@@ -219,11 +219,20 @@ func cmdResume(ctx context.Context, e *env, name string, args []string) error {
 	if err := parse(fs, args); err != nil {
 		return err
 	}
-	s, err := e.open(name)
-	if err != nil {
+	var s *session
+	if err := timed("open", func() error { var e2 error; s, e2 = e.open(name); return e2 }); err != nil {
 		return err
 	}
 	id := s.id()
+	// Probe storage while the box starts: an unreachable server costs its
+	// timeout once, in parallel, not before every offline start.
+	reach := make(chan bool, 1)
+	go func() {
+		start := time.Now()
+		ok := s.storageReachable()
+		trace("storage probe (parallel)", time.Since(start))
+		reach <- ok
+	}()
 	if !s.drv.Known(id) {
 		if _, err := s.drv.Create(ctx, driver.Box{ID: id, Name: name, ToolboxImage: s.cfg.Image}); err != nil {
 			return err
@@ -254,12 +263,15 @@ func cmdResume(ctx context.Context, e *env, name string, args []string) error {
 	if err := timed("agent ready", func() error { _, _, err := waitAgent(ctx, s.drv, id, "READY", "FAILED"); return err }); err != nil {
 		return err
 	}
-	sb, err := s.sync()
-	if err != nil {
+	var sb *boxsync.Box
+	if err := timed("sync open", func() error { var e2 error; sb, e2 = s.sync(); return e2 }); err != nil {
 		return err
 	}
+	var reachable bool
+	_ = timed("storage probe (wait)", func() error { reachable = <-reach; return nil })
 	var res boxsync.ResumeResult
-	if !s.storageReachable() {
+	var err error
+	if !reachable {
 		// Offline: start from the local home if this machine's state allows
 		// it; saves wait until storage is reachable again.
 		if res, err = sb.ResumeOffline(); err != nil {

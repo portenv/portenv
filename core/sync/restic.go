@@ -203,6 +203,7 @@ func (r *restic) backup(ctx context.Context, a backupArgs) (string, error) {
 		args = append(args, "--tag", t)
 	}
 	args = append(args, a.home)
+	start := time.Now()
 	out, err := r.run(ctx, args...)
 	if err != nil {
 		return "", err
@@ -210,11 +211,9 @@ func (r *restic) backup(ctx context.Context, a backupArgs) (string, error) {
 	sc := bufio.NewScanner(bytes.NewReader(out))
 	sc.Buffer(make([]byte, 64<<10), 4<<20)
 	for sc.Scan() {
-		var msg struct {
-			Type       string `json:"message_type"`
-			SnapshotID string `json:"snapshot_id"`
-		}
+		var msg backupSummary
 		if json.Unmarshal(sc.Bytes(), &msg) == nil && msg.Type == "summary" && msg.SnapshotID != "" {
+			r.traceBackup(start, time.Now(), a.parent != "", msg)
 			return msg.SnapshotID, nil
 		}
 	}
@@ -233,6 +232,35 @@ func (r *restic) restoreTo(ctx context.Context, s Snapshot, target string, delet
 	}
 	_, err := r.run(ctx, args...)
 	return err
+}
+
+// backupSummary is the part of restic backup's JSON summary the engine uses.
+type backupSummary struct {
+	Type         string    `json:"message_type"`
+	SnapshotID   string    `json:"snapshot_id"`
+	FilesNew     int       `json:"files_new"`
+	FilesChanged int       `json:"files_changed"`
+	DataAdded    int64     `json:"data_added_packed"`
+	Start        time.Time `json:"backup_start"`
+	End          time.Time `json:"backup_end"`
+}
+
+// traceBackup splits a backup's time into what came before restic started
+// reading files (start-up, connecting, opening the repository, locking,
+// loading the index), reading and uploading, and finishing (writing the
+// index and snapshot, unlocking). The clocks of the box and this machine may
+// differ slightly.
+func (r *restic) traceBackup(start, end time.Time, parent bool, s backupSummary) {
+	if r.trace == nil || s.Start.IsZero() || s.End.IsZero() {
+		return
+	}
+	note := ""
+	if !parent {
+		note = ", no parent"
+	}
+	r.trace("  backup: before reading", s.Start.Sub(start))
+	r.trace(fmt.Sprintf("  backup: read+upload %.1f MB (%d new, %d changed%s)", float64(s.DataAdded)/1e6, s.FilesNew, s.FilesChanged, note), s.End.Sub(s.Start))
+	r.trace("  backup: finishing", end.Sub(s.End))
 }
 
 // tag adds and removes tags on one snapshot. restic rewrites the snapshot,

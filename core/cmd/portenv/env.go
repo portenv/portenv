@@ -376,10 +376,12 @@ func homeVolume(boxID string) string {
 }
 
 // waitAgent waits until the agent reports one of the wanted states and
-// returns the state and detail.
+// returns the state and detail. It polls quickly at first (a box is usually
+// ready within a second), then backs off to once a second.
 func waitAgent(ctx context.Context, d driver.Driver, id driver.BoxID, want ...string) (string, string, error) {
 	deadline := time.Now().Add(15 * time.Minute)
 	last := ""
+	wait := 50 * time.Millisecond
 	for time.Now().Before(deadline) {
 		res, err := d.Exec(ctx, id, driver.ExecRequest{Argv: []string{"portenv-agent", "ready"}, Timeout: 10 * time.Second})
 		if err == nil {
@@ -399,8 +401,9 @@ func waitAgent(ctx context.Context, d driver.Driver, id driver.BoxID, want ...st
 		select {
 		case <-ctx.Done():
 			return "", "", ctx.Err()
-		case <-time.After(time.Second):
+		case <-time.After(wait):
 		}
+		wait = min(2*wait, time.Second)
 	}
 	return "", "", errors.New("the box did not finish starting within 15 minutes")
 }

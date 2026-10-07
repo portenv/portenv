@@ -566,7 +566,7 @@ Each milestone ends with a demo note in `docs/milestones/<id>.md` and its checkl
 
 **0.2 Toolbox image**
 
-- [ ] `images/toolbox-node` builds for arm64 and amd64 from one Dockerfile, with `portenv-agent` as init
+- [x] `images/toolbox-node` builds for arm64 and amd64 from one Dockerfile, with `portenv-agent` as init
 - [x] The skeleton home creates `work` (uid 1000), `.portenv/apt-packages.txt` and the default `excludes`
 - [x] Packages in `apt-packages.txt` are reinstalled at start, before the box reports ready
 
@@ -594,7 +594,7 @@ Each milestone ends with a demo note in `docs/milestones/<id>.md` and its checkl
 - [ ] All five resume rules and every invariant have passing tests, including two simulated machines
 - [ ] A 5 MB change saves in under 10 seconds; resuming on the same machine takes under 5 seconds
 - [ ] Killing the process mid-save leaves the repository consistent and the next save succeeds
-- [ ] The toolbox image builds for arm64 and amd64 from one Dockerfile
+- [x] The toolbox image builds for arm64 and amd64 from one Dockerfile
 
 ### Phase 1: Native Mac app, local boxes
 

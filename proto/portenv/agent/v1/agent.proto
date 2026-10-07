@@ -12,8 +12,8 @@ import "portenv/types/v1/types.proto";
 // The agent inside every box.
 service AgentService {
   rpc GetVersion(GetVersionRequest) returns (GetVersionResponse);
-  // Reports whether the box has finished starting (packages installed, users
-  // created).
+  // Reports whether the box has finished starting (users created, home
+  // checked, packages installed).
   rpc GetReadiness(GetReadinessRequest) returns (GetReadinessResponse);
 }
 
@@ -25,8 +25,20 @@ message GetVersionResponse {
 
 message GetReadinessRequest {}
 
+// Where the box is in its start sequence.
+enum ReadinessState {
+  READINESS_STATE_UNSPECIFIED = 0;
+  // Still starting: users, home checks, package replay.
+  READINESS_STATE_STARTING = 1;
+  // Started; the box is usable.
+  READINESS_STATE_READY = 2;
+  // The start sequence failed; detail says why. The box stays up so the
+  // failure can be inspected.
+  READINESS_STATE_FAILED = 3;
+}
+
 message GetReadinessResponse {
-  bool ready = 1;
-  // Human-readable reason while not ready, e.g. "installing packages".
+  ReadinessState state = 1;
+  // Human-readable step or failure, e.g. "installing 2 packages".
   string detail = 2;
 }

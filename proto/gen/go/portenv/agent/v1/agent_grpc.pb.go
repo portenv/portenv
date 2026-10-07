@@ -36,8 +36,8 @@ const (
 // The agent inside every box.
 type AgentServiceClient interface {
 	GetVersion(ctx context.Context, in *GetVersionRequest, opts ...grpc.CallOption) (*GetVersionResponse, error)
-	// Reports whether the box has finished starting (packages installed, users
-	// created).
+	// Reports whether the box has finished starting (users created, home
+	// checked, packages installed).
 	GetReadiness(ctx context.Context, in *GetReadinessRequest, opts ...grpc.CallOption) (*GetReadinessResponse, error)
 }
 
@@ -76,8 +76,8 @@ func (c *agentServiceClient) GetReadiness(ctx context.Context, in *GetReadinessR
 // The agent inside every box.
 type AgentServiceServer interface {
 	GetVersion(context.Context, *GetVersionRequest) (*GetVersionResponse, error)
-	// Reports whether the box has finished starting (packages installed, users
-	// created).
+	// Reports whether the box has finished starting (users created, home
+	// checked, packages installed).
 	GetReadiness(context.Context, *GetReadinessRequest) (*GetReadinessResponse, error)
 	mustEmbedUnimplementedAgentServiceServer()
 }

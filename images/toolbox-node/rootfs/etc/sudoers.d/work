@@ -1,0 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
+# The main user has passwordless sudo. From Phase 4 an approval helper
+# mediates it while agents are connected.
+work ALL=(ALL:ALL) NOPASSWD: ALL

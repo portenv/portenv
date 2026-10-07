@@ -44,5 +44,6 @@ Phase 0: Foundations (owner only). Start with milestone 0.1 (repository, CI and 
 - `make proto`: regenerate `proto/gen/go` after editing `proto/`; commit the result. `make proto-check` fails if it is stale.
 - `make agent-linux`: static `portenv-agent` for linux/arm64 and amd64.
 - `make swift-test`: build and test the Swift shim (macOS).
+- `make image` / `make image-test`: build the toolbox image for this Mac's architecture only (never emulate amd64) and run `images/toolbox-node/test.sh`.
 - `make secrets`: gitleaks over the full history and the working tree.
 - `make check`: everything above that runs on this machine.

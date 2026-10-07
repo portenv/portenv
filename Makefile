@@ -30,7 +30,7 @@ TOOLS := \
 TOOLS_STAMP := $(BIN)/.tools-stamp
 
 .PHONY: all build test lint fmt proto proto-check agent-linux swift-test \
-	secrets spdx-check check tools clean
+	secrets spdx-check check tools clean image image-test
 
 all: build test lint proto-check
 
@@ -86,6 +86,17 @@ proto-check: proto
 ## swift-test: build and test the Swift packages (macOS only)
 swift-test:
 	cd shims/containerization && swift build && swift test
+
+## image: build the toolbox image for this machine's architecture only
+IMAGE ?= portenv/toolbox-node:dev
+image:
+	docker build --platform linux/$$(docker version -f '{{.Server.Arch}}') \
+		--build-arg VERSION=$(VERSION) --build-arg COMMIT=$(COMMIT) \
+		-f images/toolbox-node/Dockerfile -t $(IMAGE) .
+
+## image-test: test the toolbox image (builds it first)
+image-test: image
+	images/toolbox-node/test.sh $(IMAGE)
 
 ## secrets: scan the full git history and the working tree for secrets
 secrets: $(TOOLS_STAMP)

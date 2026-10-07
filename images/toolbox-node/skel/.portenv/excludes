@@ -1,0 +1,6 @@
+# Paths left out of every save of /home (restic exclude patterns, one per
+# line). Edit freely; node_modules is excluded automatically when a box moves
+# between CPU architectures.
+/home/*/.cache
+/home/*/.npm/_cacache
+/home/*/.local/share/Trash

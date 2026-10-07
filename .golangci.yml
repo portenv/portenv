@@ -13,6 +13,11 @@ linters:
     generated: strict
     paths:
       - testdata
+    rules:
+      # Tests write fixtures with ordinary permissions.
+      - path: _test\.go
+        linters:
+          - gosec
 
 formatters:
   enable:

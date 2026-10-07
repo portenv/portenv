@@ -97,7 +97,7 @@ func cmdInit(_ context.Context, e *env, name string, args []string) error {
 
 // cmdJoin enrols an existing box on this machine: the repository key comes
 // on stdin (from portenv move, over SSH) and goes only into the key store.
-func cmdJoin(_ context.Context, e *env, name string, args []string) error {
+func cmdJoin(ctx context.Context, e *env, name string, args []string) error {
 	fs := flags("join")
 	id := fs.String("id", "", "the box's ID")
 	image := fs.String("image", defaultImage, "toolbox image")
@@ -132,13 +132,23 @@ func cmdJoin(_ context.Context, e *env, name string, args []string) error {
 	if strings.HasPrefix(c.Storage, "sftp:") && in.StorageKey == "" {
 		return errors.New("SFTP storage needs the storage key on stdin")
 	}
-	if err := e.keyStore().Put(c.ID, []byte(in.RepositoryKey)); err != nil {
-		return err
-	}
 	if in.StorageKey != "" {
 		if err := e.keyStore().Put(storageKeyID(c.ID), []byte(in.StorageKey)); err != nil {
 			return err
 		}
+	}
+	// This machine's own repository key, added here so its derivation cost
+	// is tuned for this machine. The key that came on stdin is used once to
+	// add it and is never stored.
+	own, err := keys.NewKey()
+	if err != nil {
+		return err
+	}
+	if err := addOwnKey(ctx, e, c, []byte(in.RepositoryKey), []byte(in.StorageKey), own); err != nil {
+		return fmt.Errorf("add this machine's repository key: %w", err)
+	}
+	if err := e.keyStore().Put(c.ID, own); err != nil {
+		return err
 	}
 	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
 		return err
@@ -149,6 +159,30 @@ func cmdJoin(_ context.Context, e *env, name string, args []string) error {
 	}
 	fmt.Printf("joined box %s (%s) on %s\n", name, c.ID, e.machine)
 	return nil
+}
+
+// addOwnKey runs restic key add on this machine with the transferred key.
+func addOwnKey(ctx context.Context, e *env, c boxConfig, transferred, storageKey, own []byte) error {
+	repo, _, resticEnv, err := e.storage(c)
+	if err != nil {
+		return err
+	}
+	s := &session{e: e, cfg: c, repo: repo, resticEnv: resticEnv, key: transferred, sshKey: storageKey}
+	host := s.hostExecutor()
+	if host == nil {
+		return errors.New("no restic on this machine (the server setup installs it)")
+	}
+	sb, err := boxsync.Open(boxsync.Config{
+		Executor: host, MetaExecutor: host, MetaRepository: s.hostRepo(),
+		Repository: s.hostRepo(), Password: transferred, Env: resticEnv,
+		SSHKey: storageKey, SSHHostKey: c.StorageHostKey,
+		BoxID: c.ID, MachineID: e.machine, HomeDir: "/nonexistent",
+		StateDir: filepath.Join(e.dir, "state", c.ID),
+	})
+	if err != nil {
+		return err
+	}
+	return sb.AddKey(ctx, own, e.machine)
 }
 
 // joinKeys is what portenv move sends to portenv join on stdin.
@@ -221,15 +255,24 @@ func cmdResume(ctx context.Context, e *env, name string, args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := sb.Init(ctx); err != nil {
-		return err
-	}
 	var res boxsync.ResumeResult
-	err = timed("resume (all sync)", func() error {
-		var e error
-		res, e = sb.Resume(ctx, boxsync.ResumeOptions{TakeOver: *takeOver})
-		return e
-	})
+	if !s.storageReachable() {
+		// Offline: start from the local home if this machine's state allows
+		// it; saves wait until storage is reachable again.
+		if res, err = sb.ResumeOffline(); err != nil {
+			_, _ = s.drv.Stop(ctx, id, 0)
+			return fmt.Errorf("storage is unreachable and %w", err)
+		}
+	} else {
+		if err := timed("repository check", func() error { return sb.Init(ctx) }); err != nil {
+			return err
+		}
+		err = timed("resume (all sync)", func() error {
+			var e error
+			res, e = sb.Resume(ctx, boxsync.ResumeOptions{TakeOver: *takeOver})
+			return e
+		})
+	}
 	var held *boxsync.LeaseHeldError
 	if errors.As(err, &held) {
 		_, _ = s.drv.Stop(ctx, id, 0)
@@ -261,6 +304,10 @@ func cmdResume(ctx context.Context, e *env, name string, args []string) error {
 	}
 	if state != "READY" {
 		return fmt.Errorf("the box failed to start: %s", detail)
+	}
+	if res.Offline {
+		fmt.Printf("%s is open on %s, offline (Offline · will save later)\n", name, e.machine)
+		return nil
 	}
 	fmt.Printf("%s is open on %s (resume rule %d: %s)\n", name, e.machine, res.Rule, res.Action)
 	if res.Orphaned != nil {
@@ -310,6 +357,9 @@ func save(ctx context.Context, e *env, name string, args []string, kind boxsync.
 	if err := s.requireRunning(ctx); err != nil {
 		return nil, err
 	}
+	if !s.storageReachable() {
+		return nil, errOffline
+	}
 	sb, err := s.sync()
 	if err != nil {
 		return nil, err
@@ -326,6 +376,11 @@ func save(ctx context.Context, e *env, name string, args []string, kind boxsync.
 	fmt.Printf("saved %s (%s) in %s\n", snap.ID[:8], snap.Kind, time.Since(start).Round(100*time.Millisecond))
 	return s, nil
 }
+
+// errOffline: storage is unreachable, so the save waits. Nothing is lost:
+// the work stays in the box, which stays open (and dirty) until a save
+// reaches storage.
+var errOffline = errors.New("storage is unreachable (Offline · will save later): your work stays in the box")
 
 func cmdSave(ctx context.Context, e *env, name string, args []string) error {
 	_, err := save(ctx, e, name, args, boxsync.SaveAutosave)

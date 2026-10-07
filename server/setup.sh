@@ -101,7 +101,7 @@ echo "ok: $PRETTY_NAME, $arch, ${mem_mb} MB memory, ${free_gb} GB free"
 say "packages"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -q
-apt-get install -y -q ca-certificates curl gnupg cryptsetup >/dev/null
+apt-get install -y -q ca-certificates curl gnupg cryptsetup bzip2 >/dev/null
 
 if (( mem_mb < 3000 )) && ! swapon --show | grep -q /swapfile; then
 	say "2 GB swap file (small machine)"
@@ -207,6 +207,23 @@ if [[ -n $image_ref ]]; then
 	[[ $image_ref == *@sha256:* ]] || die "--image must be pinned by digest (…@sha256:…)"
 	docker pull -q "$image_ref"
 fi
+
+say "restic on the host (lease checks, listing, keys; never /home)"
+# restic 0.19.1 from its GitHub release; checksums taken from the release's
+# SHA256SUMS, which is signed by restic's release key (CF8F 18F2 8445 7597
+# 3F79 D4E1 91A6 868B D3F7 A907).
+RESTIC_VERSION=0.19.1
+declare -A RESTIC_SHA256=(
+	[arm64]=a5f64aaab53d51e311fa3829124c5b703f2d14cf187d8640b6be3b2b49376465
+	[amd64]=f415415624dcc452f2a02b8c33641791a8c6d6d3b65bbb3543fcf9a25151585c
+)
+if ! restic version 2>/dev/null | grep -q "restic $RESTIC_VERSION "; then
+	tmp=$(mktemp)
+	curl -fsSL -o "$tmp" "https://github.com/restic/restic/releases/download/v$RESTIC_VERSION/restic_${RESTIC_VERSION}_linux_${arch}.bz2"
+	echo "${RESTIC_SHA256[$arch]}  $tmp" | sha256sum -c --quiet - || { rm -f "$tmp"; die "restic download failed its checksum"; }
+	bunzip2 -c "$tmp" > /usr/local/bin/restic && chmod 0755 /usr/local/bin/restic && rm -f "$tmp"
+fi
+restic version | head -1
 
 say "portenv CLI"
 if [[ -n $portenv_bin ]]; then

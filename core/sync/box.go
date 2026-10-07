@@ -42,6 +42,12 @@ type Config struct {
 	Now func() time.Time
 	// Trace, when set, receives the duration of each restic call.
 	Trace func(phase string, d time.Duration)
+	// MetaExecutor, when set, runs restic commands that do not need /home
+	// on the host (lease checks, listing, tags, init, keys, retention), and
+	// MetaRepository is the repository's address from the host. Backup and
+	// restore always use Executor.
+	MetaExecutor   Executor
+	MetaRepository string
 }
 
 var idRE = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
@@ -82,18 +88,49 @@ func Open(cfg Config) (*Box, error) {
 	if cfg.Executor == nil {
 		cfg.Executor = LocalExecutor{Bin: cfg.Restic, CacheDir: filepath.Join(cfg.StateDir, "cache")}
 	}
-	b := &Box{cfg: cfg, restic: &restic{exec: cfg.Executor, repo: cfg.Repository, trace: cfg.Trace, cred: Credentials{
-		Password: cfg.Password, Env: cfg.Env, SSHKey: cfg.SSHKey, SSHHostKey: cfg.SSHHostKey,
-	}}}
+	metaRepo := cfg.MetaRepository
+	if metaRepo == "" {
+		metaRepo = cfg.Repository
+	}
+	b := &Box{cfg: cfg, restic: &restic{exec: cfg.Executor, repo: cfg.Repository, trace: cfg.Trace,
+		meta: cfg.MetaExecutor, metaRepo: metaRepo, cred: Credentials{
+			Password: cfg.Password, Env: cfg.Env, SSHKey: cfg.SSHKey, SSHHostKey: cfg.SSHHostKey,
+		}}}
 	if err := b.restic.checkVersion(context.Background()); err != nil {
 		return nil, err
 	}
 	return b, nil
 }
 
-// Init creates the box's repository if it does not exist yet.
+// Init creates the box's repository if it does not exist yet. Once this
+// machine has state for the box it knows the repository, and Init costs
+// nothing.
 func (b *Box) Init(ctx context.Context) error {
+	if _, known, err := loadState(b.cfg.StateDir); err == nil && known {
+		return nil
+	}
 	return b.restic.initIfMissing(ctx)
+}
+
+// AddKey adds a repository key for this machine, with newPassword, so the
+// key's derivation cost is tuned on this machine (restic key add calibrates
+// where it runs). It needs the host executor; the box never runs key
+// commands.
+func (b *Box) AddKey(ctx context.Context, newPassword []byte, host string) error {
+	if b.restic.meta == nil {
+		return errors.New("adding a key needs the host executor")
+	}
+	cred := b.restic.cred
+	cred.NewPassword = newPassword
+	res, err := b.restic.meta.Restic(ctx, []string{"--repo", b.restic.metaRepo, "key", "add",
+		"--new-password-file", "/dev/fd/4", "--host", host}, cred)
+	if err != nil {
+		return err
+	}
+	if res.ExitCode != 0 {
+		return resticError([]string{"key"}, res.Stderr, &ExitError{Code: res.ExitCode})
+	}
+	return nil
 }
 
 // Errors.
@@ -172,6 +209,9 @@ type ResumeResult struct {
 	Action   Action
 	Restored *Snapshot // the save now in the local home, if one was restored
 	Orphaned *Snapshot // the local home saved before restoring (rule 4)
+	// Offline is true when the box started from the local home without
+	// reaching storage (ResumeOffline).
+	Offline bool
 }
 
 // Resume brings the local home up to date before the box starts, applying
@@ -258,10 +298,42 @@ func (b *Box) Resume(ctx context.Context, opts ResumeOptions) (ResumeResult, err
 	}
 
 	st.Dirty = true // the box is open from here on
+	st.Lease = LeaseHeld
 	if err := saveState(b.cfg.StateDir, st); err != nil {
 		return ResumeResult{}, err
 	}
 	return res, nil
+}
+
+// ErrOfflineUnsafe: storage is unreachable and this machine cannot show that
+// starting from its local home is safe.
+var ErrOfflineUnsafe = errors.New("cannot start offline")
+
+// ResumeOffline starts the box from the local home without reaching storage.
+// It is allowed only when this machine's state says its home equals the
+// last save it made or restored (not opened since) and it holds the lease or
+// released it cleanly. The box is marked open; saves wait until storage is
+// reachable, and the next online Resume applies the resume rules (rule 4 if
+// another machine saved meanwhile, so nothing is lost).
+func (b *Box) ResumeOffline() (ResumeResult, error) {
+	st, known, err := loadState(b.cfg.StateDir)
+	switch {
+	case err != nil:
+		return ResumeResult{}, err
+	case !known:
+		return ResumeResult{}, fmt.Errorf("%w: this machine has never synced the box", ErrOfflineUnsafe)
+	case st.Tree == "":
+		return ResumeResult{}, fmt.Errorf("%w: the box has never been saved from this machine", ErrOfflineUnsafe)
+	case st.Dirty:
+		return ResumeResult{}, fmt.Errorf("%w: the box was not closed cleanly here, so its home may differ from the last save", ErrOfflineUnsafe)
+	case st.Lease != LeaseHeld && st.Lease != LeaseReleased:
+		return ResumeResult{}, fmt.Errorf("%w: this machine's lease state is unknown", ErrOfflineUnsafe)
+	}
+	st.Dirty = true
+	if err := saveState(b.cfg.StateDir, st); err != nil {
+		return ResumeResult{}, err
+	}
+	return ResumeResult{Rule: 3, Action: ActionStartLocal, Offline: true}, nil
 }
 
 // saveOrphan saves the local home as orphaned and records it as the synced
@@ -362,7 +434,11 @@ func (b *Box) Save(ctx context.Context, opts SaveOptions) (Snapshot, error) {
 	if err != nil {
 		return Snapshot{}, err
 	}
-	if err := saveState(b.cfg.StateDir, State{Tree: s.Tree, Dirty: opts.Kind != SaveRelease}); err != nil {
+	lease := LeaseHeld
+	if opts.Kind == SaveRelease {
+		lease = LeaseReleased
+	}
+	if err := saveState(b.cfg.StateDir, State{Tree: s.Tree, Dirty: opts.Kind != SaveRelease, Lease: lease}); err != nil {
 		return Snapshot{}, fmt.Errorf("save %s made but not recorded: %w", s.short(), err)
 	}
 

@@ -1,0 +1,26 @@
+// SPDX-License-Identifier: Apache-2.0
+
+package main
+
+import "testing"
+
+func TestSFTPAddr(t *testing.T) {
+	for in, want := range map[string]string{
+		"sftp:portenv-storage@52.47.201.32:/storage/boxes/b":            "52.47.201.32:22",
+		"sftp:portenv-storage@127.0.0.1:/storage/boxes/b":               "127.0.0.1:22",
+		"sftp://portenv-storage@127.0.0.1:2222//storage/boxes/b":        "127.0.0.1:2222",
+		"sftp://portenv-storage@host.portenv.internal//storage/boxes/b": "host.portenv.internal:22",
+	} {
+		if got := sftpAddr(in); got != want {
+			t.Errorf("sftpAddr(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestHostRepoRewritesTheBoxHostAddress(t *testing.T) {
+	s := &session{cfg: boxConfig{ID: "b", Storage: "sftp://portenv-storage@host.portenv.internal:2222//storage"},
+		repo: "sftp://portenv-storage@host.portenv.internal:2222//storage/boxes/b"}
+	if got, want := s.hostRepo(), "sftp://portenv-storage@127.0.0.1:2222//storage/boxes/b"; got != want {
+		t.Fatalf("hostRepo = %q, want %q", got, want)
+	}
+}

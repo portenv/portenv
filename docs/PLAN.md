@@ -224,9 +224,25 @@ Each box has its own restic repository; saves happen automatically, and a lease 
 
 **Leases**
 
+- The lease is checked before the box starts, in every phase. Before Phase 3 that check is a snapshot listing, so on a high-latency link a resume costs at least a few round trips; the resume budget is therefore stated at a round-trip time of 50 ms or less (and offline). Phase 3's authoritative leases replace the listing with one control-plane call.
 - From Phase 3, the control plane holds leases (box, machine, since, last heartbeat) and is authoritative.
 - Before Phase 3, and whenever the control plane is unreachable, the `active:` tag on the newest snapshot is the lease.
 - A lease with no heartbeat for 10 minutes is shown as stale, not released: the user decides.
+
+**Where restic runs (ADR 0005)**
+
+- Backup and restore run inside the box, where `/home` is. Everything else (the lease check, snapshot listing, lease tags, init, keys, forget and prune) runs on the host (`portenvd` or the runner), which can keep one SSH connection to storage open without exposing it to anything in a box.
+- Every machine has its own repository key, added on that machine so the key's derivation cost is tuned for it; a machine never stores another's key.
+- Offline: a machine starts from its local home only if its state says the home equals the last save it made or restored and it holds the lease or released it cleanly; saves wait ("Offline · will save later"), and on reconnect the resume rules apply (rule 4 keeps the offline work if another machine saved meanwhile).
+
+**Later hardening: append-only storage credentials (proposal)**
+
+The storage credential that enters a box (today the SFTP key served by the agent during a restic run) can delete and overwrite repository files, so root in a box during a run could destroy history. Proposal:
+
+- The box's credential becomes append-only: it can add files but never delete or overwrite them. Forget, prune and unlocking stale locks use a separate credential that never enters a box and lives only on the host.
+- For SFTP storage, plain `sshd` cannot enforce append-only. The clean way is restic's REST server (`rest-server --append-only`) on the server, bound to the loopback address and reached through the same SSH connection: boxes get an append-only HTTP user, the host gets a full user for forget and prune. No new inbound port: it is tunnelled over the existing SSH.
+- For S3 (and Portenv storage on R2), the same split uses two credentials: put-only for boxes, full for the host.
+- Cost: one more process on servers, and restic's lock removal must happen on the host (append-only clients cannot delete their own locks).
 
 **Retention**
 
@@ -657,7 +673,7 @@ Each milestone ends with a demo note in `docs/milestones/<id>.md` and its checkl
 - [ ] Mac → server → Mac round trip loses nothing (checksums of `/home` match)
 - [x] All five resume rules and every invariant have passing tests, including two simulated machines
 - [ ] Save: Portenv's overhead beyond the transfer itself (bytes ÷ measured upload bandwidth) is under 3 seconds, and a 5 MB change saves in under 10 seconds on a 20 Mbit/s or faster uplink. The gate measures the bandwidth (and the round-trip time) and prints them next to each result
-- [ ] Same-machine resume: under 5 seconds including starting the box, both with storage reachable and with storage unreachable (offline)
+- [ ] Same-machine resume: under 5 seconds including starting the box, with storage reachable at a round-trip time of 50 ms or less, and with storage unreachable (offline). The gate records the round-trip time next to the result
 - [x] Killing the process mid-save leaves the repository consistent and the next save succeeds
 - [x] The toolbox image builds for arm64 and amd64 from one Dockerfile
 
@@ -787,7 +803,7 @@ The save engine is tested hardest, because a bug there loses someone's work; eve
 | Keys | Device add, revoke, recovery, re-encrypt; verify no key material on disk outside approved stores | Every merge touching keys |
 | Agent isolation | Adversarial suite: an agent lane tries to read other homes and secrets, escalate privilege, reach blocked hosts, persist after revoke | Every merge from Phase 4 |
 | Mac app | XCUITest for first run, title menu, lease sheet; accessibility audit; light and dark snapshots | Every merge touching the app |
-| Performance | Budgets: save overhead beyond the transfer under 3 s, and a 5 MB change under 10 s on a 20 Mbit/s or faster uplink; same-machine resume under 5 s including box start, online and offline; port relay adds under 5 ms locally. Bandwidth and round-trip time are measured and reported with every result | Nightly |
+| Performance | Budgets: save overhead beyond the transfer under 3 s, and a 5 MB change under 10 s on a 20 Mbit/s or faster uplink; same-machine resume under 5 s including box start, online at a round-trip time of 50 ms or less and offline; port relay adds under 5 ms locally. Bandwidth and round-trip time are measured and reported with every result | Nightly |
 | Recovery drill | Restore a box from the recovery phrase on a clean Mac | Before each release |
 | Own route | `own-route` job: the own-route journey with every Portenv-hosted endpoint blocked at DNS and the firewall, from locally built artifacts; from Phase 1 it also drives the app with the hosted options visible and untouched (ADR 0008, G3) | Every pull request and merge to main; blocks releases |
 
@@ -807,7 +823,6 @@ These need an owner decision; Claude Code should add new ones here instead of gu
 - [ ] Does Grok Bot read `~/.agents/skills` and can it run the install script? (The owner is testing it.)
 - [ ] Before 2.8: can the target agents be woken by an incoming webhook? If not, an agent keeping `portenv events --follow` running does the job and 2.8 drops in priority (ADR 0008).
 - [ ] Apple Developer Program enrolment (the owner is handling it): needed for Developer ID signing and notarization in 1.8.
-- [ ] Resume and save budgets on high-latency links: from the Phase 0 gate's Mac an SSH handshake to the server took 2.8 s, and each restic call made several sequential round trips, so latency costs as much as bandwidth. Should the budgets also state a round-trip time (for example under 100 ms), or should resume take the lease tag off the critical path?
 - [ ] Approval timeout default (30 minutes assumed) and what happens when it expires.
 - [ ] Anthropic's terms for agents driving Claude Code with a subscription login versus a Console API key.
 - [ ] Open-source boundary in detail: this repository is Apache-2.0 and `portenv/cloud` is private (decided), but confirm before going public whether the Mac app, the File Provider and the iPhone companion stay in the public repository or move to a private one.

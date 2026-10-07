@@ -34,33 +34,53 @@ cleanup() {
 trap cleanup EXIT
 
 echo "== stand-in server: sshd, with uid and gid 990 already taken"
-docker run -d --name "$srv" ubuntu:24.04 sleep infinity >/dev/null
+# Its SSH port is published on this machine: boxes reach it through
+# host.portenv.internal, the host itself (listing, lease tags) through the
+# loopback address.
+bind=127.0.0.1; [[ $(uname) == Linux ]] && bind=0.0.0.0
+docker run -d --name "$srv" -p "$bind:2222:22" ubuntu:24.04 sleep infinity >/dev/null
 docker exec "$srv" bash -c 'apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq openssh-server >/dev/null && groupadd -g 990 taken && useradd -u 990 -g 990 -M taken && mkdir -p /run/sshd && /usr/sbin/sshd'
 docker cp "$repo/server/setup.sh" "$srv:/tmp/setup.sh" >/dev/null
-ip=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$srv")
 host_key=$(docker exec "$srv" cut -d' ' -f1,2 /etc/ssh/ssh_host_ed25519_key.pub)
 
 echo "== box with storage on the stand-in server"
-"$portenv" init sftp --image "$image" --storage "sftp:portenv-storage@$ip:/storage" --storage-host-key "$host_key" > "$root/init.txt"
+"$portenv" init sftp --image "$image" --storage "sftp://portenv-storage@host.portenv.internal:2222//storage" --storage-host-key "$host_key" > "$root/init.txt"
 pub=$(grep '^ssh-ed25519 ' "$root/init.txt")
 docker exec "$srv" bash /tmp/setup.sh --only storage-account --storage-key "$pub" | sed 's/^/  /'
 expect "the storage account exists without uid 990" bash -c "[[ \$(docker exec $srv id -u portenv-storage) != 990 ]]"
 expect "sshd can read the authorized keys as portenv-storage" docker exec "$srv" runuser -u portenv-storage -- test -r /etc/ssh/portenv-storage.authorized_keys
 
-out=$("$portenv" resume sftp </dev/null 2>&1 | tail -1); echo "  $out"
+out=$("$portenv" resume sftp </dev/null 2>&1) || { echo "$out" | sed 's/^/  /'; }; out=$(tail -1 <<<"$out"); echo "  $out"
 expect "rule 1 with SFTP storage" grep -q "rule 1" <<<"$out"
 in_box 'echo "over sftp" > note.txt'
 expect "save over SFTP" "$portenv" save sftp </dev/null
 expect "no key or helper left in the box after the run" bash -c "[[ -z \$(docker exec portenv-sftp-$(box_id) sh -c 'ls -A /var/cache/portenv-sync | grep sftp-') ]]"
 expect "the repository is on the server, owned by portenv-storage" docker exec "$srv" bash -c "test -f /srv/portenv/storage-root/storage/boxes/$(box_id)/config && [[ \$(stat -c %U /srv/portenv/storage-root/storage/boxes/$(box_id)/config) == portenv-storage ]]"
 expect "close" "$portenv" close sftp </dev/null
-out=$("$portenv" resume sftp </dev/null 2>&1 | tail -1); echo "  $out"
+out=$("$portenv" resume sftp </dev/null 2>&1) || { echo "$out" | sed 's/^/  /'; }; out=$(tail -1 <<<"$out"); echo "  $out"
 expect "same-machine resume over SFTP (rule 3)" grep -q "rule 3" <<<"$out"
 expect "the file is there" in_box 'grep -qx "over sftp" note.txt'
 expect "restic's cache survived the restart" bash -c "[[ -n \$(docker exec portenv-sftp-$(box_id) sh -c 'ls /var/cache/portenv-sync') ]]"
 docker exec "$srv" bash -c "sed -i 's/^restrict /#restrict /' /etc/ssh/portenv-storage.authorized_keys"
 expect "an unknown key is refused (no save without the server's consent)" bash -c "! $portenv save sftp </dev/null"
 expect "close after restoring the key" bash -c "docker exec $srv sed -i 's/^#restrict /restrict /' /etc/ssh/portenv-storage.authorized_keys && $portenv close sftp </dev/null"
+
+echo "== offline: the storage server is down"
+docker stop -t 1 "$srv" >/dev/null
+t0=$(python3 -c 'import time; print(time.time())')
+out=$("$portenv" resume sftp </dev/null 2>&1) || true
+t1=$(python3 -c 'import time; print(time.time())')
+echo "  $(tail -1 <<<"$out")"
+offline_s=$(python3 -c "print(round($t1 - $t0, 1))")
+expect "resume after a clean close starts offline" grep -q "Offline · will save later" <<<"$out"
+expect "offline resume takes under 5 s (${offline_s} s)" python3 -c "import sys; sys.exit(0 if $t1 - $t0 < 5 else 1)"
+in_box 'echo "written offline" > offline.txt'
+out=$("$portenv" save sftp </dev/null 2>&1) || true
+expect "a save while offline waits, and says so" grep -q "will save later" <<<"$out"
+expect "the offline work is still in the box" in_box 'grep -qx "written offline" offline.txt'
+docker start "$srv" >/dev/null && docker exec "$srv" bash -c 'mkdir -p /run/sshd && /usr/sbin/sshd'
+expect "back online, the save goes through" "$portenv" save sftp </dev/null
+expect "close" "$portenv" close sftp </dev/null
 
 echo
 if (( failures )); then echo "$failures check(s) failed"; exit 1; fi

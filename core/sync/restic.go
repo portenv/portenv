@@ -26,10 +26,26 @@ var minResticVersion = [3]int{0, 17, 0}
 
 // restic runs restic against one box's repository through an Executor.
 type restic struct {
-	exec  Executor
+	exec  Executor // inside the box: backup and restore, which need /home
 	repo  string
 	cred  Credentials
 	trace func(phase string, d time.Duration)
+	// meta, when set, runs everything that does not need /home (listing,
+	// lease tags, init, keys, retention) on the host, outside the box, with
+	// metaRepo as the repository's address from there (ADR 0005).
+	meta     Executor
+	metaRepo string
+}
+
+// boxCommands are the restic commands that must run where /home is.
+var boxCommands = map[string]bool{"backup": true, "restore": true}
+
+// pick returns the executor and repository address for a command.
+func (r *restic) pick(args []string) (Executor, string) {
+	if r.meta != nil && len(args) > 0 && !boxCommands[args[0]] {
+		return r.meta, r.metaRepo
+	}
+	return r.exec, r.repo
 }
 
 // run runs restic with the repository, cache and password set, and returns
@@ -55,7 +71,8 @@ func (r *restic) run(ctx context.Context, args ...string) ([]byte, error) {
 }
 
 func (r *restic) runOnce(ctx context.Context, args ...string) (stdout, stderr []byte, err error) {
-	res, err := r.exec.Restic(ctx, append([]string{"--repo", r.repo}, args...), r.cred)
+	ex, repo := r.pick(args)
+	res, err := ex.Restic(ctx, append([]string{"--repo", repo}, args...), r.cred)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -89,7 +106,8 @@ var versionRE = regexp.MustCompile(`^restic (\d+)\.(\d+)\.(\d+)`)
 
 // checkVersion fails if restic is older than minResticVersion.
 func (r *restic) checkVersion(ctx context.Context) error {
-	res, err := r.exec.Restic(ctx, []string{"version"}, Credentials{})
+	ex, _ := r.pick([]string{"version"})
+	res, err := ex.Restic(ctx, []string{"version"}, Credentials{})
 	if err != nil {
 		return fmt.Errorf("run restic version: %w", err)
 	}
@@ -134,7 +152,9 @@ func (r *restic) initIfMissing(ctx context.Context) error {
 
 // snapshots returns every snapshot, oldest first, with tags parsed.
 func (r *restic) snapshots(ctx context.Context) ([]Snapshot, error) {
-	out, err := r.run(ctx, "snapshots", "--json")
+	// Listing is read-only: no lock, so no lock files to write and delete
+	// over the network.
+	out, err := r.run(ctx, "snapshots", "--json", "--no-lock")
 	if err != nil {
 		return nil, err
 	}

@@ -43,6 +43,8 @@ type Credentials struct {
 	// pinned host key ("ssh-ed25519 AAAA...").
 	SSHKey     []byte
 	SSHHostKey string
+	// NewPassword, for key add only, reaches restic on fd 4.
+	NewPassword []byte
 }
 
 // ExecResult is the outcome of one restic run.
@@ -56,30 +58,46 @@ type ExitError struct{ Code int }
 
 func (e *ExitError) Error() string { return fmt.Sprintf("exit status %d", e.Code) }
 
-// LocalExecutor runs a restic binary on this machine.
+// LocalExecutor runs a restic binary on this machine: in tests, and on the
+// host for everything that does not need a box's /home.
 type LocalExecutor struct {
 	Bin      string
 	CacheDir string
+	// ControlDir is a private directory (0700, this user) for SFTP storage:
+	// the in-memory key agent's socket, the pinned host key and the reused
+	// SSH connection.
+	ControlDir string
 }
 
 // Restic implements Executor. The password reaches restic through an
 // inherited pipe (RESTIC_PASSWORD_FILE=/dev/fd/3): never on disk, never in
 // the environment. Inherited RESTIC_* variables are dropped.
 func (l LocalExecutor) Restic(ctx context.Context, args []string, cred Credentials) (ExecResult, error) {
-	if len(cred.SSHKey) > 0 {
-		return ExecResult{}, errors.New("SFTP storage keys are only served inside a box (AgentExecutor)")
-	}
 	password, env := cred.Password, cred.Env
-	pr, pw, err := os.Pipe()
+	var extraEnv []string
+	if len(cred.SSHKey) > 0 {
+		h, opts, henv, err := startHostSFTP(l.ControlDir, cred.SSHKey, cred.SSHHostKey)
+		if err != nil {
+			return ExecResult{}, err
+		}
+		defer h.stop()
+		args = append(opts, args...)
+		extraEnv = henv
+	}
+	pr, err := passwordPipe(password)
 	if err != nil {
 		return ExecResult{}, err
 	}
 	defer func() { _ = pr.Close() }()
-	if _, err := pw.Write(password); err != nil {
-		_ = pw.Close()
-		return ExecResult{}, err
+	files := []*os.File{pr}
+	if cred.NewPassword != nil {
+		npr, err := passwordPipe(cred.NewPassword)
+		if err != nil {
+			return ExecResult{}, err
+		}
+		defer func() { _ = npr.Close() }()
+		files = append(files, npr)
 	}
-	_ = pw.Close()
 
 	if l.CacheDir != "" {
 		args = append([]string{"--cache-dir", l.CacheDir}, args...)
@@ -91,8 +109,8 @@ func (l LocalExecutor) Restic(ctx context.Context, args []string, cred Credentia
 			procEnv = append(procEnv, kv)
 		}
 	}
-	cmd.Env = append(append(procEnv, env...), "RESTIC_PASSWORD_FILE=/dev/fd/3")
-	cmd.ExtraFiles = []*os.File{pr}
+	cmd.Env = append(append(append(procEnv, env...), extraEnv...), "RESTIC_PASSWORD_FILE=/dev/fd/3")
+	cmd.ExtraFiles = files
 	var out, errb bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errb
 	err = cmd.Run()
@@ -104,6 +122,21 @@ func (l LocalExecutor) Restic(ctx context.Context, args []string, cred Credentia
 		return ExecResult{}, err
 	}
 	return ExecResult{Stdout: out.Bytes(), Stderr: errb.Bytes()}, nil
+}
+
+// passwordPipe returns the read end of a pipe already holding secret.
+func passwordPipe(secret []byte) (*os.File, error) {
+	pr, pw, err := os.Pipe()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := pw.Write(secret); err != nil {
+		_ = pw.Close()
+		_ = pr.Close()
+		return nil, err
+	}
+	_ = pw.Close()
+	return pr, nil
 }
 
 // PathInfo implements Executor.

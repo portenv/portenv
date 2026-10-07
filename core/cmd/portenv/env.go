@@ -9,9 +9,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
+	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"time"
 
@@ -216,22 +220,136 @@ func (e *env) open(name string) (*session, error) {
 
 func (s *session) id() driver.BoxID { return driver.BoxID(s.cfg.ID) }
 
-// sync opens the sync engine, running restic inside the box. The box must be
-// running.
+// hostRestic finds restic on this machine for the commands that do not need
+// a box's /home: PORTENV_RESTIC, then next to the portenv binary, then PATH.
+func hostRestic() string {
+	if p := os.Getenv("PORTENV_RESTIC"); p != "" {
+		return p
+	}
+	if self, err := os.Executable(); err == nil {
+		if p := filepath.Join(filepath.Dir(self), "restic"); fileExists(p) {
+			return p
+		}
+	}
+	if p, err := exec.LookPath("restic"); err == nil {
+		return p
+	}
+	return ""
+}
+
+// fileExists is used only with paths from the user's own configuration or
+// next to the portenv binary.
+func fileExists(p string) bool {
+	_, err := os.Stat(p) // #nosec G703 -- see above
+	return err == nil
+}
+
+// hostRepo is the repository's address from this machine (not from inside
+// the box): a real path for local storage, and the loopback address for
+// SFTP storage on this very server.
+func (s *session) hostRepo() string {
+	c := s.cfg
+	switch {
+	case c.Storage == "":
+		return filepath.Join(s.e.dir, "Repositories", c.ID)
+	case filepath.IsAbs(c.Storage):
+		return filepath.Join(c.Storage, "boxes", c.ID)
+	}
+	return strings.Replace(s.repo, "host.portenv.internal", "127.0.0.1", 1)
+}
+
+// sftpAddr returns host:port of an SFTP repository address, in either
+// restic form: sftp:user@host:/path or sftp://user@host:port//path.
+func sftpAddr(repo string) string {
+	if strings.HasPrefix(repo, "sftp://") {
+		if u, err := url.Parse(repo); err == nil && u.Host != "" {
+			port := u.Port()
+			if port == "" {
+				port = "22"
+			}
+			return net.JoinHostPort(u.Hostname(), port)
+		}
+		return ""
+	}
+	rest := strings.TrimPrefix(repo, "sftp:")
+	hostPart, _, _ := strings.Cut(rest, ":")
+	if i := strings.LastIndex(hostPart, "@"); i >= 0 {
+		hostPart = hostPart[i+1:]
+	}
+	return net.JoinHostPort(hostPart, "22")
+}
+
+// hostExecutor runs restic on this machine, or is nil when there is none
+// (then everything runs in the box).
+func (s *session) hostExecutor() boxsync.Executor {
+	bin := hostRestic()
+	if bin == "" {
+		return nil
+	}
+	// On Linux, a local storage directory written by restic in the box
+	// belongs to portenv-sync (uid 990), which this user cannot read; keep
+	// everything in the box there. (Servers use SFTP storage, which one
+	// account owns.)
+	if runtime.GOOS == "linux" && (s.cfg.Storage == "" || filepath.IsAbs(s.cfg.Storage)) {
+		return nil
+	}
+	return boxsync.LocalExecutor{
+		Bin:      bin,
+		CacheDir: filepath.Join(s.e.dir, "state", s.cfg.ID, "host-cache"),
+		// Short on purpose: SSH control sockets must fit in 104 bytes, which
+		// macOS's per-user temporary directory does not leave room for.
+		ControlDir: fmt.Sprintf("/tmp/portenv-%d", os.Getuid()),
+	}
+}
+
+// storageReachable reports whether the storage can be reached within 2 s.
+func (s *session) storageReachable() bool {
+	c := s.cfg
+	var addr string
+	switch {
+	case strings.HasPrefix(c.Storage, "sftp:"):
+		if addr = sftpAddr(s.hostRepo()); addr == "" {
+			return true // unparsable: let restic report the real error
+		}
+	case strings.HasPrefix(c.Storage, "s3:"):
+		u, err := url.Parse(strings.TrimPrefix(c.Storage, "s3:"))
+		if err != nil || u.Host == "" {
+			return true
+		}
+		addr = net.JoinHostPort(u.Hostname(), "443")
+	case c.Storage == "":
+		return fileExists(filepath.Join(s.e.dir, "Repositories"))
+	default:
+		// A local directory is reachable when its root exists (an
+		// unmounted external drive is not); the boxes folder comes later.
+		return fileExists(c.Storage) // #nosec G703 -- the user's own configured storage directory
+	}
+	conn, err := net.DialTimeout("tcp", addr, 2*time.Second) // #nosec G704 -- the user's own configured storage server
+	if err != nil {
+		return false
+	}
+	_ = conn.Close()
+	return true
+}
+
+// sync opens the sync engine: backup and restore run inside the box,
+// everything else on this machine when it has restic.
 func (s *session) sync() (*boxsync.Box, error) {
 	return boxsync.Open(boxsync.Config{
-		Executor:    boxsync.AgentExecutor{Driver: s.drv, Box: s.id()},
-		Repository:  s.repo,
-		Password:    s.key,
-		Env:         s.resticEnv,
-		SSHKey:      s.sshKey,
-		SSHHostKey:  s.cfg.StorageHostKey,
-		BoxID:       s.cfg.ID,
-		MachineID:   s.e.machine,
-		HomeDir:     "/home",
-		ExcludeFile: "/home/work/.portenv/excludes",
-		StateDir:    filepath.Join(s.e.dir, "state", s.cfg.ID),
-		Trace:       trace,
+		MetaExecutor:   s.hostExecutor(),
+		MetaRepository: s.hostRepo(),
+		Executor:       boxsync.AgentExecutor{Driver: s.drv, Box: s.id()},
+		Repository:     s.repo,
+		Password:       s.key,
+		Env:            s.resticEnv,
+		SSHKey:         s.sshKey,
+		SSHHostKey:     s.cfg.StorageHostKey,
+		BoxID:          s.cfg.ID,
+		MachineID:      s.e.machine,
+		HomeDir:        "/home",
+		ExcludeFile:    "/home/work/.portenv/excludes",
+		StateDir:       filepath.Join(s.e.dir, "state", s.cfg.ID),
+		Trace:          trace,
 	})
 }
 

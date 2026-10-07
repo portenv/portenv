@@ -22,7 +22,17 @@ type State struct {
 	// Dirty means the box was opened since that sync, so the local home may
 	// hold unsaved changes.
 	Dirty bool `json:"dirty"`
+	// Lease records this machine's last lease action: LeaseHeld after a
+	// resume or an autosave or save point, LeaseReleased after a clean
+	// close. Empty when unknown (for example a resume cut short).
+	Lease string `json:"lease,omitempty"`
 }
+
+// Recorded lease states.
+const (
+	LeaseHeld     = "held"
+	LeaseReleased = "released"
+)
 
 // loadState reads the state in dir. ok is false when there is none.
 func loadState(dir string) (st State, ok bool, err error) {

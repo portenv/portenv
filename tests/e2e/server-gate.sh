@@ -74,13 +74,22 @@ R "cd /tmp/portenv-src && sudo docker build --progress=plain -f images/toolbox-n
 expect "the toolbox image is on the server" R sudo docker image inspect "$image"
 
 echo "== link from this machine to the server"
+# Round-trip time: the median TCP connect time to the server's SSH port.
+rtt_ms=$(python3 - "${target#*@}" <<'PY'
+import socket, statistics, sys, time
+ts = []
+for _ in range(7):
+    t = time.time(); s = socket.create_connection((sys.argv[1], 22), 5); ts.append((time.time() - t) * 1000); s.close()
+print(round(statistics.median(ts)))
+PY
+)
 t0=$(seconds); R true; t1=$(seconds)
 rtt_s=$(python3 -c "print(round($t1 - $t0, 2))")
 head -c 2000000 /dev/urandom > "$root/probe.bin"
 t0=$(seconds); Rin 'cat > /dev/null' < "$root/probe.bin"; t1=$(seconds)
 up_bps=$(python3 -c "print(int(2000000 / max($t1 - $t0 - $rtt_s, 0.001)))")
 up_mbit=$(python3 -c "print(round($up_bps * 8 / 1e6, 2))")
-echo "  upload ${up_mbit} Mbit/s, SSH connection setup ${rtt_s} s"
+echo "  upload ${up_mbit} Mbit/s, round trip ${rtt_ms} ms, SSH connection setup ${rtt_s} s"
 
 echo "== Mac: new box with storage on the server (SFTP)"
 out=$("$portenv" resume gate 2>&1 | tail -1); echo "  $out"
@@ -102,7 +111,11 @@ expect "Mac closes" "$portenv" close gate
 t0=$(seconds); out=$("$portenv" resume gate 2>&1 | tail -1); t1=$(seconds)
 resume_s=$(python3 -c "print(round($t1 - $t0, 1))")
 expect "same-machine resume is rule 3" grep -q "rule 3" <<<"$out"
-expect "same-machine resume takes under 5 s, storage reachable (${resume_s} s, including starting the box; ${up_mbit} Mbit/s, SSH setup ${rtt_s} s)" python3 -c "import sys; sys.exit(0 if $t1 - $t0 < 5 else 1)"
+if (( rtt_ms <= 50 )); then
+	expect "same-machine resume under 5 s, storage reachable (${resume_s} s at ${rtt_ms} ms round trip, including starting the box)" python3 -c "import sys; sys.exit(0 if $t1 - $t0 < 5 else 1)"
+else
+	echo "skip  the online resume budget applies at a round trip of 50 ms or less; this link is ${rtt_ms} ms (resume took ${resume_s} s)"
+fi
 before=$(mac_box "$sums_cmd")
 
 echo "== Mac → server"
@@ -114,7 +127,11 @@ expect "apt-packages.txt replayed on the server" server_box 'command -v jq'
 expect "the home is on the encrypted volume" R "sudo test -d /var/lib/portenv/homes/portenv-home-$(box_id)/work"
 server_box 'echo "edited on the server" >> acme-api/README.md'
 before=$(server_box "$sums_cmd")
+expect "the server added its own repository key (it never stores the Mac's)" bash -c "[[ \$(${ssh_cmd[*]} -- $target sudo sha256sum /root/.config/Portenv/keys/$(box_id).key </dev/null | cut -d' ' -f1) != \$(shasum -a 256 $root/mac/keys/$(box_id).key | cut -d' ' -f1) ]]"
 expect "server closes" R sudo portenv close gate
+echo "== server: same-machine resume against its own storage, traced"
+R "sudo PORTENV_TRACE=1 portenv resume gate 2>&1 | grep -E '^trace|rule'" | sed 's/^/  /'
+expect "server closes again" R sudo portenv close gate
 
 echo "== server → Mac"
 out=$("$portenv" resume gate 2>&1 | tail -1); echo "  $out"
@@ -124,8 +141,24 @@ if [[ -n $before && "$before" == "$after" ]]; then pass "checksums of /home matc
 expect "Mac closes" "$portenv" close gate
 "$portenv" history gate | sed 's/^/  /'
 
+echo "== Mac: offline resume (storage pointed at an unreachable address)"
+cfg=$root/mac/boxes/gate.json
+cp "$cfg" "$cfg.online"
+python3 - "$cfg" "${target#*@}" <<'PY'
+import json, sys
+c = json.load(open(sys.argv[1])); c["storage"] = c["storage"].replace(sys.argv[2], "192.0.2.1")
+json.dump(c, open(sys.argv[1], "w"))
+PY
+t0=$(seconds); out=$("$portenv" resume gate </dev/null 2>&1) || true; t1=$(seconds)
+offline_s=$(python3 -c "print(round($t1 - $t0, 1))")
+echo "  $(tail -1 <<<"$out")"
+expect "offline resume after a clean close (Offline · will save later)" grep -q "Offline · will save later" <<<"$out"
+expect "offline resume under 5 s (${offline_s} s)" python3 -c "import sys; sys.exit(0 if $t1 - $t0 < 5 else 1)"
+docker stop -t 2 "portenv-gate-$(box_id)" >/dev/null 2>&1 || true
+mv "$cfg.online" "$cfg"
+
 echo
-echo "link: upload ${up_mbit} Mbit/s, SSH connection setup ${rtt_s} s"
-echo "budgets: 5 MB save ${save_s} s (overhead ${overhead_s} s), same-machine resume ${resume_s} s"
+echo "link: upload ${up_mbit} Mbit/s, round trip ${rtt_ms} ms, SSH connection setup ${rtt_s} s"
+echo "budgets: 5 MB save ${save_s} s (overhead ${overhead_s} s), same-machine resume ${resume_s} s online, ${offline_s} s offline"
 if (( failures )); then echo "$failures check(s) failed"; exit 1; fi
 echo "all checks passed"

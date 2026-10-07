@@ -5,6 +5,7 @@
 package agent
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -33,8 +34,11 @@ func startSFTPAgent(privateKey, hostKey string) (*sftpAgent, []string, []string,
 		return nil, nil, nil, fmt.Errorf("parse SFTP key: %w", err)
 	}
 	pub, _, _, rest, err := ssh.ParseAuthorizedKey([]byte(hostKey))
-	if err != nil || len(strings.TrimSpace(string(rest))) > 0 {
-		return nil, nil, nil, fmt.Errorf("parse storage host key: %v", err)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("parse storage host key: %w", err)
+	}
+	if len(strings.TrimSpace(string(rest))) > 0 {
+		return nil, nil, nil, errors.New("storage host key: want exactly one key")
 	}
 	keyring := sshagent.NewKeyring()
 	if err := keyring.Add(sshagent.AddedKey{PrivateKey: raw}); err != nil {

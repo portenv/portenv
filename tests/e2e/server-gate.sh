@@ -67,8 +67,9 @@ trap cleanup EXIT
 echo "== server setup"
 arch=$(R dpkg --print-architecture)
 (cd "$repo" && CGO_ENABLED=0 GOOS=linux GOARCH=$arch go build -trimpath -ldflags="-s -w" -o "$root/portenv-linux" ./core/cmd/portenv)
-"$portenv" init "$box" --image "$image" --storage "sftp:portenv-storage@${target#*@}:/storage" --storage-host-key "$host_key" > "$root/init.txt"
+"$portenv" init "$box" --image "$image" --storage "sftp:portenv-storage@${target#*@}:/storage" --storage-host-key "$host_key" --storage-rest 127.0.0.1:7422 > "$root/init.txt"
 storage_pub=$(grep '^ssh-ed25519 ' "$root/init.txt")
+rest_user=$(sed -n 's/^rest-user //p' "$root/init.txt")
 listening() { R sudo ss -Htln | awk '{print $4}' | grep -vE '^(127\.|\[::1\]|.*%lo:)' | sed 's/.*://' | sort -u | tr '\n' ' '; }
 ports_before=$(listening)
 Rin 'cat > /tmp/portenv-setup.sh' < "$repo/server/setup.sh"
@@ -77,10 +78,12 @@ if [[ $(R 'sha256sum /tmp/portenv 2>/dev/null | cut -d" " -f1') == $(shasum -a 2
 else
 	gzip -9c "$root/portenv-linux" | Rin 'gunzip > /tmp/portenv && chmod +x /tmp/portenv'
 fi
-R sudo bash /tmp/portenv-setup.sh --portenv-bin /tmp/portenv --storage-key "'$storage_pub'" | sed 's/^/  /'
+R sudo bash /tmp/portenv-setup.sh --portenv-bin /tmp/portenv --storage-key "'$storage_pub'" --rest-user "'$rest_user'" | sed 's/^/  /'
 ports_after=$(listening)
 if [[ "$ports_before" == "$ports_after" ]]; then pass "no new listening port on the server (only: $ports_after)"; else fail "no new listening port on the server (before: $ports_before, after: $ports_after)"; fi
 expect "the homes volume is LUKS-encrypted and mounted" R 'sudo cryptsetup status portenv-homes | grep -q "type:.*LUKS2" && mountpoint -q /var/lib/portenv/homes'
+expect "the REST server listens on the loopback address only" R 'sudo ss -Htln | grep -q "127.0.0.1:7422" && ! sudo ss -Htln | grep -qE "(0\.0\.0\.0|\*|\[::\]):7422"'
+expect "the REST password file holds only bcrypt hashes, readable by root and the storage account" R '[[ $(sudo stat -c "%a %U %G" /etc/portenv-rest.htpasswd) == "640 root portenv-storage" ]] && ! sudo grep -vqE "^box-[0-9a-f]+:\$2a\$" /etc/portenv-rest.htpasswd'
 expect "the LUKS key file is root-only" R '[[ $(sudo stat -c "%a %U" /etc/portenv/luks/homes.key) == "400 root" ]]'
 
 echo "== toolbox image (built on the server from the same Dockerfile)"

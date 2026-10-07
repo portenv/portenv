@@ -232,6 +232,7 @@ Each box has its own restic repository; saves happen automatically, and a lease 
 **Where restic runs (ADR 0005)**
 
 - Backup and restore run inside the box, where `/home` is. Everything else (the lease check, snapshot listing, lease tags, init, keys, forget and prune) runs on the host (`portenvd` or the runner), which can keep one SSH connection to storage open without exposing it to anything in a box.
+- On SFTP servers, the host reaches the repository through restic's REST server (`rest-server`, set up by `server/setup.sh`) on the server's loopback address, through a forward over the storage account's reused SSH connection: no inbound port, and the storage key may forward to that one port only. Each box has its own REST user; only the bcrypt hash is on the server. Backup and restore in the box keep using SFTP. Measured in the 0.5 spike (2026-10-08, 31 Mbit/s up, 42 ms, same box): online resume median 2.84 s (worst 4.6 s) through REST against 5.32 s (worst 7.74 s) over SFTP, because listing and lease tags need far fewer round trips.
 - Every machine has its own repository key, added on that machine so the key's derivation cost is tuned for it; a machine never stores another's key.
 - Offline: a machine starts from its local home only if its state says the home equals the last save it made or restored and it holds the lease or released it cleanly; saves wait ("Offline · will save later"), and on reconnect the resume rules apply (rule 4 keeps the offline work if another machine saved meanwhile).
 
@@ -240,9 +241,10 @@ Each box has its own restic repository; saves happen automatically, and a lease 
 The storage credential that enters a box (today the SFTP key served by the agent during a restic run) can delete and overwrite repository files, so root in a box during a run could destroy history. Proposal:
 
 - The box's credential becomes append-only: it can add files but never delete or overwrite them. Forget, prune and unlocking stale locks use a separate credential that never enters a box and lives only on the host.
-- For SFTP storage, plain `sshd` cannot enforce append-only. The clean way is restic's REST server (`rest-server --append-only`) on the server, bound to the loopback address and reached through the same SSH connection: boxes get an append-only HTTP user, the host gets a full user for forget and prune. No new inbound port: it is tunnelled over the existing SSH.
+- For SFTP storage, plain `sshd` cannot enforce append-only. The clean way is restic's REST server (`rest-server --append-only`), which already runs on servers since 0.5 for the host's own calls: boxes move from SFTP to an append-only REST user, the host keeps a full user for forget and prune, and the boxes' SFTP access ends. No new inbound port: it is tunnelled over the existing SSH.
 - For S3 (and Portenv storage on R2), the same split uses two credentials: put-only for boxes, full for the host.
-- Cost: one more process on servers, and restic's lock removal must happen on the host (append-only clients cannot delete their own locks).
+- Cost: restic's lock removal must happen on the host (append-only clients cannot delete their own locks). The REST server process already exists (0.5).
+- A box's SFTP upload is round-trip bound: in the 0.5 traces a 5 MB backup spent 5 to 6 s reading and uploading on a 31 to 33 Mbit/s link (about one 32 KB SFTP write per round trip), against about 1.3 s for the bytes. Moving box backups to REST here should remove most of it; measure it in 2.6.
 
 **Retention**
 

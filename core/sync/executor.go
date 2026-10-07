@@ -73,7 +73,8 @@ type LocalExecutor struct {
 	// SSH connection.
 	ControlDir string
 	// REST, when set, reaches restic's REST server on the storage server
-	// through a port forward over the reused SSH connection (spike).
+	// through a forward over the reused SSH connection, instead of SFTP
+	// (far fewer round trips for listing and lease tags).
 	REST *RESTForward
 }
 
@@ -82,6 +83,7 @@ type LocalExecutor struct {
 // No inbound port: the server listens on 127.0.0.1 only.
 type RESTForward struct {
 	Via      string // user@host of the SSH connection
+	Port     string // its SSH port; empty means 22
 	Remote   string // the server's REST address, 127.0.0.1:PORT
 	User     string
 	Password string
@@ -89,7 +91,7 @@ type RESTForward struct {
 
 // Socket is the local end of the forward.
 func (f *RESTForward) Socket(controlDir string) string {
-	sum := sha256.Sum256([]byte(f.Via + " " + f.Remote))
+	sum := sha256.Sum256([]byte(f.Via + " " + f.Port + " " + f.Remote))
 	return filepath.Join(controlDir, "rest-"+hex.EncodeToString(sum[:6])+".sock")
 }
 
@@ -261,6 +263,9 @@ func (f *RESTForward) ensure(ctx context.Context, controlDir string, opts, env [
 		}
 		base = append(base, a)
 	}
+	if f.Port != "" {
+		base = append(base, "-p", f.Port)
+	}
 	ssh := func(extra ...string) error {
 		cmd := exec.CommandContext(ctx, "ssh", append(append(slices.Clone(base), extra...), f.Via)...) // #nosec G204 -- options built here
 		cmd.Env = append(os.Environ(), env...)
@@ -270,10 +275,14 @@ func (f *RESTForward) ensure(ctx context.Context, controlDir string, opts, env [
 		}
 		return nil
 	}
+	// Nothing answers on the socket: it is missing or left by a connection
+	// that has gone. The master binds the socket, so it needs the unlink
+	// option too.
+	_ = os.Remove(sock)
 	if ssh("-O", "check") != nil {
-		if err := ssh("-M", "-N", "-f"); err != nil {
+		if err := ssh("-M", "-N", "-f", "-o", "StreamLocalBindUnlink=yes"); err != nil {
 			return err
 		}
 	}
-	return ssh("-O", "forward", "-o", "StreamLocalBindUnlink=yes", "-L", sock+":"+f.Remote)
+	return ssh("-O", "forward", "-L", sock+":"+f.Remote)
 }

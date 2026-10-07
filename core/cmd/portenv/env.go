@@ -89,6 +89,11 @@ type boxConfig struct {
 	Storage string `json:"storage"` // "" (this Mac only), an absolute directory, sftp:USER@HOST:/PATH or s3:URL
 	// StorageHostKey pins the SFTP server's host key ("ssh-ed25519 AAAA...").
 	StorageHostKey string `json:"storage_host_key,omitempty"`
+	// StorageREST is restic's REST server on the SFTP server's loopback
+	// (127.0.0.1:PORT, set up by server/setup.sh). restic on this machine
+	// reaches it through the storage account's SSH connection; backup and
+	// restore in the box keep using SFTP.
+	StorageREST string `json:"storage_rest,omitempty"`
 }
 
 // machineConfig holds this machine's settings (machine.json).
@@ -112,6 +117,10 @@ func (e *env) machineConfig() (machineConfig, error) {
 
 // storageKeyID names a box's SFTP storage key in the key store.
 func storageKeyID(boxID string) string { return boxID + "-storage" }
+
+// restKeyID names the box's REST server password in the key store; the
+// REST user is the box ID.
+func restKeyID(boxID string) string { return boxID + "-rest" }
 
 var nameRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,62}$`)
 
@@ -178,6 +187,8 @@ type session struct {
 	resticEnv []string
 	key       []byte
 	sshKey    []byte
+	// restPassword is the box's REST server password (StorageREST).
+	restPassword []byte
 }
 
 func (e *env) open(name string) (*session, error) {
@@ -213,6 +224,11 @@ func (e *env) open(name string) (*session, error) {
 	if strings.HasPrefix(c.Storage, "sftp:") {
 		if s.sshKey, err = e.keyStore().Get(storageKeyID(c.ID)); err != nil {
 			return nil, fmt.Errorf("SFTP storage key for %s: %w", name, err)
+		}
+	}
+	if c.StorageREST != "" {
+		if s.restPassword, err = e.keyStore().Get(restKeyID(c.ID)); err != nil {
+			return nil, fmt.Errorf("REST storage password for %s: %w", name, err)
 		}
 	}
 	return s, nil
@@ -308,20 +324,37 @@ func (s *session) hostExecutor() boxsync.Executor {
 
 func controlDir() string { return fmt.Sprintf("/tmp/portenv-%d", os.Getuid()) }
 
-// restForward is the REST spike: with PORTENV_SPIKE_REST=USER:PASSWORD@ADDR
-// (the REST server's loopback address on the storage server), restic on
-// this machine reaches the repository through restic's REST server over the
-// SFTP account's SSH connection instead of SFTP. Backup and restore in the
-// box still use SFTP.
+// restForward reaches the box's REST server (StorageREST) through the
+// storage account's SSH connection, on this server too (as 127.0.0.1), so
+// there is one path.
 func (s *session) restForward() *boxsync.RESTForward {
-	v := os.Getenv("PORTENV_SPIKE_REST")
-	cred, addr, ok := strings.Cut(v, "@")
-	user, pass, ok2 := strings.Cut(cred, ":")
-	if !ok || !ok2 || !strings.HasPrefix(s.cfg.Storage, "sftp:") {
+	if s.cfg.StorageREST == "" || len(s.restPassword) == 0 || !strings.HasPrefix(s.cfg.Storage, "sftp:") {
 		return nil
 	}
-	via, _, _ := strings.Cut(strings.TrimPrefix(s.cfg.Storage, "sftp:"), ":")
-	return &boxsync.RESTForward{Via: via, Remote: addr, User: user, Password: pass}
+	user, host, port := sftpTarget(strings.Replace(s.repo, "host.portenv.internal", "127.0.0.1", 1))
+	if host == "" {
+		return nil
+	}
+	return &boxsync.RESTForward{Via: user + "@" + host, Port: port, Remote: s.cfg.StorageREST, User: s.cfg.ID, Password: string(s.restPassword)}
+}
+
+// sftpTarget splits an SFTP repository address, in either restic form
+// (sftp:user@host:/path or sftp://user@host:port//path), into user, host
+// and port (empty for 22).
+func sftpTarget(repo string) (user, host, port string) {
+	if strings.HasPrefix(repo, "sftp://") {
+		u, err := url.Parse(repo)
+		if err != nil || u.Host == "" {
+			return "", "", ""
+		}
+		return u.User.Username(), u.Hostname(), u.Port()
+	}
+	userHost, _, _ := strings.Cut(strings.TrimPrefix(repo, "sftp:"), ":")
+	user, host, ok := strings.Cut(userHost, "@")
+	if !ok {
+		return "", userHost, ""
+	}
+	return user, host, ""
 }
 
 // storageReachable reports whether the storage can be reached within 2 s.

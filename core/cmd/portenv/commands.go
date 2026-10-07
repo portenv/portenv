@@ -12,11 +12,14 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"golang.org/x/crypto/bcrypt"
 
 	"github.com/portenv/portenv/core/driver"
 	"github.com/portenv/portenv/core/keys"
@@ -44,8 +47,12 @@ func cmdInit(_ context.Context, e *env, name string, args []string) error {
 	image := fs.String("image", defaultImage, "toolbox image")
 	storage := fs.String("storage", "", "storage: an absolute directory, sftp:USER@HOST:/PATH or s3:URL (default: this Mac only)")
 	hostKey := fs.String("storage-host-key", "", "SFTP storage: the server's host key, \"ssh-ed25519 AAAA...\"")
+	rest := fs.String("storage-rest", "", "SFTP storage: restic's REST server on the server's loopback, 127.0.0.1:PORT (server/setup.sh sets it up)")
 	if err := parse(fs, args); err != nil {
 		return err
+	}
+	if *rest != "" && (!strings.HasPrefix(*storage, "sftp:") || !loopbackAddr(*rest)) {
+		return usageError{"--storage-rest needs SFTP storage and a loopback address (127.0.0.1:PORT)"}
 	}
 	p, err := e.configPath(name)
 	if err != nil {
@@ -58,7 +65,7 @@ func cmdInit(_ context.Context, e *env, name string, args []string) error {
 	if _, err := rand.Read(b); err != nil {
 		return err
 	}
-	c := boxConfig{ID: "box-" + hex.EncodeToString(b), Name: name, Image: *image, Storage: *storage, StorageHostKey: *hostKey}
+	c := boxConfig{ID: "box-" + hex.EncodeToString(b), Name: name, Image: *image, Storage: *storage, StorageHostKey: *hostKey, StorageREST: *rest}
 	if _, _, _, err := e.storage(c); err != nil {
 		return err
 	}
@@ -80,6 +87,23 @@ func cmdInit(_ context.Context, e *env, name string, args []string) error {
 		}
 		storagePub = pub
 	}
+	var restUser string
+	if c.StorageREST != "" {
+		// 192 random bits, as hex: within bcrypt's 72-byte limit.
+		raw := make([]byte, 24)
+		if _, err := rand.Read(raw); err != nil {
+			return err
+		}
+		pw := []byte(hex.EncodeToString(raw))
+		if err := e.keyStore().Put(restKeyID(c.ID), pw); err != nil {
+			return err
+		}
+		hash, err := bcrypt.GenerateFromPassword(pw, bcrypt.DefaultCost)
+		if err != nil {
+			return err
+		}
+		restUser = c.ID + ":" + string(hash)
+	}
 	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
 		return err
 	}
@@ -90,6 +114,10 @@ func cmdInit(_ context.Context, e *env, name string, args []string) error {
 	fmt.Printf("created box %s (%s) on %s\n", name, c.ID, e.machine)
 	if storagePub != "" {
 		fmt.Printf("add this key to the storage account's authorized_keys on the server:\n%s\n", storagePub)
+	}
+	if restUser != "" {
+		// Only the bcrypt hash leaves this machine.
+		fmt.Printf("add this REST user on the server (setup.sh --rest-user):\nrest-user %s\n", restUser)
 	}
 	fmt.Printf("next: portenv resume %s\n", name)
 	return nil
@@ -103,8 +131,12 @@ func cmdJoin(ctx context.Context, e *env, name string, args []string) error {
 	image := fs.String("image", defaultImage, "toolbox image")
 	storage := fs.String("storage", "", "where this machine reaches the box's storage: an absolute directory, sftp:USER@HOST:/PATH or s3:URL")
 	hostKey := fs.String("storage-host-key", "", "SFTP storage: the server's host key")
+	rest := fs.String("storage-rest", "", "SFTP storage: restic's REST server on the server's loopback (password on stdin)")
 	if err := parse(fs, args); err != nil {
 		return err
+	}
+	if *rest != "" && !loopbackAddr(*rest) {
+		return usageError{"--storage-rest needs a loopback address (127.0.0.1:PORT)"}
 	}
 	if !nameRE.MatchString(*id) {
 		return usageError{"join needs --id BOX-ID"}
@@ -116,7 +148,7 @@ func cmdJoin(ctx context.Context, e *env, name string, args []string) error {
 	if _, err := os.Stat(p); err == nil {
 		return fmt.Errorf("box %s already exists here", name)
 	}
-	c := boxConfig{ID: *id, Name: name, Image: *image, Storage: *storage, StorageHostKey: *hostKey}
+	c := boxConfig{ID: *id, Name: name, Image: *image, Storage: *storage, StorageHostKey: *hostKey, StorageREST: *rest}
 	if _, _, _, err := e.storage(c); err != nil {
 		return err
 	}
@@ -137,6 +169,14 @@ func cmdJoin(ctx context.Context, e *env, name string, args []string) error {
 			return err
 		}
 	}
+	if c.StorageREST != "" {
+		if in.RESTPassword == "" {
+			return errors.New("REST storage needs its password on stdin")
+		}
+		if err := e.keyStore().Put(restKeyID(c.ID), []byte(in.RESTPassword)); err != nil {
+			return err
+		}
+	}
 	// This machine's own repository key, added here so its derivation cost
 	// is tuned for this machine. The key that came on stdin is used once to
 	// add it and is never stored.
@@ -144,7 +184,7 @@ func cmdJoin(ctx context.Context, e *env, name string, args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := addOwnKey(ctx, e, c, []byte(in.RepositoryKey), []byte(in.StorageKey), own); err != nil {
+	if err := addOwnKey(ctx, e, c, []byte(in.RepositoryKey), []byte(in.StorageKey), []byte(in.RESTPassword), own); err != nil {
 		return fmt.Errorf("add this machine's repository key: %w", err)
 	}
 	if err := e.keyStore().Put(c.ID, own); err != nil {
@@ -162,12 +202,12 @@ func cmdJoin(ctx context.Context, e *env, name string, args []string) error {
 }
 
 // addOwnKey runs restic key add on this machine with the transferred key.
-func addOwnKey(ctx context.Context, e *env, c boxConfig, transferred, storageKey, own []byte) error {
+func addOwnKey(ctx context.Context, e *env, c boxConfig, transferred, storageKey, restPassword, own []byte) error {
 	repo, _, resticEnv, err := e.storage(c)
 	if err != nil {
 		return err
 	}
-	s := &session{e: e, cfg: c, repo: repo, resticEnv: resticEnv, key: transferred, sshKey: storageKey}
+	s := &session{e: e, cfg: c, repo: repo, resticEnv: resticEnv, key: transferred, sshKey: storageKey, restPassword: restPassword}
 	host := s.hostExecutor()
 	if host == nil {
 		return errors.New("no restic on this machine (the server setup installs it)")
@@ -188,7 +228,8 @@ func addOwnKey(ctx context.Context, e *env, c boxConfig, transferred, storageKey
 // joinKeys is what portenv move sends to portenv join on stdin.
 type joinKeys struct {
 	RepositoryKey string `json:"repository_key"`
-	StorageKey    string `json:"storage_key,omitempty"` // SFTP storage, OpenSSH PEM
+	StorageKey    string `json:"storage_key,omitempty"`   // SFTP storage, OpenSSH PEM
+	RESTPassword  string `json:"rest_password,omitempty"` // REST storage (StorageREST)
 }
 
 // cmdSSHConfig prints the "ssh portenv" entry for a box on a server: it
@@ -591,6 +632,14 @@ func cmdMove(ctx context.Context, e *env, name string, args []string) error {
 			}
 			keys.StorageKey = string(sk)
 			joinArgs = append(joinArgs, "--storage-host-key", "'"+c.StorageHostKey+"'")
+			if c.StorageREST != "" {
+				rp, err := e.keyStore().Get(restKeyID(c.ID))
+				if err != nil {
+					return fmt.Errorf("REST storage password: %w", err)
+				}
+				keys.RESTPassword = string(rp)
+				joinArgs = append(joinArgs, "--storage-rest", c.StorageREST)
+			}
 		}
 		payload, err := json.Marshal(keys)
 		if err != nil {
@@ -663,4 +712,11 @@ func printKept(hist []boxsync.Snapshot) {
 func fromRegistry(ref string) bool {
 	first, _, ok := strings.Cut(ref, "/")
 	return ok && (strings.ContainsAny(first, ".:") || first == "localhost")
+}
+
+// loopbackAddr reports whether addr is 127.0.0.1:PORT: the REST server must
+// never listen anywhere a network can reach.
+func loopbackAddr(addr string) bool {
+	host, port, err := net.SplitHostPort(addr)
+	return err == nil && host == "127.0.0.1" && port != ""
 }

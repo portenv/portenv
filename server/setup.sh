@@ -5,13 +5,16 @@
 # server (arm64 or amd64):
 #
 #   sudo ./setup.sh --portenv-bin ./portenv [--homes-device /dev/X | --homes-size 8G]
-#                   [--storage-key "ssh-ed25519 AAAA..."] [--image ghcr.io/portenv/toolbox-node@sha256:...]
+#                   [--storage-key "ssh-ed25519 AAAA..."] [--rest-user "BOX-ID:BCRYPT-HASH"]
+#                   [--image ghcr.io/portenv/toolbox-node@sha256:...]
 #
 # Installs Docker Engine from Docker's repository (signing key pinned), an
 # encrypted LUKS volume for box homes unlocked at boot from a root-only key
 # file, a chrooted SFTP-only storage account for repositories, and the
-# portenv CLI. Opens no port: everything goes through the server's existing
-# SSH. Safe to run again.
+# portenv CLI, and restic's REST server on the loopback address for fast
+# listing and lease tags (reached through the storage account's SSH
+# connection). Opens no port reachable from outside: everything goes through
+# the server's existing SSH. Safe to run again.
 set -euo pipefail
 
 # Docker's release signing key, as published in Docker's install
@@ -22,6 +25,7 @@ portenv_bin=""
 homes_size=8G
 homes_device=""
 storage_key=""
+rest_user=""
 only=""
 image_ref=""
 while (($#)); do
@@ -30,11 +34,17 @@ while (($#)); do
 		--homes-size) homes_size=$2; shift 2 ;;
 		--homes-device) homes_device=$2; shift 2 ;;
 		--storage-key) storage_key=$2; shift 2 ;;
+		--rest-user) rest_user=$2; shift 2 ;;
 		--only) only=$2; shift 2 ;;
 		--image) image_ref=$2; shift 2 ;;
 		*) echo "unknown option $1" >&2; exit 2 ;;
 	esac
 done
+
+# restic's REST server: loopback only, as the storage account. A key in the
+# storage account may forward to this port and nothing else.
+REST_ADDR=127.0.0.1:7422
+REST_HTPASSWD=/etc/portenv-rest.htpasswd
 
 say() { printf '\n== %s\n' "$*"; }
 die() { printf 'setup: %s\n' "$*" >&2; exit 1; }
@@ -47,21 +57,35 @@ setup_storage_account() {
 	id portenv-storage >/dev/null 2>&1 || useradd --system --gid portenv-storage --no-create-home \
 		--home-dir / --shell /usr/sbin/nologin portenv-storage
 	install -d -m 0755 -o root -g root /srv/portenv /srv/portenv/storage-root
-	install -d -m 0700 -o portenv-storage -g portenv-storage /srv/portenv/storage-root/storage
+	install -d -m 0700 -o portenv-storage -g portenv-storage /srv/portenv/storage-root/storage /srv/portenv/storage-root/storage/boxes
 	# sshd reads authorized keys as the target user, so the file must be
 	# readable by portenv-storage: root-owned, 0644, outside root-only /etc/portenv.
 	keys=/etc/ssh/portenv-storage.authorized_keys
 	touch "$keys" && chown root:root "$keys" && chmod 0644 "$keys"
 	if [[ -n $storage_key ]]; then
-		line="restrict $storage_key"
-		grep -qxF "$line" "$keys" || echo "$line" >> "$keys"
+		# restrict: no shell, PTY or agent; the one exception is a forward to
+		# the REST server's loopback port.
+		line="restrict,port-forwarding,permitopen=\"$REST_ADDR\" $storage_key"
+		grep -vF " $storage_key" "$keys" > "$keys.new" || true
+		echo "$line" >> "$keys.new" && chmod 0644 "$keys.new" && mv "$keys.new" "$keys"
 	fi
-	cat > /etc/ssh/sshd_config.d/50-portenv-storage.conf <<'CONF'
+	# REST users (one per box: BOX-ID:BCRYPT-HASH). Only the hash is here;
+	# the password stays on the box's machines.
+	touch "$REST_HTPASSWD" && chown root:portenv-storage "$REST_HTPASSWD" && chmod 0640 "$REST_HTPASSWD"
+	if [[ -n $rest_user ]]; then
+		[[ $rest_user =~ ^box-[0-9a-f]+:\$2[aby]\$[0-9]{2}\$[./A-Za-z0-9]{53}$ ]] || die "--rest-user must be BOX-ID:BCRYPT-HASH (from portenv init)"
+		{ grep -v "^${rest_user%%:*}:" "$REST_HTPASSWD" || true; echo "$rest_user"; } > "$REST_HTPASSWD.new"
+		chown root:portenv-storage "$REST_HTPASSWD.new" && chmod 0640 "$REST_HTPASSWD.new" && mv "$REST_HTPASSWD.new" "$REST_HTPASSWD"
+		systemctl try-restart portenv-rest 2>/dev/null || true
+	fi
+	cat > /etc/ssh/sshd_config.d/50-portenv-storage.conf <<CONF
 Match User portenv-storage
 	ChrootDirectory /srv/portenv/storage-root
 	ForceCommand internal-sftp
 	AuthorizedKeysFile /etc/ssh/portenv-storage.authorized_keys
-	AllowTcpForwarding no
+	AllowTcpForwarding local
+	PermitOpen $REST_ADDR
+	AllowStreamLocalForwarding no
 	AllowAgentForwarding no
 	X11Forwarding no
 	PermitTTY no
@@ -73,12 +97,65 @@ CONF
 }
 
 
+# rest-server 0.14.0 from its GitHub release; checksums taken from the
+# release's SHA256SUMS, signed by restic's release key (CF8F 18F2 8445 7597
+# 3F79 D4E1 91A6 868B D3F7 A907), like restic below.
+REST_SERVER_VERSION=0.14.0
+declare -A REST_SERVER_SHA256=(
+	[arm64]=cef139cbe8b27b16bda731d17f093b0aa466b8c60b136c12d78b6f2bff3daf22
+	[amd64]=4c9c95bc079a0334e81fad379b19dc5c3353c71c2c88d652cafce2081c2b1c66
+)
+install_rest_server() {
+	say "restic REST server on $REST_ADDR (loopback only)"
+	local arch; arch=$(dpkg --print-architecture)
+	if ! /usr/local/bin/rest-server --version 2>/dev/null | grep -q "rest-server $REST_SERVER_VERSION"; then
+		local tmp; tmp=$(mktemp -d)
+		curl -fsSL -o "$tmp/rs.tar.gz" "https://github.com/restic/rest-server/releases/download/v$REST_SERVER_VERSION/rest-server_${REST_SERVER_VERSION}_linux_${arch}.tar.gz"
+		echo "${REST_SERVER_SHA256[$arch]}  $tmp/rs.tar.gz" | sha256sum -c --quiet - || { rm -rf "$tmp"; die "rest-server download failed its checksum"; }
+		tar -xzf "$tmp/rs.tar.gz" -C "$tmp" && install -m 0755 "$tmp/rest-server_${REST_SERVER_VERSION}_linux_${arch}/rest-server" /usr/local/bin/rest-server
+		rm -rf "$tmp"
+	fi
+	/usr/local/bin/rest-server --version | head -1
+	if [[ ! -d /run/systemd/system ]]; then
+		echo "no systemd: start it with: runuser -u portenv-storage -- /usr/local/bin/rest-server $(rest_server_args)"
+		return
+	fi
+	cat > /etc/systemd/system/portenv-rest.service <<UNIT
+[Unit]
+Description=Portenv: restic REST server for box repositories (loopback only)
+After=network.target
+
+[Service]
+User=portenv-storage
+Group=portenv-storage
+UMask=0077
+ExecStart=/usr/local/bin/rest-server $(rest_server_args)
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ReadWritePaths=/srv/portenv/storage-root/storage
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_INET AF_UNIX
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+	systemctl daemon-reload
+	systemctl enable --now portenv-rest >/dev/null 2>&1
+	systemctl restart portenv-rest
+}
+rest_server_args() { echo "--path /srv/portenv/storage-root/storage/boxes --listen $REST_ADDR --htpasswd-file $REST_HTPASSWD"; }
+
 [[ $(id -u) == 0 ]] || die "run as root (sudo)"
-if [[ $only == storage-account ]]; then
-	setup_storage_account
-	exit 0
-fi
-[[ -z $only ]] || die "unknown --only $only (want storage-account)"
+case $only in
+	storage-account) setup_storage_account; exit 0 ;;
+	rest-server) install_rest_server; exit 0 ;;
+	"") ;;
+	*) die "unknown --only $only (want storage-account or rest-server)" ;;
+esac
 
 say "preflight"
 . /etc/os-release
@@ -225,6 +302,8 @@ if ! restic version 2>/dev/null | grep -q "restic $RESTIC_VERSION "; then
 fi
 restic version | head -1
 
+install_rest_server
+
 say "portenv CLI"
 if [[ -n $portenv_bin ]]; then
 	install -m 0755 "$portenv_bin" /usr/local/bin/portenv
@@ -235,4 +314,4 @@ chmod 0600 /root/.config/Portenv/machine.json
 command -v portenv >/dev/null && portenv version
 
 say "done"
-echo "No port was opened. Box homes: /var/lib/portenv/homes. Keys: /etc/portenv (root-only)."
+echo "No port was opened (the REST server listens on $REST_ADDR only). Box homes: /var/lib/portenv/homes. Keys: /etc/portenv (root-only)."

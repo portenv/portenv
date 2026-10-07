@@ -438,7 +438,7 @@ Phases 0 to 2 have no Portenv backend, so the first run is reduced. Same six ste
 1. Welcome: a single Get started button. No sign-in; the device key is generated locally.
 2. Protection: fixed to Only you, shown as an explanation (your keys stay on your devices; losing them and the recovery key loses the data). No choice is offered.
 3. Recovery key: unchanged.
-4. Storage: My own server, An S3-compatible bucket, or This Mac only. No Portenv storage. This Mac only keeps the box's repository on the Mac's disk, and the screen says plainly that saves then have no copy off this Mac.
+4. Storage: My own server, An S3-compatible bucket, or This Mac only. No Portenv storage. This Mac only keeps the box's repository at `~/Library/Application Support/Portenv/Repositories/<box-id>`, outside the box and the engine VM, and the screen says plainly that saves then have no copy off this Mac. Time Machine may back the folder up; it is already encrypted by restic. After a week of use, one dismissible notice says "Your saves only exist on this Mac. Add a server or bucket to keep a copy elsewhere.", and Settings › Storage shows the same fact as a permanent status line.
 5. First box and 6. Getting ready: unchanged.
 
 In Phase 3, sign-in, Portenv storage and the recoverable mode are switched on. Existing users get a one-time prompt to create an account and link their devices; their boxes, keys and storage stay as they are.
@@ -667,7 +667,6 @@ These need an owner decision; Claude Code should add new ones here instead of gu
 - [ ] Phase 2: install the runner as a service from the start, or plain SSH first? The plan assumes the runner.
 - [ ] Support Intel Macs and macOS before 26 with the Docker fallback, or make them remote-only clients?
 - [ ] Trademark and domain check for Portenv in the EU and US; confirm portenv.com is registrable.
-- [ ] This Mac only storage (Phases 1–2): where the repository lives, and whether the app later nudges the user to add off-Mac storage.
 - [ ] Approval timeout default (30 minutes assumed) and what happens when it expires.
 - [ ] Anthropic's terms for agents driving Claude Code with a subscription login versus a Console API key.
 - [ ] Open-source boundary in detail: this repository is Apache-2.0 and `portenv/cloud` is private (decided), but confirm before going public whether the Mac app, the File Provider and the iPhone companion stay in the public repository or move to a private one.

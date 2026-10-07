@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Portenv agent presence and approval</title>
+
+</head>
+<body>
+
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400&amp;display=swap">
+<style>
+body{margin:0;background:#0E0E10}
+a{color:#409CFF}a:hover{color:#6CB6FF}
+</style>
+
+<div style="position: relative; width: 960px; height: 600px; box-sizing: border-box; background: #0E0E10; color: #F5F5F7; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; font-size: 13px">
+
+<div style="position: absolute; top: 0; left: 0; width: 640px; height: 600px; box-sizing: border-box; display: flex; flex-direction: column; background: #1A1A1C; border: 1px solid #3A3A3D; border-radius: 12px; overflow: hidden">
+<header style="display: flex; align-items: center; gap: 14px; height: 52px; padding: 0 14px; box-sizing: border-box; background: #2B2B2E; border-bottom: 1px solid #000000">
+<div aria-hidden="true" style="display: flex; gap: 8px; padding-right: 6px">
+<span style="width: 12px; height: 12px; border-radius: 50%; background: #FF5F57"></span>
+<span style="width: 12px; height: 12px; border-radius: 50%; background: #FEBC2E"></span>
+<span style="width: 12px; height: 12px; border-radius: 50%; background: #28C840"></span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 1px; padding: 2px 8px">
+<span style="font-weight: 600">acme-api</span>
+<span style="font-size: 11px; color: #A1A1A6">build-server · Saved just now</span>
+</div>
+<div style="flex-grow: 1"></div>
+<button type="button" aria-expanded="true" aria-label="Agents: research-agent, test-agent" style="display: flex; align-items: center; padding: 3px 6px; min-height: 34px; background: #3A3A3D; border: none; border-radius: 8px; cursor: pointer">
+<span style="position: relative; display: flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 50%; background: #5E5CE6; color: #FFFFFF; font-size: 12px; font-weight: 600; border: 2px solid #3A3A3D">R<span style="position: absolute; top: -2px; right: -2px; width: 9px; height: 9px; border-radius: 50%; background: #FF9F0A; border: 2px solid #3A3A3D"></span></span>
+<span style="display: flex; align-items: center; justify-content: center; width: 26px; height: 26px; margin-left: -7px; border-radius: 50%; background: #64D2FF; color: #062635; font-size: 12px; font-weight: 600; border: 2px solid #3A3A3D">T</span>
+</button>
+</header>
+<pre aria-hidden="true" style="flex-grow: 1; margin: 0; padding: 18px 22px; font-family: 'SF Mono', ui-monospace, 'JetBrains Mono', Menlo, monospace; font-size: 12px; line-height: 1.65; color: #6E6E73; white-space: pre"><span style="color: #4E8F68">work@portenv</span> <span style="color: #4C7BAE">~/acme-api</span> (main) $ claude --continue
+
+&gt; Run the test suite.
+
+● Ran npm test in ~/acme-api.
+  142 tests · 139 passed · 3 failed</pre>
+</div>
+
+<section aria-label="research-agent" style="position: absolute; top: 58px; left: 278px; width: 350px; box-sizing: border-box; padding: 16px; display: flex; flex-direction: column; gap: 14px; background: #2C2C2E; border: 1px solid #48484B; border-radius: 12px; box-shadow: 0 16px 40px rgba(0,0,0,0.6)">
+
+<div style="display: flex; align-items: center; gap: 12px">
+<span aria-hidden="true" style="display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 50%; background: #5E5CE6; color: #FFFFFF; font-size: 15px; font-weight: 600">R</span>
+<div style="display: flex; flex-direction: column; gap: 2px">
+<span style="font-size: 14px; font-weight: 600">research-agent</span>
+<span style="font-size: 12px; color: #A1A1A6">SSH from an agent sandbox · connected 14:32</span>
+</div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 8px">
+<span style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #C7C7CC"><span aria-hidden="true" style="width: 7px; height: 7px; border-radius: 50%; background: #30D158"></span>In its own lane · branch agent/research-agent</span>
+<pre style="margin: 0; padding: 10px 12px; background: #1A1A1C; border-radius: 8px; font-family: 'SF Mono', ui-monospace, 'JetBrains Mono', Menlo, monospace; font-size: 11px; line-height: 1.6; color: #C7C7CC; white-space: pre; overflow: hidden">$ npm test
+<span style="color: #7EE2A8">PASS</span> api/users.spec.ts
+<span style="color: #FFD60A">RUNS</span> api/orders.spec.ts
+$ sudo apt-get install redis-tools</pre>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 10px; padding: 12px; border-radius: 10px; background: #3A2E1A">
+<span style="font-size: 12px; line-height: 1.45; color: #FFD9A0">Waiting for you: wants to use <span style="font-family: 'SF Mono', ui-monospace, 'JetBrains Mono', monospace">sudo</span> to install redis-tools</span>
+<div style="display: flex; gap: 8px">
+<button type="button" style="flex: 1 1 0; min-height: 30px; background: #0A6EDB; color: #FFFFFF; border: none; border-radius: 7px; font: inherit; font-weight: 500; cursor: pointer">Allow</button>
+<button type="button" style="flex: 1 1 0; min-height: 30px; background: #48484B; color: #F5F5F7; border: none; border-radius: 7px; font: inherit; font-weight: 500; cursor: pointer">Deny</button>
+</div>
+</div>
+
+<div style="display: flex; gap: 8px">
+<button type="button" style="flex: 1 1 0; min-height: 30px; background: #48484B; color: #F5F5F7; border: none; border-radius: 7px; font: inherit; cursor: pointer">Watch</button>
+<button type="button" style="flex: 1 1 0; min-height: 30px; background: #48484B; color: #F5F5F7; border: none; border-radius: 7px; font: inherit; cursor: pointer">Take Over</button>
+</div>
+
+<p style="margin: 0; font-size: 12px; line-height: 1.5; color: #A1A1A6">Can see and run commands in its lane. Asks before sudo and secrets. Expires tonight. <a href="#">Edit…</a></p>
+
+<div style="height: 1px; background: #48484B"></div>
+<button type="button" style="align-self: flex-start; min-height: 28px; padding: 0; background: transparent; color: #FF6961; border: none; font: inherit; cursor: pointer">Revoke Access</button>
+</section>
+
+<div role="alert" style="position: absolute; top: 14px; left: 664px; width: 282px; box-sizing: border-box; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; background: #2C2C2E; border: 1px solid #48484B; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.5)">
+<div style="display: flex; gap: 10px">
+<span aria-hidden="true" style="display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; flex-shrink: 0; border-radius: 8px; background: #3A3A3D; color: #F5F5F7">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 20h18"></path><path d="M5 20V10l7-6 7 6v10"></path><path d="M10 20v-5h4v5"></path></svg>
+</span>
+<div style="display: flex; flex-direction: column; gap: 2px; min-width: 0">
+<span style="display: flex; justify-content: space-between; gap: 8px; font-size: 11px; color: #A1A1A6"><span>PORTENV</span><span>now</span></span>
+<span style="font-weight: 600; line-height: 1.35">research-agent wants to use sudo</span>
+<span style="font-size: 12px; color: #C7C7CC; line-height: 1.4">apt-get install redis-tools · acme-api on build-server</span>
+</div>
+</div>
+<div style="display: flex; gap: 8px">
+<button type="button" style="flex: 1 1 0; min-height: 30px; background: #48484B; color: #F5F5F7; border: none; border-radius: 8px; font: inherit; cursor: pointer">Allow</button>
+<button type="button" style="flex: 1 1 0; min-height: 30px; background: #48484B; color: #F5F5F7; border: none; border-radius: 8px; font: inherit; cursor: pointer">Deny</button>
+</div>
+</div>
+
+</div>
+
+
+</body>
+</html>

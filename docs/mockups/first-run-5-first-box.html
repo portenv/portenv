@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Create your first box</title>
+
+</head>
+<body>
+
+
+<style>
+body{margin:0;background:#0E0E10}
+a{color:#409CFF}a:hover{color:#6CB6FF}
+</style>
+
+<div style="width: 720px; height: 520px; box-sizing: border-box; display: flex; flex-direction: column; background: #1E1E20; color: #F5F5F7; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; font-size: 13px; border: 1px solid #3A3A3D; border-radius: 12px; overflow: hidden">
+<div aria-hidden="true" style="display: flex; gap: 8px; padding: 14px 16px">
+<span style="width: 12px; height: 12px; border-radius: 50%; background: #FF5F57"></span>
+<span style="width: 12px; height: 12px; border-radius: 50%; background: #FEBC2E"></span>
+<span style="width: 12px; height: 12px; border-radius: 50%; background: #28C840"></span>
+</div>
+<div style="flex-grow: 1; display: flex; flex-direction: column; gap: 16px; padding: 14px 64px 0">
+<h1 style="margin: 0; font-size: 24px; font-weight: 700">Create your first box</h1>
+
+<div style="display: grid; grid-template-columns: 110px minmax(0, 1fr); align-items: center; gap: 14px 16px">
+<label for="box-name" style="color: #A1A1A6; text-align: right">Name</label>
+<input id="box-name" type="text" value="acme-api" style="height: 30px; padding: 0 10px; box-sizing: border-box; background: #2A2A2D; color: #F5F5F7; border: 1px solid #48484B; border-radius: 7px; font: inherit">
+
+<span id="start-label" style="color: #A1A1A6; text-align: right">Start from</span>
+<div role="radiogroup" aria-labelledby="start-label" style="display: flex; padding: 2px; background: #2A2A2D; border: 1px solid #48484B; border-radius: 8px">
+<button type="button" role="radio" aria-checked="checked" style="flex: 1 1 0; min-height: 28px; background: #48484B; color: #F5F5F7; border: none; border-radius: 6px; font: inherit; cursor: pointer">GitHub repository</button>
+<button type="button" role="radio" aria-checked="checked" style="flex: 1 1 0; min-height: 28px; background: transparent; color: #F5F5F7; border: none; border-radius: 6px; font: inherit; cursor: pointer">Folder on this Mac</button>
+<button type="button" role="radio" aria-checked="checked" style="flex: 1 1 0; min-height: 28px; background: transparent; color: #F5F5F7; border: none; border-radius: 6px; font: inherit; cursor: pointer">Empty</button>
+</div>
+
+
+<label for="repo" style="color: #A1A1A6; text-align: right">Repository</label>
+<input id="repo" type="text" value="your-org/acme-api" style="height: 30px; padding: 0 10px; box-sizing: border-box; background: #2A2A2D; color: #F5F5F7; border: 1px solid #48484B; border-radius: 7px; font: inherit">
+
+
+
+<span style="color: #A1A1A6; text-align: right">Toolbox</span>
+<span style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap">
+<span>Node 22 · PostgreSQL client · Claude Code</span>
+<a href="#" style="font-size: 13px">Change…</a>
+</span>
+<span></span>
+<span style="margin-top: -10px; font-size: 12px; color: #8E8E93">Detected from package.json</span>
+</div>
+
+<div style="height: 1px; background: #3A3A3D"></div>
+
+<label style="display: flex; align-items: flex-start; gap: 10px; cursor: pointer">
+<input type="checkbox" checked="checked" style="width: 16px; height: 16px; margin: 1px 0 0; accent-color: #0A84FF">
+<span style="display: flex; flex-direction: column; gap: 3px">
+<span>Show this box in Finder</span>
+<span style="font-size: 12px; color: #8E8E93">Its home appears in Documents › Portenv › acme-api, for downloads and files you want to hand to the box.</span>
+</span>
+</label>
+</div>
+<div style="display: flex; align-items: center; justify-content: space-between; padding: 0 64px 32px">
+<span aria-label="Step 5 of 6" style="display: flex; gap: 6px">
+<span style="width: 7px; height: 7px; border-radius: 50%; background: #5A5A5E"></span>
+<span style="width: 7px; height: 7px; border-radius: 50%; background: #5A5A5E"></span>
+<span style="width: 7px; height: 7px; border-radius: 50%; background: #5A5A5E"></span>
+<span style="width: 7px; height: 7px; border-radius: 50%; background: #5A5A5E"></span>
+<span style="width: 7px; height: 7px; border-radius: 50%; background: #F5F5F7"></span>
+<span style="width: 7px; height: 7px; border-radius: 50%; background: #5A5A5E"></span>
+</span>
+<span style="display: flex; gap: 10px">
+<a href="first-run-4-storage.html" style="display: flex; align-items: center; min-height: 34px; padding: 0 16px; border-radius: 8px; background: #3A3A3D; color: #F5F5F7; text-decoration: none; font-size: 13px">Back</a>
+<a href="first-run-6-getting-ready.html" style="display: flex; align-items: center; min-height: 34px; padding: 0 18px; border-radius: 8px; background: #0A6EDB; color: #FFFFFF; text-decoration: none; font-size: 13px; font-weight: 600">Create Box</a>
+</span>
+</div>
+</div>
+
+
+</body>
+</html>

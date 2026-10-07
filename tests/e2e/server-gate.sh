@@ -23,6 +23,9 @@ root=$(mktemp -d "${TMPDIR:-/tmp}/portenv-gate.XXXXXX")
 read -r -a ssh_cmd <<<"${PORTENV_SSH:-ssh}"
 export PORTENV_KEYS=file PORTENV_HOME=$root/mac PORTENV_DOCKER_NAMESPACE=gate
 failures=0
+# A new box name per run: the server keeps its boxes between runs, and the
+# gate never deletes a box or its saves.
+box=gate-$(date +%Y%m%d%H%M%S)
 # R runs a command on the server with no input (an ssh that inherits an
 # open stdin can wait forever after the remote command ends); Rin passes
 # stdin through for uploads.
@@ -31,7 +34,7 @@ Rin() { "${ssh_cmd[@]}" -- "$target" "$@"; }
 pass() { printf 'ok    %s\n' "$1"; }
 fail() { printf 'FAIL  %s\n' "$1"; failures=$((failures + 1)); }
 expect() { local name=$1; shift; if "$@" >/dev/null 2>&1; then pass "$name"; else fail "$name"; fi; }
-box_id() { python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["id"])' "$root/mac/boxes/gate.json"; }
+box_id() { python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["id"])' "$root/mac/boxes/$box.json"; }
 mac_box() { docker exec -u work -w /home/work "portenv-gate-$(box_id)" bash -lc "$*"; }
 server_box() { R sudo docker exec -u work -w /home/work "portenv-$(box_id)" bash -lc "'$*'"; }
 sums_cmd='cd /home && find . -type f -not -path "./work/.cache/*" -print0 | sort -z | xargs -0 sha256sum'
@@ -64,7 +67,7 @@ trap cleanup EXIT
 echo "== server setup"
 arch=$(R dpkg --print-architecture)
 (cd "$repo" && CGO_ENABLED=0 GOOS=linux GOARCH=$arch go build -trimpath -ldflags="-s -w" -o "$root/portenv-linux" ./core/cmd/portenv)
-"$portenv" init gate --image "$image" --storage "sftp:portenv-storage@${target#*@}:/storage" --storage-host-key "$host_key" > "$root/init.txt"
+"$portenv" init "$box" --image "$image" --storage "sftp:portenv-storage@${target#*@}:/storage" --storage-host-key "$host_key" > "$root/init.txt"
 storage_pub=$(grep '^ssh-ed25519 ' "$root/init.txt")
 listening() { R sudo ss -Htln | awk '{print $4}' | grep -vE '^(127\.|\[::1\]|.*%lo:)' | sed 's/.*://' | sort -u | tr '\n' ' '; }
 ports_before=$(listening)
@@ -107,17 +110,17 @@ up_mbit=$(python3 -c "print(round($up_bps * 8 / 1e6, 2))")
 echo "  upload ${up_mbit} Mbit/s, round trip ${rtt_ms} ms, SSH connection setup ${rtt_s} s"
 
 echo "== Mac: new box with storage on the server (SFTP)"
-out=$("$portenv" resume gate 2>&1) || { echo "$out" | sed 's/^/  /'; fail "command failed: "; exit 1; }; out=$(tail -1 <<<"$out"); echo "  $out"
+out=$("$portenv" resume "$box" 2>&1) || { echo "$out" | sed 's/^/  /'; fail "command failed: "; exit 1; }; out=$(tail -1 <<<"$out"); echo "  $out"
 expect "rule 1 on the Mac" grep -q "rule 1" <<<"$out"
 mac_box 'mkdir -p acme-api && echo "hello from the Mac" > acme-api/README.md && head -c 20000000 /dev/urandom > acme-api/data.bin && echo jq >> .portenv/apt-packages.txt'
-expect "first save over SFTP" "$portenv" save gate
+expect "first save over SFTP" "$portenv" save "$box"
 # The close budget is stated at 20 Mbit/s or faster up and 50 ms or less.
 budget_link=0
 if (( rtt_ms <= 50 )) && ! lt "$up_mbit" 20; then budget_link=1; fi
 
 echo "== budget: close (final save and release with a 5 MB unsaved change)"
 mac_box 'head -c 5000000 /dev/urandom > acme-api/change.bin'
-timed "close with a 5 MB change" "$portenv" close gate
+timed "close with a 5 MB change" "$portenv" close "$box"
 close_s=$took
 # At another bandwidth, the same close with the transfer at 20 Mbit/s.
 close_at20=$(python3 -c "print(round($close_s - 5000000 / $up_bps + 5000000 * 8 / 20e6, 1))")
@@ -133,10 +136,10 @@ fi
 echo "== budget: same-machine resume, storage reachable (5 runs)"
 runs=()
 for i in 1 2 3 4 5; do
-	timed "resume $i" "$portenv" resume gate
+	timed "resume $i" "$portenv" resume "$box"
 	[[ $i == 1 ]] && expect "same-machine resume is rule 3" grep -q "rule 3" <<<"$out"
 	runs+=("$took")
-	"$portenv" close gate >/dev/null
+	"$portenv" close "$box" >/dev/null
 done
 read -r resume_s resume_worst <<<"$(stats "${runs[@]}")"
 if (( rtt_ms <= 50 )); then
@@ -151,11 +154,11 @@ echo "== budget: freshness (continuous editing, autosave every ${PORTENV_AUTOSAV
 # is in the next save, so the newest save is at most (next save's end -
 # this save's start + 1 s) behind; the gate reports the worst bound.
 interval=${PORTENV_AUTOSAVE:-30}
-"$portenv" resume gate >/dev/null 2>&1
+"$portenv" resume "$box" >/dev/null 2>&1
 docker exec -d -u work -w /home/work "portenv-gate-$(box_id)" bash -c 'while :; do date +%s.%N > acme-api/stamp; head -c 200000 /dev/urandom > acme-api/edit.bin; echo "$RANDOM" >> acme-api/log.txt; sleep 1; done'
 starts=() ends=()
 for i in 1 2 3 4 5 6; do
-	s=$(seconds); timed "autosave $i" "$portenv" save gate; e=$(seconds)
+	s=$(seconds); timed "autosave $i" "$portenv" save "$box"; e=$(seconds)
 	starts+=("$s"); ends+=("$e")
 	sleep "$(python3 -c "print(max(0, $s + $interval - $e))")"
 done
@@ -165,15 +168,17 @@ s = [float(x) for x in sys.argv[1].split()]; e = [float(x) for x in sys.argv[2].
 print(round(max(e[k + 1] - s[k] + 1 for k in range(len(s) - 1)), 1))
 PY
 )
-mac_box 'pkill -f "acme-api/[s]tamp" || true; rm -f acme-api/stamp acme-api/edit.bin acme-api/log.txt'
-"$portenv" save gate >/dev/null
+# Separate calls: a pkill pattern in the same command line would match it.
+mac_box 'pkill -f "acme-api/[s]tamp" || true'
+mac_box 'rm -f acme-api/stamp acme-api/edit.bin acme-api/log.txt'
+"$portenv" save "$box" >/dev/null
 expect "newest save never more than 60 s behind (worst ${lag} s with autosave every ${interval} s at ${up_mbit} Mbit/s)" lt "$lag" 60
-"$portenv" close gate >/dev/null
-"$portenv" resume gate >/dev/null 2>&1
+"$portenv" close "$box" >/dev/null
+"$portenv" resume "$box" >/dev/null 2>&1
 before=$(mac_box "$sums_cmd")
 
 echo "== Mac → server"
-out=$("$portenv" move gate --to "$target" --join-storage sftp:portenv-storage@host.portenv.internal:/storage </dev/null 2>&1) || { echo "$out" | sed 's/^/  /'; fail "command failed: "; exit 1; }; out=$(tail -1 <<<"$out"); echo "  $out"
+out=$("$portenv" move "$box" --to "$target" --join-storage sftp:portenv-storage@host.portenv.internal:/storage </dev/null 2>&1) || { echo "$out" | sed 's/^/  /'; fail "command failed: "; exit 1; }; out=$(tail -1 <<<"$out"); echo "  $out"
 expect "the server restores the box (rule 5)" grep -q "rule 5" <<<"$out"
 after=$(server_box "$sums_cmd")
 if [[ -n $before && "$before" == "$after" ]]; then pass "checksums of /home match on the server"; else fail "checksums of /home match on the server"; fi
@@ -182,21 +187,21 @@ expect "the home is on the encrypted volume" R "sudo test -d /var/lib/portenv/ho
 server_box 'echo "edited on the server" >> acme-api/README.md'
 before=$(server_box "$sums_cmd")
 expect "the server added its own repository key (it never stores the Mac's)" bash -c "[[ \$(${ssh_cmd[*]} -- $target sudo sha256sum /root/.config/Portenv/keys/$(box_id).key </dev/null | cut -d' ' -f1) != \$(shasum -a 256 $root/mac/keys/$(box_id).key | cut -d' ' -f1) ]]"
-expect "server closes" R sudo portenv close gate
+expect "server closes" R sudo portenv close "$box"
 echo "== server: same-machine resume against its own storage, traced"
-R "sudo PORTENV_TRACE=1 portenv resume gate 2>&1 | grep -E '^trace|rule'" | sed 's/^/  /'
-expect "server closes again" R sudo portenv close gate
+R "sudo PORTENV_TRACE=1 portenv resume "$box" 2>&1 | grep -E '^trace|rule'" | sed 's/^/  /'
+expect "server closes again" R sudo portenv close "$box"
 
 echo "== server → Mac"
-out=$("$portenv" resume gate 2>&1) || { echo "$out" | sed 's/^/  /'; fail "command failed: "; exit 1; }; out=$(tail -1 <<<"$out"); echo "  $out"
+out=$("$portenv" resume "$box" 2>&1) || { echo "$out" | sed 's/^/  /'; fail "command failed: "; exit 1; }; out=$(tail -1 <<<"$out"); echo "  $out"
 expect "the Mac restores the server's change (rule 5)" grep -q "rule 5" <<<"$out"
 after=$(mac_box "$sums_cmd")
 if [[ -n $before && "$before" == "$after" ]]; then pass "checksums of /home match back on the Mac"; else fail "checksums of /home match back on the Mac"; fi
-expect "Mac closes" "$portenv" close gate
-"$portenv" history gate | sed 's/^/  /'
+expect "Mac closes" "$portenv" close "$box"
+"$portenv" history "$box" | sed 's/^/  /'
 
 echo "== Mac: offline resume (storage pointed at an unreachable address)"
-cfg=$root/mac/boxes/gate.json
+cfg=$root/mac/boxes/$box.json
 cp "$cfg" "$cfg.online"
 python3 - "$cfg" "${target#*@}" <<'PY'
 import json, sys
@@ -209,7 +214,7 @@ state=$root/mac/state/$(box_id)
 cp -R "$state" "$state.clean"
 runs=()
 for i in 1 2 3 4 5; do
-	timed "offline resume $i" "$portenv" resume gate
+	timed "offline resume $i" "$portenv" resume "$box"
 	[[ $i == 1 ]] && expect "offline resume after a clean close (Offline · will save later)" grep -q "Offline · will save later" <<<"$out"
 	runs+=("$took")
 	docker stop -t 2 "portenv-gate-$(box_id)" >/dev/null 2>&1 || true

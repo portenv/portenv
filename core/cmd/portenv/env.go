@@ -330,7 +330,9 @@ func (s *session) storageReachable() bool {
 	var addr string
 	switch {
 	case strings.HasPrefix(c.Storage, "sftp:"):
-		if addr = sftpAddr(s.hostRepo()); addr == "" {
+		// The SFTP server's address, even when restic on this machine goes
+		// through the REST forward (spike).
+		if addr = sftpAddr(strings.Replace(s.repo, "host.portenv.internal", "127.0.0.1", 1)); addr == "" {
 			return true // unparsable: let restic report the real error
 		}
 	case strings.HasPrefix(c.Storage, "s3:"):

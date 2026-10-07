@@ -5,7 +5,7 @@
 # server (arm64 or amd64):
 #
 #   sudo ./setup.sh --portenv-bin ./portenv [--homes-device /dev/X | --homes-size 8G]
-#                   [--storage-key "ssh-ed25519 AAAA..."]
+#                   [--storage-key "ssh-ed25519 AAAA..."] [--image ghcr.io/portenv/toolbox-node@sha256:...]
 #
 # Installs Docker Engine from Docker's repository (signing key pinned), an
 # encrypted LUKS volume for box homes unlocked at boot from a root-only key
@@ -22,12 +22,14 @@ portenv_bin=""
 homes_size=8G
 homes_device=""
 storage_key=""
+image_ref=""
 while (($#)); do
 	case $1 in
 		--portenv-bin) portenv_bin=$2; shift 2 ;;
 		--homes-size) homes_size=$2; shift 2 ;;
 		--homes-device) homes_device=$2; shift 2 ;;
 		--storage-key) storage_key=$2; shift 2 ;;
+		--image) image_ref=$2; shift 2 ;;
 		*) echo "unknown option $1" >&2; exit 2 ;;
 	esac
 done
@@ -174,6 +176,12 @@ CONF
 sshd -t || die "sshd rejected the storage account configuration"
 systemctl reload ssh
 echo "repositories: sftp:portenv-storage@<this server>:/storage (here: /srv/portenv/storage-root/storage)"
+
+if [[ -n $image_ref ]]; then
+	say "toolbox image (by digest)"
+	[[ $image_ref == *@sha256:* ]] || die "--image must be pinned by digest (…@sha256:…)"
+	docker pull -q "$image_ref"
+fi
 
 say "portenv CLI"
 if [[ -n $portenv_bin ]]; then

@@ -636,6 +636,8 @@ Milestones: 1.1 `portenvd` with the local gRPC API · 1.2 main window with a ter
 
 ### Phase 2: Developer servers
 
+The toolbox image is published from CI ahead of the rest of 2.5: each architecture builds and tests on its native runner, then one multi-arch manifest goes to `ghcr.io/portenv/toolbox-node`, tagged `sha-<commit>` and `main` (and `vN` on version tags), with a build provenance attestation. Macs, servers and the setup script pull by digest, and the CLI pins a box's image to its digest on first use. Local builds stay possible for development; nothing requires them.
+
 Milestones: 2.1 runner (server build of the core) installed over SSH · 2.2 Add a Server wizard with preflight · 2.3 Move To in the title menu · 2.4 lease sheet · 2.5 toolbox registry, versions and drift warnings · 2.6 agents over direct SSH.
 
 **2.6 Agents over direct SSH** (no Portenv backend needed)

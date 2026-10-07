@@ -559,7 +559,7 @@ Each milestone ends with a demo note in `docs/milestones/<id>.md` and its checkl
 - [x] `driver.v1` and `types.v1` are fully defined; `daemon.v1` and `agent.v1` are skeletons marked unstable; `buf lint` is clean and regenerating code produces no diff
 - [x] The Go `Driver` interface mirrors `driver.v1` (signatures only)
 - [x] The engine-boundary test rejects engine SDK imports and engine CLI calls outside `core/driver/`
-- [ ] CI covers Go on Linux arm64 and amd64, proto, Swift on macOS arm64, workflow lint and a secret scan
+- [x] CI covers Go on Linux arm64 and amd64, proto, Swift on macOS arm64, workflow lint and a secret scan
 - [x] License, NOTICE and SPDX headers are in place; ADRs 0001 and 0002 are written
 
 **0.2 Toolbox image**

@@ -76,6 +76,7 @@ These were settled in planning on 7 October 2026. Reopen one only with the owner
 | Agents | Open doors (SSH incl. port 443, CLI, HTTP API, MCP, events) plus a published skill; lanes per agent; approvals at privilege boundaries | Any agent with a terminal can work safely |
 | Finder | File Provider extension shows each box in Documents › Portenv › \<box> | Native, works when the box runs remotely |
 | Developer servers | An open-source runner, installed by an in-app wizard | Full control for developers, same features |
+| Ownership | The user owns the workspace; agents are guests. Any agent (any vendor) can be connected and disconnected without moving work. An agent's lane, branch and results stay in the user's box after it disconnects, and history attributes every change to the agent that made it. Portenv ships no agent of its own | Users keep their work and choose their agents freely |
 | Repositories and license | `portenv/portenv` is public under Apache-2.0 (apps, core, shims, images, proto, docs); the control plane and gateway live in the private `portenv/cloud` repository (decided 7 October 2026) | Box agent, runner and protocols must be auditable; the hosted service is not |
 
 ## Architecture
@@ -614,12 +615,22 @@ Milestones: 1.1 `portenvd` with the local gRPC API · 1.2 main window with a ter
 
 ### Phase 2: Developer servers
 
-Milestones: 2.1 runner (server build of the core) installed over SSH · 2.2 Add a Server wizard with preflight · 2.3 Move To in the title menu · 2.4 lease sheet · 2.5 toolbox registry, versions and drift warnings.
+Milestones: 2.1 runner (server build of the core) installed over SSH · 2.2 Add a Server wizard with preflight · 2.3 Move To in the title menu · 2.4 lease sheet · 2.5 toolbox registry, versions and drift warnings · 2.6 agent lanes over direct SSH.
+
+**2.6 Agent lanes over direct SSH** (no Portenv backend needed)
+
+- On a box running on a developer server, each agent gets a lane: its own user, tmux session and git worktree on branch `agent/<name>`.
+- Connect an agent in the app creates the lane and an SSH key restricted to it, and shows the connection details to give the agent.
+- The app lists connected agents with Watch, Take Over and Revoke. Revoke removes the key and ends the agent's sessions.
+- Not in 2.6: phone approvals, the gateway and certificates. They stay in Phases 3 and 4, which extend these lanes.
 
 - [ ] Move To works Mac → server → Mac from the title menu with no data loss
 - [ ] Every lease sheet path behaves as specified, including a stale lease
 - [ ] A server reboot leaves boxes recoverable without user intervention
 - [ ] The wizard explains every preflight failure in plain language
+- [ ] An external agent connects with its key and works only in its lane
+- [ ] An agent's branch survives it disconnecting
+- [ ] Revoke ends the agent's session immediately
 
 ### Phase 3: Control plane and gateway
 
@@ -632,7 +643,7 @@ Milestones: 3.1 accounts (Apple, GitHub, email) · 3.2 device enrollment and wra
 
 ### Phase 4: Agent access
 
-Milestones: 4.1 lanes (users, tmux, worktrees, limits) · 4.2 approval helper for sudo, secrets and protected scripts · 4.3 secrets vault · 4.4 session recording and command audit · 4.5 doors: SSH on 443, `portenv ssh`, HTTP API, MCP, events · 4.6 Connect an agent with device-code login and the published skill · 4.7 iPhone companion for approvals.
+Milestones: 4.1 lanes everywhere a box runs, building on 2.6 (users, tmux, worktrees, limits) · 4.2 approval helper for sudo, secrets and protected scripts · 4.3 secrets vault · 4.4 session recording and command audit · 4.5 doors: SSH on 443, `portenv ssh`, HTTP API, MCP, events · 4.6 Connect an agent with device-code login and the published skill · 4.7 iPhone companion for approvals.
 
 - [ ] An agent in a third-party sandbox connects with a device code and works in its lane
 - [ ] It cannot read other homes or ungranted secrets, verified by an adversarial test suite

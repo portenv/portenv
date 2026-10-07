@@ -4,7 +4,7 @@ Date: 2026-10-07 · Status: accepted
 
 ## Context
 
-Agents install the `portenv` CLI on their own computers through `portenv.com/cli`, a short script that downloads a release binary and must verify it before installing (milestone 2.6). Those computers are often shared or minimal (an agent's cloud computer, a CI runner): the verification must work with tools already there, without `sudo`, and must not depend on a long-lived key nobody can recover.
+Agents install the `portenv` CLI on their own computers through `portenv.com/cli`, a short script that downloads a release binary and must verify it before installing (milestone 2.7). Those computers are often shared or minimal (an agent's cloud computer, a CI runner): the verification must work with tools already there, without `sudo`, and must not depend on a long-lived key nobody can recover.
 
 ## Options
 

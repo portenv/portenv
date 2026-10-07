@@ -4,7 +4,7 @@ Date: 2026-10-07 · Status: accepted
 
 ## Context
 
-Milestone 2.6 lets a stand-in agent reach a box on the user's own server over SSH or the `portenv` CLI, with short-lived, per-box credentials and device-code sign-in (ADR 0006). The Portenv CA and gateway only arrive in Phase 3, and there is no Portenv backend before then (ADR 0008). Something on the user's side must issue the certificates. The owner approved the runner doing it, with conditions.
+Milestone 2.7 lets a stand-in agent reach a box on the user's own server over SSH or the `portenv` CLI, with short-lived, per-box credentials and device-code sign-in (ADR 0006). The Portenv CA and gateway only arrive in Phase 3, and there is no Portenv backend before then (ADR 0008). Something on the user's side must issue the certificates. The owner approved the runner doing it, with conditions.
 
 ## Decision
 

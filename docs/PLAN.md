@@ -369,10 +369,10 @@ Secrets live in the box's vault, not in readable files. The main user's sessions
 
 Every door reaches the same core with the same login, short-lived per-box credentials, attribution and revoke; no door may bypass any of these. The HTTP API is the base the doors share and is built as part of doors 2 to 4. In build order:
 
-1. SSH on ports 22 and 443 with short-lived certificates (2.6 through the runner on the user's server; 3.8 through the gateway).
-2. The `portenv` CLI and a published skill: agents install the CLI on their own computer, sign in with a device code, and the skill teaches events, screen and send (2.6).
-3. Webhooks, sent by the box's agent or runner (not a Portenv server): signed pushes of events (waiting for input, command finished) to a URL the user registers for their agent, so trigger-driven agents wake without polling (2.7).
-4. MCP over the same core: stdio first, through the CLI on the agent's computer (2.8); remote with OAuth on the gateway (3.9), which becomes the ChatGPT plugin.
+1. SSH on ports 22 and 443 with short-lived certificates (2.7 through the runner on the user's server; 3.8 through the gateway).
+2. The `portenv` CLI and a published skill: agents install the CLI on their own computer, sign in with a device code, and the skill teaches events, screen and send (2.7).
+3. Webhooks, sent by the box's agent or runner (not a Portenv server): signed pushes of events (waiting for input, command finished) to a URL the user registers for their agent, so trigger-driven agents wake without polling (2.8).
+4. MCP over the same core: stdio first, through the CLI on the agent's computer (2.9); remote with OAuth on the gateway (3.9), which becomes the ChatGPT plugin.
 5. A web terminal on portenv.com for browser-only agents and for the user on any computer or phone, with passkeys (3.10).
 6. Later, only if usage shows the need: a GitHub bridge (the box pushes a branch, Codex works, the box pulls), chat or email bridges (every reply carries a signed, single-use token), A2A (4.5).
 
@@ -658,56 +658,64 @@ Milestones: 1.1 `portenvd` with the local gRPC API · 1.2 main window with a ter
 
 ### Phase 2: Developer servers
 
-Milestones: 2.1 runner (server build of the core) installed over SSH · 2.2 Add a Server wizard with preflight · 2.3 Move To in the title menu · 2.4 lease sheet · 2.5 toolbox registry, versions and drift warnings · 2.6 stand-in agents over SSH and the CLI · 2.7 webhooks · 2.8 stdio MCP.
+Milestones: 2.1 runner (server build of the core) installed over SSH · 2.2 Add a Server wizard with preflight · 2.3 Move To in the title menu · 2.4 lease sheet · 2.5 toolbox registry, versions and drift warnings · 2.6 append-only storage · 2.7 stand-in agents over SSH and the CLI · 2.8 webhooks · 2.9 stdio MCP.
 
-**2.6 Stand-in agents over SSH and the CLI** (no control plane, no lanes)
+**2.6 Append-only storage** (must land before 2.7, which gives outside agents stand-in access to boxes)
+
+- The storage credential that enters a box becomes append-only: it can add files to the repository but never delete or overwrite one. A box, even as root, cannot destroy a save.
+- Forget, prune and the removal of stale locks use a separate credential that never enters a box and lives only on the host (`portenvd` or the runner).
+- For SFTP storage this means restic's REST server in append-only mode (`rest-server --append-only`) on the server, bound to the loopback address and reached through the existing SSH connection, with an append-only user for boxes and a full user for the host. No new inbound port. For S3-compatible storage: a put-only credential for boxes, a full one for the host.
+
+**2.7 Stand-in agents over SSH and the CLI** (no control plane, no lanes)
 
 - Doors 1 and 2 for a box on the user's own server, in Continue my work mode. Grok Bot, or any terminal agent, reaches the box, runs Claude Code there and relays its questions back.
 - Credentials (ADR 0007): enrolment is closed by default; Connect an agent opens it for 10 minutes or until one code is approved. The agent runs `portenv login`; the user approves the device code in the app, after seeing the agent's name, the box and the key fingerprint; the runner, as certificate authority for its boxes, issues a 30-minute SSH certificate scoped to that box and mode, renewed by proof of possession of the agent's key until the grant ends (default 8 hours, at most 24 hours until Phase 3). No new inbound port: everything goes through the server's existing SSH. The app lists every certificate with revoke.
 - The core in the box agent: events (waiting for input, command finished, new output), `portenv events --follow`, `portenv screen <tab>`, `portenv send <tab>`, and `docs/skill/SKILL.md`.
 - Attribution and session recording per agent, the save point on connect, Watch, Take Over and Revoke in the app.
-- Not in 2.6: lanes (4.1), approvals (4.2), the gateway and its CA (Phase 3), phone notifications (4.6).
+- Not in 2.7: lanes (4.1), approvals (4.2), the gateway and its CA (Phase 3), phone notifications (4.6).
 
-**How agents get the skill and the CLI** (built with 2.6)
+**How agents get the skill and the CLI** (built with 2.7)
 
 - **The skill:** `skills/portenv/SKILL.md` in this repository, in the Agent Skills format (a folder with `SKILL.md` and frontmatter), versioned with the CLI. CI fails if a command the skill uses does not exist in that CLI version. It covers connecting with a device code, events, screen and send, waiting for input, relaying questions to the user, and revoking itself. It never contains credentials, and it tells the agent to install the CLI only from `portenv.com/cli` and to verify it. `portenv.com/skill` redirects to the `SKILL.md` attached to the latest release (the same pattern as the DMG and the appcast).
 - **The CLI for agents' computers:** release assets are static `portenv` binaries for linux/arm64, linux/amd64 and macOS arm64, plus a signed `checksums.txt` (ADR 0009). `portenv.com/cli` serves a short install script that detects the platform, downloads the release binary, verifies the signature and checksum, and installs into the user's home without `sudo`.
 - **Installing the skill:** `portenv skill install` writes the skill matching the CLI's own version to `~/.agents/skills/portenv/` (read by Cursor, and by Grok Bot through its support for Cursor's skills); `--path` covers other agents' folders; `portenv skill` prints it.
 - **Connect an agent** in the app shows one message to copy and paste to the agent, for example: "Install the Portenv CLI from portenv.com/cli, run `portenv skill install`, then connect to my box acme-api with code K7F2-9QX4." Opening the sheet opens the enrolment window (ADR 0007: 10 minutes or one approved code); when the agent requests the code, the approval sheet follows.
-- **Later, not in 2.6:** a plugin marketplace repository carrying the skill. The MCP door needs no skill: its tools describe themselves.
+- **Later, not in 2.7:** a plugin marketplace repository carrying the skill. The MCP door needs no skill: its tools describe themselves.
 
-**2.7 Webhooks**: signed event pushes from the runner to a URL the user registers for their agent.
+**2.8 Webhooks**: signed event pushes from the runner to a URL the user registers for their agent.
 
-**2.8 stdio MCP**: `portenv mcp` on the agent's computer exposes events, screen and send over the CLI's connection.
+**2.9 stdio MCP**: `portenv mcp` on the agent's computer exposes events, screen and send over the CLI's connection.
 
 - [ ] Move To works Mac → server → Mac from the title menu with no data loss
 - [ ] Every lease sheet path behaves as specified, including a stale lease
 - [ ] A server reboot leaves boxes recoverable without user intervention
 - [ ] The wizard explains every preflight failure in plain language
+- [ ] A box, even as root, cannot delete or overwrite any existing save: with the box's credential, deleting, renaming or rewriting any repository file (snapshots, index, data, keys, config) fails, and `restic check` passes afterwards (2.6)
+- [ ] Forget, prune and unlocking run only with the host's credential, which no box ever receives (2.6)
 - [ ] A stand-in agent connects from its own computer with a short-lived certificate, drives the user's Claude Code session by keystrokes in `/home/work/<project>`, and the user sees its activity attributed by name
 - [ ] Relay loop: a tool in the box asks a y/n question; "waiting for input" fires; a test agent reads the screen, relays the question, sends "y"; the tool continues. Run once with Claude Code and once with a plain script, using only `portenv events`, `portenv screen` and `portenv send`
 - [ ] Revert To ▸ Last Save Point undoes everything a stand-in did since it connected
 - [ ] Revoke ends the agent's session immediately and its certificate can no longer be renewed
 - [ ] Every condition in ADR 0007 has its test passing (CA key never leaves the server, one box and one mode per certificate, no new inbound port, `portenv-enroll` closed by default, locked down and silent, device codes expire, are single use and rate-limited, renewal bound to the agent's key, revoke kills renewal and sessions)
-- [ ] A webhook reaches the registered URL with a valid signature when a tab starts waiting for input (2.7)
-- [ ] The stdio MCP server answers events, screen and send for a connected agent (2.8)
+- [ ] A webhook reaches the registered URL with a valid signature when a tab starts waiting for input (2.8)
+- [ ] The stdio MCP server answers events, screen and send for a connected agent (2.9)
 - [ ] On a clean Linux machine standing in for an agent's computer, the message pasted from Connect an agent alone gets an agent from nothing to connected and relaying a Claude Code question, with no other help
 - [ ] The install script refuses a binary whose checksum or signature does not verify (ADR 0009), and CI fails if the skill uses a command the CLI does not have
 
 ### Phase 3: Control plane and gateway
 
-Milestones: 3.1 accounts (Apple, GitHub, email) · 3.2 device enrollment and wrapped keys · 3.3 authoritative leases · 3.4 box agent tunnels and gateway routing by box name · 3.5 Portenv storage · 3.6 push notifications · 3.7 full first run (sign-in, Portenv storage, recoverable mode) and the one-time account prompt for existing users · 3.8 SSH door through the gateway (Portenv CA certificates, ports 22 and 443, `portenv ssh` over HTTPS; needs 3.1, 3.2, 3.4) · 3.9 remote MCP door with OAuth and the ChatGPT plugin listing (needs 3.1, 3.4 and the 2.6 core; not lanes, approvals or the vault) · 3.10 web terminal on portenv.com with passkeys (needs 3.1, 3.4).
+Milestones: 3.1 accounts (Apple, GitHub, email) · 3.2 device enrollment and wrapped keys · 3.3 authoritative leases · 3.4 box agent tunnels and gateway routing by box name · 3.5 Portenv storage · 3.6 push notifications · 3.7 full first run (sign-in, Portenv storage, recoverable mode) and the one-time account prompt for existing users · 3.8 SSH door through the gateway (Portenv CA certificates, ports 22 and 443, `portenv ssh` over HTTPS; needs 3.1, 3.2, 3.4) · 3.9 remote MCP door with OAuth and the ChatGPT plugin listing (needs 3.1, 3.4 and the 2.7 core; not lanes, approvals or the vault) · 3.10 web terminal on portenv.com with passkeys (needs 3.1, 3.4).
 
 - [ ] A box is reachable by name wherever it runs, with no inbound ports anywhere
 - [ ] Revoking a device ends its sessions within 5 seconds
 - [ ] A control plane outage does not interrupt local work or saves to the user's own storage
 - [ ] An existing Phase 1 or 2 user creates an account and links their devices without losing a box or re-entering keys
-- [ ] An agent reaches a box by name through the gateway over SSH (22 and 443) and over remote MCP, with the same attribution and revoke as 2.6
+- [ ] An agent reaches a box by name through the gateway over SSH (22 and 443) and over remote MCP, with the same attribution and revoke as 2.7
 - [ ] The runner CAs are retired: their trust removed and keys destroyed, and the migration test passes (ADR 0007)
 
 ### Phase 4: Agent access
 
-Milestones: 4.1 lanes (users, tmux, worktrees, limits) everywhere a box runs, and stand-in mode on local and cloud boxes · 4.2 opt-in approval helper (push, delete, secrets, protected scripts, sudo in a lane) · 4.3 secrets vault · 4.4 full command audit (auditd or eBPF) on top of 2.6's session recording · 4.5 remaining doors, only if usage shows the need: GitHub bridge, chat or email bridges, A2A (ADR 0006) · 4.6 iPhone companion for approvals.
+Milestones: 4.1 lanes (users, tmux, worktrees, limits) everywhere a box runs, and stand-in mode on local and cloud boxes · 4.2 opt-in approval helper (push, delete, secrets, protected scripts, sudo in a lane) · 4.3 secrets vault · 4.4 full command audit (auditd or eBPF) on top of 2.7's session recording · 4.5 remaining doors, only if usage shows the need: GitHub bridge, chat or email bridges, A2A (ADR 0006) · 4.6 iPhone companion for approvals.
 
 - [ ] An agent in a third-party sandbox connects with a device code and works in its lane
 - [ ] A lane agent cannot read the user's home

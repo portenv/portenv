@@ -58,16 +58,17 @@ Build order:
 
 ### Roadmap placement
 
-- **2.6, end of Phase 2 (no control plane, no lanes):** stand-in access over doors 1 and 2 to a box on the user's own server. Without the control plane, the runner on that server is the certificate authority for its boxes: the agent runs `portenv login`, the user approves the device code in the app (which reaches the runner over SSH), and the runner issues a short-lived SSH certificate scoped to that box and mode. The core (events, screen, send, wait for input), attribution, recording, the connect save point, Take Over and Revoke ship here. Acceptance: a terminal agent (Grok Bot, or a test agent) relays a tool's question to the user and answers it.
-- **2.7 webhooks** and **2.8 stdio MCP** (`portenv mcp` on the agent's computer, over the CLI's connection): Phase 2, after 2.6.
+- **2.6 append-only storage comes first:** before any outside agent gets stand-in access, the storage credential inside a box becomes append-only (it cannot delete or overwrite a save), and forget and prune use a host-only credential.
+- **2.7, end of Phase 2 (no control plane, no lanes):** stand-in access over doors 1 and 2 to a box on the user's own server. Without the control plane, the runner on that server is the certificate authority for its boxes: the agent runs `portenv login`, the user approves the device code in the app (which reaches the runner over SSH), and the runner issues a short-lived SSH certificate scoped to that box and mode. The core (events, screen, send, wait for input), attribution, recording, the connect save point, Take Over and Revoke ship here. Acceptance: a terminal agent (Grok Bot, or a test agent) relays a tool's question to the user and answers it.
+- **2.8 webhooks** and **2.9 stdio MCP** (`portenv mcp` on the agent's computer, over the CLI's connection): Phase 2, after 2.7.
 - **3.8 SSH door through the gateway**: certificates from the Portenv CA, routing by box name, ports 22 and 443 and `portenv ssh` over HTTPS. Depends on 3.1 (accounts), 3.2 (device enrollment and revocation) and 3.4 (tunnels and routing).
-- **3.9 remote MCP door with OAuth**, then the ChatGPT plugin listing. Depends on 3.1 (OAuth identities), 3.4 (gateway) and the 2.6 core. It does not depend on lanes, the approval helper or the vault.
+- **3.9 remote MCP door with OAuth**, then the ChatGPT plugin listing. Depends on 3.1 (OAuth identities), 3.4 (gateway) and the 2.7 core. It does not depend on lanes, the approval helper or the vault.
 - **3.10 web terminal on portenv.com** with passkeys. Depends on 3.1 and 3.4.
 - **Phase 4** keeps lanes (4.1), the opt-in approval helper (4.2), the vault (4.3) and full recording and command audit (4.4). Its doors milestone (4.5) becomes "remaining doors": the later list above, only if usage shows the need.
 
 ## Consequences
 
 - The open question "sudo for stand-in agents before approvals exist" is answered: a stand-in has the user's full access to the box, sudo included, with no approval by default. The repository password stays out of reach anyway (ADR 0005).
-- Guest lanes move out of 2.6 into Phase 4 (4.1); 2.6 is stand-in only.
+- Guest lanes move out of 2.7 into Phase 4 (4.1); 2.7 is stand-in only.
 - Device-code login and short-lived credentials arrive in Phase 2, issued by the runner, before the Portenv CA exists. When Phase 3 lands, the gateway CA takes over and runner-issued certificates end.
 - A stand-in's credential is usable by whatever runs on the agent's computer while it is valid. Short lifetimes, per-box scope and revoke bound the damage; the app says so when connecting.

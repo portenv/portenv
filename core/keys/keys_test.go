@@ -3,10 +3,13 @@
 package keys
 
 import (
+	"bytes"
 	"errors"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"golang.org/x/crypto/ssh"
 )
 
 func TestFileStore(t *testing.T) {
@@ -60,5 +63,23 @@ func TestFileStoreValidatesIDs(t *testing.T) {
 		if err := s.Put(id, []byte("k")); err == nil {
 			t.Errorf("Put accepted box ID %q", id)
 		}
+	}
+}
+
+func TestNewSSHKey(t *testing.T) {
+	priv, pub, err := NewSSHKey("portenv storage box-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	signer, err := ssh.ParsePrivateKey(priv)
+	if err != nil {
+		t.Fatalf("private key does not parse: %v", err)
+	}
+	parsed, comment, _, _, err := ssh.ParseAuthorizedKey([]byte(pub))
+	if err != nil {
+		t.Fatalf("public key does not parse: %v", err)
+	}
+	if !bytes.Equal(parsed.Marshal(), signer.PublicKey().Marshal()) || comment != "portenv storage box-1" || parsed.Type() != ssh.KeyAlgoED25519 {
+		t.Fatalf("public key %q does not match the private key", pub)
 	}
 }

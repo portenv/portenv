@@ -33,6 +33,11 @@ const (
 type ResticInput struct {
 	Password string   `json:"password"`
 	Env      []string `json:"env,omitempty"` // storage credentials
+	// SFTP storage: the private key (OpenSSH PEM) the agent serves to
+	// restic's ssh from memory for this run, and the storage server's host
+	// key ("ssh-ed25519 AAAA..."), which is pinned.
+	SSHKey     string `json:"ssh_key,omitempty"`
+	SSHHostKey string `json:"ssh_host_key,omitempty"`
 }
 
 // resticCommands are the restic subcommands the agent runs. Key management
@@ -88,6 +93,9 @@ func parseResticRun(args []string, stdin io.Reader) ([]string, ResticInput, erro
 	}
 	if cmd != "version" && in.Password == "" {
 		return nil, in, errors.New("no repository password given")
+	}
+	if (in.SSHKey == "") != (in.SSHHostKey == "") {
+		return nil, in, errors.New("an SFTP key needs the storage server's host key, and the other way round")
 	}
 	for _, kv := range in.Env {
 		if !slices.ContainsFunc(envPrefixes, func(p string) bool { return strings.HasPrefix(kv, p) }) {

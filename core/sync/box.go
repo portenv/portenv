@@ -25,6 +25,10 @@ type Config struct {
 	Password []byte
 	// Env adds environment for restic, for example storage credentials.
 	Env []string
+	// SSHKey and SSHHostKey are for SFTP storage: the private key (served
+	// from memory inside the box) and the server's pinned host key.
+	SSHKey     []byte
+	SSHHostKey string
 
 	BoxID     string
 	MachineID string
@@ -76,7 +80,9 @@ func Open(cfg Config) (*Box, error) {
 	if cfg.Executor == nil {
 		cfg.Executor = LocalExecutor{Bin: cfg.Restic, CacheDir: filepath.Join(cfg.StateDir, "cache")}
 	}
-	b := &Box{cfg: cfg, restic: &restic{exec: cfg.Executor, repo: cfg.Repository, password: cfg.Password, env: cfg.Env}}
+	b := &Box{cfg: cfg, restic: &restic{exec: cfg.Executor, repo: cfg.Repository, cred: Credentials{
+		Password: cfg.Password, Env: cfg.Env, SSHKey: cfg.SSHKey, SSHHostKey: cfg.SSHHostKey,
+	}}}
 	if err := b.restic.checkVersion(context.Background()); err != nil {
 		return nil, err
 	}

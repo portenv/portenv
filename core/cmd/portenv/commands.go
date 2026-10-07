@@ -3,6 +3,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -14,6 +15,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/portenv/portenv/core/driver"
@@ -40,7 +42,8 @@ func parse(fs *flag.FlagSet, args []string) error {
 func cmdInit(_ context.Context, e *env, name string, args []string) error {
 	fs := flags("init")
 	image := fs.String("image", defaultImage, "toolbox image")
-	storage := fs.String("storage", "", "storage: an absolute directory or s3:URL (default: this Mac only)")
+	storage := fs.String("storage", "", "storage: an absolute directory, sftp:USER@HOST:/PATH or s3:URL (default: this Mac only)")
+	hostKey := fs.String("storage-host-key", "", "SFTP storage: the server's host key, \"ssh-ed25519 AAAA...\"")
 	if err := parse(fs, args); err != nil {
 		return err
 	}
@@ -55,13 +58,78 @@ func cmdInit(_ context.Context, e *env, name string, args []string) error {
 	if _, err := rand.Read(b); err != nil {
 		return err
 	}
-	c := boxConfig{ID: "box-" + hex.EncodeToString(b), Name: name, Image: *image, Storage: *storage}
+	c := boxConfig{ID: "box-" + hex.EncodeToString(b), Name: name, Image: *image, Storage: *storage, StorageHostKey: *hostKey}
 	if _, _, _, err := e.storage(c); err != nil {
 		return err
 	}
 	key, err := keys.NewKey()
 	if err != nil {
 		return err
+	}
+	if err := e.keyStore().Put(c.ID, key); err != nil {
+		return err
+	}
+	var storagePub string
+	if strings.HasPrefix(c.Storage, "sftp:") {
+		priv, pub, err := keys.NewSSHKey("portenv storage " + c.ID)
+		if err != nil {
+			return err
+		}
+		if err := e.keyStore().Put(storageKeyID(c.ID), priv); err != nil {
+			return err
+		}
+		storagePub = pub
+	}
+	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+		return err
+	}
+	data, _ := json.MarshalIndent(c, "", "  ")
+	if err := os.WriteFile(p, append(data, '\n'), 0o600); err != nil {
+		return err
+	}
+	fmt.Printf("created box %s (%s) on %s\n", name, c.ID, e.machine)
+	if storagePub != "" {
+		fmt.Printf("add this key to the storage account's authorized_keys on the server:\n%s\n", storagePub)
+	}
+	fmt.Printf("next: portenv resume %s\n", name)
+	return nil
+}
+
+// cmdJoin enrols an existing box on this machine: the repository key comes
+// on stdin (from portenv move, over SSH) and goes only into the key store.
+func cmdJoin(_ context.Context, e *env, name string, args []string) error {
+	fs := flags("join")
+	id := fs.String("id", "", "the box's ID")
+	image := fs.String("image", defaultImage, "toolbox image")
+	storage := fs.String("storage", "", "where this machine reaches the box's storage: an absolute directory, sftp:USER@HOST:/PATH or s3:URL")
+	hostKey := fs.String("storage-host-key", "", "SFTP storage: the server's host key")
+	if err := parse(fs, args); err != nil {
+		return err
+	}
+	if !nameRE.MatchString(*id) {
+		return usageError{"join needs --id BOX-ID"}
+	}
+	p, err := e.configPath(name)
+	if err != nil {
+		return err
+	}
+	if _, err := os.Stat(p); err == nil {
+		return fmt.Errorf("box %s already exists here", name)
+	}
+	c := boxConfig{ID: *id, Name: name, Image: *image, Storage: *storage, StorageHostKey: *hostKey}
+	if _, _, _, err := e.storage(c); err != nil {
+		return err
+	}
+	if strings.HasPrefix(c.Storage, "sftp:") {
+		return errors.New("join with SFTP storage is not supported yet: give this machine the storage directory instead")
+	}
+	key, err := io.ReadAll(io.LimitReader(os.Stdin, 4096))
+	if err != nil {
+		return err
+	}
+	key = bytes.TrimSpace(key)
+	if len(key) < 32 {
+		return errors.New("join reads the repository key from stdin; got none")
 	}
 	if err := e.keyStore().Put(c.ID, key); err != nil {
 		return err
@@ -73,7 +141,29 @@ func cmdInit(_ context.Context, e *env, name string, args []string) error {
 	if err := os.WriteFile(p, append(data, '\n'), 0o600); err != nil {
 		return err
 	}
-	fmt.Printf("created box %s (%s) on %s\nnext: portenv resume %s\n", name, c.ID, e.machine, name)
+	fmt.Printf("joined box %s (%s) on %s\n", name, c.ID, e.machine)
+	return nil
+}
+
+// cmdSSHConfig prints the "ssh portenv" entry for a box on a server: it
+// lands in the box's tmux session (Phase 0 only: docker exec).
+func cmdSSHConfig(_ context.Context, e *env, name string, args []string) error {
+	fs := flags("ssh-config")
+	host := fs.String("host", "", "the server")
+	user := fs.String("user", "ubuntu", "your SSH user on the server")
+	alias := fs.String("alias", "portenv", "the Host name to use")
+	if err := parse(fs, args); err != nil {
+		return err
+	}
+	if *host == "" {
+		return usageError{"ssh-config needs --host"}
+	}
+	c, err := e.loadBox(name)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("Host %s\n  HostName %s\n  User %s\n  RequestTTY yes\n  RemoteCommand sudo docker exec -it -u work -w /home/work %s tmux new-session -A -s main\n",
+		*alias, *host, *user, "portenv-"+c.ID)
 	return nil
 }
 
@@ -145,7 +235,8 @@ func cmdResume(ctx context.Context, e *env, name string, args []string) error {
 	}
 	fmt.Printf("%s is open on %s (resume rule %d: %s)\n", name, e.machine, res.Rule, res.Action)
 	if res.Orphaned != nil {
-		fmt.Printf("unsaved work from this machine was kept as save %s before restoring the newer one\n", res.Orphaned.ID[:8])
+		fmt.Printf("unsaved work from %s was kept as a separate save, %s (%s), before restoring the newer one; see portenv history %s\n",
+			res.Orphaned.Machine, res.Orphaned.ID[:8], res.Orphaned.Time.Local().Format(time.DateTime), name)
 	}
 	return nil
 }
@@ -312,6 +403,7 @@ func cmdStatus(ctx context.Context, e *env, name string, args []string) error {
 			last := hist[n-1]
 			fmt.Printf("saved    %s, %s from %s (%d saves)\n", last.Time.Local().Format(time.DateTime), last.Kind, last.Machine, n)
 		}
+		printKept(hist)
 		return nil
 	})
 }
@@ -333,11 +425,14 @@ func cmdHistory(ctx context.Context, e *env, name string, args []string) error {
 			fmt.Println("no saves yet")
 		}
 		for _, h := range hist {
-			lease := ""
+			note := ""
 			if h.Active != "" {
-				lease = "  open on " + h.Active
+				note = "  open on " + h.Active
 			}
-			fmt.Printf("%s  %s  %-8s  %s%s\n", h.ID[:8], h.Time.Local().Format(time.DateTime), h.Kind, h.Machine, lease)
+			if h.Kind == boxsync.KindOrphaned {
+				note = "  unsaved work from " + h.Machine + ", kept as a separate save"
+			}
+			fmt.Printf("%s  %s  %-8s  %s%s\n", h.ID[:8], h.Time.Local().Format(time.DateTime), h.Kind, h.Machine, note)
 		}
 		return nil
 	})
@@ -347,6 +442,7 @@ func cmdMove(ctx context.Context, e *env, name string, args []string) error {
 	fs := flags("move")
 	to := fs.String("to", "", "SSH host to resume the box on")
 	confirm := fs.Bool("confirm", false, "save even though the box changed on another machine")
+	joinStorage := fs.String("join-storage", "", "first enrol the box on the host, which reaches its storage at this directory")
 	if err := parse(fs, args); err != nil {
 		return err
 	}
@@ -360,8 +456,25 @@ func cmdMove(ctx context.Context, e *env, name string, args []string) error {
 	if err := cmdClose(ctx, e, name, closeArgs); err != nil {
 		return err
 	}
+	if *joinStorage != "" {
+		c, err := e.loadBox(name)
+		if err != nil {
+			return err
+		}
+		key, err := e.keyStore().Get(c.ID)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(os.Stderr, "enrolling %s on %s\n", name, *to)
+		join := remote(ctx, *to, "sudo", "portenv", "join", name, "--id", c.ID, "--image", c.Image, "--storage", *joinStorage)
+		join.Stdin = bytes.NewReader(key) // the key travels on SSH's stdin, never on disk
+		join.Stdout, join.Stderr = os.Stdout, os.Stderr
+		if err := join.Run(); err != nil {
+			return fmt.Errorf("enrol on %s: %w (the box is saved and released)", *to, err)
+		}
+	}
 	fmt.Fprintf(os.Stderr, "resuming %s on %s\n", name, *to)
-	cmd := exec.CommandContext(ctx, "ssh", "--", *to, "portenv", "resume", name) // #nosec G204 G702 -- the user's own SSH host, after -- so it cannot be an option
+	cmd := remote(ctx, *to, "sudo", "portenv", "resume", name)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("resume on %s: %w (the box is saved and released; resume it anywhere)", *to, err)
@@ -369,9 +482,38 @@ func cmdMove(ctx context.Context, e *env, name string, args []string) error {
 	return nil
 }
 
+// remote runs a command on host over SSH. PORTENV_SSH overrides the ssh
+// command and its options (tests).
+func remote(ctx context.Context, host string, argv ...string) *exec.Cmd {
+	sshCmd := []string{"ssh"}
+	if v := os.Getenv("PORTENV_SSH"); v != "" {
+		sshCmd = strings.Fields(v)
+	}
+	full := append(append(sshCmd[1:], "--", host), argv...)
+	return exec.CommandContext(ctx, sshCmd[0], full...) // #nosec G204 G702 -- the user's own SSH host, after -- so it cannot be an option
+}
+
 func stateName(s driver.State) string {
 	return map[driver.State]string{
 		driver.StateCreated: "created", driver.StateStarting: "starting", driver.StateRunning: "running",
 		driver.StateStopping: "stopping", driver.StateStopped: "stopped", driver.StateFailed: "failed",
 	}[s]
+}
+
+// printKept lists unsaved work that was kept as separate saves (resume rule
+// 4, usually after a take over), newest first, at most three.
+func printKept(hist []boxsync.Snapshot) {
+	var kept []boxsync.Snapshot
+	for i := len(hist) - 1; i >= 0; i-- {
+		if hist[i].Kind == boxsync.KindOrphaned {
+			kept = append(kept, hist[i])
+		}
+	}
+	for i, k := range kept {
+		if i == 3 {
+			fmt.Printf("kept     … and %d more (portenv history)\n", len(kept)-3)
+			break
+		}
+		fmt.Printf("kept     unsaved work from %s as a separate save, %s (%s)\n", k.Machine, k.ID[:8], k.Time.Local().Format(time.DateTime))
+	}
 }

@@ -25,10 +25,9 @@ var minResticVersion = [3]int{0, 17, 0}
 
 // restic runs restic against one box's repository through an Executor.
 type restic struct {
-	exec     Executor
-	repo     string
-	password []byte
-	env      []string
+	exec Executor
+	repo string
+	cred Credentials
 }
 
 // run runs restic with the repository, cache and password set, and returns
@@ -50,7 +49,7 @@ func (r *restic) run(ctx context.Context, args ...string) ([]byte, error) {
 }
 
 func (r *restic) runOnce(ctx context.Context, args ...string) (stdout, stderr []byte, err error) {
-	res, err := r.exec.Restic(ctx, append([]string{"--repo", r.repo}, args...), r.password, r.env)
+	res, err := r.exec.Restic(ctx, append([]string{"--repo", r.repo}, args...), r.cred)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -84,7 +83,7 @@ var versionRE = regexp.MustCompile(`^restic (\d+)\.(\d+)\.(\d+)`)
 
 // checkVersion fails if restic is older than minResticVersion.
 func (r *restic) checkVersion(ctx context.Context) error {
-	res, err := r.exec.Restic(ctx, []string{"version"}, nil, nil)
+	res, err := r.exec.Restic(ctx, []string{"version"}, Credentials{})
 	if err != nil {
 		return fmt.Errorf("run restic version: %w", err)
 	}

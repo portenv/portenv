@@ -20,8 +20,9 @@ import (
 // machines where the home is a plain directory) or inside the box through
 // portenv-agent (ADR 0005).
 type Executor interface {
-	// Restic runs restic with args, giving it password through a pipe.
-	Restic(ctx context.Context, args []string, password []byte, env []string) (ExecResult, error)
+	// Restic runs restic with args and the credentials, the password
+	// through a pipe.
+	Restic(ctx context.Context, args []string, cred Credentials) (ExecResult, error)
 	// PathInfo describes a path where restic runs (the home, the excludes
 	// file).
 	PathInfo(ctx context.Context, path string) (PathInfo, error)
@@ -32,6 +33,16 @@ type PathInfo struct {
 	Exists bool `json:"exists"`
 	IsDir  bool `json:"is_dir"`
 	Empty  bool `json:"empty"` // a directory with no entries
+}
+
+// Credentials are what one restic run needs besides its arguments.
+type Credentials struct {
+	Password []byte
+	Env      []string // storage credentials, e.g. AWS_*
+	// SFTP storage: a private key (OpenSSH PEM) and the storage server's
+	// pinned host key ("ssh-ed25519 AAAA...").
+	SSHKey     []byte
+	SSHHostKey string
 }
 
 // ExecResult is the outcome of one restic run.
@@ -54,7 +65,11 @@ type LocalExecutor struct {
 // Restic implements Executor. The password reaches restic through an
 // inherited pipe (RESTIC_PASSWORD_FILE=/dev/fd/3): never on disk, never in
 // the environment. Inherited RESTIC_* variables are dropped.
-func (l LocalExecutor) Restic(ctx context.Context, args []string, password []byte, env []string) (ExecResult, error) {
+func (l LocalExecutor) Restic(ctx context.Context, args []string, cred Credentials) (ExecResult, error) {
+	if len(cred.SSHKey) > 0 {
+		return ExecResult{}, errors.New("SFTP storage keys are only served inside a box (AgentExecutor)")
+	}
+	password, env := cred.Password, cred.Env
 	pr, pw, err := os.Pipe()
 	if err != nil {
 		return ExecResult{}, err
@@ -128,13 +143,15 @@ type AgentExecutor struct {
 const agentRefused = 125
 
 // Restic implements Executor.
-func (a AgentExecutor) Restic(ctx context.Context, args []string, password []byte, env []string) (ExecResult, error) {
-	// The password is meant to be in this JSON: it goes to the agent on
+func (a AgentExecutor) Restic(ctx context.Context, args []string, cred Credentials) (ExecResult, error) {
+	// The secrets are meant to be in this JSON: it goes to the agent on
 	// stdin and is never written anywhere.
 	input, err := json.Marshal(struct { // #nosec G117 -- deliberate, see above
-		Password string   `json:"password"`
-		Env      []string `json:"env,omitempty"`
-	}{string(password), env})
+		Password   string   `json:"password"`
+		Env        []string `json:"env,omitempty"`
+		SSHKey     string   `json:"ssh_key,omitempty"`
+		SSHHostKey string   `json:"ssh_host_key,omitempty"`
+	}{string(cred.Password), cred.Env, string(cred.SSHKey), cred.SSHHostKey})
 	if err != nil {
 		return ExecResult{}, err
 	}

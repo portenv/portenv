@@ -3,12 +3,17 @@
 package keys
 
 import (
+	"crypto/ed25519"
 	"crypto/rand"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
+
+	"golang.org/x/crypto/ssh"
 )
 
 // ErrNotFound means the store holds no key for the box.
@@ -108,4 +113,22 @@ func (f FileStore) Put(boxID string, key []byte) error {
 		return err
 	}
 	return fh.Close()
+}
+
+// NewSSHKey returns a new Ed25519 key for SFTP storage: the private key in
+// OpenSSH PEM form and the public key as an authorized_keys line.
+func NewSSHKey(comment string) (private []byte, public string, err error) {
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		return nil, "", err
+	}
+	block, err := ssh.MarshalPrivateKey(priv, comment)
+	if err != nil {
+		return nil, "", err
+	}
+	sshPub, err := ssh.NewPublicKey(pub)
+	if err != nil {
+		return nil, "", err
+	}
+	return pem.EncodeToMemory(block), strings.TrimSpace(string(ssh.MarshalAuthorizedKey(sshPub))) + " " + comment, nil
 }

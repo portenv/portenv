@@ -90,6 +90,10 @@ expect "A has B's latest change" in_box a 'grep -q "from B again" acme-api/READM
 expect "A's unsaved file is gone from the home" in_box a '! test -e acme-api/offline.txt'
 hist=$(A history demo)
 expect "A's unsaved work is in history as orphaned" grep -q orphaned <<<"$hist"
+expect "history says the work was kept" grep -q "unsaved work from .*, kept as a separate save" <<<"$hist"
+expect "the resume message says the work was kept, with its time" grep -qE "unsaved work from .* was kept as a separate save, [0-9a-f]{8} \(20[0-9-]{8} [0-9:]{8}\)" <<<"$out"
+status=$(A status demo)
+expect "status lists the kept work" grep -q "^kept     unsaved work from" <<<"$status"
 echo "$hist" | sed 's/^/  /'
 expect "A closes" A close demo
 

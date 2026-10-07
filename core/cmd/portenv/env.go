@@ -80,8 +80,32 @@ type boxConfig struct {
 	ID      string `json:"id"`
 	Name    string `json:"name"`
 	Image   string `json:"image"`
-	Storage string `json:"storage"` // "" (this Mac only), an absolute directory, or s3:URL
+	Storage string `json:"storage"` // "" (this Mac only), an absolute directory, sftp:USER@HOST:/PATH or s3:URL
+	// StorageHostKey pins the SFTP server's host key ("ssh-ed25519 AAAA...").
+	StorageHostKey string `json:"storage_host_key,omitempty"`
 }
+
+// machineConfig holds this machine's settings (machine.json).
+type machineConfig struct {
+	// HomesDir is where box home volumes live: the encrypted volume on a
+	// server (written by the server setup script).
+	HomesDir string `json:"homes_dir,omitempty"`
+}
+
+func (e *env) machineConfig() (machineConfig, error) {
+	var m machineConfig
+	b, err := os.ReadFile(filepath.Join(e.dir, "machine.json")) // #nosec G304 -- fixed name in the Portenv directory
+	if errors.Is(err, os.ErrNotExist) {
+		return m, nil
+	}
+	if err != nil {
+		return m, err
+	}
+	return m, json.Unmarshal(b, &m)
+}
+
+// storageKeyID names a box's SFTP storage key in the key store.
+func storageKeyID(boxID string) string { return boxID + "-storage" }
 
 var nameRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,62}$`)
 
@@ -121,6 +145,11 @@ func (e *env) storage(c boxConfig) (repo, hostDir string, resticEnv []string, er
 	switch {
 	case c.Storage == "":
 		return docker.StorageMount + "/" + c.ID, filepath.Join(e.dir, "Repositories"), nil, nil
+	case strings.HasPrefix(c.Storage, "sftp:"):
+		if c.StorageHostKey == "" {
+			return "", "", nil, errors.New("SFTP storage needs the server's host key (--storage-host-key)")
+		}
+		return strings.TrimSuffix(c.Storage, "/") + "/boxes/" + c.ID, "", nil, nil
 	case strings.HasPrefix(c.Storage, "s3:"):
 		for _, k := range []string{"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN", "AWS_DEFAULT_REGION"} {
 			if v := os.Getenv(k); v != "" {
@@ -131,7 +160,7 @@ func (e *env) storage(c boxConfig) (repo, hostDir string, resticEnv []string, er
 	case filepath.IsAbs(c.Storage):
 		return docker.StorageMount + "/boxes/" + c.ID, c.Storage, nil, nil
 	}
-	return "", "", nil, fmt.Errorf("unsupported storage %q: use an absolute directory or s3:URL", c.Storage)
+	return "", "", nil, fmt.Errorf("unsupported storage %q: use an absolute directory, sftp:USER@HOST:/PATH or s3:URL", c.Storage)
 }
 
 // session is everything needed to work on one box.
@@ -142,6 +171,7 @@ type session struct {
 	repo      string
 	resticEnv []string
 	key       []byte
+	sshKey    []byte
 }
 
 func (e *env) open(name string) (*session, error) {
@@ -158,8 +188,12 @@ func (e *env) open(name string) (*session, error) {
 			return nil, err
 		}
 	}
+	mc, err := e.machineConfig()
+	if err != nil {
+		return nil, err
+	}
 	drv, err := docker.New(docker.Config{
-		StateDir: filepath.Join(e.dir, "driver"), StorageDir: hostDir,
+		StateDir: filepath.Join(e.dir, "driver"), StorageDir: hostDir, HomesDir: mc.HomesDir,
 		Namespace: os.Getenv("PORTENV_DOCKER_NAMESPACE"),
 	})
 	if err != nil {
@@ -169,7 +203,13 @@ func (e *env) open(name string) (*session, error) {
 	if err != nil {
 		return nil, fmt.Errorf("repository key for %s: %w", name, err)
 	}
-	return &session{e: e, cfg: c, drv: drv, repo: repo, resticEnv: resticEnv, key: key}, nil
+	s := &session{e: e, cfg: c, drv: drv, repo: repo, resticEnv: resticEnv, key: key}
+	if strings.HasPrefix(c.Storage, "sftp:") {
+		if s.sshKey, err = e.keyStore().Get(storageKeyID(c.ID)); err != nil {
+			return nil, fmt.Errorf("SFTP storage key for %s: %w", name, err)
+		}
+	}
+	return s, nil
 }
 
 func (s *session) id() driver.BoxID { return driver.BoxID(s.cfg.ID) }
@@ -182,6 +222,8 @@ func (s *session) sync() (*boxsync.Box, error) {
 		Repository:  s.repo,
 		Password:    s.key,
 		Env:         s.resticEnv,
+		SSHKey:      s.sshKey,
+		SSHHostKey:  s.cfg.StorageHostKey,
 		BoxID:       s.cfg.ID,
 		MachineID:   s.e.machine,
 		HomeDir:     "/home",

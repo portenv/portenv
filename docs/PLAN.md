@@ -240,7 +240,7 @@ Data is encrypted everywhere it rests, keys are per device and revocable, and in
 | --- | --- |
 | Snapshots in any storage | restic encryption (AES-256 with authentication) before upload |
 | Working copy on a Mac | FileVault; the app checks it is on and warns if not |
-| Working copy on a server | Box homes on a LUKS-encrypted volume, unlocked by the runner when a box starts |
+| Working copy on a server | Box homes on a LUKS-encrypted volume. In Phase 0 it unlocks automatically at boot from a root-only key file on the server, so it never protects against root on the running server, and protects a leaked disk or snapshot only when the homes volume is on its own device (see Phase 0 minimum) |
 | Working copy on Portenv Cloud | One encrypted volume per box with its own data key |
 | Running box | Readable in memory by the host: the stated runtime trust boundary |
 | Secrets (e.g. production database credentials) | A vault with per-secret grants, encrypted on top of the above |
@@ -268,6 +268,14 @@ Data is encrypted everywhere it rests, keys are per device and revocable, and in
 **Phase 0 minimum**
 
 Repository password in the Keychain on the Mac, a root-only file on the server, a LUKS volume for box homes on the server, and a printed recovery key.
+
+What the server's LUKS volume does and does not protect, plainly. Its key is a random 64-byte file, `/etc/portenv/luks/homes.key` (root-only, 0400), on the server's root disk, and a systemd unit unlocks the volume with it at every boot before Docker starts. So:
+
+- It never protects box homes from root, or from anyone with access to the running server.
+- With the homes volume on its own device (`setup.sh --homes-device`), it protects homes on that device, or a snapshot of it, that leaves the server without the root disk.
+- With the homes volume as a file on the root disk (the default, and the Phase 0 gate server), a copy of that disk carries both the volume and its key, so it adds nothing beyond the disk's own encryption at rest (for example encrypted EBS). It keeps the layout the same as servers that have a separate device.
+
+Unlocking without a key on the server (for example a key released by the user's device when a box starts) is later work.
 
 ## Networking and access
 

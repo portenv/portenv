@@ -56,6 +56,11 @@ type Config struct {
 	// Namespace, when set, is added to container names so several simulated
 	// machines can share one engine (tests only).
 	Namespace string
+	// HomesDir, when set, is where home volumes live on the host: each named
+	// volume is a bind of HomesDir/<volume>. On servers this is the LUKS
+	// volume for box homes (milestone 0.5); unset, Docker's default storage
+	// is used (on a Mac, inside Docker's disk on a FileVault-encrypted drive).
+	HomesDir string
 }
 
 // Driver is the docker box driver.
@@ -242,7 +247,19 @@ func (d *Driver) MountHome(ctx context.Context, id driver.BoxID, home driver.Hom
 		return errors.New("MountHome needs the box stopped")
 	}
 	if _, err := d.cli.VolumeInspect(ctx, home.Ref, client.VolumeInspectOptions{}); cerrdefs.IsNotFound(err) {
-		if _, err := d.cli.VolumeCreate(ctx, client.VolumeCreateOptions{Name: home.Ref, Labels: map[string]string{labelBox: string(id)}}); err != nil {
+		opts := client.VolumeCreateOptions{Name: home.Ref, Labels: map[string]string{labelBox: string(id)}}
+		if d.cfg.HomesDir != "" {
+			if !idRE.MatchString(home.Ref) {
+				return fmt.Errorf("invalid home volume name %q", home.Ref)
+			}
+			dir := filepath.Join(d.cfg.HomesDir, home.Ref)
+			if err := os.MkdirAll(dir, 0o755); err != nil { // #nosec G301 -- becomes /home inside the box; homes in it are 0700
+				return fmt.Errorf("create home directory: %w", err)
+			}
+			opts.Driver = "local"
+			opts.DriverOpts = map[string]string{"type": "none", "o": "bind", "device": dir}
+		}
+		if _, err := d.cli.VolumeCreate(ctx, opts); err != nil {
 			return fmt.Errorf("create home volume: %w", err)
 		}
 	} else if err != nil {

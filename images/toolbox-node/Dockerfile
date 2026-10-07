@@ -15,7 +15,9 @@
 FROM --platform=$BUILDPLATFORM golang:1.26.7-bookworm@sha256:e8c859f5632dcfde7b32d2012b4351728f6437930887c2f6a91ea242459e5514 AS restic
 ARG TARGETARCH
 ARG RESTIC_VERSION=v0.19.1
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=$TARGETARCH go install -trimpath -ldflags "-s -w" \
+# The module and build caches persist across builds (BuildKit cache mounts).
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=linux GOARCH=$TARGETARCH go install -trimpath -ldflags "-s -w" \
       github.com/restic/restic/cmd/restic@$RESTIC_VERSION \
  && install -D "$(find /go/bin -type f -name restic)" /out/restic
 
@@ -28,12 +30,13 @@ WORKDIR /src
 COPY go.work ./
 COPY core/go.mod core/go.sum core/
 COPY proto/gen/go/go.mod proto/gen/go/go.sum proto/gen/go/
-RUN cd core && go mod download
+RUN --mount=type=cache,target=/go/pkg/mod cd core && go mod download
 COPY core core
 COPY proto/gen/go proto/gen/go
 # The agent refuses to run any restic but this exact build (ADR 0005).
 COPY --from=restic /out/restic /tmp/restic
-RUN restic_sha256="$(sha256sum /tmp/restic | cut -d' ' -f1)" \
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
+    restic_sha256="$(sha256sum /tmp/restic | cut -d' ' -f1)" \
  && CGO_ENABLED=0 GOOS=linux GOARCH=$TARGETARCH go build -trimpath \
       -ldflags "-s -w -X github.com/portenv/portenv/core/internal/version.Version=$VERSION -X github.com/portenv/portenv/core/internal/version.Commit=$COMMIT -X github.com/portenv/portenv/core/agent.ResticSHA256=$restic_sha256" \
       -o /out/portenv-agent ./core/cmd/portenv-agent

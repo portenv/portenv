@@ -1,6 +1,6 @@
 # Portenv
 
-Portenv (short for portable environment) is a native Mac app that gives each project an encrypted Linux workspace, a *box*, that can be saved, moved between a Mac, developer-owned servers and Portenv Cloud, and opened safely to AI agents.
+Portenv (short for portable environment) is a native Mac app that gives each project an encrypted workspace, a *box*, that can be saved, moved between a Mac, developer-owned servers and Portenv Cloud, and opened safely to AI agents.
 
 **Status:** early development (Phase 0, foundations). Nothing here is usable yet.
 

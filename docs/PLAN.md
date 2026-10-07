@@ -244,7 +244,7 @@ Data is encrypted everywhere it rests, keys are per device and revocable, and in
 - Recovery key: one more repository key per box, derived from a recovery phrase shown once at setup. Offered as Save to Passwords, Print or Copy.
 - The control plane stores only wrapped keys (encrypted to a device's public key) and relays enrollment requests.
 
-**Modes (chosen at setup, changeable in Settings)**
+**Modes (chosen at setup, changeable in Settings; before Phase 3 only Only you exists)**
 
 - Only you (end-to-end, default): no escrow. Losing every device and the recovery key loses the data; setup says so plainly.
 - You, with Portenv's help (recoverable): an escrowed key enables account recovery. Portenv could technically decrypt. Enterprise customers may bring their own KMS.
@@ -420,7 +420,9 @@ Rename… · Move To ▸ (this Mac, each server, Portenv Cloud, Add a Server…)
 - Move To: progress shown in the title subtitle; a sheet only if something fails.
 - Closing with agents connected: their sessions are saved and paused, and a notification says so. No dialog.
 
-**First run (six screens)**
+**First run (six screens, full version from Phase 3)**
+
+This is the first run once the control plane exists (Phase 3). The mockups show this version.
 
 1. Welcome: Continue with Apple, Continue with GitHub, Use email instead.
 2. Protection: Only you (default) or You, with Portenv's help.
@@ -428,6 +430,18 @@ Rename… · Move To ▸ (this Mac, each server, Portenv Cloud, Add a Server…)
 4. Storage: Portenv storage preselected; Use my own server or bucket… reveals the alternatives.
 5. First box: name, Start from (GitHub repository, folder on this Mac, empty), detected toolbox with Change…, Show this box in Finder (on).
 6. Getting ready: Preparing Linux (first time only), toolbox, encrypted home, clone, start. The window opens as soon as the box is usable.
+
+**First run in Phases 1 and 2 (no Portenv backend)**
+
+Phases 0 to 2 have no Portenv backend, so the first run is reduced. Same six steps and layout, with these differences:
+
+1. Welcome: a single Get started button. No sign-in; the device key is generated locally.
+2. Protection: fixed to Only you, shown as an explanation (your keys stay on your devices; losing them and the recovery key loses the data). No choice is offered.
+3. Recovery key: unchanged.
+4. Storage: My own server, An S3-compatible bucket, or This Mac only. No Portenv storage. This Mac only keeps the box's repository on the Mac's disk, and the screen says plainly that saves then have no copy off this Mac.
+5. First box and 6. Getting ready: unchanged.
+
+In Phase 3, sign-in, Portenv storage and the recoverable mode are switched on. Existing users get a one-time prompt to create an account and link their devices; their boxes, keys and storage stay as they are.
 
 Unsupported Macs (Intel, or macOS before 26) get one extra screen after Welcome: use Docker Desktop or OrbStack, or run boxes on a server and use this Mac as a client. Notification permission is requested when the first agent connects, not during first run.
 
@@ -582,9 +596,9 @@ Each milestone ends with a demo note in `docs/milestones/<id>.md` and its checkl
 
 ### Phase 1: Native Mac app, local boxes
 
-Milestones: 1.1 `portenvd` with the local gRPC API · 1.2 main window with a terminal view (evaluate SwiftTerm, MIT-licensed) and tmux-backed tabs · 1.3 `apple` driver shim, `docker` as fallback · 1.4 autosave, sync symbol, Changes, Browse Saves · 1.5 first run (six screens), Keychain keys, recovery key · 1.6 port relay · 1.7 shared folder, then the File Provider · 1.8 signing, notarization, Sparkle updates.
+Milestones: 1.1 `portenvd` with the local gRPC API · 1.2 main window with a terminal view (evaluate SwiftTerm, MIT-licensed) and tmux-backed tabs · 1.3 `apple` driver shim, `docker` as fallback · 1.4 autosave, sync symbol, Changes, Browse Saves · 1.5 first run (reduced, no sign-in; see Desktop app UX), Keychain keys, recovery key · 1.6 port relay · 1.7 shared folder, then the File Provider · 1.8 signing, notarization, Sparkle updates.
 
-- [ ] A new user goes from download to a working box without typing a command
+- [ ] A new user goes from download to a working box without typing a command or creating an account
 - [ ] Closing the window saves and releases; reopening restores within 5 seconds
 - [ ] Offline: work continues and saves upload when the network returns
 - [ ] Every control has a VoiceOver label; light and dark appearance both pass review
@@ -601,11 +615,12 @@ Milestones: 2.1 runner (server build of the core) installed over SSH · 2.2 Add 
 
 ### Phase 3: Control plane and gateway
 
-Milestones: 3.1 accounts (Apple, GitHub, email) · 3.2 device enrollment and wrapped keys · 3.3 authoritative leases · 3.4 box agent tunnels and gateway routing by box name · 3.5 Portenv storage · 3.6 push notifications.
+Milestones: 3.1 accounts (Apple, GitHub, email) · 3.2 device enrollment and wrapped keys · 3.3 authoritative leases · 3.4 box agent tunnels and gateway routing by box name · 3.5 Portenv storage · 3.6 push notifications · 3.7 full first run (sign-in, Portenv storage, recoverable mode) and the one-time account prompt for existing users.
 
 - [ ] A box is reachable by name wherever it runs, with no inbound ports anywhere
 - [ ] Revoking a device ends its sessions within 5 seconds
 - [ ] A control plane outage does not interrupt local work or saves to the user's own storage
+- [ ] An existing Phase 1 or 2 user creates an account and links their devices without losing a box or re-entering keys
 
 ### Phase 4: Agent access
 
@@ -652,6 +667,7 @@ These need an owner decision; Claude Code should add new ones here instead of gu
 - [ ] Phase 2: install the runner as a service from the start, or plain SSH first? The plan assumes the runner.
 - [ ] Support Intel Macs and macOS before 26 with the Docker fallback, or make them remote-only clients?
 - [ ] Trademark and domain check for Portenv in the EU and US; confirm portenv.com is registrable.
+- [ ] This Mac only storage (Phases 1–2): where the repository lives, and whether the app later nudges the user to add off-Mac storage.
 - [ ] Approval timeout default (30 minutes assumed) and what happens when it expires.
 - [ ] Anthropic's terms for agents driving Claude Code with a subscription login versus a Console API key.
 - [ ] Open-source boundary in detail: this repository is Apache-2.0 and `portenv/cloud` is private (decided), but confirm before going public whether the Mac app, the File Provider and the iPhone companion stay in the public repository or move to a private one.

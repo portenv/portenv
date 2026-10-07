@@ -4,6 +4,8 @@ Approved reference designs for the Mac app. Each screen comes as a PNG (what it 
 
 These are design references, not code to port. Build the app natively in SwiftUI (see `docs/PLAN.md`, Desktop app UX) and match the layout, copy and hierarchy. Use system components and system colors where they exist; the hex values below are the dark-appearance targets.
 
+The first-run screens show the full version, from Phase 3. Phases 1 and 2 ship a reduced first run with no sign-in, Only you protection and no Portenv storage; see `docs/PLAN.md`, Desktop app UX.
+
 ## Screens
 
 | File | What it shows |

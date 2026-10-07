@@ -1,17 +1,107 @@
 // SPDX-License-Identifier: Apache-2.0
 
-// Command portenv is the Portenv CLI for agents and power users, a thin client
-// of the same APIs.
+// Command portenv is the Portenv CLI for agents and power users, a thin
+// client of the same APIs.
 //
-// Milestone 0.1 scaffold: it only reports its version.
+// In Phase 0 it is a temporary tool that drives a box directly through the
+// docker driver and the sync engine:
+//
+//	portenv init <box> [--image IMAGE] [--storage DIR|s3:URL]
+//	portenv resume <box> [--take-over]
+//	portenv save <box> [--confirm]      autosave now
+//	portenv point <box> [--confirm]     make a save point
+//	portenv close <box> [--confirm]     save, release the lease, stop the box
+//	portenv status <box>
+//	portenv history <box>
+//	portenv move <box> --to SSH-HOST    close here, resume on SSH-HOST
+//	portenv version
 package main
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/portenv/portenv/core/internal/version"
 )
 
 func main() {
-	fmt.Println("portenv", version.String())
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	os.Exit(run(ctx, os.Args[1:]))
+}
+
+type command struct {
+	usage string
+	run   func(ctx context.Context, e *env, name string, args []string) error
+}
+
+var commands = map[string]command{
+	"init":    {"init <box> [--image IMAGE] [--storage DIR|s3:URL]", cmdInit},
+	"resume":  {"resume <box> [--take-over]", cmdResume},
+	"save":    {"save <box> [--confirm]", cmdSave},
+	"point":   {"point <box> [--confirm]", cmdPoint},
+	"close":   {"close <box> [--confirm]", cmdClose},
+	"status":  {"status <box>", cmdStatus},
+	"history": {"history <box>", cmdHistory},
+	"move":    {"move <box> --to SSH-HOST", cmdMove},
+}
+
+func run(ctx context.Context, args []string) int {
+	if len(args) == 0 || args[0] == "help" || args[0] == "-h" || args[0] == "--help" {
+		usage()
+		return 0
+	}
+	if args[0] == "version" || args[0] == "--version" {
+		fmt.Println("portenv", version.String())
+		return 0
+	}
+	c, ok := commands[args[0]]
+	if !ok {
+		fmt.Fprintf(os.Stderr, "portenv: unknown command %q\n", args[0])
+		usage()
+		return 2
+	}
+	if len(args) < 2 || args[1] == "" || args[1][0] == '-' {
+		fmt.Fprintf(os.Stderr, "usage: portenv %s\n", c.usage)
+		return 2
+	}
+	e, err := newEnv()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "portenv:", err)
+		return 1
+	}
+	if err := c.run(ctx, e, args[1], args[2:]); err != nil {
+		fmt.Fprintln(os.Stderr, "portenv:", err)
+		var u usageError
+		if errors.As(err, &u) {
+			fmt.Fprintf(os.Stderr, "usage: portenv %s\n", c.usage)
+			return 2
+		}
+		return 1
+	}
+	return 0
+}
+
+type usageError struct{ msg string }
+
+func (u usageError) Error() string { return u.msg }
+
+func usage() {
+	fmt.Fprint(os.Stderr, `portenv (Phase 0, temporary): drive a box with the docker driver.
+
+Commands:
+  init <box> [--image IMAGE] [--storage DIR|s3:URL]
+  resume <box> [--take-over]
+  save <box> [--confirm]       autosave now
+  point <box> [--confirm]      make a save point
+  close <box> [--confirm]      save, release the lease, stop the box
+  status <box>
+  history <box>
+  move <box> --to SSH-HOST     close here, then resume on SSH-HOST
+  version
+`)
 }

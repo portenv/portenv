@@ -1,4 +1,5 @@
 # syntax=docker/dockerfile:1
+# check=skip=SecretsUsedInArgOrEnv
 # SPDX-License-Identifier: Apache-2.0
 #
 # portenv/toolbox-node: the default toolbox image. Build from the repository
@@ -9,6 +10,14 @@
 # Everything here is rebuilt or pulled on each machine and never saved; only
 # /home travels. Nothing may depend on Docker-only features (the same image
 # runs on Apple Containerization and microVMs).
+
+# --- restic, built from source at the pinned version -----------------------
+FROM --platform=$BUILDPLATFORM golang:1.26.7-bookworm@sha256:e8c859f5632dcfde7b32d2012b4351728f6437930887c2f6a91ea242459e5514 AS restic
+ARG TARGETARCH
+ARG RESTIC_VERSION=v0.19.1
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=$TARGETARCH go install -trimpath -ldflags "-s -w" \
+      github.com/restic/restic/cmd/restic@$RESTIC_VERSION \
+ && install -D "$(find /go/bin -type f -name restic)" /out/restic
 
 # --- portenv-agent, built natively for the target architecture -------------
 FROM --platform=$BUILDPLATFORM golang:1.26.7-bookworm@sha256:e8c859f5632dcfde7b32d2012b4351728f6437930887c2f6a91ea242459e5514 AS agent
@@ -22,8 +31,11 @@ COPY proto/gen/go/go.mod proto/gen/go/go.sum proto/gen/go/
 RUN cd core && go mod download
 COPY core core
 COPY proto/gen/go proto/gen/go
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=$TARGETARCH go build -trimpath \
-      -ldflags "-s -w -X github.com/portenv/portenv/core/internal/version.Version=$VERSION -X github.com/portenv/portenv/core/internal/version.Commit=$COMMIT" \
+# The agent refuses to run any restic but this exact build (ADR 0005).
+COPY --from=restic /out/restic /tmp/restic
+RUN restic_sha256="$(sha256sum /tmp/restic | cut -d' ' -f1)" \
+ && CGO_ENABLED=0 GOOS=linux GOARCH=$TARGETARCH go build -trimpath \
+      -ldflags "-s -w -X github.com/portenv/portenv/core/internal/version.Version=$VERSION -X github.com/portenv/portenv/core/internal/version.Commit=$COMMIT -X github.com/portenv/portenv/core/agent.ResticSHA256=$restic_sha256" \
       -o /out/portenv-agent ./core/cmd/portenv-agent
 
 # --- the toolbox ------------------------------------------------------------
@@ -35,7 +47,8 @@ ARG NODE_VERSION=22.23.3
 ARG NODE_SHA256_arm64=a44aeb94849a299b22df10b9e622ec2f605c2183501bc40590705131de7c740f
 ARG NODE_SHA256_amd64=df450af89261115ef9f9e3830c3eeb2cc9213b63c720b1af623cb5dcbe2e02de
 
-# Anthropic's Claude Code release signing key, as published at
+# Anthropic's Claude Code release signing key fingerprint (public, not a
+# secret; the build check above is skipped for it), as published at
 # https://code.claude.com/docs/en/setup (Install with Linux package managers).
 ARG CLAUDE_KEY_FINGERPRINT=31DDDE24DDFAB679F42D7BD2BAA929FF1A7ECACE
 
@@ -49,7 +62,7 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN userdel --remove ubuntu \
  && apt-get update \
  && apt-get install -y --no-install-recommends \
-      build-essential ca-certificates curl git gnupg jq less locales \
+      build-essential ca-certificates curl git gnupg jq less libcap2-bin locales \
       openssh-client postgresql-client procps python3 python3-pip \
       python3-venv ripgrep sudo tmux unzip xz-utils \
  && rm -rf /var/lib/apt/lists/*
@@ -94,6 +107,20 @@ RUN chmod 0440 /etc/sudoers.d/work \
  && cp -an /etc/skel/. /usr/share/portenv/skel/
 
 COPY --from=agent /out/portenv-agent /usr/local/bin/portenv-agent
+
+# restic runs only as portenv-sync, a dedicated system user, with just the
+# capabilities saving and restoring every home needs. Gaining them at exec
+# makes the process non-dumpable, so other processes in the box, root
+# included, cannot read its memory, environment or files (ADR 0005).
+# Every capability must be in Docker's default set (no CAP_DAC_READ_SEARCH;
+# CAP_DAC_OVERRIDE covers reading every home), or exec fails with EPERM.
+COPY --from=restic /out/restic /usr/local/libexec/portenv/restic
+RUN groupadd --system --gid 990 portenv-sync \
+ && useradd --system --uid 990 --gid 990 --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin portenv-sync \
+ && chown root:portenv-sync /usr/local/libexec/portenv/restic \
+ && chmod 0750 /usr/local/libexec/portenv/restic \
+ && setcap cap_chown,cap_dac_override,cap_fowner,cap_fsetid+ep /usr/local/libexec/portenv/restic \
+ && install -d -o portenv-sync -g portenv-sync -m 0700 /var/cache/portenv-sync
 
 LABEL org.opencontainers.image.title="toolbox-node" \
       org.opencontainers.image.description="Portenv toolbox: Ubuntu 24.04, Node 22, Claude Code, portenv-agent" \

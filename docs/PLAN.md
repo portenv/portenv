@@ -177,6 +177,8 @@ A box is a toolbox image plus a home. The image is rebuilt or pulled on each mac
 
 Shared memory (default 1 GB, for browsers), CPU and memory limits, Docker inside the box (off), GPU (off). Changing one restarts the box after a save.
 
+A box never starts with `CAP_SYS_PTRACE`, `CAP_SYS_ADMIN`, `CAP_SYS_MODULE`, `CAP_SYS_RAWIO`, `CAP_PERFMON` or `CAP_BPF`, and is never privileged: these would let root in the box read the repository password while restic runs (ADR 0005, Conditions). The box agent refuses to start otherwise. Docker inside the box must therefore not grant them, or the setting must warn plainly that it weakens this protection; how to provide it is a Phase 1 design question.
+
 ## Save, resume and leases
 
 Each box has its own restic repository; saves happen automatically, and a lease guarantees only one machine has a box open at a time.
@@ -185,6 +187,7 @@ Each box has its own restic repository; saves happen automatically, and a lease 
 
 - One repository per box, at `<storage>/boxes/<box-id>`. Snapshot host is always `portenv`, path is always `/home`, so change detection works across machines.
 - Tags: `machine:<machine-id>`; one of `release` (closed), `point` (save point, box still open) or `orphaned` (unsaved work kept during a conflict); `active:<machine-id>` on the newest snapshot while a machine holds the lease (offline fallback only, see below).
+- The box's current save is the newest snapshot that is not `orphaned`. An orphan is history: it is never restored by default and never carries the lease, even though it is newer than the save restored over it.
 - `restic tag` rewrites a snapshot and changes its ID: always re-read the newest snapshot after tagging. Compare homes by the snapshot's tree hash, which tagging does not change (ADR 0004).
 - Backups use `--ignore-inode --ignore-ctime --exclude-caches` and the box's `excludes` file.
 - Restores into an existing home use restic 0.17 or later with `--overwrite if-changed --delete`, so only changed files download.
@@ -520,7 +523,7 @@ portenv/
     cmd/portenv-agent/    in-box agent (static, linux/arm64 + amd64)
     cmd/portenv/          CLI for agents and power users
     agent/                portenv-agent: start sequence, readiness, init duties
-    driver/               box driver interface + docker, apple (client), microvm
+    driver/               box driver interface + docker, apple (client), microvm; drivertest: the conformance suite
     sync/                 restic saves and restores, leases, invariants
     keys/                 key handling, Keychain and server key stores
     relay/                port relay, tunnels (yamux over WebSocket)
@@ -537,7 +540,7 @@ portenv/
     skill/SKILL.md        the published how-to-use-a-box skill for agents
     adr/                  architecture decision records
   tests/
-    e2e/                  two-machine scenarios, chaos tests
+    e2e/                  two-machine scenarios, the restic isolation probe, chaos tests
 ```
 
 **Conventions**
@@ -594,9 +597,9 @@ Each milestone ends with a demo note in `docs/milestones/<id>.md` and its checkl
 
 **0.4 Docker driver and temporary CLI**
 
-- [ ] The `docker` driver implements the `Driver` interface and passes the conformance suite
-- [ ] ADR settles `MountHome` (an encrypted named volume on Docker; an ext4 disk image on Apple)
-- [ ] `portenv resume`, `save`, `point`, `status`, `history` and `move` work on a local box
+- [x] The `docker` driver implements the `Driver` interface and passes the conformance suite
+- [x] ADR settles `MountHome` (an encrypted named volume on Docker; an ext4 disk image on Apple), and where restic runs (ADR 0005)
+- [x] `portenv resume`, `save`, `point`, `status`, `history` and `move` work on a local box (`move`'s remote resume is exercised against a real server in 0.5)
 
 **0.5 Server setup**
 
@@ -614,13 +617,14 @@ Each milestone ends with a demo note in `docs/milestones/<id>.md` and its checkl
 
 ### Phase 1: Native Mac app, local boxes
 
-Milestones: 1.1 `portenvd` with the local gRPC API · 1.2 main window with a terminal view (evaluate SwiftTerm, MIT-licensed) and tmux-backed tabs · 1.3 `apple` driver shim, `docker` as fallback · 1.4 autosave, sync symbol, Changes, Browse Saves · 1.5 first run (reduced, no sign-in; see Desktop app UX), Keychain keys, recovery key · 1.6 port relay · 1.7 shared folder, then the File Provider · 1.8 signing, notarization, Sparkle updates.
+Milestones: 1.1 `portenvd` with the local gRPC API · 1.2 main window with a terminal view (evaluate SwiftTerm, MIT-licensed) and tmux-backed tabs · 1.3 `apple` driver shim, `docker` as fallback (the box agent drops the forbidden capabilities from every process it starts, since a VM's root holds them by default) · 1.4 autosave, sync symbol, Changes, Browse Saves · 1.5 first run (reduced, no sign-in; see Desktop app UX), Keychain keys, recovery key · 1.6 port relay · 1.7 shared folder, then the File Provider · 1.8 signing, notarization, Sparkle updates.
 
 - [ ] A new user goes from download to a working box without typing a command or creating an account
 - [ ] Closing the window saves and releases; reopening restores within 5 seconds
 - [ ] Offline: work continues and saves upload when the network returns
 - [ ] Every control has a VoiceOver label; light and dark appearance both pass review
 - [ ] A dev server bound to the box's localhost opens in Safari through the relay
+- [ ] Inside an `apple` box (a VM), the restic password probe (`tests/e2e/restic-isolation.sh`) passes: root in the box cannot read the password, because the agent drops the forbidden capabilities itself
 
 ### Phase 2: Developer servers
 
@@ -702,6 +706,8 @@ These need an owner decision; Claude Code should add new ones here instead of gu
 - [ ] Support Intel Macs and macOS before 26 with the Docker fallback, or make them remote-only clients?
 - [ ] Trademark and domain check for Portenv in the EU and US; confirm portenv.com is registrable.
 - [ ] Stand-in agents in 2.6, before approvals exist: they act as `work`, who has passwordless sudo. Allow that (the app says the agent has full access), or withhold sudo from stand-ins until the Phase 4 approval helper?
+- [ ] Docker inside the box (Phase 1): how to provide it without granting the box `CAP_SYS_ADMIN` or privileged mode (for example rootless Docker or a nested sandbox), or whether the setting ships with a plain warning that it weakens the repository-password protection (ADR 0005).
+- [ ] Point-in-time autosaves while the box runs: worth a file system with snapshots (for example btrfs on the Apple disk image), or are file-consistent saves plus the pre-save hook enough? (ADR 0005)
 - [ ] Approval timeout default (30 minutes assumed) and what happens when it expires.
 - [ ] Anthropic's terms for agents driving Claude Code with a subscription login versus a Console API key.
 - [ ] Open-source boundary in detail: this repository is Apache-2.0 and `portenv/cloud` is private (decided), but confirm before going public whether the Mac app, the File Provider and the iPhone companion stay in the public repository or move to a private one.

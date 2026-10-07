@@ -162,3 +162,36 @@ func TestResumeUnknownStateWithLocalContentKeepsIt(t *testing.T) {
 	equalFiles(t, "orphan", w.snapshotFiles(*res.Orphaned), map[string]string{"stray.txt": "b had something"})
 	equalFiles(t, "b's home", b.files(), map[string]string{"f": "a"})
 }
+
+// TestOrphanIsNeverTheCurrentSave: rule 4 saves the local home as orphaned
+// just before restoring, so the orphan is the newest snapshot by time. It
+// must not count as the current save: the lease stays with the machine that
+// resumed, and the next machine resumes the real latest work.
+func TestOrphanIsNeverTheCurrentSave(t *testing.T) {
+	w := newWorld(t)
+	a, b := w.machine("a"), w.machine("b")
+	mustResume(t, a, ResumeOptions{})
+	a.write("f", "v1")
+	mustSave(t, a, SaveAutosave)
+	a.write("offline.txt", "stale")
+	mustResume(t, b, ResumeOptions{TakeOver: true})
+	b.write("f", "v2 from b")
+	mustSave(t, b, SaveRelease)
+
+	res := mustResume(t, a, ResumeOptions{}) // rule 4
+	if res.Rule != 4 {
+		t.Fatalf("rule %d, want 4", res.Rule)
+	}
+	lease, err := b.Lease(context.Background())
+	if err != nil || lease == nil || lease.Machine != "a" {
+		t.Fatalf("after rule 4 the lease is %+v (%v); want held by a", lease, err)
+	}
+	if _, err := b.Resume(context.Background(), ResumeOptions{}); err == nil {
+		t.Fatal("b resumed while a holds the box")
+	}
+
+	a.write("f", "v3 from a")
+	mustSave(t, a, SaveRelease)
+	mustResume(t, b, ResumeOptions{})
+	equalFiles(t, "b gets a's latest work, not the orphan", b.files(), map[string]string{"f": "v3 from a"})
+}

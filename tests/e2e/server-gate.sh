@@ -83,7 +83,7 @@ ports_after=$(listening)
 if [[ "$ports_before" == "$ports_after" ]]; then pass "no new listening port on the server (only: $ports_after)"; else fail "no new listening port on the server (before: $ports_before, after: $ports_after)"; fi
 expect "the homes volume is LUKS-encrypted and mounted" R 'sudo cryptsetup status portenv-homes | grep -q "type:.*LUKS2" && mountpoint -q /var/lib/portenv/homes'
 expect "the REST server listens on the loopback address only" R 'sudo ss -Htln | grep -q "127.0.0.1:7422" && ! sudo ss -Htln | grep -qE "(0\.0\.0\.0|\*|\[::\]):7422"'
-expect "the REST password file holds only bcrypt hashes, readable by root and the storage account" R '[[ $(sudo stat -c "%a %U %G" /etc/portenv-rest.htpasswd) == "640 root portenv-storage" ]] && ! sudo grep -vqE "^box-[0-9a-f]+:\$2a\$" /etc/portenv-rest.htpasswd'
+expect "the REST password file holds only bcrypt hashes, readable by root and the storage account" R '[[ $(sudo stat -c "%a %U %G" /etc/portenv-rest.htpasswd) == "640 root portenv-storage" ]] && ! sudo grep -vqE "^box-[0-9a-f]+:[\$]2a[\$]" /etc/portenv-rest.htpasswd'
 expect "the LUKS key file is root-only" R '[[ $(sudo stat -c "%a %U" /etc/portenv/luks/homes.key) == "400 root" ]]'
 
 echo "== toolbox image (built on the server from the same Dockerfile)"
@@ -190,6 +190,29 @@ expect "the home is on the encrypted volume" R "sudo test -d /var/lib/portenv/ho
 server_box 'echo "edited on the server" >> acme-api/README.md'
 before=$(server_box "$sums_cmd")
 expect "the server added its own repository key (it never stores the Mac's)" bash -c "[[ \$(${ssh_cmd[*]} -- $target sudo sha256sum /root/.config/Portenv/keys/$(box_id).key </dev/null | cut -d' ' -f1) != \$(shasum -a 256 $root/mac/keys/$(box_id).key | cut -d' ' -f1) ]]"
+# "ssh portenv": the entry from portenv ssh-config, through a real
+# terminal, must land in the box's tmux session "main".
+R "sudo portenv ssh-config $box --host ${target#*@} --user ${target%@*}" > "$root/ssh_config"
+expect "ssh portenv lands in the box's tmux session" python3 - "$root/ssh_config" "${ssh_cmd[@]}" <<'PY'
+import os, pty, select, sys, time
+cfg, ssh = sys.argv[1], sys.argv[2:]
+pid, fd = pty.fork()
+if pid == 0:
+    os.execvp(ssh[0], ssh + ["-F", cfg, "portenv"])
+out, deadline, sent = b"", time.time() + 30, False
+while time.time() < deadline and b"session=main" not in out:
+    if not sent and time.time() > deadline - 25:
+        os.write(fd, b"tmux display-message -p 'session=#S'\r"); sent = True
+    r, _, _ = select.select([fd], [], [], 0.5)
+    if r:
+        try: out += os.read(fd, 4096)
+        except OSError: break
+os.write(fd, b"\x02d")  # detach (C-b d)
+time.sleep(1)
+try: os.kill(pid, 9)
+except ProcessLookupError: pass
+sys.exit(0 if b"session=main" in out else 1)
+PY
 expect "server closes" R sudo portenv close "$box"
 echo "== server: same-machine resume against its own storage, traced"
 R "sudo PORTENV_TRACE=1 portenv resume "$box" 2>&1 | grep -E '^trace|rule'" | sed 's/^/  /'

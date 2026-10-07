@@ -665,19 +665,19 @@ Each milestone ends with a demo note in `docs/milestones/<id>.md` and its checkl
 
 **0.5 Server setup**
 
-- [ ] The setup script installs Docker and an encrypted volume for box homes on Ubuntu 24.04
+- [x] The setup script installs Docker and an encrypted volume for box homes on Ubuntu 24.04
 - [ ] `ssh portenv` lands in the box's tmux session
-- [ ] After a take over, the next resume on the machine that had the box tells the user that its unsaved work was kept as a separate save, with the save's time; `portenv status` and `portenv history` show it too (the app does the same from Phase 1)
-- [ ] The Phase 0 gate below passes
+- [x] After a take over, the next resume on the machine that had the box tells the user that its unsaved work was kept as a separate save, with the save's time; `portenv status` and `portenv history` show it too (the app does the same from Phase 1)
+- [x] The Phase 0 gate below passes (final round 2026-10-08; numbers in docs/milestones/0.5.md)
 
 **Phase 0 gate**
 
-- [ ] Mac → server → Mac round trip loses nothing (checksums of `/home` match)
+- [x] Mac → server → Mac round trip loses nothing (checksums of `/home` match)
 - [x] All five resume rules and every invariant have passing tests, including two simulated machines
-- [ ] Resume: under 5 seconds to a ready box (a ready terminal from Phase 1), including starting it, with storage reachable at a round-trip time of 50 ms or less and with storage unreachable (offline); the median of 5 runs, with the worst run reported too
-- [ ] Close and Move: the final save and release of a box with a 5 MB unsaved change take under 15 seconds at 20 Mbit/s up and a 50 ms round trip, reported with the measured bandwidth
-- [ ] Freshness: with continuous editing and autosave every 30 seconds, the newest save is never more than 60 seconds behind
-- [ ] The gate measures bandwidth and round-trip time, prints them next to each result, and prints the per-phase trace of every measured command
+- [x] Resume: under 5 seconds to a ready box (a ready terminal from Phase 1), including starting it, with storage reachable at a round-trip time of 50 ms or less and with storage unreachable (offline); the median of 5 runs, with the worst run reported too. Measured: 3.1 s online (worst 3.23 s), 2.22 s offline (worst 2.34 s), at 40 ms
+- [x] Close and Move: the final save and release of a box with a 5 MB unsaved change take under 15 seconds at 20 Mbit/s up and a 50 ms round trip, reported with the measured bandwidth. Measured: 8.52 s at 20.05 Mbit/s
+- [x] Freshness: with continuous editing and autosave every 30 seconds, the newest save is never more than 60 seconds behind. Measured: at most 41.1 s
+- [x] The gate measures bandwidth and round-trip time, prints them next to each result, and prints the per-phase trace of every measured command
 
 Budgets changed on 2026-10-08: they now measure what the user waits for (a ready box, a finished close or move, how much work is at risk) instead of save overhead, which users never see on its own.
 - [x] Killing the process mid-save leaves the repository consistent and the next save succeeds

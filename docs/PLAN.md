@@ -446,9 +446,15 @@ The main window is a terminal with a title; everything else appears only when it
 - Toolbar items appear only when relevant: listening ports (`:3000 ↗`), agent avatars with an approval badge.
 - Drag a file onto the terminal to copy it into the current folder.
 
+**Hosted features** (the own-route guarantee, ADR 0008 G3)
+
+- Hosted options (Portenv Cloud in Move To, Portenv storage, Account) appear as ordinary choices once they exist. Choosing one opens a sheet that explains it and offers sign-in. They are never required, never block a flow, and never show banners or nags.
+- If the service is unreachable, that shows only when the user picks the option: "Can't reach Portenv right now; your boxes keep working."
+- Before a hosted feature exists, it does not appear at all: no "coming soon" items.
+
 **Title menu** (Apple's document-menu pattern)
 
-Rename… · Move To ▸ (this Mac, each server, Portenv Cloud, Add a Server…) · Duplicate for a Task… · Revert To ▸ (Last Save Point, shown with its time; Browse All Saves…) · Show in Finder ⌥⌘R
+Rename… · Move To ▸ (this Mac, each server, Portenv Cloud once it exists, Add a Server…) · Duplicate for a Task… · Revert To ▸ (Last Save Point, shown with its time; Browse All Saves…) · Show in Finder ⌥⌘R
 
 **Menu bar**
 
@@ -474,10 +480,10 @@ Rename… · Move To ▸ (this Mac, each server, Portenv Cloud, Add a Server…)
 
 This is the first run once the control plane exists (Phase 3). The mockups show this version.
 
-1. Welcome: Continue with Apple, Continue with GitHub, Use email instead.
+1. Welcome: Continue with Apple, Continue with GitHub, Use email instead, and Continue without an account (the own route needs none; the remaining steps then skip sign-in and Portenv storage).
 2. Protection: Only you (default) or You, with Portenv's help.
 3. Recovery key: Save to Passwords, Print, Copy; Continue enabled only after "I've saved my recovery key".
-4. Storage: Portenv storage preselected; Use my own server or bucket… reveals the alternatives.
+4. Storage: Portenv storage can be preselected, but "Use my own server or bucket" and "Keep on this Mac for now" are visible on the same screen, each one click, with no account needed.
 5. First box: name, Start from (GitHub repository, folder on this Mac, empty), detected toolbox with Change…, Show this box in Finder (on).
 6. Getting ready: Setting up Portenv (first run only), toolbox, encrypted home, clone, start. The window opens as soon as the box is usable.
 
@@ -657,6 +663,7 @@ Milestones: 1.1 `portenvd` with the local gRPC API · 1.2 main window with a ter
 - **Stable URLs:** `portenv.com/download` and `portenv.com/appcast.xml` redirect to the latest release's assets (Cloudflare redirect rules). The app's Sparkle feed URL is `portenv.com/appcast.xml`, never a GitHub URL, so hosting can move later without breaking updates.
 - **Keys:** the Developer ID certificate and the Sparkle EdDSA private key live only in CI secrets and the owner's Keychain, never in the repository.
 - **Sparkle key backup** (losing it means installed apps can never be updated): when the key is generated, export it once to two offline copies (an encrypted USB drive and a printed or written copy in a separate safe place), record its public key and fingerprint in this plan, and test a restore into a clean Keychain by signing a throwaway appcast that a test install accepts. Repeat the restore test before each major release. A suspected leak means rotating to a new key, which only apps that already trust both keys can follow: ship the new public key in an update signed with the old key first.
+- **Own route:** the update check runs in the background and times out quietly when portenv.com is unreachable; it never blocks or slows launch. A release is blocked unless the `own-route` job passes on the tagged commit.
 - **Later:** a Homebrew cask pointing at the same release.
 
 - [ ] A new user goes from download to a working box without typing a command or creating an account
@@ -762,6 +769,7 @@ The save engine is tested hardest, because a bug there loses someone's work; eve
 | Mac app | XCUITest for first run, title menu, lease sheet; accessibility audit; light and dark snapshots | Every merge touching the app |
 | Performance | Budgets: 5 MB save under 10 s, same-machine resume under 5 s, port relay adds under 5 ms locally | Nightly |
 | Recovery drill | Restore a box from the recovery phrase on a clean Mac | Before each release |
+| Own route | `own-route` job: the own-route journey with every Portenv-hosted endpoint blocked at DNS and the firewall, from locally built artifacts; from Phase 1 it also drives the app with the hosted options visible and untouched (ADR 0008, G3) | Every pull request and merge to main; blocks releases |
 
 CI runs the Go suites on Linux arm64 and amd64 and the app suites on macOS arm64 runners. A release is blocked by any failing gate.
 

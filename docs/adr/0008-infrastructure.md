@@ -1,6 +1,6 @@
 # 0008. Infrastructure
 
-Date: 2026-10-07 · Status: accepted
+Date: 2026-10-07 · Status: accepted · Amended 2026-10-08 (own-route hard rules under G3)
 
 ## Context
 
@@ -19,6 +19,15 @@ Webhooks (2.8) are sent by the box agent or the runner, not by a Portenv server.
 ### G3. Your own machines need no Portenv servers
 
 Everything that runs on your own machines and storage (the app, local boxes, your servers, your storage, SSH and CLI access, webhooks from the box) works without Portenv's servers or an account. Hosted services (gateway, push, remote MCP, web terminal, Portenv storage, Portenv Cloud) are separate.
+
+**Hard rules (the own-route guarantee).** The developer-managed route (your Mac, your servers, your storage, agents over SSH and the CLI) never depends on Portenv's hosted services:
+
+1. No sign-in is ever required for the own route. First run completes without an account, in every phase.
+2. Entitlement and billing checks apply only to hosted features, never to own-route ones.
+3. Update checks, the skill URL and any other fetch from portenv.com never block or slow the app: they run in the background and time out quietly.
+4. Nothing on the own route waits on telemetry or crash reporting.
+
+**Enforced by the `own-route` CI job** (`tests/e2e/own-route.sh`). It runs the full own-route journey with every Portenv-hosted endpoint unreachable: portenv.com, the gateway, the control plane and Portenv storage, blocked at DNS and the firewall for the runner and its boxes (the list is `tests/e2e/hosted-endpoints.txt`; source naming an unlisted portenv.com host fails the job). The journey: create a box, autosave, Move Mac → server → Mac with matching checksums, Revert To, offline resume, and from 2.7 an agent connecting over SSH and the CLI and relaying a question. Once the app exists, the job also drives the UI: every own-route flow completes with the hosted options visible and untouched. It uses locally built artifacts (CLI, image, skill), so no distribution URL is on its path. It runs on every pull request and every merge to main, and releases are blocked unless it passes. Steps that are not built yet are listed as pending and join the journey in their milestone.
 
 ### G4. Portenv storage (3.5)
 

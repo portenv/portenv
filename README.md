@@ -33,6 +33,10 @@ make check        # everything CI runs that works on this machine
 
 Developer tools (buf, protoc plugins, golangci-lint, actionlint, gitleaks) are pinned in the `Makefile` and installed into `bin/` on first use.
 
+## Trademarks
+
+Grok Bot, ChatGPT Dots and Meta Muse are trademarks of their respective owners. Portenv is not affiliated with or endorsed by them.
+
 ## License
 
 Apache License 2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).

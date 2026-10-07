@@ -9,6 +9,5 @@ updates:
     directories:
       - /core
       - /proto/gen/go
-      - /tools
     schedule:
       interval: weekly

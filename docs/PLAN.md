@@ -184,7 +184,7 @@ Each box has its own restic repository; saves happen automatically, and a lease 
 
 - One repository per box, at `<storage>/boxes/<box-id>`. Snapshot host is always `portenv`, path is always `/home`, so change detection works across machines.
 - Tags: `machine:<machine-id>`; one of `release` (closed), `point` (save point, box still open) or `orphaned` (unsaved work kept during a conflict); `active:<machine-id>` on the newest snapshot while a machine holds the lease (offline fallback only, see below).
-- `restic tag` rewrites a snapshot and changes its ID: always re-read the newest snapshot after tagging.
+- `restic tag` rewrites a snapshot and changes its ID: always re-read the newest snapshot after tagging. Compare homes by the snapshot's tree hash, which tagging does not change (ADR 0004).
 - Backups use `--ignore-inode --ignore-ctime --exclude-caches` and the box's `excludes` file.
 - Restores into an existing home use restic 0.17 or later with `--overwrite if-changed --delete`, so only changed files download.
 
@@ -578,9 +578,9 @@ Each milestone ends with a demo note in `docs/milestones/<id>.md` and its checkl
 
 **0.3 Sync package** (tests first)
 
-- [ ] Table-driven tests cover all five resume rules and every invariant, against real restic repositories
-- [ ] Tag-based leases (`active:<machine-id>`) work across two simulated machines
-- [ ] Killing restic mid-save leaves the repository consistent and the next save succeeds
+- [x] Table-driven tests cover all five resume rules and every invariant, against real restic repositories
+- [x] Tag-based leases (`active:<machine-id>`) work across two simulated machines
+- [x] Killing restic mid-save leaves the repository consistent and the next save succeeds
 
 **0.4 Docker driver and temporary CLI**
 
@@ -597,9 +597,9 @@ Each milestone ends with a demo note in `docs/milestones/<id>.md` and its checkl
 **Phase 0 gate**
 
 - [ ] Mac → server → Mac round trip loses nothing (checksums of `/home` match)
-- [ ] All five resume rules and every invariant have passing tests, including two simulated machines
+- [x] All five resume rules and every invariant have passing tests, including two simulated machines
 - [ ] A 5 MB change saves in under 10 seconds; resuming on the same machine takes under 5 seconds
-- [ ] Killing the process mid-save leaves the repository consistent and the next save succeeds
+- [x] Killing the process mid-save leaves the repository consistent and the next save succeeds
 - [x] The toolbox image builds for arm64 and amd64 from one Dockerfile
 
 ### Phase 1: Native Mac app, local boxes

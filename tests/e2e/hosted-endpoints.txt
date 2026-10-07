@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Every Portenv-hosted endpoint: portenv.com, the gateway, the control
+# plane, Portenv storage, update and skill downloads. The own-route job
+# (tests/e2e/own-route.sh) makes all of them unreachable, and fails if any
+# source file names a portenv.com host that is not listed here. Add new
+# hosted endpoints here first.
+portenv.com
+www.portenv.com
+api.portenv.com
+app.portenv.com
+gateway.portenv.com
+control.portenv.com
+cloud.portenv.com
+storage.portenv.com
+updates.portenv.com
+downloads.portenv.com
+skill.portenv.com

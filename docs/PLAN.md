@@ -76,7 +76,7 @@ These were settled in planning on 7 October 2026. Reopen one only with the owner
 | Agents | Open doors (SSH incl. port 443, CLI, HTTP API, MCP, events) plus a published skill; lanes per agent; approvals at privilege boundaries | Any agent with a terminal can work safely |
 | Finder | File Provider extension shows each box in Documents › Portenv › \<box> | Native, works when the box runs remotely |
 | Developer servers | An open-source runner, installed by an in-app wizard | Full control for developers, same features |
-| Ownership | The user owns the workspace; agents are guests. Any agent (any vendor) can be connected and disconnected without moving work. An agent's lane, branch and results stay in the user's box after it disconnects, and history attributes every change to the agent that made it. Portenv ships no agent of its own | Users keep their work and choose their agents freely |
+| Ownership | The user owns the workspace; agents are guests. Any agent from any vendor can be connected and disconnected without moving work. Work done by agents stays in the user's box, and history attributes every change to the agent that made it. Portenv ships no agent of its own | Users keep their work and choose their agents freely |
 | Repositories and license | `portenv/portenv` is public under Apache-2.0 (apps, core, shims, images, proto, docs); the control plane and gateway live in the private `portenv/cloud` repository (decided 7 October 2026) | Box agent, runner and protocols must be auditable; the hosted service is not |
 
 ## Architecture
@@ -294,18 +294,27 @@ Tailscale and similar mesh VPNs: they require each user's own account and cannot
 
 ## Agent access
 
-Any agent that can open a terminal can work in a box: it gets its own sandboxed lane, works freely inside it, and is stopped only at privilege boundaries, where the owner approves on the Mac or iPhone.
+Any agent that can open a terminal can work in a box, in one of two modes chosen per agent in Connect an agent. A guest works freely in its own sandboxed lane and is stopped only at privilege boundaries, where the owner approves on the Mac or iPhone.
 
 **Assume agents type anything.** Most agents hold a persistent SSH session from their own computer and send keystrokes. Control therefore lives in the box (operating system boundaries), not in parsing commands.
 
-**Lanes**
+**Modes**
+
+| Mode | The agent | Access |
+| --- | --- | --- |
+| Continue my work (stand-in) | Logs in with its own key but acts as the user `work`, lands in the user's tmux session, can read and type into any of the user's tabs (including a running Claude Code session) and run commands in the user's project folders | The user's full access. The app says so plainly when the agent is connected |
+| Separate lane (guest) | Has its own Linux user, tmux session and git worktree on branch `agent/<name>` | No access to the user's files or sessions |
+
+In both modes every session is recorded and tagged with the agent's name, there is one writer per terminal with explicit Take Over, and Revoke ends access and live sessions immediately.
+
+**Lanes (guest mode)**
 
 - One Linux user per agent (`/home/<agent>`), its own tmux session, and its own git worktree on branch `agent/<agent>`. A read-only view of the main checkout is mounted at `/home/<agent>/main`.
 - An agent's SSH session lands in its tmux session, so dropped connections resume. One writer per terminal; others attach read-only; Take Over is explicit.
 - Per-lane limits: CPU, memory, process count, network egress rules (production hosts blocked unless granted).
 - Agent keystrokes count as activity, so idle sleep does not cut off a working agent. A maximum session length still applies.
 
-**Permission levels**
+**Permission levels** (guest mode; a stand-in has the user's full access)
 
 | Level | Allows | Default |
 | --- | --- | --- |
@@ -615,22 +624,22 @@ Milestones: 1.1 `portenvd` with the local gRPC API · 1.2 main window with a ter
 
 ### Phase 2: Developer servers
 
-Milestones: 2.1 runner (server build of the core) installed over SSH · 2.2 Add a Server wizard with preflight · 2.3 Move To in the title menu · 2.4 lease sheet · 2.5 toolbox registry, versions and drift warnings · 2.6 agent lanes over direct SSH.
+Milestones: 2.1 runner (server build of the core) installed over SSH · 2.2 Add a Server wizard with preflight · 2.3 Move To in the title menu · 2.4 lease sheet · 2.5 toolbox registry, versions and drift warnings · 2.6 agents over direct SSH.
 
-**2.6 Agent lanes over direct SSH** (no Portenv backend needed)
+**2.6 Agents over direct SSH** (no Portenv backend needed)
 
-- On a box running on a developer server, each agent gets a lane: its own user, tmux session and git worktree on branch `agent/<name>`.
-- Connect an agent in the app creates the lane and an SSH key restricted to it, and shows the connection details to give the agent.
-- The app lists connected agents with Watch, Take Over and Revoke. Revoke removes the key and ends the agent's sessions.
-- Not in 2.6: phone approvals, the gateway and certificates. They stay in Phases 3 and 4, which extend these lanes.
+- Both agent modes, stand-in and guest, for boxes on a developer server.
+- Connect an agent creates the agent's key, restricted to that box and mode, and shows the connection details to give the agent.
+- The app lists connected agents with Watch, Take Over and Revoke.
+- Not in 2.6: phone approvals, the gateway and certificates. They stay in Phases 3 and 4.
 
 - [ ] Move To works Mac → server → Mac from the title menu with no data loss
 - [ ] Every lease sheet path behaves as specified, including a stale lease
 - [ ] A server reboot leaves boxes recoverable without user intervention
 - [ ] The wizard explains every preflight failure in plain language
-- [ ] An external agent connects with its key and works only in its lane
-- [ ] An agent's branch survives it disconnecting
-- [ ] Revoke ends the agent's session immediately
+- [ ] A stand-in agent connects from its own computer, drives the user's Claude Code session by keystrokes in `/home/work/<project>`, and the user sees its activity attributed by name
+- [ ] A guest agent cannot read the user's home
+- [ ] Revoke ends either kind of session immediately
 
 ### Phase 3: Control plane and gateway
 
@@ -643,7 +652,7 @@ Milestones: 3.1 accounts (Apple, GitHub, email) · 3.2 device enrollment and wra
 
 ### Phase 4: Agent access
 
-Milestones: 4.1 lanes everywhere a box runs, building on 2.6 (users, tmux, worktrees, limits) · 4.2 approval helper for sudo, secrets and protected scripts · 4.3 secrets vault · 4.4 session recording and command audit · 4.5 doors: SSH on 443, `portenv ssh`, HTTP API, MCP, events · 4.6 Connect an agent with device-code login and the published skill · 4.7 iPhone companion for approvals.
+Milestones: 4.1 both agent modes everywhere a box runs, building on 2.6 (lanes: users, tmux, worktrees, limits) · 4.2 approval helper for sudo, secrets and protected scripts · 4.3 secrets vault · 4.4 session recording and command audit · 4.5 doors: SSH on 443, `portenv ssh`, HTTP API, MCP, events · 4.6 Connect an agent with device-code login and the published skill · 4.7 iPhone companion for approvals.
 
 - [ ] An agent in a third-party sandbox connects with a device code and works in its lane
 - [ ] It cannot read other homes or ungranted secrets, verified by an adversarial test suite
@@ -686,6 +695,7 @@ These need an owner decision; Claude Code should add new ones here instead of gu
 - [ ] Phase 2: install the runner as a service from the start, or plain SSH first? The plan assumes the runner.
 - [ ] Support Intel Macs and macOS before 26 with the Docker fallback, or make them remote-only clients?
 - [ ] Trademark and domain check for Portenv in the EU and US; confirm portenv.com is registrable.
+- [ ] Stand-in agents in 2.6, before approvals exist: they act as `work`, who has passwordless sudo. Allow that (the app says the agent has full access), or withhold sudo from stand-ins until the Phase 4 approval helper?
 - [ ] Approval timeout default (30 minutes assumed) and what happens when it expires.
 - [ ] Anthropic's terms for agents driving Claude Code with a subscription login versus a Console API key.
 - [ ] Open-source boundary in detail: this repository is Apache-2.0 and `portenv/cloud` is private (decided), but confirm before going public whether the Mac app, the File Provider and the iPhone companion stay in the public repository or move to a private one.

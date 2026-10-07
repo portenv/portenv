@@ -590,3 +590,27 @@ func (d *Driver) Known(id driver.BoxID) bool {
 	_, err = os.Stat(p)
 	return err == nil
 }
+
+// ImageDigest returns ref pinned to the registry digest it resolved to
+// ("repo:tag@sha256:..."), or ref unchanged when it is already pinned or the
+// image is local only (built here, never pushed).
+func (d *Driver) ImageDigest(ctx context.Context, ref string) (string, error) {
+	if strings.Contains(ref, "@sha256:") {
+		return ref, nil
+	}
+	insp, err := d.cli.ImageInspect(ctx, ref)
+	if err != nil {
+		return "", fmt.Errorf("inspect image %s: %w", ref, err)
+	}
+	repo := ref
+	if i := strings.LastIndex(ref, ":"); i > strings.LastIndex(ref, "/") {
+		repo = ref[:i]
+	}
+	for _, rd := range insp.RepoDigests {
+		name, digest, ok := strings.Cut(rd, "@")
+		if ok && (name == repo || strings.HasSuffix(name, "/"+repo)) {
+			return ref + "@" + digest, nil
+		}
+	}
+	return ref, nil
+}

@@ -194,6 +194,17 @@ func cmdResume(ctx context.Context, e *env, name string, args []string) error {
 		if _, err := s.drv.Create(ctx, driver.Box{ID: id, Name: name, ToolboxImage: s.cfg.Image}); err != nil {
 			return err
 		}
+		// Pin the image to the digest it resolved to (images are pulled by
+		// digest from then on; local development images stay as they are).
+		if pinned, err := s.drv.ImageDigest(ctx, s.cfg.Image); err != nil {
+			return err
+		} else if pinned != s.cfg.Image {
+			s.cfg.Image = pinned
+			if err := e.saveBox(s.cfg); err != nil {
+				return err
+			}
+			fmt.Fprintf(os.Stderr, "toolbox pinned to %s\n", pinned)
+		}
 		if err := s.drv.MountHome(ctx, id, driver.HomeStorage{Ref: homeVolume(s.cfg.ID)}); err != nil {
 			return err
 		}

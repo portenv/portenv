@@ -21,7 +21,9 @@ import (
 	boxsync "github.com/portenv/portenv/core/sync"
 )
 
-const defaultImage = "ghcr.io/portenv/toolbox-node:v1"
+// defaultImage is the toolbox published by CI; the first resume pins it to
+// the digest it resolved to, so a box never changes image silently.
+const defaultImage = "ghcr.io/portenv/toolbox-node:main"
 
 // env is this machine's Portenv directory:
 //
@@ -283,4 +285,20 @@ func waitAgent(ctx context.Context, d driver.Driver, id driver.BoxID, want ...st
 		}
 	}
 	return "", "", errors.New("the box did not finish starting within 15 minutes")
+}
+
+func (e *env) saveBox(c boxConfig) error {
+	p, err := e.configPath(c.Name)
+	if err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(c, "", "  ")
+	if err != nil {
+		return err
+	}
+	tmp := p + ".tmp"
+	if err := os.WriteFile(tmp, append(data, '\n'), 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, p)
 }

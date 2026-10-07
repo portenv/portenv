@@ -133,9 +133,12 @@ type Stats struct {
 
 // HomeStorage refers to a box's encrypted home storage in the driver's own
 // terms: a named volume on an encrypted disk for Docker, an ext4 disk image
-// for Apple Containerization. The format is settled in milestone 0.4.
+// for Apple Containerization (ADR 0005).
 type HomeStorage struct {
 	Ref string
+	// Fresh marks new, empty storage: the box creates its home from the
+	// image's skeleton (resume rule 1). Never set for existing storage.
+	Fresh bool
 }
 
 // Capabilities describe a driver and its engine.
@@ -171,7 +174,8 @@ type Driver interface {
 	// SetResources applies new start-time settings. It reports whether they
 	// take effect only after a restart; the caller saves and restarts.
 	SetResources(ctx context.Context, id BoxID, r Resources) (restartRequired bool, err error)
-	// MountHome attaches the box's encrypted home storage at /home.
+	// MountHome attaches the box's encrypted home storage at /home. It is
+	// called after Create and before Start, while the box is stopped.
 	MountHome(ctx context.Context, id BoxID, home HomeStorage) error
 	// Capabilities describes the driver and its engine.
 	Capabilities(ctx context.Context) (Capabilities, error)

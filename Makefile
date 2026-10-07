@@ -31,7 +31,7 @@ TOOLS := \
 TOOLS_STAMP := $(BIN)/.tools-stamp
 
 .PHONY: all build test lint fmt proto proto-check agent-linux swift-test \
-	secrets spdx-check check tools clean image image-test
+	secrets spdx-check check tools clean image image-test driver-test e2e
 
 all: build test lint proto-check
 
@@ -98,6 +98,15 @@ image:
 ## image-test: test the toolbox image (builds it first)
 image-test: image
 	images/toolbox-node/test.sh $(IMAGE)
+
+## driver-test: run the driver conformance suite against Docker with $(IMAGE)
+driver-test:
+	PORTENV_TEST_IMAGE=$(IMAGE) go test -count=1 -timeout 20m ./core/driver/docker/
+
+## e2e: restic isolation probe and the two-machine test against $(IMAGE)
+e2e: build
+	tests/e2e/restic-isolation.sh $(IMAGE)
+	tests/e2e/two-machines.sh $(IMAGE)
 
 ## secrets: scan the full git history and the working tree for secrets
 secrets: $(TOOLS_STAMP)

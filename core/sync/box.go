@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"regexp"
 	"time"
@@ -14,8 +13,11 @@ import (
 
 // Config describes one box on one machine.
 type Config struct {
-	// Restic is the restic binary (0.17 or later).
+	// Restic is the restic binary (0.17 or later) for a LocalExecutor. Not
+	// needed when Executor is set.
 	Restic string
+	// Executor runs restic; nil means a LocalExecutor with Restic.
+	Executor Executor
 	// Repository is the box's restic repository, <storage>/boxes/<box-id>.
 	Repository string
 	// Password is the repository key for this machine. It is passed to
@@ -40,7 +42,7 @@ var idRE = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
 
 func (c Config) validate() error {
 	switch {
-	case c.Restic == "":
+	case c.Restic == "" && c.Executor == nil:
 		return errors.New("sync: no restic binary configured")
 	case c.Repository == "":
 		return errors.New("sync: no repository configured")
@@ -71,10 +73,10 @@ func Open(cfg Config) (*Box, error) {
 	if cfg.Now == nil {
 		cfg.Now = time.Now
 	}
-	b := &Box{cfg: cfg, restic: &restic{
-		bin: cfg.Restic, repo: cfg.Repository, password: cfg.Password, env: cfg.Env,
-		cacheDir: filepath.Join(cfg.StateDir, "cache"),
-	}}
+	if cfg.Executor == nil {
+		cfg.Executor = LocalExecutor{Bin: cfg.Restic, CacheDir: filepath.Join(cfg.StateDir, "cache")}
+	}
+	b := &Box{cfg: cfg, restic: &restic{exec: cfg.Executor, repo: cfg.Repository, password: cfg.Password, env: cfg.Env}}
 	if err := b.restic.checkVersion(context.Background()); err != nil {
 		return nil, err
 	}
@@ -182,7 +184,8 @@ func (b *Box) Resume(ctx context.Context, opts ResumeOptions) (ResumeResult, err
 
 	// Rule 1: nothing saved yet. A local home, if any, is kept as it is; the
 	// first save records it and takes the lease.
-	if len(snaps) == 0 {
+	newest, saved := current(snaps)
+	if !saved {
 		res := ResumeResult{Rule: 1, Action: ActionStartLocal}
 		if empty {
 			res.Action = ActionNewBox
@@ -191,7 +194,6 @@ func (b *Box) Resume(ctx context.Context, opts ResumeOptions) (ResumeResult, err
 		return res, saveState(b.cfg.StateDir, st)
 	}
 
-	newest := snaps[len(snaps)-1]
 	me := b.cfg.MachineID
 
 	// Rule 2: another machine holds the lease.
@@ -331,8 +333,7 @@ func (b *Box) Save(ctx context.Context, opts SaveOptions) (Snapshot, error) {
 		return Snapshot{}, err
 	}
 	me := b.cfg.MachineID
-	if len(snaps) > 0 && !opts.ConfirmLeaseChange {
-		newest := snaps[len(snaps)-1]
+	if newest, saved := current(snaps); saved && !opts.ConfirmLeaseChange {
 		takenOver := newest.Active != "" && newest.Active != me
 		savedElsewhere := newest.Machine != me && newest.Tree != st.Tree
 		if takenOver || savedElsewhere {
@@ -387,7 +388,11 @@ func (b *Box) backup(ctx context.Context, snaps []Snapshot, st State, tags []str
 	}
 	exclude := ""
 	if b.cfg.ExcludeFile != "" {
-		if _, err := os.Stat(b.cfg.ExcludeFile); err == nil {
+		info, err := b.cfg.Executor.PathInfo(ctx, b.cfg.ExcludeFile)
+		if err != nil {
+			return Snapshot{}, err
+		}
+		if info.Exists && !info.IsDir {
 			exclude = b.cfg.ExcludeFile
 		}
 	}
@@ -410,11 +415,11 @@ func (b *Box) backup(ctx context.Context, snaps []Snapshot, st State, tags []str
 // Lease returns the current lease, or nil when no machine holds the box.
 func (b *Box) Lease(ctx context.Context) (*Lease, error) {
 	snaps, err := b.restic.snapshots(ctx)
-	if err != nil || len(snaps) == 0 {
+	if err != nil {
 		return nil, err
 	}
-	newest := snaps[len(snaps)-1]
-	if newest.Active == "" {
+	newest, saved := current(snaps)
+	if !saved || newest.Active == "" {
 		return nil, nil
 	}
 	l := b.leaseOf(newest)
@@ -443,9 +448,31 @@ func (b *Box) Forget(ctx context.Context, prune bool) error {
 }
 
 func (b *Box) homeEmpty() (bool, error) {
-	entries, err := os.ReadDir(b.cfg.HomeDir)
+	info, err := b.cfg.Executor.PathInfo(context.Background(), b.cfg.HomeDir)
 	if err != nil {
-		return false, fmt.Errorf("read home: %w", err)
+		return false, err
 	}
-	return len(entries) == 0, nil
+	if !info.IsDir {
+		return false, fmt.Errorf("home %s is not a directory", b.cfg.HomeDir)
+	}
+	return info.Empty, nil
+}
+
+// LocalState returns this machine's sync state for the box; ok is false when
+// there is none.
+func (b *Box) LocalState() (st State, ok bool, err error) {
+	return loadState(b.cfg.StateDir)
+}
+
+// current returns the box's current save: the newest snapshot that is not
+// orphaned. An orphan (rule 4) is newer by time than the save restored over
+// it, but it is history, never the current version, and never carries the
+// lease.
+func current(snaps []Snapshot) (Snapshot, bool) {
+	for i := len(snaps) - 1; i >= 0; i-- {
+		if snaps[i].Kind != KindOrphaned {
+			return snaps[i], true
+		}
+	}
+	return Snapshot{}, false
 }

@@ -9,8 +9,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
-	"os/exec"
 	"regexp"
 	"sort"
 	"strconv"
@@ -25,13 +23,12 @@ const snapshotHost = "portenv"
 // and --delete.
 var minResticVersion = [3]int{0, 17, 0}
 
-// restic runs the restic binary against one box's repository.
+// restic runs restic against one box's repository through an Executor.
 type restic struct {
-	bin      string
+	exec     Executor
 	repo     string
 	password []byte
 	env      []string
-	cacheDir string
 }
 
 // run runs restic with the repository, cache and password set, and returns
@@ -53,38 +50,14 @@ func (r *restic) run(ctx context.Context, args ...string) ([]byte, error) {
 }
 
 func (r *restic) runOnce(ctx context.Context, args ...string) (stdout, stderr []byte, err error) {
-	pr, pw, err := os.Pipe()
+	res, err := r.exec.Restic(ctx, append([]string{"--repo", r.repo}, args...), r.password, r.env)
 	if err != nil {
 		return nil, nil, err
 	}
-	defer func() { _ = pr.Close() }()
-	if _, err := pw.Write(r.password); err != nil {
-		_ = pw.Close()
-		return nil, nil, err
+	if res.ExitCode != 0 {
+		return res.Stdout, res.Stderr, &ExitError{Code: res.ExitCode}
 	}
-	_ = pw.Close()
-
-	full := append([]string{"--repo", r.repo, "--cache-dir", r.cacheDir}, args...)
-	// #nosec G204 -- the restic binary comes from configuration; arguments are built here.
-	cmd := exec.CommandContext(ctx, r.bin, full...)
-	cmd.Env = append(r.environ(), "RESTIC_PASSWORD_FILE=/dev/fd/3")
-	cmd.ExtraFiles = []*os.File{pr}
-	var out, errb bytes.Buffer
-	cmd.Stdout, cmd.Stderr = &out, &errb
-	err = cmd.Run()
-	return out.Bytes(), errb.Bytes(), err
-}
-
-// environ is the process environment without any RESTIC_* variable, plus the
-// configured extras (for example S3 credentials).
-func (r *restic) environ() []string {
-	var env []string
-	for _, kv := range os.Environ() {
-		if !strings.HasPrefix(kv, "RESTIC_") {
-			env = append(env, kv)
-		}
-	}
-	return append(env, r.env...)
+	return res.Stdout, res.Stderr, nil
 }
 
 func isLockError(stderr []byte) bool {
@@ -111,11 +84,14 @@ var versionRE = regexp.MustCompile(`^restic (\d+)\.(\d+)\.(\d+)`)
 
 // checkVersion fails if restic is older than minResticVersion.
 func (r *restic) checkVersion(ctx context.Context) error {
-	// #nosec G204 -- the restic binary comes from configuration.
-	out, err := exec.CommandContext(ctx, r.bin, "version").Output()
+	res, err := r.exec.Restic(ctx, []string{"version"}, nil, nil)
 	if err != nil {
-		return fmt.Errorf("run %s version: %w", r.bin, err)
+		return fmt.Errorf("run restic version: %w", err)
 	}
+	if res.ExitCode != 0 {
+		return fmt.Errorf("restic version exited %d: %s", res.ExitCode, strings.TrimSpace(string(res.Stderr)))
+	}
+	out := res.Stdout
 	m := versionRE.FindStringSubmatch(string(out))
 	if m == nil {
 		return fmt.Errorf("unrecognised restic version output %q", strings.TrimSpace(string(out)))
@@ -142,9 +118,9 @@ func (r *restic) initIfMissing(ctx context.Context) error {
 	if err == nil {
 		return nil
 	}
-	var exit *exec.ExitError
+	var exit *ExitError
 	// restic exits 10 when the repository does not exist.
-	if !errors.As(err, &exit) || exit.ExitCode() != 10 {
+	if !errors.As(err, &exit) || exit.Code != 10 {
 		return resticError([]string{"cat"}, stderr, err)
 	}
 	_, err = r.run(ctx, "init")

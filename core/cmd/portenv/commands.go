@@ -228,9 +228,12 @@ func cmdResume(ctx context.Context, e *env, name string, args []string) error {
 		if _, err := s.drv.Create(ctx, driver.Box{ID: id, Name: name, ToolboxImage: s.cfg.Image}); err != nil {
 			return err
 		}
-		// Pin the image to the digest it resolved to (images are pulled by
-		// digest from then on; local development images stay as they are).
-		if pinned, err := s.drv.ImageDigest(ctx, s.cfg.Image); err != nil {
+		// Pin a registry image to the digest it resolved to, so every machine
+		// pulls exactly that image. Local development images stay as they
+		// are: their digest exists only on this machine.
+		if !fromRegistry(s.cfg.Image) {
+			// nothing to pin
+		} else if pinned, err := s.drv.ImageDigest(ctx, s.cfg.Image); err != nil {
 			return err
 		} else if pinned != s.cfg.Image {
 			s.cfg.Image = pinned
@@ -622,4 +625,12 @@ func printKept(hist []boxsync.Snapshot) {
 		}
 		fmt.Printf("kept     unsaved work from %s as a separate save, %s (%s)\n", k.Machine, k.ID[:8], k.Time.Local().Format(time.DateTime))
 	}
+}
+
+// fromRegistry reports whether an image reference names a registry host
+// ("ghcr.io/portenv/toolbox-node:main"), as opposed to a local image
+// ("portenv/toolbox-node:dev").
+func fromRegistry(ref string) bool {
+	first, _, ok := strings.Cut(ref, "/")
+	return ok && (strings.ContainsAny(first, ".:") || first == "localhost")
 }

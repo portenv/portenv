@@ -92,7 +92,7 @@ up_mbit=$(python3 -c "print(round($up_bps * 8 / 1e6, 2))")
 echo "  upload ${up_mbit} Mbit/s, round trip ${rtt_ms} ms, SSH connection setup ${rtt_s} s"
 
 echo "== Mac: new box with storage on the server (SFTP)"
-out=$("$portenv" resume gate 2>&1 | tail -1); echo "  $out"
+out=$("$portenv" resume gate 2>&1) || { echo "$out" | sed 's/^/  /'; fail "command failed: "; exit 1; }; out=$(tail -1 <<<"$out"); echo "  $out"
 expect "rule 1 on the Mac" grep -q "rule 1" <<<"$out"
 mac_box 'mkdir -p acme-api && echo "hello from the Mac" > acme-api/README.md && head -c 20000000 /dev/urandom > acme-api/data.bin && echo jq >> .portenv/apt-packages.txt'
 expect "first save over SFTP" "$portenv" save gate
@@ -108,7 +108,7 @@ else
 	echo "skip  the 10 s budget applies at 20 Mbit/s or faster; this uplink is ${up_mbit} Mbit/s"
 fi
 expect "Mac closes" "$portenv" close gate
-t0=$(seconds); out=$("$portenv" resume gate 2>&1 | tail -1); t1=$(seconds)
+t0=$(seconds); out=$("$portenv" resume gate 2>&1) || { echo "$out" | sed 's/^/  /'; fail "command failed: "; exit 1; }; out=$(tail -1 <<<"$out"); t1=$(seconds)
 resume_s=$(python3 -c "print(round($t1 - $t0, 1))")
 expect "same-machine resume is rule 3" grep -q "rule 3" <<<"$out"
 if (( rtt_ms <= 50 )); then
@@ -119,7 +119,7 @@ fi
 before=$(mac_box "$sums_cmd")
 
 echo "== Mac → server"
-out=$("$portenv" move gate --to "$target" --join-storage sftp:portenv-storage@host.portenv.internal:/storage </dev/null 2>&1 | tail -1); echo "  $out"
+out=$("$portenv" move gate --to "$target" --join-storage sftp:portenv-storage@host.portenv.internal:/storage </dev/null 2>&1) || { echo "$out" | sed 's/^/  /'; fail "command failed: "; exit 1; }; out=$(tail -1 <<<"$out"); echo "  $out"
 expect "the server restores the box (rule 5)" grep -q "rule 5" <<<"$out"
 after=$(server_box "$sums_cmd")
 if [[ -n $before && "$before" == "$after" ]]; then pass "checksums of /home match on the server"; else fail "checksums of /home match on the server"; fi
@@ -134,7 +134,7 @@ R "sudo PORTENV_TRACE=1 portenv resume gate 2>&1 | grep -E '^trace|rule'" | sed 
 expect "server closes again" R sudo portenv close gate
 
 echo "== server → Mac"
-out=$("$portenv" resume gate 2>&1 | tail -1); echo "  $out"
+out=$("$portenv" resume gate 2>&1) || { echo "$out" | sed 's/^/  /'; fail "command failed: "; exit 1; }; out=$(tail -1 <<<"$out"); echo "  $out"
 expect "the Mac restores the server's change (rule 5)" grep -q "rule 5" <<<"$out"
 after=$(mac_box "$sums_cmd")
 if [[ -n $before && "$before" == "$after" ]]; then pass "checksums of /home match back on the Mac"; else fail "checksums of /home match back on the Mac"; fi

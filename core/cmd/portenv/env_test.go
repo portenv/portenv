@@ -24,3 +24,18 @@ func TestHostRepoRewritesTheBoxHostAddress(t *testing.T) {
 		t.Fatalf("hostRepo = %q, want %q", got, want)
 	}
 }
+
+func TestFromRegistry(t *testing.T) {
+	for ref, want := range map[string]bool{
+		"ghcr.io/portenv/toolbox-node:main":           true,
+		"ghcr.io/portenv/toolbox-node@sha256:abcd":    true,
+		"localhost:5000/toolbox:dev":                  true,
+		"portenv/toolbox-node:dev":                    false,
+		"portenv/toolbox-node:dev@sha256:89cb7465493": false,
+		"toolbox": false,
+	} {
+		if got := fromRegistry(ref); got != want {
+			t.Errorf("fromRegistry(%q) = %v, want %v", ref, got, want)
+		}
+	}
+}

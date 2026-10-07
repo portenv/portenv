@@ -255,6 +255,9 @@ func (s *session) hostRepo() string {
 	case filepath.IsAbs(c.Storage):
 		return filepath.Join(c.Storage, "boxes", c.ID)
 	}
+	if f := s.restForward(); f != nil {
+		return "rest:http+unix://" + f.Socket(controlDir()) + ":/" + s.cfg.ID + "/"
+	}
 	return strings.Replace(s.repo, "host.portenv.internal", "127.0.0.1", 1)
 }
 
@@ -298,8 +301,27 @@ func (s *session) hostExecutor() boxsync.Executor {
 		CacheDir: filepath.Join(s.e.dir, "state", s.cfg.ID, "host-cache"),
 		// Short on purpose: SSH control sockets must fit in 104 bytes, which
 		// macOS's per-user temporary directory does not leave room for.
-		ControlDir: fmt.Sprintf("/tmp/portenv-%d", os.Getuid()),
+		ControlDir: controlDir(),
+		REST:       s.restForward(),
 	}
+}
+
+func controlDir() string { return fmt.Sprintf("/tmp/portenv-%d", os.Getuid()) }
+
+// restForward is the REST spike: with PORTENV_SPIKE_REST=USER:PASSWORD@ADDR
+// (the REST server's loopback address on the storage server), restic on
+// this machine reaches the repository through restic's REST server over the
+// SFTP account's SSH connection instead of SFTP. Backup and restore in the
+// box still use SFTP.
+func (s *session) restForward() *boxsync.RESTForward {
+	v := os.Getenv("PORTENV_SPIKE_REST")
+	cred, addr, ok := strings.Cut(v, "@")
+	user, pass, ok2 := strings.Cut(cred, ":")
+	if !ok || !ok2 || !strings.HasPrefix(s.cfg.Storage, "sftp:") {
+		return nil
+	}
+	via, _, _ := strings.Cut(strings.TrimPrefix(s.cfg.Storage, "sftp:"), ":")
+	return &boxsync.RESTForward{Via: via, Remote: addr, User: user, Password: pass}
 }
 
 // storageReachable reports whether the storage can be reached within 2 s.

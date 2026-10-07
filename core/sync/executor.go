@@ -5,11 +5,16 @@ package sync
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -67,6 +72,25 @@ type LocalExecutor struct {
 	// the in-memory key agent's socket, the pinned host key and the reused
 	// SSH connection.
 	ControlDir string
+	// REST, when set, reaches restic's REST server on the storage server
+	// through a port forward over the reused SSH connection (spike).
+	REST *RESTForward
+}
+
+// RESTForward is restic's REST server on the storage server's loopback,
+// forwarded to a unix socket in ControlDir over the reused SSH connection.
+// No inbound port: the server listens on 127.0.0.1 only.
+type RESTForward struct {
+	Via      string // user@host of the SSH connection
+	Remote   string // the server's REST address, 127.0.0.1:PORT
+	User     string
+	Password string
+}
+
+// Socket is the local end of the forward.
+func (f *RESTForward) Socket(controlDir string) string {
+	sum := sha256.Sum256([]byte(f.Via + " " + f.Remote))
+	return filepath.Join(controlDir, "rest-"+hex.EncodeToString(sum[:6])+".sock")
 }
 
 // Restic implements Executor. The password reaches restic through an
@@ -83,6 +107,12 @@ func (l LocalExecutor) Restic(ctx context.Context, args []string, cred Credentia
 		defer h.stop()
 		args = append(opts, args...)
 		extraEnv = henv
+		if l.REST != nil {
+			if err := l.REST.ensure(ctx, l.ControlDir, opts, henv); err != nil {
+				return ExecResult{}, fmt.Errorf("REST forward: %w", err)
+			}
+			extraEnv = append(extraEnv, "RESTIC_REST_USERNAME="+l.REST.User, "RESTIC_REST_PASSWORD="+l.REST.Password)
+		}
 	}
 	pr, err := passwordPipe(password)
 	if err != nil {
@@ -212,4 +242,38 @@ func (a AgentExecutor) PathInfo(ctx context.Context, path string) (PathInfo, err
 		return PathInfo{}, fmt.Errorf("inspect %s in box: exit %d: %s", path, res.ExitCode, strings.TrimSpace(string(res.Stderr)))
 	}
 	return info, nil
+}
+
+// ensure makes sure the SSH master connection and the forward exist. The
+// master is the same one restic's SFTP runs reuse (same ControlPath).
+func (f *RESTForward) ensure(ctx context.Context, controlDir string, opts, env []string) error {
+	sock := f.Socket(controlDir)
+	if c, err := net.DialTimeout("unix", sock, time.Second); err == nil {
+		_ = c.Close()
+		return nil
+	}
+	// opts is ["-o", "sftp.args=<ssh options>"]; reuse those options.
+	var base []string
+	for _, a := range strings.Fields(strings.TrimPrefix(opts[1], "sftp.args=")) {
+		if a == "ClearAllForwardings=yes" {
+			base = base[:len(base)-1] // drop its "-o" too
+			continue
+		}
+		base = append(base, a)
+	}
+	ssh := func(extra ...string) error {
+		cmd := exec.CommandContext(ctx, "ssh", append(append(slices.Clone(base), extra...), f.Via)...) // #nosec G204 -- options built here
+		cmd.Env = append(os.Environ(), env...)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("ssh %s: %w: %s", extra[0], err, strings.TrimSpace(string(out)))
+		}
+		return nil
+	}
+	if ssh("-O", "check") != nil {
+		if err := ssh("-M", "-N", "-f"); err != nil {
+			return err
+		}
+	}
+	return ssh("-O", "forward", "-o", "StreamLocalBindUnlink=yes", "-L", sock+":"+f.Remote)
 }

@@ -73,6 +73,15 @@ echo "== toolbox image (built on the server from the same Dockerfile)"
 R "cd /tmp/portenv-src && sudo docker build --progress=plain -f images/toolbox-node/Dockerfile -t '$image' . 2>&1 | grep -E '^#[0-9]+ (DONE|ERROR)|naming to|ERROR' | tail -3" | sed 's/^/  /'
 expect "the toolbox image is on the server" R sudo docker image inspect "$image"
 
+echo "== link from this machine to the server"
+t0=$(seconds); R true; t1=$(seconds)
+rtt_s=$(python3 -c "print(round($t1 - $t0, 2))")
+head -c 2000000 /dev/urandom > "$root/probe.bin"
+t0=$(seconds); Rin 'cat > /dev/null' < "$root/probe.bin"; t1=$(seconds)
+up_bps=$(python3 -c "print(int(2000000 / max($t1 - $t0 - $rtt_s, 0.001)))")
+up_mbit=$(python3 -c "print(round($up_bps * 8 / 1e6, 2))")
+echo "  upload ${up_mbit} Mbit/s, SSH connection setup ${rtt_s} s"
+
 echo "== Mac: new box with storage on the server (SFTP)"
 out=$("$portenv" resume gate 2>&1 | tail -1); echo "  $out"
 expect "rule 1 on the Mac" grep -q "rule 1" <<<"$out"
@@ -81,12 +90,19 @@ expect "first save over SFTP" "$portenv" save gate
 mac_box 'head -c 5000000 /dev/urandom > acme-api/change.bin'
 t0=$(seconds); "$portenv" save gate >/dev/null; t1=$(seconds)
 save_s=$(python3 -c "print(round($t1 - $t0, 1))")
-expect "a 5 MB change saves in under 10 s over SFTP (${save_s} s)" python3 -c "import sys; sys.exit(0 if $t1 - $t0 < 10 else 1)"
+transfer_s=$(python3 -c "print(round(5000000 / $up_bps, 1))")
+overhead_s=$(python3 -c "print(round($t1 - $t0 - 5000000 / $up_bps, 1))")
+expect "save overhead beyond the transfer under 3 s (${overhead_s} s; save ${save_s} s, transfer ${transfer_s} s at ${up_mbit} Mbit/s)" python3 -c "import sys; sys.exit(0 if $overhead_s < 3 else 1)"
+if python3 -c "import sys; sys.exit(0 if $up_mbit >= 20 else 1)"; then
+	expect "a 5 MB change saves in under 10 s at ${up_mbit} Mbit/s (${save_s} s)" python3 -c "import sys; sys.exit(0 if $t1 - $t0 < 10 else 1)"
+else
+	echo "skip  the 10 s budget applies at 20 Mbit/s or faster; this uplink is ${up_mbit} Mbit/s"
+fi
 expect "Mac closes" "$portenv" close gate
 t0=$(seconds); out=$("$portenv" resume gate 2>&1 | tail -1); t1=$(seconds)
 resume_s=$(python3 -c "print(round($t1 - $t0, 1))")
 expect "same-machine resume is rule 3" grep -q "rule 3" <<<"$out"
-expect "same-machine resume takes under 5 s (${resume_s} s, including starting the box)" python3 -c "import sys; sys.exit(0 if $t1 - $t0 < 5 else 1)"
+expect "same-machine resume takes under 5 s, storage reachable (${resume_s} s, including starting the box; ${up_mbit} Mbit/s, SSH setup ${rtt_s} s)" python3 -c "import sys; sys.exit(0 if $t1 - $t0 < 5 else 1)"
 before=$(mac_box "$sums_cmd")
 
 echo "== Mac → server"
@@ -109,6 +125,7 @@ expect "Mac closes" "$portenv" close gate
 "$portenv" history gate | sed 's/^/  /'
 
 echo
-echo "budgets: 5 MB save ${save_s} s, same-machine resume ${resume_s} s"
+echo "link: upload ${up_mbit} Mbit/s, SSH connection setup ${rtt_s} s"
+echo "budgets: 5 MB save ${save_s} s (overhead ${overhead_s} s), same-machine resume ${resume_s} s"
 if (( failures )); then echo "$failures check(s) failed"; exit 1; fi
 echo "all checks passed"

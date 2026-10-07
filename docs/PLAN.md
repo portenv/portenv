@@ -656,13 +656,22 @@ Each milestone ends with a demo note in `docs/milestones/<id>.md` and its checkl
 
 - [ ] Mac → server → Mac round trip loses nothing (checksums of `/home` match)
 - [x] All five resume rules and every invariant have passing tests, including two simulated machines
-- [ ] A 5 MB change saves in under 10 seconds; resuming on the same machine takes under 5 seconds
+- [ ] Save: Portenv's overhead beyond the transfer itself (bytes ÷ measured upload bandwidth) is under 3 seconds, and a 5 MB change saves in under 10 seconds on a 20 Mbit/s or faster uplink. The gate measures the bandwidth (and the round-trip time) and prints them next to each result
+- [ ] Same-machine resume: under 5 seconds including starting the box, both with storage reachable and with storage unreachable (offline)
 - [x] Killing the process mid-save leaves the repository consistent and the next save succeeds
 - [x] The toolbox image builds for arm64 and amd64 from one Dockerfile
 
 ### Phase 1: Native Mac app, local boxes
 
 Milestones: 1.1 `portenvd` with the local gRPC API · 1.2 main window with a terminal view (evaluate SwiftTerm, MIT-licensed) and tmux-backed tabs · 1.3 `apple` driver shim, `docker` as fallback (the box agent drops the forbidden capabilities from every process it starts, since a VM's root holds them by default) · 1.4 autosave, sync symbol, Changes, Browse Saves · 1.5 first run (reduced, no sign-in; see Desktop app UX), Keychain keys, recovery key · 1.6 port relay · 1.7 shared folder, then the File Provider · 1.8 signing, notarization, Sparkle updates.
+
+**1.4 Autosave, the sync symbol, Changes and Browse Saves: slow links are normal**
+
+Slow uplinks are a real user condition, not an edge case (the Phase 0 gate ran over about 50 KB/s up). So:
+
+- A Move, or any save that takes more than a few seconds, shows visible progress and a time estimate in the title subtitle, from the bytes still to send and the measured bandwidth.
+- Closing the laptop or quitting mid-upload never loses work and never leaves the lease in a bad state: the local home stays as it was (dirty), no partial save counts as complete, the lease stays with this machine until a save completes, and the upload resumes (restic deduplicates what already arrived) when the Mac wakes.
+- Same-machine resume never waits on the network: offline, the box starts from the local home and saves queue.
 
 **1.8 Releases and where the app is downloaded from**
 
@@ -676,6 +685,7 @@ Milestones: 1.1 `portenvd` with the local gRPC API · 1.2 main window with a ter
 
 - [ ] A new user goes from download to a working box without typing a command or creating an account
 - [ ] Closing the window saves and releases; reopening restores within 5 seconds
+- [ ] On a throttled uplink (for example 400 kbit/s), a Move shows progress and an estimate, and closing the lid mid-upload loses nothing and leaves the lease with this machine
 - [ ] A version tag produces a signed, notarized, stapled `Portenv.dmg` and a signed `appcast.xml` on the GitHub release; `portenv.com/download` and `portenv.com/appcast.xml` redirect to them, and an installed build updates through Sparkle
 - [ ] The Sparkle key's offline backups exist and a restore test passed
 - [ ] Offline: work continues and saves upload when the network returns
@@ -777,7 +787,7 @@ The save engine is tested hardest, because a bug there loses someone's work; eve
 | Keys | Device add, revoke, recovery, re-encrypt; verify no key material on disk outside approved stores | Every merge touching keys |
 | Agent isolation | Adversarial suite: an agent lane tries to read other homes and secrets, escalate privilege, reach blocked hosts, persist after revoke | Every merge from Phase 4 |
 | Mac app | XCUITest for first run, title menu, lease sheet; accessibility audit; light and dark snapshots | Every merge touching the app |
-| Performance | Budgets: 5 MB save under 10 s, same-machine resume under 5 s, port relay adds under 5 ms locally | Nightly |
+| Performance | Budgets: save overhead beyond the transfer under 3 s, and a 5 MB change under 10 s on a 20 Mbit/s or faster uplink; same-machine resume under 5 s including box start, online and offline; port relay adds under 5 ms locally. Bandwidth and round-trip time are measured and reported with every result | Nightly |
 | Recovery drill | Restore a box from the recovery phrase on a clean Mac | Before each release |
 | Own route | `own-route` job: the own-route journey with every Portenv-hosted endpoint blocked at DNS and the firewall, from locally built artifacts; from Phase 1 it also drives the app with the hosted options visible and untouched (ADR 0008, G3) | Every pull request and merge to main; blocks releases |
 
@@ -797,6 +807,7 @@ These need an owner decision; Claude Code should add new ones here instead of gu
 - [ ] Does Grok Bot read `~/.agents/skills` and can it run the install script? (The owner is testing it.)
 - [ ] Before 2.8: can the target agents be woken by an incoming webhook? If not, an agent keeping `portenv events --follow` running does the job and 2.8 drops in priority (ADR 0008).
 - [ ] Apple Developer Program enrolment (the owner is handling it): needed for Developer ID signing and notarization in 1.8.
+- [ ] Resume and save budgets on high-latency links: from the Phase 0 gate's Mac an SSH handshake to the server took 2.8 s, and each restic call made several sequential round trips, so latency costs as much as bandwidth. Should the budgets also state a round-trip time (for example under 100 ms), or should resume take the lease tag off the critical path?
 - [ ] Approval timeout default (30 minutes assumed) and what happens when it expires.
 - [ ] Anthropic's terms for agents driving Claude Code with a subscription login versus a Console API key.
 - [ ] Open-source boundary in detail: this repository is Apache-2.0 and `portenv/cloud` is private (decided), but confirm before going public whether the Mac app, the File Provider and the iPhone companion stay in the public repository or move to a private one.

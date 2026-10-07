@@ -220,6 +220,9 @@ func (d *Driver) hostConfig(s spec) *container.HostConfig {
 	}
 	host := &container.HostConfig{
 		ShmSize: shm,
+		// The machine running the box, for storage on that machine (SFTP)
+		// and later the port relay's way back to the Mac.
+		ExtraHosts: []string{"host.portenv.internal:host-gateway"},
 		Resources: container.Resources{
 			NanoCPUs: int64(s.Box.Resources.CPUMillis) * 1_000_000,
 			Memory:   int64(s.Box.Resources.MemoryBytes), // #nosec G115 -- sizes far below MaxInt64
@@ -231,7 +234,21 @@ func (d *Driver) hostConfig(s spec) *container.HostConfig {
 	if d.cfg.StorageDir != "" {
 		host.Mounts = append(host.Mounts, mount.Mount{Type: mount.TypeBind, Source: d.cfg.StorageDir, Target: StorageMount})
 	}
+	// restic's cache survives restarts (the root file system does not), so
+	// a same-machine resume reads almost nothing remotely. It holds only
+	// encrypted repository data and is never saved or moved.
+	host.Mounts = append(host.Mounts, mount.Mount{Type: mount.TypeVolume, Source: d.cacheVolume(s.Box.ID), Target: CacheMount})
 	return host
+}
+
+// CacheMount is restic's cache inside every box (portenv-sync's, 0700).
+const CacheMount = "/var/cache/portenv-sync"
+
+func (d *Driver) cacheVolume(id driver.BoxID) string {
+	if d.cfg.Namespace != "" {
+		return "portenv-cache-" + d.cfg.Namespace + "-" + string(id)
+	}
+	return "portenv-cache-" + string(id)
 }
 
 // MountHome records the box's home storage, creating the named volume if

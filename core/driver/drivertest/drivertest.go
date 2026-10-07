@@ -155,7 +155,7 @@ func homeSurvives(t *testing.T, env Env) {
 	b.create(true)
 	b.start()
 	b.waitReady("READY")
-	if _, code := b.exec("sh", "-c", "echo kept > /home/work/marker && echo lost > /var/tmp/marker"); code != 0 {
+	if _, code := b.exec("sh", "-c", "echo kept > /home/work/marker && echo lost > /var/tmp/marker && echo cached > /var/cache/portenv-sync/probe"); code != 0 {
 		t.Fatal("write markers")
 	}
 	if _, err := env.Driver.Stop(context.Background(), b.id, 5*time.Second); err != nil {
@@ -168,6 +168,12 @@ func homeSurvives(t *testing.T, env Env) {
 	}
 	if _, code := b.exec("test", "-e", "/var/tmp/marker"); code == 0 {
 		t.Fatal("the root filesystem survived a restart; it must be fresh each start")
+	}
+	if out, _ := b.exec("cat", "/var/cache/portenv-sync/probe"); strings.TrimSpace(out) != "cached" {
+		t.Fatalf("restic's cache did not survive a restart: %q", out)
+	}
+	if out, _ := b.exec("stat", "-c", "%u %a", "/var/cache/portenv-sync"); strings.TrimSpace(out) != "990 700" {
+		t.Fatalf("restic's cache directory is %q, want owned by portenv-sync (990) with mode 700", out)
 	}
 
 	// Destroy keeps home storage: a new box on the same storage finds it.

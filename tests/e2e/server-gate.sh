@@ -14,6 +14,7 @@
 set -euo pipefail
 target=${1:?usage: server-gate.sh USER@HOST HOST-KEY [IMAGE]}
 host_key=${2:?usage: server-gate.sh USER@HOST HOST-KEY [IMAGE]}
+[[ $host_key =~ ^ssh-ed25519\ [A-Za-z0-9+/=]+$ ]] || { echo "HOST-KEY must be one line: ssh-ed25519 AAAA..." >&2; exit 2; }
 image=${3:-portenv/toolbox-node:dev}
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 portenv=$repo/bin/portenv
@@ -21,7 +22,11 @@ root=$(mktemp -d "${TMPDIR:-/tmp}/portenv-gate.XXXXXX")
 read -r -a ssh_cmd <<<"${PORTENV_SSH:-ssh}"
 export PORTENV_KEYS=file PORTENV_HOME=$root/mac PORTENV_DOCKER_NAMESPACE=gate
 failures=0
-R() { "${ssh_cmd[@]}" -- "$target" "$@"; }
+# R runs a command on the server with no input (an ssh that inherits an
+# open stdin can wait forever after the remote command ends); Rin passes
+# stdin through for uploads.
+R() { "${ssh_cmd[@]}" -- "$target" "$@" </dev/null; }
+Rin() { "${ssh_cmd[@]}" -- "$target" "$@"; }
 pass() { printf 'ok    %s\n' "$1"; }
 fail() { printf 'FAIL  %s\n' "$1"; failures=$((failures + 1)); }
 expect() { local name=$1; shift; if "$@" >/dev/null 2>&1; then pass "$name"; else fail "$name"; fi; }
@@ -43,23 +48,30 @@ trap cleanup EXIT
 
 echo "== server setup"
 arch=$(R dpkg --print-architecture)
-(cd "$repo" && CGO_ENABLED=0 GOOS=linux GOARCH=$arch go build -trimpath -o "$root/portenv-linux" ./core/cmd/portenv)
+(cd "$repo" && CGO_ENABLED=0 GOOS=linux GOARCH=$arch go build -trimpath -ldflags="-s -w" -o "$root/portenv-linux" ./core/cmd/portenv)
 "$portenv" init gate --image "$image" --storage "sftp:portenv-storage@${target#*@}:/storage" --storage-host-key "$host_key" > "$root/init.txt"
 storage_pub=$(grep '^ssh-ed25519 ' "$root/init.txt")
 listening() { R sudo ss -Htln | awk '{print $4}' | grep -vE '^(127\.|\[::1\]|.*%lo:)' | sed 's/.*://' | sort -u | tr '\n' ' '; }
 ports_before=$(listening)
-R 'cat > /tmp/portenv-setup.sh' < "$repo/server/setup.sh"
-R 'cat > /tmp/portenv && chmod +x /tmp/portenv' < "$root/portenv-linux"
+Rin 'cat > /tmp/portenv-setup.sh' < "$repo/server/setup.sh"
+if [[ $(R 'sha256sum /tmp/portenv 2>/dev/null | cut -d" " -f1') == $(shasum -a 256 "$root/portenv-linux" | cut -d' ' -f1) ]]; then
+	echo "  the server already has this portenv build"
+else
+	gzip -9c "$root/portenv-linux" | Rin 'gunzip > /tmp/portenv && chmod +x /tmp/portenv'
+fi
 R sudo bash /tmp/portenv-setup.sh --portenv-bin /tmp/portenv --storage-key "'$storage_pub'" | sed 's/^/  /'
 ports_after=$(listening)
 if [[ "$ports_before" == "$ports_after" ]]; then pass "no new listening port on the server (only: $ports_after)"; else fail "no new listening port on the server (before: $ports_before, after: $ports_after)"; fi
 expect "the homes volume is LUKS-encrypted and mounted" R 'sudo cryptsetup status portenv-homes | grep -q "type:.*LUKS2" && mountpoint -q /var/lib/portenv/homes'
 expect "the LUKS key file is root-only" R '[[ $(sudo stat -c "%a %U" /etc/portenv/luks/homes.key) == "400 root" ]]'
 
-echo "== toolbox image"
-if R sudo docker image inspect "$image" >/dev/null 2>&1; then echo "  already loaded"; else
-	docker save "$image" | gzip -1 | R 'gunzip | sudo docker load' | sed 's/^/  /'
-fi
+echo "== toolbox image (built on the server from the same Dockerfile)"
+# Sending the source (a few MB) and building there is far faster than
+# uploading the image from a slow connection, and is what a machine without
+# the registry does anyway.
+(cd "$repo" && git ls-files -z | COPYFILE_DISABLE=1 tar --no-mac-metadata --null -T - -czf - ) | Rin 'rm -rf /tmp/portenv-src && mkdir -p /tmp/portenv-src && tar -xzf - -C /tmp/portenv-src'
+R "cd /tmp/portenv-src && sudo docker build --progress=plain -f images/toolbox-node/Dockerfile -t '$image' . 2>&1 | grep -E '^#[0-9]+ (DONE|ERROR)|naming to|ERROR' | tail -3" | sed 's/^/  /'
+expect "the toolbox image is on the server" R sudo docker image inspect "$image"
 
 echo "== Mac: new box with storage on the server (SFTP)"
 out=$("$portenv" resume gate 2>&1 | tail -1); echo "  $out"
@@ -78,7 +90,7 @@ expect "same-machine resume takes under 5 s (${resume_s} s, including starting t
 before=$(mac_box "$sums_cmd")
 
 echo "== Mac → server"
-out=$("$portenv" move gate --to "$target" --join-storage /srv/portenv/storage-root/storage 2>&1 | tail -1); echo "  $out"
+out=$("$portenv" move gate --to "$target" --join-storage sftp:portenv-storage@host.portenv.internal:/storage </dev/null 2>&1 | tail -1); echo "  $out"
 expect "the server restores the box (rule 5)" grep -q "rule 5" <<<"$out"
 after=$(server_box "$sums_cmd")
 if [[ -n $before && "$before" == "$after" ]]; then pass "checksums of /home match on the server"; else fail "checksums of /home match on the server"; fi

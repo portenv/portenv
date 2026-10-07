@@ -22,12 +22,14 @@ portenv_bin=""
 homes_size=8G
 homes_device=""
 storage_key=""
+only=""
 while (($#)); do
 	case $1 in
 		--portenv-bin) portenv_bin=$2; shift 2 ;;
 		--homes-size) homes_size=$2; shift 2 ;;
 		--homes-device) homes_device=$2; shift 2 ;;
 		--storage-key) storage_key=$2; shift 2 ;;
+		--only) only=$2; shift 2 ;;
 		*) echo "unknown option $1" >&2; exit 2 ;;
 	esac
 done
@@ -35,8 +37,48 @@ done
 say() { printf '\n== %s\n' "$*"; }
 die() { printf 'setup: %s\n' "$*" >&2; exit 1; }
 
-say "preflight"
+setup_storage_account() {
+	say "SFTP storage account (chrooted, SFTP only)"
+	# Every box, including boxes on this server, reaches repositories over SFTP
+	# as this account, so all repository files have one owner whatever its uid.
+	getent group portenv-storage >/dev/null || groupadd --system portenv-storage
+	id portenv-storage >/dev/null 2>&1 || useradd --system --gid portenv-storage --no-create-home \
+		--home-dir / --shell /usr/sbin/nologin portenv-storage
+	install -d -m 0755 -o root -g root /srv/portenv /srv/portenv/storage-root
+	install -d -m 0700 -o portenv-storage -g portenv-storage /srv/portenv/storage-root/storage
+	# sshd reads authorized keys as the target user, so the file must be
+	# readable by portenv-storage: root-owned, 0644, outside root-only /etc/portenv.
+	keys=/etc/ssh/portenv-storage.authorized_keys
+	touch "$keys" && chown root:root "$keys" && chmod 0644 "$keys"
+	if [[ -n $storage_key ]]; then
+		line="restrict $storage_key"
+		grep -qxF "$line" "$keys" || echo "$line" >> "$keys"
+	fi
+	cat > /etc/ssh/sshd_config.d/50-portenv-storage.conf <<'CONF'
+Match User portenv-storage
+	ChrootDirectory /srv/portenv/storage-root
+	ForceCommand internal-sftp
+	AuthorizedKeysFile /etc/ssh/portenv-storage.authorized_keys
+	AllowTcpForwarding no
+	AllowAgentForwarding no
+	X11Forwarding no
+	PermitTTY no
+	PasswordAuthentication no
+CONF
+	sshd -t || die "sshd rejected the storage account configuration"
+	systemctl reload ssh 2>/dev/null || kill -HUP "$(cat /run/sshd.pid 2>/dev/null)" 2>/dev/null || true
+	echo "repositories: sftp:portenv-storage@<this server>:/storage; boxes on this server use sftp:portenv-storage@host.portenv.internal:/storage"
+}
+
+
 [[ $(id -u) == 0 ]] || die "run as root (sudo)"
+if [[ $only == storage-account ]]; then
+	setup_storage_account
+	exit 0
+fi
+[[ -z $only ]] || die "unknown --only $only (want storage-account)"
+
+say "preflight"
 . /etc/os-release
 [[ $ID == ubuntu && ($VERSION_ID == 24.04 || $VERSION_ID == 22.04) ]] || die "needs Ubuntu 22.04 or 24.04 (found $PRETTY_NAME)"
 arch=$(dpkg --print-architecture)
@@ -44,7 +86,11 @@ arch=$(dpkg --print-architecture)
 mem_mb=$(awk '/MemTotal/{print int($2/1024)}' /proc/meminfo)
 (( mem_mb >= 1800 )) || die "needs at least 2 GB of memory (found ${mem_mb} MB)"
 free_gb=$(df -BG --output=avail / | tail -1 | tr -dc 0-9)
-(( free_gb >= 15 )) || die "needs at least 15 GB free on / (found ${free_gb} GB)"
+# A fresh install needs room for the homes volume and the toolbox image;
+# once the homes volume exists, a few GB is enough to run setup again.
+need_gb=15
+[[ -e /var/lib/portenv/homes.luks || -n $homes_device ]] && need_gb=3
+(( free_gb >= need_gb )) || die "needs at least ${need_gb} GB free on / (found ${free_gb} GB)"
 timedatectl show -p NTPSynchronized --value 2>/dev/null | grep -qx yes || echo "warning: the clock is not NTP-synchronised; leases compare save times"
 [[ -e /dev/kvm ]] && echo "KVM available (recorded for microVMs later)" || echo "no KVM (fine for the docker driver)"
 [[ -z $portenv_bin || -x $portenv_bin ]] || die "--portenv-bin $portenv_bin is not an executable"
@@ -145,35 +191,14 @@ systemctl daemon-reload
 systemctl enable -q --now portenv-homes.service
 systemctl restart docker
 mountpoint -q /var/lib/portenv/homes || die "the homes volume is not mounted"
-echo "mounted $(df -h --output=size /var/lib/portenv/homes | tail -1 | tr -d ' ') encrypted at /var/lib/portenv/homes"
-
-say "SFTP storage account (chrooted, SFTP only)"
-# uid 990 matches portenv-sync inside boxes, so repositories written over
-# SFTP and by boxes on this server share one owner.
-getent group portenv-storage >/dev/null || groupadd --system --gid 990 portenv-storage
-id portenv-storage >/dev/null 2>&1 || useradd --system --uid 990 --gid 990 --no-create-home \
-	--home-dir / --shell /usr/sbin/nologin portenv-storage
-install -d -m 0755 -o root -g root /srv/portenv /srv/portenv/storage-root
-install -d -m 0700 -o portenv-storage -g portenv-storage /srv/portenv/storage-root/storage
-touch /etc/portenv/storage-authorized-keys && chmod 0644 /etc/portenv/storage-authorized-keys
-if [[ -n $storage_key ]]; then
-	line="restrict $storage_key"
-	grep -qxF "$line" /etc/portenv/storage-authorized-keys || echo "$line" >> /etc/portenv/storage-authorized-keys
+echo "mounted $(df -h --output=size /var/lib/portenv/homes | tail -1 | tr -d ' ') at /var/lib/portenv/homes"
+if [[ -n $homes_device ]]; then
+	echo "box homes: encrypted on their own device ($homes_device); a copy of that device alone cannot be read"
+else
+	echo "box homes: encrypted at rest by your provider (the volume and its key share the root disk)"
 fi
-cat > /etc/ssh/sshd_config.d/50-portenv-storage.conf <<'CONF'
-Match User portenv-storage
-	ChrootDirectory /srv/portenv/storage-root
-	ForceCommand internal-sftp
-	AuthorizedKeysFile /etc/portenv/storage-authorized-keys
-	AllowTcpForwarding no
-	AllowAgentForwarding no
-	X11Forwarding no
-	PermitTTY no
-	PasswordAuthentication no
-CONF
-sshd -t || die "sshd rejected the storage account configuration"
-systemctl reload ssh
-echo "repositories: sftp:portenv-storage@<this server>:/storage (here: /srv/portenv/storage-root/storage)"
+
+setup_storage_account
 
 say "portenv CLI"
 if [[ -n $portenv_bin ]]; then
@@ -185,4 +210,4 @@ chmod 0600 /root/.config/Portenv/machine.json
 command -v portenv >/dev/null && portenv version
 
 say "done"
-echo "No port was opened. Box homes: /var/lib/portenv/homes (LUKS). Keys: /etc/portenv (root-only)."
+echo "No port was opened. Box homes: /var/lib/portenv/homes. Keys: /etc/portenv (root-only)."

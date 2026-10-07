@@ -40,6 +40,8 @@ type Config struct {
 	StateDir string
 	// Now is the clock; nil means time.Now.
 	Now func() time.Time
+	// Trace, when set, receives the duration of each restic call.
+	Trace func(phase string, d time.Duration)
 }
 
 var idRE = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
@@ -80,7 +82,7 @@ func Open(cfg Config) (*Box, error) {
 	if cfg.Executor == nil {
 		cfg.Executor = LocalExecutor{Bin: cfg.Restic, CacheDir: filepath.Join(cfg.StateDir, "cache")}
 	}
-	b := &Box{cfg: cfg, restic: &restic{exec: cfg.Executor, repo: cfg.Repository, cred: Credentials{
+	b := &Box{cfg: cfg, restic: &restic{exec: cfg.Executor, repo: cfg.Repository, trace: cfg.Trace, cred: Credentials{
 		Password: cfg.Password, Env: cfg.Env, SSHKey: cfg.SSHKey, SSHHostKey: cfg.SSHHostKey,
 	}}}
 	if err := b.restic.checkVersion(context.Background()); err != nil {

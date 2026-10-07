@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // snapshotHost is the restic host of every snapshot, on every machine, so
@@ -25,9 +26,10 @@ var minResticVersion = [3]int{0, 17, 0}
 
 // restic runs restic against one box's repository through an Executor.
 type restic struct {
-	exec Executor
-	repo string
-	cred Credentials
+	exec  Executor
+	repo  string
+	cred  Credentials
+	trace func(phase string, d time.Duration)
 }
 
 // run runs restic with the repository, cache and password set, and returns
@@ -36,6 +38,10 @@ type restic struct {
 // A stale lock left by a killed restic is removed once and the command
 // retried.
 func (r *restic) run(ctx context.Context, args ...string) ([]byte, error) {
+	if r.trace != nil && len(args) > 0 {
+		start := time.Now()
+		defer func() { r.trace("restic "+args[0], time.Since(start)) }()
+	}
 	out, stderr, err := r.runOnce(ctx, args...)
 	if err != nil && isLockError(stderr) && ctx.Err() == nil {
 		if _, _, uerr := r.runOnce(ctx, "unlock"); uerr == nil {

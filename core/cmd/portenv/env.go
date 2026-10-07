@@ -229,7 +229,23 @@ func (s *session) sync() (*boxsync.Box, error) {
 		HomeDir:     "/home",
 		ExcludeFile: "/home/work/.portenv/excludes",
 		StateDir:    filepath.Join(s.e.dir, "state", s.cfg.ID),
+		Trace:       trace,
 	})
+}
+
+// trace prints a phase's duration when PORTENV_TRACE=1.
+func trace(phase string, d time.Duration) {
+	if os.Getenv("PORTENV_TRACE") == "1" {
+		fmt.Fprintf(os.Stderr, "trace  %-28s %6.2f s\n", phase, d.Seconds())
+	}
+}
+
+// timed runs fn and traces its duration.
+func timed(phase string, fn func() error) error {
+	start := time.Now()
+	err := fn()
+	trace(phase, time.Since(start))
+	return err
 }
 
 func homeVolume(boxID string) string {

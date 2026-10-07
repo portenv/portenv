@@ -41,10 +41,10 @@ func startSFTPAgent(privateKey, hostKey string) (*sftpAgent, []string, []string,
 		return nil, nil, nil, err
 	}
 
-	if err := os.MkdirAll("/run/portenv", 0o700); err != nil {
-		return nil, nil, nil, err
-	}
-	dir, err := os.MkdirTemp("/run/portenv", "sftp-")
+	// Under portenv-sync's own cache directory (0700, owned by it): restic's
+	// ssh runs as portenv-sync and must reach the socket and the host key,
+	// which it could not inside the root-only /run/portenv.
+	dir, err := os.MkdirTemp(resticCacheDir, "sftp-")
 	if err != nil {
 		return nil, nil, nil, err
 	}

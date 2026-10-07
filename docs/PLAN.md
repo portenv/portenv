@@ -273,7 +273,7 @@ What the server's LUKS volume does and does not protect, plainly. Its key is a r
 
 - It never protects box homes from root, or from anyone with access to the running server.
 - With the homes volume on its own device (`setup.sh --homes-device`), it protects homes on that device, or a snapshot of it, that leaves the server without the root disk.
-- With the homes volume as a file on the root disk (the default, and the Phase 0 gate server), a copy of that disk carries both the volume and its key, so it adds nothing beyond the disk's own encryption at rest (for example encrypted EBS). It keeps the layout the same as servers that have a separate device.
+- With the homes volume as a file on the root disk (the default, and the Phase 0 gate server), a copy of that disk carries both the volume and its key, so it adds nothing beyond the disk's own encryption at rest. The app and docs describe this default as **encrypted at rest by your provider** (for example encrypted EBS), never as extra protection. The LUKS file keeps the layout the same as servers that have a separate device.
 
 Unlocking without a key on the server (for example a key released by the user's device when a box starts) is later work.
 

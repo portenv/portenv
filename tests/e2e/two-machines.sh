@@ -29,10 +29,16 @@ sums() { in_box "$1" 'cd /home && find . -type f -not -path "./work/.cache/*" -p
 cleanup() {
 	local id; id=$(box_id 2>/dev/null || true)
 	for m in a b; do
-		[[ -n $id ]] && docker rm -f "portenv-e2e$m-$id" >/dev/null 2>&1
-		[[ -n $id ]] && docker volume rm -f "portenv-home-e2e$m-$id" >/dev/null 2>&1
+		if [[ -n $id ]]; then
+			docker rm -f "portenv-e2e$m-$id" >/dev/null 2>&1 || true
+			docker volume rm -f "portenv-home-e2e$m-$id" >/dev/null 2>&1 || true
+		fi
 	done
-	rm -rf "$root"
+	# restic in the box wrote the repository as portenv-sync (uid 990, mode
+	# 0700). On Linux hosts those files really are uid 990, so remove them as
+	# root from a container; on a Mac the shared folder maps them to the user.
+	docker run --rm -v "$root:/scratch" --entrypoint rm "$image" -rf /scratch/storage >/dev/null 2>&1 || true
+	rm -rf "$root" || true
 }
 trap cleanup EXIT
 

@@ -163,7 +163,8 @@ A box is a toolbox image plus a home. The image is rebuilt or pulled on each mac
 
 - `work` has passwordless sudo, mediated by the approval helper once agents exist (see agent access).
 - Agent users have no sudo by default and cannot read other homes (`chmod 700` on every home).
-- Users and groups are recreated from a manifest in `/home/work/.portenv/` at every start, because `/etc` does not travel.
+- Users and groups are recreated from a manifest in `/home/work/.portenv/` at every start, because `/etc` does not travel. Until milestone 4.1 only `work` exists, and the image creates it.
+- A new box's home is created from the image's skeleton only when the caller says the box is new (`PORTENV_INIT_HOME=1`, resume rule 1); a missing or empty home otherwise fails the start (ADR 0003).
 
 **Packages and excludes**
 
@@ -502,6 +503,7 @@ portenv/
     cmd/portenv-runner/   server daemon (same core, server build)
     cmd/portenv-agent/    in-box agent (static, linux/arm64 + amd64)
     cmd/portenv/          CLI for agents and power users
+    agent/                portenv-agent: start sequence, readiness, init duties
     driver/               box driver interface + docker, apple (client), microvm
     sync/                 restic saves and restores, leases, invariants
     keys/                 key handling, Keychain and server key stores
@@ -565,8 +567,8 @@ Each milestone ends with a demo note in `docs/milestones/<id>.md` and its checkl
 **0.2 Toolbox image**
 
 - [ ] `images/toolbox-node` builds for arm64 and amd64 from one Dockerfile, with `portenv-agent` as init
-- [ ] The skeleton home creates `work` (uid 1000), `.portenv/apt-packages.txt` and the default `excludes`
-- [ ] Packages in `apt-packages.txt` are reinstalled at start, before the box reports ready
+- [x] The skeleton home creates `work` (uid 1000), `.portenv/apt-packages.txt` and the default `excludes`
+- [x] Packages in `apt-packages.txt` are reinstalled at start, before the box reports ready
 
 **0.3 Sync package** (tests first)
 

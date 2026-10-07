@@ -31,6 +31,11 @@ jobs:
         with:
           go-version-file: core/go.mod
           cache-dependency-path: '**/go.sum'
+      - name: Cache pinned tools
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: bin
+          key: tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Makefile') }}
       - run: make build
       - run: make test
       - name: Lint
@@ -57,6 +62,11 @@ jobs:
         with:
           go-version-file: core/go.mod
           cache-dependency-path: '**/go.sum'
+      - name: Cache pinned tools
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: bin
+          key: tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Makefile') }}
       # Lint and format run in the go job; this checks generated code is current.
       # Breaking-change checks (buf breaking) stay off until Phase 1.
       - run: make proto-check
@@ -79,4 +89,9 @@ jobs:
         with:
           go-version-file: core/go.mod
           cache-dependency-path: '**/go.sum'
+      - name: Cache pinned tools
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: bin
+          key: tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Makefile') }}
       - run: make secrets

@@ -28,6 +28,63 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// Where the box is in its start sequence.
+type ReadinessState int32
+
+const (
+	ReadinessState_READINESS_STATE_UNSPECIFIED ReadinessState = 0
+	// Still starting: users, home checks, package replay.
+	ReadinessState_READINESS_STATE_STARTING ReadinessState = 1
+	// Started; the box is usable.
+	ReadinessState_READINESS_STATE_READY ReadinessState = 2
+	// The start sequence failed; detail says why. The box stays up so the
+	// failure can be inspected.
+	ReadinessState_READINESS_STATE_FAILED ReadinessState = 3
+)
+
+// Enum value maps for ReadinessState.
+var (
+	ReadinessState_name = map[int32]string{
+		0: "READINESS_STATE_UNSPECIFIED",
+		1: "READINESS_STATE_STARTING",
+		2: "READINESS_STATE_READY",
+		3: "READINESS_STATE_FAILED",
+	}
+	ReadinessState_value = map[string]int32{
+		"READINESS_STATE_UNSPECIFIED": 0,
+		"READINESS_STATE_STARTING":    1,
+		"READINESS_STATE_READY":       2,
+		"READINESS_STATE_FAILED":      3,
+	}
+)
+
+func (x ReadinessState) Enum() *ReadinessState {
+	p := new(ReadinessState)
+	*p = x
+	return p
+}
+
+func (x ReadinessState) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ReadinessState) Descriptor() protoreflect.EnumDescriptor {
+	return file_portenv_agent_v1_agent_proto_enumTypes[0].Descriptor()
+}
+
+func (ReadinessState) Type() protoreflect.EnumType {
+	return &file_portenv_agent_v1_agent_proto_enumTypes[0]
+}
+
+func (x ReadinessState) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ReadinessState.Descriptor instead.
+func (ReadinessState) EnumDescriptor() ([]byte, []int) {
+	return file_portenv_agent_v1_agent_proto_rawDescGZIP(), []int{0}
+}
+
 type GetVersionRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -146,8 +203,8 @@ func (*GetReadinessRequest) Descriptor() ([]byte, []int) {
 
 type GetReadinessResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	Ready bool                   `protobuf:"varint,1,opt,name=ready,proto3" json:"ready,omitempty"`
-	// Human-readable reason while not ready, e.g. "installing packages".
+	State ReadinessState         `protobuf:"varint,1,opt,name=state,proto3,enum=portenv.agent.v1.ReadinessState" json:"state,omitempty"`
+	// Human-readable step or failure, e.g. "installing 2 packages".
 	Detail        string `protobuf:"bytes,2,opt,name=detail,proto3" json:"detail,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -183,11 +240,11 @@ func (*GetReadinessResponse) Descriptor() ([]byte, []int) {
 	return file_portenv_agent_v1_agent_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *GetReadinessResponse) GetReady() bool {
+func (x *GetReadinessResponse) GetState() ReadinessState {
 	if x != nil {
-		return x.Ready
+		return x.State
 	}
-	return false
+	return ReadinessState_READINESS_STATE_UNSPECIFIED
 }
 
 func (x *GetReadinessResponse) GetDetail() string {
@@ -205,10 +262,15 @@ const file_portenv_agent_v1_agent_proto_rawDesc = "" +
 	"\x11GetVersionRequest\"G\n" +
 	"\x12GetVersionResponse\x121\n" +
 	"\x05build\x18\x01 \x01(\v2\x1b.portenv.types.v1.BuildInfoR\x05build\"\x15\n" +
-	"\x13GetReadinessRequest\"D\n" +
-	"\x14GetReadinessResponse\x12\x14\n" +
-	"\x05ready\x18\x01 \x01(\bR\x05ready\x12\x16\n" +
-	"\x06detail\x18\x02 \x01(\tR\x06detail2\xc6\x01\n" +
+	"\x13GetReadinessRequest\"f\n" +
+	"\x14GetReadinessResponse\x126\n" +
+	"\x05state\x18\x01 \x01(\x0e2 .portenv.agent.v1.ReadinessStateR\x05state\x12\x16\n" +
+	"\x06detail\x18\x02 \x01(\tR\x06detail*\x86\x01\n" +
+	"\x0eReadinessState\x12\x1f\n" +
+	"\x1bREADINESS_STATE_UNSPECIFIED\x10\x00\x12\x1c\n" +
+	"\x18READINESS_STATE_STARTING\x10\x01\x12\x19\n" +
+	"\x15READINESS_STATE_READY\x10\x02\x12\x1a\n" +
+	"\x16READINESS_STATE_FAILED\x10\x032\xc6\x01\n" +
 	"\fAgentService\x12W\n" +
 	"\n" +
 	"GetVersion\x12#.portenv.agent.v1.GetVersionRequest\x1a$.portenv.agent.v1.GetVersionResponse\x12]\n" +
@@ -228,25 +290,28 @@ func file_portenv_agent_v1_agent_proto_rawDescGZIP() []byte {
 	return file_portenv_agent_v1_agent_proto_rawDescData
 }
 
+var file_portenv_agent_v1_agent_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
 var file_portenv_agent_v1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_portenv_agent_v1_agent_proto_goTypes = []any{
-	(*GetVersionRequest)(nil),    // 0: portenv.agent.v1.GetVersionRequest
-	(*GetVersionResponse)(nil),   // 1: portenv.agent.v1.GetVersionResponse
-	(*GetReadinessRequest)(nil),  // 2: portenv.agent.v1.GetReadinessRequest
-	(*GetReadinessResponse)(nil), // 3: portenv.agent.v1.GetReadinessResponse
-	(*v1.BuildInfo)(nil),         // 4: portenv.types.v1.BuildInfo
+	(ReadinessState)(0),          // 0: portenv.agent.v1.ReadinessState
+	(*GetVersionRequest)(nil),    // 1: portenv.agent.v1.GetVersionRequest
+	(*GetVersionResponse)(nil),   // 2: portenv.agent.v1.GetVersionResponse
+	(*GetReadinessRequest)(nil),  // 3: portenv.agent.v1.GetReadinessRequest
+	(*GetReadinessResponse)(nil), // 4: portenv.agent.v1.GetReadinessResponse
+	(*v1.BuildInfo)(nil),         // 5: portenv.types.v1.BuildInfo
 }
 var file_portenv_agent_v1_agent_proto_depIdxs = []int32{
-	4, // 0: portenv.agent.v1.GetVersionResponse.build:type_name -> portenv.types.v1.BuildInfo
-	0, // 1: portenv.agent.v1.AgentService.GetVersion:input_type -> portenv.agent.v1.GetVersionRequest
-	2, // 2: portenv.agent.v1.AgentService.GetReadiness:input_type -> portenv.agent.v1.GetReadinessRequest
-	1, // 3: portenv.agent.v1.AgentService.GetVersion:output_type -> portenv.agent.v1.GetVersionResponse
-	3, // 4: portenv.agent.v1.AgentService.GetReadiness:output_type -> portenv.agent.v1.GetReadinessResponse
-	3, // [3:5] is the sub-list for method output_type
-	1, // [1:3] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	5, // 0: portenv.agent.v1.GetVersionResponse.build:type_name -> portenv.types.v1.BuildInfo
+	0, // 1: portenv.agent.v1.GetReadinessResponse.state:type_name -> portenv.agent.v1.ReadinessState
+	1, // 2: portenv.agent.v1.AgentService.GetVersion:input_type -> portenv.agent.v1.GetVersionRequest
+	3, // 3: portenv.agent.v1.AgentService.GetReadiness:input_type -> portenv.agent.v1.GetReadinessRequest
+	2, // 4: portenv.agent.v1.AgentService.GetVersion:output_type -> portenv.agent.v1.GetVersionResponse
+	4, // 5: portenv.agent.v1.AgentService.GetReadiness:output_type -> portenv.agent.v1.GetReadinessResponse
+	4, // [4:6] is the sub-list for method output_type
+	2, // [2:4] is the sub-list for method input_type
+	2, // [2:2] is the sub-list for extension type_name
+	2, // [2:2] is the sub-list for extension extendee
+	0, // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_portenv_agent_v1_agent_proto_init() }
@@ -259,13 +324,14 @@ func file_portenv_agent_v1_agent_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_portenv_agent_v1_agent_proto_rawDesc), len(file_portenv_agent_v1_agent_proto_rawDesc)),
-			NumEnums:      0,
+			NumEnums:      1,
 			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_portenv_agent_v1_agent_proto_goTypes,
 		DependencyIndexes: file_portenv_agent_v1_agent_proto_depIdxs,
+		EnumInfos:         file_portenv_agent_v1_agent_proto_enumTypes,
 		MessageInfos:      file_portenv_agent_v1_agent_proto_msgTypes,
 	}.Build()
 	File_portenv_agent_v1_agent_proto = out.File

@@ -1,0 +1,7 @@
+# Only what image builds need: Go sources and image files.
+*
+!go.work
+!core/
+!proto/gen/go/
+!images/
+core/**/testdata/

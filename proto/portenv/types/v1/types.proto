@@ -1,0 +1,114 @@
+// SPDX-License-Identifier: Apache-2.0
+
+syntax = "proto3";
+
+// Types shared by every Portenv protocol: boxes, snapshots and leases.
+package portenv.types.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// A box: a toolbox image plus a portable home. Only the home travels between
+// machines; the image is pulled or rebuilt on each one.
+message Box {
+  // Stable identifier, unique per account. Names the box's restic repository
+  // (<storage>/boxes/<id>).
+  string id = 1;
+  // Display name, shown as the window title. May change; never used as a key.
+  string name = 2;
+  // OCI image reference of the toolbox, e.g. "portenv/toolbox-node:v12".
+  string toolbox_image = 3;
+  // Start-time settings from the Box Settings window.
+  Resources resources = 4;
+}
+
+// Lifecycle state of a box on one machine, as its driver reports it.
+enum BoxState {
+  BOX_STATE_UNSPECIFIED = 0;
+  // Created by the driver, not started.
+  BOX_STATE_CREATED = 1;
+  BOX_STATE_STARTING = 2;
+  BOX_STATE_RUNNING = 3;
+  BOX_STATE_STOPPING = 4;
+  BOX_STATE_STOPPED = 5;
+  // The driver could not start or keep the box running.
+  BOX_STATE_FAILED = 6;
+}
+
+// Start-time settings. Changing one restarts the box after a save.
+message Resources {
+  // CPU limit in thousandths of a CPU. 0 means no limit.
+  uint32 cpu_millis = 1;
+  // Memory limit in bytes. 0 means no limit.
+  uint64 memory_bytes = 2;
+  // Size of /dev/shm in bytes, for browsers. 0 means the default (1 GiB).
+  uint64 shared_memory_bytes = 3;
+  // Run a Docker engine inside the box. Off by default.
+  bool docker_in_box = 4;
+  // Pass a GPU through to the box. Off by default.
+  bool gpu = 5;
+}
+
+// CPU architecture of a machine or an image.
+enum Architecture {
+  ARCHITECTURE_UNSPECIFIED = 0;
+  ARCHITECTURE_ARM64 = 1;
+  ARCHITECTURE_AMD64 = 2;
+}
+
+// Why a snapshot was made. Stored as a restic tag.
+enum SnapshotKind {
+  SNAPSHOT_KIND_UNSPECIFIED = 0;
+  // Untagged autosave while the box is open.
+  SNAPSHOT_KIND_AUTOSAVE = 1;
+  // Tag "release": saved when the box was closed and its lease released.
+  SNAPSHOT_KIND_RELEASE = 2;
+  // Tag "point": a save point; the box stayed open.
+  SNAPSHOT_KIND_POINT = 3;
+  // Tag "orphaned": unsaved work kept during a conflict. Never pruned.
+  SNAPSHOT_KIND_ORPHANED = 4;
+}
+
+// A restic snapshot of a box's /home. Snapshot host is always "portenv" and
+// path is always "/home".
+message SnapshotRef {
+  // restic snapshot ID. Retagging rewrites the snapshot and changes this ID,
+  // so re-read the newest snapshot after every tag change.
+  string id = 1;
+  string box_id = 2;
+  google.protobuf.Timestamp time = 3;
+  // Machine that made the snapshot (tag "machine:<id>").
+  string machine_id = 4;
+  SnapshotKind kind = 5;
+  // Set when the snapshot carries "active:<machine-id>": the offline lease
+  // fallback. Empty otherwise.
+  string active_machine_id = 6;
+}
+
+// Where a lease record comes from.
+enum LeaseSource {
+  LEASE_SOURCE_UNSPECIFIED = 0;
+  // The "active:" tag on the newest snapshot (before Phase 3, or offline).
+  LEASE_SOURCE_SNAPSHOT_TAG = 1;
+  // The control plane (authoritative from Phase 3).
+  LEASE_SOURCE_CONTROL_PLANE = 2;
+}
+
+// One machine's claim to hold a box open. At most one machine holds a box's
+// lease unless the user explicitly took over.
+message Lease {
+  string box_id = 1;
+  string machine_id = 2;
+  google.protobuf.Timestamp since = 3;
+  // Unset for snapshot-tag leases. A lease without a heartbeat for 10 minutes
+  // is shown as stale, never released automatically.
+  google.protobuf.Timestamp last_heartbeat = 4;
+  LeaseSource source = 5;
+}
+
+// Build information reported by every Portenv binary.
+message BuildInfo {
+  // Semantic version, or "dev" for local builds.
+  string version = 1;
+  // Git commit the binary was built from.
+  string commit = 2;
+}

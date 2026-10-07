@@ -1,0 +1,19 @@
+# Build output
+/bin/
+.build/
+.swiftpm/
+*.xcodeproj/xcuserdata/
+DerivedData/
+
+# Editors and OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Never commit secrets or local configuration
+.env
+.env.*
+*.pem
+*.key
+restic-password*

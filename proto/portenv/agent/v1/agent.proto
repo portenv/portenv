@@ -1,0 +1,32 @@
+// SPDX-License-Identifier: Apache-2.0
+
+syntax = "proto3";
+
+// UNSTABLE: skeleton only. The API of portenv-agent, the box's init process,
+// as portenvd and the runner call it. Terminals, lanes, port discovery and
+// audit are designed in Phase 1; anything here may change.
+package portenv.agent.v1;
+
+import "portenv/types/v1/types.proto";
+
+// The agent inside every box.
+service AgentService {
+  rpc GetVersion(GetVersionRequest) returns (GetVersionResponse);
+  // Reports whether the box has finished starting (packages installed, users
+  // created).
+  rpc GetReadiness(GetReadinessRequest) returns (GetReadinessResponse);
+}
+
+message GetVersionRequest {}
+
+message GetVersionResponse {
+  portenv.types.v1.BuildInfo build = 1;
+}
+
+message GetReadinessRequest {}
+
+message GetReadinessResponse {
+  bool ready = 1;
+  // Human-readable reason while not ready, e.g. "installing packages".
+  string detail = 2;
+}

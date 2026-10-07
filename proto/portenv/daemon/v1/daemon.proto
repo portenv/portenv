@@ -1,0 +1,34 @@
+// SPDX-License-Identifier: Apache-2.0
+
+syntax = "proto3";
+
+// UNSTABLE: skeleton only. The local API between Portenv.app and portenvd,
+// served over a Unix socket in the user's Library folder and authenticated by
+// peer credentials. Designed in milestone 1.1; anything here may change.
+package portenv.daemon.v1;
+
+import "portenv/types/v1/types.proto";
+
+// The daemon that owns boxes on this Mac.
+service DaemonService {
+  rpc GetVersion(GetVersionRequest) returns (GetVersionResponse);
+  rpc ListBoxes(ListBoxesRequest) returns (ListBoxesResponse);
+}
+
+message GetVersionRequest {}
+
+message GetVersionResponse {
+  portenv.types.v1.BuildInfo build = 1;
+}
+
+message ListBoxesRequest {}
+
+message ListBoxesResponse {
+  repeated BoxStatus boxes = 1;
+}
+
+// A box as this machine sees it.
+message BoxStatus {
+  portenv.types.v1.Box box = 1;
+  portenv.types.v1.BoxState state = 2;
+}

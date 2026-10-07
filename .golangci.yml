@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: Apache-2.0
+version: "2"
+
+linters:
+  default: standard
+  enable:
+    - bodyclose
+    - errorlint
+    - gosec
+    - misspell
+    - unconvert
+  exclusions:
+    generated: strict
+    paths:
+      - testdata
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/portenv/portenv

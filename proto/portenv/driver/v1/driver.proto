@@ -1,0 +1,177 @@
+// SPDX-License-Identifier: Apache-2.0
+
+syntax = "proto3";
+
+// The box driver protocol. portenvd and the runner call drivers through the
+// Go Driver interface in core/driver; drivers written in other languages (the
+// Swift shim for Apple Containerization) serve this service over a local Unix
+// socket instead. Keep the two in step.
+//
+// Terminals, ports and files never go through a driver; they go through the
+// box agent (portenv.agent.v1).
+package portenv.driver.v1;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+import "portenv/types/v1/types.proto";
+
+// Runs boxes on one engine: Docker, Apple Containerization or a microVM.
+service DriverService {
+  // Creates the box's instance from its toolbox image. Does not start it.
+  rpc Create(CreateRequest) returns (CreateResponse);
+  // Starts a created or stopped box.
+  rpc Start(StartRequest) returns (StartResponse);
+  // Stops a running box, waiting up to the timeout before forcing it.
+  rpc Stop(StopRequest) returns (StopResponse);
+  // Removes the box's instance. Never deletes its home storage.
+  rpc Destroy(DestroyRequest) returns (DestroyResponse);
+  // Runs one non-interactive command in the box. Bootstrap only (for example
+  // before the box agent is up); never an access path for people or agents.
+  rpc Exec(ExecRequest) returns (ExecResponse);
+  // Streams the box's console output.
+  rpc Logs(LogsRequest) returns (stream LogsResponse);
+  // Returns a point-in-time snapshot of the box's state and resource use.
+  rpc Stats(StatsRequest) returns (StatsResponse);
+  // Applies new start-time settings.
+  rpc SetResources(SetResourcesRequest) returns (SetResourcesResponse);
+  // Attaches the box's encrypted home storage at /home.
+  rpc MountHome(MountHomeRequest) returns (MountHomeResponse);
+  // Describes the driver and its engine.
+  rpc Capabilities(CapabilitiesRequest) returns (CapabilitiesResponse);
+}
+
+message CreateRequest {
+  portenv.types.v1.Box box = 1;
+}
+
+message CreateResponse {
+  portenv.types.v1.BoxState state = 1;
+}
+
+message StartRequest {
+  string box_id = 1;
+}
+
+message StartResponse {
+  portenv.types.v1.BoxState state = 1;
+}
+
+message StopRequest {
+  string box_id = 1;
+  // How long to wait for a clean shutdown before forcing it. Unset means the
+  // driver's default.
+  google.protobuf.Duration timeout = 2;
+}
+
+message StopResponse {
+  portenv.types.v1.BoxState state = 1;
+}
+
+message DestroyRequest {
+  string box_id = 1;
+}
+
+message DestroyResponse {}
+
+message ExecRequest {
+  string box_id = 1;
+  // Program and arguments. Not run through a shell.
+  repeated string argv = 2;
+  // Extra environment, as "KEY=value".
+  repeated string env = 3;
+  // User to run as. Empty means root.
+  string user = 4;
+  bytes stdin = 5;
+  // Unset means no timeout.
+  google.protobuf.Duration timeout = 6;
+}
+
+message ExecResponse {
+  int32 exit_code = 1;
+  bytes stdout = 2;
+  bytes stderr = 3;
+}
+
+// Which console stream a log chunk came from.
+enum LogStream {
+  LOG_STREAM_UNSPECIFIED = 0;
+  LOG_STREAM_STDOUT = 1;
+  LOG_STREAM_STDERR = 2;
+}
+
+message LogsRequest {
+  string box_id = 1;
+  // Keep the stream open and send new output as it arrives.
+  bool follow = 2;
+  // Only output after this time. Unset means from the beginning.
+  google.protobuf.Timestamp since = 3;
+  // Only the last N lines before following. 0 means all.
+  uint32 tail_lines = 4;
+}
+
+message LogsResponse {
+  LogStream stream = 1;
+  bytes data = 2;
+  google.protobuf.Timestamp time = 3;
+}
+
+message StatsRequest {
+  string box_id = 1;
+}
+
+message StatsResponse {
+  portenv.types.v1.BoxState state = 1;
+  google.protobuf.Timestamp time = 2;
+  // Total CPU time used since the box started.
+  google.protobuf.Duration cpu_time = 3;
+  uint64 memory_bytes = 4;
+  // 0 means no limit.
+  uint64 memory_limit_bytes = 5;
+  uint32 process_count = 6;
+}
+
+message SetResourcesRequest {
+  string box_id = 1;
+  portenv.types.v1.Resources resources = 2;
+}
+
+message SetResourcesResponse {
+  // True when the settings apply only after a restart. The caller saves and
+  // restarts; the driver never restarts a box on its own.
+  bool restart_required = 1;
+}
+
+// A box's encrypted home storage, in the driver's own terms: a named volume
+// on an encrypted disk for Docker, an ext4 disk image for Apple
+// Containerization. The exact format is settled in milestone 0.4 (ADR).
+message HomeStorage {
+  string ref = 1;
+}
+
+message MountHomeRequest {
+  string box_id = 1;
+  HomeStorage home = 2;
+}
+
+message MountHomeResponse {}
+
+message CapabilitiesRequest {}
+
+// How strongly the engine isolates a box from its host and other boxes.
+enum Isolation {
+  ISOLATION_UNSPECIFIED = 0;
+  // Shares the host or VM kernel with other boxes (Docker).
+  ISOLATION_CONTAINER = 1;
+  // Each box in its own virtual machine (Apple Containerization, microVMs).
+  ISOLATION_VM = 2;
+}
+
+message CapabilitiesResponse {
+  // Driver name: "docker", "apple" or "microvm".
+  string driver = 1;
+  string engine_version = 2;
+  Isolation isolation = 3;
+  repeated portenv.types.v1.Architecture architectures = 4;
+  bool gpu = 5;
+  bool docker_in_box = 6;
+}

@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: Apache-2.0
+version: v2
+modules:
+  - path: .
+lint:
+  use:
+    - STANDARD
+breaking:
+  # Off until Phase 1 freezes the APIs (see docs/adr/0002).
+  use:
+    - FILE

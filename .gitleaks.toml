@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# gitleaks configuration: the default rules plus reviewed exceptions. Add an
+# exception only for a value that is public by design, with its source.
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Public OpenPGP fingerprint of Anthropic's Claude Code release signing key (https://code.claude.com/docs/en/setup)"
+regexes = ['''^31DDDE24DDFAB679F42D7BD2BAA929FF1A7ECACE$''']

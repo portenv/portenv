@@ -631,12 +631,11 @@ Milestones: 2.1 runner (server build of the core) installed over SSH · 2.2 Add 
 - Both agent modes, stand-in and guest, for boxes on a developer server.
 - Connect an agent creates the agent's key, restricted to that box and mode, and shows the connection details to give the agent.
 - The app lists connected agents with Watch, Take Over and Revoke.
-- Agent signals:
-  - Every box pre-installs Claude Code hooks (Notification for `permission_prompt` and `idle_prompt`, PermissionRequest, Stop) that emit structured events through `portenv-agent`. They ship in the toolbox image as system-wide settings, so they do not depend on the user's `~/.claude`.
-  - `portenv events --follow`, run over the agent's SSH session, streams JSON lines: tab, event type, and the question or last message.
-  - `portenv send <tab> "<text>"` types into a tab.
-  - In stand-in mode an agent may also start its own Claude Code sessions in the user's project, in a new tab or headless (`claude -p --resume`). The skill document recommends a separate worktree when working alongside an active user session.
-  - `docs/skill/SKILL.md` documents the loop: follow events, relay questions to the human, send answers.
+- Agent signals, tool-agnostic:
+  - Core events, for any terminal program: waiting for input (output idle, with the last screen of text attached), command finished with its exit code (from shell semantic-prompt markers), and new output since the last read.
+  - Optional adapters add structured detail where a tool supports it, for example Claude Code hooks for permission prompts and finished replies. No feature may depend on an adapter.
+  - `portenv events --follow` streams these events as JSON lines; `portenv send <tab> "<text>"` types into a tab; `portenv screen <tab>` returns the current screen as text.
+  - `docs/skill/SKILL.md` documents the loop for any agent: follow events, relay questions to the human, send answers. It names no specific coding tool.
 - Not in 2.6: phone approvals, the gateway and certificates. They stay in Phases 3 and 4.
 
 - [ ] Move To works Mac → server → Mac from the title menu with no data loss
@@ -646,7 +645,7 @@ Milestones: 2.1 runner (server build of the core) installed over SSH · 2.2 Add 
 - [ ] A stand-in agent connects from its own computer, drives the user's Claude Code session by keystrokes in `/home/work/<project>`, and the user sees its activity attributed by name
 - [ ] A guest agent cannot read the user's home
 - [ ] Revoke ends either kind of session immediately
-- [ ] An agent relays a Claude Code permission prompt to a human and answers it, using only `portenv events` and `portenv send` (no screen scraping)
+- [ ] An agent relays a question from a CLI tool to a human and answers it using only `portenv events` and `portenv send`, tested with at least two different tools
 
 ### Phase 3: Control plane and gateway
 

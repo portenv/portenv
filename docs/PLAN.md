@@ -235,7 +235,7 @@ Each box has its own restic repository; saves happen automatically, and a lease 
 - Every machine has its own repository key, added on that machine so the key's derivation cost is tuned for it; a machine never stores another's key.
 - Offline: a machine starts from its local home only if its state says the home equals the last save it made or restored and it holds the lease or released it cleanly; saves wait ("Offline · will save later"), and on reconnect the resume rules apply (rule 4 keeps the offline work if another machine saved meanwhile).
 
-**Later hardening: append-only storage credentials (proposal)**
+**Append-only storage credentials (milestone 2.6, before any outside agent gets access)**
 
 The storage credential that enters a box (today the SFTP key served by the agent during a restic run) can delete and overwrite repository files, so root in a box during a run could destroy history. Proposal:
 

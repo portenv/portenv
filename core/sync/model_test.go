@@ -4,6 +4,7 @@ package sync
 
 import (
 	"context"
+	"fmt"
 	"math/rand/v2"
 	"testing"
 )
@@ -30,6 +31,7 @@ func runModel(t *testing.T, seed uint64, steps int) {
 	w := newWorld(t)
 	ms := []*machine{w.machine("a"), w.machine("b")}
 	open := map[string]bool{}
+	holder := ""         // the machine that should hold the lease, "" for none
 	var written []string // every token ever written
 
 	ctx := context.Background()
@@ -48,12 +50,14 @@ func runModel(t *testing.T, seed uint64, steps int) {
 				t.Fatalf("seed %d step %d %s open: %v", seed, step, m.id, err)
 			}
 			open[m.id] = true
-			// The other machine loses the lease if this was a take over.
+			if res.Rule != 1 { // with nothing saved there is no lease to take yet
+				holder = m.id
+			}
 			if res.Action == ActionNewBox {
 				m.write("README", "new box")
 			}
 		default:
-			switch rng.IntN(4) {
+			switch rng.IntN(5) {
 			case 0, 1:
 				op = "edit"
 				tok := token()
@@ -69,6 +73,7 @@ func runModel(t *testing.T, seed uint64, steps int) {
 				if err != nil {
 					t.Fatalf("seed %d step %d %s autosave: %v", seed, step, m.id, err)
 				}
+				holder = m.id
 			case 3:
 				op = "close"
 				_, err := m.Save(ctx, SaveOptions{Kind: SaveRelease})
@@ -82,10 +87,37 @@ func runModel(t *testing.T, seed uint64, steps int) {
 					t.Fatalf("seed %d step %d %s close: %v", seed, step, m.id, err)
 				}
 				open[m.id] = false
+				holder = ""
+			case 4:
+				// The machine crashed or was offline and resumes again
+				// without having closed: rules 3 and 4.
+				res, err := m.Resume(ctx, ResumeOptions{})
+				if _, held := isLeaseHeld(err); held {
+					op = "reopen (refused: lease held)"
+					break
+				}
+				if err != nil {
+					t.Fatalf("seed %d step %d %s reopen: %v", seed, step, m.id, err)
+				}
+				op = fmt.Sprintf("reopen (rule %d)", res.Rule)
+				if res.Rule != 1 {
+					holder = m.id
+				}
 			}
 		}
 		t.Logf("step %2d %s %s", step, m.id, op)
 		assertNothingLost(t, w, ms, written)
+		lease, err := w.inspector().Lease(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := ""
+		if lease != nil {
+			got = lease.Machine
+		}
+		if got != holder {
+			t.Fatalf("seed %d step %d: lease held by %q, want %q", seed, step, got, holder)
+		}
 	}
 }
 

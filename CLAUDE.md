@@ -45,5 +45,6 @@ Phase 0: Foundations (owner only). Start with milestone 0.1 (repository, CI and 
 - `make agent-linux`: static `portenv-agent` for linux/arm64 and amd64.
 - `make swift-test`: build and test the Swift shim (macOS).
 - `make image` / `make image-test`: build the toolbox image for this Mac's architecture only (never emulate amd64) and run `images/toolbox-node/test.sh`.
+- `make driver-test` / `make e2e`: driver conformance (with the capability-refusal test) and the end-to-end checks (restic isolation probe, two-machine round trip) against `IMAGE`.
 - `make secrets`: gitleaks over the full history and the working tree.
 - `make check`: everything above that runs on this machine.

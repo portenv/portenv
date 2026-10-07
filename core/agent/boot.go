@@ -30,6 +30,9 @@ type Config struct {
 	// off unless PORTENV_INIT_HOME=1; otherwise a missing home is an error,
 	// never silently replaced.
 	InitHome bool
+	// CapBoundingSet reads the box's capability bounding set; nil skips the
+	// isolation check (tests). DefaultConfig reads /proc/self/status.
+	CapBoundingSet func() (uint64, error)
 }
 
 // DefaultConfig returns the box layout from docs/PLAN.md.
@@ -40,6 +43,9 @@ func DefaultConfig() Config {
 		HomeRoot: "/home",
 		Skeleton: "/usr/share/portenv/skel",
 		InitHome: os.Getenv("PORTENV_INIT_HOME") == "1",
+		// A container's bounding set is the box's. In a VM (Phase 1) the
+		// agent drops these itself for every process it starts instead.
+		CapBoundingSet: BoundingSet,
 	}
 }
 
@@ -76,6 +82,12 @@ func (r ExecRunner) Run(ctx context.Context, env []string, name string, args ...
 // Boot runs the start sequence and reports each step to r. It does not mark
 // the box ready; the caller does that when Boot returns nil.
 func Boot(ctx context.Context, cfg Config, run Runner, r *Readiness) error {
+	if cfg.CapBoundingSet != nil {
+		r.Step("checking isolation")
+		if err := checkIsolation(cfg.CapBoundingSet); err != nil {
+			return err
+		}
+	}
 	r.Step("checking user " + cfg.User)
 	if err := ensureUser(ctx, cfg, run); err != nil {
 		return err

@@ -999,10 +999,13 @@ func (x *SetResourcesResponse) GetRestartRequired() bool {
 
 // A box's encrypted home storage, in the driver's own terms: a named volume
 // on an encrypted disk for Docker, an ext4 disk image for Apple
-// Containerization. The exact format is settled in milestone 0.4 (ADR).
+// Containerization (ADR 0005).
 type HomeStorage struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Ref           string                 `protobuf:"bytes,1,opt,name=ref,proto3" json:"ref,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Ref   string                 `protobuf:"bytes,1,opt,name=ref,proto3" json:"ref,omitempty"`
+	// The storage is new and empty: the box creates its home from the image's
+	// skeleton (resume rule 1). Never set for existing storage.
+	Fresh         bool `protobuf:"varint,2,opt,name=fresh,proto3" json:"fresh,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1042,6 +1045,13 @@ func (x *HomeStorage) GetRef() string {
 		return x.Ref
 	}
 	return ""
+}
+
+func (x *HomeStorage) GetFresh() bool {
+	if x != nil {
+		return x.Fresh
+	}
+	return false
 }
 
 type MountHomeRequest struct {
@@ -1308,9 +1318,10 @@ const file_portenv_driver_v1_driver_proto_rawDesc = "" +
 	"\x06box_id\x18\x01 \x01(\tR\x05boxId\x129\n" +
 	"\tresources\x18\x02 \x01(\v2\x1b.portenv.types.v1.ResourcesR\tresources\"A\n" +
 	"\x14SetResourcesResponse\x12)\n" +
-	"\x10restart_required\x18\x01 \x01(\bR\x0frestartRequired\"\x1f\n" +
+	"\x10restart_required\x18\x01 \x01(\bR\x0frestartRequired\"5\n" +
 	"\vHomeStorage\x12\x10\n" +
-	"\x03ref\x18\x01 \x01(\tR\x03ref\"]\n" +
+	"\x03ref\x18\x01 \x01(\tR\x03ref\x12\x14\n" +
+	"\x05fresh\x18\x02 \x01(\bR\x05fresh\"]\n" +
 	"\x10MountHomeRequest\x12\x15\n" +
 	"\x06box_id\x18\x01 \x01(\tR\x05boxId\x122\n" +
 	"\x04home\x18\x02 \x01(\v2\x1e.portenv.driver.v1.HomeStorageR\x04home\"\x13\n" +

@@ -143,9 +143,12 @@ message SetResourcesResponse {
 
 // A box's encrypted home storage, in the driver's own terms: a named volume
 // on an encrypted disk for Docker, an ext4 disk image for Apple
-// Containerization. The exact format is settled in milestone 0.4 (ADR).
+// Containerization (ADR 0005).
 message HomeStorage {
   string ref = 1;
+  // The storage is new and empty: the box creates its home from the image's
+  // skeleton (resume rule 1). Never set for existing storage.
+  bool fresh = 2;
 }
 
 message MountHomeRequest {

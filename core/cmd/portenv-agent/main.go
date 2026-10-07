@@ -8,10 +8,14 @@
 //	portenv-agent init      run as the box's init process (the image entrypoint)
 //	portenv-agent ready     exit 0 if the box is ready, 1 otherwise (health check)
 //	portenv-agent version   print the version
+//	portenv-agent restic …  run restic as portenv-sync; the password arrives as
+//	                        JSON on stdin (Phase 0 sync path, ADR 0005)
+//	portenv-agent path-info P  describe a path under /home as JSON
 package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
@@ -51,11 +55,30 @@ func run(args []string) int {
 			return 1
 		}
 		return 0
+	case "restic":
+		code, err := agent.RunRestic(ctx, args[1:], os.Stdin, os.Stdout, os.Stderr)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "portenv-agent:", err)
+			return 125
+		}
+		return code
+	case "path-info":
+		if len(args) != 2 {
+			fmt.Fprintln(os.Stderr, "usage: portenv-agent path-info PATH")
+			return 2
+		}
+		info, err := agent.PathInfo(args[1])
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "portenv-agent:", err)
+			return 1
+		}
+		_ = json.NewEncoder(os.Stdout).Encode(info)
+		return 0
 	case "version", "--version", "-v":
 		fmt.Println("portenv-agent", version.String())
 		return 0
 	default:
-		fmt.Fprintf(os.Stderr, "portenv-agent: unknown command %q (want init, ready or version)\n", cmd)
+		fmt.Fprintf(os.Stderr, "portenv-agent: unknown command %q (want init, ready, restic, path-info or version)\n", cmd)
 		return 2
 	}
 }

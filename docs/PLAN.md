@@ -200,7 +200,7 @@ Each box has its own restic repository; saves happen automatically, and a lease 
 
 **When saves happen**
 
-- Every 5 minutes while there are changes, and when the Mac sleeps or the lid closes (a power assertion holds sleep until the upload finishes, up to 60 seconds).
+- Every 30 seconds while there are changes (so the newest save is never more than a minute behind), and when the Mac sleeps or the lid closes (a power assertion holds sleep until the upload finishes, up to 60 seconds).
 - Before Move To, before closing the window, before an approved privileged action, on ⌘S (Make Save Point), and as a save point when a stand-in agent connects (so Revert To ▸ Last Save Point undoes its work).
 - The box agent tracks changed paths with inotify, so the toolbar can show unsaved state without scanning.
 - An optional `~/.portenv/hooks/pre-save` runs first, for example to dump a database running in the box.
@@ -226,7 +226,7 @@ Each box has its own restic repository; saves happen automatically, and a lease 
 
 - The lease is checked before the box starts, in every phase. Before Phase 3 that check is a snapshot listing, so on a high-latency link a resume costs at least a few round trips; the resume budget is therefore stated at a round-trip time of 50 ms or less (and offline). Phase 3's authoritative leases replace the listing with one control-plane call.
 - From Phase 3, the control plane holds leases (box, machine, since, last heartbeat) and is authoritative.
-- Before Phase 3, and whenever the control plane is unreachable, the `active:` tag on the newest snapshot is the lease.
+- Before Phase 3, and whenever the control plane is unreachable, the `active:` tag on the current save is the lease. A save is created already carrying it (`restic backup --tag active:<machine-id>`), with no separate tag step, and is complete once its snapshot ID from restic's summary is recorded, with no listing afterwards. Readers look only at the current save's tag; tags left on older saves are cleared by housekeeping.
 - A lease with no heartbeat for 10 minutes is shown as stale, not released: the user decides.
 
 **Where restic runs (ADR 0005)**
@@ -246,7 +246,7 @@ The storage credential that enters a box (today the SFTP key served by the agent
 
 **Retention**
 
-Keep the last 20 saves, hourly for 24 hours, daily for 14 days, weekly for 8 weeks, monthly for 12 months, and every `orphaned` snapshot. Prune weekly, in the background.
+Keep the last 20 saves, hourly for 24 hours, daily for 14 days, weekly for 8 weeks, monthly for 12 months, and every `orphaned` snapshot. The current save is always kept, whatever the policy says. Housekeeping runs when the machine is idle, never on close: it clears leftover `active:` tags and applies retention; prune weekly, in the background.
 
 ## Encryption and key management
 
@@ -672,8 +672,12 @@ Each milestone ends with a demo note in `docs/milestones/<id>.md` and its checkl
 
 - [ ] Mac → server → Mac round trip loses nothing (checksums of `/home` match)
 - [x] All five resume rules and every invariant have passing tests, including two simulated machines
-- [ ] Save: Portenv's overhead beyond the transfer itself (bytes ÷ measured upload bandwidth) is under 3 seconds, and a 5 MB change saves in under 10 seconds on a 20 Mbit/s or faster uplink. The gate measures the bandwidth (and the round-trip time) and prints them next to each result
-- [ ] Same-machine resume: under 5 seconds including starting the box, with storage reachable at a round-trip time of 50 ms or less, and with storage unreachable (offline). The gate records the round-trip time next to the result
+- [ ] Resume: under 5 seconds to a ready box (a ready terminal from Phase 1), including starting it, with storage reachable at a round-trip time of 50 ms or less and with storage unreachable (offline); the median of 5 runs, with the worst run reported too
+- [ ] Close and Move: the final save and release of a box with a 5 MB unsaved change take under 15 seconds at 20 Mbit/s up and a 50 ms round trip, reported with the measured bandwidth
+- [ ] Freshness: with continuous editing and autosave every 30 seconds, the newest save is never more than 60 seconds behind
+- [ ] The gate measures bandwidth and round-trip time, prints them next to each result, and prints the per-phase trace of every measured command
+
+Budgets changed on 2026-10-08: they now measure what the user waits for (a ready box, a finished close or move, how much work is at risk) instead of save overhead, which users never see on its own.
 - [x] Killing the process mid-save leaves the repository consistent and the next save succeeds
 - [x] The toolbox image builds for arm64 and amd64 from one Dockerfile
 
@@ -803,7 +807,7 @@ The save engine is tested hardest, because a bug there loses someone's work; eve
 | Keys | Device add, revoke, recovery, re-encrypt; verify no key material on disk outside approved stores | Every merge touching keys |
 | Agent isolation | Adversarial suite: an agent lane tries to read other homes and secrets, escalate privilege, reach blocked hosts, persist after revoke | Every merge from Phase 4 |
 | Mac app | XCUITest for first run, title menu, lease sheet; accessibility audit; light and dark snapshots | Every merge touching the app |
-| Performance | Budgets: save overhead beyond the transfer under 3 s, and a 5 MB change under 10 s on a 20 Mbit/s or faster uplink; same-machine resume under 5 s including box start, online at a round-trip time of 50 ms or less and offline; port relay adds under 5 ms locally. Bandwidth and round-trip time are measured and reported with every result | Nightly |
+| Performance | Budgets: resume under 5 s to a ready box (median of 5, worst reported), online at a round-trip time of 50 ms or less and offline; close or move with a 5 MB change under 15 s at 20 Mbit/s up and 50 ms; newest save at most 60 s behind with continuous editing; port relay adds under 5 ms locally. Bandwidth and round-trip time are measured and reported with every result | Nightly |
 | Recovery drill | Restore a box from the recovery phrase on a clean Mac | Before each release |
 | Own route | `own-route` job: the own-route journey with every Portenv-hosted endpoint blocked at DNS and the firewall, from locally built artifacts; from Phase 1 it also drives the app with the hosted options visible and untouched (ADR 0008, G3) | Every pull request and merge to main; blocks releases |
 

@@ -9,7 +9,8 @@
 # second argument is the server's host key, pinned for SFTP storage. The
 # script sets the server up (server/setup.sh), loads the toolbox image, then
 # runs a Mac → server → Mac round trip with SFTP storage on the server,
-# comparing checksums of /home, and measures the save and resume budgets.
+# comparing checksums of /home, and measures the Phase 0 budgets (resume,
+# close, freshness) with the per-phase trace of each measured command.
 # Uses docker exec to inspect boxes (Phase 0 tests only).
 set -euo pipefail
 target=${1:?usage: server-gate.sh USER@HOST HOST-KEY [IMAGE]}
@@ -35,6 +36,20 @@ mac_box() { docker exec -u work -w /home/work "portenv-gate-$(box_id)" bash -lc 
 server_box() { R sudo docker exec -u work -w /home/work "portenv-$(box_id)" bash -lc "'$*'"; }
 sums_cmd='cd /home && find . -type f -not -path "./work/.cache/*" -print0 | sort -z | xargs -0 sha256sum'
 seconds() { python3 -c 'import time; print(f"{time.time():.3f}")'; }
+# timed NAME CMD...: runs a portenv command with the trace on, prints its
+# trace lines and result indented, and sets $took (seconds) and $out (its
+# last line). A failing command fails the gate.
+timed() {
+	local name=$1 t0 t1 all; shift
+	t0=$(seconds)
+	all=$(PORTENV_TRACE=1 "$@" </dev/null 2>&1) || { echo "$all" | sed 's/^/  /'; fail "$name: command failed"; exit 1; }
+	t1=$(seconds)
+	took=$(python3 -c "print(round($t1 - $t0, 2))"); out=$(grep -v '^trace' <<<"$all" | tail -1)
+	echo "  $name: ${took} s"; grep '^trace' <<<"$all" | sed 's/^/    /' || true
+}
+# stats prints "median worst" of its arguments.
+stats() { python3 -c 'import statistics, sys; v = [float(x) for x in sys.argv[1:]]; print(round(statistics.median(v), 2), round(max(v), 2))' "$@"; }
+lt() { python3 -c "import sys; sys.exit(0 if $1 < $2 else 1)"; }
 
 cleanup() {
 	local id; id=$(box_id 2>/dev/null || true)
@@ -96,26 +111,65 @@ out=$("$portenv" resume gate 2>&1) || { echo "$out" | sed 's/^/  /'; fail "comma
 expect "rule 1 on the Mac" grep -q "rule 1" <<<"$out"
 mac_box 'mkdir -p acme-api && echo "hello from the Mac" > acme-api/README.md && head -c 20000000 /dev/urandom > acme-api/data.bin && echo jq >> .portenv/apt-packages.txt'
 expect "first save over SFTP" "$portenv" save gate
+# The close budget is stated at 20 Mbit/s or faster up and 50 ms or less.
+budget_link=0
+if (( rtt_ms <= 50 )) && ! lt "$up_mbit" 20; then budget_link=1; fi
+
+echo "== budget: close (final save and release with a 5 MB unsaved change)"
 mac_box 'head -c 5000000 /dev/urandom > acme-api/change.bin'
-t0=$(seconds); "$portenv" save gate >/dev/null; t1=$(seconds)
-save_s=$(python3 -c "print(round($t1 - $t0, 1))")
-transfer_s=$(python3 -c "print(round(5000000 / $up_bps, 1))")
-overhead_s=$(python3 -c "print(round($t1 - $t0 - 5000000 / $up_bps, 1))")
-expect "save overhead beyond the transfer under 3 s (${overhead_s} s; save ${save_s} s, transfer ${transfer_s} s at ${up_mbit} Mbit/s)" python3 -c "import sys; sys.exit(0 if $overhead_s < 3 else 1)"
-if python3 -c "import sys; sys.exit(0 if $up_mbit >= 20 else 1)"; then
-	expect "a 5 MB change saves in under 10 s at ${up_mbit} Mbit/s (${save_s} s)" python3 -c "import sys; sys.exit(0 if $t1 - $t0 < 10 else 1)"
+timed "close with a 5 MB change" "$portenv" close gate
+close_s=$took
+# At another bandwidth, the same close with the transfer at 20 Mbit/s.
+close_at20=$(python3 -c "print(round($close_s - 5000000 / $up_bps + 5000000 * 8 / 20e6, 1))")
+if (( budget_link )); then
+	expect "close with a 5 MB change under 15 s (${close_s} s at ${up_mbit} Mbit/s up, ${rtt_ms} ms)" lt "$close_s" 15
+elif (( rtt_ms <= 50 )); then
+	echo "skip  the close budget is stated at 20 Mbit/s up; this uplink is ${up_mbit} Mbit/s: ${close_s} s measured, ${close_at20} s with the transfer at 20 Mbit/s"
+	expect "close with a 5 MB change, transfer scaled to 20 Mbit/s, under 15 s (${close_at20} s)" lt "$close_at20" 15
 else
-	echo "skip  the 10 s budget applies at 20 Mbit/s or faster; this uplink is ${up_mbit} Mbit/s"
+	echo "skip  the close budget is stated at a round trip of 50 ms or less; this link is ${rtt_ms} ms (close took ${close_s} s)"
 fi
-expect "Mac closes" "$portenv" close gate
-t0=$(seconds); out=$("$portenv" resume gate 2>&1) || { echo "$out" | sed 's/^/  /'; fail "command failed: "; exit 1; }; out=$(tail -1 <<<"$out"); t1=$(seconds)
-resume_s=$(python3 -c "print(round($t1 - $t0, 1))")
-expect "same-machine resume is rule 3" grep -q "rule 3" <<<"$out"
+
+echo "== budget: same-machine resume, storage reachable (5 runs)"
+runs=()
+for i in 1 2 3 4 5; do
+	timed "resume $i" "$portenv" resume gate
+	[[ $i == 1 ]] && expect "same-machine resume is rule 3" grep -q "rule 3" <<<"$out"
+	runs+=("$took")
+	"$portenv" close gate >/dev/null
+done
+read -r resume_s resume_worst <<<"$(stats "${runs[@]}")"
 if (( rtt_ms <= 50 )); then
-	expect "same-machine resume under 5 s, storage reachable (${resume_s} s at ${rtt_ms} ms round trip, including starting the box)" python3 -c "import sys; sys.exit(0 if $t1 - $t0 < 5 else 1)"
+	expect "same-machine resume under 5 s to a ready box (median ${resume_s} s, worst ${resume_worst} s, ${rtt_ms} ms round trip)" lt "$resume_s" 5
 else
-	echo "skip  the online resume budget applies at a round trip of 50 ms or less; this link is ${rtt_ms} ms (resume took ${resume_s} s)"
+	echo "skip  the online resume budget applies at a round trip of 50 ms or less; this link is ${rtt_ms} ms (median ${resume_s} s, worst ${resume_worst} s)"
 fi
+
+echo "== budget: freshness (continuous editing, autosave every ${PORTENV_AUTOSAVE:-30} s)"
+# The box edits files every second while the gate autosaves on a fixed
+# interval from each save's start. An edit made just after a save started
+# is in the next save, so the newest save is at most (next save's end -
+# this save's start + 1 s) behind; the gate reports the worst bound.
+interval=${PORTENV_AUTOSAVE:-30}
+"$portenv" resume gate >/dev/null 2>&1
+docker exec -d -u work -w /home/work "portenv-gate-$(box_id)" bash -c 'while :; do date +%s.%N > acme-api/stamp; head -c 200000 /dev/urandom > acme-api/edit.bin; echo "$RANDOM" >> acme-api/log.txt; sleep 1; done'
+starts=() ends=()
+for i in 1 2 3 4 5 6; do
+	s=$(seconds); timed "autosave $i" "$portenv" save gate; e=$(seconds)
+	starts+=("$s"); ends+=("$e")
+	sleep "$(python3 -c "print(max(0, $s + $interval - $e))")"
+done
+lag=$(python3 - "${starts[*]}" "${ends[*]}" <<'PY'
+import sys
+s = [float(x) for x in sys.argv[1].split()]; e = [float(x) for x in sys.argv[2].split()]
+print(round(max(e[k + 1] - s[k] + 1 for k in range(len(s) - 1)), 1))
+PY
+)
+mac_box 'pkill -f "acme-api/[s]tamp" || true; rm -f acme-api/stamp acme-api/edit.bin acme-api/log.txt'
+"$portenv" save gate >/dev/null
+expect "newest save never more than 60 s behind (worst ${lag} s with autosave every ${interval} s at ${up_mbit} Mbit/s)" lt "$lag" 60
+"$portenv" close gate >/dev/null
+"$portenv" resume gate >/dev/null 2>&1
 before=$(mac_box "$sums_cmd")
 
 echo "== Mac → server"
@@ -149,16 +203,26 @@ import json, sys
 c = json.load(open(sys.argv[1])); c["storage"] = c["storage"].replace(sys.argv[2], "192.0.2.1")
 json.dump(c, open(sys.argv[1], "w"))
 PY
-t0=$(seconds); out=$("$portenv" resume gate </dev/null 2>&1) || true; t1=$(seconds)
-offline_s=$(python3 -c "print(round($t1 - $t0, 1))")
-echo "  $(tail -1 <<<"$out")"
-expect "offline resume after a clean close (Offline · will save later)" grep -q "Offline · will save later" <<<"$out"
-expect "offline resume under 5 s (${offline_s} s)" python3 -c "import sys; sys.exit(0 if $t1 - $t0 < 5 else 1)"
-docker stop -t 2 "portenv-gate-$(box_id)" >/dev/null 2>&1 || true
+# Each run starts from the same clean-close state (an offline resume marks
+# the box open, which rightly blocks the next offline start).
+state=$root/mac/state/$(box_id)
+cp -R "$state" "$state.clean"
+runs=()
+for i in 1 2 3 4 5; do
+	timed "offline resume $i" "$portenv" resume gate
+	[[ $i == 1 ]] && expect "offline resume after a clean close (Offline · will save later)" grep -q "Offline · will save later" <<<"$out"
+	runs+=("$took")
+	docker stop -t 2 "portenv-gate-$(box_id)" >/dev/null 2>&1 || true
+	rm -rf "$state" && cp -R "$state.clean" "$state"
+done
+read -r offline_s offline_worst <<<"$(stats "${runs[@]}")"
+expect "offline resume under 5 s to a ready box (median ${offline_s} s, worst ${offline_worst} s)" lt "$offline_s" 5
+rm -rf "$state.clean"
 mv "$cfg.online" "$cfg"
 
 echo
 echo "link: upload ${up_mbit} Mbit/s, round trip ${rtt_ms} ms, SSH connection setup ${rtt_s} s"
-echo "budgets: 5 MB save ${save_s} s (overhead ${overhead_s} s), same-machine resume ${resume_s} s online, ${offline_s} s offline"
+echo "budgets: resume median ${resume_s} s (worst ${resume_worst} s) online, ${offline_s} s (worst ${offline_worst} s) offline;"
+echo "         close with 5 MB ${close_s} s at ${up_mbit} Mbit/s (${close_at20} s at 20 Mbit/s); freshness worst ${lag} s with autosave every ${interval} s"
 if (( failures )); then echo "$failures check(s) failed"; exit 1; fi
 echo "all checks passed"

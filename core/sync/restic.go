@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -35,6 +36,7 @@ type restic struct {
 	// metaRepo as the repository's address from there (ADR 0005).
 	meta     Executor
 	metaRepo string
+	keyHint  string // this machine's key ID, tried first
 }
 
 // boxCommands are the restic commands that must run where /home is.
@@ -72,7 +74,13 @@ func (r *restic) run(ctx context.Context, args ...string) ([]byte, error) {
 
 func (r *restic) runOnce(ctx context.Context, args ...string) (stdout, stderr []byte, err error) {
 	ex, repo := r.pick(args)
-	res, err := ex.Restic(ctx, append([]string{"--repo", repo}, args...), r.cred)
+	full := append([]string{"--repo", repo}, args...)
+	if r.keyHint != "" && len(args) > 0 {
+		// After the command, so the box agent still reads the command
+		// first.
+		full = slices.Concat([]string{"--repo", repo, args[0], "--key-hint", r.keyHint}, args[1:])
+	}
+	res, err := ex.Restic(ctx, full, r.cred)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -254,14 +262,69 @@ func (r *restic) untag(ctx context.Context, ids []string, tag string) error {
 	return err
 }
 
-// forget applies the retention policy from docs/PLAN.md.
-func (r *restic) forget(ctx context.Context, prune bool) error {
-	args := []string{"forget", "--group-by", "host",
-		"--keep-last", "20", "--keep-hourly", "24", "--keep-daily", "14",
-		"--keep-weekly", "8", "--keep-monthly", "12", "--keep-tag", tagOrphaned}
-	if prune {
-		args = append(args, "--prune")
+// retention is the policy from docs/PLAN.md.
+var retention = []string{"--group-by", "host",
+	"--keep-last", "20", "--keep-hourly", "24", "--keep-daily", "14",
+	"--keep-weekly", "8", "--keep-monthly", "12", "--keep-tag", tagOrphaned}
+
+// expired returns the IDs the retention policy would remove, without
+// removing anything.
+func (r *restic) expired(ctx context.Context) ([]string, error) {
+	out, err := r.run(ctx, append([]string{"forget", "--dry-run", "--json", "--no-lock"}, retention...)...)
+	if err != nil {
+		return nil, err
 	}
-	_, err := r.run(ctx, args...)
-	return err
+	var groups []struct {
+		Remove []Snapshot `json:"remove"`
+	}
+	if err := json.Unmarshal(out, &groups); err != nil {
+		return nil, fmt.Errorf("parse restic forget plan: %w", err)
+	}
+	var ids []string
+	for _, g := range groups {
+		for _, s := range g.Remove {
+			ids = append(ids, s.ID)
+		}
+	}
+	return ids, nil
+}
+
+// forgetIDs removes exactly these snapshots, then prunes unreferenced data
+// when asked.
+func (r *restic) forgetIDs(ctx context.Context, ids []string, prune bool) error {
+	if len(ids) > 0 {
+		if _, err := r.run(ctx, append([]string{"forget"}, ids...)...); err != nil {
+			return err
+		}
+	}
+	if prune {
+		_, err := r.run(ctx, "prune")
+		return err
+	}
+	return nil
+}
+
+// currentKeyID returns the ID of the key the password opens. Key commands
+// run only on the host; without a host executor there is no hint.
+func (r *restic) currentKeyID(ctx context.Context) (string, error) {
+	if _, inBox := r.exec.(AgentExecutor); inBox && r.meta == nil {
+		return "", nil
+	}
+	out, err := r.run(ctx, "key", "list", "--json", "--no-lock")
+	if err != nil {
+		return "", err
+	}
+	var keys []struct {
+		Current bool   `json:"current"`
+		ID      string `json:"id"`
+	}
+	if err := json.Unmarshal(out, &keys); err != nil {
+		return "", fmt.Errorf("parse restic key list: %w", err)
+	}
+	for _, k := range keys {
+		if k.Current {
+			return k.ID, nil
+		}
+	}
+	return "", nil
 }

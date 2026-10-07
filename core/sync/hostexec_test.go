@@ -55,6 +55,11 @@ func TestOnlyBackupAndRestoreRunInTheBox(t *testing.T) {
 			if !slices.Contains(host.cmds, "snapshots") {
 				t.Errorf("%s: host ran %v, want the listing there", m.id, host.cmds)
 			}
+			// Saves are created already tagged, so a (which only saves)
+			// never tags; b takes the lease on resume, on the host.
+			if m.id == "a" && slices.Contains(host.cmds, "tag") {
+				t.Errorf("a: host ran %v; saves must not run a tag step", host.cmds)
+			}
 			if m.id == "b" && !slices.Contains(host.cmds, "tag") {
 				t.Errorf("b: host ran %v, want b's lease tag there", host.cmds)
 			}

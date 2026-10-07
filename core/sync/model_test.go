@@ -57,7 +57,7 @@ func runModel(t *testing.T, seed uint64, steps int) {
 				m.write("README", "new box")
 			}
 		default:
-			switch rng.IntN(5) {
+			switch rng.IntN(6) {
 			case 0, 1:
 				op = "edit"
 				tok := token()
@@ -101,6 +101,37 @@ func runModel(t *testing.T, seed uint64, steps int) {
 				}
 				op = fmt.Sprintf("reopen (rule %d)", res.Rule)
 				if res.Rule != 1 {
+					holder = m.id
+				}
+			case 5:
+				// A save killed mid-way: either restic itself (no snapshot),
+				// or the CLI after restic finished but before it recorded the
+				// snapshot ID (a snapshot exists, the state does not know it).
+				if rng.IntN(2) == 0 {
+					op = "save killed inside restic"
+					orig := m.restic.exec
+					f := &failingExecutor{Executor: orig, n: 2} // listing, then backup
+					m.restic.exec = f
+					_, _ = m.Save(ctx, SaveOptions{Kind: SaveAutosave})
+					m.restic.exec = orig
+				} else {
+					op = "save killed after restic, before recording it"
+					snaps, err := m.restic.snapshots(ctx)
+					if err != nil {
+						t.Fatal(err)
+					}
+					cur, ok := current(snaps)
+					if ok && ((cur.Active != "" && cur.Active != m.id) || cur.Machine != m.id) {
+						op += " (skipped: the lease is elsewhere)"
+						break
+					}
+					if empty, _ := m.homeEmpty(); empty {
+						op += " (skipped: empty home)"
+						break
+					}
+					if _, err := m.restic.backup(ctx, backupArgs{home: m.home, tags: []string{tagMachinePfx + m.id, tagActivePfx + m.id}}); err != nil {
+						t.Fatal(err)
+					}
 					holder = m.id
 				}
 			}

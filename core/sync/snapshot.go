@@ -75,6 +75,14 @@ func (s *Snapshot) parseTags() {
 	}
 }
 
+// origin is the snapshot's original ID, stable across tag rewrites.
+func (s Snapshot) origin() string {
+	if s.Original != "" {
+		return s.Original
+	}
+	return s.ID
+}
+
 func (s Snapshot) short() string {
 	if len(s.ID) > snapshotIDSize {
 		return s.ID[:snapshotIDSize]

@@ -19,6 +19,14 @@ type State struct {
 	// synced to (saved from or restored to). Comparing trees, not snapshot
 	// IDs, survives restic tag rewriting IDs.
 	Tree string `json:"tree"`
+	// Snapshot is the original ID of that snapshot (restic tag rewrites a
+	// snapshot's ID but keeps the first one as "original"). A save records
+	// it straight from restic's summary; Tree is filled in at the next
+	// listing.
+	Snapshot string `json:"snapshot,omitempty"`
+	// KeyHint is the ID of this machine's own repository key, so restic
+	// tries it first instead of deriving every key in turn.
+	KeyHint string `json:"key_hint,omitempty"`
 	// Dirty means the box was opened since that sync, so the local home may
 	// hold unsaved changes.
 	Dirty bool `json:"dirty"`

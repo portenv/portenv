@@ -525,6 +525,24 @@ func cmdHistory(ctx context.Context, e *env, name string, args []string) error {
 	})
 }
 
+// cmdHousekeep tidies the repository while nothing else is happening:
+// leftover lease tags on older saves, then retention (never the current
+// save). It is not part of close, so closing stays fast.
+func cmdHousekeep(ctx context.Context, e *env, name string, args []string) error {
+	fs := flags("housekeep")
+	prune := fs.Bool("prune", false, "also delete data no snapshot uses")
+	if err := parse(fs, args); err != nil {
+		return err
+	}
+	s, err := e.open(name)
+	if err != nil {
+		return err
+	}
+	return s.whileRunning(ctx, func(sb *boxsync.Box) error {
+		return sb.Housekeep(ctx, *prune)
+	})
+}
+
 func cmdMove(ctx context.Context, e *env, name string, args []string) error {
 	fs := flags("move")
 	to := fs.String("to", "", "SSH host to resume the box on")

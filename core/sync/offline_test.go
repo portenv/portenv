@@ -96,11 +96,17 @@ func TestReconnectAfterTakeOverKeepsOfflineWork(t *testing.T) {
 type failingExecutor struct {
 	Executor
 	n, calls int
+	killed   string // the restic command that was killed
 }
 
 func (f *failingExecutor) Restic(ctx context.Context, args []string, cred Credentials) (ExecResult, error) {
 	f.calls++
 	if f.calls == f.n {
+		for i, a := range args {
+			if a == "--repo" {
+				f.killed = args[i+2]
+			}
+		}
 		return ExecResult{}, errors.New("killed")
 	}
 	return f.Executor.Restic(ctx, args, cred)
@@ -125,7 +131,9 @@ func TestReconnectKilledAtEveryStep(t *testing.T) {
 			orig := a.cfg.Executor
 			f := &failingExecutor{Executor: orig, n: n}
 			a.cfg.Executor, a.restic.exec = f, f
-			if _, err := a.Resume(context.Background(), ResumeOptions{}); err == nil {
+			// Looking up the key hint is optional: killing it may not fail
+			// the resume.
+			if _, err := a.Resume(context.Background(), ResumeOptions{}); err == nil && f.killed != "key" {
 				t.Fatalf("killed at call %d of %d but Resume succeeded", n, total)
 			}
 			a.cfg.Executor, a.restic.exec = orig, orig

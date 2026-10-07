@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"time"
 )
 
@@ -225,6 +226,7 @@ func (b *Box) Resume(ctx context.Context, opts ResumeOptions) (ResumeResult, err
 	if err != nil {
 		return ResumeResult{}, err
 	}
+	st = b.resolve(ctx, snaps, st)
 	empty, err := b.homeEmpty()
 	if err != nil {
 		return ResumeResult{}, err
@@ -263,7 +265,7 @@ func (b *Box) Resume(ctx context.Context, opts ResumeOptions) (ResumeResult, err
 		// Rule 3.
 		res = ResumeResult{Rule: 3, Action: ActionStartLocal}
 		if newest.Machine == me {
-			st.Tree = newest.Tree
+			st.Tree, st.Snapshot = newest.Tree, newest.origin()
 		}
 	case !known || st.Dirty:
 		// Rule 4: possibly unsaved local changes, and a newer save. Keep the
@@ -283,7 +285,7 @@ func (b *Box) Resume(ctx context.Context, opts ResumeOptions) (ResumeResult, err
 			return ResumeResult{}, err
 		}
 		res.Restored = &newest
-		st.Tree = newest.Tree
+		st.Tree, st.Snapshot = newest.Tree, newest.origin()
 	}
 
 	// Take the lease: move the active tag to this machine.
@@ -322,7 +324,7 @@ func (b *Box) ResumeOffline() (ResumeResult, error) {
 		return ResumeResult{}, err
 	case !known:
 		return ResumeResult{}, fmt.Errorf("%w: this machine has never synced the box", ErrOfflineUnsafe)
-	case st.Tree == "":
+	case st.Tree == "" && st.Snapshot == "":
 		return ResumeResult{}, fmt.Errorf("%w: the box has never been saved from this machine", ErrOfflineUnsafe)
 	case st.Dirty:
 		return ResumeResult{}, fmt.Errorf("%w: the box was not closed cleanly here, so its home may differ from the last save", ErrOfflineUnsafe)
@@ -343,7 +345,7 @@ func (b *Box) saveOrphan(ctx context.Context, snaps []Snapshot, st State) (Snaps
 	if err != nil {
 		return Snapshot{}, err
 	}
-	if err := saveState(b.cfg.StateDir, State{Tree: s.Tree, Dirty: false}); err != nil {
+	if err := saveState(b.cfg.StateDir, State{Tree: s.Tree, Snapshot: s.origin(), Dirty: false, KeyHint: st.KeyHint}); err != nil {
 		return Snapshot{}, err
 	}
 	return s, nil
@@ -366,7 +368,7 @@ func (b *Box) restoreSnapshot(ctx context.Context, s Snapshot) error {
 	if err := b.restic.restoreTo(ctx, s, b.cfg.HomeDir, true); err != nil {
 		return fmt.Errorf("restore %s: %w", s.short(), err)
 	}
-	return saveState(b.cfg.StateDir, State{Tree: s.Tree, Dirty: false})
+	return saveState(b.cfg.StateDir, State{Tree: s.Tree, Snapshot: s.origin(), Dirty: false, KeyHint: st.KeyHint})
 }
 
 // SaveKind says what a save is for.
@@ -412,6 +414,7 @@ func (b *Box) Save(ctx context.Context, opts SaveOptions) (Snapshot, error) {
 	if err != nil {
 		return Snapshot{}, err
 	}
+	st = b.resolve(ctx, snaps, st)
 	me := b.cfg.MachineID
 	if newest, saved := current(snaps); saved && !opts.ConfirmLeaseChange {
 		takenOver := newest.Active != "" && newest.Active != me
@@ -430,30 +433,25 @@ func (b *Box) Save(ctx context.Context, opts SaveOptions) (Snapshot, error) {
 	default:
 		tags = append(tags, tagActivePfx+me)
 	}
-	s, err := b.backup(ctx, snaps, st, tags)
+	// The new snapshot is created already carrying the lease tag (or none on
+	// release): no separate tag step. The save is complete once restic's
+	// summary reports the snapshot ID and the state records it; its tree is
+	// filled in at the next listing.
+	id, err := b.backupID(ctx, snaps, st, tags)
 	if err != nil {
 		return Snapshot{}, err
 	}
+	s := Snapshot{ID: id, Tags: tags, Hostname: snapshotHost, Time: b.cfg.Now()}
+	s.parseTags()
 	lease := LeaseHeld
 	if opts.Kind == SaveRelease {
 		lease = LeaseReleased
 	}
-	if err := saveState(b.cfg.StateDir, State{Tree: s.Tree, Dirty: opts.Kind != SaveRelease, Lease: lease}); err != nil {
+	if err := saveState(b.cfg.StateDir, State{Snapshot: id, Dirty: opts.Kind != SaveRelease, Lease: lease, KeyHint: st.KeyHint}); err != nil {
 		return Snapshot{}, fmt.Errorf("save %s made but not recorded: %w", s.short(), err)
 	}
-
-	// Only the newest snapshot carries the lease. Clearing older active
-	// tags is tidying: the lease is read from the newest snapshot alone, so
-	// a failure here does not undo the save.
-	byTag := map[string][]string{}
-	for _, old := range snaps {
-		if old.Active != "" {
-			byTag[tagActivePfx+old.Active] = append(byTag[tagActivePfx+old.Active], old.ID)
-		}
-	}
-	for tag, ids := range byTag {
-		_ = b.restic.untag(ctx, ids, tag)
-	}
+	// Older snapshots may still carry active tags; readers only look at the
+	// current save, and Housekeep clears the rest when the machine is idle.
 	return s, nil
 }
 
@@ -461,26 +459,7 @@ func (b *Box) Save(ctx context.Context, opts SaveOptions) (Snapshot, error) {
 // synced to as the parent so unchanged files are not re-read, and returns
 // the new snapshot as restic lists it.
 func (b *Box) backup(ctx context.Context, snaps []Snapshot, st State, tags []string) (Snapshot, error) {
-	parent := ""
-	for i := len(snaps) - 1; i >= 0; i-- {
-		if s := snaps[i]; (st.Tree != "" && s.Tree == st.Tree) || (parent == "" && s.Machine == b.cfg.MachineID) {
-			parent = s.ID
-			if s.Tree == st.Tree {
-				break
-			}
-		}
-	}
-	exclude := ""
-	if b.cfg.ExcludeFile != "" {
-		info, err := b.cfg.Executor.PathInfo(ctx, b.cfg.ExcludeFile)
-		if err != nil {
-			return Snapshot{}, err
-		}
-		if info.Exists && !info.IsDir {
-			exclude = b.cfg.ExcludeFile
-		}
-	}
-	id, err := b.restic.backup(ctx, backupArgs{home: b.cfg.HomeDir, tags: tags, parent: parent, excludeFile: exclude})
+	id, err := b.backupID(ctx, snaps, st, tags)
 	if err != nil {
 		return Snapshot{}, err
 	}
@@ -494,6 +473,58 @@ func (b *Box) backup(ctx context.Context, snaps []Snapshot, st State, tags []str
 		}
 	}
 	return Snapshot{}, fmt.Errorf("snapshot %s reported by restic is not in the repository", id)
+}
+
+// backupID saves the home with tags and returns the new snapshot's ID from
+// restic's summary, without listing afterwards.
+func (b *Box) backupID(ctx context.Context, snaps []Snapshot, st State, tags []string) (string, error) {
+	parent := ""
+	for i := len(snaps) - 1; i >= 0; i-- {
+		s := snaps[i]
+		synced := (st.Tree != "" && s.Tree == st.Tree) || (st.Snapshot != "" && s.origin() == st.Snapshot)
+		if synced || (parent == "" && s.Machine == b.cfg.MachineID) {
+			parent = s.ID
+			if synced {
+				break
+			}
+		}
+	}
+	exclude := ""
+	if b.cfg.ExcludeFile != "" {
+		info, err := b.cfg.Executor.PathInfo(ctx, b.cfg.ExcludeFile)
+		if err != nil {
+			return "", err
+		}
+		if info.Exists && !info.IsDir {
+			exclude = b.cfg.ExcludeFile
+		}
+	}
+	return b.restic.backup(ctx, backupArgs{home: b.cfg.HomeDir, tags: tags, parent: parent, excludeFile: exclude})
+}
+
+// resolve fills in the tree of the snapshot this machine last recorded, and
+// this machine's key hint, from a fresh listing, saving the state when it
+// learns something.
+func (b *Box) resolve(ctx context.Context, snaps []Snapshot, st State) State {
+	changed := false
+	if st.Tree == "" && st.Snapshot != "" {
+		for _, s := range snaps {
+			if s.origin() == st.Snapshot {
+				st.Tree, changed = s.Tree, true
+				break
+			}
+		}
+	}
+	if st.KeyHint == "" && len(snaps) > 0 {
+		if id, err := b.restic.currentKeyID(ctx); err == nil && id != "" {
+			st.KeyHint, changed = id, true
+		}
+	}
+	b.restic.keyHint = st.KeyHint
+	if changed {
+		_ = saveState(b.cfg.StateDir, st) // a hint, not a commitment
+	}
+	return st
 }
 
 // Lease returns the current lease, or nil when no machine holds the box.
@@ -521,14 +552,61 @@ func (b *Box) leaseOf(s Snapshot) Lease {
 
 // History returns every save of the box, oldest first.
 func (b *Box) History(ctx context.Context) ([]Snapshot, error) {
-	return b.restic.snapshots(ctx)
+	snaps, err := b.restic.snapshots(ctx)
+	if err != nil {
+		return nil, err
+	}
+	// Only the current save's active tag is the lease; older ones are
+	// leftovers housekeeping has not cleared yet.
+	cur, _ := current(snaps)
+	for i := range snaps {
+		if snaps[i].ID != cur.ID {
+			snaps[i].Active = ""
+		}
+	}
+	return snaps, nil
 }
 
 // Forget applies the retention policy (keep the last 20, hourly for 24
 // hours, daily for 14 days, weekly for 8 weeks, monthly for 12 months, and
 // every orphaned save). With prune, unreferenced data is removed too.
 func (b *Box) Forget(ctx context.Context, prune bool) error {
-	return b.restic.forget(ctx, prune)
+	return b.Housekeep(ctx, prune)
+}
+
+// Housekeep tidies the repository while the machine is idle: it clears
+// active tags left on snapshots older than the current save, then applies
+// the retention policy. The current save is never removed: it is taken out
+// of the policy's plan before anything is forgotten.
+func (b *Box) Housekeep(ctx context.Context, prune bool) error {
+	snaps, err := b.restic.snapshots(ctx)
+	if err != nil {
+		return err
+	}
+	cur, saved := current(snaps)
+	byTag := map[string][]string{}
+	for _, s := range snaps {
+		if s.Active != "" && (!saved || s.ID != cur.ID) {
+			byTag[tagActivePfx+s.Active] = append(byTag[tagActivePfx+s.Active], s.ID)
+		}
+	}
+	for tag, ids := range byTag {
+		if err := b.restic.untag(ctx, ids, tag); err != nil {
+			return err
+		}
+	}
+	if len(byTag) > 0 { // untag rewrote IDs
+		if snaps, err = b.restic.snapshots(ctx); err != nil {
+			return err
+		}
+		cur, saved = current(snaps)
+	}
+	plan, err := b.restic.expired(ctx)
+	if err != nil {
+		return err
+	}
+	keep := slices.DeleteFunc(plan, func(id string) bool { return saved && id == cur.ID })
+	return b.restic.forgetIDs(ctx, keep, prune)
 }
 
 func (b *Box) homeEmpty() (bool, error) {

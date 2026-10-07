@@ -13,6 +13,7 @@
 //	portenv close <box> [--confirm]     save, release the lease, stop the box
 //	portenv status <box>
 //	portenv history <box>
+//	portenv housekeep <box> [--prune]   clear old lease tags, apply retention
 //	portenv move <box> --to SSH-HOST [--join-storage DIR]
 //	                                    close here, resume on SSH-HOST
 //	portenv join <box> --id ID --storage DIR    enrol a box (key on stdin)
@@ -50,6 +51,7 @@ var commands = map[string]command{
 	"close":      {"close <box> [--confirm]", cmdClose},
 	"status":     {"status <box>", cmdStatus},
 	"history":    {"history <box>", cmdHistory},
+	"housekeep":  {"housekeep <box> [--prune]", cmdHousekeep},
 	"move":       {"move <box> --to SSH-HOST [--join-storage DIR]", cmdMove},
 	"join":       {"join <box> --id BOX-ID --storage DIR [--image IMAGE]   (repository key on stdin)", cmdJoin},
 	"ssh-config": {"ssh-config <box> --host SERVER [--user USER] [--alias portenv]", cmdSSHConfig},
@@ -106,6 +108,7 @@ Commands:
   close <box> [--confirm]      save, release the lease, stop the box
   status <box>
   history <box>
+  housekeep <box> [--prune]    clear old lease tags and apply retention (run when idle)
   move <box> --to SSH-HOST [--join-storage DIR]
                                close here, then resume on SSH-HOST (enrolling it first)
   join <box> --id BOX-ID --storage DIR    enrol a box here; repository key on stdin

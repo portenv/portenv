@@ -436,7 +436,7 @@ This is the first run once the control plane exists (Phase 3). The mockups show 
 3. Recovery key: Save to Passwords, Print, Copy; Continue enabled only after "I've saved my recovery key".
 4. Storage: Portenv storage preselected; Use my own server or bucket… reveals the alternatives.
 5. First box: name, Start from (GitHub repository, folder on this Mac, empty), detected toolbox with Change…, Show this box in Finder (on).
-6. Getting ready: Preparing Linux (first time only), toolbox, encrypted home, clone, start. The window opens as soon as the box is usable.
+6. Getting ready: Setting up Portenv (first run only), toolbox, encrypted home, clone, start. The window opens as soon as the box is usable.
 
 **First run in Phases 1 and 2 (no Portenv backend)**
 

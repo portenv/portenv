@@ -18,7 +18,7 @@ The first-run screens show the full version, from Phase 3. Phases 1 and 2 ship a
 | `first-run-3-recovery-key` | Recovery key with Save to Passwords, Print, Copy; Continue enabled only after the confirmation checkbox. |
 | `first-run-4-storage` | Portenv storage preselected. In the app the two alternatives stay hidden behind "Use my own server or bucket…"; this render shows them expanded. |
 | `first-run-5-first-box` | Name, Start from (GitHub, folder, empty), detected toolbox, Show this box in Finder. |
-| `first-run-6-getting-ready` | Progress through toolbox, encrypted home, clone, start. Add "Preparing Linux" as the first step on a first-ever run. |
+| `first-run-6-getting-ready` | Progress through toolbox, encrypted home, clone, start. Add "Setting up Portenv" as the first step on the first run only. |
 
 ## Design notes
 

@@ -668,6 +668,14 @@ Milestones: 2.1 runner (server build of the core) installed over SSH · 2.2 Add 
 - Attribution and session recording per agent, the save point on connect, Watch, Take Over and Revoke in the app.
 - Not in 2.6: lanes (4.1), approvals (4.2), the gateway and its CA (Phase 3), phone notifications (4.6).
 
+**How agents get the skill and the CLI** (built with 2.6)
+
+- **The skill:** `skills/portenv/SKILL.md` in this repository, in the Agent Skills format (a folder with `SKILL.md` and frontmatter), versioned with the CLI. CI fails if a command the skill uses does not exist in that CLI version. It covers connecting with a device code, events, screen and send, waiting for input, relaying questions to the user, and revoking itself. It never contains credentials, and it tells the agent to install the CLI only from `portenv.com/cli` and to verify it. `portenv.com/skill` redirects to the `SKILL.md` attached to the latest release (the same pattern as the DMG and the appcast).
+- **The CLI for agents' computers:** release assets are static `portenv` binaries for linux/arm64, linux/amd64 and macOS arm64, plus a signed `checksums.txt` (ADR 0009). `portenv.com/cli` serves a short install script that detects the platform, downloads the release binary, verifies the signature and checksum, and installs into the user's home without `sudo`.
+- **Installing the skill:** `portenv skill install` writes the skill matching the CLI's own version to `~/.agents/skills/portenv/` (read by Cursor, and by Grok Bot through its support for Cursor's skills); `--path` covers other agents' folders; `portenv skill` prints it.
+- **Connect an agent** in the app shows one message to copy and paste to the agent, for example: "Install the Portenv CLI from portenv.com/cli, run `portenv skill install`, then connect to my box acme-api with code K7F2-9QX4." Opening the sheet opens the enrolment window (ADR 0007: 10 minutes or one approved code); when the agent requests the code, the approval sheet follows.
+- **Later, not in 2.6:** a plugin marketplace repository carrying the skill. The MCP door needs no skill: its tools describe themselves.
+
 **2.7 Webhooks**: signed event pushes from the runner to a URL the user registers for their agent.
 
 **2.8 stdio MCP**: `portenv mcp` on the agent's computer exposes events, screen and send over the CLI's connection.
@@ -683,6 +691,8 @@ Milestones: 2.1 runner (server build of the core) installed over SSH · 2.2 Add 
 - [ ] Every condition in ADR 0007 has its test passing (CA key never leaves the server, one box and one mode per certificate, no new inbound port, `portenv-enroll` closed by default, locked down and silent, device codes expire, are single use and rate-limited, renewal bound to the agent's key, revoke kills renewal and sessions)
 - [ ] A webhook reaches the registered URL with a valid signature when a tab starts waiting for input (2.7)
 - [ ] The stdio MCP server answers events, screen and send for a connected agent (2.8)
+- [ ] On a clean Linux machine standing in for an agent's computer, the message pasted from Connect an agent alone gets an agent from nothing to connected and relaying a Claude Code question, with no other help
+- [ ] The install script refuses a binary whose checksum or signature does not verify (ADR 0009), and CI fails if the skill uses a command the CLI does not have
 
 ### Phase 3: Control plane and gateway
 
@@ -744,6 +754,7 @@ These need an owner decision; Claude Code should add new ones here instead of gu
 - [ ] Docker inside the box (Phase 1): how to provide it without granting the box `CAP_SYS_ADMIN` or privileged mode (for example rootless Docker or a nested sandbox), or whether the setting ships with a plain warning that it weakens the repository-password protection (ADR 0005).
 - [ ] Point-in-time autosaves while the box runs: worth a file system with snapshots (for example btrfs on the Apple disk image), or are file-consistent saves plus the pre-save hook enough? (ADR 0005)
 - [ ] Before each door is built: confirm the target agents can actually reach it (for example outbound SSH from their computers for door 1).
+- [ ] Does Grok Bot read `~/.agents/skills` and can it run the install script? (The owner is testing it.)
 - [ ] Approval timeout default (30 minutes assumed) and what happens when it expires.
 - [ ] Anthropic's terms for agents driving Claude Code with a subscription login versus a Console API key.
 - [ ] Open-source boundary in detail: this repository is Apache-2.0 and `portenv/cloud` is private (decided), but confirm before going public whether the Mac app, the File Provider and the iPhone companion stay in the public repository or move to a private one.

@@ -663,7 +663,7 @@ Milestones: 2.1 runner (server build of the core) installed over SSH · 2.2 Add 
 **2.6 Stand-in agents over SSH and the CLI** (no control plane, no lanes)
 
 - Doors 1 and 2 for a box on the user's own server, in Continue my work mode. Grok Bot, or any terminal agent, reaches the box, runs Claude Code there and relays its questions back.
-- Credentials (ADR 0007): the agent runs `portenv login`; the user approves the device code in the app, after seeing the agent's name, the box and the key fingerprint; the runner, as certificate authority for its boxes, issues a 30-minute SSH certificate scoped to that box and mode, renewed by proof of possession of the agent's key until the grant ends (default 8 hours, at most 24 hours until Phase 3). No new inbound port: everything goes through the server's existing SSH. The app lists every certificate with revoke.
+- Credentials (ADR 0007): enrolment is closed by default; Connect an agent opens it for 10 minutes or until one code is approved. The agent runs `portenv login`; the user approves the device code in the app, after seeing the agent's name, the box and the key fingerprint; the runner, as certificate authority for its boxes, issues a 30-minute SSH certificate scoped to that box and mode, renewed by proof of possession of the agent's key until the grant ends (default 8 hours, at most 24 hours until Phase 3). No new inbound port: everything goes through the server's existing SSH. The app lists every certificate with revoke.
 - The core in the box agent: events (waiting for input, command finished, new output), `portenv events --follow`, `portenv screen <tab>`, `portenv send <tab>`, and `docs/skill/SKILL.md`.
 - Attribution and session recording per agent, the save point on connect, Watch, Take Over and Revoke in the app.
 - Not in 2.6: lanes (4.1), approvals (4.2), the gateway and its CA (Phase 3), phone notifications (4.6).
@@ -680,7 +680,7 @@ Milestones: 2.1 runner (server build of the core) installed over SSH · 2.2 Add 
 - [ ] Relay loop: a tool in the box asks a y/n question; "waiting for input" fires; a test agent reads the screen, relays the question, sends "y"; the tool continues. Run once with Claude Code and once with a plain script, using only `portenv events`, `portenv screen` and `portenv send`
 - [ ] Revert To ▸ Last Save Point undoes everything a stand-in did since it connected
 - [ ] Revoke ends the agent's session immediately and its certificate can no longer be renewed
-- [ ] Every condition in ADR 0007 has its test passing (CA key never leaves the server, one box and one mode per certificate, no new inbound port, `portenv-enroll` locked down and silent, device codes expire, are single use and rate-limited, renewal bound to the agent's key, revoke kills renewal and sessions)
+- [ ] Every condition in ADR 0007 has its test passing (CA key never leaves the server, one box and one mode per certificate, no new inbound port, `portenv-enroll` closed by default, locked down and silent, device codes expire, are single use and rate-limited, renewal bound to the agent's key, revoke kills renewal and sessions)
 - [ ] A webhook reaches the registered URL with a valid signature when a tab starts waiting for input (2.7)
 - [ ] The stdio MCP server answers events, screen and send for a connected agent (2.8)
 

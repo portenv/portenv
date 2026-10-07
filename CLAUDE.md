@@ -1,6 +1,6 @@
 # Portenv
 
-Portenv (short for portable environment) is a native Mac app that gives each project an encrypted Linux workspace, a "box", that can be saved, moved between a Mac, developer-owned servers and Portenv Cloud, and opened safely to AI agents.
+Portenv (short for portable environment) is a native Mac app that gives each project an encrypted workspace, a "box", that can be saved, moved between a Mac, developer-owned servers and Portenv Cloud, and opened safely to AI agents.
 
 **The full plan is in `docs/PLAN.md`. Read it completely before writing code.** It is the master copy and the source of truth: update it in the same change as the code. The "Decisions already made" section is settled; ask before deviating from it, and call out any change to it in your summary.
 
@@ -19,6 +19,7 @@ Phase 0: Foundations (owner only). Start with milestone 0.1 (repository, CI and 
 - Add unknowns to "Open questions" in `docs/PLAN.md` instead of guessing.
 - Ask before touching real production credentials, deleting snapshots or repositories, or publishing anything.
 - Record any decision that changes the plan as an ADR in `docs/adr/`.
+- In public product descriptions (README, repository description, app copy), call a box an encrypted workspace; don't name Linux. Technical docs may.
 - This repository is public (Apache-2.0). Every source file starts with an SPDX header. Keep business content (pricing, plans, how the cloud is sold) and private or customer details out of it, including demo data.
 
 ## Fixed names and paths

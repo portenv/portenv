@@ -26,7 +26,8 @@ TOOLS := \
 	google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.6.2 \
 	github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 \
 	github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 \
-	github.com/zricethezav/gitleaks/v8@v8.30.1
+	github.com/zricethezav/gitleaks/v8@v8.30.1 \
+	github.com/restic/restic/cmd/restic@v0.19.1
 TOOLS_STAMP := $(BIN)/.tools-stamp
 
 .PHONY: all build test lint fmt proto proto-check agent-linux swift-test \
@@ -54,9 +55,9 @@ agent-linux:
 		file $(BIN)/linux-$$a/portenv-agent | tee /dev/stderr | grep -q 'statically linked'; \
 	done
 
-## test: run Go tests with the race detector
-test:
-	for m in $(GO_MODULES); do go test -race ./$$m/...; done
+## test: run Go tests with the race detector (sync tests use the pinned restic)
+test: $(TOOLS_STAMP)
+	for m in $(GO_MODULES); do RESTIC=$(BIN)/restic go test -race ./$$m/...; done
 
 ## lint: formatting, vet, golangci-lint, buf lint, workflow lint, SPDX headers
 lint: $(TOOLS_STAMP) spdx-check

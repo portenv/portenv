@@ -403,17 +403,23 @@ The main window is a terminal with a title; everything else appears only when it
 - Toolbar items appear only when relevant: listening ports (`:3000 ↗`), agent avatars with an approval badge.
 - Drag a file onto the terminal to copy it into the current folder.
 
-**Title menu**
+**Title menu** (Apple's document-menu pattern)
 
-Rename… · Move To ▸ (this Mac, each server, Portenv Cloud, Add a Server…) · Duplicate for a Task… · Show in Finder ⌥⌘R · Make Save Point ⌘S · Show Changes ⌥⌘C · Browse Saves… · Box Settings…
+Rename… · Move To ▸ (this Mac, each server, Portenv Cloud, Add a Server…) · Duplicate for a Task… · Revert To ▸ (Last Save Point, Browse All Saves…) · Show in Finder ⌥⌘R
+
+**Menu bar**
+
+- File › Make Save Point ⌘S.
+- Box › Box Settings… (also reachable from Settings).
+- Changes are not a menu item: clicking the sync symbol next to the title shows what changed since the last save.
 
 **Other views**
 
-- Changes: files new, changed or deleted since the last save; a Never saved section with sizes; include or exclude per folder.
-- Browse Saves: a timeline of saves per machine; open any save read-only; restore one file or everything.
+- Changes (click the sync symbol next to the title): files new, changed or deleted since the last save; a Never saved section with sizes; include or exclude per folder.
+- Browse All Saves (Revert To ▸): a timeline of saves per machine; open any save read-only, compare any save with now; restore one file or everything.
 - Agent popover (click an avatar): identity, where it connected from, lane and branch, a live glimpse of its terminal, pending approval, Watch, Take Over, permissions in one sentence, Revoke Access.
 - Sidebar (⌘0): Boxes, Machines, Agents.
-- Settings window (⌘,): Account and devices, Protection and recovery key, Storage, Machines, Agents and permissions, Secrets, Box defaults, Notifications.
+- Settings window (⌘,): Account and devices, Protection and recovery key, Storage, Machines, Agents and permissions, Secrets, Box defaults and the open box's Box Settings, Notifications.
 
 **Lease and move sheets**
 
@@ -430,7 +436,7 @@ This is the first run once the control plane exists (Phase 3). The mockups show 
 3. Recovery key: Save to Passwords, Print, Copy; Continue enabled only after "I've saved my recovery key".
 4. Storage: Portenv storage preselected; Use my own server or bucket… reveals the alternatives.
 5. First box: name, Start from (GitHub repository, folder on this Mac, empty), detected toolbox with Change…, Show this box in Finder (on).
-6. Getting ready: Preparing Linux (first time only), toolbox, encrypted home, clone, start. The window opens as soon as the box is usable.
+6. Getting ready: Setting up Portenv (first run only), toolbox, encrypted home, clone, start. The window opens as soon as the box is usable.
 
 **First run in Phases 1 and 2 (no Portenv backend)**
 

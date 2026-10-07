@@ -11,14 +11,14 @@ The first-run screens show the full version, from Phase 3. Phases 1 and 2 ship a
 | File | What it shows |
 | --- | --- |
 | `main-window` | The default window: title with sync symbol and subtitle, tabs (including an agent lane being watched), full-width terminal, quiet toolbar items (`:3000` port, agent avatars with an approval badge). No action buttons. |
-| `title-menu` | Clicking the title: Rename, Move To ▸ (this Mac, servers, Portenv Cloud, Add a Server), Duplicate for a Task, Show in Finder, Make Save Point, Show Changes, Browse Saves, Box Settings. |
+| `title-menu` | Clicking the title (Apple's document-menu pattern): Rename, Move To ▸ (this Mac, servers, Portenv Cloud, Add a Server), Duplicate for a Task, Revert To ▸ (Last Save Point, Browse All Saves), Show in Finder. Make Save Point is in the File menu, Box Settings in the Box menu and Settings; changes open from the sync symbol. |
 | `agent-presence` | Clicking an agent avatar: identity, lane and branch, live terminal glimpse, pending sudo approval, Watch / Take Over, permissions sentence, Revoke Access. Beside it, the matching macOS notification. |
 | `first-run-1-welcome` | Sign in with Apple, GitHub or email. |
 | `first-run-2-protection` | Only you (default) or You, with Portenv's help. |
 | `first-run-3-recovery-key` | Recovery key with Save to Passwords, Print, Copy; Continue enabled only after the confirmation checkbox. |
 | `first-run-4-storage` | Portenv storage preselected. In the app the two alternatives stay hidden behind "Use my own server or bucket…"; this render shows them expanded. |
 | `first-run-5-first-box` | Name, Start from (GitHub, folder, empty), detected toolbox, Show this box in Finder. |
-| `first-run-6-getting-ready` | Progress through toolbox, encrypted home, clone, start. Add "Preparing Linux" as the first step on a first-ever run. |
+| `first-run-6-getting-ready` | Progress through toolbox, encrypted home, clone, start. Add "Setting up Portenv" as the first step on the first run only. |
 
 ## Design notes
 

@@ -12,16 +12,19 @@ The runner on each developer server is an SSH certificate authority for the boxe
 
 **Enrolment (device code, no new inbound port)**
 
-1. The agent runs `portenv login <server> --box <name>`. The CLI generates an Ed25519 key on the agent's computer and connects to the server's existing SSH daemon as the enrolment user `portenv-enroll`. That user accepts any key but only runs a forced command that can request and collect enrolment; no shell, no forwarding.
+1. The agent runs `portenv login <server> --box <name>`. The CLI generates an Ed25519 key on the agent's computer (it never leaves that computer) and connects to the server's existing SSH daemon as the enrolment user `portenv-enroll`.
+   - **How the agent authenticates:** it cannot yet; it has no credential. `portenv-enroll` therefore accepts any public key: the SSH daemon's `AuthorizedKeysCommand` returns the presented key with `restrict,command="portenv-runner enroll"`. The key only identifies the request (the fingerprint the user will see); it grants nothing.
+   - **Lockdown**, because this account is reachable from the internet on real servers: the forced command is the only thing that runs (no shell, no other command, no SFTP or any subsystem); no PTY; no port, agent or X11 forwarding (`restrict` plus a `Match User portenv-enroll` block with `DisableForwarding yes`, `PermitTTY no`, `PermitUserRC no`); rate limits per source IP in the SSH daemon (`PerSourcePenalties`, `PerSourceMaxStartups`) and in the forced command. Nothing it returns reveals boxes or users: every request gets the same answer (a code and its expiry), whether or not the box name exists.
 2. The runner records a pending request (box, mode, the agent's stated name, the key's fingerprint) and returns a device code with its expiry.
-3. The user enters the code in the app (Agents › Connect an agent). The app reaches the runner over its own SSH connection, and the approval sheet shows the agent's name, the box and the key fingerprint before the user approves.
+3. The request surfaces only as an approval sheet in the app, which reaches the runner over its own SSH connection: the user enters the code (Agents › Connect an agent) and sees the agent's name, the box and the key fingerprint before approving. Nothing else is notified. A code nobody approves expires silently.
 4. The CLI, polling as `portenv-enroll` with the same key, collects a certificate for that key.
 5. The agent connects with the certificate; the server's SSH daemon trusts the runner CA for its box principals and lands the session in the box (stand-in: the user's tmux session).
 
 **Lifetimes**
 
-- **Certificates: 30 minutes.** The CLI renews over its own certificate-authenticated connection before expiry, until the grant ends. Live sessions survive a renewal; revoking ends them.
-- **Grants: set when connecting, default 8 hours, at most 7 days.** After a grant ends, the agent needs a new device code.
+- **Certificates: 30 minutes.** Live sessions survive a renewal; revoking ends them.
+- **Renewal is proof of possession, not a bearer token.** The grant is bound to the agent's Ed25519 key. To renew, the CLI connects to `portenv-enroll` with that key and asks for a new certificate; the runner issues one only if the key's fingerprint has an active grant. There is no renewal token to copy; the long-lived secret is the private key on the agent's computer, and revoking the grant makes it worthless at once.
+- **Grants: set when connecting, default 8 hours, at most 24 hours** until Phase 3 brings central revocation (then revisit 7 days). After a grant ends, the agent needs a new device code.
 - **Device codes: 10 minutes, single use.**
 
 ## Conditions
@@ -32,13 +35,19 @@ The runner on each developer server is an SSH certificate authority for the boxe
 | It signs only for boxes on that runner | Principals are `box-<id>:<mode>` for boxes the runner owns; the SSH daemon accepts certificates only for those principals, through `AuthorizedPrincipalsCommand` | Signing for an unknown box fails; a certificate for box A cannot open box B |
 | Certificates are short-lived and scoped to one box and one mode | 30 minutes; one principal; mode stand-in only until lanes (4.1) | Expired certificates are refused; a certificate carries exactly one principal |
 | No new inbound port | Agents and the app reach the runner only through the server's existing SSH daemon (`portenv-enroll` with a forced command; the app over the user's SSH) | Port scan before and after install shows no new listener |
+| `portenv-enroll` is locked down: forced command only; no shell, PTY, SFTP or other subsystem; no port, agent or X11 forwarding | `AuthorizedKeysCommand` adds `restrict,command=...`; a `Match User portenv-enroll` block sets `DisableForwarding yes`, `PermitTTY no`, `PermitUserRC no` | Attempts at a shell, a PTY, `sftp`, `-L`/`-R`/`-D` forwarding, agent and X11 forwarding all fail; only the enrol command answers |
+| Enrolment is rate-limited per source IP | `PerSourcePenalties` and `PerSourceMaxStartups` in the SSH daemon; the forced command also limits pending and total requests per source IP and per box | Bursts from one address are refused; other addresses still enrol |
+| Enrolment reveals nothing about the server | The forced command answers every request the same way (a code and its expiry) whether or not the box exists, and never lists boxes or users | Responses for an existing and a missing box are byte-for-byte the same shape |
+| Requests surface only as approval sheets in the app; unapproved codes expire silently | Pending requests are visible only to the app over the user's SSH; no notification, email or log outside root-only files | An unapproved code expires after 10 minutes with no notice anywhere |
 | Device codes expire within 10 minutes, are single use and rate-limited | Per source address and per box: at most 5 pending requests and 20 requests an hour; codes are random, 8 characters from an unambiguous alphabet | Expired, reused and over-limit requests are refused |
 | The approval sheet shows the agent's name, the box and the key fingerprint | The pending request carries them; the app shows them before Approve | App UI test (Phase 2) |
-| Every certificate is listed with revoke, and revoke ends live sessions | The runner keeps a log of issued certificates (serial, key fingerprint, agent, box, mode, validity); revoke adds the key to the SSH daemon's revoked-keys list, stops renewal and kills the agent's sessions | Revoke test: the live session ends within 5 seconds and the certificate is refused afterwards |
+| Renewal is proof of possession of a key generated on the agent's computer | Grants are bound to the agent's key fingerprint; renewal requires SSH authentication with that key; no bearer token exists | Renewal with a different key, or with a copied certificate but not the key, is refused |
+| Grants last 8 hours by default and at most 24 hours (until Phase 3) | The app offers up to 24 hours; the runner refuses longer grants | A 25-hour grant is refused |
+| Every grant and certificate is listed with revoke; revoke kills renewal and live sessions at once | The runner keeps a log of grants and issued certificates (serial, key fingerprint, agent, box, mode, validity); the app lists grants next to their certificates; revoke deletes the grant (renewal refused immediately), adds the key to the SSH daemon's revoked-keys list and kills the agent's sessions | Revoke test: renewal is refused immediately, the live session ends within 5 seconds, and the certificate is refused afterwards |
 | When the Portenv CA arrives, the runner CA is retired: its trust removed and its key destroyed | Phase 3 migration: re-enrol agents through the Portenv CA, remove the runner CA from the SSH daemon's trusted keys, shred the key | Migration test: runner-CA certificates are refused afterwards and the key file is gone |
 
 ## Consequences
 
-- The enrolment user is reachable by anyone who can reach the server's SSH port, but can only request a device code; rate limits and the user's approval in the app gate everything else.
+- The enrolment user is reachable by anyone who can reach the server's SSH port, but can only request a device code and collect a certificate the user approved; the lockdown, rate limits and the user's approval in the app gate everything else.
 - A certificate on the agent's computer is usable by whatever runs there while it is valid (ADR 0006); 30-minute certificates, per-box scope and revoke bound that.
 - Phase 3 changes who signs, not how agents connect: the CLI, the skill and the session landing stay the same.

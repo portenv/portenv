@@ -75,6 +75,34 @@ grep "portenv-daemon-" "$root/execs.txt" | sed 's/^[^ ]* //' | sort | uniq -c | 
 others=$(grep "portenv-daemon-" "$root/execs.txt" | grep -vc 'exec_create: /usr/local/bin/portenv-agent ready$' || true)
 expect "no docker exec into the box but the engine's health check ($others others)" test "$others" = 0
 
+# The box agent dies mid-session. Processes in the box keep editing files;
+# nothing can be saved until the box restarts. Restart Box keeps the local
+# home (it has unsaved changes, so nothing is restored over it: rule 3),
+# and the next save includes the edits made while the agent was gone.
+# docker exec here only simulates the failure and the box's own processes.
+"$portenv" app open d >/dev/null 2>&1 || true
+c=portenv-daemon-$(box_id)
+docker exec "$c" pkill -f '^portenv-agent serve' || true
+sleep 1
+out=$("$portenv" app check d 2>&1) || true; echo "  $out"
+expect "check: the box agent is unavailable" grep -q "the box agent is unavailable" <<<"$out"
+docker exec -u work "$c" sh -c 'echo while-down > /home/work/down.txt'
+out=$("$portenv" app restart d 2>&1) || true; echo "  $out"
+expect "Restart Box keeps the local home (rule 3)" grep -q "rule 3" <<<"$out"
+out=$(type_in 'echo down=$(cat ~/down.txt)')
+expect "the edit made while the agent was gone is still there" grep -q "down=while-down" <<<"$out"
+out=$("$portenv" app point d 2>&1) || true; echo "  $out"
+expect "the next save goes through" grep -q "^save point " <<<"$out"
+"$portenv" app close d >/dev/null 2>&1 || true
+# Prove it is in the save: drop this machine's copy of the box entirely.
+docker rm -f "$c" >/dev/null 2>&1 || true
+docker volume rm -f "portenv-home-daemon-$(box_id)" >/dev/null 2>&1 || true
+out=$("$portenv" app open d 2>&1) || true; echo "  $out"
+expect "reopen with no local home restores from storage (rule 5)" grep -q "rule 5" <<<"$out"
+out=$(type_in 'echo down=$(cat ~/down.txt)')
+expect "the save includes the edit made while the agent was gone" grep -q "down=while-down" <<<"$out"
+"$portenv" app close d >/dev/null 2>&1 || true
+
 # An impostor on the agent's port (ADR 0010, conditions): root in the box
 # kills the agent and serves a self-made certificate there. portenvd
 # refuses it and reports the box agent as unavailable; nothing is saved.

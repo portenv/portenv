@@ -26,6 +26,31 @@ service DaemonService {
   rpc MoveBox(MoveBoxRequest) returns (MoveBoxResponse);
   // Attaches a terminal to the box's tmux session through the box agent.
   rpc Terminal(stream TerminalRequest) returns (stream TerminalResponse);
+  // Reports whether the box agent answers on its channel.
+  rpc CheckBox(CheckBoxRequest) returns (CheckBoxResponse);
+  // Restarts the box (for example after its agent became unavailable) and
+  // opens it again through the resume rules: the local home is kept, never
+  // restored over while it has unsaved changes.
+  rpc RestartBox(RestartBoxRequest) returns (RestartBoxResponse);
+}
+
+message CheckBoxRequest {
+  string name = 1;
+}
+
+message CheckBoxResponse {
+  bool agent_available = 1;
+  // Why not, when it is not.
+  string detail = 2;
+}
+
+message RestartBoxRequest {
+  string name = 1;
+}
+
+message RestartBoxResponse {
+  string summary = 1;
+  int32 rule = 2;
 }
 
 message OpenBoxRequest {

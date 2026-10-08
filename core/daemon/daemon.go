@@ -513,3 +513,44 @@ func agentError(err error) error {
 	}
 	return err
 }
+
+// CheckBox reports whether the box agent answers on its channel.
+func (s *Server) CheckBox(ctx context.Context, req *daemonv1.CheckBoxRequest) (*daemonv1.CheckBoxResponse, error) {
+	ob, err := s.get(req.GetName())
+	if err != nil {
+		return nil, err
+	}
+	if ob.agent == nil {
+		return &daemonv1.CheckBoxResponse{Detail: "the box agent is unavailable"}, nil
+	}
+	cctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	if _, err := ob.agent.GetReadiness(cctx, &agentv1.GetReadinessRequest{}); err != nil {
+		return &daemonv1.CheckBoxResponse{Detail: status.Convert(agentError(err)).Message()}, nil
+	}
+	return &daemonv1.CheckBoxResponse{AgentAvailable: true}, nil
+}
+
+// RestartBox stops the box without saving (with its agent gone, nothing in
+// it can be saved) and opens it again through the resume rules. Its home
+// stays on its volume and this machine's state still says it has unsaved
+// changes, so nothing is restored over it (rule 3 on this machine); the
+// next save includes everything.
+func (s *Server) RestartBox(ctx context.Context, req *daemonv1.RestartBoxRequest) (*daemonv1.RestartBoxResponse, error) {
+	name := req.GetName()
+	ob, err := s.get(name)
+	if err != nil {
+		return nil, err
+	}
+	ob.mu.Lock()
+	ob.stop(ctx)
+	s.mu.Lock()
+	delete(s.open, name)
+	s.mu.Unlock()
+	ob.mu.Unlock()
+	res, err := s.OpenBox(ctx, &daemonv1.OpenBoxRequest{Name: name})
+	if err != nil {
+		return nil, err
+	}
+	return &daemonv1.RestartBoxResponse{Summary: res.GetSummary(), Rule: res.GetRule()}, nil
+}

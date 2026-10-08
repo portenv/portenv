@@ -51,7 +51,7 @@ install -d -m 0700 "$root/b/keys" && install -m 0600 "$root/a/keys/$(box_id).key
 echo "== new box on A"
 out=$(A resume demo 2>/dev/null); echo "  $out"
 expect "rule 1 creates a fresh home" grep -q "rule 1" <<<"$out"
-in_box a 'mkdir -p acme-api && echo "hello" > acme-api/README.md && head -c 2000000 /dev/urandom > acme-api/blob.bin && echo jq >> .portenv/apt-packages.txt'
+in_box a 'mkdir -p acme-api && echo "hello" > acme-api/README.md && head -c 2000000 /dev/urandom > acme-api/blob.bin && echo tree >> .portenv/apt-packages.txt'
 expect "save" A save demo
 expect "status shows the lease on A" bash -c "PORTENV_HOME=$root/a PORTENV_DOCKER_NAMESPACE=e2ea PORTENV_KEYS=file $portenv status demo | grep -q 'lease    .*'"
 
@@ -65,7 +65,7 @@ out=$(B resume demo 2>/dev/null); echo "  $out"
 expect "B restores (rule 5)" grep -q "rule 5" <<<"$out"
 after=$(sums b)
 if [[ "$before" == "$after" ]]; then pass "checksums of /home match on B"; else fail "checksums of /home match on B"; fi
-expect "apt-packages.txt replayed on B" in_box b 'command -v jq'
+expect "apt-packages.txt replayed on B" in_box b 'command -v tree'
 in_box b 'echo "from B" >> acme-api/README.md'
 before=$(sums b)
 expect "B closes" B close demo

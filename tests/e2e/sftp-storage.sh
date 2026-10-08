@@ -3,11 +3,13 @@
 #
 # SFTP storage end to end, locally: an Ubuntu container stands in for a
 # server (sshd plus the storage account from server/setup.sh), and a box on
-# this machine saves to it and resumes. Covers the storage account when uid
-# and gid 990 are already taken, the authorized-keys file being readable by
-# sshd, the agent serving the key from memory and pinning the host key, and
-# restic's cache surviving restarts, and restic on this machine reaching the
-# repository through the REST server over the storage account's SSH.
+# this machine saves to it and opens again. Covers the storage account when
+# uid and gid 990 are already taken, the authorized-keys file being readable
+# by sshd, the agent serving the key from memory and pinning the host key,
+# restic's cache surviving restarts, restic on this machine reaching the
+# repository through the REST server over the storage account's SSH, and
+# opening offline. The box is driven only through portenvd and the agent
+# channel, as the app drives it; docker exec only inspects.
 #
 #   tests/e2e/sftp-storage.sh [IMAGE]
 set -euo pipefail
@@ -26,6 +28,7 @@ in_box() { docker exec -u work -w /home/work "portenv-sftp-$(box_id)" bash -lc "
 cleanup() {
 	# Nothing in the cleanup may fail: under set -e that would fail the run.
 	if [[ -n ${dpid:-} ]]; then kill "$dpid" 2>/dev/null || true; wait "$dpid" 2>/dev/null || true; fi
+	if (( failures )) && [[ -f $root/portenvd.log ]]; then echo "== portenvd log"; sed 's/^/  /' "$root/portenvd.log" || true; fi
 	local id; id=$(box_id 2>/dev/null || true)
 	if [[ -n $id ]]; then
 		docker rm -f "portenv-sftp-$id" >/dev/null 2>&1 || true
@@ -60,61 +63,111 @@ expect "only the bcrypt hash of the REST password is on the server" docker exec 
 expect "the storage account exists without uid 990" bash -c "[[ \$(docker exec $srv id -u portenv-storage) != 990 ]]"
 expect "sshd can read the authorized keys as portenv-storage" docker exec "$srv" runuser -u portenv-storage -- test -r /etc/ssh/portenv-storage.authorized_keys
 
-out=$("$portenv" resume sftp </dev/null 2>&1) || { echo "$out" | sed 's/^/  /'; }; out=$(tail -1 <<<"$out"); echo "  $out"
-expect "rule 1 with SFTP storage" grep -q "rule 1" <<<"$out"
-in_box 'echo "over sftp" > note.txt'
-expect "save over SFTP" "$portenv" save sftp </dev/null
-expect "no key or helper left in the box after the run" bash -c "[[ -z \$(docker exec portenv-sftp-$(box_id) sh -c 'ls -A /var/cache/portenv-sync | grep sftp-') ]]"
-expect "listing and lease tags go through the REST server" docker exec "$srv" grep -q "GET /$(box_id)/snapshots" /tmp/rest.log
-expect "the repository is on the server, owned by portenv-storage" docker exec "$srv" bash -c "test -f /srv/portenv/storage-root/storage/boxes/$(box_id)/config && [[ \$(stat -c %U /srv/portenv/storage-root/storage/boxes/$(box_id)/config) == portenv-storage ]]"
-expect "close" "$portenv" close sftp </dev/null
-out=$("$portenv" resume sftp </dev/null 2>&1) || { echo "$out" | sed 's/^/  /'; }; out=$(tail -1 <<<"$out"); echo "  $out"
-expect "same-machine resume over SFTP (rule 3)" grep -q "rule 3" <<<"$out"
-expect "the file is there" in_box 'grep -qx "over sftp" note.txt'
-expect "restic's cache survived the restart" bash -c "[[ -n \$(docker exec portenv-sftp-$(box_id) sh -c 'ls /var/cache/portenv-sync') ]]"
-docker exec "$srv" bash -c "sed -i 's/^restrict/#restrict/' /etc/ssh/portenv-storage.authorized_keys"
-expect "an unknown key is refused (no save without the server's consent)" bash -c "! $portenv save sftp </dev/null"
-expect "close after restoring the key" bash -c "docker exec $srv sed -i 's/^#restrict/restrict/' /etc/ssh/portenv-storage.authorized_keys && $portenv close sftp </dev/null"
-
-echo "== the same storage through portenvd and the agent channel"
-# The CLI above runs restic with docker exec as root in the box; portenvd
-# runs it through the agent channel's API process (portenv-agent, uid 991,
-# few capabilities). Saving over SFTP there is a different path and must be
-# tested on its own: it once failed while everything above passed.
+echo "== the box, through portenvd and the agent channel (as the app does)"
+# Everything the app relies on goes through portenvd, which reaches the box
+# only through the agent channel (portenv-agent, uid 991, few capabilities);
+# docker exec below only inspects. Files are written in the box's terminal.
 "$repo/bin/portenvd" 2>"$root/portenvd.log" &
 dpid=$!
 for _ in $(seq 50); do [[ -S $root/mac/portenvd.sock ]] && break; sleep 0.1; done
-out=$("$portenv" app open sftp 2>&1) || true; echo "  $out"
-expect "portenvd opens the box (rule 3)" grep -q "rule 3" <<<"$out"
-{ printf 'echo through-the-channel > ~/channel.txt\r'; sleep 2; } | "$portenv" attach sftp >/dev/null 2>&1 || true
-out=$("$portenv" app point sftp 2>&1) || true; echo "  $out"
-expect "a save over SFTP through the agent channel" grep -q "^save point" <<<"$out"
+# Each call has a time limit: a hang fails its check instead of the run.
+limit() { perl -e 'alarm shift; exec @ARGV' 180 "$@"; }
+app() { limit "$portenv" app "$@" 2>&1; }
+state() { app state sftp | python3 -c 'import json,sys; print(json.load(sys.stdin)["state"])'; }
+type_in() { { printf '%s\r' "$1"; sleep 2; } | "$portenv" attach sftp >/dev/null 2>&1 || true; }
+out=$(app open sftp) || true; echo "  $out"
+expect "rule 1 with SFTP storage" grep -q "rule 1" <<<"$out"
+expect "the state says not saved yet" test "$(state)" = SAVE_STATE_NOT_SAVED_YET
+type_in 'echo "over sftp" > ~/note.txt'
+out=$(app point sftp) || true; echo "  $out"
+expect "a save over SFTP" grep -q "^save point" <<<"$out"
+expect "the state says saved" test "$(state)" = SAVE_STATE_SAVED
+# The agent's SFTP helpers (key socket, pinned host key) live in
+# /run/portenv-sftp for the run only.
+expect "no key or helper left in the box after the run" bash -c "docker exec portenv-sftp-$(box_id) test -d /run/portenv-sftp && [[ -z \$(docker exec portenv-sftp-$(box_id) sh -c 'ls -A /run/portenv-sftp; ls -A /var/cache/portenv-sync | grep sftp-') ]]"
+expect "listing and lease tags go through the REST server" docker exec "$srv" grep -q "GET /$(box_id)/snapshots" /tmp/rest.log
+expect "the repository is on the server, owned by portenv-storage" docker exec "$srv" bash -c "test -f /srv/portenv/storage-root/storage/boxes/$(box_id)/config && [[ \$(stat -c %U /srv/portenv/storage-root/storage/boxes/$(box_id)/config) == portenv-storage ]]"
 # The REST forward's SSH connection drops (network change, idle limit): the
 # next save rebuilds it.
 pkill -f "ssh .*-M -N -f .*ControlPersist=4h" || true
 sleep 1
-out=$("$portenv" app point sftp 2>&1) || true; echo "  $out"
+out=$(app point sftp) || true; echo "  $out"
 expect "a save after the REST forward's connection dropped" grep -q "^save point" <<<"$out"
-out=$("$portenv" app close sftp 2>&1) || true; echo "  $out"
-expect "close over SFTP through the agent channel" grep -q "closed and released" <<<"$out"
-kill "$dpid" 2>/dev/null; wait "$dpid" 2>/dev/null || true
+out=$(app close sftp) || true; echo "  $out"
+expect "close saves and releases" grep -q "closed and released" <<<"$out"
+out=$(app open sftp) || true; echo "  $out"
+expect "same-machine open over SFTP (rule 3)" grep -q "rule 3" <<<"$out"
+expect "the file is there" in_box 'grep -qx "over sftp" note.txt'
+expect "restic's cache survived the restart" bash -c "[[ -n \$(docker exec portenv-sftp-$(box_id) sh -c 'ls /var/cache/portenv-sync') ]]"
+docker exec "$srv" bash -c "sed -i 's/^restrict/#restrict/' /etc/ssh/portenv-storage.authorized_keys"
+expect "an unknown key is refused (no save without the server's consent)" bash -c "! perl -e 'alarm shift; exec @ARGV' 180 $portenv app point sftp"
+docker exec "$srv" sed -i 's/^#restrict/restrict/' /etc/ssh/portenv-storage.authorized_keys
+out=$(app close sftp) || true; echo "  $out"
+expect "close after restoring the key" grep -q "closed and released" <<<"$out"
 
 echo "== offline: the storage server is down"
-docker stop -t 1 "$srv" >/dev/null
-t0=$(python3 -c 'import time; print(time.time())')
-out=$("$portenv" resume sftp </dev/null 2>&1) || true
-t1=$(python3 -c 'import time; print(time.time())')
-echo "  $(tail -1 <<<"$out")"
-offline_s=$(python3 -c "print(round($t1 - $t0, 1))")
-expect "resume after a clean close starts offline" grep -q "Offline · will save later" <<<"$out"
-expect "offline resume takes under 5 s (${offline_s} s)" python3 -c "import sys; sys.exit(0 if $t1 - $t0 < 5 else 1)"
-in_box 'echo "written offline" > offline.txt'
-out=$("$portenv" save sftp </dev/null 2>&1) || true
-expect "a save while offline waits, and says so" grep -q "will save later" <<<"$out"
+# portenvd decides between online and offline alongside the box's start:
+# with the network up it probes the storage server (at most 1 s); a fresh
+# "no network" report from the app (a running process, at most 30 s old)
+# skips the probe; a report whose sender has gone counts for nothing.
+server_down() { docker stop -t 1 "$srv" >/dev/null; }
+server_up() { docker start "$srv" >/dev/null && docker exec "$srv" bash -c 'mkdir -p /run/sshd && /usr/sbin/sshd' && start_rest && sleep 1; }
+probes() { grep -c "storage probe" "$root/portenvd.log" || true; }
+# Opens the box, prints its stage timings, and sets out, open_s and probed.
+timed_open() {
+	local before lines t0 t1; before=$(probes); lines=$(wc -l <"$root/portenvd.log")
+	t0=$(python3 -c 'import time; print(time.time())')
+	out=$(app open sftp) || true
+	t1=$(python3 -c 'import time; print(time.time())')
+	open_s=$(python3 -c "print(round($t1 - $t0, 2))")
+	probed=$(( $(probes) - before ))
+	echo "  $out (${open_s} s)"
+	tail -n +"$((lines + 1))" "$root/portenvd.log" | grep 'after=' | sed -E 's/.*msg="?([^"]*[^" ])"? .*after=([^ ]*).*/    \2  \1/' || true
+}
+under() { python3 -c "import sys; sys.exit(0 if $1 < $2 else 1)"; }
+
+server_down
+"$portenv" app network up
+timed_open
+expect "network up, storage down: opens offline" grep -q "Offline · will save later" <<<"$out"
+expect "network up, storage down: the storage was probed" test "$probed" -eq 1
+expect "network up, storage down: under 5 s (${open_s} s)" under "$open_s" 5
+expect "the state says offline" test "$(state)" = SAVE_STATE_OFFLINE
+type_in 'echo "written offline" > ~/offline.txt'
+out=$(app point sftp) && st=0 || st=$?; echo "  $out"
+expect "a save point while offline is refused" test "$st" -ne 0
+expect "and the state still says offline" test "$(state)" = SAVE_STATE_OFFLINE
 expect "the offline work is still in the box" in_box 'grep -qx "written offline" offline.txt'
-docker start "$srv" >/dev/null && docker exec "$srv" bash -c 'mkdir -p /run/sshd && /usr/sbin/sshd' && start_rest && sleep 1
-expect "back online, the save goes through" "$portenv" save sftp </dev/null
-expect "close" "$portenv" close sftp </dev/null
+server_up
+out=$(app point sftp) || true; echo "  $out"
+expect "back online, the save goes through" grep -q "^save point" <<<"$out"
+expect "the state says saved again" test "$(state)" = SAVE_STATE_SAVED
+out=$(app close sftp) || true; echo "  $out"
+expect "close" grep -q "closed and released" <<<"$out"
+
+# This script stands in for the app: a report sent from here comes from a
+# running process.
+server_down
+"$portenv" app network down
+timed_open
+expect "no network (fresh report): opens offline" grep -q "Offline · will save later" <<<"$out"
+expect "no network (fresh report): no storage probe" test "$probed" -eq 0
+expect "no network (fresh report): under 5 s (${open_s} s)" under "$open_s" 5
+server_up
+out=$(app close sftp) || true
+expect "close once the server is back" grep -q "closed and released" <<<"$out"
+
+# A "down" from a process that has exited (an app that quit) is not trusted.
+server_down
+bash -c '"$1" app network down; true' _ "$portenv"
+timed_open
+expect "a down from an app that quit: the storage is probed again" test "$probed" -eq 1
+expect "and the box still opens offline" grep -q "Offline · will save later" <<<"$out"
+server_up
+out=$(app close sftp) || true
+expect "close" grep -q "closed and released" <<<"$out"
+kill "$dpid" 2>/dev/null || true; wait "$dpid" 2>/dev/null || true
+dpid=
 
 echo
 if (( failures )); then echo "$failures check(s) failed"; exit 1; fi

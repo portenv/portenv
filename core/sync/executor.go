@@ -79,6 +79,21 @@ type LocalExecutor struct {
 	REST *RESTForward
 }
 
+// BinaryID identifies the restic binary this executor runs without running
+// it (path, size and modification time): a version check holds until it
+// changes.
+func (l LocalExecutor) BinaryID() (string, error) {
+	p, err := exec.LookPath(l.Bin)
+	if err != nil {
+		return "", err
+	}
+	fi, err := os.Stat(p)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%s %d %d", p, fi.Size(), fi.ModTime().UnixNano()), nil
+}
+
 // RESTForward is restic's REST server on the storage server's loopback,
 // forwarded to a unix socket in ControlDir over the reused SSH connection.
 // No inbound port: the server listens on 127.0.0.1 only.
@@ -253,6 +268,16 @@ func agentInput(cred Credentials) ([]byte, error) {
 // channel (ADR 0010): what portenvd uses from Phase 1, never docker exec.
 type ChannelExecutor struct {
 	Agent agentv1.AgentServiceClient
+	// Client, when set, returns the client to use instead of Agent: the
+	// box's current channel, which changes when the box restarts.
+	Client func() agentv1.AgentServiceClient
+}
+
+func (c ChannelExecutor) agent() agentv1.AgentServiceClient {
+	if c.Client != nil {
+		return c.Client()
+	}
+	return c.Agent
 }
 
 // Restic implements Executor.
@@ -261,7 +286,7 @@ func (c ChannelExecutor) Restic(ctx context.Context, args []string, cred Credent
 	if err != nil {
 		return ExecResult{}, err
 	}
-	res, err := c.Agent.RunRestic(ctx, &agentv1.RunResticRequest{Args: args, Input: input})
+	res, err := c.agent().RunRestic(ctx, &agentv1.RunResticRequest{Args: args, Input: input})
 	if err != nil {
 		return ExecResult{}, fmt.Errorf("run restic in box: %w", err)
 	}
@@ -270,7 +295,7 @@ func (c ChannelExecutor) Restic(ctx context.Context, args []string, cred Credent
 
 // PathInfo implements Executor.
 func (c ChannelExecutor) PathInfo(ctx context.Context, path string) (PathInfo, error) {
-	res, err := c.Agent.GetPathInfo(ctx, &agentv1.GetPathInfoRequest{Path: path})
+	res, err := c.agent().GetPathInfo(ctx, &agentv1.GetPathInfoRequest{Path: path})
 	if err != nil {
 		return PathInfo{}, fmt.Errorf("inspect %s in box: %w", path, err)
 	}

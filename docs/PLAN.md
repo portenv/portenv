@@ -235,6 +235,7 @@ Each box has its own restic repository; saves happen automatically, and a lease 
 - On SFTP servers, the host reaches the repository through restic's REST server (`rest-server`, set up by `server/setup.sh`) on the server's loopback address, through a forward over the storage account's reused SSH connection: no inbound port, and the storage key may forward to that one port only. Each box has its own REST user; only the bcrypt hash is on the server. Backup and restore in the box keep using SFTP. Measured in the 0.5 spike (2026-10-08, 31 Mbit/s up, 42 ms, same box): online resume median 2.84 s (worst 4.6 s) through REST against 5.32 s (worst 7.74 s) over SFTP, because listing and lease tags need far fewer round trips.
 - Every machine has its own repository key, added on that machine so the key's derivation cost is tuned for it; a machine never stores another's key.
 - Offline: a machine starts from its local home only if its state says the home equals the last save it made or restored and it holds the lease or released it cleanly; saves wait ("Offline · will save later"), and on reconnect the resume rules apply (rule 4 keeps the offline work if another machine saved meanwhile).
+- Online or offline is decided alongside the box's start, never before it. On the Mac the app reports the system's network status (NWPathMonitor) to `portenvd`; a "no network at all" report skips the storage probe, but only while the app that sent it runs and for at most 30 s after it (the app repeats it every 10 s). A missing, stale or orphaned report, or "network up", means probing the storage server, with a 1 s timeout. Opening never runs restic just to check it: its version is checked once per binary (path, size, time), since restic is pinned and hash-checked when installed.
 
 **Append-only storage credentials (milestone 2.6, before any outside agent gets access)**
 
@@ -838,6 +839,8 @@ The save engine is tested hardest, because a bug there loses someone's work; eve
 
 CI runs the Go suites on Linux arm64 and amd64 and the app suites on macOS arm64 runners. A release is blocked by any failing gate.
 
+Behaviour the app relies on is tested through the path the app uses: `portenvd` (or the runner) and the box agent's channel. `docker exec` in a test only inspects or simulates a failure, and `tests/e2e/daemon.sh` fails on any other exec into the box. Each such check has been shown to fail when the code it covers is broken (a mutation check), and a test that can't fail is a bug in the test. Every e2e call has a time limit, so a hang fails a check.
+
 ## Open questions
 
 These need an owner decision; Claude Code should add new ones here instead of guessing.
@@ -858,3 +861,4 @@ These need an owner decision; Claude Code should add new ones here instead of gu
 - [ ] Phase 3 control-plane milestones now live in `portenv/cloud`: how its CI pins and tests against `proto/gen/go` versions from this repository (tags, or a pseudo-version per merge).
 - [ ] Scope of the iPhone companion: approvals only, or also status and a read-only terminal?
 - [ ] Name of the CLI binary: `portenv` assumed.
+- [ ] Restic runs have no deadline: with the REST forward broken (a mutation check), the first open hung for 29 minutes in `portenvd`, and so did its shutdown save. Proposal: a no-progress timeout per restic run (restic reports progress as JSON), after which the save fails and the state line says so.

@@ -116,8 +116,9 @@ out=$(type_in 'echo down=$(cat ~/down.txt)')
 expect "the save includes the edit made while the agent was gone" grep -q "down=while-down" <<<"$out"
 after=$(sums)
 expect "checksums of the whole home match after the restore ($(wc -l <<<"$after") files)" test -n "$before" -a "$before" = "$after"
-out=$(type_in 'command -v tree && echo tree-present')
-expect "apt-packages.txt is replayed on the restored box" grep -q "tree-present" <<<"$out"
+# The terminal echoes what is typed: look for what only the command prints.
+out=$(type_in 'echo tree-at:$(command -v tree)')
+expect "apt-packages.txt is replayed on the restored box" grep -q "tree-at:/usr/bin/tree" <<<"$out"
 
 # Quitting the app stops portenvd (SIGTERM) with the box open: it saves,
 # releases and stops the box. Proof: drop the local home; the next open

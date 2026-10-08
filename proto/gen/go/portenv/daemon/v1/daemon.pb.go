@@ -97,6 +97,57 @@ func (SaveState) EnumDescriptor() ([]byte, []int) {
 	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{0}
 }
 
+type NetworkPath int32
+
+const (
+	NetworkPath_NETWORK_PATH_UNSPECIFIED NetworkPath = 0
+	// Some network is usable: probe the storage before opening online.
+	NetworkPath_NETWORK_PATH_SATISFIED NetworkPath = 1
+	// No network at all: storage cannot be reachable.
+	NetworkPath_NETWORK_PATH_UNSATISFIED NetworkPath = 2
+)
+
+// Enum value maps for NetworkPath.
+var (
+	NetworkPath_name = map[int32]string{
+		0: "NETWORK_PATH_UNSPECIFIED",
+		1: "NETWORK_PATH_SATISFIED",
+		2: "NETWORK_PATH_UNSATISFIED",
+	}
+	NetworkPath_value = map[string]int32{
+		"NETWORK_PATH_UNSPECIFIED": 0,
+		"NETWORK_PATH_SATISFIED":   1,
+		"NETWORK_PATH_UNSATISFIED": 2,
+	}
+)
+
+func (x NetworkPath) Enum() *NetworkPath {
+	p := new(NetworkPath)
+	*p = x
+	return p
+}
+
+func (x NetworkPath) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (NetworkPath) Descriptor() protoreflect.EnumDescriptor {
+	return file_portenv_daemon_v1_daemon_proto_enumTypes[1].Descriptor()
+}
+
+func (NetworkPath) Type() protoreflect.EnumType {
+	return &file_portenv_daemon_v1_daemon_proto_enumTypes[1]
+}
+
+func (x NetworkPath) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use NetworkPath.Descriptor instead.
+func (NetworkPath) EnumDescriptor() ([]byte, []int) {
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{1}
+}
+
 type CheckBoxRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
@@ -1475,6 +1526,96 @@ func (x *GetBoxStateResponse) GetLocation() string {
 	return ""
 }
 
+type SetNetworkPathRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Path  NetworkPath            `protobuf:"varint,1,opt,name=path,proto3,enum=portenv.daemon.v1.NetworkPath" json:"path,omitempty"`
+	// The app that saw this status (the portenv command's parent). A "down"
+	// counts only while that process runs and for 30 s after the report.
+	ReporterPid   int32 `protobuf:"varint,2,opt,name=reporter_pid,json=reporterPid,proto3" json:"reporter_pid,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetNetworkPathRequest) Reset() {
+	*x = SetNetworkPathRequest{}
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetNetworkPathRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetNetworkPathRequest) ProtoMessage() {}
+
+func (x *SetNetworkPathRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetNetworkPathRequest.ProtoReflect.Descriptor instead.
+func (*SetNetworkPathRequest) Descriptor() ([]byte, []int) {
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *SetNetworkPathRequest) GetPath() NetworkPath {
+	if x != nil {
+		return x.Path
+	}
+	return NetworkPath_NETWORK_PATH_UNSPECIFIED
+}
+
+func (x *SetNetworkPathRequest) GetReporterPid() int32 {
+	if x != nil {
+		return x.ReporterPid
+	}
+	return 0
+}
+
+type SetNetworkPathResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetNetworkPathResponse) Reset() {
+	*x = SetNetworkPathResponse{}
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetNetworkPathResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetNetworkPathResponse) ProtoMessage() {}
+
+func (x *SetNetworkPathResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetNetworkPathResponse.ProtoReflect.Descriptor instead.
+func (*SetNetworkPathResponse) Descriptor() ([]byte, []int) {
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{28}
+}
+
 var File_portenv_daemon_v1_daemon_proto protoreflect.FileDescriptor
 
 const file_portenv_daemon_v1_daemon_proto_rawDesc = "" +
@@ -1549,7 +1690,11 @@ const file_portenv_daemon_v1_daemon_proto_rawDesc = "" +
 	"\x13GetBoxStateResponse\x122\n" +
 	"\x05state\x18\x01 \x01(\x0e2\x1c.portenv.daemon.v1.SaveStateR\x05state\x125\n" +
 	"\bsaved_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\asavedAt\x12\x1a\n" +
-	"\blocation\x18\x03 \x01(\tR\blocation*\xc3\x01\n" +
+	"\blocation\x18\x03 \x01(\tR\blocation\"n\n" +
+	"\x15SetNetworkPathRequest\x122\n" +
+	"\x04path\x18\x01 \x01(\x0e2\x1e.portenv.daemon.v1.NetworkPathR\x04path\x12!\n" +
+	"\freporter_pid\x18\x02 \x01(\x05R\vreporterPid\"\x18\n" +
+	"\x16SetNetworkPathResponse*\xc3\x01\n" +
 	"\tSaveState\x12\x1a\n" +
 	"\x16SAVE_STATE_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18SAVE_STATE_NOT_SAVED_YET\x10\x01\x12\x15\n" +
@@ -1557,7 +1702,11 @@ const file_portenv_daemon_v1_daemon_proto_rawDesc = "" +
 	"\x10SAVE_STATE_SAVED\x10\x03\x12\x16\n" +
 	"\x12SAVE_STATE_OFFLINE\x10\x04\x12 \n" +
 	"\x1cSAVE_STATE_AGENT_UNAVAILABLE\x10\x05\x12\x15\n" +
-	"\x11SAVE_STATE_CLOSED\x10\x062\xdd\b\n" +
+	"\x11SAVE_STATE_CLOSED\x10\x06*e\n" +
+	"\vNetworkPath\x12\x1c\n" +
+	"\x18NETWORK_PATH_UNSPECIFIED\x10\x00\x12\x1a\n" +
+	"\x16NETWORK_PATH_SATISFIED\x10\x01\x12\x1c\n" +
+	"\x18NETWORK_PATH_UNSATISFIED\x10\x022\xc4\t\n" +
 	"\rDaemonService\x12Y\n" +
 	"\n" +
 	"GetVersion\x12$.portenv.daemon.v1.GetVersionRequest\x1a%.portenv.daemon.v1.GetVersionResponse\x12V\n" +
@@ -1573,7 +1722,8 @@ const file_portenv_daemon_v1_daemon_proto_rawDesc = "" +
 	"RestartBox\x12$.portenv.daemon.v1.RestartBoxRequest\x1a%.portenv.daemon.v1.RestartBoxResponse\x12Y\n" +
 	"\n" +
 	"GetChannel\x12$.portenv.daemon.v1.GetChannelRequest\x1a%.portenv.daemon.v1.GetChannelResponse\x12\\\n" +
-	"\vGetBoxState\x12%.portenv.daemon.v1.GetBoxStateRequest\x1a&.portenv.daemon.v1.GetBoxStateResponseB\xce\x01\n" +
+	"\vGetBoxState\x12%.portenv.daemon.v1.GetBoxStateRequest\x1a&.portenv.daemon.v1.GetBoxStateResponse\x12e\n" +
+	"\x0eSetNetworkPath\x12(.portenv.daemon.v1.SetNetworkPathRequest\x1a).portenv.daemon.v1.SetNetworkPathResponseB\xce\x01\n" +
 	"\x15com.portenv.daemon.v1B\vDaemonProtoP\x01ZBgithub.com/portenv/portenv/proto/gen/go/portenv/daemon/v1;daemonv1\xa2\x02\x03PDX\xaa\x02\x11Portenv.Daemon.V1\xca\x02\x11Portenv\\Daemon\\V1\xe2\x02\x1dPortenv\\Daemon\\V1\\GPBMetadata\xea\x02\x13Portenv::Daemon::V1b\x06proto3"
 
 var (
@@ -1588,85 +1738,91 @@ func file_portenv_daemon_v1_daemon_proto_rawDescGZIP() []byte {
 	return file_portenv_daemon_v1_daemon_proto_rawDescData
 }
 
-var file_portenv_daemon_v1_daemon_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_portenv_daemon_v1_daemon_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
+var file_portenv_daemon_v1_daemon_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_portenv_daemon_v1_daemon_proto_msgTypes = make([]protoimpl.MessageInfo, 29)
 var file_portenv_daemon_v1_daemon_proto_goTypes = []any{
 	(SaveState)(0),                        // 0: portenv.daemon.v1.SaveState
-	(*CheckBoxRequest)(nil),               // 1: portenv.daemon.v1.CheckBoxRequest
-	(*CheckBoxResponse)(nil),              // 2: portenv.daemon.v1.CheckBoxResponse
-	(*RestartBoxRequest)(nil),             // 3: portenv.daemon.v1.RestartBoxRequest
-	(*RestartBoxResponse)(nil),            // 4: portenv.daemon.v1.RestartBoxResponse
-	(*OpenBoxRequest)(nil),                // 5: portenv.daemon.v1.OpenBoxRequest
-	(*OpenBoxResponse)(nil),               // 6: portenv.daemon.v1.OpenBoxResponse
-	(*CloseBoxRequest)(nil),               // 7: portenv.daemon.v1.CloseBoxRequest
-	(*CloseBoxResponse)(nil),              // 8: portenv.daemon.v1.CloseBoxResponse
-	(*MakeSavePointRequest)(nil),          // 9: portenv.daemon.v1.MakeSavePointRequest
-	(*MakeSavePointResponse)(nil),         // 10: portenv.daemon.v1.MakeSavePointResponse
-	(*RevertToLastSavePointRequest)(nil),  // 11: portenv.daemon.v1.RevertToLastSavePointRequest
-	(*RevertToLastSavePointResponse)(nil), // 12: portenv.daemon.v1.RevertToLastSavePointResponse
-	(*MoveBoxRequest)(nil),                // 13: portenv.daemon.v1.MoveBoxRequest
-	(*MoveBoxResponse)(nil),               // 14: portenv.daemon.v1.MoveBoxResponse
-	(*TerminalRequest)(nil),               // 15: portenv.daemon.v1.TerminalRequest
-	(*TerminalOpen)(nil),                  // 16: portenv.daemon.v1.TerminalOpen
-	(*TerminalSize)(nil),                  // 17: portenv.daemon.v1.TerminalSize
-	(*TerminalResponse)(nil),              // 18: portenv.daemon.v1.TerminalResponse
-	(*GetVersionRequest)(nil),             // 19: portenv.daemon.v1.GetVersionRequest
-	(*GetVersionResponse)(nil),            // 20: portenv.daemon.v1.GetVersionResponse
-	(*ListBoxesRequest)(nil),              // 21: portenv.daemon.v1.ListBoxesRequest
-	(*ListBoxesResponse)(nil),             // 22: portenv.daemon.v1.ListBoxesResponse
-	(*BoxStatus)(nil),                     // 23: portenv.daemon.v1.BoxStatus
-	(*GetChannelRequest)(nil),             // 24: portenv.daemon.v1.GetChannelRequest
-	(*GetChannelResponse)(nil),            // 25: portenv.daemon.v1.GetChannelResponse
-	(*GetBoxStateRequest)(nil),            // 26: portenv.daemon.v1.GetBoxStateRequest
-	(*GetBoxStateResponse)(nil),           // 27: portenv.daemon.v1.GetBoxStateResponse
-	(*v1.SnapshotRef)(nil),                // 28: portenv.types.v1.SnapshotRef
-	(*v1.BuildInfo)(nil),                  // 29: portenv.types.v1.BuildInfo
-	(*v1.Box)(nil),                        // 30: portenv.types.v1.Box
-	(v1.BoxState)(0),                      // 31: portenv.types.v1.BoxState
-	(*timestamppb.Timestamp)(nil),         // 32: google.protobuf.Timestamp
+	(NetworkPath)(0),                      // 1: portenv.daemon.v1.NetworkPath
+	(*CheckBoxRequest)(nil),               // 2: portenv.daemon.v1.CheckBoxRequest
+	(*CheckBoxResponse)(nil),              // 3: portenv.daemon.v1.CheckBoxResponse
+	(*RestartBoxRequest)(nil),             // 4: portenv.daemon.v1.RestartBoxRequest
+	(*RestartBoxResponse)(nil),            // 5: portenv.daemon.v1.RestartBoxResponse
+	(*OpenBoxRequest)(nil),                // 6: portenv.daemon.v1.OpenBoxRequest
+	(*OpenBoxResponse)(nil),               // 7: portenv.daemon.v1.OpenBoxResponse
+	(*CloseBoxRequest)(nil),               // 8: portenv.daemon.v1.CloseBoxRequest
+	(*CloseBoxResponse)(nil),              // 9: portenv.daemon.v1.CloseBoxResponse
+	(*MakeSavePointRequest)(nil),          // 10: portenv.daemon.v1.MakeSavePointRequest
+	(*MakeSavePointResponse)(nil),         // 11: portenv.daemon.v1.MakeSavePointResponse
+	(*RevertToLastSavePointRequest)(nil),  // 12: portenv.daemon.v1.RevertToLastSavePointRequest
+	(*RevertToLastSavePointResponse)(nil), // 13: portenv.daemon.v1.RevertToLastSavePointResponse
+	(*MoveBoxRequest)(nil),                // 14: portenv.daemon.v1.MoveBoxRequest
+	(*MoveBoxResponse)(nil),               // 15: portenv.daemon.v1.MoveBoxResponse
+	(*TerminalRequest)(nil),               // 16: portenv.daemon.v1.TerminalRequest
+	(*TerminalOpen)(nil),                  // 17: portenv.daemon.v1.TerminalOpen
+	(*TerminalSize)(nil),                  // 18: portenv.daemon.v1.TerminalSize
+	(*TerminalResponse)(nil),              // 19: portenv.daemon.v1.TerminalResponse
+	(*GetVersionRequest)(nil),             // 20: portenv.daemon.v1.GetVersionRequest
+	(*GetVersionResponse)(nil),            // 21: portenv.daemon.v1.GetVersionResponse
+	(*ListBoxesRequest)(nil),              // 22: portenv.daemon.v1.ListBoxesRequest
+	(*ListBoxesResponse)(nil),             // 23: portenv.daemon.v1.ListBoxesResponse
+	(*BoxStatus)(nil),                     // 24: portenv.daemon.v1.BoxStatus
+	(*GetChannelRequest)(nil),             // 25: portenv.daemon.v1.GetChannelRequest
+	(*GetChannelResponse)(nil),            // 26: portenv.daemon.v1.GetChannelResponse
+	(*GetBoxStateRequest)(nil),            // 27: portenv.daemon.v1.GetBoxStateRequest
+	(*GetBoxStateResponse)(nil),           // 28: portenv.daemon.v1.GetBoxStateResponse
+	(*SetNetworkPathRequest)(nil),         // 29: portenv.daemon.v1.SetNetworkPathRequest
+	(*SetNetworkPathResponse)(nil),        // 30: portenv.daemon.v1.SetNetworkPathResponse
+	(*v1.SnapshotRef)(nil),                // 31: portenv.types.v1.SnapshotRef
+	(*v1.BuildInfo)(nil),                  // 32: portenv.types.v1.BuildInfo
+	(*v1.Box)(nil),                        // 33: portenv.types.v1.Box
+	(v1.BoxState)(0),                      // 34: portenv.types.v1.BoxState
+	(*timestamppb.Timestamp)(nil),         // 35: google.protobuf.Timestamp
 }
 var file_portenv_daemon_v1_daemon_proto_depIdxs = []int32{
-	28, // 0: portenv.daemon.v1.MakeSavePointResponse.snapshot:type_name -> portenv.types.v1.SnapshotRef
-	28, // 1: portenv.daemon.v1.RevertToLastSavePointResponse.restored:type_name -> portenv.types.v1.SnapshotRef
-	28, // 2: portenv.daemon.v1.RevertToLastSavePointResponse.saved_before:type_name -> portenv.types.v1.SnapshotRef
-	16, // 3: portenv.daemon.v1.TerminalRequest.open:type_name -> portenv.daemon.v1.TerminalOpen
-	17, // 4: portenv.daemon.v1.TerminalRequest.resize:type_name -> portenv.daemon.v1.TerminalSize
-	17, // 5: portenv.daemon.v1.TerminalOpen.size:type_name -> portenv.daemon.v1.TerminalSize
-	29, // 6: portenv.daemon.v1.GetVersionResponse.build:type_name -> portenv.types.v1.BuildInfo
-	23, // 7: portenv.daemon.v1.ListBoxesResponse.boxes:type_name -> portenv.daemon.v1.BoxStatus
-	30, // 8: portenv.daemon.v1.BoxStatus.box:type_name -> portenv.types.v1.Box
-	31, // 9: portenv.daemon.v1.BoxStatus.state:type_name -> portenv.types.v1.BoxState
+	31, // 0: portenv.daemon.v1.MakeSavePointResponse.snapshot:type_name -> portenv.types.v1.SnapshotRef
+	31, // 1: portenv.daemon.v1.RevertToLastSavePointResponse.restored:type_name -> portenv.types.v1.SnapshotRef
+	31, // 2: portenv.daemon.v1.RevertToLastSavePointResponse.saved_before:type_name -> portenv.types.v1.SnapshotRef
+	17, // 3: portenv.daemon.v1.TerminalRequest.open:type_name -> portenv.daemon.v1.TerminalOpen
+	18, // 4: portenv.daemon.v1.TerminalRequest.resize:type_name -> portenv.daemon.v1.TerminalSize
+	18, // 5: portenv.daemon.v1.TerminalOpen.size:type_name -> portenv.daemon.v1.TerminalSize
+	32, // 6: portenv.daemon.v1.GetVersionResponse.build:type_name -> portenv.types.v1.BuildInfo
+	24, // 7: portenv.daemon.v1.ListBoxesResponse.boxes:type_name -> portenv.daemon.v1.BoxStatus
+	33, // 8: portenv.daemon.v1.BoxStatus.box:type_name -> portenv.types.v1.Box
+	34, // 9: portenv.daemon.v1.BoxStatus.state:type_name -> portenv.types.v1.BoxState
 	0,  // 10: portenv.daemon.v1.GetBoxStateResponse.state:type_name -> portenv.daemon.v1.SaveState
-	32, // 11: portenv.daemon.v1.GetBoxStateResponse.saved_at:type_name -> google.protobuf.Timestamp
-	19, // 12: portenv.daemon.v1.DaemonService.GetVersion:input_type -> portenv.daemon.v1.GetVersionRequest
-	21, // 13: portenv.daemon.v1.DaemonService.ListBoxes:input_type -> portenv.daemon.v1.ListBoxesRequest
-	5,  // 14: portenv.daemon.v1.DaemonService.OpenBox:input_type -> portenv.daemon.v1.OpenBoxRequest
-	7,  // 15: portenv.daemon.v1.DaemonService.CloseBox:input_type -> portenv.daemon.v1.CloseBoxRequest
-	9,  // 16: portenv.daemon.v1.DaemonService.MakeSavePoint:input_type -> portenv.daemon.v1.MakeSavePointRequest
-	11, // 17: portenv.daemon.v1.DaemonService.RevertToLastSavePoint:input_type -> portenv.daemon.v1.RevertToLastSavePointRequest
-	13, // 18: portenv.daemon.v1.DaemonService.MoveBox:input_type -> portenv.daemon.v1.MoveBoxRequest
-	15, // 19: portenv.daemon.v1.DaemonService.Terminal:input_type -> portenv.daemon.v1.TerminalRequest
-	1,  // 20: portenv.daemon.v1.DaemonService.CheckBox:input_type -> portenv.daemon.v1.CheckBoxRequest
-	3,  // 21: portenv.daemon.v1.DaemonService.RestartBox:input_type -> portenv.daemon.v1.RestartBoxRequest
-	24, // 22: portenv.daemon.v1.DaemonService.GetChannel:input_type -> portenv.daemon.v1.GetChannelRequest
-	26, // 23: portenv.daemon.v1.DaemonService.GetBoxState:input_type -> portenv.daemon.v1.GetBoxStateRequest
-	20, // 24: portenv.daemon.v1.DaemonService.GetVersion:output_type -> portenv.daemon.v1.GetVersionResponse
-	22, // 25: portenv.daemon.v1.DaemonService.ListBoxes:output_type -> portenv.daemon.v1.ListBoxesResponse
-	6,  // 26: portenv.daemon.v1.DaemonService.OpenBox:output_type -> portenv.daemon.v1.OpenBoxResponse
-	8,  // 27: portenv.daemon.v1.DaemonService.CloseBox:output_type -> portenv.daemon.v1.CloseBoxResponse
-	10, // 28: portenv.daemon.v1.DaemonService.MakeSavePoint:output_type -> portenv.daemon.v1.MakeSavePointResponse
-	12, // 29: portenv.daemon.v1.DaemonService.RevertToLastSavePoint:output_type -> portenv.daemon.v1.RevertToLastSavePointResponse
-	14, // 30: portenv.daemon.v1.DaemonService.MoveBox:output_type -> portenv.daemon.v1.MoveBoxResponse
-	18, // 31: portenv.daemon.v1.DaemonService.Terminal:output_type -> portenv.daemon.v1.TerminalResponse
-	2,  // 32: portenv.daemon.v1.DaemonService.CheckBox:output_type -> portenv.daemon.v1.CheckBoxResponse
-	4,  // 33: portenv.daemon.v1.DaemonService.RestartBox:output_type -> portenv.daemon.v1.RestartBoxResponse
-	25, // 34: portenv.daemon.v1.DaemonService.GetChannel:output_type -> portenv.daemon.v1.GetChannelResponse
-	27, // 35: portenv.daemon.v1.DaemonService.GetBoxState:output_type -> portenv.daemon.v1.GetBoxStateResponse
-	24, // [24:36] is the sub-list for method output_type
-	12, // [12:24] is the sub-list for method input_type
-	12, // [12:12] is the sub-list for extension type_name
-	12, // [12:12] is the sub-list for extension extendee
-	0,  // [0:12] is the sub-list for field type_name
+	35, // 11: portenv.daemon.v1.GetBoxStateResponse.saved_at:type_name -> google.protobuf.Timestamp
+	1,  // 12: portenv.daemon.v1.SetNetworkPathRequest.path:type_name -> portenv.daemon.v1.NetworkPath
+	20, // 13: portenv.daemon.v1.DaemonService.GetVersion:input_type -> portenv.daemon.v1.GetVersionRequest
+	22, // 14: portenv.daemon.v1.DaemonService.ListBoxes:input_type -> portenv.daemon.v1.ListBoxesRequest
+	6,  // 15: portenv.daemon.v1.DaemonService.OpenBox:input_type -> portenv.daemon.v1.OpenBoxRequest
+	8,  // 16: portenv.daemon.v1.DaemonService.CloseBox:input_type -> portenv.daemon.v1.CloseBoxRequest
+	10, // 17: portenv.daemon.v1.DaemonService.MakeSavePoint:input_type -> portenv.daemon.v1.MakeSavePointRequest
+	12, // 18: portenv.daemon.v1.DaemonService.RevertToLastSavePoint:input_type -> portenv.daemon.v1.RevertToLastSavePointRequest
+	14, // 19: portenv.daemon.v1.DaemonService.MoveBox:input_type -> portenv.daemon.v1.MoveBoxRequest
+	16, // 20: portenv.daemon.v1.DaemonService.Terminal:input_type -> portenv.daemon.v1.TerminalRequest
+	2,  // 21: portenv.daemon.v1.DaemonService.CheckBox:input_type -> portenv.daemon.v1.CheckBoxRequest
+	4,  // 22: portenv.daemon.v1.DaemonService.RestartBox:input_type -> portenv.daemon.v1.RestartBoxRequest
+	25, // 23: portenv.daemon.v1.DaemonService.GetChannel:input_type -> portenv.daemon.v1.GetChannelRequest
+	27, // 24: portenv.daemon.v1.DaemonService.GetBoxState:input_type -> portenv.daemon.v1.GetBoxStateRequest
+	29, // 25: portenv.daemon.v1.DaemonService.SetNetworkPath:input_type -> portenv.daemon.v1.SetNetworkPathRequest
+	21, // 26: portenv.daemon.v1.DaemonService.GetVersion:output_type -> portenv.daemon.v1.GetVersionResponse
+	23, // 27: portenv.daemon.v1.DaemonService.ListBoxes:output_type -> portenv.daemon.v1.ListBoxesResponse
+	7,  // 28: portenv.daemon.v1.DaemonService.OpenBox:output_type -> portenv.daemon.v1.OpenBoxResponse
+	9,  // 29: portenv.daemon.v1.DaemonService.CloseBox:output_type -> portenv.daemon.v1.CloseBoxResponse
+	11, // 30: portenv.daemon.v1.DaemonService.MakeSavePoint:output_type -> portenv.daemon.v1.MakeSavePointResponse
+	13, // 31: portenv.daemon.v1.DaemonService.RevertToLastSavePoint:output_type -> portenv.daemon.v1.RevertToLastSavePointResponse
+	15, // 32: portenv.daemon.v1.DaemonService.MoveBox:output_type -> portenv.daemon.v1.MoveBoxResponse
+	19, // 33: portenv.daemon.v1.DaemonService.Terminal:output_type -> portenv.daemon.v1.TerminalResponse
+	3,  // 34: portenv.daemon.v1.DaemonService.CheckBox:output_type -> portenv.daemon.v1.CheckBoxResponse
+	5,  // 35: portenv.daemon.v1.DaemonService.RestartBox:output_type -> portenv.daemon.v1.RestartBoxResponse
+	26, // 36: portenv.daemon.v1.DaemonService.GetChannel:output_type -> portenv.daemon.v1.GetChannelResponse
+	28, // 37: portenv.daemon.v1.DaemonService.GetBoxState:output_type -> portenv.daemon.v1.GetBoxStateResponse
+	30, // 38: portenv.daemon.v1.DaemonService.SetNetworkPath:output_type -> portenv.daemon.v1.SetNetworkPathResponse
+	26, // [26:39] is the sub-list for method output_type
+	13, // [13:26] is the sub-list for method input_type
+	13, // [13:13] is the sub-list for extension type_name
+	13, // [13:13] is the sub-list for extension extendee
+	0,  // [0:13] is the sub-list for field type_name
 }
 
 func init() { file_portenv_daemon_v1_daemon_proto_init() }
@@ -1688,8 +1844,8 @@ func file_portenv_daemon_v1_daemon_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_portenv_daemon_v1_daemon_proto_rawDesc), len(file_portenv_daemon_v1_daemon_proto_rawDesc)),
-			NumEnums:      1,
-			NumMessages:   27,
+			NumEnums:      2,
+			NumMessages:   29,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

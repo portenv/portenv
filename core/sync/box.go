@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -97,10 +98,40 @@ func Open(cfg Config) (*Box, error) {
 		meta: cfg.MetaExecutor, metaRepo: metaRepo, cred: Credentials{
 			Password: cfg.Password, Env: cfg.Env, SSHKey: cfg.SSHKey, SSHHostKey: cfg.SSHHostKey,
 		}}}
-	if err := b.restic.checkVersion(context.Background()); err != nil {
+	if err := b.checkVersionOnce(context.Background()); err != nil {
 		return nil, err
 	}
 	return b, nil
+}
+
+// versionFile records which restic binary passed the version check.
+const versionFile = "restic-checked"
+
+// checkVersionOnce checks restic's version once per binary: restic is
+// pinned and hash-checked when installed, so an open that finds the same
+// binary (same path, size and time) skips running it. An executor that
+// cannot identify its binary (restic in the box) is checked every time.
+func (b *Box) checkVersionOnce(ctx context.Context) error {
+	ex, _ := b.restic.pick([]string{"version"})
+	idr, ok := ex.(interface{ BinaryID() (string, error) })
+	if !ok || b.cfg.StateDir == "" {
+		return b.restic.checkVersion(ctx)
+	}
+	id, err := idr.BinaryID()
+	if err != nil {
+		return b.restic.checkVersion(ctx)
+	}
+	path := filepath.Join(b.cfg.StateDir, versionFile)
+	if got, err := os.ReadFile(path); err == nil && string(got) == id { // #nosec G304 -- this box's state directory
+		return nil
+	}
+	if err := b.restic.checkVersion(ctx); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(b.cfg.StateDir, 0o700); err != nil {
+		return err
+	}
+	return os.WriteFile(path, []byte(id), 0o600)
 }
 
 // Init creates the box's repository if it does not exist yet. Once this

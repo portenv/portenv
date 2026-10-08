@@ -4,6 +4,7 @@ package sync
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/rand/v2"
 	"testing"
@@ -57,7 +58,7 @@ func runModel(t *testing.T, seed uint64, steps int) {
 				m.write("README", "new box")
 			}
 		default:
-			switch rng.IntN(6) {
+			switch rng.IntN(8) {
 			case 0, 1:
 				op = "edit"
 				tok := token()
@@ -134,6 +135,32 @@ func runModel(t *testing.T, seed uint64, steps int) {
 					}
 					holder = m.id
 				}
+			case 6:
+				op = "save point"
+				_, err := m.Save(ctx, SaveOptions{Kind: SavePoint})
+				if _, changed := isLeaseChanged(err); changed {
+					op = "save point (refused: lease changed)"
+					break
+				}
+				if err != nil {
+					t.Fatalf("seed %d step %d %s save point: %v", seed, step, m.id, err)
+				}
+				holder = m.id
+			case 7:
+				op = "revert to last save point"
+				_, err := m.RevertToLastSavePoint(ctx)
+				if _, changed := isLeaseChanged(err); changed {
+					op = "revert (refused: lease changed)"
+					break
+				}
+				if errors.Is(err, ErrNoSavePoint) {
+					op = "revert (refused: no save point)"
+					break
+				}
+				if err != nil {
+					t.Fatalf("seed %d step %d %s revert: %v", seed, step, m.id, err)
+				}
+				holder = m.id
 			}
 		}
 		t.Logf("step %2d %s %s", step, m.id, op)

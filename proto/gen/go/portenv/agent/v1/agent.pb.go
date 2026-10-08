@@ -85,6 +85,512 @@ func (ReadinessState) EnumDescriptor() ([]byte, []int) {
 	return file_portenv_agent_v1_agent_proto_rawDescGZIP(), []int{0}
 }
 
+type RunResticRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// restic's arguments, without the binary name.
+	Args []string `protobuf:"bytes,1,rep,name=args,proto3" json:"args,omitempty"`
+	// The JSON input of portenv-agent restic: password, storage environment
+	// and SFTP key.
+	Input         []byte `protobuf:"bytes,2,opt,name=input,proto3" json:"input,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RunResticRequest) Reset() {
+	*x = RunResticRequest{}
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RunResticRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RunResticRequest) ProtoMessage() {}
+
+func (x *RunResticRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RunResticRequest.ProtoReflect.Descriptor instead.
+func (*RunResticRequest) Descriptor() ([]byte, []int) {
+	return file_portenv_agent_v1_agent_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *RunResticRequest) GetArgs() []string {
+	if x != nil {
+		return x.Args
+	}
+	return nil
+}
+
+func (x *RunResticRequest) GetInput() []byte {
+	if x != nil {
+		return x.Input
+	}
+	return nil
+}
+
+type RunResticResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Stdout        []byte                 `protobuf:"bytes,1,opt,name=stdout,proto3" json:"stdout,omitempty"`
+	Stderr        []byte                 `protobuf:"bytes,2,opt,name=stderr,proto3" json:"stderr,omitempty"`
+	ExitCode      int32                  `protobuf:"varint,3,opt,name=exit_code,json=exitCode,proto3" json:"exit_code,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RunResticResponse) Reset() {
+	*x = RunResticResponse{}
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RunResticResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RunResticResponse) ProtoMessage() {}
+
+func (x *RunResticResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RunResticResponse.ProtoReflect.Descriptor instead.
+func (*RunResticResponse) Descriptor() ([]byte, []int) {
+	return file_portenv_agent_v1_agent_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *RunResticResponse) GetStdout() []byte {
+	if x != nil {
+		return x.Stdout
+	}
+	return nil
+}
+
+func (x *RunResticResponse) GetStderr() []byte {
+	if x != nil {
+		return x.Stderr
+	}
+	return nil
+}
+
+func (x *RunResticResponse) GetExitCode() int32 {
+	if x != nil {
+		return x.ExitCode
+	}
+	return 0
+}
+
+type GetPathInfoRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetPathInfoRequest) Reset() {
+	*x = GetPathInfoRequest{}
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetPathInfoRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetPathInfoRequest) ProtoMessage() {}
+
+func (x *GetPathInfoRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetPathInfoRequest.ProtoReflect.Descriptor instead.
+func (*GetPathInfoRequest) Descriptor() ([]byte, []int) {
+	return file_portenv_agent_v1_agent_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *GetPathInfoRequest) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+type GetPathInfoResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Exists        bool                   `protobuf:"varint,1,opt,name=exists,proto3" json:"exists,omitempty"`
+	IsDir         bool                   `protobuf:"varint,2,opt,name=is_dir,json=isDir,proto3" json:"is_dir,omitempty"`
+	Empty         bool                   `protobuf:"varint,3,opt,name=empty,proto3" json:"empty,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetPathInfoResponse) Reset() {
+	*x = GetPathInfoResponse{}
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetPathInfoResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetPathInfoResponse) ProtoMessage() {}
+
+func (x *GetPathInfoResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetPathInfoResponse.ProtoReflect.Descriptor instead.
+func (*GetPathInfoResponse) Descriptor() ([]byte, []int) {
+	return file_portenv_agent_v1_agent_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *GetPathInfoResponse) GetExists() bool {
+	if x != nil {
+		return x.Exists
+	}
+	return false
+}
+
+func (x *GetPathInfoResponse) GetIsDir() bool {
+	if x != nil {
+		return x.IsDir
+	}
+	return false
+}
+
+func (x *GetPathInfoResponse) GetEmpty() bool {
+	if x != nil {
+		return x.Empty
+	}
+	return false
+}
+
+type TerminalRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Msg:
+	//
+	//	*TerminalRequest_Open
+	//	*TerminalRequest_Input
+	//	*TerminalRequest_Resize
+	Msg           isTerminalRequest_Msg `protobuf_oneof:"msg"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TerminalRequest) Reset() {
+	*x = TerminalRequest{}
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TerminalRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TerminalRequest) ProtoMessage() {}
+
+func (x *TerminalRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TerminalRequest.ProtoReflect.Descriptor instead.
+func (*TerminalRequest) Descriptor() ([]byte, []int) {
+	return file_portenv_agent_v1_agent_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *TerminalRequest) GetMsg() isTerminalRequest_Msg {
+	if x != nil {
+		return x.Msg
+	}
+	return nil
+}
+
+func (x *TerminalRequest) GetOpen() *TerminalOpen {
+	if x != nil {
+		if x, ok := x.Msg.(*TerminalRequest_Open); ok {
+			return x.Open
+		}
+	}
+	return nil
+}
+
+func (x *TerminalRequest) GetInput() []byte {
+	if x != nil {
+		if x, ok := x.Msg.(*TerminalRequest_Input); ok {
+			return x.Input
+		}
+	}
+	return nil
+}
+
+func (x *TerminalRequest) GetResize() *TerminalSize {
+	if x != nil {
+		if x, ok := x.Msg.(*TerminalRequest_Resize); ok {
+			return x.Resize
+		}
+	}
+	return nil
+}
+
+type isTerminalRequest_Msg interface {
+	isTerminalRequest_Msg()
+}
+
+type TerminalRequest_Open struct {
+	Open *TerminalOpen `protobuf:"bytes,1,opt,name=open,proto3,oneof"`
+}
+
+type TerminalRequest_Input struct {
+	// Keystrokes and pasted text.
+	Input []byte `protobuf:"bytes,2,opt,name=input,proto3,oneof"`
+}
+
+type TerminalRequest_Resize struct {
+	Resize *TerminalSize `protobuf:"bytes,3,opt,name=resize,proto3,oneof"`
+}
+
+func (*TerminalRequest_Open) isTerminalRequest_Msg() {}
+
+func (*TerminalRequest_Input) isTerminalRequest_Msg() {}
+
+func (*TerminalRequest_Resize) isTerminalRequest_Msg() {}
+
+type TerminalOpen struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The tmux session, for example "main".
+	Session       string        `protobuf:"bytes,1,opt,name=session,proto3" json:"session,omitempty"`
+	Size          *TerminalSize `protobuf:"bytes,2,opt,name=size,proto3" json:"size,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TerminalOpen) Reset() {
+	*x = TerminalOpen{}
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TerminalOpen) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TerminalOpen) ProtoMessage() {}
+
+func (x *TerminalOpen) ProtoReflect() protoreflect.Message {
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TerminalOpen.ProtoReflect.Descriptor instead.
+func (*TerminalOpen) Descriptor() ([]byte, []int) {
+	return file_portenv_agent_v1_agent_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *TerminalOpen) GetSession() string {
+	if x != nil {
+		return x.Session
+	}
+	return ""
+}
+
+func (x *TerminalOpen) GetSize() *TerminalSize {
+	if x != nil {
+		return x.Size
+	}
+	return nil
+}
+
+type TerminalSize struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Cols          uint32                 `protobuf:"varint,1,opt,name=cols,proto3" json:"cols,omitempty"`
+	Rows          uint32                 `protobuf:"varint,2,opt,name=rows,proto3" json:"rows,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TerminalSize) Reset() {
+	*x = TerminalSize{}
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TerminalSize) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TerminalSize) ProtoMessage() {}
+
+func (x *TerminalSize) ProtoReflect() protoreflect.Message {
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TerminalSize.ProtoReflect.Descriptor instead.
+func (*TerminalSize) Descriptor() ([]byte, []int) {
+	return file_portenv_agent_v1_agent_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *TerminalSize) GetCols() uint32 {
+	if x != nil {
+		return x.Cols
+	}
+	return 0
+}
+
+func (x *TerminalSize) GetRows() uint32 {
+	if x != nil {
+		return x.Rows
+	}
+	return 0
+}
+
+type TerminalResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Msg:
+	//
+	//	*TerminalResponse_Output
+	//	*TerminalResponse_ExitCode
+	Msg           isTerminalResponse_Msg `protobuf_oneof:"msg"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TerminalResponse) Reset() {
+	*x = TerminalResponse{}
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TerminalResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TerminalResponse) ProtoMessage() {}
+
+func (x *TerminalResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TerminalResponse.ProtoReflect.Descriptor instead.
+func (*TerminalResponse) Descriptor() ([]byte, []int) {
+	return file_portenv_agent_v1_agent_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *TerminalResponse) GetMsg() isTerminalResponse_Msg {
+	if x != nil {
+		return x.Msg
+	}
+	return nil
+}
+
+func (x *TerminalResponse) GetOutput() []byte {
+	if x != nil {
+		if x, ok := x.Msg.(*TerminalResponse_Output); ok {
+			return x.Output
+		}
+	}
+	return nil
+}
+
+func (x *TerminalResponse) GetExitCode() int32 {
+	if x != nil {
+		if x, ok := x.Msg.(*TerminalResponse_ExitCode); ok {
+			return x.ExitCode
+		}
+	}
+	return 0
+}
+
+type isTerminalResponse_Msg interface {
+	isTerminalResponse_Msg()
+}
+
+type TerminalResponse_Output struct {
+	Output []byte `protobuf:"bytes,1,opt,name=output,proto3,oneof"`
+}
+
+type TerminalResponse_ExitCode struct {
+	// The terminal ended (the tmux client exited or detached).
+	ExitCode int32 `protobuf:"varint,2,opt,name=exit_code,json=exitCode,proto3,oneof"`
+}
+
+func (*TerminalResponse_Output) isTerminalResponse_Msg() {}
+
+func (*TerminalResponse_ExitCode) isTerminalResponse_Msg() {}
+
 type GetVersionRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -93,7 +599,7 @@ type GetVersionRequest struct {
 
 func (x *GetVersionRequest) Reset() {
 	*x = GetVersionRequest{}
-	mi := &file_portenv_agent_v1_agent_proto_msgTypes[0]
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -105,7 +611,7 @@ func (x *GetVersionRequest) String() string {
 func (*GetVersionRequest) ProtoMessage() {}
 
 func (x *GetVersionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_agent_v1_agent_proto_msgTypes[0]
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -118,7 +624,7 @@ func (x *GetVersionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetVersionRequest.ProtoReflect.Descriptor instead.
 func (*GetVersionRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_agent_v1_agent_proto_rawDescGZIP(), []int{0}
+	return file_portenv_agent_v1_agent_proto_rawDescGZIP(), []int{8}
 }
 
 type GetVersionResponse struct {
@@ -130,7 +636,7 @@ type GetVersionResponse struct {
 
 func (x *GetVersionResponse) Reset() {
 	*x = GetVersionResponse{}
-	mi := &file_portenv_agent_v1_agent_proto_msgTypes[1]
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -142,7 +648,7 @@ func (x *GetVersionResponse) String() string {
 func (*GetVersionResponse) ProtoMessage() {}
 
 func (x *GetVersionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_agent_v1_agent_proto_msgTypes[1]
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -155,7 +661,7 @@ func (x *GetVersionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetVersionResponse.ProtoReflect.Descriptor instead.
 func (*GetVersionResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_agent_v1_agent_proto_rawDescGZIP(), []int{1}
+	return file_portenv_agent_v1_agent_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *GetVersionResponse) GetBuild() *v1.BuildInfo {
@@ -173,7 +679,7 @@ type GetReadinessRequest struct {
 
 func (x *GetReadinessRequest) Reset() {
 	*x = GetReadinessRequest{}
-	mi := &file_portenv_agent_v1_agent_proto_msgTypes[2]
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -185,7 +691,7 @@ func (x *GetReadinessRequest) String() string {
 func (*GetReadinessRequest) ProtoMessage() {}
 
 func (x *GetReadinessRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_agent_v1_agent_proto_msgTypes[2]
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -198,7 +704,7 @@ func (x *GetReadinessRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetReadinessRequest.ProtoReflect.Descriptor instead.
 func (*GetReadinessRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_agent_v1_agent_proto_rawDescGZIP(), []int{2}
+	return file_portenv_agent_v1_agent_proto_rawDescGZIP(), []int{10}
 }
 
 type GetReadinessResponse struct {
@@ -212,7 +718,7 @@ type GetReadinessResponse struct {
 
 func (x *GetReadinessResponse) Reset() {
 	*x = GetReadinessResponse{}
-	mi := &file_portenv_agent_v1_agent_proto_msgTypes[3]
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -224,7 +730,7 @@ func (x *GetReadinessResponse) String() string {
 func (*GetReadinessResponse) ProtoMessage() {}
 
 func (x *GetReadinessResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_agent_v1_agent_proto_msgTypes[3]
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -237,7 +743,7 @@ func (x *GetReadinessResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetReadinessResponse.ProtoReflect.Descriptor instead.
 func (*GetReadinessResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_agent_v1_agent_proto_rawDescGZIP(), []int{3}
+	return file_portenv_agent_v1_agent_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *GetReadinessResponse) GetState() ReadinessState {
@@ -258,7 +764,35 @@ var File_portenv_agent_v1_agent_proto protoreflect.FileDescriptor
 
 const file_portenv_agent_v1_agent_proto_rawDesc = "" +
 	"\n" +
-	"\x1cportenv/agent/v1/agent.proto\x12\x10portenv.agent.v1\x1a\x1cportenv/types/v1/types.proto\"\x13\n" +
+	"\x1cportenv/agent/v1/agent.proto\x12\x10portenv.agent.v1\x1a\x1cportenv/types/v1/types.proto\"<\n" +
+	"\x10RunResticRequest\x12\x12\n" +
+	"\x04args\x18\x01 \x03(\tR\x04args\x12\x14\n" +
+	"\x05input\x18\x02 \x01(\fR\x05input\"`\n" +
+	"\x11RunResticResponse\x12\x16\n" +
+	"\x06stdout\x18\x01 \x01(\fR\x06stdout\x12\x16\n" +
+	"\x06stderr\x18\x02 \x01(\fR\x06stderr\x12\x1b\n" +
+	"\texit_code\x18\x03 \x01(\x05R\bexitCode\"(\n" +
+	"\x12GetPathInfoRequest\x12\x12\n" +
+	"\x04path\x18\x01 \x01(\tR\x04path\"Z\n" +
+	"\x13GetPathInfoResponse\x12\x16\n" +
+	"\x06exists\x18\x01 \x01(\bR\x06exists\x12\x15\n" +
+	"\x06is_dir\x18\x02 \x01(\bR\x05isDir\x12\x14\n" +
+	"\x05empty\x18\x03 \x01(\bR\x05empty\"\xa0\x01\n" +
+	"\x0fTerminalRequest\x124\n" +
+	"\x04open\x18\x01 \x01(\v2\x1e.portenv.agent.v1.TerminalOpenH\x00R\x04open\x12\x16\n" +
+	"\x05input\x18\x02 \x01(\fH\x00R\x05input\x128\n" +
+	"\x06resize\x18\x03 \x01(\v2\x1e.portenv.agent.v1.TerminalSizeH\x00R\x06resizeB\x05\n" +
+	"\x03msg\"\\\n" +
+	"\fTerminalOpen\x12\x18\n" +
+	"\asession\x18\x01 \x01(\tR\asession\x122\n" +
+	"\x04size\x18\x02 \x01(\v2\x1e.portenv.agent.v1.TerminalSizeR\x04size\"6\n" +
+	"\fTerminalSize\x12\x12\n" +
+	"\x04cols\x18\x01 \x01(\rR\x04cols\x12\x12\n" +
+	"\x04rows\x18\x02 \x01(\rR\x04rows\"R\n" +
+	"\x10TerminalResponse\x12\x18\n" +
+	"\x06output\x18\x01 \x01(\fH\x00R\x06output\x12\x1d\n" +
+	"\texit_code\x18\x02 \x01(\x05H\x00R\bexitCodeB\x05\n" +
+	"\x03msg\"\x13\n" +
 	"\x11GetVersionRequest\"G\n" +
 	"\x12GetVersionResponse\x121\n" +
 	"\x05build\x18\x01 \x01(\v2\x1b.portenv.types.v1.BuildInfoR\x05build\"\x15\n" +
@@ -270,11 +804,14 @@ const file_portenv_agent_v1_agent_proto_rawDesc = "" +
 	"\x1bREADINESS_STATE_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18READINESS_STATE_STARTING\x10\x01\x12\x19\n" +
 	"\x15READINESS_STATE_READY\x10\x02\x12\x1a\n" +
-	"\x16READINESS_STATE_FAILED\x10\x032\xc6\x01\n" +
+	"\x16READINESS_STATE_FAILED\x10\x032\xcf\x03\n" +
 	"\fAgentService\x12W\n" +
 	"\n" +
 	"GetVersion\x12#.portenv.agent.v1.GetVersionRequest\x1a$.portenv.agent.v1.GetVersionResponse\x12]\n" +
-	"\fGetReadiness\x12%.portenv.agent.v1.GetReadinessRequest\x1a&.portenv.agent.v1.GetReadinessResponseB\xc6\x01\n" +
+	"\fGetReadiness\x12%.portenv.agent.v1.GetReadinessRequest\x1a&.portenv.agent.v1.GetReadinessResponse\x12T\n" +
+	"\tRunRestic\x12\".portenv.agent.v1.RunResticRequest\x1a#.portenv.agent.v1.RunResticResponse\x12Z\n" +
+	"\vGetPathInfo\x12$.portenv.agent.v1.GetPathInfoRequest\x1a%.portenv.agent.v1.GetPathInfoResponse\x12U\n" +
+	"\bTerminal\x12!.portenv.agent.v1.TerminalRequest\x1a\".portenv.agent.v1.TerminalResponse(\x010\x01B\xc6\x01\n" +
 	"\x14com.portenv.agent.v1B\n" +
 	"AgentProtoP\x01Z@github.com/portenv/portenv/proto/gen/go/portenv/agent/v1;agentv1\xa2\x02\x03PAX\xaa\x02\x10Portenv.Agent.V1\xca\x02\x10Portenv\\Agent\\V1\xe2\x02\x1cPortenv\\Agent\\V1\\GPBMetadata\xea\x02\x12Portenv::Agent::V1b\x06proto3"
 
@@ -291,27 +828,44 @@ func file_portenv_agent_v1_agent_proto_rawDescGZIP() []byte {
 }
 
 var file_portenv_agent_v1_agent_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_portenv_agent_v1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_portenv_agent_v1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_portenv_agent_v1_agent_proto_goTypes = []any{
 	(ReadinessState)(0),          // 0: portenv.agent.v1.ReadinessState
-	(*GetVersionRequest)(nil),    // 1: portenv.agent.v1.GetVersionRequest
-	(*GetVersionResponse)(nil),   // 2: portenv.agent.v1.GetVersionResponse
-	(*GetReadinessRequest)(nil),  // 3: portenv.agent.v1.GetReadinessRequest
-	(*GetReadinessResponse)(nil), // 4: portenv.agent.v1.GetReadinessResponse
-	(*v1.BuildInfo)(nil),         // 5: portenv.types.v1.BuildInfo
+	(*RunResticRequest)(nil),     // 1: portenv.agent.v1.RunResticRequest
+	(*RunResticResponse)(nil),    // 2: portenv.agent.v1.RunResticResponse
+	(*GetPathInfoRequest)(nil),   // 3: portenv.agent.v1.GetPathInfoRequest
+	(*GetPathInfoResponse)(nil),  // 4: portenv.agent.v1.GetPathInfoResponse
+	(*TerminalRequest)(nil),      // 5: portenv.agent.v1.TerminalRequest
+	(*TerminalOpen)(nil),         // 6: portenv.agent.v1.TerminalOpen
+	(*TerminalSize)(nil),         // 7: portenv.agent.v1.TerminalSize
+	(*TerminalResponse)(nil),     // 8: portenv.agent.v1.TerminalResponse
+	(*GetVersionRequest)(nil),    // 9: portenv.agent.v1.GetVersionRequest
+	(*GetVersionResponse)(nil),   // 10: portenv.agent.v1.GetVersionResponse
+	(*GetReadinessRequest)(nil),  // 11: portenv.agent.v1.GetReadinessRequest
+	(*GetReadinessResponse)(nil), // 12: portenv.agent.v1.GetReadinessResponse
+	(*v1.BuildInfo)(nil),         // 13: portenv.types.v1.BuildInfo
 }
 var file_portenv_agent_v1_agent_proto_depIdxs = []int32{
-	5, // 0: portenv.agent.v1.GetVersionResponse.build:type_name -> portenv.types.v1.BuildInfo
-	0, // 1: portenv.agent.v1.GetReadinessResponse.state:type_name -> portenv.agent.v1.ReadinessState
-	1, // 2: portenv.agent.v1.AgentService.GetVersion:input_type -> portenv.agent.v1.GetVersionRequest
-	3, // 3: portenv.agent.v1.AgentService.GetReadiness:input_type -> portenv.agent.v1.GetReadinessRequest
-	2, // 4: portenv.agent.v1.AgentService.GetVersion:output_type -> portenv.agent.v1.GetVersionResponse
-	4, // 5: portenv.agent.v1.AgentService.GetReadiness:output_type -> portenv.agent.v1.GetReadinessResponse
-	4, // [4:6] is the sub-list for method output_type
-	2, // [2:4] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	6,  // 0: portenv.agent.v1.TerminalRequest.open:type_name -> portenv.agent.v1.TerminalOpen
+	7,  // 1: portenv.agent.v1.TerminalRequest.resize:type_name -> portenv.agent.v1.TerminalSize
+	7,  // 2: portenv.agent.v1.TerminalOpen.size:type_name -> portenv.agent.v1.TerminalSize
+	13, // 3: portenv.agent.v1.GetVersionResponse.build:type_name -> portenv.types.v1.BuildInfo
+	0,  // 4: portenv.agent.v1.GetReadinessResponse.state:type_name -> portenv.agent.v1.ReadinessState
+	9,  // 5: portenv.agent.v1.AgentService.GetVersion:input_type -> portenv.agent.v1.GetVersionRequest
+	11, // 6: portenv.agent.v1.AgentService.GetReadiness:input_type -> portenv.agent.v1.GetReadinessRequest
+	1,  // 7: portenv.agent.v1.AgentService.RunRestic:input_type -> portenv.agent.v1.RunResticRequest
+	3,  // 8: portenv.agent.v1.AgentService.GetPathInfo:input_type -> portenv.agent.v1.GetPathInfoRequest
+	5,  // 9: portenv.agent.v1.AgentService.Terminal:input_type -> portenv.agent.v1.TerminalRequest
+	10, // 10: portenv.agent.v1.AgentService.GetVersion:output_type -> portenv.agent.v1.GetVersionResponse
+	12, // 11: portenv.agent.v1.AgentService.GetReadiness:output_type -> portenv.agent.v1.GetReadinessResponse
+	2,  // 12: portenv.agent.v1.AgentService.RunRestic:output_type -> portenv.agent.v1.RunResticResponse
+	4,  // 13: portenv.agent.v1.AgentService.GetPathInfo:output_type -> portenv.agent.v1.GetPathInfoResponse
+	8,  // 14: portenv.agent.v1.AgentService.Terminal:output_type -> portenv.agent.v1.TerminalResponse
+	10, // [10:15] is the sub-list for method output_type
+	5,  // [5:10] is the sub-list for method input_type
+	5,  // [5:5] is the sub-list for extension type_name
+	5,  // [5:5] is the sub-list for extension extendee
+	0,  // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_portenv_agent_v1_agent_proto_init() }
@@ -319,13 +873,22 @@ func file_portenv_agent_v1_agent_proto_init() {
 	if File_portenv_agent_v1_agent_proto != nil {
 		return
 	}
+	file_portenv_agent_v1_agent_proto_msgTypes[4].OneofWrappers = []any{
+		(*TerminalRequest_Open)(nil),
+		(*TerminalRequest_Input)(nil),
+		(*TerminalRequest_Resize)(nil),
+	}
+	file_portenv_agent_v1_agent_proto_msgTypes[7].OneofWrappers = []any{
+		(*TerminalResponse_Output)(nil),
+		(*TerminalResponse_ExitCode)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_portenv_agent_v1_agent_proto_rawDesc), len(file_portenv_agent_v1_agent_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   4,
+			NumMessages:   12,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

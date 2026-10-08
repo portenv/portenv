@@ -307,6 +307,64 @@ func (b *Box) Resume(ctx context.Context, opts ResumeOptions) (ResumeResult, err
 	return res, nil
 }
 
+// ErrNoSavePoint: Revert To ▸ Last Save Point with no save point in the
+// box's history.
+var ErrNoSavePoint = errors.New("no save point yet")
+
+// RevertResult is what RevertToLastSavePoint did.
+type RevertResult struct {
+	Restored    Snapshot // the save point now in the home
+	SavedBefore Snapshot // the home as it was just before, saved first
+}
+
+// RevertToLastSavePoint puts the newest save point back in the home. The
+// home is saved first (an autosave, with the usual lease checks), so the
+// revert itself can be undone from history; only then is the save point
+// restored over it. The box stays open on this machine.
+func (b *Box) RevertToLastSavePoint(ctx context.Context) (RevertResult, error) {
+	empty, err := b.homeEmpty()
+	if err != nil {
+		return RevertResult{}, err
+	}
+	if empty {
+		return RevertResult{}, ErrEmptyHome
+	}
+	snaps, err := b.restic.snapshots(ctx)
+	if err != nil {
+		return RevertResult{}, err
+	}
+	var point Snapshot
+	found := false
+	for i := len(snaps) - 1; i >= 0; i-- {
+		if snaps[i].Kind == KindPoint {
+			point, found = snaps[i], true
+			break
+		}
+	}
+	if !found {
+		return RevertResult{}, ErrNoSavePoint
+	}
+	before, err := b.saveListed(ctx, snaps, SaveOptions{Kind: SaveAutosave})
+	if err != nil {
+		return RevertResult{}, fmt.Errorf("save the home before reverting: %w", err)
+	}
+	st, _, err := loadState(b.cfg.StateDir)
+	if err != nil {
+		return RevertResult{}, err
+	}
+	// The home is saved (before), so restoring over it loses nothing; if the
+	// restore fails half way, the state still says dirty and the next save
+	// or a retry fixes it.
+	if err := b.restic.restoreTo(ctx, point, b.cfg.HomeDir, true); err != nil {
+		return RevertResult{}, fmt.Errorf("restore save point %s: %w", point.short(), err)
+	}
+	st.Tree, st.Snapshot, st.Dirty, st.Lease = point.Tree, point.origin(), true, LeaseHeld
+	if err := saveState(b.cfg.StateDir, st); err != nil {
+		return RevertResult{}, err
+	}
+	return RevertResult{Restored: point, SavedBefore: before}, nil
+}
+
 // ErrOfflineUnsafe: storage is unreachable and this machine cannot show that
 // starting from its local home is safe.
 var ErrOfflineUnsafe = errors.New("cannot start offline")
@@ -410,6 +468,11 @@ func (b *Box) Save(ctx context.Context, opts SaveOptions) (Snapshot, error) {
 	if err != nil {
 		return Snapshot{}, err
 	}
+	return b.saveListed(ctx, snaps, opts)
+}
+
+// saveListed is Save with the repository already listed.
+func (b *Box) saveListed(ctx context.Context, snaps []Snapshot, opts SaveOptions) (Snapshot, error) {
 	st, _, err := loadState(b.cfg.StateDir)
 	if err != nil {
 		return Snapshot{}, err

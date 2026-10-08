@@ -27,6 +27,9 @@ const _ = grpc.SupportPackageIsVersion9
 const (
 	AgentService_GetVersion_FullMethodName   = "/portenv.agent.v1.AgentService/GetVersion"
 	AgentService_GetReadiness_FullMethodName = "/portenv.agent.v1.AgentService/GetReadiness"
+	AgentService_RunRestic_FullMethodName    = "/portenv.agent.v1.AgentService/RunRestic"
+	AgentService_GetPathInfo_FullMethodName  = "/portenv.agent.v1.AgentService/GetPathInfo"
+	AgentService_Terminal_FullMethodName     = "/portenv.agent.v1.AgentService/Terminal"
 )
 
 // AgentServiceClient is the client API for AgentService service.
@@ -39,6 +42,14 @@ type AgentServiceClient interface {
 	// Reports whether the box has finished starting (users created, home
 	// checked, packages installed).
 	GetReadiness(ctx context.Context, in *GetReadinessRequest, opts ...grpc.CallOption) (*GetReadinessResponse, error)
+	// Runs one allow-listed restic command as portenv-sync (ADR 0005). The
+	// input carries the password and storage credentials; it is never logged.
+	RunRestic(ctx context.Context, in *RunResticRequest, opts ...grpc.CallOption) (*RunResticResponse, error)
+	// Describes a path under /home for the sync engine.
+	GetPathInfo(ctx context.Context, in *GetPathInfoRequest, opts ...grpc.CallOption) (*GetPathInfoResponse, error)
+	// Attaches a terminal to one of work's tmux sessions (created if needed).
+	// The first message from the client must be open.
+	Terminal(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[TerminalRequest, TerminalResponse], error)
 }
 
 type agentServiceClient struct {
@@ -69,6 +80,39 @@ func (c *agentServiceClient) GetReadiness(ctx context.Context, in *GetReadinessR
 	return out, nil
 }
 
+func (c *agentServiceClient) RunRestic(ctx context.Context, in *RunResticRequest, opts ...grpc.CallOption) (*RunResticResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RunResticResponse)
+	err := c.cc.Invoke(ctx, AgentService_RunRestic_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *agentServiceClient) GetPathInfo(ctx context.Context, in *GetPathInfoRequest, opts ...grpc.CallOption) (*GetPathInfoResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetPathInfoResponse)
+	err := c.cc.Invoke(ctx, AgentService_GetPathInfo_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *agentServiceClient) Terminal(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[TerminalRequest, TerminalResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &AgentService_ServiceDesc.Streams[0], AgentService_Terminal_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[TerminalRequest, TerminalResponse]{ClientStream: stream}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type AgentService_TerminalClient = grpc.BidiStreamingClient[TerminalRequest, TerminalResponse]
+
 // AgentServiceServer is the server API for AgentService service.
 // All implementations must embed UnimplementedAgentServiceServer
 // for forward compatibility.
@@ -79,6 +123,14 @@ type AgentServiceServer interface {
 	// Reports whether the box has finished starting (users created, home
 	// checked, packages installed).
 	GetReadiness(context.Context, *GetReadinessRequest) (*GetReadinessResponse, error)
+	// Runs one allow-listed restic command as portenv-sync (ADR 0005). The
+	// input carries the password and storage credentials; it is never logged.
+	RunRestic(context.Context, *RunResticRequest) (*RunResticResponse, error)
+	// Describes a path under /home for the sync engine.
+	GetPathInfo(context.Context, *GetPathInfoRequest) (*GetPathInfoResponse, error)
+	// Attaches a terminal to one of work's tmux sessions (created if needed).
+	// The first message from the client must be open.
+	Terminal(grpc.BidiStreamingServer[TerminalRequest, TerminalResponse]) error
 	mustEmbedUnimplementedAgentServiceServer()
 }
 
@@ -94,6 +146,15 @@ func (UnimplementedAgentServiceServer) GetVersion(context.Context, *GetVersionRe
 }
 func (UnimplementedAgentServiceServer) GetReadiness(context.Context, *GetReadinessRequest) (*GetReadinessResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetReadiness not implemented")
+}
+func (UnimplementedAgentServiceServer) RunRestic(context.Context, *RunResticRequest) (*RunResticResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RunRestic not implemented")
+}
+func (UnimplementedAgentServiceServer) GetPathInfo(context.Context, *GetPathInfoRequest) (*GetPathInfoResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetPathInfo not implemented")
+}
+func (UnimplementedAgentServiceServer) Terminal(grpc.BidiStreamingServer[TerminalRequest, TerminalResponse]) error {
+	return status.Error(codes.Unimplemented, "method Terminal not implemented")
 }
 func (UnimplementedAgentServiceServer) mustEmbedUnimplementedAgentServiceServer() {}
 func (UnimplementedAgentServiceServer) testEmbeddedByValue()                      {}
@@ -152,6 +213,49 @@ func _AgentService_GetReadiness_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AgentService_RunRestic_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RunResticRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentServiceServer).RunRestic(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentService_RunRestic_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentServiceServer).RunRestic(ctx, req.(*RunResticRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AgentService_GetPathInfo_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetPathInfoRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentServiceServer).GetPathInfo(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentService_GetPathInfo_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentServiceServer).GetPathInfo(ctx, req.(*GetPathInfoRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AgentService_Terminal_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(AgentServiceServer).Terminal(&grpc.GenericServerStream[TerminalRequest, TerminalResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type AgentService_TerminalServer = grpc.BidiStreamingServer[TerminalRequest, TerminalResponse]
+
 // AgentService_ServiceDesc is the grpc.ServiceDesc for AgentService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -167,7 +271,22 @@ var AgentService_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "GetReadiness",
 			Handler:    _AgentService_GetReadiness_Handler,
 		},
+		{
+			MethodName: "RunRestic",
+			Handler:    _AgentService_RunRestic_Handler,
+		},
+		{
+			MethodName: "GetPathInfo",
+			Handler:    _AgentService_GetPathInfo_Handler,
+		},
 	},
-	Streams:  []grpc.StreamDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "Terminal",
+			Handler:       _AgentService_Terminal_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
+		},
+	},
 	Metadata: "portenv/agent/v1/agent.proto",
 }

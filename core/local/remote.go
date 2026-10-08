@@ -12,11 +12,12 @@ import (
 	"io"
 	"net"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/portenv/portenv/core/internal/bounded"
 )
 
 // PortenvPath is portenv on servers: the only command the SSH user may run
@@ -37,18 +38,47 @@ func sshBase() []string {
 	return sshCmd
 }
 
+// Limits for commands run on a server over SSH (ADR 0012). The server runs
+// restic under its own deadlines; these are the Mac's backstop.
+const (
+	// QuickRemote: queries (state, channel, check, ping, status).
+	QuickRemote = 60 * time.Second
+	// LongRemote: open, close, save point, revert, restart and enrolment,
+	// which save or restore the home on the server.
+	LongRemote = 30 * time.Minute
+	// sshSetup: connection and forward setup.
+	sshSetup = 30 * time.Second
+)
+
 // Remote is a command on an SSH host, with PORTENV_SSH as the ssh command
-// when set. The host comes after "--", so it can never be read as an option.
-func Remote(ctx context.Context, host string, argv ...string) *exec.Cmd {
+// when set, stopped after limit. The host comes after "--", so it can never
+// be read as an option.
+func Remote(ctx context.Context, limit time.Duration, host string, argv ...string) (*bounded.Cmd, error) {
 	sshCmd := sshBase()
 	full := append(append(sshCmd[1:], "--", host), argv...)
-	return exec.CommandContext(ctx, sshCmd[0], full...) // #nosec G204 G702 -- the user's own SSH host, after -- so it cannot be an option
+	return bounded.Command(ctx, limit, sshCmd[0], full...)
+}
+
+// appLimit is the limit for `portenv app ACTION` on a server.
+func appLimit(action string) time.Duration {
+	switch action {
+	case "state", "channel", "check", "ping", "servers":
+		return QuickRemote
+	}
+	return LongRemote
 }
 
 // AppOn runs `portenv app ARGS` on host through its runner (sudo, by full
 // path) and returns its standard output, or its last error line.
 func AppOn(ctx context.Context, host string, args ...string) (string, error) {
-	cmd := Remote(ctx, host, append([]string{"sudo", PortenvPath, "app"}, args...)...)
+	action := ""
+	if len(args) > 0 {
+		action = args[0]
+	}
+	cmd, err := Remote(ctx, appLimit(action), host, append([]string{"sudo", PortenvPath, "app"}, args...)...)
+	if err != nil {
+		return "", err
+	}
 	cmd.Stdin = nil
 	var out, errb strings.Builder
 	cmd.Stdout, cmd.Stderr = &out, &errb
@@ -76,7 +106,10 @@ func ForwardLocal(ctx context.Context, host, remoteAddr string) (string, error) 
 	_ = os.Remove(sock)
 	base := sshBase()
 	run := func(extra ...string) error {
-		cmd := exec.CommandContext(ctx, base[0], append(append(slices.Clone(base[1:]), extra...), "--", host)...) // #nosec G204 -- the user's own SSH host, after --
+		cmd, err := bounded.Command(ctx, sshSetup, base[0], append(append(slices.Clone(base[1:]), extra...), "--", host)...)
+		if err != nil {
+			return err
+		}
 		cmd.Stdin = nil
 		out, err := cmd.CombinedOutput()
 		if err != nil {
@@ -98,8 +131,11 @@ func ForwardLocal(ctx context.Context, host, remoteAddr string) (string, error) 
 // RunRemote runs a non-interactive command on host, writing its output to
 // out. It never forwards stdin: an ssh that inherits an open stdin can wait
 // forever after the remote command has finished.
-func RunRemote(ctx context.Context, host string, out io.Writer, argv ...string) error {
-	cmd := Remote(ctx, host, argv...)
+func RunRemote(ctx context.Context, limit time.Duration, host string, out io.Writer, argv ...string) error {
+	cmd, err := Remote(ctx, limit, host, argv...)
+	if err != nil {
+		return err
+	}
 	cmd.Stdin = nil // /dev/null
 	cmd.Stdout, cmd.Stderr = out, out
 	return cmd.Run()
@@ -142,7 +178,10 @@ func EnrolOn(ctx context.Context, e *Env, c BoxConfig, host, joinStorage string,
 	if err != nil {
 		return err
 	}
-	join := Remote(ctx, host, joinArgs...)
+	join, err := Remote(ctx, LongRemote, host, joinArgs...)
+	if err != nil {
+		return err
+	}
 	join.Stdin = bytes.NewReader(payload)
 	join.Stdout, join.Stderr = out, out
 	if err := join.Run(); err != nil {
@@ -154,7 +193,7 @@ func EnrolOn(ctx context.Context, e *Env, c BoxConfig, host, joinStorage string,
 // ResumeOn opens the box on host with the Phase 0 CLI (portenv resume
 // there; the gate's path).
 func ResumeOn(ctx context.Context, host, name string, out io.Writer) error {
-	if err := RunRemote(ctx, host, out, "sudo", PortenvPath, "resume", name); err != nil {
+	if err := RunRemote(ctx, LongRemote, host, out, "sudo", PortenvPath, "resume", name); err != nil {
 		return fmt.Errorf("resume on %s: %w (the box is saved and released; resume it anywhere)", host, err)
 	}
 	return nil
@@ -162,7 +201,7 @@ func ResumeOn(ctx context.Context, host, name string, out io.Writer) error {
 
 // CloseOn saves, releases and stops the box on host (portenv close there).
 func CloseOn(ctx context.Context, host, name string, out io.Writer) error {
-	if err := RunRemote(ctx, host, out, "sudo", PortenvPath, "close", name); err != nil {
+	if err := RunRemote(ctx, LongRemote, host, out, "sudo", PortenvPath, "close", name); err != nil {
 		return fmt.Errorf("close on %s: %w", host, err)
 	}
 	return nil
@@ -170,5 +209,5 @@ func CloseOn(ctx context.Context, host, name string, out io.Writer) error {
 
 // KnownOn reports whether host has the box enrolled.
 func KnownOn(ctx context.Context, host, name string) bool {
-	return RunRemote(ctx, host, io.Discard, "sudo", PortenvPath, "status", name) == nil
+	return RunRemote(ctx, QuickRemote, host, io.Discard, "sudo", PortenvPath, "status", name) == nil
 }

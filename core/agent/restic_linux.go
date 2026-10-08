@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"syscall"
+	"time"
 
 	"golang.org/x/sys/unix"
 )
@@ -22,6 +23,11 @@ import (
 // pipe, passing restic's output through, and returns restic's exit code.
 // The calling process makes itself non-dumpable before reading the password,
 // so other processes in the box cannot read it from this process either.
+
+// resticKillGrace is how long restic has to exit after SIGINT, when the
+// caller's deadline passes, before SIGKILL (as bounded.KillGrace).
+const resticKillGrace = 15 * time.Second
+
 func RunRestic(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer) (int, error) {
 	if err := unix.Prctl(unix.PR_SET_DUMPABLE, 0, 0, 0, 0); err != nil {
 		return 0, fmt.Errorf("make agent non-dumpable: %w", err)

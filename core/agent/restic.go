@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"time"
 )
 
 // ResticBinary is restic inside the box: owned by root:portenv-sync, mode
@@ -30,9 +29,6 @@ const (
 	// restic's ssh (portenv-agent, 0711; created by the image).
 	sftpHelperDir  = "/run/portenv-sftp"
 	maxSecretInput = 64 << 10
-	// resticKillGrace is how long restic has to exit after SIGINT, when the
-	// caller's deadline passes, before SIGKILL (as sync.KillGrace).
-	resticKillGrace = 15 * time.Second
 )
 
 // ResticInput is what the caller sends on stdin for one restic run. It never

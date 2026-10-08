@@ -5,6 +5,8 @@ package sync
 import (
 	"fmt"
 	"time"
+
+	"github.com/portenv/portenv/core/internal/bounded"
 )
 
 // Deadlines bound every restic run, so a save never hangs (a broken
@@ -23,7 +25,11 @@ type Deadlines struct {
 }
 
 // KillGrace is how long restic has to exit after SIGINT before SIGKILL.
-const KillGrace = 15 * time.Second
+const KillGrace = bounded.KillGrace
+
+// sshSetupLimit bounds each ssh call that sets up or checks the REST
+// forward's connection.
+const sshSetupLimit = 30 * time.Second
 
 // DefaultDeadlines are the deadlines when Config leaves them unset.
 var DefaultDeadlines = Deadlines{

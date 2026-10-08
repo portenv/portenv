@@ -14,6 +14,16 @@ struct MainWindow: View {
             .frame(minWidth: 640, minHeight: 400)
             .navigationTitle(controller.box)
             .navigationSubtitle(controller.subtitle)
+            // The title is a menu only in a window with a toolbar; its one
+            // item is the sync symbol next to the title (docs/PLAN.md, Main
+            // window).
+            .toolbar {
+                ToolbarItem(placement: .navigation) {
+                    Image(systemName: controller.busy ? "arrow.triangle.2.circlepath" : "checkmark.circle")
+                        .foregroundStyle(.secondary)
+                        .help(controller.subtitle)
+                }
+            }
             .toolbarTitleMenu {
                 Menu("Move To") {
                     Button("This Mac") { Task { await controller.move(to: "this-mac") } }

@@ -16,12 +16,19 @@ public struct CLIError: Error, LocalizedError, Equatable {
     public var errorDescription: String? { message }
 }
 
-/// Where the Portenv binaries are: PORTENV_BIN_DIR, or the repository's
-/// bin/ when the app runs from Xcode (make build puts them there).
+/// Where the Portenv binaries are: PORTENV_BIN_DIR, inside Portenv.app
+/// (make app), or the repository's bin/ when the app runs from Xcode (make
+/// build puts them there).
 public enum Binaries {
     public static var directory: URL {
         if let dir = ProcessInfo.processInfo.environment["PORTENV_BIN_DIR"], !dir.isEmpty {
             return URL(fileURLWithPath: dir)
+        }
+        // Portenv.app (make app) carries its own portenv, portenvd and restic.
+        let inside = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers")
+        if Bundle.main.bundleURL.pathExtension == "app",
+           FileManager.default.isExecutableFile(atPath: inside.appendingPathComponent("portenv").path) {
+            return inside
         }
         // apps/mac/Sources/PortenvKit/CLI.swift → the repository root.
         return URL(fileURLWithPath: #filePath)

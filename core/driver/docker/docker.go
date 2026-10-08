@@ -11,7 +11,6 @@
 package docker
 
 import (
-	"archive/tar"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -196,7 +195,7 @@ func (d *Driver) recreate(ctx context.Context, s spec) error {
 	if _, err := d.cli.ContainerRemove(ctx, name, client.ContainerRemoveOptions{}); err != nil && !cerrdefs.IsNotFound(err) {
 		return fmt.Errorf("remove old container: %w", err)
 	}
-	var env []string
+	env := []string{agent.ChannelEnv + "=stdin"}
 	if s.Home.Fresh {
 		env = append(env, "PORTENV_INIT_HOME=1")
 	}
@@ -209,6 +208,8 @@ func (d *Driver) recreate(ctx context.Context, s spec) error {
 			Env:          env,
 			Labels:       map[string]string{labelBox: string(s.Box.ID)},
 			ExposedPorts: network.PortSet{agentPort: {}},
+			// The agent channel's secrets arrive on stdin, once (ADR 0010).
+			OpenStdin: true, StdinOnce: true, AttachStdin: true,
 		},
 		HostConfig: host,
 	})
@@ -320,9 +321,13 @@ func (d *Driver) Start(ctx context.Context, id driver.BoxID) (driver.State, erro
 	if err != nil {
 		return driver.StateUnspecified, err
 	}
-	if err := d.installChannel(ctx, id, sec); err != nil {
-		return driver.StateUnspecified, err
+	// The secrets go to the box's stdin (ADR 0010): attach before starting,
+	// write one line, close. Never a file, never exec.
+	att, err := d.cli.ContainerAttach(ctx, d.containerName(id), client.ContainerAttachOptions{Stream: true, Stdin: true})
+	if err != nil {
+		return driver.StateUnspecified, fmt.Errorf("attach the agent channel: %w", err)
 	}
+	defer att.Close()
 	d.mu.Lock()
 	if d.channels == nil {
 		d.channels = map[driver.BoxID]agent.ChannelSecrets{}
@@ -331,6 +336,16 @@ func (d *Driver) Start(ctx context.Context, id driver.BoxID) (driver.State, erro
 	d.mu.Unlock()
 	if _, err := d.cli.ContainerStart(ctx, d.containerName(id), client.ContainerStartOptions{}); err != nil {
 		return driver.StateFailed, fmt.Errorf("start container: %w", err)
+	}
+	line, err := sec.Line()
+	if err != nil {
+		return driver.StateFailed, err
+	}
+	if _, err := att.Conn.Write(line); err != nil {
+		return driver.StateFailed, fmt.Errorf("hand the agent channel its secrets: %w", err)
+	}
+	if err := att.CloseWrite(); err != nil {
+		return driver.StateFailed, fmt.Errorf("close the agent channel's stdin: %w", err)
 	}
 	// A fresh home is created once; later starts must find it in place.
 	if s.Home.Fresh {
@@ -643,48 +658,6 @@ func (d *Driver) ImageDigest(ctx context.Context, ref string) (string, error) {
 
 // agentPort is the agent channel inside the box.
 var agentPort = network.MustParsePort(strconv.Itoa(agent.ChannelPort) + "/tcp")
-
-// installChannel writes this start's channel secrets into the created,
-// not yet started container: root-only files on its fresh root file system.
-func (d *Driver) installChannel(ctx context.Context, id driver.BoxID, sec agent.ChannelSecrets) error {
-	var buf bytes.Buffer
-	tw := tar.NewWriter(&buf)
-	now := time.Now()
-	dir := strings.TrimPrefix(agent.ChannelDir, "/") + "/"
-	parts := strings.Split(strings.TrimSuffix(dir, "/"), "/")
-	// run/ as it is; run/portenv/ root:portenv-agent 0710; the channel's own
-	// directory and files belong to portenv-agent (0700/0600), the user the
-	// API process runs as, so it reads and removes them without
-	// cap_dac_override.
-	for i := range parts {
-		p := strings.Join(parts[:i+1], "/") + "/"
-		h := &tar.Header{Typeflag: tar.TypeDir, Name: p, Mode: 0o755, ModTime: now}
-		switch p {
-		case dir:
-			h.Mode, h.Uid, h.Gid = 0o700, agent.ServeUID, agent.ServeUID
-		case "run/portenv/":
-			h.Mode, h.Gid = 0o710, agent.ServeUID
-		}
-		if err := tw.WriteHeader(h); err != nil {
-			return err
-		}
-	}
-	for name, data := range map[string][]byte{agent.TokenFile: []byte(sec.Token), agent.CertFile: sec.CertPEM, agent.KeyFile: sec.KeyPEM} {
-		if err := tw.WriteHeader(&tar.Header{Typeflag: tar.TypeReg, Name: dir + name, Mode: 0o600, Uid: agent.ServeUID, Gid: agent.ServeUID, Size: int64(len(data)), ModTime: now}); err != nil {
-			return err
-		}
-		if _, err := tw.Write(data); err != nil {
-			return err
-		}
-	}
-	if err := tw.Close(); err != nil {
-		return err
-	}
-	if _, err := d.cli.CopyToContainer(ctx, d.containerName(id), client.CopyToContainerOptions{DestinationPath: "/", Content: &buf}); err != nil {
-		return fmt.Errorf("install agent channel: %w", err)
-	}
-	return nil
-}
 
 // AgentChannel implements driver.Driver: the agent port as published on
 // 127.0.0.1, with this start's certificate and token.

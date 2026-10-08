@@ -3,10 +3,10 @@
 package agent
 
 import (
+	"bytes"
 	"context"
 	"net"
-	"os"
-	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -23,13 +23,7 @@ func startChannel(t *testing.T) (ChannelSecrets, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	dir := t.TempDir()
-	for name, data := range map[string][]byte{TokenFile: []byte(sec.Token), CertFile: sec.CertPEM, KeyFile: sec.KeyPEM} {
-		if err := os.WriteFile(filepath.Join(dir, name), data, 0o600); err != nil {
-			t.Fatal(err)
-		}
-	}
-	srv, err := newChannelServer(DefaultConfig(), dir)
+	srv, err := newChannelServer(DefaultConfig(), sec)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,44 +79,39 @@ func TestChannelRefusesAnImpostor(t *testing.T) {
 	}
 }
 
-// TestChannelFilesAreGoneOnceLoaded: the API process removes the key,
-// certificate, token and their directory as soon as it has read them.
-func TestChannelFilesAreGoneOnceLoaded(t *testing.T) {
+// TestChannelSecretsComeOnStdin: the driver writes one JSON line on the
+// box's stdin; the API process reads exactly that, and nothing else.
+func TestChannelSecretsComeOnStdin(t *testing.T) {
 	sec, _ := NewChannelSecrets()
-	dir := filepath.Join(t.TempDir(), "agent")
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	line, err := sec.Line()
+	if err != nil {
 		t.Fatal(err)
 	}
-	for name, data := range map[string][]byte{TokenFile: []byte(sec.Token), CertFile: sec.CertPEM, KeyFile: sec.KeyPEM} {
-		if err := os.WriteFile(filepath.Join(dir, name), data, 0o600); err != nil {
-			t.Fatal(err)
+	got, err := ReadChannelSecrets(bytes.NewReader(append(line, []byte("trailing input is ignored\n")...)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Token != sec.Token || !bytes.Equal(got.CertPEM, sec.CertPEM) || !bytes.Equal(got.KeyPEM, sec.KeyPEM) {
+		t.Fatal("secrets changed on the way")
+	}
+	if _, err := newChannelServer(DefaultConfig(), got); err != nil {
+		t.Fatal(err)
+	}
+	for _, bad := range []string{"", "not json\n", `{"Token":"short"}` + "\n"} {
+		s, err := ReadChannelSecrets(strings.NewReader(bad))
+		if err == nil {
+			_, err = newChannelServer(DefaultConfig(), s)
 		}
-	}
-	if _, err := newChannelServer(DefaultConfig(), dir); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(dir); !os.IsNotExist(err) {
-		t.Fatalf("channel directory still there after loading (%v)", err)
-	}
-	if err := WaitChannelLoaded(dir, time.Second); err != nil {
-		t.Fatalf("init's wait: %v", err)
+		if err == nil {
+			t.Errorf("accepted %q", bad)
+		}
 	}
 }
 
-// TestInitRemovesChannelFilesTheAPIDidNotLoad: if the API process never
-// loads them, init removes them before starting anything else.
-func TestInitRemovesChannelFilesTheAPIDidNotLoad(t *testing.T) {
-	dir := filepath.Join(t.TempDir(), "agent")
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, TokenFile), []byte("secret-token-secret-token-secret-token"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := WaitChannelLoaded(dir, 100*time.Millisecond); err == nil {
-		t.Fatal("no error when the channel never loaded")
-	}
-	if _, err := os.Stat(dir); !os.IsNotExist(err) {
-		t.Fatal("init left the channel files in place")
+// TestInitWaitsForTheChannel: init starts nothing else until the API
+// process listens, which it does only after reading the secrets.
+func TestInitWaitsForTheChannel(t *testing.T) {
+	if err := WaitChannelListening(1, 100*time.Millisecond); err == nil {
+		t.Fatal("no error with nothing listening")
 	}
 }

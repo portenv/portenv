@@ -84,9 +84,10 @@ func DialChannel(dial func(ctx context.Context) (net.Conn, error), certPEM []byt
 		MinVersion: tls.VersionTLS13,
 		ServerName: "portenv-agent",
 		// The certificate is pinned, not chained to a CA: accept exactly it.
-		InsecureSkipVerify: true, // #nosec G402 -- verified by VerifyPeerCertificate below
-		VerifyPeerCertificate: func(raw [][]byte, _ [][]*x509.Certificate) error {
-			if len(raw) == 0 || !bytes.Equal(raw[0], pinned) {
+		// VerifyConnection runs on every connection, resumed ones included.
+		InsecureSkipVerify: true, // #nosec G402 -- verified by VerifyConnection below
+		VerifyConnection: func(cs tls.ConnectionState) error {
+			if len(cs.PeerCertificates) == 0 || !bytes.Equal(cs.PeerCertificates[0].Raw, pinned) {
 				return errors.New("agent channel: the certificate is not this box's")
 			}
 			return nil

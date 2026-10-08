@@ -3,7 +3,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -13,7 +12,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -58,7 +56,7 @@ func cmdInit(_ context.Context, e *local.Env, name string, args []string) error 
 	if err != nil {
 		return err
 	}
-	if _, err := os.Stat(p); err == nil {
+	if _, err := os.Stat(p); err == nil { // #nosec G703 -- box names are validated by local.NameRE
 		return fmt.Errorf("box %s already exists", name)
 	}
 	b := make([]byte, 6)
@@ -104,11 +102,11 @@ func cmdInit(_ context.Context, e *local.Env, name string, args []string) error 
 		}
 		restUser = c.ID + ":" + string(hash)
 	}
-	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil { // #nosec G703 -- box names are validated by local.NameRE
 		return err
 	}
 	data, _ := json.MarshalIndent(c, "", "  ")
-	if err := os.WriteFile(p, append(data, '\n'), 0o600); err != nil {
+	if err := os.WriteFile(p, append(data, '\n'), 0o600); err != nil { // #nosec G703 -- box names are validated by local.NameRE
 		return err
 	}
 	fmt.Printf("created box %s (%s) on %s\n", name, c.ID, e.Machine)
@@ -145,7 +143,7 @@ func cmdJoin(ctx context.Context, e *local.Env, name string, args []string) erro
 	if err != nil {
 		return err
 	}
-	if _, err := os.Stat(p); err == nil {
+	if _, err := os.Stat(p); err == nil { // #nosec G703 -- box names are validated by local.NameRE
 		return fmt.Errorf("box %s already exists here", name)
 	}
 	c := local.BoxConfig{ID: *id, Name: name, Image: *image, Storage: *storage, StorageHostKey: *hostKey, StorageREST: *rest}
@@ -154,7 +152,7 @@ func cmdJoin(ctx context.Context, e *local.Env, name string, args []string) erro
 	}
 	// The keys arrive on stdin as JSON (portenv move sends them over SSH);
 	// they go only into this machine's key store.
-	var in joinKeys
+	var in local.JoinKeys
 	if err := json.NewDecoder(io.LimitReader(os.Stdin, 16<<10)).Decode(&in); err != nil {
 		return fmt.Errorf("join reads its keys from stdin as JSON: %w", err)
 	}
@@ -190,11 +188,11 @@ func cmdJoin(ctx context.Context, e *local.Env, name string, args []string) erro
 	if err := e.KeyStore().Put(c.ID, own); err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil { // #nosec G703 -- box names are validated by local.NameRE
 		return err
 	}
 	data, _ := json.MarshalIndent(c, "", "  ")
-	if err := os.WriteFile(p, append(data, '\n'), 0o600); err != nil {
+	if err := os.WriteFile(p, append(data, '\n'), 0o600); err != nil { // #nosec G703 -- box names are validated by local.NameRE
 		return err
 	}
 	fmt.Printf("joined box %s (%s) on %s\n", name, c.ID, e.Machine)
@@ -223,13 +221,6 @@ func addOwnKey(ctx context.Context, e *local.Env, c local.BoxConfig, transferred
 		return err
 	}
 	return sb.AddKey(ctx, own, e.Machine)
-}
-
-// joinKeys is what portenv move sends to portenv join on stdin.
-type joinKeys struct {
-	RepositoryKey string `json:"repository_key"`
-	StorageKey    string `json:"storage_key,omitempty"`   // SFTP storage, OpenSSH PEM
-	RESTPassword  string `json:"rest_password,omitempty"` // REST storage (StorageREST)
 }
 
 // cmdSSHConfig prints the "ssh portenv" entry for a box on a server: it
@@ -274,27 +265,8 @@ func cmdResume(ctx context.Context, e *local.Env, name string, args []string) er
 		local.Trace("storage probe (parallel)", time.Since(start))
 		reach <- ok
 	}()
-	if !s.Drv.Known(id) {
-		if _, err := s.Drv.Create(ctx, driver.Box{ID: id, Name: name, ToolboxImage: s.Cfg.Image}); err != nil {
-			return err
-		}
-		// Pin a registry image to the digest it resolved to, so every machine
-		// pulls exactly that image. Local development images stay as they
-		// are: their digest exists only on this machine.
-		if !local.FromRegistry(s.Cfg.Image) {
-			// nothing to pin
-		} else if pinned, err := s.Drv.ImageDigest(ctx, s.Cfg.Image); err != nil {
-			return err
-		} else if pinned != s.Cfg.Image {
-			s.Cfg.Image = pinned
-			if err := e.SaveBox(s.Cfg); err != nil {
-				return err
-			}
-			fmt.Fprintf(os.Stderr, "toolbox pinned to %s\n", pinned)
-		}
-		if err := s.Drv.MountHome(ctx, id, driver.HomeStorage{Ref: local.HomeVolume(s.Cfg.ID)}); err != nil {
-			return err
-		}
+	if err := s.EnsureCreated(ctx, func(msg string) { fmt.Fprintln(os.Stderr, msg) }); err != nil {
+		return err
 	}
 	fmt.Fprintln(os.Stderr, "starting the box")
 	if err := local.Timed("box start", func() error { _, err := s.Drv.Start(ctx, id); return err }); err != nil {
@@ -345,11 +317,11 @@ func cmdResume(ctx context.Context, e *local.Env, name string, args []string) er
 	switch res.Action {
 	case boxsync.ActionNewBox:
 		fmt.Fprintln(os.Stderr, "nothing saved yet: creating a fresh home")
-		if err := restart(ctx, s, true); err != nil {
+		if err := s.Restart(ctx, true); err != nil {
 			return err
 		}
 	case boxsync.ActionRestored, boxsync.ActionRestoredKeptLocal:
-		if err := local.Timed("restart after restore", func() error { return restart(ctx, s, false) }); err != nil {
+		if err := local.Timed("restart after restore", func() error { return s.Restart(ctx, false) }); err != nil {
 			return err
 		}
 	}
@@ -375,22 +347,6 @@ func cmdResume(ctx context.Context, e *local.Env, name string, args []string) er
 			res.Orphaned.Machine, res.Orphaned.ID[:8], res.Orphaned.Time.Local().Format(time.DateTime), name)
 	}
 	return nil
-}
-
-// restart stops the box and starts it again, with a fresh home from the
-// image's skeleton when fresh is set, so its start sequence runs on the
-// current home.
-func restart(ctx context.Context, s *local.Session, fresh bool) error {
-	if _, err := s.Drv.Stop(ctx, s.ID(), 0); err != nil {
-		return err
-	}
-	if fresh {
-		if err := s.Drv.MountHome(ctx, s.ID(), driver.HomeStorage{Ref: local.HomeVolume(s.Cfg.ID), Fresh: true}); err != nil {
-			return err
-		}
-	}
-	_, err := s.Drv.Start(ctx, s.ID())
-	return err
 }
 
 func requireRunning(ctx context.Context, s *local.Session) error {
@@ -623,68 +579,19 @@ func cmdMove(ctx context.Context, e *local.Env, name string, args []string) erro
 		if err != nil {
 			return err
 		}
-		key, err := e.KeyStore().Get(c.ID)
-		if err != nil {
-			return err
-		}
-		keys := joinKeys{RepositoryKey: string(key)}
-		joinArgs := []string{"sudo", "portenv", "join", name, "--id", c.ID, "--image", c.Image, "--storage", *joinStorage}
-		if strings.HasPrefix(*joinStorage, "sftp:") {
-			sk, err := e.KeyStore().Get(local.StorageKeyID(c.ID))
-			if err != nil {
-				return fmt.Errorf("storage key: %w", err)
-			}
-			keys.StorageKey = string(sk)
-			joinArgs = append(joinArgs, "--storage-host-key", "'"+c.StorageHostKey+"'")
-			if c.StorageREST != "" {
-				rp, err := e.KeyStore().Get(local.RESTKeyID(c.ID))
-				if err != nil {
-					return fmt.Errorf("REST storage password: %w", err)
-				}
-				keys.RESTPassword = string(rp)
-				joinArgs = append(joinArgs, "--storage-rest", c.StorageREST)
-			}
-		}
-		payload, err := json.Marshal(keys)
-		if err != nil {
-			return err
-		}
 		fmt.Fprintf(os.Stderr, "enrolling %s on %s\n", name, *to)
-		join := remote(ctx, *to, joinArgs...)
-		join.Stdin = bytes.NewReader(payload) // the keys travel on SSH's stdin, never on disk
-		join.Stdout, join.Stderr = os.Stdout, os.Stderr
-		if err := join.Run(); err != nil {
-			return fmt.Errorf("enrol on %s: %w (the box is saved and released)", *to, err)
+		if err := local.EnrolOn(ctx, e, c, *to, *joinStorage, os.Stdout); err != nil {
+			return err
 		}
 	}
 	fmt.Fprintf(os.Stderr, "resuming %s on %s\n", name, *to)
-	if err := runRemote(ctx, *to, "sudo", "portenv", "resume", name); err != nil {
-		return fmt.Errorf("resume on %s: %w (the box is saved and released; resume it anywhere)", *to, err)
+	if err := local.ResumeOn(ctx, *to, name, os.Stdout); err != nil {
+		return err
 	}
 	return nil
 }
 
 // remote runs a command on host over SSH. PORTENV_SSH overrides the ssh
-// command and its options (tests).
-func remote(ctx context.Context, host string, argv ...string) *exec.Cmd {
-	sshCmd := []string{"ssh"}
-	if v := os.Getenv("PORTENV_SSH"); v != "" {
-		sshCmd = strings.Fields(v)
-	}
-	full := append(append(sshCmd[1:], "--", host), argv...)
-	return exec.CommandContext(ctx, sshCmd[0], full...) // #nosec G204 G702 -- the user's own SSH host, after -- so it cannot be an option
-}
-
-// runRemote runs a non-interactive command on host, showing its output. It
-// never forwards stdin: an ssh that inherits an open stdin can wait forever
-// after the remote command has finished.
-func runRemote(ctx context.Context, host string, argv ...string) error {
-	cmd := remote(ctx, host, argv...)
-	cmd.Stdin = nil // /dev/null
-	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
-	return cmd.Run()
-}
-
 func stateName(s driver.State) string {
 	return map[driver.State]string{
 		driver.StateCreated: "created", driver.StateStarting: "starting", driver.StateRunning: "running",

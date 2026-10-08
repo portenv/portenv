@@ -39,6 +39,7 @@ const (
 	DriverService_SetResources_FullMethodName = "/portenv.driver.v1.DriverService/SetResources"
 	DriverService_MountHome_FullMethodName    = "/portenv.driver.v1.DriverService/MountHome"
 	DriverService_Capabilities_FullMethodName = "/portenv.driver.v1.DriverService/Capabilities"
+	DriverService_AgentChannel_FullMethodName = "/portenv.driver.v1.DriverService/AgentChannel"
 )
 
 // DriverServiceClient is the client API for DriverService service.
@@ -68,6 +69,10 @@ type DriverServiceClient interface {
 	MountHome(ctx context.Context, in *MountHomeRequest, opts ...grpc.CallOption) (*MountHomeResponse, error)
 	// Describes the driver and its engine.
 	Capabilities(ctx context.Context, in *CapabilitiesRequest, opts ...grpc.CallOption) (*CapabilitiesResponse, error)
+	// The way to the box agent's API for the box's current start (ADR 0010):
+	// the address to dial, the certificate the agent must present, and the
+	// token for every call. Fresh at every start.
+	AgentChannel(ctx context.Context, in *AgentChannelRequest, opts ...grpc.CallOption) (*AgentChannelResponse, error)
 }
 
 type driverServiceClient struct {
@@ -187,6 +192,16 @@ func (c *driverServiceClient) Capabilities(ctx context.Context, in *Capabilities
 	return out, nil
 }
 
+func (c *driverServiceClient) AgentChannel(ctx context.Context, in *AgentChannelRequest, opts ...grpc.CallOption) (*AgentChannelResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AgentChannelResponse)
+	err := c.cc.Invoke(ctx, DriverService_AgentChannel_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DriverServiceServer is the server API for DriverService service.
 // All implementations must embed UnimplementedDriverServiceServer
 // for forward compatibility.
@@ -214,6 +229,10 @@ type DriverServiceServer interface {
 	MountHome(context.Context, *MountHomeRequest) (*MountHomeResponse, error)
 	// Describes the driver and its engine.
 	Capabilities(context.Context, *CapabilitiesRequest) (*CapabilitiesResponse, error)
+	// The way to the box agent's API for the box's current start (ADR 0010):
+	// the address to dial, the certificate the agent must present, and the
+	// token for every call. Fresh at every start.
+	AgentChannel(context.Context, *AgentChannelRequest) (*AgentChannelResponse, error)
 	mustEmbedUnimplementedDriverServiceServer()
 }
 
@@ -253,6 +272,9 @@ func (UnimplementedDriverServiceServer) MountHome(context.Context, *MountHomeReq
 }
 func (UnimplementedDriverServiceServer) Capabilities(context.Context, *CapabilitiesRequest) (*CapabilitiesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Capabilities not implemented")
+}
+func (UnimplementedDriverServiceServer) AgentChannel(context.Context, *AgentChannelRequest) (*AgentChannelResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AgentChannel not implemented")
 }
 func (UnimplementedDriverServiceServer) mustEmbedUnimplementedDriverServiceServer() {}
 func (UnimplementedDriverServiceServer) testEmbeddedByValue()                       {}
@@ -448,6 +470,24 @@ func _DriverService_Capabilities_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
+func _DriverService_AgentChannel_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AgentChannelRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DriverServiceServer).AgentChannel(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DriverService_AgentChannel_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DriverServiceServer).AgentChannel(ctx, req.(*AgentChannelRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // DriverService_ServiceDesc is the grpc.ServiceDesc for DriverService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -490,6 +530,10 @@ var DriverService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Capabilities",
 			Handler:    _DriverService_Capabilities_Handler,
+		},
+		{
+			MethodName: "AgentChannel",
+			Handler:    _DriverService_AgentChannel_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

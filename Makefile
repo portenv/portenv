@@ -103,11 +103,12 @@ image-test: image
 driver-test:
 	PORTENV_TEST_IMAGE=$(IMAGE) go test -count=1 -timeout 20m ./core/driver/docker/
 
-## e2e: restic isolation probe, two machines, and SFTP storage against $(IMAGE)
+## e2e: restic isolation probe, two machines, SFTP storage and portenvd against $(IMAGE)
 e2e: build $(TOOLS_STAMP)
 	tests/e2e/restic-isolation.sh $(IMAGE)
 	tests/e2e/two-machines.sh $(IMAGE)
 	tests/e2e/sftp-storage.sh $(IMAGE)
+	tests/e2e/daemon.sh $(IMAGE)
 
 ## secrets: scan the full git history and the working tree for secrets
 secrets: $(TOOLS_STAMP)

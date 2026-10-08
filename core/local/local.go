@@ -101,6 +101,9 @@ type MachineConfig struct {
 	// HomesDir is where box home volumes live: the encrypted volume on a
 	// server (written by the server setup script).
 	HomesDir string `json:"homes_dir,omitempty"`
+	// Servers are the SSH hosts (user@host, running portenv) offered in
+	// Move To. Phase 2's Add a Server replaces this list.
+	Servers []string `json:"servers,omitempty"`
 }
 
 func (e *Env) MachineConfig() (MachineConfig, error) {
@@ -398,10 +401,16 @@ func (s *Session) StorageReachable() bool {
 // sync opens the sync engine: backup and restore run inside the box,
 // everything else on this machine when it has restic.
 func (s *Session) Sync() (*boxsync.Box, error) {
+	return s.SyncWith(boxsync.AgentExecutor{Driver: s.Drv, Box: s.ID()})
+}
+
+// SyncWith opens the sync engine with in-box runs going through ex: the
+// agent channel for portenvd (ADR 0010), docker exec for the Phase 0 CLI.
+func (s *Session) SyncWith(ex boxsync.Executor) (*boxsync.Box, error) {
 	return boxsync.Open(boxsync.Config{
 		MetaExecutor:   s.HostExecutor(),
 		MetaRepository: s.HostRepo(),
-		Executor:       boxsync.AgentExecutor{Driver: s.Drv, Box: s.ID()},
+		Executor:       ex,
 		Repository:     s.Repo,
 		Password:       s.Key,
 		Env:            s.ResticEnv,
@@ -500,4 +509,50 @@ func FromRegistry(ref string) bool {
 func LoopbackAddr(addr string) bool {
 	host, port, err := net.SplitHostPort(addr)
 	return err == nil && host == "127.0.0.1" && port != ""
+}
+
+// EnsureCreated creates the box's instance on this machine if the driver
+// does not know it yet: a registry image is pinned to the digest it
+// resolved to (so every machine runs exactly that image), and the home
+// storage is attached. notify reports what it did.
+func (s *Session) EnsureCreated(ctx context.Context, notify func(string)) error {
+	id := s.ID()
+	if s.Drv.Known(id) {
+		return nil
+	}
+	if _, err := s.Drv.Create(ctx, driver.Box{ID: id, Name: s.Cfg.Name, ToolboxImage: s.Cfg.Image}); err != nil {
+		return err
+	}
+	// Local development images stay as they are: their digest exists only
+	// on this machine.
+	if FromRegistry(s.Cfg.Image) {
+		pinned, err := s.Drv.ImageDigest(ctx, s.Cfg.Image)
+		if err != nil {
+			return err
+		}
+		if pinned != s.Cfg.Image {
+			s.Cfg.Image = pinned
+			if err := s.E.SaveBox(s.Cfg); err != nil {
+				return err
+			}
+			notify("toolbox pinned to " + pinned)
+		}
+	}
+	return s.Drv.MountHome(ctx, id, driver.HomeStorage{Ref: HomeVolume(s.Cfg.ID)})
+}
+
+// Restart stops the box and starts it again, with a fresh home from the
+// image's skeleton when fresh is set, so its start sequence runs on the
+// current home.
+func (s *Session) Restart(ctx context.Context, fresh bool) error {
+	if _, err := s.Drv.Stop(ctx, s.ID(), 0); err != nil {
+		return err
+	}
+	if fresh {
+		if err := s.Drv.MountHome(ctx, s.ID(), driver.HomeStorage{Ref: HomeVolume(s.Cfg.ID), Fresh: true}); err != nil {
+			return err
+		}
+	}
+	_, err := s.Drv.Start(ctx, s.ID())
+	return err
 }

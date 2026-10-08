@@ -13,7 +13,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"strings"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -35,7 +34,7 @@ const (
 )
 
 // TokenHeader carries the per-start token on every call.
-const TokenHeader = "portenv-agent-token"
+const TokenHeader = "portenv-agent-token" // #nosec G101 -- a header name, not a credential
 
 // sessionRE is a tmux session name the terminal call accepts.
 var sessionRE = regexp.MustCompile(`^[A-Za-z0-9_-]{1,32}$`)
@@ -159,18 +158,4 @@ func (s *apiServer) Terminal(stream agentv1.AgentService_TerminalServer) error {
 		return status.Error(codes.InvalidArgument, "session names are 1 to 32 letters, digits, - or _")
 	}
 	return runTerminal(stream, s.cfg, open)
-}
-
-// envFor is the environment of a terminal as the main user.
-func envFor(cfg Config) []string {
-	return []string{
-		"HOME=" + cfg.Home(), "USER=" + cfg.User, "LOGNAME=" + cfg.User,
-		"SHELL=/bin/bash", "TERM=xterm-256color", "LANG=C.UTF-8", "COLORTERM=truecolor",
-		"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-	}
-}
-
-// isClosed reports whether err only says the other side went away.
-func isClosed(err error) bool {
-	return err == nil || errors.Is(err, os.ErrClosed) || strings.Contains(err.Error(), "input/output error")
 }

@@ -6,6 +6,7 @@ package agent
 
 import (
 	"errors"
+	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -95,4 +96,18 @@ func groupsOf(user string) ([]uint32, error) {
 		gs = append(gs, uint32(g))
 	}
 	return gs, nil
+}
+
+// envFor is the environment of a terminal as the main user.
+func envFor(cfg Config) []string {
+	return []string{
+		"HOME=" + cfg.Home(), "USER=" + cfg.User, "LOGNAME=" + cfg.User,
+		"SHELL=/bin/bash", "TERM=xterm-256color", "LANG=C.UTF-8", "COLORTERM=truecolor",
+		"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+	}
+}
+
+// isClosed reports whether err only says the other side went away.
+func isClosed(err error) bool {
+	return err == nil || errors.Is(err, os.ErrClosed) || strings.Contains(err.Error(), "input/output error")
 }

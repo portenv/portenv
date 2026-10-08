@@ -38,6 +38,10 @@ service DriverService {
   rpc MountHome(MountHomeRequest) returns (MountHomeResponse);
   // Describes the driver and its engine.
   rpc Capabilities(CapabilitiesRequest) returns (CapabilitiesResponse);
+  // The way to the box agent's API for the box's current start (ADR 0010):
+  // the address to dial, the certificate the agent must present, and the
+  // token for every call. Fresh at every start.
+  rpc AgentChannel(AgentChannelRequest) returns (AgentChannelResponse);
 }
 
 message CreateRequest {
@@ -177,4 +181,18 @@ message CapabilitiesResponse {
   repeated portenv.types.v1.Architecture architectures = 4;
   bool gpu = 5;
   bool docker_in_box = 6;
+}
+
+message AgentChannelRequest {
+  string box_id = 1;
+}
+
+message AgentChannelResponse {
+  // Where to connect: "tcp:127.0.0.1:PORT" (docker) or "vsock:CID:PORT"
+  // (apple).
+  string address = 1;
+  // PEM certificate the agent presents; the client accepts only it.
+  bytes cert_pem = 2;
+  // Sent with every call to the agent.
+  string token = 3;
 }

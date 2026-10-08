@@ -25,12 +25,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/portenv/portenv/core/local"
 	"os"
 	"os/signal"
 	"syscall"
 
 	"github.com/portenv/portenv/core/internal/version"
+	"github.com/portenv/portenv/core/local"
 )
 
 func main() {
@@ -55,6 +55,8 @@ var commands = map[string]command{
 	"housekeep":  {"housekeep <box> [--prune]", cmdHousekeep},
 	"move":       {"move <box> --to SSH-HOST [--join-storage DIR]", cmdMove},
 	"join":       {"join <box> --id BOX-ID --storage DIR [--image IMAGE]   (repository key on stdin)", cmdJoin},
+	"attach":     {"attach <box> [--session NAME]   (through portenvd)", cmdAttach},
+	"app":        {"app open|close|point|revert|servers BOX | app move BOX this-mac|USER@HOST   (through portenvd)", cmdApp},
 	"ssh-config": {"ssh-config <box> --host SERVER [--user USER] [--alias portenv]", cmdSSHConfig},
 }
 
@@ -112,6 +114,8 @@ Commands:
                                close here, then resume on SSH-HOST (enrolling it first)
   join <box> --id BOX-ID --storage DIR    enrol a box here; repository key on stdin
   ssh-config <box> --host SERVER          print the "ssh portenv" entry
+  attach <box> [--session NAME]           this terminal in the box's tmux session (portenvd)
+  app ACTION BOX [TARGET]                 the app's actions through portenvd
   version
 `)
 }

@@ -196,12 +196,15 @@ func (s *Server) GetChannel(ctx context.Context, req *daemonv1.GetChannelRequest
 // the sync state (last saved snapshot and its time) and what this daemon
 // knows is happening (a save running, storage unreachable, the agent's
 // channel down). Opening a box successfully says nothing about saves.
-func saveState(st boxsync.State, saving, offline, agentDown, retrying, failed bool) (daemonv1.SaveState, time.Time) {
+func saveState(st boxsync.State, saving, offline, agentDown, retrying, failed, quitUnsaved bool) (daemonv1.SaveState, time.Time) {
 	switch {
 	case agentDown:
 		return daemonv1.SaveState_SAVE_STATE_AGENT_UNAVAILABLE, st.SavedAt
 	case retrying:
 		return daemonv1.SaveState_SAVE_STATE_RETRYING, st.SavedAt
+	case quitUnsaved:
+		// Until the save made first thing on open completes.
+		return daemonv1.SaveState_SAVE_STATE_QUIT_UNSAVED, st.SavedAt
 	case saving:
 		return daemonv1.SaveState_SAVE_STATE_SAVING, st.SavedAt
 	case offline:
@@ -229,7 +232,7 @@ func (s *Server) GetBoxState(ctx context.Context, req *daemonv1.GetBoxStateReque
 	if err != nil {
 		return nil, err
 	}
-	state, at := saveState(st, ob.saving.Load(), ob.offline.Load(), ob.agentDown.Load(), ob.retrying.Load(), ob.failed.Load())
+	state, at := saveState(st, ob.saving.Load(), ob.offline.Load(), ob.agentDown.Load(), ob.retrying.Load(), ob.failed.Load(), ob.quitUnsaved.Load())
 	r := &daemonv1.GetBoxStateResponse{State: state}
 	if !at.IsZero() {
 		r.SavedAt = timestamppb.New(at)

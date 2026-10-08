@@ -5,7 +5,8 @@
 # type into its tmux session through the agent channel, make a save point,
 # change a file, revert, close, reopen, restore from storage (whole-home
 # checksums, apt packages replayed), quit with a box open, and the agent's
-# failures. portenvd reaches the box only through the agent channel: a
+# failures, quitting when a box can't be saved, waking from sleep, and
+# quitting while a box opens. portenvd reaches the box only through the agent channel: a
 # watcher over the whole run allows no docker exec but the engine's health
 # check and this script's own probes (inspection and simulated failures).
 #
@@ -155,6 +156,76 @@ out=$("$portenv" app open d 2>&1) || true
 out=$(type_in 'echo window=$(cat ~/window.txt)')
 expect "the window's last edit is in the box" grep -q "window=window" <<<"$out"
 "$portenv" app close d >/dev/null 2>&1 || true
+
+# Quit with a box that can't be saved (the box agent is down): the close
+# fails, which the app turns into the alert "couldn't be saved before
+# quitting". Quit Anyway then stops portenvd: the box is left as it is,
+# with the quit marker; the next open says so and saves first thing.
+st_json() { "$portenv" app state d 2>/dev/null; }
+state_of() { st_json | python3 -c 'import json,sys; print(json.load(sys.stdin)["state"])' 2>/dev/null; }
+saved_at() { st_json | python3 -c 'import json,sys; print(json.load(sys.stdin).get("saved_at",""))' 2>/dev/null; }
+marker() { echo "$root/mac/state/$(box_id)/quit-unsaved"; }
+"$portenv" app open d >/dev/null 2>&1 || true
+c=portenv-daemon-$(box_id)
+type_in 'echo before-quit-anyway > ~/qa.txt' 1 >/dev/null
+before_qa=$(saved_at)
+probe "$c" pkill -f '^portenv-agent serve' || true
+sleep 1
+out=$("$portenv" app close d 2>&1) && st=0 || st=$?; echo "  $out"
+expect "quit with the agent down: the close fails, so the app asks (the alert)" test "$st" -ne 0
+expect "and says why: the box agent is unavailable" grep -q "the box agent is unavailable" <<<"$out"
+kill -TERM "$dpid"   # Quit Anyway
+for _ in $(seq 240); do kill -0 "$dpid" 2>/dev/null || break; sleep 0.5; done
+wait "$dpid" 2>/dev/null || true
+expect "Quit Anyway: portenvd stops" bash -c "! kill -0 $dpid 2>/dev/null"
+expect "the quit marker is recorded for the box" test -f "$(marker)"
+expect "the box is left as it is (still running)" test "$(docker inspect -f '{{.State.Running}}' "$c" 2>/dev/null)" = true
+start_daemon
+out=$("$portenv" app open d 2>&1) || true; echo "  $out"
+expect "relaunch: the open says Portenv quit before saving" grep -q "Portenv quit before saving" <<<"$out"
+seen=""
+for _ in $(seq 120); do s1=$(state_of); seen="$seen $s1"; [[ $s1 == SAVE_STATE_SAVED ]] && break; sleep 0.5; done
+echo "  states after relaunch:$(tr ' ' '\n' <<<"$seen" | awk 'NF && $0!=p {printf " %s", $0; p=$0}')"
+expect "the state line said so until the save" grep -qE "SAVE_STATE_(QUIT_UNSAVED|SAVING)" <<<"$seen"
+expect "then the box was saved first thing" test "$(state_of)" = SAVE_STATE_SAVED
+expect "with a newer save time than before quitting" test "$(saved_at)" != "$before_qa"
+expect "and the quit marker is gone" test ! -f "$(marker)"
+"$portenv" app close d >/dev/null 2>&1 || true
+docker rm -f "$c" >/dev/null 2>&1 || true
+docker volume rm -f "portenv-home-daemon-$(box_id)" >/dev/null 2>&1 || true
+"$portenv" app open d >/dev/null 2>&1 || true
+out=$(type_in 'echo qa=$(cat ~/qa.txt)')
+expect "the edit made before Quit Anyway is in that save (restored from storage)" grep -q "qa=before-quit-anyway" <<<"$out"
+
+# Waking from sleep: the box agent's channel dropped while the Mac slept.
+# The app reports the wake; portenvd checks every open box's channel and
+# restarts a box whose channel is gone (its home stays: rule 3).
+type_in 'echo before-sleep > ~/sleep.txt' 1 >/dev/null
+probe "$c" pkill -f '^portenv-agent serve' || true
+sleep 1
+out=$("$portenv" app woke 2>&1) || true; echo "  $out"
+expect "after waking: the dropped channel is noticed and the box restarted" grep -q "restarted" <<<"$out"
+out=$("$portenv" app check d 2>&1) || true
+expect "the box agent answers again" bash -c "! grep -q unavailable <<<'$out'"
+out=$(type_in 'echo sleep=$(cat ~/sleep.txt)')
+expect "the edit made before sleeping is still there" grep -q "sleep=before-sleep" <<<"$out"
+out=$("$portenv" app point d 2>&1) || true
+expect "and the next save goes through" grep -q "^save point" <<<"$out"
+"$portenv" app close d >/dev/null 2>&1 || true
+
+# Quit while a box is still opening: portenvd waits for the open, then
+# saves, releases and stops it (it once forgot boxes still opening).
+"$portenv" app open d >/dev/null 2>&1 &
+opener=$!
+sleep 1
+kill -TERM "$dpid"
+for _ in $(seq 360); do kill -0 "$dpid" 2>/dev/null || break; sleep 0.5; done
+wait "$dpid" 2>/dev/null || true
+wait "$opener" 2>/dev/null || true
+expect "quit while opening: portenvd stops within 3 minutes" bash -c "! kill -0 $dpid 2>/dev/null"
+expect "and the box it was opening is stopped" test "$(docker inspect -f '{{.State.Running}}' "$c" 2>/dev/null)" != true
+expect "and released (lease released, nothing unsaved)" python3 -c "import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if d.get('lease')=='released' and not d.get('dirty') else 1)" "$root/mac/state/$(box_id)/state.json"
+start_daemon
 
 # An impostor on the agent's port (ADR 0010, conditions): root in the box
 # kills the agent and serves a self-made certificate there. portenvd

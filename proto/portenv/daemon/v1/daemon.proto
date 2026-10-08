@@ -45,6 +45,10 @@ service DaemonService {
   // Mac). A fresh "down" (from a running app, at most 30 s old) opens a
   // box offline at once, without probing storage; anything else probes.
   rpc SetNetworkPath(SetNetworkPathRequest) returns (SetNetworkPathResponse);
+  // The system woke from sleep: check every open box's agent channel and
+  // restart a box whose channel is gone (its home stays: rule 3), so a
+  // dropped channel never sits unnoticed until the next save.
+  rpc Woke(WokeRequest) returns (WokeResponse);
 }
 
 message CheckBoxRequest {
@@ -194,6 +198,11 @@ enum SaveState {
   // The last save failed (after its retry); saved_at is the last one that
   // completed ("Not saved since 14:58"), until a save succeeds.
   SAVE_STATE_NOT_SAVED = 8;
+  // Portenv quit before this box could be saved (Quit Anyway, or the app
+  // ended); saved_at is the last save that completed. The box is saved first
+  // thing when it opens ("Not saved since 15:54 · Portenv quit before
+  // saving"), and this clears once a save succeeds.
+  SAVE_STATE_QUIT_UNSAVED = 9;
 }
 
 message GetBoxStateResponse {
@@ -219,3 +228,20 @@ message SetNetworkPathRequest {
 }
 
 message SetNetworkPathResponse {}
+
+message WokeRequest {}
+
+message WokeResponse {
+  repeated WokeBox boxes = 1;
+}
+
+// One open box after a wake.
+message WokeBox {
+  string name = 1;
+  // The channel answered.
+  bool agent_available = 2;
+  // The channel was gone and the box was restarted.
+  bool restarted = 3;
+  // Why a restart failed, when it did.
+  string detail = 4;
+}

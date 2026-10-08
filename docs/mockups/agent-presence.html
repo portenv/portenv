@@ -26,37 +26,37 @@ a{color:#409CFF}a:hover{color:#6CB6FF}
 </div>
 <div style="display: flex; flex-direction: column; gap: 1px; padding: 2px 8px">
 <span style="font-weight: 600">acme-api</span>
-<span style="font-size: 11px; color: #A1A1A6">build-server · Saved just now</span>
+<span style="font-size: 11px; color: #A1A1A6">Test server · Saved just now</span>
 </div>
 <div style="flex-grow: 1"></div>
-<button type="button" aria-expanded="true" aria-label="Agents: research-agent, test-agent" style="display: flex; align-items: center; padding: 3px 6px; min-height: 34px; background: #3A3A3D; border: none; border-radius: 8px; cursor: pointer">
-<span style="position: relative; display: flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 50%; background: #5E5CE6; color: #FFFFFF; font-size: 12px; font-weight: 600; border: 2px solid #3A3A3D">R<span style="position: absolute; top: -2px; right: -2px; width: 9px; height: 9px; border-radius: 50%; background: #FF9F0A; border: 2px solid #3A3A3D"></span></span>
-<span style="display: flex; align-items: center; justify-content: center; width: 26px; height: 26px; margin-left: -7px; border-radius: 50%; background: #64D2FF; color: #062635; font-size: 12px; font-weight: 600; border: 2px solid #3A3A3D">T</span>
+<button type="button" aria-expanded="true" aria-label="Agents: Grok Bot, Meta Muse. Meta Muse is waiting for you" style="display: flex; align-items: center; padding: 3px 6px; min-height: 34px; background: #3A3A3D; border: none; border-radius: 8px; cursor: pointer">
+<span style="display: flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 50%; background: #5E5CE6; color: #FFFFFF; font-size: 12px; font-weight: 600; border: 2px solid #3A3A3D">G</span>
+<span style="position: relative; display: flex; align-items: center; justify-content: center; width: 26px; height: 26px; margin-left: -7px; border-radius: 50%; background: #64D2FF; color: #062635; font-size: 12px; font-weight: 600; border: 2px solid #3A3A3D">M<span style="position: absolute; top: -2px; right: -2px; width: 9px; height: 9px; border-radius: 50%; background: #FF9F0A; border: 2px solid #3A3A3D"></span></span>
 </button>
 </header>
-<pre aria-hidden="true" style="flex-grow: 1; margin: 0; padding: 18px 22px; font-family: 'SF Mono', ui-monospace, 'JetBrains Mono', Menlo, monospace; font-size: 12px; line-height: 1.65; color: #6E6E73; white-space: pre"><span style="color: #4E8F68">work@portenv</span> <span style="color: #4C7BAE">~/acme-api</span> (main) $ claude --continue
+<pre aria-hidden="true" style="flex-grow: 1; margin: 0; padding: 18px 22px; font-family: 'SF Mono', ui-monospace, 'JetBrains Mono', Menlo, monospace; font-size: 12px; line-height: 1.65; color: #6E6E73; white-space: pre"><span style="color: #4E8F68">work@portenv</span> <span style="color: #4C7BAE">~/acme-api</span> (fix/retries) $ claude --continue
 
-&gt; Run the test suite.
+&gt; Find out why the retry test is flaky and fix it.
 
-● Ran npm test in ~/acme-api.
-  142 tests · 139 passed · 3 failed</pre>
+● Ran the test 40 times: 8 failures, all on the second retry.
+  Changing api/retries.ts to take the clock as a parameter.</pre>
 </div>
 
-<section aria-label="research-agent" style="position: absolute; top: 58px; left: 278px; width: 350px; box-sizing: border-box; padding: 16px; display: flex; flex-direction: column; gap: 14px; background: #2C2C2E; border: 1px solid #48484B; border-radius: 12px; box-shadow: 0 16px 40px rgba(0,0,0,0.6)">
+<section aria-label="Meta Muse" style="position: absolute; top: 58px; left: 278px; width: 350px; box-sizing: border-box; padding: 16px; display: flex; flex-direction: column; gap: 14px; background: #2C2C2E; border: 1px solid #48484B; border-radius: 12px; box-shadow: 0 16px 40px rgba(0,0,0,0.6)">
 
 <div style="display: flex; align-items: center; gap: 12px">
-<span aria-hidden="true" style="display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 50%; background: #5E5CE6; color: #FFFFFF; font-size: 15px; font-weight: 600">R</span>
+<span aria-hidden="true" style="display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 50%; background: #64D2FF; color: #062635; font-size: 15px; font-weight: 600">M</span>
 <div style="display: flex; flex-direction: column; gap: 2px">
-<span style="font-size: 14px; font-weight: 600">research-agent</span>
-<span style="font-size: 12px; color: #A1A1A6">SSH from an agent sandbox · connected 14:32</span>
+<span style="font-size: 14px; font-weight: 600">Meta Muse</span>
+<span style="font-size: 12px; color: #A1A1A6">Web terminal · connected 14:32</span>
 </div>
 </div>
 
 <div style="display: flex; flex-direction: column; gap: 8px">
-<span style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #C7C7CC"><span aria-hidden="true" style="width: 7px; height: 7px; border-radius: 50%; background: #30D158"></span>In its own lane · branch agent/research-agent</span>
+<span style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #C7C7CC"><span aria-hidden="true" style="width: 7px; height: 7px; border-radius: 50%; background: #30D158"></span>Own lane · branch agent/muse</span>
 <pre style="margin: 0; padding: 10px 12px; background: #1A1A1C; border-radius: 8px; font-family: 'SF Mono', ui-monospace, 'JetBrains Mono', Menlo, monospace; font-size: 11px; line-height: 1.6; color: #C7C7CC; white-space: pre; overflow: hidden">$ npm test
-<span style="color: #7EE2A8">PASS</span> api/users.spec.ts
-<span style="color: #FFD60A">RUNS</span> api/orders.spec.ts
+<span style="color: #7EE2A8">PASS</span> api/payments.spec.ts
+<span style="color: #FFD60A">RUNS</span> api/webhooks.spec.ts
 $ sudo apt-get install redis-tools</pre>
 </div>
 
@@ -86,8 +86,8 @@ $ sudo apt-get install redis-tools</pre>
 </span>
 <div style="display: flex; flex-direction: column; gap: 2px; min-width: 0">
 <span style="display: flex; justify-content: space-between; gap: 8px; font-size: 11px; color: #A1A1A6"><span>PORTENV</span><span>now</span></span>
-<span style="font-weight: 600; line-height: 1.35">research-agent wants to use sudo</span>
-<span style="font-size: 12px; color: #C7C7CC; line-height: 1.4">apt-get install redis-tools · acme-api on build-server</span>
+<span style="font-weight: 600; line-height: 1.35">Meta Muse wants to use sudo</span>
+<span style="font-size: 12px; color: #C7C7CC; line-height: 1.4">apt-get install redis-tools · acme-api on Test server</span>
 </div>
 </div>
 <div style="display: flex; gap: 8px">

@@ -30,38 +30,38 @@ body{margin:0;background:#0E0E10}
 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#A1A1A6" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M8 12.5l2.6 2.6L16 9.5"></path></svg>
 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#A1A1A6" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg>
 </span>
-<span style="font-size: 11px; color: #A1A1A6">MacBook Air · Saved 2 min ago</span>
+<span style="font-size: 11px; color: #A1A1A6">This Mac · Saved at 11:58</span>
 </button>
 </header>
 
 <div aria-hidden="true" style="display: flex; height: 30px; background: #232325; border-bottom: 1px solid #000000; font-size: 12px">
 <span style="flex: 1 1 0; display: flex; align-items: center; justify-content: center; background: #1A1A1C; border-right: 1px solid #000000">claude</span>
 <span style="flex: 1 1 0; display: flex; align-items: center; justify-content: center; color: #A1A1A6; border-right: 1px solid #000000">shell</span>
-<span style="flex: 1 1 0; display: flex; align-items: center; justify-content: center; color: #A1A1A6">research-agent</span>
+<span style="flex: 1 1 0; display: flex; align-items: center; justify-content: center; color: #A1A1A6">grok-bot</span>
 </div>
 
-<pre aria-hidden="true" style="flex-grow: 1; margin: 0; padding: 18px 22px; font-family: 'SF Mono', ui-monospace, 'JetBrains Mono', Menlo, monospace; font-size: 12.5px; line-height: 1.65; color: #6E6E73; white-space: pre"><span style="color: #4E8F68">work@portenv</span> <span style="color: #4C7BAE">~/acme-api</span> (main) $ claude --continue
+<pre aria-hidden="true" style="flex-grow: 1; margin: 0; padding: 18px 22px; font-family: 'SF Mono', ui-monospace, 'JetBrains Mono', Menlo, monospace; font-size: 12.5px; line-height: 1.65; color: #6E6E73; white-space: pre"><span style="color: #4E8F68">work@portenv</span> <span style="color: #4C7BAE">~/acme-api</span> (fix/retries) $ claude --continue
 
-&gt; Run the test suite and tell me what's still failing.
+&gt; Find out why the retry test is flaky and fix it.
 
-● Ran npm test in ~/acme-api.
-  142 tests · 139 passed · 3 failed (auth/session.spec.ts)</pre>
+● Ran the test 40 times: 8 failures, all on the second retry.
+  Changing api/retries.ts to take the clock as a parameter.</pre>
 
 <ul role="menu" aria-label="Box menu" style="position: absolute; top: 50px; left: 112px; width: 248px; margin: 0; padding: 5px; list-style: none; box-sizing: border-box; background: #2C2C2E; border: 1px solid #48484B; border-radius: 9px; box-shadow: 0 12px 32px rgba(0,0,0,0.55)">
 <li role="none"><button type="button" role="menuitem" style="display: flex; align-items: center; justify-content: space-between; width: 100%; height: 26px; padding: 0 10px; background: transparent; color: #F5F5F7; border: none; border-radius: 5px; font: inherit; text-align: left; cursor: pointer">Rename…</button></li>
-<li role="none"><button type="button" role="menuitem" aria-haspopup="menu" aria-expanded="true" style="display: flex; align-items: center; justify-content: space-between; width: 100%; height: 26px; padding: 0 10px; background: #0A6EDB; color: #FFFFFF; border: none; border-radius: 5px; font: inherit; text-align: left; cursor: pointer">Move To<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></button></li>
+<li role="none"><button type="button" role="menuitem" aria-haspopup="menu" style="display: flex; align-items: center; justify-content: space-between; width: 100%; height: 26px; padding: 0 10px; background: transparent; color: #F5F5F7; border: none; border-radius: 5px; font: inherit; text-align: left; cursor: pointer">Move To<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#A1A1A6" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></button></li>
 <li role="none"><button type="button" role="menuitem" style="display: flex; align-items: center; justify-content: space-between; width: 100%; height: 26px; padding: 0 10px; background: transparent; color: #F5F5F7; border: none; border-radius: 5px; font: inherit; text-align: left; cursor: pointer">Duplicate for a Task…</button></li>
-<li role="none"><button type="button" role="menuitem" aria-haspopup="menu" aria-expanded="false" style="display: flex; align-items: center; justify-content: space-between; width: 100%; height: 26px; padding: 0 10px; background: transparent; color: #F5F5F7; border: none; border-radius: 5px; font: inherit; text-align: left; cursor: pointer">Revert To<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></button></li>
+<li role="separator" style="height: 1px; margin: 5px 10px; background: #48484B"></li>
+<li role="none"><button type="button" role="menuitem" aria-haspopup="menu" aria-expanded="true" style="display: flex; align-items: center; justify-content: space-between; width: 100%; height: 26px; padding: 0 10px; background: #0A6EDB; color: #FFFFFF; border: none; border-radius: 5px; font: inherit; text-align: left; cursor: pointer">Revert To<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></button></li>
+<li role="none"><button type="button" role="menuitem" style="display: flex; align-items: center; justify-content: space-between; width: 100%; height: 26px; padding: 0 10px; background: transparent; color: #F5F5F7; border: none; border-radius: 5px; font: inherit; text-align: left; cursor: pointer">Make a Save Point<span style="color: #A1A1A6">⌘S</span></button></li>
 <li role="separator" style="height: 1px; margin: 5px 10px; background: #48484B"></li>
 <li role="none"><button type="button" role="menuitem" style="display: flex; align-items: center; justify-content: space-between; width: 100%; height: 26px; padding: 0 10px; background: transparent; color: #F5F5F7; border: none; border-radius: 5px; font: inherit; text-align: left; cursor: pointer">Show in Finder<span style="color: #A1A1A6">⌥⌘R</span></button></li>
 </ul>
 
-<ul role="menu" aria-label="Move To" style="position: absolute; top: 78px; left: 356px; width: 260px; margin: 0; padding: 5px; list-style: none; box-sizing: border-box; background: #2C2C2E; border: 1px solid #48484B; border-radius: 9px; box-shadow: 0 12px 32px rgba(0,0,0,0.55)">
-<li role="none"><button type="button" role="menuitemradio" aria-checked="true" style="display: flex; align-items: center; gap: 8px; width: 100%; height: 26px; padding: 0 10px 0 6px; background: transparent; color: #F5F5F7; border: none; border-radius: 5px; font: inherit; text-align: left; cursor: pointer"><span style="width: 14px; text-align: center">✓</span><span style="flex-grow: 1">MacBook Air</span><span style="font-size: 12px; color: #A1A1A6">This Mac</span></button></li>
-<li role="none"><button type="button" role="menuitemradio" aria-checked="false" style="display: flex; align-items: center; gap: 8px; width: 100%; height: 26px; padding: 0 10px 0 6px; background: #0A6EDB; color: #FFFFFF; border: none; border-radius: 5px; font: inherit; text-align: left; cursor: pointer"><span style="width: 14px"></span><span style="flex-grow: 1">build-server</span><span style="font-size: 12px; color: #DCEBFF">Ready</span></button></li>
-<li role="none"><button type="button" role="menuitemradio" aria-checked="false" style="display: flex; align-items: center; gap: 8px; width: 100%; height: 26px; padding: 0 10px 0 6px; background: transparent; color: #F5F5F7; border: none; border-radius: 5px; font: inherit; text-align: left; cursor: pointer"><span style="width: 14px"></span><span style="flex-grow: 1">Portenv Cloud</span><span style="font-size: 12px; color: #A1A1A6">Always on</span></button></li>
+<ul role="menu" aria-label="Revert To" style="position: absolute; top: 139px; left: 356px; width: 272px; margin: 0; padding: 5px; list-style: none; box-sizing: border-box; background: #2C2C2E; border: 1px solid #48484B; border-radius: 9px; box-shadow: 0 12px 32px rgba(0,0,0,0.55)">
+<li role="none"><button type="button" role="menuitem" style="display: flex; align-items: center; gap: 8px; width: 100%; height: 26px; padding: 0 10px; background: #0A6EDB; color: #FFFFFF; border: none; border-radius: 5px; font: inherit; text-align: left; cursor: pointer"><span style="flex-grow: 1">Last Save Point</span><span style="font-size: 12px; color: #DCEBFF">11:52 today</span></button></li>
 <li role="separator" style="height: 1px; margin: 5px 10px; background: #48484B"></li>
-<li role="none"><button type="button" role="menuitem" style="display: flex; align-items: center; gap: 8px; width: 100%; height: 26px; padding: 0 10px 0 6px; background: transparent; color: #F5F5F7; border: none; border-radius: 5px; font: inherit; text-align: left; cursor: pointer"><span style="width: 14px"></span>Add a Server…</button></li>
+<li role="none"><button type="button" role="menuitem" style="display: flex; align-items: center; gap: 8px; width: 100%; height: 26px; padding: 0 10px; background: transparent; color: #F5F5F7; border: none; border-radius: 5px; font: inherit; text-align: left; cursor: pointer">Browse All Saves…</button></li>
 </ul>
 
 </div>

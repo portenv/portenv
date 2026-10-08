@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Portenv command palette</title>
+
+</head>
+<body>
+
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0;background:#0E0E10}
+a{color:#0A84FF}a:hover{color:#409CFF}
+</style>
+
+<div style="position: relative; width: 100%; max-width: 1440px; margin: 0 auto; min-height: 800px; box-sizing: border-box; display: flex; flex-direction: column; background: #1A1A1C; color: #F5F5F7; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; font-size: 13px; border: 1px solid #3A3A3D; border-radius: 12px; overflow: hidden">
+
+<header style="display: flex; align-items: center; gap: 14px; min-height: 52px; padding: 8px 14px; box-sizing: border-box; background: #2B2B2E; border-bottom: 1px solid #000000">
+<div aria-hidden="true" style="display: flex; gap: 8px; padding-right: 6px">
+<span style="width: 12px; height: 12px; border-radius: 50%; background: #FF5F57"></span>
+<span style="width: 12px; height: 12px; border-radius: 50%; background: #FEBC2E"></span>
+<span style="width: 12px; height: 12px; border-radius: 50%; background: #28C840"></span>
+</div>
+<span style="display: flex; flex-direction: column; gap: 1px; padding: 2px 8px">
+<span style="font-weight: 600">acme-api</span>
+<span style="font-size: 11px; color: #A1A1A6">This Mac · Saved at 14:58</span>
+</span>
+</header>
+
+<div aria-hidden="true" style="flex-grow: 1; padding: 22px; font-family: 'SF Mono', ui-monospace, 'JetBrains Mono', Menlo, monospace; font-size: 12.5px; line-height: 1.6; color: #6E6E73">
+<div>$ git diff --stat</div>
+<div> api/retries.ts      | 14 +++++++---</div>
+<div> api/retries.spec.ts |  9 +++++--</div>
+<div>$ claude --continue</div>
+</div>
+
+<div aria-hidden="true" style="position: absolute; inset: 52px 0 0 0; background: rgba(0,0,0,0.35)"></div>
+
+<div role="dialog" aria-label="Command palette" style="position: absolute; top: 96px; left: 50%; transform: translateX(-50%); width: min(600px, calc(100% - 32px)); display: flex; flex-direction: column; background: #2A2A2D; border: 1px solid #48484A; border-radius: 12px; box-shadow: 0 24px 60px rgba(0,0,0,0.6); overflow: hidden">
+
+<div style="display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid #3A3A3D">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#A1A1A6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4-4"></path></svg>
+<label for="palette-q" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Command</label>
+<input id="palette-q" type="text" placeholder="Type a command" style="flex-grow: 1; min-width: 0; background: transparent; border: none; outline: none; color: #F5F5F7; font: inherit; font-size: 16px">
+<span style="font-size: 12px; color: #8E8E93">esc</span>
+</div>
+
+<div style="display: flex; flex-direction: column; padding: 6px; max-height: 520px; overflow-y: auto">
+
+<span style="padding: 8px 10px 4px; font-size: 11px; font-weight: 600; color: #A1A1A6">Waiting for you</span>
+<button type="button" style="display: flex; align-items: center; gap: 10px; min-height: 36px; padding: 0 10px; background: #0A6EDB; color: #FFFFFF; border: none; border-radius: 7px; font: inherit; text-align: left; cursor: pointer">
+<span aria-hidden="true" style="display: flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; background: #5E5CE6; color: #FFFFFF; font-size: 9px; font-weight: 700">G</span>
+<span style="flex-grow: 1">Answer Claude Code: “Push fix/retries to the remote?”</span>
+<span style="font-size: 12px; color: #DCEBFF">claude tab</span>
+</button>
+
+<span style="padding: 10px 10px 4px; font-size: 11px; font-weight: 600; color: #A1A1A6">Box</span>
+<button type="button" style="display: flex; align-items: center; gap: 10px; min-height: 34px; padding: 0 10px; background: transparent; color: #F5F5F7; border: none; border-radius: 7px; font: inherit; text-align: left; cursor: pointer"><span style="flex-grow: 1">Move To Test server</span></button>
+<button type="button" style="display: flex; align-items: center; gap: 10px; min-height: 34px; padding: 0 10px; background: transparent; color: #F5F5F7; border: none; border-radius: 7px; font: inherit; text-align: left; cursor: pointer"><span style="flex-grow: 1">Make a Save Point</span><span style="font-size: 12px; color: #8E8E93">⌘S</span></button>
+<button type="button" style="display: flex; align-items: center; gap: 10px; min-height: 34px; padding: 0 10px; background: transparent; color: #F5F5F7; border: none; border-radius: 7px; font: inherit; text-align: left; cursor: pointer"><span style="flex-grow: 1">Revert To Last Save Point</span><span style="font-size: 12px; color: #8E8E93">14:31</span></button>
+<button type="button" style="display: flex; align-items: center; gap: 10px; min-height: 34px; padding: 0 10px; background: transparent; color: #F5F5F7; border: none; border-radius: 7px; font: inherit; text-align: left; cursor: pointer"><span style="flex-grow: 1">Show Inspector</span><span style="font-size: 12px; color: #8E8E93">⌥⌘I</span></button>
+
+<span style="padding: 10px 10px 4px; font-size: 11px; font-weight: 600; color: #A1A1A6">Tabs</span>
+<button type="button" style="display: flex; align-items: center; gap: 10px; min-height: 34px; padding: 0 10px; background: transparent; color: #F5F5F7; border: none; border-radius: 7px; font: inherit; text-align: left; cursor: pointer"><span style="flex-grow: 1">New Tab</span><span style="font-size: 12px; color: #8E8E93">⌘T</span></button>
+<button type="button" style="display: flex; align-items: center; gap: 10px; min-height: 34px; padding: 0 10px; background: transparent; color: #F5F5F7; border: none; border-radius: 7px; font: inherit; text-align: left; cursor: pointer"><span style="flex-grow: 1">Go to shell</span><span style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #8E8E93"><span aria-hidden="true" style="width: 7px; height: 7px; border-radius: 50%; background: #30D158"></span>npm run build finished</span></button>
+
+<span style="padding: 10px 10px 4px; font-size: 11px; font-weight: 600; color: #A1A1A6">Saved commands</span>
+<button type="button" style="display: flex; align-items: center; gap: 10px; min-height: 34px; padding: 0 10px; background: transparent; color: #F5F5F7; border: none; border-radius: 7px; font: inherit; text-align: left; cursor: pointer"><span style="flex-grow: 1">Run “Start dev server”</span><span style="font-family: 'SF Mono', ui-monospace, 'JetBrains Mono', monospace; font-size: 11px; color: #8E8E93">npm run dev</span></button>
+<button type="button" style="display: flex; align-items: center; gap: 10px; min-height: 34px; padding: 0 10px; background: transparent; color: #F5F5F7; border: none; border-radius: 7px; font: inherit; text-align: left; cursor: pointer"><span style="flex-grow: 1">Run “Run tests”</span><span style="font-family: 'SF Mono', ui-monospace, 'JetBrains Mono', monospace; font-size: 11px; color: #8E8E93">npm test</span></button>
+
+<span style="padding: 10px 10px 4px; font-size: 11px; font-weight: 600; color: #A1A1A6">Agents</span>
+<button type="button" style="display: flex; align-items: center; gap: 10px; min-height: 34px; padding: 0 10px; background: transparent; color: #F5F5F7; border: none; border-radius: 7px; font: inherit; text-align: left; cursor: pointer"><span style="flex-grow: 1">Connect an Agent…</span></button>
+
+</div>
+
+<div style="display: flex; gap: 16px; padding: 8px 14px; border-top: 1px solid #3A3A3D; font-size: 11px; color: #8E8E93">
+<span>↑↓ to choose</span><span>↩ to run</span><span style="flex-grow: 1"></span><span>⌘K anywhere</span>
+</div>
+</div>
+
+</div>
+
+
+</body>
+</html>

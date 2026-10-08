@@ -6,6 +6,8 @@ Portenv (short for portable environment) is a native Mac app that gives each pro
 
 The approved app designs are in `docs/mockups/` (PNG plus static HTML per screen, with a README). Match them when building the Mac app; they are references, not code to port.
 
+`docs/design/GUIDELINES.md` is the rulebook for all app UI (state line, menus, terminal, inspector, palette, notifications, writing, accessibility). If a mockup and GUIDELINES.md disagree, GUIDELINES.md wins.
+
 ## Current phase
 
 Phase 0: Foundations (owner only). Start with milestone 0.1 (repository, CI and protocol scaffold). Do not start a phase until the previous phase's acceptance checklist in `docs/PLAN.md` passes.

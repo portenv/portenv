@@ -10,9 +10,12 @@ The first-run screens show the full version, from Phase 3. Phases 1 and 2 ship a
 
 | File | What it shows |
 | --- | --- |
-| `main-window` | The default window: title with sync symbol and subtitle, tabs (including an agent lane being watched), full-width terminal, quiet toolbar items (`:3000` port, agent avatars with an approval badge). No action buttons. |
-| `title-menu` | Clicking the title (Apple's document-menu pattern): Rename… · Move To ▸ (this Mac, servers, Portenv Cloud, Add a Server…) · Duplicate for a Task… · Revert To ▸ (Last Save Point, shown with its time; Browse All Saves…) · Show in Finder ⌥⌘R. Make Save Point is in the File menu, Box Settings in the Box menu and Settings; changes open from the sync symbol. The PNG predates this exact layout; a new image follows. |
-| `agent-presence` | Clicking an agent avatar: identity, lane and branch, live terminal glimpse, pending sudo approval, Watch / Take Over, permissions sentence, Revoke Access. Beside it, the matching macOS notification. |
+| `main-window` | The main window with the inspector open. Terminal as blocks with attribution (your `git diff --stat` between two Grok Bot commands), a sticky header for the block being scrolled, the inline answer card for Claude Code's question, tab badges (Grok Bot working in `claude`, finished build in `shell`, Meta Muse's lane in `muse`), and the inspector: Where it is, Saves, Who's here, Running now with saved commands. |
+| `title-menu` | Clicking the title: Rename, Move To ▸, Duplicate for a Task, Revert To ▸ (Last Save Point, Browse All Saves), Make a Save Point ⌘S, Show in Finder. |
+| `agent-presence` | Clicking an agent avatar: Meta Muse in its own lane, live terminal glimpse, a pending sudo request (opt-in approvals), Watch / Take Over, Revoke Access, and the matching notification. |
+| `main-window-moving` | The same window during Move To ▸ Test server: the inspector's Where it is section becomes the move's four-step progress, the terminal dims, the state line says "Moving to Test server…". |
+| `command-palette` | ⌘K: Waiting for you, Box, Tabs, Saved commands, Agents. |
+| `notification` | The macOS notification when Claude Code is waiting and the window isn't in front, with Yes, push / Not yet / Show. |
 | `first-run-1-welcome` | Continue with Apple, Continue with GitHub, Continue without an account (no sign-in is ever required for your own machines and storage; ADR 0008), or email. |
 | `first-run-2-protection` | Only you (default) or You, with Portenv's help. |
 | `first-run-3-recovery-key` | Recovery key with Save to Passwords, Print, Copy; Continue enabled only after the confirmation checkbox. |
@@ -22,6 +25,7 @@ The first-run screens show the full version, from Phase 3. Phases 1 and 2 ship a
 
 ## Design notes
 
+- docs/design/GUIDELINES.md is the rulebook. If a mockup and the guidelines disagree, the guidelines win.
 - Type: system font (SF Pro) for UI, SF Mono for the terminal. Title 13 pt semibold with an 11 pt secondary subtitle; first-run headings 24 pt bold.
 - Colors (dark): window `#1A1A1C`, toolbar `#2B2B2E`, tab bar `#232325`, menus and popovers `#2C2C2E`, secondary text `#A1A1A6`, accent `#0A84FF` (buttons with white text use `#0A6EDB`), approval highlight `#FF9F0A`, destructive `#FF6961`.
 - Agent identity colors: monogram circles, one hue per agent, consistent everywhere the agent appears (toolbar, tab, popover).

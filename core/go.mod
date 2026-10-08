@@ -9,7 +9,7 @@ require (
 	github.com/moby/moby/client v0.6.1
 	github.com/portenv/portenv/proto/gen/go v0.0.0
 	golang.org/x/crypto v0.54.0
-	golang.org/x/sys v0.47.0
+	golang.org/x/sys v0.48.0
 	google.golang.org/grpc v1.84.0
 )
 

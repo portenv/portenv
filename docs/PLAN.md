@@ -67,7 +67,7 @@ These were settled in planning on 7 October 2026. Reopen one only with the owner
 | Box format | OCI image (Dockerfile) for the toolbox plus a portable home | Every runtime can run OCI images |
 | Home | `/home/work` for the main user `work`; projects directly in home; agent lanes at `/home/<agent>` | Fixed paths keep tool history valid across machines |
 | Saved unit | All of `/home`, minus excludes | Agent lanes travel with the box |
-| Runtime | Box driver interface; Docker first, Apple Containerization as the native Mac engine, microVMs (Firecracker or Kata) on Portenv Cloud | Docker ships fastest; VMs isolate tenants |
+| Runtime | Box driver interface; Docker first, Apple Containerization as the native Mac engine, microVMs (Firecracker or Cloud Hypervisor, chosen by a spike) on Portenv Cloud | Docker ships fastest; VMs isolate tenants |
 | Access path | Through an in-box agent, never `docker exec` (from Phase 1) | Lets a box move from container to VM unchanged |
 | Snapshots | restic repositories, encrypted, incremental, one repository per box | Proven format, multiple keys per repository |
 | Leases | One machine holds a box open at a time; control plane is authoritative, snapshot tags are the offline fallback | Prevents silent overwrites |
@@ -77,6 +77,7 @@ These were settled in planning on 7 October 2026. Reopen one only with the owner
 | Finder | File Provider extension shows each box in Documents › Portenv › \<box> | Native, works when the box runs remotely |
 | Developer servers | An open-source runner, installed by an in-app wizard | Full control for developers, same features |
 | Ownership | The user owns every box; agents are guests the user invites. Any agent that can open a terminal or use a connector can join, and be connected and disconnected without moving work; nothing is specific to one agent. Work done by agents stays in the user's box, and history attributes every change to the agent that made it. Portenv ships no agent of its own (ADR 0006) | Users keep their work and choose their agents freely |
+| Backend | No Portenv backend before Phase 3: Phases 0 to 2 run only on the user's Mac, servers and storage. Everything that runs on your own machines and storage (the app, local boxes, your servers, your storage, SSH and CLI access, webhooks from the box) works without Portenv's servers or an account. Hosted services (gateway, push, remote MCP, web terminal, Portenv storage, Portenv Cloud) are separate. (ADR 0008) | The product works without Portenv's servers |
 | Repositories and license | `portenv/portenv` is public under Apache-2.0 (apps, core, shims, images, proto, docs); the control plane and gateway live in the private `portenv/cloud` repository (decided 7 October 2026) | Box agent, runner and protocols must be auditable; the hosted service is not |
 
 ## Architecture
@@ -445,9 +446,15 @@ The main window is a terminal with a title; everything else appears only when it
 - Toolbar items appear only when relevant: listening ports (`:3000 ↗`), agent avatars with an approval badge.
 - Drag a file onto the terminal to copy it into the current folder.
 
+**Hosted features** (the own-route guarantee, ADR 0008 G3)
+
+- Hosted options (Portenv Cloud in Move To, Portenv storage, Account) appear as ordinary choices once they exist. Choosing one opens a sheet that explains it and offers sign-in. They are never required, never block a flow, and never show banners or nags.
+- If the service is unreachable, that shows only when the user picks the option: "Can't reach Portenv right now; your boxes keep working."
+- Before a hosted feature exists, it does not appear at all: no "coming soon" items.
+
 **Title menu** (Apple's document-menu pattern)
 
-Rename… · Move To ▸ (this Mac, each server, Portenv Cloud, Add a Server…) · Duplicate for a Task… · Revert To ▸ (Last Save Point, shown with its time; Browse All Saves…) · Show in Finder ⌥⌘R
+Rename… · Move To ▸ (this Mac, each server, Portenv Cloud once it exists, Add a Server…) · Duplicate for a Task… · Revert To ▸ (Last Save Point, shown with its time; Browse All Saves…) · Show in Finder ⌥⌘R
 
 **Menu bar**
 
@@ -473,10 +480,10 @@ Rename… · Move To ▸ (this Mac, each server, Portenv Cloud, Add a Server…)
 
 This is the first run once the control plane exists (Phase 3). The mockups show this version.
 
-1. Welcome: Continue with Apple, Continue with GitHub, Use email instead.
+1. Welcome: Continue with Apple, Continue with GitHub, Use email instead, and Continue without an account (the own route needs none; the remaining steps then skip sign-in and Portenv storage).
 2. Protection: Only you (default) or You, with Portenv's help.
 3. Recovery key: Save to Passwords, Print, Copy; Continue enabled only after "I've saved my recovery key".
-4. Storage: Portenv storage preselected; Use my own server or bucket… reveals the alternatives.
+4. Storage: Portenv storage can be preselected, but "Use my own server or bucket" and "Keep on this Mac for now" are visible on the same screen, each one click, with no account needed.
 5. First box: name, Start from (GitHub repository, folder on this Mac, empty), detected toolbox with Change…, Show this box in Finder (on).
 6. Getting ready: Setting up Portenv (first run only), toolbox, encrypted home, clone, start. The window opens as soon as the box is usable.
 
@@ -514,7 +521,7 @@ Portenv never links an engine into its code: drivers talk to engines through the
 | --- | --- | --- | --- |
 | `docker` | Mac (fallback), Linux servers | Docker Engine API over its socket | 0 |
 | `apple` | Mac, Apple silicon, macOS 26+ | Apple Containerization (Swift, Apache-2.0), each box in its own lightweight VM | 1 |
-| `microvm` | Portenv Cloud, KVM-capable servers | Firecracker or Kata (Apple Containerization's cloud-hypervisor backend is an option to evaluate) | 5 |
+| `microvm` | Portenv Cloud, KVM-capable servers | Firecracker or Cloud Hypervisor, chosen by a spike; the first launch may use a rented provider behind the same driver | 5 |
 
 Apple Containerization is pre-1.0: pin its version and expect API changes between minor versions.
 
@@ -649,8 +656,20 @@ Each milestone ends with a demo note in `docs/milestones/<id>.md` and its checkl
 
 Milestones: 1.1 `portenvd` with the local gRPC API · 1.2 main window with a terminal view (evaluate SwiftTerm, MIT-licensed) and tmux-backed tabs · 1.3 `apple` driver shim, `docker` as fallback (the box agent drops the forbidden capabilities from every process it starts, since a VM's root holds them by default) · 1.4 autosave, sync symbol, Changes, Browse Saves · 1.5 first run (reduced, no sign-in; see Desktop app UX), Keychain keys, recovery key · 1.6 port relay · 1.7 shared folder, then the File Provider · 1.8 signing, notarization, Sparkle updates.
 
+**1.8 Releases and where the app is downloaded from**
+
+- **Pipeline:** a version tag triggers CI on a macOS runner: build, sign with the Developer ID certificate, notarize and staple, package and sign `Portenv.dmg`, and generate a Sparkle `appcast.xml` signed with Portenv's EdDSA key.
+- **Hosting:** the DMG and `appcast.xml` are assets on the `portenv/portenv` GitHub release.
+- **Stable URLs:** `portenv.com/download` and `portenv.com/appcast.xml` redirect to the latest release's assets (Cloudflare redirect rules). The app's Sparkle feed URL is `portenv.com/appcast.xml`, never a GitHub URL, so hosting can move later without breaking updates.
+- **Keys:** the Developer ID certificate and the Sparkle EdDSA private key live only in CI secrets and the owner's Keychain, never in the repository.
+- **Sparkle key backup** (losing it means installed apps can never be updated): when the key is generated, export it once to two offline copies (an encrypted USB drive and a printed or written copy in a separate safe place), record its public key and fingerprint in this plan, and test a restore into a clean Keychain by signing a throwaway appcast that a test install accepts. Repeat the restore test before each major release. A suspected leak means rotating to a new key, which only apps that already trust both keys can follow: ship the new public key in an update signed with the old key first.
+- **Own route:** the update check runs in the background and times out quietly when portenv.com is unreachable; it never blocks or slows launch. A release is blocked unless the `own-route` job passes on the tagged commit.
+- **Later:** a Homebrew cask pointing at the same release.
+
 - [ ] A new user goes from download to a working box without typing a command or creating an account
 - [ ] Closing the window saves and releases; reopening restores within 5 seconds
+- [ ] A version tag produces a signed, notarized, stapled `Portenv.dmg` and a signed `appcast.xml` on the GitHub release; `portenv.com/download` and `portenv.com/appcast.xml` redirect to them, and an installed build updates through Sparkle
+- [ ] The Sparkle key's offline backups exist and a restore test passed
 - [ ] Offline: work continues and saves upload when the network returns
 - [ ] Every control has a VoiceOver label; light and dark appearance both pass review
 - [ ] A dev server bound to the box's localhost opens in Safari through the relay
@@ -682,7 +701,7 @@ Milestones: 2.1 runner (server build of the core) installed over SSH · 2.2 Add 
 - **Connect an agent** in the app shows one message to copy and paste to the agent, for example: "Install the Portenv CLI from portenv.com/cli, run `portenv skill install`, then connect to my box acme-api with code K7F2-9QX4." Opening the sheet opens the enrolment window (ADR 0007: 10 minutes or one approved code); when the agent requests the code, the approval sheet follows.
 - **Later, not in 2.7:** a plugin marketplace repository carrying the skill. The MCP door needs no skill: its tools describe themselves.
 
-**2.8 Webhooks**: signed event pushes from the runner to a URL the user registers for their agent.
+**2.8 Webhooks**: signed event pushes from the box agent or runner (never a Portenv server) to a URL the user registers for their agent. Settings and the signing key live in `~/.portenv` in the box, so they are encrypted and move with it. Before building it, confirm the target agents can be woken by an incoming webhook (Open questions).
 
 **2.9 stdio MCP**: `portenv mcp` on the agent's computer exposes events, screen and send over the CLI's connection.
 
@@ -704,7 +723,7 @@ Milestones: 2.1 runner (server build of the core) installed over SSH · 2.2 Add 
 
 ### Phase 3: Control plane and gateway
 
-Milestones: 3.1 accounts (Apple, GitHub, email) · 3.2 device enrollment and wrapped keys · 3.3 authoritative leases · 3.4 box agent tunnels and gateway routing by box name · 3.5 Portenv storage · 3.6 push notifications · 3.7 full first run (sign-in, Portenv storage, recoverable mode) and the one-time account prompt for existing users · 3.8 SSH door through the gateway (Portenv CA certificates, ports 22 and 443, `portenv ssh` over HTTPS; needs 3.1, 3.2, 3.4) · 3.9 remote MCP door with OAuth and the ChatGPT plugin listing (needs 3.1, 3.4 and the 2.7 core; not lanes, approvals or the vault) · 3.10 web terminal on portenv.com with passkeys (needs 3.1, 3.4).
+Milestones: 3.1 accounts (Apple, GitHub, email) · 3.2 device enrollment and wrapped keys · 3.3 authoritative leases · 3.4 box agent tunnels and gateway routing by box name · 3.5 Portenv storage (Cloudflare R2, one prefix per box, short-lived prefix-scoped credentials minted per device, quotas by refusing credentials, retention and pruning on the user's devices; ADR 0008) · 3.6 push notifications · 3.7 full first run (sign-in, Portenv storage, recoverable mode) and the one-time account prompt for existing users · 3.8 SSH door through the gateway (Portenv CA certificates, ports 22 and 443, `portenv ssh` over HTTPS; needs 3.1, 3.2, 3.4) · 3.9 remote MCP door with OAuth and the ChatGPT plugin listing (needs 3.1, 3.4 and the 2.7 core; not lanes, approvals or the vault) · 3.10 web terminal on portenv.com with passkeys (needs 3.1, 3.4).
 
 - [ ] A box is reachable by name wherever it runs, with no inbound ports anywhere
 - [ ] Revoking a device ends its sessions within 5 seconds
@@ -725,11 +744,13 @@ Milestones: 4.1 lanes (users, tmux, worktrees, limits) everywhere a box runs, an
 
 ### Phase 5: Portenv Cloud
 
-Milestones: 5.1 `microvm` driver and cloud hosts · 5.2 per-box encrypted volumes · 5.3 wake on demand (with end-to-end approval) · 5.4 Duplicate for a Task (fast clones from a snapshot). Cloud-side work for this phase lives in `portenv/cloud`.
+Milestones: 5.1 microVM driver: Firecracker or Cloud Hypervisor, chosen by a spike (the first launch may use a rented provider behind the same driver) · 5.2 one microVM per box and one tenant per VM, a shared read-only toolbox image, `/home` restored onto local disk encrypted per box · 5.3 wake on demand (with end-to-end approval) and idle stop (save and stop after a set time; agent keystrokes count as activity) · 5.4 Duplicate for a Task (fast clones from a snapshot). Placement is a simple scheduler in the control-plane database that prefers the host with the box's `/home` cached; draining a host moves its boxes. Cloud-side work for this phase lives in `portenv/cloud`.
 
 - [ ] A box starts on Portenv Cloud in seconds from its latest save
 - [ ] Ten clones of one box run in parallel, isolated from each other
 - [ ] Tenant isolation passes an external review
+- [ ] A stopped box costs only storage, and a dead host loses at most the work since the last autosave
+- [ ] Abuse controls are live: outbound port 25 blocked, sustained full-CPU detection
 
 **Later:** teams and shared servers, Create a server for me through provider APIs, Linux and Windows apps, a self-hosted control plane for enterprises.
 
@@ -748,6 +769,7 @@ The save engine is tested hardest, because a bug there loses someone's work; eve
 | Mac app | XCUITest for first run, title menu, lease sheet; accessibility audit; light and dark snapshots | Every merge touching the app |
 | Performance | Budgets: 5 MB save under 10 s, same-machine resume under 5 s, port relay adds under 5 ms locally | Nightly |
 | Recovery drill | Restore a box from the recovery phrase on a clean Mac | Before each release |
+| Own route | `own-route` job: the own-route journey with every Portenv-hosted endpoint blocked at DNS and the firewall, from locally built artifacts; from Phase 1 it also drives the app with the hosted options visible and untouched (ADR 0008, G3) | Every pull request and merge to main; blocks releases |
 
 CI runs the Go suites on Linux arm64 and amd64 and the app suites on macOS arm64 runners. A release is blocked by any failing gate.
 
@@ -763,6 +785,8 @@ These need an owner decision; Claude Code should add new ones here instead of gu
 - [ ] Point-in-time autosaves while the box runs: worth a file system with snapshots (for example btrfs on the Apple disk image), or are file-consistent saves plus the pre-save hook enough? (ADR 0005)
 - [ ] Before each door is built: confirm the target agents can actually reach it (for example outbound SSH from their computers for door 1).
 - [ ] Does Grok Bot read `~/.agents/skills` and can it run the install script? (The owner is testing it.)
+- [ ] Before 2.8: can the target agents be woken by an incoming webhook? If not, an agent keeping `portenv events --follow` running does the job and 2.8 drops in priority (ADR 0008).
+- [ ] Apple Developer Program enrolment (the owner is handling it): needed for Developer ID signing and notarization in 1.8.
 - [ ] Approval timeout default (30 minutes assumed) and what happens when it expires.
 - [ ] Anthropic's terms for agents driving Claude Code with a subscription login versus a Console API key.
 - [ ] Open-source boundary in detail: this repository is Apache-2.0 and `portenv/cloud` is private (decided), but confirm before going public whether the Mac app, the File Provider and the iPhone companion stay in the public repository or move to a private one.

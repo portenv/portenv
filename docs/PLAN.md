@@ -696,6 +696,7 @@ A thin slice through every layer, in the code where 1.1 and 1.2 continue: a mini
 - [x] Move To ▸ a server and back to This Mac through `portenvd`, files intact both ways (`tests/e2e/daemon-server.sh`, 2026-10-08: 29.0 s there including enrolling the server, 21.0 s back)
 - [x] Quitting the app (or SIGTERM) saves and releases the open box
 - [x] The restic password stays unreadable in the box with the channel (`TestChannelPasswordIsUnreadable`)
+- [x] ADR 0010's conditions hold, each with its test: the channel's files never reach a save and are gone once loaded, root in the box cannot read the key or token, and an impostor on the agent's port gets nothing while the app reports the box agent unavailable
 
 **1.4 Autosave, the sync symbol, Changes and Browse Saves: slow links are normal**
 
@@ -721,6 +722,7 @@ Slow uplinks are a real user condition, not an edge case (the Phase 0 gate ran o
 - [ ] A version tag produces a signed, notarized, stapled `Portenv.dmg` and a signed `appcast.xml` on the GitHub release; `portenv.com/download` and `portenv.com/appcast.xml` redirect to them, and an installed build updates through Sparkle
 - [ ] The Sparkle key's offline backups exist and a restore test passed
 - [ ] Offline: work continues and saves upload when the network returns
+- [ ] No docker exec as an access path to boxes on the Mac: they are reached only through `portenvd` and the agent channel (ADR 0010). Server boxes follow in 2.1, when the runner lands; until then Move To a server in the app is a preview path, used only on the owner's test server.
 - [ ] Every control has a VoiceOver label; light and dark appearance both pass review
 - [ ] A dev server bound to the box's localhost opens in Safari through the relay
 - [ ] Inside an `apple` box (a VM), the restic password probe (`tests/e2e/restic-isolation.sh`) passes: root in the box cannot read the password, because the agent drops the forbidden capabilities itself
@@ -729,7 +731,7 @@ Slow uplinks are a real user condition, not an edge case (the Phase 0 gate ran o
 
 The toolbox image is published from CI ahead of the rest of 2.5: each architecture builds and tests on its native runner, then one multi-arch manifest goes to `ghcr.io/portenv/toolbox-node`, tagged `sha-<commit>` and `main` (and `vN` on version tags), with a build provenance attestation. Macs, servers and the setup script pull by digest, and the CLI pins a box's image to its digest on first use. Local builds stay possible for development; nothing requires them.
 
-Milestones: 2.1 runner (server build of the core) installed over SSH · 2.2 Add a Server wizard with preflight · 2.3 Move To in the title menu · 2.4 lease sheet · 2.5 toolbox registry, versions and drift warnings · 2.6 append-only storage · 2.7 stand-in agents over SSH and the CLI · 2.8 webhooks · 2.9 stdio MCP.
+Milestones: 2.1 runner (server build of the core) installed over SSH; from here server boxes, too, are reached only through the runner and the agent channel, never docker exec · 2.2 Add a Server wizard with preflight · 2.3 Move To in the title menu · 2.4 lease sheet · 2.5 toolbox registry, versions and drift warnings · 2.6 append-only storage · 2.7 stand-in agents over SSH and the CLI · 2.8 webhooks · 2.9 stdio MCP.
 
 **2.6 Append-only storage** (must land before 2.7, which gives outside agents stand-in access to boxes)
 

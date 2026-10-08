@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -31,6 +32,13 @@ const (
 	TokenFile   = "token"
 	CertFile    = "cert.pem"
 	KeyFile     = "key.pem"
+)
+
+// The API process runs as portenv-agent from a copy of the agent with file
+// capabilities, which makes it non-dumpable from its first instruction.
+const (
+	ServeBinary = "/usr/local/libexec/portenv/agent-serve"
+	ServeUID    = 991
 )
 
 // TokenHeader carries the per-start token on every call.
@@ -62,17 +70,27 @@ func ServeChannel(ctx context.Context, cfg Config, dir string, port int) error {
 	return serveOn(ctx, srv, lis)
 }
 
-// newChannelServer loads the channel's token and certificate from dir.
+// newChannelServer loads the channel's token, key and certificate from dir
+// into memory, then removes the files and dir: after this, nothing in the
+// box can read them (ADR 0010, conditions).
 func newChannelServer(cfg Config, dir string) (*grpc.Server, error) {
-	token, err := os.ReadFile(filepath.Join(dir, TokenFile)) // #nosec G304 -- fixed root-only path
-	if err != nil {
-		return nil, fmt.Errorf("read channel token: %w", err)
+	files := map[string][]byte{}
+	for _, name := range []string{TokenFile, CertFile, KeyFile} {
+		data, err := os.ReadFile(filepath.Join(dir, name)) // #nosec G304 -- fixed root-only path
+		if err != nil {
+			_ = removeChannelFiles(dir)
+			return nil, fmt.Errorf("read channel %s: %w", name, err)
+		}
+		files[name] = data
 	}
-	token = bytes.TrimSpace(token)
+	if err := removeChannelFiles(dir); err != nil {
+		return nil, fmt.Errorf("remove channel files: %w", err)
+	}
+	token := bytes.TrimSpace(files[TokenFile])
 	if len(token) < 32 {
 		return nil, errors.New("channel token is too short")
 	}
-	cert, err := tls.LoadX509KeyPair(filepath.Join(dir, CertFile), filepath.Join(dir, KeyFile))
+	cert, err := tls.X509KeyPair(files[CertFile], files[KeyFile])
 	if err != nil {
 		return nil, fmt.Errorf("load channel certificate: %w", err)
 	}
@@ -137,8 +155,8 @@ func (s *apiServer) RunRestic(ctx context.Context, req *agentv1.RunResticRequest
 	return &agentv1.RunResticResponse{Stdout: out.Bytes(), Stderr: errb.Bytes(), ExitCode: int32(code)}, nil // #nosec G115 -- exit codes fit
 }
 
-func (s *apiServer) GetPathInfo(_ context.Context, req *agentv1.GetPathInfoRequest) (*agentv1.GetPathInfoResponse, error) {
-	info, err := PathInfo(req.GetPath())
+func (s *apiServer) GetPathInfo(ctx context.Context, req *agentv1.GetPathInfoRequest) (*agentv1.GetPathInfoResponse, error) {
+	info, err := pathInfoAs(ctx, s.cfg, req.GetPath())
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
@@ -158,4 +176,34 @@ func (s *apiServer) Terminal(stream agentv1.AgentService_TerminalServer) error {
 		return status.Error(codes.InvalidArgument, "session names are 1 to 32 letters, digits, - or _")
 	}
 	return runTerminal(stream, s.cfg, open)
+}
+
+// removeChannelFiles deletes the channel's files and their directory.
+func removeChannelFiles(dir string) error {
+	var first error
+	for _, name := range []string{TokenFile, CertFile, KeyFile} {
+		if err := os.Remove(filepath.Join(dir, name)); err != nil && !errors.Is(err, os.ErrNotExist) && first == nil {
+			first = err
+		}
+	}
+	// The directory belongs to portenv-agent but sits in a root-owned
+	// parent, so the API process cannot remove it; empty, it holds nothing.
+	_ = os.Remove(dir)
+	return first
+}
+
+// WaitChannelLoaded waits until the API process has read and removed the
+// channel files, so init starts no other process while they exist. On
+// timeout it removes them itself (the channel is then unavailable) and
+// reports it.
+func WaitChannelLoaded(dir string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if _, err := os.Stat(filepath.Join(dir, TokenFile)); errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	_ = removeChannelFiles(dir)
+	return errors.New("the agent channel did not load its secrets in time; removed them")
 }

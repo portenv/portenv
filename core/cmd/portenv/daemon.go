@@ -37,7 +37,7 @@ func dialDaemon(e *local.Env) (daemonv1.DaemonServiceClient, func(), error) {
 
 // cmdApp runs one of the app's actions through portenvd:
 //
-//	portenv app open|close|point|revert BOX
+//	portenv app open|close|point|revert|check|restart BOX
 //	portenv app move BOX this-mac|USER@HOST
 //	portenv app servers BOX         (the Move To targets, one per line)
 //	portenv app ping                (exit 0 when portenvd answers)
@@ -98,6 +98,21 @@ func cmdApp(ctx context.Context, e *local.Env, op string, args []string) error {
 			return plain(err)
 		}
 		summary = fmt.Sprintf("reverted to save point %s; the work it replaced is save %s", short(r.GetRestored().GetId()), short(r.GetSavedBefore().GetId()))
+	case "check":
+		r, err := c.CheckBox(ctx, &daemonv1.CheckBoxRequest{Name: name})
+		if err != nil {
+			return plain(err)
+		}
+		if !r.GetAgentAvailable() {
+			return errors.New(r.GetDetail())
+		}
+		summary = "the box agent is available"
+	case "restart":
+		r, err := c.RestartBox(ctx, &daemonv1.RestartBoxRequest{Name: name})
+		if err != nil {
+			return plain(err)
+		}
+		summary = "restarted: " + r.GetSummary()
 	case "move":
 		if len(args) != 2 {
 			return usageError{Msg: "app move needs BOX and a target (this-mac or USER@HOST)"}

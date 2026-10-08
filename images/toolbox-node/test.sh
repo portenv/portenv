@@ -55,7 +55,8 @@ check "home is 0700 and owned by work" test "$(in_box stat -c '%a %U' /home/work
 check "skeleton apt-packages.txt" in_box test -f /home/work/.portenv/apt-packages.txt
 check "skeleton excludes" in_box grep -qx '/home/\*/.cache' /home/work/.portenv/excludes
 check "skeleton shell files" in_box test -f /home/work/.bashrc
-check "agent socket is root-only" test "$(in_box stat -c '%a' /run/portenv)" = 700
+check "agent socket reaches root and portenv-agent only" test "$(in_box stat -c '%a %U:%G' /run/portenv /run/portenv/agent.sock | tr '\n' ' ')" = "710 root:portenv-agent 660 root:portenv-agent "
+check "the agent channel copy carries only setuid, setgid, chown and kill" test "$(in_box getcap /usr/local/libexec/portenv/agent-serve | awk '{print $2}')" = "cap_chown,cap_kill,cap_setgid,cap_setuid=ep"
 check "work has passwordless sudo" as_work 'sudo -n true'
 check "node 22" as_work 'node --version | grep -q "^v22\."'
 check "npm installs globals into the home" as_work 'test "$(npm config get prefix)" = /home/work/.local'

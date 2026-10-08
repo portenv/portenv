@@ -56,7 +56,7 @@ var commands = map[string]command{
 	"move":       {"move <box> --to SSH-HOST [--join-storage DIR]", cmdMove},
 	"join":       {"join <box> --id BOX-ID --storage DIR [--image IMAGE]   (repository key on stdin)", cmdJoin},
 	"attach":     {"attach <box> [--session NAME]   (through portenvd)", cmdAttach},
-	"app":        {"app open|close|point|revert|servers BOX | app move BOX this-mac|USER@HOST   (through portenvd)", cmdApp},
+	"app":        {"app open|close|point|revert|check|restart|servers BOX | app move BOX this-mac|USER@HOST   (through portenvd)", cmdApp},
 	"ssh-config": {"ssh-config <box> --host SERVER [--user USER] [--alias portenv]", cmdSSHConfig},
 }
 

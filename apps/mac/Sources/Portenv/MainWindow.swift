@@ -48,8 +48,23 @@ struct MainWindow: View {
 
     @ViewBuilder private var content: some View {
         switch controller.location {
+        case .thisMac where controller.agentUnavailable:
+            VStack(spacing: 10) {
+                Text("The box agent is unavailable").font(.title3)
+                Text("Nothing can be saved until the box restarts. Your unsaved changes stay in the box; restarting keeps them.")
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 420)
+                Button("Restart Box") { Task { await controller.restartBox() } }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(controller.busy)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(.background)
         case .thisMac:
-            BoxTerminal(box: controller.box, generation: controller.terminalGeneration)
+            BoxTerminal(box: controller.box, generation: controller.terminalGeneration) {
+                Task { await controller.terminalEnded() }
+            }
         case .server(let server):
             placeholder("\(controller.box) is open on \(server)", "Move To ▸ This Mac brings it back.")
         case .closed:
@@ -86,5 +101,8 @@ struct BoxMenu: View {
             Button("Last Save Point") { Task { await controller.revertToLastSavePoint() } }
                 .disabled(controller.location != .thisMac || controller.busy)
         }
+        Divider()
+        Button("Restart Box") { Task { await controller.restartBox() } }
+            .disabled(controller.location != .thisMac || controller.busy)
     }
 }

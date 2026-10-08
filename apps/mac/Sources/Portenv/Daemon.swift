@@ -14,6 +14,11 @@ actor Daemon {
         let p = Process()
         p.executableURL = Binaries.portenvd
         p.standardInput = FileHandle.nullDevice
+        // If this app ends without stopping it (killed, crashed), portenvd
+        // still saves, releases and exits.
+        var env = ProcessInfo.processInfo.environment
+        env["PORTENVD_EXIT_WITH_PARENT"] = "1"
+        p.environment = env
         do { try p.run() } catch { return }
         process = p
         for _ in 0..<50 where !FileManager.default.fileExists(atPath: Binaries.socket.path) {

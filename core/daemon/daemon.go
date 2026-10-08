@@ -197,7 +197,7 @@ func (s *Server) openBox(ctx context.Context, name string) (*openBox, boxsync.Re
 	ob := &openBox{sess: sess}
 	// An empty home makes the agent report FAILED; restic still runs.
 	if _, err := ob.connect(ctx, true); err != nil {
-		return nil, none, err
+		return nil, none, agentError(err)
 	}
 	if ob.sb, err = sess.SyncWith(boxsync.ChannelExecutor{Agent: ob.agent}); err != nil {
 		ob.stop(ctx)
@@ -256,6 +256,9 @@ func (ob *openBox) connect(ctx context.Context, allowFailed bool) (agentv1.Readi
 	wait := 50 * time.Millisecond
 	for time.Now().Before(deadline) {
 		r, err := ob.agent.GetReadiness(ctx, &agentv1.GetReadinessRequest{})
+		if err != nil && strings.Contains(err.Error(), "the certificate is not this box's") {
+			return 0, err // something else answers on the agent's port: never retry into it
+		}
 		if err == nil {
 			switch r.GetState() {
 			case agentv1.ReadinessState_READINESS_STATE_READY:
@@ -315,7 +318,7 @@ func (s *Server) closeBox(ctx context.Context, name string) error {
 	ob.mu.Lock()
 	defer ob.mu.Unlock()
 	if _, err := ob.sb.Save(ctx, boxsync.SaveOptions{Kind: boxsync.SaveRelease}); err != nil {
-		return err
+		return agentError(err)
 	}
 	ob.stop(ctx)
 	s.mu.Lock()
@@ -334,7 +337,7 @@ func (s *Server) MakeSavePoint(ctx context.Context, req *daemonv1.MakeSavePointR
 	defer ob.mu.Unlock()
 	snap, err := ob.sb.Save(ctx, boxsync.SaveOptions{Kind: boxsync.SavePoint})
 	if err != nil {
-		return nil, err
+		return nil, agentError(err)
 	}
 	return &daemonv1.MakeSavePointResponse{Snapshot: ref(ob.sess.Cfg.ID, snap)}, nil
 }
@@ -353,7 +356,7 @@ func (s *Server) RevertToLastSavePoint(ctx context.Context, req *daemonv1.Revert
 		return nil, status.Error(codes.FailedPrecondition, "there is no save point yet")
 	}
 	if err != nil {
-		return nil, err
+		return nil, agentError(err)
 	}
 	return &daemonv1.RevertToLastSavePointResponse{Restored: ref(ob.sess.Cfg.ID, res.Restored), SavedBefore: ref(ob.sess.Cfg.ID, res.SavedBefore)}, nil
 }
@@ -433,7 +436,7 @@ func (s *Server) Terminal(stream daemonv1.DaemonService_TerminalServer) error {
 	}
 	at, err := ob.agent.Terminal(stream.Context())
 	if err != nil {
-		return err
+		return agentError(err)
 	}
 	size := &agentv1.TerminalSize{Cols: open.GetSize().GetCols(), Rows: open.GetSize().GetRows()}
 	if err := at.Send(&agentv1.TerminalRequest{Msg: &agentv1.TerminalRequest_Open{Open: &agentv1.TerminalOpen{Session: open.GetSession(), Size: size}}}); err != nil {
@@ -466,7 +469,7 @@ func (s *Server) Terminal(stream daemonv1.DaemonService_TerminalServer) error {
 			return nil
 		}
 		if err != nil {
-			return err
+			return agentError(err)
 		}
 		var m daemonv1.TerminalResponse
 		switch v := r.GetMsg().(type) {
@@ -495,4 +498,59 @@ func (w logWriter) Write(p []byte) (int, error) {
 		}
 	}
 	return len(p), nil
+}
+
+// agentError reports a channel that is down or fails verification (for
+// example something else answering on the agent's port) as the box agent
+// being unavailable: nothing was sent to it.
+func agentError(err error) error {
+	if err == nil {
+		return nil
+	}
+	msg := err.Error()
+	if status.Code(err) == codes.Unavailable || strings.Contains(msg, "the certificate is not this box's") {
+		return status.Error(codes.Unavailable, "the box agent is unavailable (its channel is down or failed verification); restart the box")
+	}
+	return err
+}
+
+// CheckBox reports whether the box agent answers on its channel.
+func (s *Server) CheckBox(ctx context.Context, req *daemonv1.CheckBoxRequest) (*daemonv1.CheckBoxResponse, error) {
+	ob, err := s.get(req.GetName())
+	if err != nil {
+		return nil, err
+	}
+	if ob.agent == nil {
+		return &daemonv1.CheckBoxResponse{Detail: "the box agent is unavailable"}, nil
+	}
+	cctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	if _, err := ob.agent.GetReadiness(cctx, &agentv1.GetReadinessRequest{}); err != nil {
+		return &daemonv1.CheckBoxResponse{Detail: status.Convert(agentError(err)).Message()}, nil
+	}
+	return &daemonv1.CheckBoxResponse{AgentAvailable: true}, nil
+}
+
+// RestartBox stops the box without saving (with its agent gone, nothing in
+// it can be saved) and opens it again through the resume rules. Its home
+// stays on its volume and this machine's state still says it has unsaved
+// changes, so nothing is restored over it (rule 3 on this machine); the
+// next save includes everything.
+func (s *Server) RestartBox(ctx context.Context, req *daemonv1.RestartBoxRequest) (*daemonv1.RestartBoxResponse, error) {
+	name := req.GetName()
+	ob, err := s.get(name)
+	if err != nil {
+		return nil, err
+	}
+	ob.mu.Lock()
+	ob.stop(ctx)
+	s.mu.Lock()
+	delete(s.open, name)
+	s.mu.Unlock()
+	ob.mu.Unlock()
+	res, err := s.OpenBox(ctx, &daemonv1.OpenBoxRequest{Name: name})
+	if err != nil {
+		return nil, err
+	}
+	return &daemonv1.RestartBoxResponse{Summary: res.GetSummary(), Rule: res.GetRule()}, nil
 }

@@ -1,6 +1,6 @@
 # 0010. The agent channel: gRPC to the box agent over pinned TLS, loopback only, per-start token
 
-Date: 2026-10-08 · Status: proposed
+Date: 2026-10-08 · Status: accepted, with conditions (below)
 
 ## Context
 
@@ -19,10 +19,24 @@ The constraints: no port reachable from the network, nothing in a box other than
 - The agent serves `portenv.agent.v1.AgentService` (readiness, restic, path info, terminal) on TCP port 7700 inside the box. The docker driver publishes it on `127.0.0.1` with an ephemeral host port, never on another address.
 - At every start the driver creates a 256-bit random token and a fresh TLS key and self-signed certificate for the agent, writes them into the new container before it starts (`/run/portenv/agent/`, root, 0600, on the fresh root file system, so they never outlive the start) with the engine's copy API, and keeps the token and certificate in memory only.
 - Both ends authenticate. The client pins that exact certificate, so a process that takes over the loopback port after the box stops never receives the token or a password; every call then carries the token, which the agent compares in constant time.
-- The API runs in `portenv-agent serve`, a child of the init process that makes itself non-dumpable before it reads the token, and that init restarts if it exits. Init itself never handles passwords, and restic and terminal processes are the API process's own children, so init's reaper never races their exit status.
+- The API runs in `portenv-agent serve`, started by init as the dedicated user `portenv-agent` (uid 991, supplementary group `portenv-sync` to read restic's binary) from a copy of the agent with file capabilities, exactly `cap_setuid,cap_setgid,cap_chown,cap_kill`: setuid and setgid start terminals as `work` and restic as `portenv-sync`; chown hands restic's ssh its per-run SSH agent socket; kill stops its own children, which run as other users. All are in Docker's default set and none is on ADR 0005's forbidden list. It has no `cap_dac_override`: the channel files are written as `portenv-agent`, the readiness socket is `root:portenv-agent` 0660 in a 0710 directory, and path checks in `/home` run as `work` through the plain agent binary. Gaining capabilities at exec makes it non-dumpable from its first instruction. It reads the key, certificate and token into memory, then deletes the files and their directory; init starts no other process until they are gone. Init itself never handles passwords, and restic and terminal processes are the API process's own children, so init's reaper never races their exit status. If the API process exits, init cannot restart it (the secrets are gone): the box must be restarted for a new channel.
 - The driver interface gains `AgentChannel(ctx, id)`, which returns a dialer for the channel and the token. Callers never learn how it is carried; the apple driver will return a vsock dialer.
 - The terminal call attaches a PTY to `tmux new-session -A -s <session>` as `work`, so closing and reopening the window lands in the same session.
 - Phase 0's `portenv` CLI keeps `docker exec` (it is the Phase 0 tool, run on servers until the runner replaces it in 2.1). `portenvd` uses only the agent channel.
+
+## Conditions
+
+The guarantees above hold only while all of these are true. Each has a test.
+
+| Condition | Why | Enforced by |
+| --- | --- | --- |
+| The key, certificate and token are written outside `/home` (`/run/portenv/agent/` on the container's fresh root file system) and never appear in a save | A save is all of `/home` and moves to other machines and storage | `TestChannelConditions`: a save taken right after start, restored into a scratch directory, holds none of the files or the token |
+| The API process reads them, then deletes the files and directory before any other process in the box starts, and is non-dumpable from its first instruction | After that nothing in the box can obtain them | The capable copy run as `portenv-agent`; init's `WaitChannelLoaded` (removes the files itself on timeout); `TestChannelFilesAreGoneOnceLoaded`, `TestInitRemovesChannelFilesTheAPIDidNotLoad`; `TestChannelConditions` checks the directory is gone and the process runs as uid 991 |
+| Root in the box cannot read the key or token: files, `/proc`, environment | Root in a box is not hypothetical (ADR 0005) | `TestChannelConditions` probes the API process as root, as its own uid and as a lane user (environment, file descriptors, command line, memory, ptrace); `TestChannelPasswordIsUnreadable` does the same for the restic password, with a control showing the probe finds secrets in an ordinary root process |
+| An impostor on the agent's port (root kills the agent and serves a self-made certificate) gets nothing: `portenvd` refuses it, never sends the token or a password, and the app reports the box agent as unavailable | The port is published on the Mac's loopback; anything can listen on it once the agent is gone | Pinned certificate checked in `VerifyConnection`; `TestChannelRefusesAnImpostor`; `TestChannelConditions` (the impostor's log holds neither); `tests/e2e/daemon.sh` (portenvd says the box agent is unavailable); `AgentUnavailableTests` in the app |
+| The agent switches users only to `work` or a lane uid (2000–2999) for user processes and to `portenv-sync` for restic runs; never root. Processes started for users, and anything restic starts, carry no capabilities (CapPrm, CapEff, CapAmb zero); nothing sets ambient capabilities | The API process's capabilities must stay with it | `CheckSwitch` at every setuid and `TestCheckSwitchAllowsOnlyWorkLanesAndResticsUser`; `TestNoAmbientCapabilities` (no source sets them); `TestChannelConditions` reads the sets of work's processes through a terminal and of a stand-in for restic's ssh; the image test checks the copy carries exactly `cap_chown,cap_kill,cap_setgid,cap_setuid` |
+| The box agent dying mid-session loses nothing: Restart Box keeps the local home (unsaved changes are never restored over) and the next save includes what changed meanwhile | The channel can fail while the box's processes keep working | `RestartBox` reopens through the resume rules (rule 3 on this machine); `tests/e2e/daemon.sh` edits files with the agent gone, restarts, saves, then restores from storage with this machine's copy removed |
+| No `docker exec` as an access path: on the Mac by Phase 1's gate (only through `portenvd`), on servers from 2.1 (only through the runner). Until 2.1, Move To a server is a preview path, used only on the owner's test server | `docker exec` must not stay an access path | The Phase 1 checklist and milestone 2.1 in `docs/PLAN.md` |
 
 ## Consequences
 

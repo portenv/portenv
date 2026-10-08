@@ -30,6 +30,9 @@ func RunRestic(ctx context.Context, args []string, stdin io.Reader, stdout, stde
 	if err != nil {
 		return 0, err
 	}
+	if err := CheckSwitch(syncUID, ForRestic); err != nil {
+		return 0, err
+	}
 
 	bin, err := os.Open(ResticBinary)
 	if err != nil {

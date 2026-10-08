@@ -652,18 +652,25 @@ func (d *Driver) installChannel(ctx context.Context, id driver.BoxID, sec agent.
 	now := time.Now()
 	dir := strings.TrimPrefix(agent.ChannelDir, "/") + "/"
 	parts := strings.Split(strings.TrimSuffix(dir, "/"), "/")
+	// run/ as it is; run/portenv/ root:portenv-agent 0710; the channel's own
+	// directory and files belong to portenv-agent (0700/0600), the user the
+	// API process runs as, so it reads and removes them without
+	// cap_dac_override.
 	for i := range parts {
 		p := strings.Join(parts[:i+1], "/") + "/"
-		mode := int64(0o755)
-		if p == dir {
-			mode = 0o700
+		h := &tar.Header{Typeflag: tar.TypeDir, Name: p, Mode: 0o755, ModTime: now}
+		switch p {
+		case dir:
+			h.Mode, h.Uid, h.Gid = 0o700, agent.ServeUID, agent.ServeUID
+		case "run/portenv/":
+			h.Mode, h.Gid = 0o710, agent.ServeUID
 		}
-		if err := tw.WriteHeader(&tar.Header{Typeflag: tar.TypeDir, Name: p, Mode: mode, ModTime: now}); err != nil {
+		if err := tw.WriteHeader(h); err != nil {
 			return err
 		}
 	}
 	for name, data := range map[string][]byte{agent.TokenFile: []byte(sec.Token), agent.CertFile: sec.CertPEM, agent.KeyFile: sec.KeyPEM} {
-		if err := tw.WriteHeader(&tar.Header{Typeflag: tar.TypeReg, Name: dir + name, Mode: 0o600, Size: int64(len(data)), ModTime: now}); err != nil {
+		if err := tw.WriteHeader(&tar.Header{Typeflag: tar.TypeReg, Name: dir + name, Mode: 0o600, Uid: agent.ServeUID, Gid: agent.ServeUID, Size: int64(len(data)), ModTime: now}); err != nil {
 			return err
 		}
 		if _, err := tw.Write(data); err != nil {

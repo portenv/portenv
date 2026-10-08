@@ -78,12 +78,57 @@ func TestChannelConditions(t *testing.T) {
 	}
 	// Condition 2: the files are gone, and the API process runs as
 	// portenv-agent.
-	if got := sh("", "test -e "+agent.ChannelDir+" && echo present || echo absent"); got != "absent" {
-		t.Errorf("channel directory after start: %s, want absent", got)
+	// The directory may stay (it sits in a root-owned parent the API
+	// process cannot write), but empty.
+	if got := sh("", "ls -A "+agent.ChannelDir+" 2>/dev/null | tr '\\n' ' '"); got != "" {
+		t.Errorf("channel files after start: %q, want none", got)
 	}
 	servePid := sh("", "pgrep -f '^portenv-agent serve'")
 	if uid := sh("", "ps -o uid= -p "+servePid); uid != "991" {
 		t.Errorf("API process uid %q, want 991 (portenv-agent)", uid)
+	}
+
+	// Processes started for users carry no capabilities: CapPrm, CapEff and
+	// CapAmb are zero for the terminal's shell, the tmux server and every
+	// other process of work; ambient sets are zero for the API process too.
+	{
+		conn, err := agent.DialChannel(ch.Dial, ch.CertPEM, ch.Token)
+		if err != nil {
+			t.Fatal(err)
+		}
+		term, err := agentv1.NewAgentServiceClient(conn).Terminal(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = term.Send(&agentv1.TerminalRequest{Msg: &agentv1.TerminalRequest_Open{Open: &agentv1.TerminalOpen{Session: "main", Size: &agentv1.TerminalSize{Cols: 200, Rows: 50}}}})
+		_ = term.Send(&agentv1.TerminalRequest{Msg: &agentv1.TerminalRequest_Input{Input: []byte(
+			"for p in $$ $(pgrep -u work); do grep -E '^Cap(Prm|Eff|Amb)' /proc/$p/status; done | sort | uniq -c | sed 's/^/capcheck /'; echo capcheck-$((40+2))-done\r")}})
+		var out strings.Builder
+		for !strings.Contains(out.String(), "capcheck-42-done") {
+			r, err := term.Recv()
+			if err != nil {
+				t.Fatalf("terminal: %v; output %q", err, out.String())
+			}
+			out.Write(r.GetOutput())
+		}
+		_ = term.CloseSend()
+		_ = conn.Close()
+		lines := 0
+		for _, line := range strings.Split(out.String(), "\n") {
+			if !strings.Contains(line, "capcheck ") || strings.Contains(line, "sed") {
+				continue
+			}
+			lines++
+			if !strings.HasSuffix(strings.TrimSpace(line), "0000000000000000") {
+				t.Errorf("a process started for work has capabilities: %s", strings.TrimSpace(line))
+			}
+		}
+		if lines < 3 {
+			t.Fatalf("read %d capability lines through the terminal, want CapPrm, CapEff and CapAmb: %q", lines, out.String())
+		}
+	}
+	if got := sh("", "grep '^CapAmb' /proc/"+servePid+"/status | awk '{print $2}'"); got != "0000000000000000" {
+		t.Errorf("the API process has ambient capabilities %s", got)
 	}
 
 	// Condition 1: a save right after start contains none of them.

@@ -25,6 +25,9 @@ const (
 	syncUID        = 990
 	syncGID        = 990
 	resticCacheDir = "/var/cache/portenv-sync"
+	// sftpHelperDir holds the per-run SSH agent socket and host key for
+	// restic's ssh (portenv-agent, 0711; created by the image).
+	sftpHelperDir  = "/run/portenv-sftp"
 	maxSecretInput = 64 << 10
 )
 

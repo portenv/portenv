@@ -155,8 +155,8 @@ func (s *apiServer) RunRestic(ctx context.Context, req *agentv1.RunResticRequest
 	return &agentv1.RunResticResponse{Stdout: out.Bytes(), Stderr: errb.Bytes(), ExitCode: int32(code)}, nil // #nosec G115 -- exit codes fit
 }
 
-func (s *apiServer) GetPathInfo(_ context.Context, req *agentv1.GetPathInfoRequest) (*agentv1.GetPathInfoResponse, error) {
-	info, err := PathInfo(req.GetPath())
+func (s *apiServer) GetPathInfo(ctx context.Context, req *agentv1.GetPathInfoRequest) (*agentv1.GetPathInfoResponse, error) {
+	info, err := pathInfoAs(ctx, s.cfg, req.GetPath())
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
@@ -186,9 +186,9 @@ func removeChannelFiles(dir string) error {
 			first = err
 		}
 	}
-	if err := os.Remove(dir); err != nil && !errors.Is(err, os.ErrNotExist) && first == nil {
-		first = err
-	}
+	// The directory belongs to portenv-agent but sits in a root-owned
+	// parent, so the API process cannot remove it; empty, it holds nothing.
+	_ = os.Remove(dir)
 	return first
 }
 

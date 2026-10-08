@@ -14,8 +14,8 @@ struct MainWindow: View {
             .frame(minWidth: 640, minHeight: 400)
             .navigationTitle(controller.box)
             // The title is the box's menu (Apple's document-menu pattern):
-            // the system title is replaced by a menu button showing the
-            // box's name and state, next to the sync symbol.
+            // the system title is replaced by BoxTitle, the box's name over
+            // its state line, next to the sync symbol.
             .toolbar(removing: .title)
             .toolbar {
                 ToolbarItem(placement: .navigation) {
@@ -24,17 +24,7 @@ struct MainWindow: View {
                         .help(controller.subtitle)
                 }
                 ToolbarItem(placement: .navigation) {
-                    Menu {
-                        BoxMenu(controller: controller)
-                    } label: {
-                        VStack(alignment: .leading, spacing: 0) {
-                            Text(controller.box).font(.headline)
-                            Text(controller.subtitle).font(.caption).foregroundStyle(.secondary)
-                        }
-                    }
-                    .menuIndicator(.visible)
-                    .fixedSize()
-                    .help("Box actions")
+                    BoxTitle(controller: controller)
                 }
             }
             .disabled(controller.busy)
@@ -48,7 +38,7 @@ struct MainWindow: View {
 
     @ViewBuilder private var content: some View {
         switch controller.location {
-        case .thisMac where controller.agentUnavailable:
+        case _ where controller.agentUnavailable && controller.isOpen:
             VStack(spacing: 10) {
                 Text("The box agent is unavailable").font(.title3)
                 Text("Nothing can be saved until the box restarts. Your unsaved changes stay in the box; restarting keeps them.")
@@ -61,12 +51,12 @@ struct MainWindow: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(.background)
-        case .thisMac:
+        case .thisMac, .server:
+            // The same terminal wherever the box runs: portenvd reaches a
+            // server box's agent through an SSH forward (ADR 0010).
             BoxTerminal(box: controller.box, generation: controller.terminalGeneration) {
                 Task { await controller.terminalEnded() }
             }
-        case .server(let server):
-            placeholder("\(controller.box) is open on \(server)", "Move To ▸ This Mac brings it back.")
         case .closed:
             placeholder(controller.busy ? controller.subtitle : "\(controller.box) is closed", "")
         }
@@ -89,20 +79,28 @@ struct BoxMenu: View {
 
     var body: some View {
         Menu("Move To") {
-            Button("This Mac") { Task { await controller.move(to: "this-mac") } }
-                .disabled(controller.location == .thisMac || controller.busy)
+            // The current location is checked (macOS convention); every
+            // other location stays available.
+            target("This Mac", "this-mac")
             if !controller.servers.isEmpty { Divider() }
             ForEach(controller.servers, id: \.self) { server in
-                Button(server) { Task { await controller.move(to: server) } }
-                    .disabled(controller.location == .server(server) || controller.busy)
+                target(server, server)
             }
         }
         Menu("Revert To") {
             Button("Last Save Point") { Task { await controller.revertToLastSavePoint() } }
-                .disabled(controller.location != .thisMac || controller.busy)
+                .disabled(!controller.isOpen || controller.busy)
         }
         Divider()
         Button("Restart Box") { Task { await controller.restartBox() } }
-            .disabled(controller.location != .thisMac || controller.busy)
+            .disabled(!controller.isOpen || controller.busy)
+    }
+
+    private func target(_ title: String, _ id: String) -> some View {
+        Toggle(title, isOn: Binding(
+            get: { controller.isCurrent(id) },
+            set: { on in if on { Task { await controller.move(to: id) } } }
+        ))
+        .disabled(controller.busy)
     }
 }

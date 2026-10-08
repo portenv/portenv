@@ -20,6 +20,11 @@ struct PortenvApp: App {
                 .task {
                     await Daemon.shared.ensureRunning()
                     await controller.open()
+                    // The state line follows the recorded save state.
+                    while !Task.isCancelled {
+                        try? await Task.sleep(for: .seconds(3))
+                        if !controller.busy { await controller.refresh() }
+                    }
                 }
         }
         .windowToolbarStyle(.unified(showsTitle: true))
@@ -27,7 +32,7 @@ struct PortenvApp: App {
             CommandGroup(replacing: .saveItem) {
                 Button("Make Save Point") { Task { await controller.makeSavePoint() } }
                     .keyboardShortcut("s")
-                    .disabled(controller.location != .thisMac || controller.busy)
+                    .disabled(!controller.isOpen || controller.busy)
             }
             // The title menu's box actions, also in the menu bar.
             CommandMenu("Box") {

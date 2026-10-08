@@ -65,11 +65,14 @@ type Server struct {
 // openBox is a box this daemon opened: its session, sync engine and agent
 // channel.
 type openBox struct {
-	mu    sync.Mutex // one box operation at a time
-	sess  *local.Session
-	sb    *boxsync.Box
-	conn  *grpc.ClientConn
-	agent agentv1.AgentServiceClient
+	mu sync.Mutex // one box operation at a time
+	// closed: saved, released and stopped (set under mu); a close that
+	// waited for that one finds nothing left to do.
+	closed bool
+	sess   *local.Session
+	sb     *boxsync.Box
+	conn   *grpc.ClientConn
+	agent  agentv1.AgentServiceClient
 
 	// What the save state is derived from besides the sync state.
 	saving, offline, agentDown atomic.Bool
@@ -98,7 +101,7 @@ func (s *Server) Serve(ctx context.Context) error {
 	if err := os.Chmod(sock, 0o600); err != nil {
 		return err
 	}
-	srv := grpc.NewServer()
+	srv := s.grpcServer()
 	daemonv1.RegisterDaemonServiceServer(srv, s)
 	go func() {
 		<-ctx.Done()
@@ -365,6 +368,11 @@ func (s *Server) closeBox(ctx context.Context, name string) error {
 	s.leaving(name)
 	ob.mu.Lock()
 	defer ob.mu.Unlock()
+	// Closed while this call waited (closing the last window, then the app
+	// quitting): nothing left to do.
+	if ob.closed {
+		return nil
+	}
 	ob.saving.Store(true)
 	_, err = ob.sb.Save(ctx, boxsync.SaveOptions{Kind: boxsync.SaveRelease})
 	ob.saving.Store(false)
@@ -372,6 +380,7 @@ func (s *Server) closeBox(ctx context.Context, name string) error {
 		return ob.noteErr(err)
 	}
 	ob.stop(ctx)
+	ob.closed = true
 	s.mu.Lock()
 	delete(s.open, name)
 	s.mu.Unlock()

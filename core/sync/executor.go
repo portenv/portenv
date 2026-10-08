@@ -290,14 +290,9 @@ func (a AgentExecutor) PathInfo(ctx context.Context, path string) (PathInfo, err
 	return info, nil
 }
 
-// ensure makes sure the SSH master connection and the forward exist. The
-// master is the same one restic's SFTP runs reuse (same ControlPath).
-func (f *RESTForward) ensure(ctx context.Context, controlDir string, opts, env []string) error {
-	return f.ensureFresh(ctx, controlDir, opts, env, false)
-}
-
-// ensureFresh is ensure; with reset it first drops the SSH connection and
-// the socket (after a run failed on them).
+// ensureFresh makes sure the forward's SSH connection (the master restic's
+// SFTP runs also reuse, same ControlPath) and its socket are up; with reset
+// it first drops them (after a run failed on them).
 func (f *RESTForward) ensureFresh(ctx context.Context, controlDir string, opts, env []string, reset bool) error {
 	sock := f.Socket(controlDir)
 	// opts is ["-o", "sftp.args=<ssh options>"]; reuse those options.

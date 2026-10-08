@@ -3,16 +3,19 @@
 package agent
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/subtle"
 	"crypto/tls"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
-	"os"
-	"path/filepath"
 	"regexp"
+	"strings"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -23,14 +26,20 @@ import (
 	agentv1 "github.com/portenv/portenv/proto/gen/go/portenv/agent/v1"
 )
 
-// The agent channel (ADR 0010). The driver writes these before the box
-// starts; they live on the fresh root file system, root-only.
+// The agent channel (ADR 0010). The driver hands each start's secrets to
+// the box on its stdin (attach, never exec, never a file); init passes that
+// stdin on to the API process, which reads them.
 const (
-	ChannelDir  = "/run/portenv/agent"
 	ChannelPort = 7700
-	TokenFile   = "token"
-	CertFile    = "cert.pem"
-	KeyFile     = "key.pem"
+	// ChannelEnv set to "stdin" tells init that the secrets come on stdin.
+	ChannelEnv = "PORTENV_CHANNEL"
+)
+
+// The API process runs as portenv-agent from a copy of the agent with file
+// capabilities, which makes it non-dumpable from its first instruction.
+const (
+	ServeBinary = "/usr/local/libexec/portenv/agent-serve"
+	ServeUID    = 991
 )
 
 // TokenHeader carries the per-start token on every call.
@@ -50,8 +59,8 @@ type apiServer struct {
 // ServeChannel serves the agent API on the channel described by dir until
 // ctx ends. The caller must already be non-dumpable (passwords pass
 // through this process).
-func ServeChannel(ctx context.Context, cfg Config, dir string, port int) error {
-	srv, err := newChannelServer(cfg, dir)
+func ServeChannel(ctx context.Context, cfg Config, sec ChannelSecrets, port int) error {
+	srv, err := newChannelServer(cfg, sec)
 	if err != nil {
 		return err
 	}
@@ -62,17 +71,27 @@ func ServeChannel(ctx context.Context, cfg Config, dir string, port int) error {
 	return serveOn(ctx, srv, lis)
 }
 
-// newChannelServer loads the channel's token and certificate from dir.
-func newChannelServer(cfg Config, dir string) (*grpc.Server, error) {
-	token, err := os.ReadFile(filepath.Join(dir, TokenFile)) // #nosec G304 -- fixed root-only path
-	if err != nil {
-		return nil, fmt.Errorf("read channel token: %w", err)
+// ReadChannelSecrets reads one start's secrets: one JSON line, as the
+// driver writes it. They stay in this process's memory only.
+func ReadChannelSecrets(r io.Reader) (ChannelSecrets, error) {
+	line, err := bufio.NewReader(io.LimitReader(r, 64<<10)).ReadBytes('\n')
+	if err != nil && !errors.Is(err, io.EOF) {
+		return ChannelSecrets{}, fmt.Errorf("read channel secrets: %w", err)
 	}
-	token = bytes.TrimSpace(token)
+	var sec ChannelSecrets
+	if err := json.Unmarshal(bytes.TrimSpace(line), &sec); err != nil {
+		return ChannelSecrets{}, fmt.Errorf("parse channel secrets: %w", err)
+	}
+	return sec, nil
+}
+
+// newChannelServer serves the API with one start's secrets.
+func newChannelServer(cfg Config, sec ChannelSecrets) (*grpc.Server, error) {
+	token := []byte(strings.TrimSpace(sec.Token))
 	if len(token) < 32 {
 		return nil, errors.New("channel token is too short")
 	}
-	cert, err := tls.LoadX509KeyPair(filepath.Join(dir, CertFile), filepath.Join(dir, KeyFile))
+	cert, err := tls.X509KeyPair(sec.CertPEM, sec.KeyPEM)
 	if err != nil {
 		return nil, fmt.Errorf("load channel certificate: %w", err)
 	}
@@ -137,8 +156,8 @@ func (s *apiServer) RunRestic(ctx context.Context, req *agentv1.RunResticRequest
 	return &agentv1.RunResticResponse{Stdout: out.Bytes(), Stderr: errb.Bytes(), ExitCode: int32(code)}, nil // #nosec G115 -- exit codes fit
 }
 
-func (s *apiServer) GetPathInfo(_ context.Context, req *agentv1.GetPathInfoRequest) (*agentv1.GetPathInfoResponse, error) {
-	info, err := PathInfo(req.GetPath())
+func (s *apiServer) GetPathInfo(ctx context.Context, req *agentv1.GetPathInfoRequest) (*agentv1.GetPathInfoResponse, error) {
+	info, err := pathInfoAs(ctx, s.cfg, req.GetPath())
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
@@ -158,4 +177,19 @@ func (s *apiServer) Terminal(stream agentv1.AgentService_TerminalServer) error {
 		return status.Error(codes.InvalidArgument, "session names are 1 to 32 letters, digits, - or _")
 	}
 	return runTerminal(stream, s.cfg, open)
+}
+
+// WaitChannelListening waits until the API process listens on its port,
+// which it does only after reading the secrets: init starts no other process
+// before then.
+func WaitChannelListening(port int, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if c, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", port), 200*time.Millisecond); err == nil {
+			_ = c.Close()
+			return nil
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	return errors.New("the agent channel did not start in time")
 }

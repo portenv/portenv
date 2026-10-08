@@ -33,6 +33,10 @@ const (
 	DaemonService_RevertToLastSavePoint_FullMethodName = "/portenv.daemon.v1.DaemonService/RevertToLastSavePoint"
 	DaemonService_MoveBox_FullMethodName               = "/portenv.daemon.v1.DaemonService/MoveBox"
 	DaemonService_Terminal_FullMethodName              = "/portenv.daemon.v1.DaemonService/Terminal"
+	DaemonService_CheckBox_FullMethodName              = "/portenv.daemon.v1.DaemonService/CheckBox"
+	DaemonService_RestartBox_FullMethodName            = "/portenv.daemon.v1.DaemonService/RestartBox"
+	DaemonService_GetChannel_FullMethodName            = "/portenv.daemon.v1.DaemonService/GetChannel"
+	DaemonService_GetBoxState_FullMethodName           = "/portenv.daemon.v1.DaemonService/GetBoxState"
 )
 
 // DaemonServiceClient is the client API for DaemonService service.
@@ -56,6 +60,20 @@ type DaemonServiceClient interface {
 	MoveBox(ctx context.Context, in *MoveBoxRequest, opts ...grpc.CallOption) (*MoveBoxResponse, error)
 	// Attaches a terminal to the box's tmux session through the box agent.
 	Terminal(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[TerminalRequest, TerminalResponse], error)
+	// Reports whether the box agent answers on its channel.
+	CheckBox(ctx context.Context, in *CheckBoxRequest, opts ...grpc.CallOption) (*CheckBoxResponse, error)
+	// Restarts the box (for example after its agent became unavailable) and
+	// opens it again through the resume rules: the local home is kept, never
+	// restored over while it has unsaved changes.
+	RestartBox(ctx context.Context, in *RestartBoxRequest, opts ...grpc.CallOption) (*RestartBoxResponse, error)
+	// The agent channel of a box open here (ADR 0010): its address on this
+	// machine's loopback, the certificate the agent presents and the token.
+	// Only for the owner of this socket; a Mac fetches it from a server's
+	// runner over SSH and keeps it in memory.
+	GetChannel(ctx context.Context, in *GetChannelRequest, opts ...grpc.CallOption) (*GetChannelResponse, error)
+	// The box's save state, derived only from what is recorded (the last
+	// saved snapshot, the dirty flag, a save in progress) and where it runs.
+	GetBoxState(ctx context.Context, in *GetBoxStateRequest, opts ...grpc.CallOption) (*GetBoxStateResponse, error)
 }
 
 type daemonServiceClient struct {
@@ -149,6 +167,46 @@ func (c *daemonServiceClient) Terminal(ctx context.Context, opts ...grpc.CallOpt
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type DaemonService_TerminalClient = grpc.BidiStreamingClient[TerminalRequest, TerminalResponse]
 
+func (c *daemonServiceClient) CheckBox(ctx context.Context, in *CheckBoxRequest, opts ...grpc.CallOption) (*CheckBoxResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CheckBoxResponse)
+	err := c.cc.Invoke(ctx, DaemonService_CheckBox_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) RestartBox(ctx context.Context, in *RestartBoxRequest, opts ...grpc.CallOption) (*RestartBoxResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RestartBoxResponse)
+	err := c.cc.Invoke(ctx, DaemonService_RestartBox_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) GetChannel(ctx context.Context, in *GetChannelRequest, opts ...grpc.CallOption) (*GetChannelResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetChannelResponse)
+	err := c.cc.Invoke(ctx, DaemonService_GetChannel_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) GetBoxState(ctx context.Context, in *GetBoxStateRequest, opts ...grpc.CallOption) (*GetBoxStateResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetBoxStateResponse)
+	err := c.cc.Invoke(ctx, DaemonService_GetBoxState_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DaemonServiceServer is the server API for DaemonService service.
 // All implementations must embed UnimplementedDaemonServiceServer
 // for forward compatibility.
@@ -170,6 +228,20 @@ type DaemonServiceServer interface {
 	MoveBox(context.Context, *MoveBoxRequest) (*MoveBoxResponse, error)
 	// Attaches a terminal to the box's tmux session through the box agent.
 	Terminal(grpc.BidiStreamingServer[TerminalRequest, TerminalResponse]) error
+	// Reports whether the box agent answers on its channel.
+	CheckBox(context.Context, *CheckBoxRequest) (*CheckBoxResponse, error)
+	// Restarts the box (for example after its agent became unavailable) and
+	// opens it again through the resume rules: the local home is kept, never
+	// restored over while it has unsaved changes.
+	RestartBox(context.Context, *RestartBoxRequest) (*RestartBoxResponse, error)
+	// The agent channel of a box open here (ADR 0010): its address on this
+	// machine's loopback, the certificate the agent presents and the token.
+	// Only for the owner of this socket; a Mac fetches it from a server's
+	// runner over SSH and keeps it in memory.
+	GetChannel(context.Context, *GetChannelRequest) (*GetChannelResponse, error)
+	// The box's save state, derived only from what is recorded (the last
+	// saved snapshot, the dirty flag, a save in progress) and where it runs.
+	GetBoxState(context.Context, *GetBoxStateRequest) (*GetBoxStateResponse, error)
 	mustEmbedUnimplementedDaemonServiceServer()
 }
 
@@ -203,6 +275,18 @@ func (UnimplementedDaemonServiceServer) MoveBox(context.Context, *MoveBoxRequest
 }
 func (UnimplementedDaemonServiceServer) Terminal(grpc.BidiStreamingServer[TerminalRequest, TerminalResponse]) error {
 	return status.Error(codes.Unimplemented, "method Terminal not implemented")
+}
+func (UnimplementedDaemonServiceServer) CheckBox(context.Context, *CheckBoxRequest) (*CheckBoxResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CheckBox not implemented")
+}
+func (UnimplementedDaemonServiceServer) RestartBox(context.Context, *RestartBoxRequest) (*RestartBoxResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RestartBox not implemented")
+}
+func (UnimplementedDaemonServiceServer) GetChannel(context.Context, *GetChannelRequest) (*GetChannelResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetChannel not implemented")
+}
+func (UnimplementedDaemonServiceServer) GetBoxState(context.Context, *GetBoxStateRequest) (*GetBoxStateResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetBoxState not implemented")
 }
 func (UnimplementedDaemonServiceServer) mustEmbedUnimplementedDaemonServiceServer() {}
 func (UnimplementedDaemonServiceServer) testEmbeddedByValue()                       {}
@@ -358,6 +442,78 @@ func _DaemonService_Terminal_Handler(srv interface{}, stream grpc.ServerStream) 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type DaemonService_TerminalServer = grpc.BidiStreamingServer[TerminalRequest, TerminalResponse]
 
+func _DaemonService_CheckBox_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CheckBoxRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).CheckBox(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_CheckBox_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).CheckBox(ctx, req.(*CheckBoxRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_RestartBox_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RestartBoxRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).RestartBox(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_RestartBox_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).RestartBox(ctx, req.(*RestartBoxRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_GetChannel_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetChannelRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).GetChannel(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_GetChannel_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).GetChannel(ctx, req.(*GetChannelRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_GetBoxState_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetBoxStateRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).GetBoxState(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_GetBoxState_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).GetBoxState(ctx, req.(*GetBoxStateRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // DaemonService_ServiceDesc is the grpc.ServiceDesc for DaemonService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -392,6 +548,22 @@ var DaemonService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "MoveBox",
 			Handler:    _DaemonService_MoveBox_Handler,
+		},
+		{
+			MethodName: "CheckBox",
+			Handler:    _DaemonService_CheckBox_Handler,
+		},
+		{
+			MethodName: "RestartBox",
+			Handler:    _DaemonService_RestartBox_Handler,
+		},
+		{
+			MethodName: "GetChannel",
+			Handler:    _DaemonService_GetChannel_Handler,
+		},
+		{
+			MethodName: "GetBoxState",
+			Handler:    _DaemonService_GetBoxState_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

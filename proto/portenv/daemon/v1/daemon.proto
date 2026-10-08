@@ -7,6 +7,7 @@ syntax = "proto3";
 // peer credentials. Designed in milestone 1.1; anything here may change.
 package portenv.daemon.v1;
 
+import "google/protobuf/timestamp.proto";
 import "portenv/types/v1/types.proto";
 
 // The daemon that owns boxes on this Mac.
@@ -26,6 +27,39 @@ service DaemonService {
   rpc MoveBox(MoveBoxRequest) returns (MoveBoxResponse);
   // Attaches a terminal to the box's tmux session through the box agent.
   rpc Terminal(stream TerminalRequest) returns (stream TerminalResponse);
+  // Reports whether the box agent answers on its channel.
+  rpc CheckBox(CheckBoxRequest) returns (CheckBoxResponse);
+  // Restarts the box (for example after its agent became unavailable) and
+  // opens it again through the resume rules: the local home is kept, never
+  // restored over while it has unsaved changes.
+  rpc RestartBox(RestartBoxRequest) returns (RestartBoxResponse);
+  // The agent channel of a box open here (ADR 0010): its address on this
+  // machine's loopback, the certificate the agent presents and the token.
+  // Only for the owner of this socket; a Mac fetches it from a server's
+  // runner over SSH and keeps it in memory.
+  rpc GetChannel(GetChannelRequest) returns (GetChannelResponse);
+  // The box's save state, derived only from what is recorded (the last
+  // saved snapshot, the dirty flag, a save in progress) and where it runs.
+  rpc GetBoxState(GetBoxStateRequest) returns (GetBoxStateResponse);
+}
+
+message CheckBoxRequest {
+  string name = 1;
+}
+
+message CheckBoxResponse {
+  bool agent_available = 1;
+  // Why not, when it is not.
+  string detail = 2;
+}
+
+message RestartBoxRequest {
+  string name = 1;
+}
+
+message RestartBoxResponse {
+  string summary = 1;
+  int32 rule = 2;
 }
 
 message OpenBoxRequest {
@@ -37,6 +71,8 @@ message OpenBoxResponse {
   string summary = 1;
   // The resume rule that applied (1 to 5), or 0 when offline.
   int32 rule = 2;
+  // Where the box runs: empty for this machine, else the server (user@host).
+  string location = 3;
 }
 
 message CloseBoxRequest {
@@ -116,4 +152,43 @@ message ListBoxesResponse {
 message BoxStatus {
   portenv.types.v1.Box box = 1;
   portenv.types.v1.BoxState state = 2;
+}
+
+message GetChannelRequest {
+  string name = 1;
+}
+
+message GetChannelResponse {
+  // 127.0.0.1:PORT on the machine running the box.
+  string address = 1;
+  bytes cert_pem = 2;
+  string token = 3;
+}
+
+message GetBoxStateRequest {
+  string name = 1;
+}
+
+// What the title's save state shows.
+enum SaveState {
+  SAVE_STATE_UNSPECIFIED = 0;
+  // Open, never saved (a new box).
+  SAVE_STATE_NOT_SAVED_YET = 1;
+  // A save is in progress.
+  SAVE_STATE_SAVING = 2;
+  // The last save completed at saved_at.
+  SAVE_STATE_SAVED = 3;
+  // Storage is unreachable; saves wait.
+  SAVE_STATE_OFFLINE = 4;
+  // The box agent's channel is down: nothing can be saved until a restart.
+  SAVE_STATE_AGENT_UNAVAILABLE = 5;
+  // Not open on this machine or its server.
+  SAVE_STATE_CLOSED = 6;
+}
+
+message GetBoxStateResponse {
+  SaveState state = 1;
+  google.protobuf.Timestamp saved_at = 2;
+  // Where the box runs: empty for this machine, else the server.
+  string location = 3;
 }

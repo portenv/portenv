@@ -100,6 +100,16 @@ func (f *RESTForward) Socket(controlDir string) string {
 // inherited pipe (RESTIC_PASSWORD_FILE=/dev/fd/3): never on disk, never in
 // the environment. Inherited RESTIC_* variables are dropped.
 func (l LocalExecutor) Restic(ctx context.Context, args []string, cred Credentials) (ExecResult, error) {
+	res, err := l.restic(ctx, args, cred, false)
+	// A run that failed on the REST forward's socket (its SSH connection
+	// went away) gets a fresh forward and one more try.
+	if err == nil && res.ExitCode != 0 && l.REST != nil && bytes.Contains(res.Stderr, []byte(l.REST.Socket(l.ControlDir))) {
+		res, err = l.restic(ctx, args, cred, true)
+	}
+	return res, err
+}
+
+func (l LocalExecutor) restic(ctx context.Context, args []string, cred Credentials, resetForward bool) (ExecResult, error) {
 	password, env := cred.Password, cred.Env
 	var extraEnv []string
 	if len(cred.SSHKey) > 0 {
@@ -111,7 +121,7 @@ func (l LocalExecutor) Restic(ctx context.Context, args []string, cred Credentia
 		args = append(opts, args...)
 		extraEnv = henv
 		if l.REST != nil {
-			if err := l.REST.ensure(ctx, l.ControlDir, opts, henv); err != nil {
+			if err := l.REST.ensureFresh(ctx, l.ControlDir, opts, henv, resetForward); err != nil {
 				return ExecResult{}, fmt.Errorf("REST forward: %w", err)
 			}
 			extraEnv = append(extraEnv, "RESTIC_REST_USERNAME="+l.REST.User, "RESTIC_REST_PASSWORD="+l.REST.Password)
@@ -280,14 +290,11 @@ func (a AgentExecutor) PathInfo(ctx context.Context, path string) (PathInfo, err
 	return info, nil
 }
 
-// ensure makes sure the SSH master connection and the forward exist. The
-// master is the same one restic's SFTP runs reuse (same ControlPath).
-func (f *RESTForward) ensure(ctx context.Context, controlDir string, opts, env []string) error {
+// ensureFresh makes sure the forward's SSH connection (the master restic's
+// SFTP runs also reuse, same ControlPath) and its socket are up; with reset
+// it first drops them (after a run failed on them).
+func (f *RESTForward) ensureFresh(ctx context.Context, controlDir string, opts, env []string, reset bool) error {
 	sock := f.Socket(controlDir)
-	if c, err := net.DialTimeout("unix", sock, time.Second); err == nil {
-		_ = c.Close()
-		return nil
-	}
 	// opts is ["-o", "sftp.args=<ssh options>"]; reuse those options.
 	var base []string
 	for _, a := range strings.Fields(strings.TrimPrefix(opts[1], "sftp.args=")) {
@@ -309,12 +316,24 @@ func (f *RESTForward) ensure(ctx context.Context, controlDir string, opts, env [
 		}
 		return nil
 	}
-	// Nothing answers on the socket: it is missing or left by a connection
-	// that has gone. The master binds the socket, so it needs the unlink
-	// option too.
+	if reset {
+		_ = ssh("-O", "exit")
+	} else if ssh("-O", "check") == nil {
+		// The connection is up; the forward too if the socket answers.
+		if c, err := net.DialTimeout("unix", sock, time.Second); err == nil {
+			_ = c.Close()
+			return nil
+		}
+	}
+	// Nothing answers: the socket is missing or left by a connection that
+	// has gone. The master binds the socket, so it needs the unlink option.
+	// A forward is not a client of the master, so the master's idle limit
+	// would end it under a socket in use: it stays up for hours, and
+	// keepalives end it promptly if the network drops it instead.
 	_ = os.Remove(sock)
 	if ssh("-O", "check") != nil {
-		if err := ssh("-M", "-N", "-f", "-o", "StreamLocalBindUnlink=yes"); err != nil {
+		if err := ssh("-M", "-N", "-f", "-o", "StreamLocalBindUnlink=yes", "-o", "ControlPersist=4h",
+			"-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=4"); err != nil {
 			return err
 		}
 	}

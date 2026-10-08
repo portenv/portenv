@@ -20,6 +20,11 @@ struct PortenvApp: App {
                 .task {
                     await Daemon.shared.ensureRunning()
                     await controller.open()
+                    // The state line follows the recorded save state.
+                    while !Task.isCancelled {
+                        try? await Task.sleep(for: .seconds(3))
+                        if !controller.busy { await controller.refresh() }
+                    }
                 }
         }
         .windowToolbarStyle(.unified(showsTitle: true))
@@ -27,7 +32,7 @@ struct PortenvApp: App {
             CommandGroup(replacing: .saveItem) {
                 Button("Make Save Point") { Task { await controller.makeSavePoint() } }
                     .keyboardShortcut("s")
-                    .disabled(controller.location != .thisMac || controller.busy)
+                    .disabled(!controller.isOpen || controller.busy)
             }
             // The title menu's box actions, also in the menu bar.
             CommandMenu("Box") {
@@ -39,20 +44,23 @@ struct PortenvApp: App {
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private var sigterm: DispatchSourceSignal?
+    private var signals: [DispatchSourceSignal] = []
 
     func applicationDidFinishLaunching(_: Notification) {
         // A Swift package executable starts as a background process; make
         // it a regular app with a Dock icon and a menu bar.
         NSApp.setActivationPolicy(.regular)
         NSApp.activate()
-        // SIGTERM (Xcode's Stop, logout, kill) quits like ⌘Q, so open boxes
-        // are saved and released.
-        signal(SIGTERM, SIG_IGN)
-        let source = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
-        source.setEventHandler { NSApp.terminate(nil) }
-        source.resume()
-        sigterm = source
+        // SIGTERM (Xcode's Stop, logout, kill) and SIGINT (Ctrl-C in the
+        // Terminal that started it) quit like ⌘Q, so open boxes are saved
+        // and released.
+        for sig in [SIGTERM, SIGINT] {
+            signal(sig, SIG_IGN)
+            let source = DispatchSource.makeSignalSource(signal: sig, queue: .main)
+            source.setEventHandler { NSApp.terminate(nil) }
+            source.resume()
+            signals.append(source)
+        }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_: NSApplication) -> Bool { true }

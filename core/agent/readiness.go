@@ -84,8 +84,20 @@ func (s *server) GetReadiness(context.Context, *agentv1.GetReadinessRequest) (*a
 // Serve serves the agent API on a Unix socket until ctx is done. The socket's
 // directory is created root-only (0700) and the socket itself is 0600.
 func Serve(ctx context.Context, socket string, r *Readiness) error {
-	if err := os.MkdirAll(filepath.Dir(socket), 0o700); err != nil {
+	// root:portenv-agent 0710: the API process (portenv-agent) reaches the
+	// socket; nothing else in the box does.
+	dir := filepath.Dir(socket)
+	if err := os.MkdirAll(dir, 0o710); err != nil {
 		return fmt.Errorf("agent socket dir: %w", err)
+	}
+	asRoot := os.Getuid() == 0 // init in a box; tests run unprivileged
+	if asRoot {
+		if err := os.Chown(dir, 0, ServeUID); err != nil {
+			return fmt.Errorf("agent socket dir owner: %w", err)
+		}
+	}
+	if err := os.Chmod(dir, 0o710); err != nil { // #nosec G302 -- a directory: owner and group search only
+		return fmt.Errorf("agent socket dir permissions: %w", err)
 	}
 	if err := os.Remove(socket); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("remove stale agent socket: %w", err)
@@ -94,7 +106,13 @@ func Serve(ctx context.Context, socket string, r *Readiness) error {
 	if err != nil {
 		return fmt.Errorf("listen on agent socket: %w", err)
 	}
-	if err := os.Chmod(socket, 0o600); err != nil {
+	if asRoot {
+		if err := os.Chown(socket, 0, ServeUID); err != nil {
+			_ = lis.Close()
+			return fmt.Errorf("agent socket owner: %w", err)
+		}
+	}
+	if err := os.Chmod(socket, 0o660); err != nil { // #nosec G302 -- root and portenv-agent only
 		_ = lis.Close()
 		return fmt.Errorf("agent socket permissions: %w", err)
 	}

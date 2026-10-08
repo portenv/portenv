@@ -20,6 +20,9 @@ import (
 // runTerminal attaches a PTY to tmux new-session -A as the main user, so
 // reopening lands in the same session, and relays it over the stream.
 func runTerminal(stream agentv1.AgentService_TerminalServer, cfg Config, open *agentv1.TerminalOpen) error {
+	if err := CheckSwitch(cfg.UID, ForUser); err != nil {
+		return err
+	}
 	groups, err := groupsOf(cfg.User)
 	if err != nil {
 		return err

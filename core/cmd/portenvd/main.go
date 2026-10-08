@@ -20,6 +20,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/portenv/portenv/core/daemon"
 	"github.com/portenv/portenv/core/internal/version"
@@ -34,6 +35,14 @@ func main() {
 	log := slog.New(slog.NewTextHandler(os.Stderr, nil)).With("component", "portenvd")
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	// Started by the app: stop (saving and releasing open boxes) when the
+	// app is gone, however it ended.
+	if os.Getenv("PORTENVD_EXIT_WITH_PARENT") == "1" {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithCancel(ctx)
+		defer cancel()
+		go exitWithParent(cancel, log)
+	}
 	env, err := local.NewEnv()
 	if err != nil {
 		log.Error("portenv directory", "err", err)
@@ -43,5 +52,19 @@ func main() {
 	if err := daemon.New(env, log).Serve(ctx); err != nil {
 		log.Error("stopped", "err", err)
 		os.Exit(1)
+	}
+}
+
+// exitWithParent cancels when this process's parent changes: the app that
+// started it has ended and this process was handed to launchd.
+func exitWithParent(cancel context.CancelFunc, log *slog.Logger) {
+	parent := os.Getppid()
+	for {
+		time.Sleep(time.Second)
+		if os.Getppid() != parent {
+			log.Info("the app that started portenvd has ended; closing open boxes")
+			cancel()
+			return
+		}
 	}
 }

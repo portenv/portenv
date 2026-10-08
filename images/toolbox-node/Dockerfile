@@ -125,6 +125,25 @@ RUN groupadd --system --gid 990 portenv-sync \
  && setcap cap_chown,cap_dac_override,cap_fowner,cap_fsetid+ep /usr/local/libexec/portenv/restic \
  && install -d -o portenv-sync -g portenv-sync -m 0700 /var/cache/portenv-sync
 
+# The agent channel's API process (ADR 0010) runs as portenv-agent from a
+# copy of the agent with file capabilities: gaining them at exec makes it
+# non-dumpable from its first instruction, before it reads the channel's
+# key and token or any password. Only what it must do, all in Docker's
+# default set and none on ADR 0005's forbidden list:
+#   cap_setuid, cap_setgid  start terminals as work and restic as portenv-sync
+#                           (the agent allows no other uid, never root)
+#   cap_chown               hand restic's ssh its per-run SSH agent socket
+#   cap_kill                stop its own children, which run as other users
+# Everything else it reads is its own (the channel files, written as
+# portenv-agent), its group's (the readiness socket; restic's binary through
+# the portenv-sync group), or checked as work by the plain agent binary
+# (path checks in /home): no cap_dac_override.
+RUN groupadd --system --gid 991 portenv-agent \
+ && useradd --system --uid 991 --gid 991 --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin portenv-agent \
+ && install -o root -g portenv-agent -m 0750 /usr/local/bin/portenv-agent /usr/local/libexec/portenv/agent-serve \
+ && setcap cap_setuid,cap_setgid,cap_chown,cap_kill+ep /usr/local/libexec/portenv/agent-serve \
+ && install -d -o portenv-agent -g portenv-agent -m 0711 /run/portenv-sftp
+
 LABEL org.opencontainers.image.title="toolbox-node" \
       org.opencontainers.image.description="Portenv toolbox: Ubuntu 24.04, Node 22, Claude Code, portenv-agent" \
       org.opencontainers.image.source="https://github.com/portenv/portenv"

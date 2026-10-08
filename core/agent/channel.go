@@ -12,6 +12,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/hex"
+	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"math/big"
@@ -106,3 +107,13 @@ func (t tokenCreds) GetRequestMetadata(context.Context, ...string) (map[string]s
 	return map[string]string{TokenHeader: string(t)}, nil
 }
 func (t tokenCreds) RequireTransportSecurity() bool { return true }
+
+// Line is the secrets as the driver writes them on the box's stdin: one
+// JSON line.
+func (s ChannelSecrets) Line() ([]byte, error) {
+	b, err := json.Marshal(s)
+	if err != nil {
+		return nil, err
+	}
+	return append(b, '\n'), nil
+}

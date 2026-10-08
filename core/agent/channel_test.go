@@ -3,11 +3,12 @@
 package agent
 
 import (
+	"bytes"
 	"context"
 	"net"
-	"os"
-	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -22,13 +23,7 @@ func startChannel(t *testing.T) (ChannelSecrets, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	dir := t.TempDir()
-	for name, data := range map[string][]byte{TokenFile: []byte(sec.Token), CertFile: sec.CertPEM, KeyFile: sec.KeyPEM} {
-		if err := os.WriteFile(filepath.Join(dir, name), data, 0o600); err != nil {
-			t.Fatal(err)
-		}
-	}
-	srv, err := newChannelServer(DefaultConfig(), dir)
+	srv, err := newChannelServer(DefaultConfig(), sec)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,7 +63,12 @@ func TestChannelNeedsTheTokenAndThePinnedCertificate(t *testing.T) {
 	if err := call(t, addr, sec.CertPEM, ""); status.Code(err) != codes.Unauthenticated {
 		t.Fatalf("without token: %v, want Unauthenticated", err)
 	}
-	if err := call(t, addr, sec.CertPEM, sec.Token[:len(sec.Token)-1]+"0"); status.Code(err) != codes.Unauthenticated {
+	// One character changed, never to itself (the token is hex).
+	last := "0"
+	if strings.HasSuffix(sec.Token, "0") {
+		last = "1"
+	}
+	if err := call(t, addr, sec.CertPEM, sec.Token[:len(sec.Token)-1]+last); status.Code(err) != codes.Unauthenticated {
 		t.Fatalf("wrong token: %v, want Unauthenticated", err)
 	}
 }
@@ -81,5 +81,42 @@ func TestChannelRefusesAnImpostor(t *testing.T) {
 	err := call(t, impostor, mine.CertPEM, mine.Token)
 	if status.Code(err) != codes.Unavailable {
 		t.Fatalf("against an impostor: %v, want the TLS handshake to fail (Unavailable)", err)
+	}
+}
+
+// TestChannelSecretsComeOnStdin: the driver writes one JSON line on the
+// box's stdin; the API process reads exactly that, and nothing else.
+func TestChannelSecretsComeOnStdin(t *testing.T) {
+	sec, _ := NewChannelSecrets()
+	line, err := sec.Line()
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := ReadChannelSecrets(bytes.NewReader(append(line, []byte("trailing input is ignored\n")...)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Token != sec.Token || !bytes.Equal(got.CertPEM, sec.CertPEM) || !bytes.Equal(got.KeyPEM, sec.KeyPEM) {
+		t.Fatal("secrets changed on the way")
+	}
+	if _, err := newChannelServer(DefaultConfig(), got); err != nil {
+		t.Fatal(err)
+	}
+	for _, bad := range []string{"", "not json\n", `{"Token":"short"}` + "\n"} {
+		s, err := ReadChannelSecrets(strings.NewReader(bad))
+		if err == nil {
+			_, err = newChannelServer(DefaultConfig(), s)
+		}
+		if err == nil {
+			t.Errorf("accepted %q", bad)
+		}
+	}
+}
+
+// TestInitWaitsForTheChannel: init starts nothing else until the API
+// process listens, which it does only after reading the secrets.
+func TestInitWaitsForTheChannel(t *testing.T) {
+	if err := WaitChannelListening(1, 100*time.Millisecond); err == nil {
+		t.Fatal("no error with nothing listening")
 	}
 }

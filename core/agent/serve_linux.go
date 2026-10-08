@@ -7,6 +7,7 @@ package agent
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"golang.org/x/sys/unix"
 )
@@ -18,5 +19,11 @@ func ServeChannelProcess(ctx context.Context, cfg Config) error {
 	if err := unix.Prctl(unix.PR_SET_DUMPABLE, 0, 0, 0, 0); err != nil {
 		return fmt.Errorf("make agent channel non-dumpable: %w", err)
 	}
-	return ServeChannel(ctx, cfg, ChannelDir, ChannelPort)
+	// Read the secrets, then close stdin at once: nothing is left to read.
+	sec, err := ReadChannelSecrets(os.Stdin)
+	_ = os.Stdin.Close()
+	if err != nil {
+		return err
+	}
+	return ServeChannel(ctx, cfg, sec, ChannelPort)
 }

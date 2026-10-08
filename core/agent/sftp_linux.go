@@ -45,16 +45,17 @@ func startSFTPAgent(privateKey, hostKey string) (*sftpAgent, []string, []string,
 		return nil, nil, nil, err
 	}
 
-	// Under portenv-sync's own cache directory (0700, owned by it): restic's
-	// ssh runs as portenv-sync and must reach the socket and the host key,
-	// which it could not inside the root-only /run/portenv.
-	dir, err := os.MkdirTemp(resticCacheDir, "sftp-")
+	// In portenv-agent's helper directory (0711, set up by the image):
+	// restic's ssh runs as portenv-sync and must reach the socket (handed to
+	// it with chown) and the public host key, but cannot list the
+	// directory.
+	dir, err := os.MkdirTemp(sftpHelperDir, "sftp-")
 	if err != nil {
 		return nil, nil, nil, err
 	}
 	a := &sftpAgent{dir: dir}
 	fail := func(err error) (*sftpAgent, []string, []string, error) { a.stop(); return nil, nil, nil, err }
-	if err := os.Chown(dir, syncUID, syncGID); err != nil {
+	if err := os.Chmod(dir, 0o711); err != nil { // #nosec G302 -- search only, no listing
 		return fail(err)
 	}
 	// The host key is public; pinning it under a fixed alias keeps the
@@ -68,10 +69,12 @@ func startSFTPAgent(privateKey, hostKey string) (*sftpAgent, []string, []string,
 	if err != nil {
 		return fail(err)
 	}
-	if err := os.Chown(sock, syncUID, syncGID); err != nil {
+	// Mode first, then the owner: once portenv-sync owns the socket, this
+	// process (without cap_fowner) may no longer change its mode.
+	if err := os.Chmod(sock, 0o600); err != nil {
 		return fail(err)
 	}
-	if err := os.Chmod(sock, 0o600); err != nil {
+	if err := os.Chown(sock, syncUID, syncGID); err != nil {
 		return fail(err)
 	}
 	go func() {

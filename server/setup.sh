@@ -7,6 +7,7 @@
 #   sudo ./setup.sh --portenv-bin ./portenv [--homes-device /dev/X | --homes-size 8G]
 #                   [--storage-key "ssh-ed25519 AAAA..."] [--rest-user "BOX-ID:BCRYPT-HASH"]
 #                   [--image ghcr.io/portenv/toolbox-node@sha256:...]
+#                   [--runner-bin ./portenv-runner] [--mac-key "ssh-ed25519 AAAA..."]
 #
 # Installs Docker Engine from Docker's repository (signing key pinned), an
 # encrypted LUKS volume for box homes unlocked at boot from a root-only key
@@ -26,6 +27,8 @@ homes_size=8G
 homes_device=""
 storage_key=""
 rest_user=""
+runner_bin=""
+mac_key=""
 only=""
 image_ref=""
 while (($#)); do
@@ -35,6 +38,8 @@ while (($#)); do
 		--homes-device) homes_device=$2; shift 2 ;;
 		--storage-key) storage_key=$2; shift 2 ;;
 		--rest-user) rest_user=$2; shift 2 ;;
+		--runner-bin) runner_bin=$2; shift 2 ;;
+		--mac-key) mac_key=$2; shift 2 ;;
 		--only) only=$2; shift 2 ;;
 		--image) image_ref=$2; shift 2 ;;
 		*) echo "unknown option $1" >&2; exit 2 ;;
@@ -149,12 +154,77 @@ UNIT
 }
 rest_server_args() { echo "--path /srv/portenv/storage-root/storage/boxes --listen $REST_ADDR --htpasswd-file $REST_HTPASSWD"; }
 
+# The runner (portenv-runner): opens boxes with the agent channel and serves
+# the Mac through `sudo portenv app` over SSH. Root, a root-only socket, and
+# boxes keep running when it restarts.
+setup_runner() {
+	say "portenv-runner"
+	if [[ -n $runner_bin ]]; then
+		install -m 0755 "$runner_bin" /usr/local/bin/portenv-runner
+	fi
+	[[ -x /usr/local/bin/portenv-runner ]] || { echo "no portenv-runner (pass --runner-bin)"; return; }
+	if [[ ! -d /run/systemd/system ]]; then
+		echo "no systemd: start it with: /usr/local/bin/portenv-runner"
+		return
+	fi
+	cat > /etc/systemd/system/portenv-runner.service <<'UNIT'
+[Unit]
+Description=Portenv runner: boxes on this server, reached through the agent channel
+After=docker.service network.target
+Requires=docker.service
+
+[Service]
+ExecStart=/usr/local/bin/portenv-runner
+# The same Portenv directory as `sudo portenv` (root's).
+Environment=HOME=/root
+Restart=on-failure
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+	systemctl daemon-reload
+	systemctl enable --now portenv-runner >/dev/null 2>&1
+	systemctl restart portenv-runner
+	/usr/local/bin/portenv-runner version
+}
+
+# The Mac's SSH user: a dedicated account whose sudo allows only portenv, by
+# full path (never a shell), and whose SSH may forward only to this server's
+# loopback (the box agents' ports).
+setup_ssh_user() {
+	say "SSH user portenv (sudo: /usr/local/bin/portenv only)"
+	id portenv >/dev/null 2>&1 || useradd --create-home --shell /bin/bash portenv
+	install -d -m 0700 -o portenv -g portenv /home/portenv/.ssh
+	if [[ -n $mac_key ]]; then
+		[[ $mac_key =~ ^ssh-ed25519\ [A-Za-z0-9+/=]+ ]] || die "--mac-key must be an ssh-ed25519 public key"
+		grep -qF "$mac_key" /home/portenv/.ssh/authorized_keys 2>/dev/null || echo "$mac_key" >> /home/portenv/.ssh/authorized_keys
+		chown portenv:portenv /home/portenv/.ssh/authorized_keys && chmod 0600 /home/portenv/.ssh/authorized_keys
+	fi
+	printf 'portenv ALL=(root) NOPASSWD: /usr/local/bin/portenv\n' > /etc/sudoers.d/portenv
+	chmod 0440 /etc/sudoers.d/portenv
+	visudo -cf /etc/sudoers.d/portenv >/dev/null || die "sudoers rule for portenv rejected"
+	cat > /etc/ssh/sshd_config.d/51-portenv-user.conf <<'CONF'
+Match User portenv
+	AllowTcpForwarding local
+	PermitOpen 127.0.0.1:*
+	AllowStreamLocalForwarding no
+	AllowAgentForwarding no
+	X11Forwarding no
+	PermitTTY no
+	PasswordAuthentication no
+CONF
+	sshd -t || die "sshd rejected the portenv user configuration"
+	systemctl reload ssh 2>/dev/null || kill -HUP "$(cat /run/sshd.pid 2>/dev/null)" 2>/dev/null || true
+}
+
 [[ $(id -u) == 0 ]] || die "run as root (sudo)"
 case $only in
 	storage-account) setup_storage_account; exit 0 ;;
 	rest-server) install_rest_server; exit 0 ;;
+	runner) setup_runner; setup_ssh_user; exit 0 ;;
 	"") ;;
-	*) die "unknown --only $only (want storage-account or rest-server)" ;;
+	*) die "unknown --only $only (want storage-account, rest-server or runner)" ;;
 esac
 
 say "preflight"
@@ -312,6 +382,9 @@ install -d -m 0700 /root/.config/Portenv
 printf '{"homes_dir": "/var/lib/portenv/homes"}\n' > /root/.config/Portenv/machine.json
 chmod 0600 /root/.config/Portenv/machine.json
 command -v portenv >/dev/null && portenv version
+
+setup_runner
+setup_ssh_user
 
 say "done"
 echo "No port was opened (the REST server listens on $REST_ADDR only). Box homes: /var/lib/portenv/homes. Keys: /etc/portenv (root-only)."

@@ -53,6 +53,9 @@ type Server struct {
 	mu     sync.Mutex
 	open   map[string]*openBox   // by box name
 	remote map[string]*remoteBox // boxes this Mac opened on a server
+	// gen counts each box's moves, closes and restarts by this daemon, so
+	// a terminal that ends because of one is not reported as a failure.
+	gen map[string]uint64
 }
 
 // openBox is a box this daemon opened: its session, sync engine and agent
@@ -70,7 +73,7 @@ type openBox struct {
 
 // New returns a daemon for this machine's Portenv directory.
 func New(env *local.Env, log *slog.Logger) *Server {
-	return &Server{env: env, log: log, open: map[string]*openBox{}, remote: map[string]*remoteBox{}}
+	return &Server{env: env, log: log, open: map[string]*openBox{}, remote: map[string]*remoteBox{}, gen: map[string]uint64{}}
 }
 
 // Serve listens on the socket in the Portenv directory (mode 0600 in a 0700
@@ -337,6 +340,7 @@ func (s *Server) closeBox(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
+	s.leaving(name)
 	ob.mu.Lock()
 	defer ob.mu.Unlock()
 	ob.saving.Store(true)
@@ -410,6 +414,7 @@ func (s *Server) RevertToLastSavePoint(ctx context.Context, req *daemonv1.Revert
 // "this-mac", or a server from the machine's servers list.
 func (s *Server) MoveBox(ctx context.Context, req *daemonv1.MoveBoxRequest) (*daemonv1.MoveBoxResponse, error) {
 	name, target := req.GetName(), req.GetTarget()
+	s.leaving(name)
 	mc, err := s.env.MachineConfig()
 	if err != nil {
 		return nil, err
@@ -484,6 +489,7 @@ func (s *Server) Terminal(stream daemonv1.DaemonService_TerminalServer) error {
 	if open == nil {
 		return status.Error(codes.InvalidArgument, "the first terminal message must be open")
 	}
+	gen := s.boxGen(open.GetBox())
 	var ac agentv1.AgentServiceClient
 	if s.location(open.GetBox()) != "" {
 		if ac, err = s.remoteAgent(stream.Context(), open.GetBox()); err != nil {
@@ -530,11 +536,8 @@ func (s *Server) Terminal(stream daemonv1.DaemonService_TerminalServer) error {
 	}()
 	for {
 		r, err := at.Recv()
-		if errors.Is(err, io.EOF) {
-			return nil
-		}
 		if err != nil {
-			return agentError(err)
+			return s.terminalEnd(open.GetBox(), gen, err)
 		}
 		var m daemonv1.TerminalResponse
 		switch v := r.GetMsg().(type) {
@@ -563,6 +566,31 @@ func (w logWriter) Write(p []byte) (int, error) {
 		}
 	}
 	return len(p), nil
+}
+
+// leaving records that this daemon is moving, closing or restarting the
+// box: its open terminals are about to end, and that is not a failure.
+func (s *Server) leaving(name string) {
+	s.mu.Lock()
+	s.gen[name]++
+	s.mu.Unlock()
+}
+
+// boxGen is the box's count of moves, closes and restarts so far.
+func (s *Server) boxGen(name string) uint64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.gen[name]
+}
+
+// terminalEnd is how a terminal opened at gen ends after err from the
+// agent: quietly when the shell ended or the box was moved, closed or
+// restarted since (the app reconnects it), otherwise as agentError.
+func (s *Server) terminalEnd(name string, gen uint64, err error) error {
+	if errors.Is(err, io.EOF) || s.boxGen(name) != gen {
+		return nil
+	}
+	return agentError(err)
 }
 
 // agentError reports a channel that is down or fails verification (for
@@ -619,6 +647,7 @@ func (s *Server) CheckBox(ctx context.Context, req *daemonv1.CheckBoxRequest) (*
 // next save includes everything.
 func (s *Server) RestartBox(ctx context.Context, req *daemonv1.RestartBoxRequest) (*daemonv1.RestartBoxResponse, error) {
 	name := req.GetName()
+	s.leaving(name)
 	if out, err := s.onServer(ctx, name, "restart"); !errors.Is(err, errNotRemote) {
 		if err != nil {
 			return nil, err

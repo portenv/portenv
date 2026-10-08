@@ -34,6 +34,8 @@ func TestConformance(t *testing.T) {
 		HomeRef: func(id driver.BoxID) string { return "portenv-test-home-" + string(id) },
 		Cleanup: func(ref string) {
 			_, _ = d.cli.VolumeRemove(context.Background(), ref, client.VolumeRemoveOptions{Force: true})
+			id := driver.BoxID(strings.TrimPrefix(ref, "portenv-test-home-"))
+			_, _ = d.cli.VolumeRemove(context.Background(), d.cacheVolume(id), client.VolumeRemoveOptions{Force: true})
 		},
 	})
 }
@@ -64,6 +66,20 @@ func TestHostConfigKeepsIsolation(t *testing.T) {
 			t.Error("box shares a host namespace")
 		case len(h.Devices) > 0:
 			t.Errorf("box gets host devices %v", h.Devices)
+		}
+		// The only published port is the agent channel, on loopback (ADR 0010).
+		for port, binds := range h.PortBindings {
+			if port != agentPort {
+				t.Errorf("box publishes port %v", port)
+			}
+			for _, b := range binds {
+				if !b.HostIP.IsLoopback() {
+					t.Errorf("agent port published on %v, want 127.0.0.1 only", b.HostIP)
+				}
+			}
+		}
+		if len(h.PortBindings) != 1 {
+			t.Errorf("port bindings %v, want just the agent channel", h.PortBindings)
 		}
 		for _, o := range h.SecurityOpt {
 			if strings.Contains(o, "unconfined") {

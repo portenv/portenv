@@ -16,7 +16,9 @@ package driver
 
 import (
 	"context"
+	"errors"
 	"iter"
+	"net"
 	"time"
 )
 
@@ -179,4 +181,20 @@ type Driver interface {
 	MountHome(ctx context.Context, id BoxID, home HomeStorage) error
 	// Capabilities describes the driver and its engine.
 	Capabilities(ctx context.Context) (Capabilities, error)
+	// AgentChannel returns the way to the box agent's API for the current
+	// start (ADR 0010). It fails with ErrNoChannel when this driver did not
+	// start the box (the secrets exist only in the process that started it);
+	// stopping and starting the box again opens a new channel.
+	AgentChannel(ctx context.Context, id BoxID) (AgentChannel, error)
 }
+
+// AgentChannel reaches the box agent: Dial opens a connection, CertPEM is
+// the certificate the agent must present, Token goes with every call.
+type AgentChannel struct {
+	Dial    func(ctx context.Context) (net.Conn, error)
+	CertPEM []byte
+	Token   string
+}
+
+// ErrNoChannel: this process has no agent channel for the box's start.
+var ErrNoChannel = errors.New("no agent channel for this start of the box (restart it to open one)")

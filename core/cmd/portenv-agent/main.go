@@ -11,6 +11,7 @@
 //	portenv-agent restic …  run restic as portenv-sync; the password arrives as
 //	                        JSON on stdin (Phase 0 sync path, ADR 0005)
 //	portenv-agent path-info P  describe a path under /home as JSON
+//	portenv-agent serve     serve the agent channel (started by init, ADR 0010)
 package main
 
 import (
@@ -62,6 +63,13 @@ func run(args []string) int {
 			return 125
 		}
 		return code
+	case "serve":
+		log := slog.New(slog.NewTextHandler(os.Stderr, nil)).With("component", "portenv-agent serve")
+		if err := agent.ServeChannelProcess(ctx, agent.DefaultConfig()); err != nil {
+			log.Error("agent channel stopped", "err", err)
+			return 1
+		}
+		return 0
 	case "path-info":
 		if len(args) != 2 {
 			fmt.Fprintln(os.Stderr, "usage: portenv-agent path-info PATH")

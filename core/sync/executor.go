@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/portenv/portenv/core/driver"
+	agentv1 "github.com/portenv/portenv/proto/gen/go/portenv/agent/v1"
 )
 
 // Executor runs restic for a Box and inspects the home: locally (tests, and
@@ -209,14 +210,7 @@ const agentRefused = 125
 
 // Restic implements Executor.
 func (a AgentExecutor) Restic(ctx context.Context, args []string, cred Credentials) (ExecResult, error) {
-	// The secrets are meant to be in this JSON: it goes to the agent on
-	// stdin and is never written anywhere.
-	input, err := json.Marshal(struct { // #nosec G117 -- deliberate, see above
-		Password   string   `json:"password"`
-		Env        []string `json:"env,omitempty"`
-		SSHKey     string   `json:"ssh_key,omitempty"`
-		SSHHostKey string   `json:"ssh_host_key,omitempty"`
-	}{string(cred.Password), cred.Env, string(cred.SSHKey), cred.SSHHostKey})
+	input, err := agentInput(cred)
 	if err != nil {
 		return ExecResult{}, err
 	}
@@ -231,6 +225,46 @@ func (a AgentExecutor) Restic(ctx context.Context, args []string, cred Credentia
 		return ExecResult{}, fmt.Errorf("agent refused the restic run: %s", strings.TrimSpace(string(res.Stderr)))
 	}
 	return ExecResult{Stdout: res.Stdout, Stderr: res.Stderr, ExitCode: res.ExitCode}, nil
+}
+
+// agentInput is the JSON portenv-agent restic reads: the password and
+// storage credentials. The secrets are meant to be in it: it goes to the
+// agent on a pipe or the agent channel and is never written anywhere.
+func agentInput(cred Credentials) ([]byte, error) {
+	return json.Marshal(struct { // #nosec G117 -- deliberate, see above
+		Password   string   `json:"password"`
+		Env        []string `json:"env,omitempty"`
+		SSHKey     string   `json:"ssh_key,omitempty"`
+		SSHHostKey string   `json:"ssh_host_key,omitempty"`
+	}{string(cred.Password), cred.Env, string(cred.SSHKey), cred.SSHHostKey})
+}
+
+// ChannelExecutor runs restic and path checks inside a box over the agent
+// channel (ADR 0010): what portenvd uses from Phase 1, never docker exec.
+type ChannelExecutor struct {
+	Agent agentv1.AgentServiceClient
+}
+
+// Restic implements Executor.
+func (c ChannelExecutor) Restic(ctx context.Context, args []string, cred Credentials) (ExecResult, error) {
+	input, err := agentInput(cred)
+	if err != nil {
+		return ExecResult{}, err
+	}
+	res, err := c.Agent.RunRestic(ctx, &agentv1.RunResticRequest{Args: args, Input: input})
+	if err != nil {
+		return ExecResult{}, fmt.Errorf("run restic in box: %w", err)
+	}
+	return ExecResult{Stdout: res.GetStdout(), Stderr: res.GetStderr(), ExitCode: int(res.GetExitCode())}, nil
+}
+
+// PathInfo implements Executor.
+func (c ChannelExecutor) PathInfo(ctx context.Context, path string) (PathInfo, error) {
+	res, err := c.Agent.GetPathInfo(ctx, &agentv1.GetPathInfoRequest{Path: path})
+	if err != nil {
+		return PathInfo{}, fmt.Errorf("inspect %s in box: %w", path, err)
+	}
+	return PathInfo{Exists: res.GetExists(), IsDir: res.GetIsDir(), Empty: res.GetEmpty()}, nil
 }
 
 // PathInfo implements Executor.

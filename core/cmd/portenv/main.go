@@ -25,6 +25,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/portenv/portenv/core/local"
 	"os"
 	"os/signal"
 	"syscall"
@@ -40,7 +41,7 @@ func main() {
 
 type command struct {
 	usage string
-	run   func(ctx context.Context, e *env, name string, args []string) error
+	run   func(ctx context.Context, e *local.Env, name string, args []string) error
 }
 
 var commands = map[string]command{
@@ -76,7 +77,7 @@ func run(ctx context.Context, args []string) int {
 		fmt.Fprintf(os.Stderr, "usage: portenv %s\n", c.usage)
 		return 2
 	}
-	e, err := newEnv()
+	e, err := local.NewEnv()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "portenv:", err)
 		return 1
@@ -93,9 +94,7 @@ func run(ctx context.Context, args []string) int {
 	return 0
 }
 
-type usageError struct{ msg string }
-
-func (u usageError) Error() string { return u.msg }
+type usageError = local.UsageError
 
 func usage() {
 	fmt.Fprint(os.Stderr, `portenv (Phase 0, temporary): drive a box with the docker driver.

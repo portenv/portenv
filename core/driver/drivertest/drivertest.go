@@ -8,11 +8,14 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"net"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/portenv/portenv/core/agent"
 	"github.com/portenv/portenv/core/driver"
+	agentv1 "github.com/portenv/portenv/proto/gen/go/portenv/agent/v1"
 )
 
 // Env describes the driver under test.
@@ -32,6 +35,7 @@ func Run(t *testing.T, env Env) {
 	t.Run("HomeSurvivesRestartAndDestroy", func(t *testing.T) { homeSurvives(t, env) })
 	t.Run("ExecAndStdin", func(t *testing.T) { execStdin(t, env) })
 	t.Run("MissingHomeIsReported", func(t *testing.T) { missingHome(t, env) })
+	t.Run("AgentChannel", func(t *testing.T) { agentChannel(t, env) })
 }
 
 type box struct {
@@ -218,5 +222,100 @@ func missingHome(t *testing.T, env Env) {
 	out := b.waitReady("FAILED")
 	if !strings.Contains(out, "home storage is not attached") {
 		t.Fatalf("got %q", out)
+	}
+}
+
+// agentChannel: the agent's API is reachable through AgentChannel (never
+// Exec), a terminal lands in tmux as work, and a restart replaces the
+// channel's credentials (ADR 0010).
+func agentChannel(t *testing.T, env Env) {
+	b := newBox(t, env)
+	b.create(true)
+	b.start()
+	b.waitReady("READY")
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	dial := func() (agentv1.AgentServiceClient, *agent.ChannelSecrets, func()) {
+		ch, err := env.Driver.AgentChannel(ctx, b.id)
+		if err != nil {
+			t.Fatalf("AgentChannel: %v", err)
+		}
+		conn, err := agent.DialChannel(ch.Dial, ch.CertPEM, ch.Token)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return agentv1.NewAgentServiceClient(conn), &agent.ChannelSecrets{Token: ch.Token, CertPEM: ch.CertPEM}, func() { _ = conn.Close() }
+	}
+	c, old, closeOld := dial()
+	defer closeOld()
+	var ready *agentv1.GetReadinessResponse
+	var err error
+	for range 50 {
+		if ready, err = c.GetReadiness(ctx, &agentv1.GetReadinessRequest{}); err == nil && ready.GetState() == agentv1.ReadinessState_READINESS_STATE_READY {
+			break
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	if err != nil || ready.GetState() != agentv1.ReadinessState_READINESS_STATE_READY {
+		t.Fatalf("readiness over the channel: %v %v", ready, err)
+	}
+	if info, err := c.GetPathInfo(ctx, &agentv1.GetPathInfoRequest{Path: "/home/work"}); err != nil || !info.GetIsDir() {
+		t.Fatalf("path info over the channel: %v %v", info, err)
+	}
+
+	term, err := c.Terminal(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	send := func(r *agentv1.TerminalRequest) {
+		if err := term.Send(r); err != nil {
+			t.Fatal(err)
+		}
+	}
+	send(&agentv1.TerminalRequest{Msg: &agentv1.TerminalRequest_Open{Open: &agentv1.TerminalOpen{Session: "main", Size: &agentv1.TerminalSize{Cols: 100, Rows: 30}}}})
+	send(&agentv1.TerminalRequest{Msg: &agentv1.TerminalRequest_Input{Input: []byte("echo user=$(id -un) in=$TMUX marker=$((40+2))\r")}})
+	var out strings.Builder
+	for !strings.Contains(out.String(), "marker=42") {
+		r, err := term.Recv()
+		if err != nil {
+			t.Fatalf("terminal: %v; output so far %q", err, out.String())
+		}
+		out.Write(r.GetOutput())
+	}
+	if !strings.Contains(out.String(), "user=work") || !strings.Contains(out.String(), "in=/tmp/tmux-1000") {
+		t.Fatalf("terminal is not work's tmux session: %q", out.String())
+	}
+	_ = term.CloseSend()
+
+	// A restart makes new credentials: the old ones no longer work.
+	if _, err := env.Driver.Stop(ctx, b.id, 5*time.Second); err != nil {
+		t.Fatal(err)
+	}
+	b.start()
+	b.waitReady("READY")
+	stale, err := agent.DialChannel(func(ctx context.Context) (net.Conn, error) {
+		ch, err := env.Driver.AgentChannel(ctx, b.id)
+		if err != nil {
+			return nil, err
+		}
+		return ch.Dial(ctx)
+	}, old.CertPEM, old.Token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = stale.Close() }()
+	if _, err := agentv1.NewAgentServiceClient(stale).GetPathInfo(ctx, &agentv1.GetPathInfoRequest{Path: "/home"}); err == nil {
+		t.Fatal("the previous start's credentials still reach the agent")
+	}
+	c2, _, closeNew := dial()
+	defer closeNew()
+	for range 50 {
+		if _, err = c2.GetPathInfo(ctx, &agentv1.GetPathInfoRequest{Path: "/home"}); err == nil {
+			break
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	if err != nil {
+		t.Fatalf("the new channel after a restart: %v", err)
 	}
 }

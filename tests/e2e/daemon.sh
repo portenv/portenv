@@ -28,6 +28,10 @@ cleanup() {
 		docker rm -f "portenv-daemon-$id" >/dev/null 2>&1 || true
 		docker volume rm -f "portenv-home-daemon-$id" "portenv-cache-daemon-$id" >/dev/null 2>&1 || true
 	fi
+	# restic in the box wrote the repository as portenv-sync (uid 990); on
+	# Linux hosts those files really are uid 990, so remove them as root in
+	# a container.
+	docker run --rm -v "$root:/scratch" --entrypoint rm "$image" -rf /scratch/mac/Repositories >/dev/null 2>&1 || true
 	rm -rf "$root" || true
 }
 trap cleanup EXIT
@@ -39,7 +43,8 @@ epid=$!
 "$repo/bin/portenvd" 2>"$root/portenvd.log" &
 dpid=$!
 for _ in $(seq 50); do [[ -S $root/mac/portenvd.sock ]] && break; sleep 0.1; done
-expect "portenvd serves its socket, mode 0600" bash -c "[[ \$(stat -f %Lp '$root/mac/portenvd.sock' 2>/dev/null || stat -c %a '$root/mac/portenvd.sock') == 600 ]]"
+mode() { if [[ $(uname) == Darwin ]]; then stat -f %Lp "$1"; else stat -c %a "$1"; fi; }
+expect "portenvd serves its socket, mode 0600 ($(mode "$root/mac/portenvd.sock"))" test "$(mode "$root/mac/portenvd.sock")" = 600
 
 "$portenv" init d --image "$image" >/dev/null
 out=$("$portenv" app open d 2>&1) || true; echo "  $out"

@@ -78,7 +78,7 @@ func newChannelServer(cfg Config, dir string) (*grpc.Server, error) {
 	for _, name := range []string{TokenFile, CertFile, KeyFile} {
 		data, err := os.ReadFile(filepath.Join(dir, name)) // #nosec G304 -- fixed root-only path
 		if err != nil {
-			removeChannelFiles(dir)
+			_ = removeChannelFiles(dir)
 			return nil, fmt.Errorf("read channel %s: %w", name, err)
 		}
 		files[name] = data

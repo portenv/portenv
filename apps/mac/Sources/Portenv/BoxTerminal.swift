@@ -12,10 +12,14 @@ import SwiftUI
 struct BoxTerminal: NSViewRepresentable {
     let box: String
     let generation: Int
+    /// Called when `portenv attach` ends (the session closed, or the box
+    /// agent went away).
+    var onEnded: @MainActor () -> Void = {}
 
     func makeNSView(context: Context) -> LocalProcessTerminalView {
         let view = LocalProcessTerminalView(frame: .zero)
         view.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
+        context.coordinator.onEnded = onEnded
         context.coordinator.attach(view, box: box, generation: generation)
         return view
     }
@@ -31,6 +35,7 @@ struct BoxTerminal: NSViewRepresentable {
     @MainActor
     final class Coordinator: NSObject, LocalProcessTerminalViewDelegate {
         var generation = -1
+        var onEnded: @MainActor () -> Void = {}
 
         func attach(_ view: LocalProcessTerminalView, box: String, generation: Int) {
             self.generation = generation
@@ -49,6 +54,8 @@ struct BoxTerminal: NSViewRepresentable {
         nonisolated func sizeChanged(source _: LocalProcessTerminalView, newCols _: Int, newRows _: Int) {}
         nonisolated func setTerminalTitle(source _: LocalProcessTerminalView, title _: String) {}
         nonisolated func hostCurrentDirectoryUpdate(source _: SwiftTerm.TerminalView, directory _: String?) {}
-        nonisolated func processTerminated(source _: SwiftTerm.TerminalView, exitCode _: Int32?) {}
+        nonisolated func processTerminated(source _: SwiftTerm.TerminalView, exitCode _: Int32?) {
+            Task { @MainActor in self.onEnded() }
+        }
     }
 }

@@ -101,3 +101,71 @@ final class UnavailableCLI: CLIRunning, @unchecked Sendable {
         return arguments.count > 1 && arguments[1] == "open" ? "open on mac (resume rule 3: start local)" : ""
     }
 }
+
+/// Answers like portenvd while the box agent is gone, until a restart.
+final class AgentGoneCLI: CLIRunning, @unchecked Sendable {
+    private let lock = NSLock()
+    private var _calls: [[String]] = []
+    private var restarted = false
+    var calls: [[String]] { lock.withLock { _calls } }
+
+    func run(_ arguments: [String]) async throws -> String {
+        lock.withLock { _calls.append(arguments) }
+        let action = arguments.count > 1 ? arguments[1] : ""
+        switch action {
+        case "open": return "open on mac (resume rule 3: start local)"
+        case "restart":
+            lock.withLock { restarted = true }
+            return "restarted: open on mac (resume rule 3: start local)"
+        case "check", "point":
+            if lock.withLock({ restarted }) { return "ok" }
+            throw CLIError("the box agent is unavailable (its channel is down or failed verification); restart the box")
+        default: return ""
+        }
+    }
+}
+
+@MainActor
+struct RestartBoxTests {
+    @Test func aTerminalThatEndsWithTheAgentGoneShowsUnavailable() async {
+        let cli = AgentGoneCLI()
+        let c = BoxController(box: "demo", cli: cli)
+        await c.open()
+        await c.terminalEnded()
+        #expect(c.agentUnavailable)
+        #expect(cli.calls.contains(["app", "check", "demo"]))
+        #expect(c.location == .thisMac)
+    }
+
+    @Test func restartBoxClearsTheStateAndReattaches() async {
+        let cli = AgentGoneCLI()
+        let c = BoxController(box: "demo", cli: cli)
+        await c.open()
+        await c.terminalEnded()
+        let before = c.terminalGeneration
+        await c.restartBox()
+        #expect(!c.agentUnavailable)
+        #expect(c.terminalGeneration == before + 1)
+        #expect(cli.calls.contains(["app", "restart", "demo"]))
+        await c.makeSavePoint() // saving works again
+        #expect(c.error == nil)
+    }
+
+    @Test func aTerminalThatEndsWithTheAgentFineJustReattaches() async {
+        let cli = FakeCLI()
+        let c = BoxController(box: "demo", cli: cli)
+        await c.open()
+        let before = c.terminalGeneration
+        await c.terminalEnded()
+        #expect(!c.agentUnavailable)
+        #expect(c.terminalGeneration == before + 1)
+    }
+
+    @Test func anActionFailingWithTheAgentGoneShowsUnavailable() async {
+        let cli = AgentGoneCLI()
+        let c = BoxController(box: "demo", cli: cli)
+        await c.open()
+        await c.makeSavePoint()
+        #expect(c.agentUnavailable)
+    }
+}

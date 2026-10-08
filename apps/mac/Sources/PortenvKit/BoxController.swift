@@ -25,6 +25,9 @@ public final class BoxController {
     /// Changes whenever the box starts on this Mac again, so the terminal
     /// reattaches to the new start's tmux session.
     public private(set) var terminalGeneration = 0
+    /// The box agent stopped answering: nothing can be saved, and unsaved
+    /// changes stay in the box until Restart Box.
+    public private(set) var agentUnavailable = false
 
     private let cli: CLIRunning
 
@@ -90,6 +93,38 @@ public final class BoxController {
 
     public func dismissError() { error = nil }
 
+    /// The terminal's connection ended without the user leaving it: ask
+    /// portenvd whether the box agent still answers; reattach if it does.
+    public func terminalEnded() async {
+        guard location == .thisMac, !busy else { return }
+        do {
+            _ = try await cli.run(["app", "check", box])
+            terminalGeneration += 1
+        } catch {
+            if Self.isAgentUnavailable(error) { agentUnavailable = true }
+        }
+    }
+
+    /// Restart Box: stops the box and opens it again; the local home and
+    /// its unsaved changes stay (portenvd's resume rules never restore over
+    /// them).
+    public func restartBox() async {
+        guard location == .thisMac, !busy else { return }
+        busy = true
+        defer { busy = false }
+        do {
+            _ = try await cli.run(["app", "restart", box])
+            agentUnavailable = false
+            terminalGeneration += 1
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    static func isAgentUnavailable(_ error: Error) -> Bool {
+        error.localizedDescription.contains("the box agent is unavailable")
+    }
+
     private func perform(_ progress: String, _ action: @escaping @MainActor () async throws -> String) async {
         guard !busy else { return }
         busy = true
@@ -101,6 +136,7 @@ public final class BoxController {
         } catch {
             subtitle = before
             self.error = error.localizedDescription
+            if Self.isAgentUnavailable(error) { agentUnavailable = true }
         }
     }
 

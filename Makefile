@@ -1,11 +1,20 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # Developer and CI entry points. Every tool is pinned below and installed into
-# bin/ on first use, so nothing needs installing besides Go, and Swift on
-# a Mac.
+# bin/ on first use, so nothing needs installing besides Go, GNU Make 4 or
+# later, and Swift on a Mac.
 
-SHELL := /bin/bash
-.SHELLFLAGS := -eu -o pipefail -c
+# GNU Make 4 or later only. macOS ships 3.81, which ignores .SHELLFLAGS and
+# once let failing tests and lint pass locally; stop before running anything.
+ifeq ($(filter 4.% 5.% 6.% 7.% 8.% 9.%,$(MAKE_VERSION)),)
+$(error GNU Make $(MAKE_VERSION) is too old: this Makefile needs GNU Make 4 or later. On a Mac: brew install make, then run gmake instead of make (or put "$$(brew --prefix)/opt/make/libexec/gnubin" first in PATH so make is GNU Make 4))
+endif
+
+# Every recipe fails on any failing command (scripts/make-shell: bash -eu -o
+# pipefail). Through SHELL, not .SHELLFLAGS, which GNU Make 3.81 (macOS's)
+# ignores.
+SHELL := $(CURDIR)/scripts/make-shell
+.SHELLFLAGS := -c
 
 BIN := $(CURDIR)/bin
 GO_MODULES := core proto/gen/go
@@ -112,7 +121,7 @@ swift-test:
 
 ## swift-env-check: a secret in the environment never reaches the Swift build folders
 swift-env-check:
-	scripts/check-swift-env.sh
+	MAKE="$(MAKE)" scripts/check-swift-env.sh
 
 ## image: build the toolbox image for this machine's architecture only
 IMAGE ?= portenv/toolbox-node:dev

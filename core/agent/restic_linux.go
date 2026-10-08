@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"syscall"
+	"time"
 
 	"golang.org/x/sys/unix"
 )
@@ -22,6 +23,11 @@ import (
 // pipe, passing restic's output through, and returns restic's exit code.
 // The calling process makes itself non-dumpable before reading the password,
 // so other processes in the box cannot read it from this process either.
+
+// resticKillGrace is how long restic has to exit after SIGINT, when the
+// caller's deadline passes, before SIGKILL (as bounded.KillGrace).
+const resticKillGrace = 15 * time.Second
+
 func RunRestic(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer) (int, error) {
 	if err := unix.Prctl(unix.PR_SET_DUMPABLE, 0, 0, 0, 0); err != nil {
 		return 0, fmt.Errorf("make agent non-dumpable: %w", err)
@@ -75,6 +81,11 @@ func RunRestic(ctx context.Context, args []string, stdin io.Reader, stdout, stde
 	// path names by the time exec happens.
 	cmd := exec.CommandContext(ctx, "/proc/self/fd/4", args...) // #nosec G204 -- validated subcommand and flags
 	cmd.Args[0] = "restic"
+	// Stopped at the caller's deadline (the gRPC call's): SIGINT first, so
+	// restic releases its lock and cleans up; SIGKILL only if it hasn't
+	// exited after the grace period (cap_kill: restic runs as portenv-sync).
+	cmd.Cancel = func() error { return cmd.Process.Signal(os.Interrupt) }
+	cmd.WaitDelay = resticKillGrace
 	cmd.ExtraFiles = []*os.File{pr, bin}
 	cmd.Env = append([]string{
 		"PATH=/usr/bin:/bin", "HOME=/nonexistent",

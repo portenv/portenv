@@ -46,6 +46,12 @@ const (
 	SaveState_SAVE_STATE_AGENT_UNAVAILABLE SaveState = 5
 	// Not open on this machine or its server.
 	SaveState_SAVE_STATE_CLOSED SaveState = 6
+	// A save missed its deadline and is being retried; saved_at is the last
+	// save that completed ("Not saved since 14:58 · retrying").
+	SaveState_SAVE_STATE_RETRYING SaveState = 7
+	// The last save failed (after its retry); saved_at is the last one that
+	// completed ("Not saved since 14:58"), until a save succeeds.
+	SaveState_SAVE_STATE_NOT_SAVED SaveState = 8
 )
 
 // Enum value maps for SaveState.
@@ -58,6 +64,8 @@ var (
 		4: "SAVE_STATE_OFFLINE",
 		5: "SAVE_STATE_AGENT_UNAVAILABLE",
 		6: "SAVE_STATE_CLOSED",
+		7: "SAVE_STATE_RETRYING",
+		8: "SAVE_STATE_NOT_SAVED",
 	}
 	SaveState_value = map[string]int32{
 		"SAVE_STATE_UNSPECIFIED":       0,
@@ -67,6 +75,8 @@ var (
 		"SAVE_STATE_OFFLINE":           4,
 		"SAVE_STATE_AGENT_UNAVAILABLE": 5,
 		"SAVE_STATE_CLOSED":            6,
+		"SAVE_STATE_RETRYING":          7,
+		"SAVE_STATE_NOT_SAVED":         8,
 	}
 )
 
@@ -1694,7 +1704,7 @@ const file_portenv_daemon_v1_daemon_proto_rawDesc = "" +
 	"\x15SetNetworkPathRequest\x122\n" +
 	"\x04path\x18\x01 \x01(\x0e2\x1e.portenv.daemon.v1.NetworkPathR\x04path\x12!\n" +
 	"\freporter_pid\x18\x02 \x01(\x05R\vreporterPid\"\x18\n" +
-	"\x16SetNetworkPathResponse*\xc3\x01\n" +
+	"\x16SetNetworkPathResponse*\xf6\x01\n" +
 	"\tSaveState\x12\x1a\n" +
 	"\x16SAVE_STATE_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18SAVE_STATE_NOT_SAVED_YET\x10\x01\x12\x15\n" +
@@ -1702,7 +1712,9 @@ const file_portenv_daemon_v1_daemon_proto_rawDesc = "" +
 	"\x10SAVE_STATE_SAVED\x10\x03\x12\x16\n" +
 	"\x12SAVE_STATE_OFFLINE\x10\x04\x12 \n" +
 	"\x1cSAVE_STATE_AGENT_UNAVAILABLE\x10\x05\x12\x15\n" +
-	"\x11SAVE_STATE_CLOSED\x10\x06*e\n" +
+	"\x11SAVE_STATE_CLOSED\x10\x06\x12\x17\n" +
+	"\x13SAVE_STATE_RETRYING\x10\a\x12\x18\n" +
+	"\x14SAVE_STATE_NOT_SAVED\x10\b*e\n" +
 	"\vNetworkPath\x12\x1c\n" +
 	"\x18NETWORK_PATH_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16NETWORK_PATH_SATISFIED\x10\x01\x12\x1c\n" +

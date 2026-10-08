@@ -22,6 +22,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/portenv/portenv/core/driver"
+	"github.com/portenv/portenv/core/internal/bounded"
 	agentv1 "github.com/portenv/portenv/proto/gen/go/portenv/agent/v1"
 )
 
@@ -163,7 +164,13 @@ func (l LocalExecutor) restic(ctx context.Context, args []string, cred Credentia
 	if l.CacheDir != "" {
 		args = append([]string{"--cache-dir", l.CacheDir}, args...)
 	}
-	cmd := exec.CommandContext(ctx, l.Bin, args...) // #nosec G204 -- the restic binary comes from configuration
+	// The real deadline comes with ctx (restic.runWithin); a caller without
+	// one gets the short deadline. Stopped with SIGINT first, so restic
+	// releases its lock, then SIGKILL after the grace period.
+	cmd, err := bounded.Command(ctx, bounded.Limit(ctx, DefaultDeadlines.Short), l.Bin, args...)
+	if err != nil {
+		return ExecResult{}, err
+	}
 	var procEnv []string
 	for _, kv := range os.Environ() {
 		if !strings.HasPrefix(kv, "RESTIC_") {
@@ -352,7 +359,10 @@ func (f *RESTForward) ensureFresh(ctx context.Context, controlDir string, opts, 
 		base = append(base, "-p", f.Port)
 	}
 	ssh := func(extra ...string) error {
-		cmd := exec.CommandContext(ctx, "ssh", append(append(slices.Clone(base), extra...), f.Via)...) // #nosec G204 -- options built here
+		cmd, err := bounded.Command(ctx, sshSetupLimit, "ssh", append(append(slices.Clone(base), extra...), f.Via)...)
+		if err != nil {
+			return err
+		}
 		cmd.Env = append(os.Environ(), env...)
 		out, err := cmd.CombinedOutput()
 		if err != nil {

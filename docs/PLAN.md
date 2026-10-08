@@ -236,6 +236,7 @@ Each box has its own restic repository; saves happen automatically, and a lease 
 - Every machine has its own repository key, added on that machine so the key's derivation cost is tuned for it; a machine never stores another's key.
 - Offline: a machine starts from its local home only if its state says the home equals the last save it made or restored and it holds the lease or released it cleanly; saves wait ("Offline · will save later"), and on reconnect the resume rules apply (rule 4 keeps the offline work if another machine saved meanwhile).
 - Online or offline is decided alongside the box's start, never before it. On the Mac the app reports the system's network status (NWPathMonitor) to `portenvd`; a "no network at all" report skips the storage probe, but only while the app that sent it runs and for at most 30 s after it (the app repeats it every 10 s). A missing, stale or orphaned report, or "network up", means probing the storage server, with a 1 s timeout. Opening never runs restic just to check it: its version is checked once per binary (path, size, time), since restic is pinned and hash-checked when installed.
+- Every restic run has a deadline (ADR 0012): 60 s for listing, tags and keys, 5 min for a check, and for backup and restore 2 min plus the data at 1 MiB/s. A run that misses it is stopped (SIGINT, then SIGKILL after 15 s), unlocked, checked when it writes, and run once more; then the save fails. Meanwhile the state line says "Not saved since 14:58 · retrying", and after a failed save "Not saved since 14:58" until a save succeeds.
 
 **Append-only storage credentials (milestone 2.6, before any outside agent gets access)**
 
@@ -283,6 +284,7 @@ Data is encrypted everywhere it rests, keys are per device and revocable, and in
 3. Suspected compromise: Re-encrypt box creates a new repository, copies all snapshots (`restic copy`), then deletes the old one. Needed because restic cannot rotate a repository's master key.
 4. Start a box on Portenv Cloud in end-to-end mode while the user is away: the request goes to the user's devices; approving releases a key for that session only.
 5. Recovery: the recovery phrase unlocks every box and enrolls a new device.
+6. Delete a box: Delete Box asks whether to delete its saves too. A box's keys (every device's repository key, its REST password, its storage SSH key) are removed only together with its saves. If the saves stay (for example in the user's own bucket), the keys stay as well, and the box remains restorable from Browse Saves or with the recovery key. Invariant, tested when Delete Box is built: no box ends up with saves but no key on any device or in the recovery key.
 
 **Phase 0 minimum**
 
@@ -713,7 +715,7 @@ The minimal server-side piece that 2.1's runner grows from: `portenv-runner` (th
 
 Slow uplinks are a real user condition, not an edge case (the Phase 0 gate ran over about 50 KB/s up). So:
 
-- Save status is honest: the title's save state comes only from the recorded save state (the last recorded snapshot and its time, the dirty flag, a save in progress) and what portenvd knows is happening (storage unreachable, the box agent's channel down), never from "open succeeded" or other events. A new box shows "Not saved yet". The states: Not saved yet, Saving…, Saved at (time), Offline · will save later, Not saved · box agent unavailable. Tested per state (`daemon/savestate_test.go`, `PortenvKitTests`).
+- Save status is honest: the title's save state comes only from the recorded save state (the last recorded snapshot and its time, the dirty flag, a save in progress) and what portenvd knows is happening (storage unreachable, the box agent's channel down), never from "open succeeded" or other events. A new box shows "Not saved yet". The states: Not saved yet, Saving…, Saved at (time), Offline · will save later, Not saved · box agent unavailable, Not saved since (time) · retrying, Not saved since (time). Tested per state (`daemon/savestate_test.go`, `PortenvKitTests`).
 - A Move, or any save that takes more than a few seconds, shows visible progress and a time estimate in the title subtitle, from the bytes still to send and the measured bandwidth.
 - Closing the laptop or quitting mid-upload never loses work and never leaves the lease in a bad state: the local home stays as it was (dirty), no partial save counts as complete, the lease stays with this machine until a save completes, and the upload resumes (restic deduplicates what already arrived) when the Mac wakes.
 - Same-machine resume never waits on the network: offline, the box starts from the local home and saves queue.
@@ -830,7 +832,7 @@ The save engine is tested hardest, because a bug there loses someone's work; eve
 | Two-machine scenarios | e2e harness with two simulated machines against real restic repositories (local folder, MinIO for S3, SFTP container) | Every merge |
 | Crash safety | Kill `portenvd` or restic at random points during save and restore; cut the network mid-upload | Nightly |
 | Drivers | One conformance suite run against `docker`, `apple` and `microvm` | Every merge touching a driver |
-| Keys | Device add, revoke, recovery, re-encrypt; verify no key material on disk outside approved stores | Every merge touching keys |
+| Keys | Device add, revoke, recovery, re-encrypt, Delete Box (keys go only with the saves: no box is left with saves but no key); verify no key material on disk outside approved stores | Every merge touching keys |
 | Agent isolation | Adversarial suite: an agent lane tries to read other homes and secrets, escalate privilege, reach blocked hosts, persist after revoke | Every merge from Phase 4 |
 | Mac app | XCUITest for first run, title menu, lease sheet; accessibility audit; light and dark snapshots | Every merge touching the app |
 | Performance | Budgets: resume under 5 s to a ready box (median of 5, worst reported), online at a round-trip time of 50 ms or less and offline; close or move with a 5 MB change under 15 s at 20 Mbit/s up and 50 ms; newest save at most 60 s behind with continuous editing; port relay adds under 5 ms locally. Bandwidth and round-trip time are measured and reported with every result | Nightly |
@@ -861,4 +863,3 @@ These need an owner decision; Claude Code should add new ones here instead of gu
 - [ ] Phase 3 control-plane milestones now live in `portenv/cloud`: how its CI pins and tests against `proto/gen/go` versions from this repository (tags, or a pseudo-version per merge).
 - [ ] Scope of the iPhone companion: approvals only, or also status and a read-only terminal?
 - [ ] Name of the CLI binary: `portenv` assumed.
-- [ ] Restic runs have no deadline: with the REST forward broken (a mutation check), the first open hung for 29 minutes in `portenvd`, and so did its shutdown save. Proposal: a no-progress timeout per restic run (restic reports progress as JSON), after which the save fails and the state line says so.

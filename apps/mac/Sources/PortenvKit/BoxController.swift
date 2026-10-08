@@ -13,6 +13,8 @@ public struct BoxState: Equatable, Sendable {
         case offline = "SAVE_STATE_OFFLINE"
         case agentUnavailable = "SAVE_STATE_AGENT_UNAVAILABLE"
         case closed = "SAVE_STATE_CLOSED"
+        case retrying = "SAVE_STATE_RETRYING"
+        case notSaved = "SAVE_STATE_NOT_SAVED"
     }
 
     public var save: Save
@@ -60,9 +62,16 @@ public struct BoxState: Equatable, Sendable {
         case .offline: save = "Offline · will save later"
         case .agentUnavailable: save = "Not saved · box agent unavailable"
         case .closed: save = "Closed"
+        case .retrying: save = notSavedSince(f) + " · retrying"
+        case .notSaved: save = notSavedSince(f)
         }
         if let location { return "On \(location) · \(save)" }
         return save
+    }
+
+    /// "Not saved since 14:58", or "Not saved" when nothing was ever saved.
+    private func notSavedSince(_ f: DateFormatter) -> String {
+        savedAt.map { "Not saved since " + f.string(from: $0) } ?? "Not saved"
     }
 }
 

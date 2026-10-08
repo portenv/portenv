@@ -67,11 +67,24 @@ echo "== the box, through portenvd and the agent channel (as the app does)"
 # Everything the app relies on goes through portenvd, which reaches the box
 # only through the agent channel (portenv-agent, uid 991, few capabilities);
 # docker exec below only inspects. Files are written in the box's terminal.
-"$repo/bin/portenvd" 2>"$root/portenvd.log" &
+# Short restic deadlines (test only), so a run against a server that stopped
+# answering ends in seconds; real deadlines are minutes (ADR 0012).
+PORTENV_TEST_RESTIC_DEADLINES=20s "$repo/bin/portenvd" 2>"$root/portenvd.log" &
 dpid=$!
 for _ in $(seq 50); do [[ -S $root/mac/portenvd.sock ]] && break; sleep 0.1; done
 # Each call has a time limit: a hang fails its check instead of the run.
-limit() { perl -e 'alarm shift; exec @ARGV' 180 "$@"; }
+# (SIGTERM, then SIGKILL: a Go program doesn't exit on SIGALRM.) The
+# watcher's output goes nowhere, so $(...) never waits for it.
+limit() {
+	"$@" &
+	local p=$! st=0
+	( sleep 180; kill -TERM "$p" 2>/dev/null; sleep 5; kill -KILL "$p" 2>/dev/null ) >/dev/null 2>&1 &
+	local w=$!
+	wait "$p" || st=$?
+	kill "$w" 2>/dev/null || true
+	wait "$w" 2>/dev/null || true
+	return "$st"
+}
 app() { limit "$portenv" app "$@" 2>&1; }
 state() { app state sftp | python3 -c 'import json,sys; print(json.load(sys.stdin)["state"])'; }
 type_in() { { printf '%s\r' "$1"; sleep 2; } | "$portenv" attach sftp >/dev/null 2>&1 || true; }
@@ -100,10 +113,40 @@ expect "same-machine open over SFTP (rule 3)" grep -q "rule 3" <<<"$out"
 expect "the file is there" in_box 'grep -qx "over sftp" note.txt'
 expect "restic's cache survived the restart" bash -c "[[ -n \$(docker exec portenv-sftp-$(box_id) sh -c 'ls /var/cache/portenv-sync') ]]"
 docker exec "$srv" bash -c "sed -i 's/^restrict/#restrict/' /etc/ssh/portenv-storage.authorized_keys"
-expect "an unknown key is refused (no save without the server's consent)" bash -c "! perl -e 'alarm shift; exec @ARGV' 180 $portenv app point sftp"
+st=0; app point sftp >/dev/null || st=$?
+expect "an unknown key is refused (no save without the server's consent)" test "$st" -ne 0
 docker exec "$srv" sed -i 's/^#restrict/restrict/' /etc/ssh/portenv-storage.authorized_keys
 out=$(app close sftp) || true; echo "  $out"
 expect "close after restoring the key" grep -q "closed and released" <<<"$out"
+
+echo "== the storage server stops answering mid-session"
+# The REST server is frozen (SIGSTOP): connections are accepted and never
+# answered, the case that once hung a save for 29 minutes. Each restic run
+# has a deadline; a run that misses it is stopped, the lock cleared, and run
+# once more; then the save fails and the state line says so.
+out=$(app open sftp) || true; echo "  $out"
+saved_before=$(app state sftp | python3 -c 'import json,sys; print(json.load(sys.stdin).get("saved_at",""))')
+docker exec "$srv" pkill -STOP -f rest-server
+seen="$root/states.txt"; : >"$seen"
+( for _ in $(seq 120); do state >>"$seen" 2>/dev/null || true; sleep 1; done ) &
+watcher=$!
+t0=$(python3 -c 'import time; print(time.time())')
+out=$(app point sftp) && st=0 || st=$?
+t1=$(python3 -c 'import time; print(time.time())')
+kill "$watcher" 2>/dev/null || true; wait "$watcher" 2>/dev/null || true
+took=$(python3 -c "print(round($t1 - $t0))")
+echo "  $out (${took} s)"
+expect "a save against a frozen server fails instead of hanging" test "$st" -ne 0
+expect "within its deadlines (3 runs of 20 s, plus margins; ${took} s)" python3 -c "import sys; sys.exit(0 if $t1 - $t0 < 100 else 1)"
+expect "while it retried, the state said retrying" grep -qx SAVE_STATE_RETRYING "$seen"
+expect "then: not saved, since the last save" test "$(state)" = SAVE_STATE_NOT_SAVED
+expect "and the time is still the last save's" test "$(app state sftp | python3 -c 'import json,sys; print(json.load(sys.stdin).get("saved_at",""))')" = "$saved_before"
+docker exec "$srv" pkill -CONT -f rest-server
+out=$(app point sftp) || true; echo "  $out"
+expect "the server answers again: the next save goes through" grep -q "^save point" <<<"$out"
+expect "and the state says saved" test "$(state)" = SAVE_STATE_SAVED
+out=$(app close sftp) || true
+expect "close" grep -q "closed and released" <<<"$out"
 
 echo "== offline: the storage server is down"
 # portenvd decides between online and offline alongside the box's start:

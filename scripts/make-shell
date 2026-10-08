@@ -1,0 +1,8 @@
+#!/bin/bash
+# SPDX-License-Identifier: Apache-2.0
+#
+# The shell every Makefile recipe runs in: bash with -e, -u and pipefail, so a
+# failing command anywhere in a recipe (inside a loop, or before a pipe) fails
+# the target. Set through SHELL, because GNU Make 3.81 (the one macOS ships)
+# ignores .SHELLFLAGS and would run recipes with plain `bash -c`.
+exec /bin/bash -eu -o pipefail "$@"

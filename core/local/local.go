@@ -424,7 +424,19 @@ func (s *Session) SyncWith(ex boxsync.Executor) (*boxsync.Box, error) {
 		ExcludeFile:    "/home/work/.portenv/excludes",
 		StateDir:       filepath.Join(s.E.Dir, "state", s.Cfg.ID),
 		Trace:          Trace,
+		Deadlines:      testDeadlines(),
 	})
+}
+
+// testDeadlines shortens restic's deadlines for end-to-end tests only
+// (PORTENV_TEST_RESTIC_DEADLINES, one duration for every command), so a
+// test of a hung run finishes in seconds. Unset: the defaults.
+func testDeadlines() boxsync.Deadlines {
+	d, err := time.ParseDuration(os.Getenv("PORTENV_TEST_RESTIC_DEADLINES"))
+	if err != nil || d <= 0 {
+		return boxsync.Deadlines{}
+	}
+	return boxsync.Deadlines{Short: d, Check: d, Base: d, BytesPerSecond: 1 << 20}
 }
 
 // Trace prints a phase's duration when PORTENV_TRACE=1.

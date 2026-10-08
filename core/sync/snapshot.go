@@ -51,6 +51,11 @@ type Snapshot struct {
 	Hostname string    `json:"hostname"`
 	Paths    []string  `json:"paths"`
 	Tags     []string  `json:"tags"`
+	// Summary is restic's record of the backup (restic 0.17 and later):
+	// its size sets a restore's deadline.
+	Summary struct {
+		TotalBytesProcessed int64 `json:"total_bytes_processed"`
+	} `json:"summary"`
 
 	Kind    SnapshotKind `json:"-"`
 	Machine string       `json:"-"` // from machine:<id>

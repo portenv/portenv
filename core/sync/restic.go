@@ -40,6 +40,13 @@ type restic struct {
 	// lastStart is when the last backup started, from restic's summary:
 	// the time restic gives that snapshot.
 	lastStart time.Time
+	// deadlines bound each run; onRetry, when set, hears when a run that
+	// hit its deadline is being retried (true) and when that ends (false).
+	deadlines Deadlines
+	onRetry   func(retrying bool)
+	// homeBytes is the size of the home at the last save known here (from
+	// restic's summaries): a backup's deadline scales with it.
+	homeBytes int64
 }
 
 // boxCommands are the restic commands that must run where /home is.
@@ -59,20 +66,63 @@ func (r *restic) pick(args []string) (Executor, string) {
 // A stale lock left by a killed restic is removed once and the command
 // retried.
 func (r *restic) run(ctx context.Context, args ...string) ([]byte, error) {
+	return r.runSized(ctx, 0, args...)
+}
+
+// runSized is run for a command moving about bytes of data (backup,
+// restore), which sets its deadline. A run that hits its deadline is
+// stopped, the lock is cleared, the repository is checked when the command
+// writes, and the command runs once more; a second miss is a DeadlineError.
+func (r *restic) runSized(ctx context.Context, bytes int64, args ...string) ([]byte, error) {
 	if r.trace != nil && len(args) > 0 {
 		start := time.Now()
 		defer func() { r.trace("restic "+args[0], time.Since(start)) }()
 	}
-	out, stderr, err := r.runOnce(ctx, args...)
+	out, stderr, err := r.runWithin(ctx, bytes, args...)
+	var missed *DeadlineError
+	if errors.As(err, &missed) {
+		if r.onRetry != nil {
+			r.onRetry(true)
+			defer r.onRetry(false)
+		}
+		_, _, _ = r.runWithin(ctx, 0, "unlock")
+		if writes(args[0]) {
+			if _, cstderr, cerr := r.runWithin(ctx, 0, "check"); cerr != nil {
+				return nil, fmt.Errorf("after restic %s missed its deadline, the repository check failed: %w", args[0], resticError([]string{"check"}, cstderr, cerr))
+			}
+		}
+		out, stderr, err = r.runWithin(ctx, bytes, args...)
+		if errors.As(err, &missed) {
+			missed.Retried = true
+			return out, missed
+		}
+	}
 	if err != nil && isLockError(stderr) && ctx.Err() == nil {
-		if _, _, uerr := r.runOnce(ctx, "unlock"); uerr == nil {
-			out, stderr, err = r.runOnce(ctx, args...)
+		if _, _, uerr := r.runWithin(ctx, 0, "unlock"); uerr == nil {
+			out, stderr, err = r.runWithin(ctx, bytes, args...)
 		}
 	}
 	if err != nil {
+		var de *DeadlineError
+		if errors.As(err, &de) {
+			return out, err
+		}
 		return out, resticError(args, stderr, err)
 	}
 	return out, nil
+}
+
+// runWithin runs one restic command under its deadline. When the deadline
+// (not the caller) stopped it, the error is a *DeadlineError.
+func (r *restic) runWithin(ctx context.Context, bytes int64, args ...string) (stdout, stderr []byte, err error) {
+	d := r.deadlines.withDefaults().For(args[0], bytes)
+	dctx, cancel := context.WithTimeout(ctx, d)
+	defer cancel()
+	stdout, stderr, err = r.runOnce(dctx, args...)
+	if err != nil && ctx.Err() == nil && errors.Is(dctx.Err(), context.DeadlineExceeded) {
+		return stdout, stderr, &DeadlineError{Cmd: args[0], Deadline: d}
+	}
+	return stdout, stderr, err
 }
 
 func (r *restic) runOnce(ctx context.Context, args ...string) (stdout, stderr []byte, err error) {
@@ -118,7 +168,9 @@ var versionRE = regexp.MustCompile(`^restic (\d+)\.(\d+)\.(\d+)`)
 // checkVersion fails if restic is older than minResticVersion.
 func (r *restic) checkVersion(ctx context.Context) error {
 	ex, _ := r.pick([]string{"version"})
-	res, err := ex.Restic(ctx, []string{"version"}, Credentials{})
+	vctx, cancel := context.WithTimeout(ctx, r.deadlines.withDefaults().Short)
+	defer cancel()
+	res, err := ex.Restic(vctx, []string{"version"}, Credentials{})
 	if err != nil {
 		return fmt.Errorf("run restic version: %w", err)
 	}
@@ -148,9 +200,13 @@ func (r *restic) checkVersion(ctx context.Context) error {
 
 // initIfMissing creates the repository unless it exists.
 func (r *restic) initIfMissing(ctx context.Context) error {
-	_, stderr, err := r.runOnce(ctx, "cat", "config")
+	_, stderr, err := r.runWithin(ctx, 0, "cat", "config")
 	if err == nil {
 		return nil
+	}
+	var de *DeadlineError
+	if errors.As(err, &de) {
+		return err
 	}
 	var exit *ExitError
 	// restic exits 10 when the repository does not exist.
@@ -175,6 +231,9 @@ func (r *restic) snapshots(ctx context.Context) ([]Snapshot, error) {
 	}
 	for i := range snaps {
 		snaps[i].parseTags()
+		if b := snaps[i].Summary.TotalBytesProcessed; b > r.homeBytes {
+			r.homeBytes = b
+		}
 	}
 	sort.SliceStable(snaps, func(i, j int) bool {
 		if !snaps[i].Time.Equal(snaps[j].Time) {
@@ -207,7 +266,7 @@ func (r *restic) backup(ctx context.Context, a backupArgs) (string, error) {
 	}
 	args = append(args, a.home)
 	start := time.Now()
-	out, err := r.run(ctx, args...)
+	out, err := r.runSized(ctx, r.homeBytes, args...)
 	if err != nil {
 		return "", err
 	}
@@ -218,6 +277,9 @@ func (r *restic) backup(ctx context.Context, a backupArgs) (string, error) {
 		if json.Unmarshal(sc.Bytes(), &msg) == nil && msg.Type == "summary" && msg.SnapshotID != "" {
 			r.traceBackup(start, time.Now(), a.parent != "", msg)
 			r.lastStart = msg.Start
+			if msg.TotalBytes > 0 {
+				r.homeBytes = msg.TotalBytes
+			}
 			return msg.SnapshotID, nil
 		}
 	}
@@ -234,7 +296,7 @@ func (r *restic) restoreTo(ctx context.Context, s Snapshot, target string, delet
 	if deleteExtra {
 		args = append(args, "--delete")
 	}
-	_, err := r.run(ctx, args...)
+	_, err := r.runSized(ctx, s.Summary.TotalBytesProcessed, args...)
 	return err
 }
 
@@ -245,6 +307,7 @@ type backupSummary struct {
 	FilesNew     int       `json:"files_new"`
 	FilesChanged int       `json:"files_changed"`
 	DataAdded    int64     `json:"data_added_packed"`
+	TotalBytes   int64     `json:"total_bytes_processed"`
 	Start        time.Time `json:"backup_start"`
 	End          time.Time `json:"backup_end"`
 }

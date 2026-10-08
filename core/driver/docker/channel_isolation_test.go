@@ -131,9 +131,12 @@ func TestChannelPasswordIsUnreadable(t *testing.T) {
 	if servePid == "" || resticPid == "" {
 		t.Fatalf("serve %q restic %q not found", servePid, resticPid)
 	}
-	// restic runs with its own file capabilities but never ambient ones.
-	if got := exec("", "sh", "-c", "grep '^CapAmb' /proc/"+resticPid+"/status | awk '{print $2}'"); got != "0000000000000000" {
-		t.Errorf("restic has ambient capabilities %s", got)
+	// restic runs with its own file capabilities but no inheritable or
+	// ambient ones, so nothing it starts inherits any.
+	for _, set := range []string{"CapInh", "CapAmb"} {
+		if got := exec("", "sh", "-c", "grep '^"+set+"' /proc/"+resticPid+"/status | awk '{print $2}'"); got != "0000000000000000" {
+			t.Errorf("restic has %s %s", set, got)
+		}
 	}
 	exec("", "sh", "-c", "cat > /tmp/memprobe.py <<'PY'\n"+memProbe+"\nPY")
 	// Control: an ordinary root process holding the secret is readable, so

@@ -131,6 +131,28 @@ func TestChannelConditions(t *testing.T) {
 		t.Errorf("the API process has ambient capabilities %s", got)
 	}
 
+	// Anything restic starts (its ssh for SFTP storage) carries no
+	// capabilities either: restic's own file capabilities stay with restic.
+	// The agent refuses restic's -o (so nothing can swap ssh for another
+	// command through it), so restic is started here as the agent starts it:
+	// as portenv-sync, with empty inheritable and ambient sets (the channel
+	// run in TestChannelPasswordIsUnreadable checks restic starts that way).
+	// sftp.command stands in for ssh and records its capability sets.
+	{
+		sh("", "rm -f /tmp/restic-child-caps; RESTIC_PASSWORD=unused setpriv --reuid=990 --regid=990 --clear-groups --inh-caps=-all "+
+			agent.ResticBinary+" --no-cache --repo sftp:nowhere:/repo -o sftp.command=\"sh -c 'grep -E ^Cap /proc/self/status > /tmp/restic-child-caps; exit 1'\" snapshots >/dev/null 2>&1 || true")
+		caps := sh("", "cat /tmp/restic-child-caps 2>/dev/null")
+		if !strings.Contains(caps, "CapEff") {
+			t.Fatalf("restic did not start its child (no capability record): %q", caps)
+		}
+		for _, line := range strings.Split(caps, "\n") {
+			f := strings.Fields(line)
+			if len(f) == 2 && (f[0] == "CapPrm:" || f[0] == "CapEff:" || f[0] == "CapAmb:") && f[1] != "0000000000000000" {
+				t.Errorf("a process restic started has %s %s", f[0], f[1])
+			}
+		}
+	}
+
 	// Condition 1: a save right after start contains none of them.
 	conn, err := agent.DialChannel(ch.Dial, ch.CertPEM, ch.Token)
 	if err != nil {

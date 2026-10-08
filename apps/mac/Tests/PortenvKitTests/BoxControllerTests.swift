@@ -78,3 +78,26 @@ struct BoxControllerTests {
         #expect(c.location == .closed)
     }
 }
+
+@MainActor
+struct AgentUnavailableTests {
+    /// portenvd reports an agent channel that is down or fails verification
+    /// (ADR 0010); the window shows that, and the box stays where it was.
+    @Test func anUnavailableAgentIsReported() async {
+        let cli = UnavailableCLI()
+        let c = BoxController(box: "demo", cli: cli)
+        await c.open()
+        await c.makeSavePoint()
+        #expect(c.error?.contains("the box agent is unavailable") == true)
+        #expect(c.location == .thisMac)
+    }
+}
+
+final class UnavailableCLI: CLIRunning, @unchecked Sendable {
+    func run(_ arguments: [String]) async throws -> String {
+        if arguments.count > 1, arguments[1] == "point" {
+            throw CLIError("the box agent is unavailable (its channel is down or failed verification); restart the box")
+        }
+        return arguments.count > 1 && arguments[1] == "open" ? "open on mac (resume rule 3: start local)" : ""
+    }
+}

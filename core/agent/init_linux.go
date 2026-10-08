@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"slices"
 	"sync"
+	"syscall"
 	"time"
 
 	"golang.org/x/sys/unix"
@@ -49,6 +50,12 @@ func Init(ctx context.Context, cfg Config, log *slog.Logger) error {
 	// and restarted when it exits. Its restic and terminal processes are its
 	// own children, so this process's reaper never takes their exit status.
 	servePid := startServe(log)
+	// No other process starts while the channel's secrets are on disk.
+	if servePid != 0 {
+		if err := WaitChannelLoaded(ChannelDir, 10*time.Second); err != nil {
+			log.Error("agent channel", "err", err)
+		}
+	}
 
 	// The reaper and the start sequence's commands share this lock, so the
 	// reaper never collects a child that ExecRunner is still waiting for.
@@ -115,9 +122,12 @@ func startServe(log *slog.Logger) int {
 		log.Info("no agent channel provided; serving the local socket only")
 		return 0
 	}
-	p, err := os.StartProcess("/proc/self/exe", []string{"portenv-agent", "serve"}, &os.ProcAttr{
+	// As portenv-agent, from the copy with file capabilities: non-dumpable
+	// from its first instruction (ADR 0010, conditions).
+	p, err := os.StartProcess(ServeBinary, []string{"portenv-agent", "serve"}, &os.ProcAttr{
 		Files: []*os.File{nil, os.Stdout, os.Stderr},
 		Env:   []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"},
+		Sys:   &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: ServeUID, Gid: ServeUID, Groups: []uint32{}}},
 	})
 	if err != nil {
 		log.Error("start agent channel", "err", err)

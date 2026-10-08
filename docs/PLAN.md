@@ -696,6 +696,7 @@ A thin slice through every layer, in the code where 1.1 and 1.2 continue: a mini
 - [x] Move To ▸ a server and back to This Mac through `portenvd`, files intact both ways (`tests/e2e/daemon-server.sh`, 2026-10-08: 29.0 s there including enrolling the server, 21.0 s back)
 - [x] Quitting the app (or SIGTERM) saves and releases the open box
 - [x] The restic password stays unreadable in the box with the channel (`TestChannelPasswordIsUnreadable`)
+- [x] ADR 0010's conditions hold, each with its test: the channel's files never reach a save and are gone once loaded, root in the box cannot read the key or token, and an impostor on the agent's port gets nothing while the app reports the box agent unavailable
 
 **1.4 Autosave, the sync symbol, Changes and Browse Saves: slow links are normal**
 
@@ -721,6 +722,7 @@ Slow uplinks are a real user condition, not an edge case (the Phase 0 gate ran o
 - [ ] A version tag produces a signed, notarized, stapled `Portenv.dmg` and a signed `appcast.xml` on the GitHub release; `portenv.com/download` and `portenv.com/appcast.xml` redirect to them, and an installed build updates through Sparkle
 - [ ] The Sparkle key's offline backups exist and a restore test passed
 - [ ] Offline: work continues and saves upload when the network returns
+- [ ] The Phase 0 CLI's `docker exec` path is removed or moved behind `portenvd`: nothing reaches a box except through the agent channel (ADR 0010, conditions)
 - [ ] Every control has a VoiceOver label; light and dark appearance both pass review
 - [ ] A dev server bound to the box's localhost opens in Safari through the relay
 - [ ] Inside an `apple` box (a VM), the restic password probe (`tests/e2e/restic-isolation.sh`) passes: root in the box cannot read the password, because the agent drops the forbidden capabilities itself

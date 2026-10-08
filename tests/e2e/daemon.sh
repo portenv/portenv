@@ -75,5 +75,14 @@ grep "portenv-daemon-" "$root/execs.txt" | sed 's/^[^ ]* //' | sort | uniq -c | 
 others=$(grep "portenv-daemon-" "$root/execs.txt" | grep -vc 'exec_create: /usr/local/bin/portenv-agent ready$' || true)
 expect "no docker exec into the box but the engine's health check ($others others)" test "$others" = 0
 
+# An impostor on the agent's port (ADR 0010, conditions): root in the box
+# kills the agent and serves a self-made certificate there. portenvd
+# refuses it and reports the box agent as unavailable; nothing is saved.
+"$portenv" app open d >/dev/null 2>&1 || true
+c=portenv-daemon-$(box_id)
+docker exec "$c" sh -c "pkill -f '^portenv-agent serve'; sleep 1; openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -subj /CN=portenv-agent -days 1 -keyout /tmp/i.key -out /tmp/i.crt 2>/dev/null; setsid sh -c 'openssl s_server -accept 7700 -cert /tmp/i.crt -key /tmp/i.key -quiet >/tmp/impostor.log 2>&1' >/dev/null 2>&1 & sleep 1"
+out=$("$portenv" app point d 2>&1) || true; echo "  $out"
+expect "an impostor on the agent's port: portenvd reports the box agent unavailable" grep -q "the box agent is unavailable" <<<"$out"
+
 if (( failures )); then echo "$failures check(s) failed"; sed 's/^/  portenvd: /' "$root/portenvd.log" | tail -20; exit 1; fi
 echo "all checks passed"

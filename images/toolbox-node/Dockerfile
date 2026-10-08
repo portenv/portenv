@@ -125,6 +125,18 @@ RUN groupadd --system --gid 990 portenv-sync \
  && setcap cap_chown,cap_dac_override,cap_fowner,cap_fsetid+ep /usr/local/libexec/portenv/restic \
  && install -d -o portenv-sync -g portenv-sync -m 0700 /var/cache/portenv-sync
 
+# The agent channel's API process (ADR 0010) runs as portenv-agent from a
+# copy of the agent with file capabilities: gaining them at exec makes it
+# non-dumpable from its first instruction, before it reads the channel's
+# key and token or any password. setuid and setgid start restic as
+# portenv-sync and terminals as work; dac_override reads and removes the
+# channel files and answers path checks in /home; chown sets up restic's
+# SFTP helper; kill stops its own children. All are in Docker's default set.
+RUN groupadd --system --gid 991 portenv-agent \
+ && useradd --system --uid 991 --gid 991 --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin portenv-agent \
+ && install -o root -g portenv-agent -m 0750 /usr/local/bin/portenv-agent /usr/local/libexec/portenv/agent-serve \
+ && setcap cap_setuid,cap_setgid,cap_dac_override,cap_chown,cap_kill+ep /usr/local/libexec/portenv/agent-serve
+
 LABEL org.opencontainers.image.title="toolbox-node" \
       org.opencontainers.image.description="Portenv toolbox: Ubuntu 24.04, Node 22, Claude Code, portenv-agent" \
       org.opencontainers.image.source="https://github.com/portenv/portenv"

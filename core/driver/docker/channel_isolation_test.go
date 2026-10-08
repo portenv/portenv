@@ -142,12 +142,14 @@ func TestChannelPasswordIsUnreadable(t *testing.T) {
 		t.Fatalf("control: the probe did not find the secret in a plain root process (%s)", got)
 	}
 	for _, target := range []struct{ name, pid string }{{"agent API process", servePid}, {"restic", resticPid}} {
-		for _, attacker := range []string{"root", "root-as-sync", "lane"} {
+		for _, attacker := range []string{"root", "root-as-sync", "root-as-agent", "lane"} {
 			for _, what := range []string{"environ", "fd3", "cmdline", "mem", "ptrace"} {
 				argv := []string{"python3", "/tmp/memprobe.py", target.pid, secret, what}
 				switch attacker {
 				case "root-as-sync":
 					argv = append([]string{"setpriv", "--reuid=990", "--regid=990", "--clear-groups"}, argv...)
+				case "root-as-agent":
+					argv = append([]string{"setpriv", "--reuid=991", "--regid=991", "--clear-groups"}, argv...)
 				case "lane":
 					argv = append([]string{"setpriv", "--reuid=2000", "--regid=2000", "--clear-groups"}, argv...)
 				}

@@ -25,8 +25,16 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	DaemonService_GetVersion_FullMethodName = "/portenv.daemon.v1.DaemonService/GetVersion"
-	DaemonService_ListBoxes_FullMethodName  = "/portenv.daemon.v1.DaemonService/ListBoxes"
+	DaemonService_GetVersion_FullMethodName            = "/portenv.daemon.v1.DaemonService/GetVersion"
+	DaemonService_ListBoxes_FullMethodName             = "/portenv.daemon.v1.DaemonService/ListBoxes"
+	DaemonService_OpenBox_FullMethodName               = "/portenv.daemon.v1.DaemonService/OpenBox"
+	DaemonService_CloseBox_FullMethodName              = "/portenv.daemon.v1.DaemonService/CloseBox"
+	DaemonService_MakeSavePoint_FullMethodName         = "/portenv.daemon.v1.DaemonService/MakeSavePoint"
+	DaemonService_RevertToLastSavePoint_FullMethodName = "/portenv.daemon.v1.DaemonService/RevertToLastSavePoint"
+	DaemonService_MoveBox_FullMethodName               = "/portenv.daemon.v1.DaemonService/MoveBox"
+	DaemonService_Terminal_FullMethodName              = "/portenv.daemon.v1.DaemonService/Terminal"
+	DaemonService_CheckBox_FullMethodName              = "/portenv.daemon.v1.DaemonService/CheckBox"
+	DaemonService_RestartBox_FullMethodName            = "/portenv.daemon.v1.DaemonService/RestartBox"
 )
 
 // DaemonServiceClient is the client API for DaemonService service.
@@ -37,6 +45,25 @@ const (
 type DaemonServiceClient interface {
 	GetVersion(ctx context.Context, in *GetVersionRequest, opts ...grpc.CallOption) (*GetVersionResponse, error)
 	ListBoxes(ctx context.Context, in *ListBoxesRequest, opts ...grpc.CallOption) (*ListBoxesResponse, error)
+	// Opens a box on this Mac: the resume rules, then a running box.
+	OpenBox(ctx context.Context, in *OpenBoxRequest, opts ...grpc.CallOption) (*OpenBoxResponse, error)
+	// Saves and releases the box and stops it.
+	CloseBox(ctx context.Context, in *CloseBoxRequest, opts ...grpc.CallOption) (*CloseBoxResponse, error)
+	// Makes a save point (File › Make Save Point).
+	MakeSavePoint(ctx context.Context, in *MakeSavePointRequest, opts ...grpc.CallOption) (*MakeSavePointResponse, error)
+	// Revert To ▸ Last Save Point: saves the current home first, then restores
+	// the newest save point.
+	RevertToLastSavePoint(ctx context.Context, in *RevertToLastSavePointRequest, opts ...grpc.CallOption) (*RevertToLastSavePointResponse, error)
+	// Move To ▸: closes the box here and opens it on the target.
+	MoveBox(ctx context.Context, in *MoveBoxRequest, opts ...grpc.CallOption) (*MoveBoxResponse, error)
+	// Attaches a terminal to the box's tmux session through the box agent.
+	Terminal(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[TerminalRequest, TerminalResponse], error)
+	// Reports whether the box agent answers on its channel.
+	CheckBox(ctx context.Context, in *CheckBoxRequest, opts ...grpc.CallOption) (*CheckBoxResponse, error)
+	// Restarts the box (for example after its agent became unavailable) and
+	// opens it again through the resume rules: the local home is kept, never
+	// restored over while it has unsaved changes.
+	RestartBox(ctx context.Context, in *RestartBoxRequest, opts ...grpc.CallOption) (*RestartBoxResponse, error)
 }
 
 type daemonServiceClient struct {
@@ -67,6 +94,89 @@ func (c *daemonServiceClient) ListBoxes(ctx context.Context, in *ListBoxesReques
 	return out, nil
 }
 
+func (c *daemonServiceClient) OpenBox(ctx context.Context, in *OpenBoxRequest, opts ...grpc.CallOption) (*OpenBoxResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(OpenBoxResponse)
+	err := c.cc.Invoke(ctx, DaemonService_OpenBox_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) CloseBox(ctx context.Context, in *CloseBoxRequest, opts ...grpc.CallOption) (*CloseBoxResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CloseBoxResponse)
+	err := c.cc.Invoke(ctx, DaemonService_CloseBox_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) MakeSavePoint(ctx context.Context, in *MakeSavePointRequest, opts ...grpc.CallOption) (*MakeSavePointResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MakeSavePointResponse)
+	err := c.cc.Invoke(ctx, DaemonService_MakeSavePoint_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) RevertToLastSavePoint(ctx context.Context, in *RevertToLastSavePointRequest, opts ...grpc.CallOption) (*RevertToLastSavePointResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RevertToLastSavePointResponse)
+	err := c.cc.Invoke(ctx, DaemonService_RevertToLastSavePoint_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) MoveBox(ctx context.Context, in *MoveBoxRequest, opts ...grpc.CallOption) (*MoveBoxResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MoveBoxResponse)
+	err := c.cc.Invoke(ctx, DaemonService_MoveBox_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) Terminal(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[TerminalRequest, TerminalResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &DaemonService_ServiceDesc.Streams[0], DaemonService_Terminal_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[TerminalRequest, TerminalResponse]{ClientStream: stream}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type DaemonService_TerminalClient = grpc.BidiStreamingClient[TerminalRequest, TerminalResponse]
+
+func (c *daemonServiceClient) CheckBox(ctx context.Context, in *CheckBoxRequest, opts ...grpc.CallOption) (*CheckBoxResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CheckBoxResponse)
+	err := c.cc.Invoke(ctx, DaemonService_CheckBox_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) RestartBox(ctx context.Context, in *RestartBoxRequest, opts ...grpc.CallOption) (*RestartBoxResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RestartBoxResponse)
+	err := c.cc.Invoke(ctx, DaemonService_RestartBox_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DaemonServiceServer is the server API for DaemonService service.
 // All implementations must embed UnimplementedDaemonServiceServer
 // for forward compatibility.
@@ -75,6 +185,25 @@ func (c *daemonServiceClient) ListBoxes(ctx context.Context, in *ListBoxesReques
 type DaemonServiceServer interface {
 	GetVersion(context.Context, *GetVersionRequest) (*GetVersionResponse, error)
 	ListBoxes(context.Context, *ListBoxesRequest) (*ListBoxesResponse, error)
+	// Opens a box on this Mac: the resume rules, then a running box.
+	OpenBox(context.Context, *OpenBoxRequest) (*OpenBoxResponse, error)
+	// Saves and releases the box and stops it.
+	CloseBox(context.Context, *CloseBoxRequest) (*CloseBoxResponse, error)
+	// Makes a save point (File › Make Save Point).
+	MakeSavePoint(context.Context, *MakeSavePointRequest) (*MakeSavePointResponse, error)
+	// Revert To ▸ Last Save Point: saves the current home first, then restores
+	// the newest save point.
+	RevertToLastSavePoint(context.Context, *RevertToLastSavePointRequest) (*RevertToLastSavePointResponse, error)
+	// Move To ▸: closes the box here and opens it on the target.
+	MoveBox(context.Context, *MoveBoxRequest) (*MoveBoxResponse, error)
+	// Attaches a terminal to the box's tmux session through the box agent.
+	Terminal(grpc.BidiStreamingServer[TerminalRequest, TerminalResponse]) error
+	// Reports whether the box agent answers on its channel.
+	CheckBox(context.Context, *CheckBoxRequest) (*CheckBoxResponse, error)
+	// Restarts the box (for example after its agent became unavailable) and
+	// opens it again through the resume rules: the local home is kept, never
+	// restored over while it has unsaved changes.
+	RestartBox(context.Context, *RestartBoxRequest) (*RestartBoxResponse, error)
 	mustEmbedUnimplementedDaemonServiceServer()
 }
 
@@ -90,6 +219,30 @@ func (UnimplementedDaemonServiceServer) GetVersion(context.Context, *GetVersionR
 }
 func (UnimplementedDaemonServiceServer) ListBoxes(context.Context, *ListBoxesRequest) (*ListBoxesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListBoxes not implemented")
+}
+func (UnimplementedDaemonServiceServer) OpenBox(context.Context, *OpenBoxRequest) (*OpenBoxResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method OpenBox not implemented")
+}
+func (UnimplementedDaemonServiceServer) CloseBox(context.Context, *CloseBoxRequest) (*CloseBoxResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CloseBox not implemented")
+}
+func (UnimplementedDaemonServiceServer) MakeSavePoint(context.Context, *MakeSavePointRequest) (*MakeSavePointResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method MakeSavePoint not implemented")
+}
+func (UnimplementedDaemonServiceServer) RevertToLastSavePoint(context.Context, *RevertToLastSavePointRequest) (*RevertToLastSavePointResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RevertToLastSavePoint not implemented")
+}
+func (UnimplementedDaemonServiceServer) MoveBox(context.Context, *MoveBoxRequest) (*MoveBoxResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method MoveBox not implemented")
+}
+func (UnimplementedDaemonServiceServer) Terminal(grpc.BidiStreamingServer[TerminalRequest, TerminalResponse]) error {
+	return status.Error(codes.Unimplemented, "method Terminal not implemented")
+}
+func (UnimplementedDaemonServiceServer) CheckBox(context.Context, *CheckBoxRequest) (*CheckBoxResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CheckBox not implemented")
+}
+func (UnimplementedDaemonServiceServer) RestartBox(context.Context, *RestartBoxRequest) (*RestartBoxResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RestartBox not implemented")
 }
 func (UnimplementedDaemonServiceServer) mustEmbedUnimplementedDaemonServiceServer() {}
 func (UnimplementedDaemonServiceServer) testEmbeddedByValue()                       {}
@@ -148,6 +301,139 @@ func _DaemonService_ListBoxes_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _DaemonService_OpenBox_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(OpenBoxRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).OpenBox(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_OpenBox_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).OpenBox(ctx, req.(*OpenBoxRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_CloseBox_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CloseBoxRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).CloseBox(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_CloseBox_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).CloseBox(ctx, req.(*CloseBoxRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_MakeSavePoint_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MakeSavePointRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).MakeSavePoint(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_MakeSavePoint_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).MakeSavePoint(ctx, req.(*MakeSavePointRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_RevertToLastSavePoint_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RevertToLastSavePointRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).RevertToLastSavePoint(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_RevertToLastSavePoint_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).RevertToLastSavePoint(ctx, req.(*RevertToLastSavePointRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_MoveBox_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MoveBoxRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).MoveBox(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_MoveBox_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).MoveBox(ctx, req.(*MoveBoxRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_Terminal_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(DaemonServiceServer).Terminal(&grpc.GenericServerStream[TerminalRequest, TerminalResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type DaemonService_TerminalServer = grpc.BidiStreamingServer[TerminalRequest, TerminalResponse]
+
+func _DaemonService_CheckBox_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CheckBoxRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).CheckBox(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_CheckBox_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).CheckBox(ctx, req.(*CheckBoxRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_RestartBox_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RestartBoxRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).RestartBox(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_RestartBox_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).RestartBox(ctx, req.(*RestartBoxRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // DaemonService_ServiceDesc is the grpc.ServiceDesc for DaemonService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -163,7 +449,42 @@ var DaemonService_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "ListBoxes",
 			Handler:    _DaemonService_ListBoxes_Handler,
 		},
+		{
+			MethodName: "OpenBox",
+			Handler:    _DaemonService_OpenBox_Handler,
+		},
+		{
+			MethodName: "CloseBox",
+			Handler:    _DaemonService_CloseBox_Handler,
+		},
+		{
+			MethodName: "MakeSavePoint",
+			Handler:    _DaemonService_MakeSavePoint_Handler,
+		},
+		{
+			MethodName: "RevertToLastSavePoint",
+			Handler:    _DaemonService_RevertToLastSavePoint_Handler,
+		},
+		{
+			MethodName: "MoveBox",
+			Handler:    _DaemonService_MoveBox_Handler,
+		},
+		{
+			MethodName: "CheckBox",
+			Handler:    _DaemonService_CheckBox_Handler,
+		},
+		{
+			MethodName: "RestartBox",
+			Handler:    _DaemonService_RestartBox_Handler,
+		},
 	},
-	Streams:  []grpc.StreamDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "Terminal",
+			Handler:       _DaemonService_Terminal_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
+		},
+	},
 	Metadata: "portenv/daemon/v1/daemon.proto",
 }

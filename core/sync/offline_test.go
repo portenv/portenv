@@ -97,11 +97,16 @@ type failingExecutor struct {
 	Executor
 	n, calls int
 	killed   string // the restic command that was killed
+	cmd      string // when set, kill the first run of this command instead of call n
 }
 
 func (f *failingExecutor) Restic(ctx context.Context, args []string, cred Credentials) (ExecResult, error) {
 	f.calls++
-	if f.calls == f.n {
+	if f.cmd != "" && f.killed == "" && resticCommand(args) == f.cmd {
+		f.killed = f.cmd
+		return ExecResult{}, errors.New("killed")
+	}
+	if f.cmd == "" && f.calls == f.n {
 		for i, a := range args {
 			if a == "--repo" {
 				f.killed = args[i+2]
@@ -154,4 +159,14 @@ func TestReconnectKilledAtEveryStep(t *testing.T) {
 			w.check()
 		})
 	}
+}
+
+// resticCommand is the restic command in a full argument list.
+func resticCommand(args []string) string {
+	for i, a := range args {
+		if a == "--repo" && i+2 < len(args) {
+			return args[i+2]
+		}
+	}
+	return ""
 }

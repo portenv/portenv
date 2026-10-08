@@ -64,8 +64,10 @@ func TestServeReportsReadiness(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if perm := fi.Mode().Perm(); perm&0o077 != 0 {
-			t.Errorf("%s has mode %v, want no group or other access", p, perm)
+		// Root and the portenv-agent group (the agent channel's API
+		// process) only: never others.
+		if perm := fi.Mode().Perm(); perm&0o007 != 0 || perm&0o020 != 0 && fi.IsDir() {
+			t.Errorf("%s has mode %v, want access for owner and group only (no group write on the directory)", p, perm)
 		}
 	}
 

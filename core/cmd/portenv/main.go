@@ -30,6 +30,7 @@ import (
 	"syscall"
 
 	"github.com/portenv/portenv/core/internal/version"
+	"github.com/portenv/portenv/core/local"
 )
 
 func main() {
@@ -40,7 +41,7 @@ func main() {
 
 type command struct {
 	usage string
-	run   func(ctx context.Context, e *env, name string, args []string) error
+	run   func(ctx context.Context, e *local.Env, name string, args []string) error
 }
 
 var commands = map[string]command{
@@ -54,6 +55,8 @@ var commands = map[string]command{
 	"housekeep":  {"housekeep <box> [--prune]", cmdHousekeep},
 	"move":       {"move <box> --to SSH-HOST [--join-storage DIR]", cmdMove},
 	"join":       {"join <box> --id BOX-ID --storage DIR [--image IMAGE]   (repository key on stdin)", cmdJoin},
+	"attach":     {"attach <box> [--session NAME]   (through portenvd)", cmdAttach},
+	"app":        {"app open|close|point|revert|check|restart|servers BOX | app move BOX this-mac|USER@HOST   (through portenvd)", cmdApp},
 	"ssh-config": {"ssh-config <box> --host SERVER [--user USER] [--alias portenv]", cmdSSHConfig},
 }
 
@@ -76,7 +79,7 @@ func run(ctx context.Context, args []string) int {
 		fmt.Fprintf(os.Stderr, "usage: portenv %s\n", c.usage)
 		return 2
 	}
-	e, err := newEnv()
+	e, err := local.NewEnv()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "portenv:", err)
 		return 1
@@ -93,9 +96,7 @@ func run(ctx context.Context, args []string) int {
 	return 0
 }
 
-type usageError struct{ msg string }
-
-func (u usageError) Error() string { return u.msg }
+type usageError = local.UsageError
 
 func usage() {
 	fmt.Fprint(os.Stderr, `portenv (Phase 0, temporary): drive a box with the docker driver.
@@ -113,6 +114,8 @@ Commands:
                                close here, then resume on SSH-HOST (enrolling it first)
   join <box> --id BOX-ID --storage DIR    enrol a box here; repository key on stdin
   ssh-config <box> --host SERVER          print the "ssh portenv" entry
+  attach <box> [--session NAME]           this terminal in the box's tmux session (portenvd)
+  app ACTION BOX [TARGET]                 the app's actions through portenvd
   version
 `)
 }

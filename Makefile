@@ -30,7 +30,7 @@ TOOLS := \
 	github.com/restic/restic/cmd/restic@v0.19.1
 TOOLS_STAMP := $(BIN)/.tools-stamp
 
-.PHONY: all build test lint fmt proto proto-check agent-linux swift-test \
+.PHONY: all build app test lint fmt proto proto-check agent-linux swift-test \
 	secrets spdx-check check tools clean image image-test driver-test e2e
 
 all: build test lint proto-check
@@ -84,9 +84,27 @@ proto-check: proto
 	git diff --exit-code -- proto/gen
 	test -z "$$(git status --porcelain -- proto/gen | tee /dev/stderr)"
 
+## app: build Portenv.app into bin/, with portenv, portenvd and restic inside (1.0: ad-hoc signed to run here)
+# Built outside the repository: SwiftPM's resource accessor falls back to the
+# build folder's path, and a repository under ~/Documents would make macOS ask
+# for access to Documents at launch. (A proper Xcode project, 1.8, embeds
+# resources the usual way.)
+APP_BUILD := $(HOME)/Library/Caches/Portenv/app-build
+app: build
+	cd apps/mac && swift build -c release --scratch-path "$(APP_BUILD)"
+	rm -rf $(BIN)/Portenv.app && mkdir -p $(BIN)/Portenv.app/Contents/MacOS
+	cp "$(APP_BUILD)/release/Portenv" $(BIN)/Portenv.app/Contents/MacOS/Portenv
+	# Helpers, not MacOS/: on a case-insensitive disk portenv would replace Portenv.
+	mkdir -p $(BIN)/Portenv.app/Contents/Helpers && cp $(BIN)/portenv $(BIN)/portenvd $(BIN)/restic $(BIN)/Portenv.app/Contents/Helpers/
+	for f in portenv portenvd restic; do codesign --force --sign - $(BIN)/Portenv.app/Contents/Helpers/$$f; done
+	cp apps/mac/Info.plist $(BIN)/Portenv.app/Contents/Info.plist
+	mkdir -p $(BIN)/Portenv.app/Contents/Resources && for b in "$(APP_BUILD)"/release/*.bundle; do [ -e "$$b" ] && cp -R "$$b" $(BIN)/Portenv.app/Contents/Resources/; done; true
+	codesign --force --sign - $(BIN)/Portenv.app
+
 ## swift-test: build and test the Swift packages (macOS only)
 swift-test:
 	cd shims/containerization && swift build && swift test
+	cd apps/mac && swift build && swift test
 
 ## image: build the toolbox image for this machine's architecture only
 IMAGE ?= portenv/toolbox-node:dev
@@ -103,11 +121,12 @@ image-test: image
 driver-test:
 	PORTENV_TEST_IMAGE=$(IMAGE) go test -count=1 -timeout 20m ./core/driver/docker/
 
-## e2e: restic isolation probe, two machines, and SFTP storage against $(IMAGE)
+## e2e: restic isolation probe, two machines, SFTP storage and portenvd against $(IMAGE)
 e2e: build $(TOOLS_STAMP)
 	tests/e2e/restic-isolation.sh $(IMAGE)
 	tests/e2e/two-machines.sh $(IMAGE)
 	tests/e2e/sftp-storage.sh $(IMAGE)
+	tests/e2e/daemon.sh $(IMAGE)
 
 ## secrets: scan the full git history and the working tree for secrets
 secrets: $(TOOLS_STAMP)

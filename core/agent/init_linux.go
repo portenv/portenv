@@ -10,7 +10,10 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"slices"
 	"sync"
+	"syscall"
 	"time"
 
 	"golang.org/x/sys/unix"
@@ -43,6 +46,16 @@ func Init(ctx context.Context, cfg Config, log *slog.Logger) error {
 			log.Error("agent API stopped", "err", err)
 		}
 	}()
+	// The agent channel (ADR 0010) runs in its own process, started here
+	// and restarted when it exits. Its restic and terminal processes are its
+	// own children, so this process's reaper never takes their exit status.
+	servePid := startServe(log)
+	// No other process starts while the channel's secrets are on disk.
+	if servePid != 0 {
+		if err := WaitChannelLoaded(ChannelDir, 10*time.Second); err != nil {
+			log.Error("agent channel", "err", err)
+		}
+	}
 
 	// The reaper and the start sequence's commands share this lock, so the
 	// reaper never collects a child that ExecRunner is still waiting for.
@@ -67,7 +80,7 @@ func Init(ctx context.Context, cfg Config, log *slog.Logger) error {
 			// held the lock.
 			bootDone = nil
 			mu.Lock()
-			reap()
+			servePid = restartIfReaped(reap(), servePid, log)
 			mu.Unlock()
 		case sig := <-sigs:
 			switch sig {
@@ -75,7 +88,7 @@ func Init(ctx context.Context, cfg Config, log *slog.Logger) error {
 				// Never block the signal loop behind a long command such as
 				// apt-get: skip now, catch up when the start sequence ends.
 				if mu.TryLock() {
-					reap()
+					servePid = restartIfReaped(reap(), servePid, log)
 					mu.Unlock()
 				}
 			case unix.SIGTERM, unix.SIGINT:
@@ -89,15 +102,50 @@ func Init(ctx context.Context, cfg Config, log *slog.Logger) error {
 	}
 }
 
-// reap collects every exited child without blocking.
-func reap() {
+// reap collects every exited child without blocking and returns their PIDs.
+func reap() []int {
+	var pids []int
 	for {
 		var ws unix.WaitStatus
 		pid, err := unix.Wait4(-1, &ws, unix.WNOHANG, nil)
 		if pid <= 0 || err != nil {
-			return
+			return pids
 		}
+		pids = append(pids, pid)
 	}
+}
+
+// startServe starts portenv-agent serve when the driver provided a channel,
+// and returns its PID (0 when there is none).
+func startServe(log *slog.Logger) int {
+	if _, err := os.Stat(filepath.Join(ChannelDir, TokenFile)); err != nil {
+		log.Info("no agent channel provided; serving the local socket only")
+		return 0
+	}
+	// As portenv-agent, from the copy with file capabilities: non-dumpable
+	// from its first instruction (ADR 0010, conditions).
+	p, err := os.StartProcess(ServeBinary, []string{"portenv-agent", "serve"}, &os.ProcAttr{
+		Files: []*os.File{nil, os.Stdout, os.Stderr},
+		Env:   []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"},
+		// portenv-sync as a supplementary group only to read and run the
+		// restic binary (root:portenv-sync, 0750).
+		Sys: &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: ServeUID, Gid: ServeUID, Groups: []uint32{syncGID}}},
+	})
+	if err != nil {
+		log.Error("start agent channel", "err", err)
+		return 0
+	}
+	return p.Pid
+}
+
+// restartIfReaped restarts the channel process when it is among the reaped.
+func restartIfReaped(reaped []int, servePid int, log *slog.Logger) int {
+	if servePid != 0 && slices.Contains(reaped, servePid) {
+		log.Warn("agent channel exited; restarting it")
+		time.Sleep(200 * time.Millisecond)
+		return startServe(log)
+	}
+	return servePid
 }
 
 // stopAll sends SIGTERM to every other process in the box, waits for them to

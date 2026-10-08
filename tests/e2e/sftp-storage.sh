@@ -24,6 +24,8 @@ expect() { local name=$1; shift; if "$@" >/dev/null 2>&1; then pass "$name"; els
 box_id() { python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["id"])' "$root/mac/boxes/sftp.json"; }
 in_box() { docker exec -u work -w /home/work "portenv-sftp-$(box_id)" bash -lc "$*"; }
 cleanup() {
+	# Nothing in the cleanup may fail: under set -e that would fail the run.
+	if [[ -n ${dpid:-} ]]; then kill "$dpid" 2>/dev/null || true; wait "$dpid" 2>/dev/null || true; fi
 	local id; id=$(box_id 2>/dev/null || true)
 	if [[ -n $id ]]; then
 		docker rm -f "portenv-sftp-$id" >/dev/null 2>&1 || true
@@ -73,6 +75,23 @@ expect "restic's cache survived the restart" bash -c "[[ -n \$(docker exec porte
 docker exec "$srv" bash -c "sed -i 's/^restrict/#restrict/' /etc/ssh/portenv-storage.authorized_keys"
 expect "an unknown key is refused (no save without the server's consent)" bash -c "! $portenv save sftp </dev/null"
 expect "close after restoring the key" bash -c "docker exec $srv sed -i 's/^#restrict/restrict/' /etc/ssh/portenv-storage.authorized_keys && $portenv close sftp </dev/null"
+
+echo "== the same storage through portenvd and the agent channel"
+# The CLI above runs restic with docker exec as root in the box; portenvd
+# runs it through the agent channel's API process (portenv-agent, uid 991,
+# few capabilities). Saving over SFTP there is a different path and must be
+# tested on its own: it once failed while everything above passed.
+"$repo/bin/portenvd" 2>"$root/portenvd.log" &
+dpid=$!
+for _ in $(seq 50); do [[ -S $root/mac/portenvd.sock ]] && break; sleep 0.1; done
+out=$("$portenv" app open sftp 2>&1) || true; echo "  $out"
+expect "portenvd opens the box (rule 3)" grep -q "rule 3" <<<"$out"
+{ printf 'echo through-the-channel > ~/channel.txt\r'; sleep 2; } | "$portenv" attach sftp >/dev/null 2>&1 || true
+out=$("$portenv" app point sftp 2>&1) || true; echo "  $out"
+expect "a save over SFTP through the agent channel" grep -q "^save point" <<<"$out"
+out=$("$portenv" app close sftp 2>&1) || true; echo "  $out"
+expect "close over SFTP through the agent channel" grep -q "closed and released" <<<"$out"
+kill "$dpid" 2>/dev/null; wait "$dpid" 2>/dev/null || true
 
 echo "== offline: the storage server is down"
 docker stop -t 1 "$srv" >/dev/null

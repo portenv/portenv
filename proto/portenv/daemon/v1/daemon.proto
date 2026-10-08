@@ -13,6 +13,116 @@ import "portenv/types/v1/types.proto";
 service DaemonService {
   rpc GetVersion(GetVersionRequest) returns (GetVersionResponse);
   rpc ListBoxes(ListBoxesRequest) returns (ListBoxesResponse);
+  // Opens a box on this Mac: the resume rules, then a running box.
+  rpc OpenBox(OpenBoxRequest) returns (OpenBoxResponse);
+  // Saves and releases the box and stops it.
+  rpc CloseBox(CloseBoxRequest) returns (CloseBoxResponse);
+  // Makes a save point (File › Make Save Point).
+  rpc MakeSavePoint(MakeSavePointRequest) returns (MakeSavePointResponse);
+  // Revert To ▸ Last Save Point: saves the current home first, then restores
+  // the newest save point.
+  rpc RevertToLastSavePoint(RevertToLastSavePointRequest) returns (RevertToLastSavePointResponse);
+  // Move To ▸: closes the box here and opens it on the target.
+  rpc MoveBox(MoveBoxRequest) returns (MoveBoxResponse);
+  // Attaches a terminal to the box's tmux session through the box agent.
+  rpc Terminal(stream TerminalRequest) returns (stream TerminalResponse);
+  // Reports whether the box agent answers on its channel.
+  rpc CheckBox(CheckBoxRequest) returns (CheckBoxResponse);
+  // Restarts the box (for example after its agent became unavailable) and
+  // opens it again through the resume rules: the local home is kept, never
+  // restored over while it has unsaved changes.
+  rpc RestartBox(RestartBoxRequest) returns (RestartBoxResponse);
+}
+
+message CheckBoxRequest {
+  string name = 1;
+}
+
+message CheckBoxResponse {
+  bool agent_available = 1;
+  // Why not, when it is not.
+  string detail = 2;
+}
+
+message RestartBoxRequest {
+  string name = 1;
+}
+
+message RestartBoxResponse {
+  string summary = 1;
+  int32 rule = 2;
+}
+
+message OpenBoxRequest {
+  string name = 1;
+}
+
+message OpenBoxResponse {
+  // A sentence for the title subtitle, for example "Saved 2 min ago".
+  string summary = 1;
+  // The resume rule that applied (1 to 5), or 0 when offline.
+  int32 rule = 2;
+}
+
+message CloseBoxRequest {
+  string name = 1;
+}
+
+message CloseBoxResponse {}
+
+message MakeSavePointRequest {
+  string name = 1;
+}
+
+message MakeSavePointResponse {
+  portenv.types.v1.SnapshotRef snapshot = 1;
+}
+
+message RevertToLastSavePointRequest {
+  string name = 1;
+}
+
+message RevertToLastSavePointResponse {
+  // The save point restored.
+  portenv.types.v1.SnapshotRef restored = 1;
+  // The save made of the home just before reverting, so it can be undone.
+  portenv.types.v1.SnapshotRef saved_before = 2;
+}
+
+message MoveBoxRequest {
+  string name = 1;
+  // "this-mac", or an SSH host (user@host) that runs portenv.
+  string target = 2;
+}
+
+message MoveBoxResponse {
+  string summary = 1;
+}
+
+message TerminalRequest {
+  oneof msg {
+    TerminalOpen open = 1;
+    bytes input = 2;
+    TerminalSize resize = 3;
+  }
+}
+
+message TerminalOpen {
+  string box = 1;
+  string session = 2;
+  TerminalSize size = 3;
+}
+
+message TerminalSize {
+  uint32 cols = 1;
+  uint32 rows = 2;
+}
+
+message TerminalResponse {
+  oneof msg {
+    bytes output = 1;
+    int32 exit_code = 2;
+  }
 }
 
 message GetVersionRequest {}

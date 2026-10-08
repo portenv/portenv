@@ -11,6 +11,7 @@
 package docker
 
 import (
+	"archive/tar"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -18,19 +19,24 @@ import (
 	"fmt"
 	"io"
 	"iter"
+	"net"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	cerrdefs "github.com/containerd/errdefs"
 	"github.com/moby/moby/api/pkg/stdcopy"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/mount"
+	"github.com/moby/moby/api/types/network"
 	"github.com/moby/moby/client"
 
+	"github.com/portenv/portenv/core/agent"
 	"github.com/portenv/portenv/core/driver"
 )
 
@@ -67,6 +73,9 @@ type Config struct {
 type Driver struct {
 	cfg Config
 	cli *client.Client
+
+	mu       sync.Mutex
+	channels map[driver.BoxID]agent.ChannelSecrets // this process's starts only
 }
 
 var _ driver.Driver = (*Driver)(nil)
@@ -195,10 +204,11 @@ func (d *Driver) recreate(ctx context.Context, s spec) error {
 	_, err := d.cli.ContainerCreate(ctx, client.ContainerCreateOptions{
 		Name: name,
 		Config: &container.Config{
-			Image:    s.Box.ToolboxImage,
-			Hostname: "portenv",
-			Env:      env,
-			Labels:   map[string]string{labelBox: string(s.Box.ID)},
+			Image:        s.Box.ToolboxImage,
+			Hostname:     "portenv",
+			Env:          env,
+			Labels:       map[string]string{labelBox: string(s.Box.ID)},
+			ExposedPorts: network.PortSet{agentPort: {}},
 		},
 		HostConfig: host,
 	})
@@ -227,6 +237,9 @@ func (d *Driver) hostConfig(s spec) *container.HostConfig {
 			NanoCPUs: int64(s.Box.Resources.CPUMillis) * 1_000_000,
 			Memory:   int64(s.Box.Resources.MemoryBytes), // #nosec G115 -- sizes far below MaxInt64
 		},
+		// The agent channel (ADR 0010), on this machine's loopback address
+		// only, at a port the engine picks. Nothing else is published.
+		PortBindings: network.PortMap{agentPort: {{HostIP: netip.AddrFrom4([4]byte{127, 0, 0, 1}), HostPort: ""}}},
 	}
 	if s.Home.Ref != "" {
 		host.Mounts = append(host.Mounts, mount.Mount{Type: mount.TypeVolume, Source: s.Home.Ref, Target: "/home"})
@@ -303,6 +316,19 @@ func (d *Driver) Start(ctx context.Context, id driver.BoxID) (driver.State, erro
 	if err := d.recreate(ctx, s); err != nil {
 		return driver.StateUnspecified, err
 	}
+	sec, err := agent.NewChannelSecrets()
+	if err != nil {
+		return driver.StateUnspecified, err
+	}
+	if err := d.installChannel(ctx, id, sec); err != nil {
+		return driver.StateUnspecified, err
+	}
+	d.mu.Lock()
+	if d.channels == nil {
+		d.channels = map[driver.BoxID]agent.ChannelSecrets{}
+	}
+	d.channels[id] = sec
+	d.mu.Unlock()
 	if _, err := d.cli.ContainerStart(ctx, d.containerName(id), client.ContainerStartOptions{}); err != nil {
 		return driver.StateFailed, fmt.Errorf("start container: %w", err)
 	}
@@ -613,4 +639,82 @@ func (d *Driver) ImageDigest(ctx context.Context, ref string) (string, error) {
 		}
 	}
 	return ref, nil
+}
+
+// agentPort is the agent channel inside the box.
+var agentPort = network.MustParsePort(strconv.Itoa(agent.ChannelPort) + "/tcp")
+
+// installChannel writes this start's channel secrets into the created,
+// not yet started container: root-only files on its fresh root file system.
+func (d *Driver) installChannel(ctx context.Context, id driver.BoxID, sec agent.ChannelSecrets) error {
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+	now := time.Now()
+	dir := strings.TrimPrefix(agent.ChannelDir, "/") + "/"
+	parts := strings.Split(strings.TrimSuffix(dir, "/"), "/")
+	// run/ as it is; run/portenv/ root:portenv-agent 0710; the channel's own
+	// directory and files belong to portenv-agent (0700/0600), the user the
+	// API process runs as, so it reads and removes them without
+	// cap_dac_override.
+	for i := range parts {
+		p := strings.Join(parts[:i+1], "/") + "/"
+		h := &tar.Header{Typeflag: tar.TypeDir, Name: p, Mode: 0o755, ModTime: now}
+		switch p {
+		case dir:
+			h.Mode, h.Uid, h.Gid = 0o700, agent.ServeUID, agent.ServeUID
+		case "run/portenv/":
+			h.Mode, h.Gid = 0o710, agent.ServeUID
+		}
+		if err := tw.WriteHeader(h); err != nil {
+			return err
+		}
+	}
+	for name, data := range map[string][]byte{agent.TokenFile: []byte(sec.Token), agent.CertFile: sec.CertPEM, agent.KeyFile: sec.KeyPEM} {
+		if err := tw.WriteHeader(&tar.Header{Typeflag: tar.TypeReg, Name: dir + name, Mode: 0o600, Uid: agent.ServeUID, Gid: agent.ServeUID, Size: int64(len(data)), ModTime: now}); err != nil {
+			return err
+		}
+		if _, err := tw.Write(data); err != nil {
+			return err
+		}
+	}
+	if err := tw.Close(); err != nil {
+		return err
+	}
+	if _, err := d.cli.CopyToContainer(ctx, d.containerName(id), client.CopyToContainerOptions{DestinationPath: "/", Content: &buf}); err != nil {
+		return fmt.Errorf("install agent channel: %w", err)
+	}
+	return nil
+}
+
+// AgentChannel implements driver.Driver: the agent port as published on
+// 127.0.0.1, with this start's certificate and token.
+func (d *Driver) AgentChannel(ctx context.Context, id driver.BoxID) (driver.AgentChannel, error) {
+	d.mu.Lock()
+	sec, ok := d.channels[id]
+	d.mu.Unlock()
+	if !ok {
+		return driver.AgentChannel{}, driver.ErrNoChannel
+	}
+	res, err := d.cli.ContainerInspect(ctx, d.containerName(id), client.ContainerInspectOptions{})
+	if err != nil {
+		return driver.AgentChannel{}, err
+	}
+	var addr string
+	if ns := res.Container.NetworkSettings; ns != nil {
+		for _, b := range ns.Ports[agentPort] {
+			if b.HostIP.IsLoopback() && b.HostPort != "" {
+				addr = net.JoinHostPort(b.HostIP.String(), b.HostPort)
+			}
+		}
+	}
+	if addr == "" {
+		return driver.AgentChannel{}, fmt.Errorf("box %s: the agent port is not published on the loopback address", id)
+	}
+	return driver.AgentChannel{
+		Dial: func(ctx context.Context) (net.Conn, error) {
+			return (&net.Dialer{Timeout: 5 * time.Second}).DialContext(ctx, "tcp", addr)
+		},
+		CertPEM: sec.CertPEM,
+		Token:   sec.Token,
+	}, nil
 }

@@ -21,8 +21,9 @@ box_id() { python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["id"]
 # terminal showed; the session lives on after the client detaches.
 type_in() { { printf '%s\r' "$1"; sleep "${2:-2}"; } | "$portenv" attach d 2>/dev/null | tr -d '\r' || true; }
 cleanup() {
-	[[ -n ${dpid:-} ]] && kill "$dpid" 2>/dev/null && wait "$dpid" 2>/dev/null
-	[[ -n ${epid:-} ]] && kill "$epid" 2>/dev/null
+	# Nothing in the cleanup may fail: under set -e that would fail the run.
+	if [[ -n ${dpid:-} ]]; then kill "$dpid" 2>/dev/null || true; wait "$dpid" 2>/dev/null || true; fi
+	if [[ -n ${epid:-} ]]; then kill "$epid" 2>/dev/null || true; fi
 	local id; id=$(box_id 2>/dev/null || true)
 	if [[ -n $id ]]; then
 		docker rm -f "portenv-daemon-$id" >/dev/null 2>&1 || true

@@ -44,6 +44,12 @@ type Config struct {
 	Now func() time.Time
 	// Trace, when set, receives the duration of each restic call.
 	Trace func(phase string, d time.Duration)
+	// Deadlines bound each restic run (zero values: DefaultDeadlines).
+	Deadlines Deadlines
+	// OnRetry, when set, hears when a restic run that hit its deadline is
+	// being retried (true) and when that ends (false): the state line shows
+	// "Not saved since … · retrying".
+	OnRetry func(retrying bool)
 	// MetaExecutor, when set, runs restic commands that do not need /home
 	// on the host (lease checks, listing, tags, init, keys, retention), and
 	// MetaRepository is the repository's address from the host. Backup and
@@ -95,6 +101,7 @@ func Open(cfg Config) (*Box, error) {
 		metaRepo = cfg.Repository
 	}
 	b := &Box{cfg: cfg, restic: &restic{exec: cfg.Executor, repo: cfg.Repository, trace: cfg.Trace,
+		deadlines: cfg.Deadlines, onRetry: cfg.OnRetry,
 		meta: cfg.MetaExecutor, metaRepo: metaRepo, cred: Credentials{
 			Password: cfg.Password, Env: cfg.Env, SSHKey: cfg.SSHKey, SSHHostKey: cfg.SSHHostKey,
 		}}}
@@ -103,6 +110,10 @@ func Open(cfg Config) (*Box, error) {
 	}
 	return b, nil
 }
+
+// OnRetry sets the function that hears when a restic run that missed its
+// deadline is being retried (true) and when that ends (false).
+func (b *Box) OnRetry(fn func(retrying bool)) { b.restic.onRetry = fn }
 
 // versionFile records which restic binary passed the version check.
 const versionFile = "restic-checked"

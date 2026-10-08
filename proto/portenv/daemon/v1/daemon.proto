@@ -188,6 +188,12 @@ enum SaveState {
   SAVE_STATE_AGENT_UNAVAILABLE = 5;
   // Not open on this machine or its server.
   SAVE_STATE_CLOSED = 6;
+  // A save missed its deadline and is being retried; saved_at is the last
+  // save that completed ("Not saved since 14:58 · retrying").
+  SAVE_STATE_RETRYING = 7;
+  // The last save failed (after its retry); saved_at is the last one that
+  // completed ("Not saved since 14:58"), until a save succeeds.
+  SAVE_STATE_NOT_SAVED = 8;
 }
 
 message GetBoxStateResponse {

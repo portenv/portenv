@@ -76,6 +76,9 @@ type openBox struct {
 
 	// What the save state is derived from besides the sync state.
 	saving, offline, agentDown atomic.Bool
+	// retrying: a restic run missed its deadline and is being retried;
+	// failed: the last save failed (after its retry), until one succeeds.
+	retrying, failed atomic.Bool
 }
 
 // New returns a daemon for this machine's Portenv directory.
@@ -253,6 +256,7 @@ func (s *Server) openBox(ctx context.Context, name string) (*openBox, boxsync.Re
 		ob.stop(ctx)
 		return nil, none, err
 	}
+	ob.sb.OnRetry(func(on bool) { ob.retrying.Store(on) })
 	step("sync engine ready")
 	var res boxsync.ResumeResult
 	if !<-reach {
@@ -376,6 +380,7 @@ func (s *Server) closeBox(ctx context.Context, name string) error {
 	ob.saving.Store(true)
 	_, err = ob.sb.Save(ctx, boxsync.SaveOptions{Kind: boxsync.SaveRelease})
 	ob.saving.Store(false)
+	ob.failed.Store(err != nil)
 	if err != nil {
 		return ob.noteErr(err)
 	}
@@ -404,6 +409,7 @@ func (s *Server) MakeSavePoint(ctx context.Context, req *daemonv1.MakeSavePointR
 	ob.saving.Store(true)
 	snap, err := ob.sb.Save(ctx, boxsync.SaveOptions{Kind: boxsync.SavePoint})
 	ob.saving.Store(false)
+	ob.failed.Store(err != nil)
 	if err != nil {
 		return nil, ob.noteErr(err)
 	}
@@ -432,6 +438,7 @@ func (s *Server) RevertToLastSavePoint(ctx context.Context, req *daemonv1.Revert
 	ob.saving.Store(true)
 	res, err := ob.sb.RevertToLastSavePoint(ctx)
 	ob.saving.Store(false)
+	ob.failed.Store(err != nil && !errors.Is(err, boxsync.ErrNoSavePoint))
 	if errors.Is(err, boxsync.ErrNoSavePoint) {
 		return nil, status.Error(codes.FailedPrecondition, "there is no save point yet")
 	}

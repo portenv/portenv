@@ -75,6 +75,11 @@ func RunRestic(ctx context.Context, args []string, stdin io.Reader, stdout, stde
 	// path names by the time exec happens.
 	cmd := exec.CommandContext(ctx, "/proc/self/fd/4", args...) // #nosec G204 -- validated subcommand and flags
 	cmd.Args[0] = "restic"
+	// Stopped at the caller's deadline (the gRPC call's): SIGINT first, so
+	// restic releases its lock and cleans up; SIGKILL only if it hasn't
+	// exited after the grace period (cap_kill: restic runs as portenv-sync).
+	cmd.Cancel = func() error { return cmd.Process.Signal(os.Interrupt) }
+	cmd.WaitDelay = resticKillGrace
 	cmd.ExtraFiles = []*os.File{pr, bin}
 	cmd.Env = append([]string{
 		"PATH=/usr/bin:/bin", "HOME=/nonexistent",

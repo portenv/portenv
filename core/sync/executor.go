@@ -164,6 +164,10 @@ func (l LocalExecutor) restic(ctx context.Context, args []string, cred Credentia
 		args = append([]string{"--cache-dir", l.CacheDir}, args...)
 	}
 	cmd := exec.CommandContext(ctx, l.Bin, args...) // #nosec G204 -- the restic binary comes from configuration
+	// Stopped at a deadline: SIGINT first, so restic releases its lock and
+	// cleans up; SIGKILL only if it hasn't exited after KillGrace.
+	cmd.Cancel = func() error { return cmd.Process.Signal(os.Interrupt) }
+	cmd.WaitDelay = KillGrace
 	var procEnv []string
 	for _, kv := range os.Environ() {
 		if !strings.HasPrefix(kv, "RESTIC_") {

@@ -38,6 +38,10 @@ struct StateLineTests {
         let at = ISO8601DateFormatter().date(from: "2026-10-08T09:42:00Z")!
         #expect(BoxState(save: .notSavedYet).line(timeZone: utc) == "Not saved yet")
         #expect(BoxState(save: .saving, savedAt: at).line(timeZone: utc) == "Saving…")
+        #expect(BoxState(save: .retrying, savedAt: at).line(timeZone: utc) == "Not saved since 09:42 · retrying")
+        #expect(BoxState(save: .notSaved, savedAt: at).line(timeZone: utc) == "Not saved since 09:42")
+        #expect(BoxState(save: .notSaved).line(timeZone: utc) == "Not saved")
+        #expect(BoxState.parse(#"{"state":"SAVE_STATE_RETRYING","saved_at":"2026-10-08T09:42:00Z"}"#)?.save == .retrying)
         #expect(BoxState(save: .saved, savedAt: at).line(timeZone: utc) == "Saved at 09:42")
         #expect(BoxState(save: .offline, savedAt: at).line(timeZone: utc) == "Offline · will save later")
         #expect(BoxState(save: .agentUnavailable, savedAt: at).line(timeZone: utc) == "Not saved · box agent unavailable")

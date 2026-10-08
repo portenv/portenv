@@ -13,7 +13,11 @@
 //	portenv close <box> [--confirm]     save, release the lease, stop the box
 //	portenv status <box>
 //	portenv history <box>
-//	portenv move <box> --to SSH-HOST    close here, resume on SSH-HOST
+//	portenv housekeep <box> [--prune]   clear old lease tags, apply retention
+//	portenv move <box> --to SSH-HOST [--join-storage DIR]
+//	                                    close here, resume on SSH-HOST
+//	portenv join <box> --id ID --storage DIR    enrol a box (key on stdin)
+//	portenv ssh-config <box> --host SERVER      print the "ssh portenv" entry
 //	portenv version
 package main
 
@@ -40,14 +44,17 @@ type command struct {
 }
 
 var commands = map[string]command{
-	"init":    {"init <box> [--image IMAGE] [--storage DIR|s3:URL]", cmdInit},
-	"resume":  {"resume <box> [--take-over]", cmdResume},
-	"save":    {"save <box> [--confirm]", cmdSave},
-	"point":   {"point <box> [--confirm]", cmdPoint},
-	"close":   {"close <box> [--confirm]", cmdClose},
-	"status":  {"status <box>", cmdStatus},
-	"history": {"history <box>", cmdHistory},
-	"move":    {"move <box> --to SSH-HOST", cmdMove},
+	"init":       {"init <box> [--image IMAGE] [--storage DIR|s3:URL]", cmdInit},
+	"resume":     {"resume <box> [--take-over]", cmdResume},
+	"save":       {"save <box> [--confirm]", cmdSave},
+	"point":      {"point <box> [--confirm]", cmdPoint},
+	"close":      {"close <box> [--confirm]", cmdClose},
+	"status":     {"status <box>", cmdStatus},
+	"history":    {"history <box>", cmdHistory},
+	"housekeep":  {"housekeep <box> [--prune]", cmdHousekeep},
+	"move":       {"move <box> --to SSH-HOST [--join-storage DIR]", cmdMove},
+	"join":       {"join <box> --id BOX-ID --storage DIR [--image IMAGE]   (repository key on stdin)", cmdJoin},
+	"ssh-config": {"ssh-config <box> --host SERVER [--user USER] [--alias portenv]", cmdSSHConfig},
 }
 
 func run(ctx context.Context, args []string) int {
@@ -101,7 +108,11 @@ Commands:
   close <box> [--confirm]      save, release the lease, stop the box
   status <box>
   history <box>
-  move <box> --to SSH-HOST     close here, then resume on SSH-HOST
+  housekeep <box> [--prune]    clear old lease tags and apply retention (run when idle)
+  move <box> --to SSH-HOST [--join-storage DIR]
+                               close here, then resume on SSH-HOST (enrolling it first)
+  join <box> --id BOX-ID --storage DIR    enrol a box here; repository key on stdin
+  ssh-config <box> --host SERVER          print the "ssh portenv" entry
   version
 `)
 }

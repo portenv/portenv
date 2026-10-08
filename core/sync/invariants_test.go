@@ -82,8 +82,8 @@ func TestInvariantSaveCompleteOnlyWithSnapshotAndState(t *testing.T) {
 	if err != nil || !ok {
 		t.Fatalf("state after save: %+v %v %v", st, ok, err)
 	}
-	if st.Tree != s.Tree {
-		t.Fatalf("state tree %s, want the saved snapshot's %s", st.Tree, s.Tree)
+	if st.Snapshot != s.origin() {
+		t.Fatalf("state records snapshot %s, want the saved snapshot %s", st.Snapshot, s.origin())
 	}
 }
 
@@ -114,6 +114,7 @@ func TestInvariantSaveOverChangedLeaseNeedsConfirmation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	aSnap = w.resolve(aSnap)
 	var sawB bool
 	for _, s := range w.snapshots() {
 		if s.Tree == bSnap.Tree {
@@ -146,5 +147,6 @@ func TestOwnUnrecordedSaveIsNotAConflict(t *testing.T) {
 	if err != nil {
 		t.Fatalf("save after an unrecorded own save: %v", err)
 	}
+	s = w.resolve(s)
 	equalFiles(t, "latest", w.snapshotFiles(s), map[string]string{"f": "3"})
 }

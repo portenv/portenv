@@ -57,6 +57,17 @@ func RunRestic(ctx context.Context, args []string, stdin io.Reader, stdout, stde
 	}
 	_ = pw.Close()
 
+	var extraEnv []string
+	if in.SSHKey != "" {
+		sa, opts, env, err := startSFTPAgent(in.SSHKey, in.SSHHostKey)
+		if err != nil {
+			return 0, err
+		}
+		defer sa.stop()
+		args = append(opts, args...)
+		extraEnv = env
+	}
+
 	// Execute the file just hashed (fd 4 in the child), not whatever the
 	// path names by the time exec happens.
 	cmd := exec.CommandContext(ctx, "/proc/self/fd/4", args...) // #nosec G204 -- validated subcommand and flags
@@ -66,7 +77,7 @@ func RunRestic(ctx context.Context, args []string, stdin io.Reader, stdout, stde
 		"PATH=/usr/bin:/bin", "HOME=/nonexistent",
 		"RESTIC_CACHE_DIR=" + resticCacheDir,
 		"RESTIC_PASSWORD_FILE=/dev/fd/3",
-	}, in.Env...)
+	}, append(in.Env, extraEnv...)...)
 	cmd.Stdout, cmd.Stderr = stdout, stderr
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Credential: &syscall.Credential{Uid: syncUID, Gid: syncGID, Groups: []uint32{}},

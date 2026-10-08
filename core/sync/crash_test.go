@@ -58,8 +58,8 @@ func TestKilledSaveLeavesRepositoryConsistent(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if st.Tree != stateBefore.Tree {
-			t.Fatalf("a killed save updated the state (tree %s, want %s)", st.Tree, stateBefore.Tree)
+		if st.Snapshot != stateBefore.Snapshot {
+			t.Fatalf("a killed save updated the state (snapshot %s, want %s)", st.Snapshot, stateBefore.Snapshot)
 		}
 	}
 	w.check()

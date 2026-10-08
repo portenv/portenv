@@ -56,6 +56,11 @@ type Config struct {
 	// Namespace, when set, is added to container names so several simulated
 	// machines can share one engine (tests only).
 	Namespace string
+	// HomesDir, when set, is where home volumes live on the host: each named
+	// volume is a bind of HomesDir/<volume>. On servers this is the LUKS
+	// volume for box homes (milestone 0.5); unset, Docker's default storage
+	// is used (on a Mac, inside Docker's disk on a FileVault-encrypted drive).
+	HomesDir string
 }
 
 // Driver is the docker box driver.
@@ -215,6 +220,9 @@ func (d *Driver) hostConfig(s spec) *container.HostConfig {
 	}
 	host := &container.HostConfig{
 		ShmSize: shm,
+		// The machine running the box, for storage on that machine (SFTP)
+		// and later the port relay's way back to the Mac.
+		ExtraHosts: []string{"host.portenv.internal:host-gateway"},
 		Resources: container.Resources{
 			NanoCPUs: int64(s.Box.Resources.CPUMillis) * 1_000_000,
 			Memory:   int64(s.Box.Resources.MemoryBytes), // #nosec G115 -- sizes far below MaxInt64
@@ -226,7 +234,21 @@ func (d *Driver) hostConfig(s spec) *container.HostConfig {
 	if d.cfg.StorageDir != "" {
 		host.Mounts = append(host.Mounts, mount.Mount{Type: mount.TypeBind, Source: d.cfg.StorageDir, Target: StorageMount})
 	}
+	// restic's cache survives restarts (the root file system does not), so
+	// a same-machine resume reads almost nothing remotely. It holds only
+	// encrypted repository data and is never saved or moved.
+	host.Mounts = append(host.Mounts, mount.Mount{Type: mount.TypeVolume, Source: d.cacheVolume(s.Box.ID), Target: CacheMount})
 	return host
+}
+
+// CacheMount is restic's cache inside every box (portenv-sync's, 0700).
+const CacheMount = "/var/cache/portenv-sync"
+
+func (d *Driver) cacheVolume(id driver.BoxID) string {
+	if d.cfg.Namespace != "" {
+		return "portenv-cache-" + d.cfg.Namespace + "-" + string(id)
+	}
+	return "portenv-cache-" + string(id)
 }
 
 // MountHome records the box's home storage, creating the named volume if
@@ -242,7 +264,19 @@ func (d *Driver) MountHome(ctx context.Context, id driver.BoxID, home driver.Hom
 		return errors.New("MountHome needs the box stopped")
 	}
 	if _, err := d.cli.VolumeInspect(ctx, home.Ref, client.VolumeInspectOptions{}); cerrdefs.IsNotFound(err) {
-		if _, err := d.cli.VolumeCreate(ctx, client.VolumeCreateOptions{Name: home.Ref, Labels: map[string]string{labelBox: string(id)}}); err != nil {
+		opts := client.VolumeCreateOptions{Name: home.Ref, Labels: map[string]string{labelBox: string(id)}}
+		if d.cfg.HomesDir != "" {
+			if !idRE.MatchString(home.Ref) {
+				return fmt.Errorf("invalid home volume name %q", home.Ref)
+			}
+			dir := filepath.Join(d.cfg.HomesDir, home.Ref)
+			if err := os.MkdirAll(dir, 0o755); err != nil { // #nosec G301 -- becomes /home inside the box; homes in it are 0700
+				return fmt.Errorf("create home directory: %w", err)
+			}
+			opts.Driver = "local"
+			opts.DriverOpts = map[string]string{"type": "none", "o": "bind", "device": dir}
+		}
+		if _, err := d.cli.VolumeCreate(ctx, opts); err != nil {
 			return fmt.Errorf("create home volume: %w", err)
 		}
 	} else if err != nil {
@@ -555,4 +589,28 @@ func (d *Driver) Known(id driver.BoxID) bool {
 	}
 	_, err = os.Stat(p)
 	return err == nil
+}
+
+// ImageDigest returns ref pinned to the registry digest it resolved to
+// ("repo:tag@sha256:..."), or ref unchanged when it is already pinned or the
+// image is local only (built here, never pushed).
+func (d *Driver) ImageDigest(ctx context.Context, ref string) (string, error) {
+	if strings.Contains(ref, "@sha256:") {
+		return ref, nil
+	}
+	insp, err := d.cli.ImageInspect(ctx, ref)
+	if err != nil {
+		return "", fmt.Errorf("inspect image %s: %w", ref, err)
+	}
+	repo := ref
+	if i := strings.LastIndex(ref, ":"); i > strings.LastIndex(ref, "/") {
+		repo = ref[:i]
+	}
+	for _, rd := range insp.RepoDigests {
+		name, digest, ok := strings.Cut(rd, "@")
+		if ok && (name == repo || strings.HasSuffix(name, "/"+repo)) {
+			return ref + "@" + digest, nil
+		}
+	}
+	return ref, nil
 }

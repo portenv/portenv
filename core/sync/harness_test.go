@@ -222,7 +222,20 @@ func mustSave(t *testing.T, m *machine, kind SaveKind) Snapshot {
 	if err != nil {
 		t.Fatalf("%s: Save(%v): %v", m.id, kind, err)
 	}
-	return s
+	return m.w.resolve(s)
+}
+
+// resolve looks a saved snapshot up in the repository (by its original ID),
+// for its tree and paths.
+func (w *world) resolve(s Snapshot) Snapshot {
+	w.t.Helper()
+	for _, r := range w.snapshots() {
+		if r.origin() == s.origin() {
+			return r
+		}
+	}
+	w.t.Fatalf("snapshot %s not in the repository", s.ID)
+	return Snapshot{}
 }
 
 func isLeaseHeld(err error) (*LeaseHeldError, bool) {

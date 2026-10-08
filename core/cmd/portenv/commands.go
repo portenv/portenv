@@ -3,6 +3,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -11,10 +12,14 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
+
+	"golang.org/x/crypto/bcrypt"
 
 	"github.com/portenv/portenv/core/driver"
 	"github.com/portenv/portenv/core/keys"
@@ -40,9 +45,14 @@ func parse(fs *flag.FlagSet, args []string) error {
 func cmdInit(_ context.Context, e *env, name string, args []string) error {
 	fs := flags("init")
 	image := fs.String("image", defaultImage, "toolbox image")
-	storage := fs.String("storage", "", "storage: an absolute directory or s3:URL (default: this Mac only)")
+	storage := fs.String("storage", "", "storage: an absolute directory, sftp:USER@HOST:/PATH or s3:URL (default: this Mac only)")
+	hostKey := fs.String("storage-host-key", "", "SFTP storage: the server's host key, \"ssh-ed25519 AAAA...\"")
+	rest := fs.String("storage-rest", "", "SFTP storage: restic's REST server on the server's loopback, 127.0.0.1:PORT (server/setup.sh sets it up)")
 	if err := parse(fs, args); err != nil {
 		return err
+	}
+	if *rest != "" && (!strings.HasPrefix(*storage, "sftp:") || !loopbackAddr(*rest)) {
+		return usageError{"--storage-rest needs SFTP storage and a loopback address (127.0.0.1:PORT)"}
 	}
 	p, err := e.configPath(name)
 	if err != nil {
@@ -55,7 +65,7 @@ func cmdInit(_ context.Context, e *env, name string, args []string) error {
 	if _, err := rand.Read(b); err != nil {
 		return err
 	}
-	c := boxConfig{ID: "box-" + hex.EncodeToString(b), Name: name, Image: *image, Storage: *storage}
+	c := boxConfig{ID: "box-" + hex.EncodeToString(b), Name: name, Image: *image, Storage: *storage, StorageHostKey: *hostKey, StorageREST: *rest}
 	if _, _, _, err := e.storage(c); err != nil {
 		return err
 	}
@@ -66,6 +76,34 @@ func cmdInit(_ context.Context, e *env, name string, args []string) error {
 	if err := e.keyStore().Put(c.ID, key); err != nil {
 		return err
 	}
+	var storagePub string
+	if strings.HasPrefix(c.Storage, "sftp:") {
+		priv, pub, err := keys.NewSSHKey("portenv storage " + c.ID)
+		if err != nil {
+			return err
+		}
+		if err := e.keyStore().Put(storageKeyID(c.ID), priv); err != nil {
+			return err
+		}
+		storagePub = pub
+	}
+	var restUser string
+	if c.StorageREST != "" {
+		// 192 random bits, as hex: within bcrypt's 72-byte limit.
+		raw := make([]byte, 24)
+		if _, err := rand.Read(raw); err != nil {
+			return err
+		}
+		pw := []byte(hex.EncodeToString(raw))
+		if err := e.keyStore().Put(restKeyID(c.ID), pw); err != nil {
+			return err
+		}
+		hash, err := bcrypt.GenerateFromPassword(pw, bcrypt.DefaultCost)
+		if err != nil {
+			return err
+		}
+		restUser = c.ID + ":" + string(hash)
+	}
 	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
 		return err
 	}
@@ -73,7 +111,146 @@ func cmdInit(_ context.Context, e *env, name string, args []string) error {
 	if err := os.WriteFile(p, append(data, '\n'), 0o600); err != nil {
 		return err
 	}
-	fmt.Printf("created box %s (%s) on %s\nnext: portenv resume %s\n", name, c.ID, e.machine, name)
+	fmt.Printf("created box %s (%s) on %s\n", name, c.ID, e.machine)
+	if storagePub != "" {
+		fmt.Printf("add this key to the storage account's authorized_keys on the server:\n%s\n", storagePub)
+	}
+	if restUser != "" {
+		// Only the bcrypt hash leaves this machine.
+		fmt.Printf("add this REST user on the server (setup.sh --rest-user):\nrest-user %s\n", restUser)
+	}
+	fmt.Printf("next: portenv resume %s\n", name)
+	return nil
+}
+
+// cmdJoin enrols an existing box on this machine: the repository key comes
+// on stdin (from portenv move, over SSH) and goes only into the key store.
+func cmdJoin(ctx context.Context, e *env, name string, args []string) error {
+	fs := flags("join")
+	id := fs.String("id", "", "the box's ID")
+	image := fs.String("image", defaultImage, "toolbox image")
+	storage := fs.String("storage", "", "where this machine reaches the box's storage: an absolute directory, sftp:USER@HOST:/PATH or s3:URL")
+	hostKey := fs.String("storage-host-key", "", "SFTP storage: the server's host key")
+	rest := fs.String("storage-rest", "", "SFTP storage: restic's REST server on the server's loopback (password on stdin)")
+	if err := parse(fs, args); err != nil {
+		return err
+	}
+	if *rest != "" && !loopbackAddr(*rest) {
+		return usageError{"--storage-rest needs a loopback address (127.0.0.1:PORT)"}
+	}
+	if !nameRE.MatchString(*id) {
+		return usageError{"join needs --id BOX-ID"}
+	}
+	p, err := e.configPath(name)
+	if err != nil {
+		return err
+	}
+	if _, err := os.Stat(p); err == nil {
+		return fmt.Errorf("box %s already exists here", name)
+	}
+	c := boxConfig{ID: *id, Name: name, Image: *image, Storage: *storage, StorageHostKey: *hostKey, StorageREST: *rest}
+	if _, _, _, err := e.storage(c); err != nil {
+		return err
+	}
+	// The keys arrive on stdin as JSON (portenv move sends them over SSH);
+	// they go only into this machine's key store.
+	var in joinKeys
+	if err := json.NewDecoder(io.LimitReader(os.Stdin, 16<<10)).Decode(&in); err != nil {
+		return fmt.Errorf("join reads its keys from stdin as JSON: %w", err)
+	}
+	if len(in.RepositoryKey) < 32 {
+		return errors.New("join needs the repository key on stdin")
+	}
+	if strings.HasPrefix(c.Storage, "sftp:") && in.StorageKey == "" {
+		return errors.New("SFTP storage needs the storage key on stdin")
+	}
+	if in.StorageKey != "" {
+		if err := e.keyStore().Put(storageKeyID(c.ID), []byte(in.StorageKey)); err != nil {
+			return err
+		}
+	}
+	if c.StorageREST != "" {
+		if in.RESTPassword == "" {
+			return errors.New("REST storage needs its password on stdin")
+		}
+		if err := e.keyStore().Put(restKeyID(c.ID), []byte(in.RESTPassword)); err != nil {
+			return err
+		}
+	}
+	// This machine's own repository key, added here so its derivation cost
+	// is tuned for this machine. The key that came on stdin is used once to
+	// add it and is never stored.
+	own, err := keys.NewKey()
+	if err != nil {
+		return err
+	}
+	if err := addOwnKey(ctx, e, c, []byte(in.RepositoryKey), []byte(in.StorageKey), []byte(in.RESTPassword), own); err != nil {
+		return fmt.Errorf("add this machine's repository key: %w", err)
+	}
+	if err := e.keyStore().Put(c.ID, own); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+		return err
+	}
+	data, _ := json.MarshalIndent(c, "", "  ")
+	if err := os.WriteFile(p, append(data, '\n'), 0o600); err != nil {
+		return err
+	}
+	fmt.Printf("joined box %s (%s) on %s\n", name, c.ID, e.machine)
+	return nil
+}
+
+// addOwnKey runs restic key add on this machine with the transferred key.
+func addOwnKey(ctx context.Context, e *env, c boxConfig, transferred, storageKey, restPassword, own []byte) error {
+	repo, _, resticEnv, err := e.storage(c)
+	if err != nil {
+		return err
+	}
+	s := &session{e: e, cfg: c, repo: repo, resticEnv: resticEnv, key: transferred, sshKey: storageKey, restPassword: restPassword}
+	host := s.hostExecutor()
+	if host == nil {
+		return errors.New("no restic on this machine (the server setup installs it)")
+	}
+	sb, err := boxsync.Open(boxsync.Config{
+		Executor: host, MetaExecutor: host, MetaRepository: s.hostRepo(),
+		Repository: s.hostRepo(), Password: transferred, Env: resticEnv,
+		SSHKey: storageKey, SSHHostKey: c.StorageHostKey,
+		BoxID: c.ID, MachineID: e.machine, HomeDir: "/nonexistent",
+		StateDir: filepath.Join(e.dir, "state", c.ID),
+	})
+	if err != nil {
+		return err
+	}
+	return sb.AddKey(ctx, own, e.machine)
+}
+
+// joinKeys is what portenv move sends to portenv join on stdin.
+type joinKeys struct {
+	RepositoryKey string `json:"repository_key"`
+	StorageKey    string `json:"storage_key,omitempty"`   // SFTP storage, OpenSSH PEM
+	RESTPassword  string `json:"rest_password,omitempty"` // REST storage (StorageREST)
+}
+
+// cmdSSHConfig prints the "ssh portenv" entry for a box on a server: it
+// lands in the box's tmux session (Phase 0 only: docker exec).
+func cmdSSHConfig(_ context.Context, e *env, name string, args []string) error {
+	fs := flags("ssh-config")
+	host := fs.String("host", "", "the server")
+	user := fs.String("user", "ubuntu", "your SSH user on the server")
+	alias := fs.String("alias", "portenv", "the Host name to use")
+	if err := parse(fs, args); err != nil {
+		return err
+	}
+	if *host == "" {
+		return usageError{"ssh-config needs --host"}
+	}
+	c, err := e.loadBox(name)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("Host %s\n  HostName %s\n  User %s\n  RequestTTY yes\n  RemoteCommand sudo docker exec -it -u work -w /home/work %s tmux new-session -A -s main\n",
+		*alias, *host, *user, "portenv-"+c.ID)
 	return nil
 }
 
@@ -83,35 +260,75 @@ func cmdResume(ctx context.Context, e *env, name string, args []string) error {
 	if err := parse(fs, args); err != nil {
 		return err
 	}
-	s, err := e.open(name)
-	if err != nil {
+	var s *session
+	if err := timed("open", func() error { var e2 error; s, e2 = e.open(name); return e2 }); err != nil {
 		return err
 	}
 	id := s.id()
+	// Probe storage while the box starts: an unreachable server costs its
+	// timeout once, in parallel, not before every offline start.
+	reach := make(chan bool, 1)
+	go func() {
+		start := time.Now()
+		ok := s.storageReachable()
+		trace("storage probe (parallel)", time.Since(start))
+		reach <- ok
+	}()
 	if !s.drv.Known(id) {
 		if _, err := s.drv.Create(ctx, driver.Box{ID: id, Name: name, ToolboxImage: s.cfg.Image}); err != nil {
 			return err
+		}
+		// Pin a registry image to the digest it resolved to, so every machine
+		// pulls exactly that image. Local development images stay as they
+		// are: their digest exists only on this machine.
+		if !fromRegistry(s.cfg.Image) {
+			// nothing to pin
+		} else if pinned, err := s.drv.ImageDigest(ctx, s.cfg.Image); err != nil {
+			return err
+		} else if pinned != s.cfg.Image {
+			s.cfg.Image = pinned
+			if err := e.saveBox(s.cfg); err != nil {
+				return err
+			}
+			fmt.Fprintf(os.Stderr, "toolbox pinned to %s\n", pinned)
 		}
 		if err := s.drv.MountHome(ctx, id, driver.HomeStorage{Ref: homeVolume(s.cfg.ID)}); err != nil {
 			return err
 		}
 	}
 	fmt.Fprintln(os.Stderr, "starting the box")
-	if _, err := s.drv.Start(ctx, id); err != nil {
+	if err := timed("box start", func() error { _, err := s.drv.Start(ctx, id); return err }); err != nil {
 		return err
 	}
 	// An empty home makes the agent report FAILED; restic still runs.
-	if _, _, err := waitAgent(ctx, s.drv, id, "READY", "FAILED"); err != nil {
+	if err := timed("agent ready", func() error { _, _, err := waitAgent(ctx, s.drv, id, "READY", "FAILED"); return err }); err != nil {
 		return err
 	}
-	sb, err := s.sync()
-	if err != nil {
+	var sb *boxsync.Box
+	if err := timed("sync open", func() error { var e2 error; sb, e2 = s.sync(); return e2 }); err != nil {
 		return err
 	}
-	if err := sb.Init(ctx); err != nil {
-		return err
+	var reachable bool
+	_ = timed("storage probe (wait)", func() error { reachable = <-reach; return nil })
+	var res boxsync.ResumeResult
+	var err error
+	if !reachable {
+		// Offline: start from the local home if this machine's state allows
+		// it; saves wait until storage is reachable again.
+		if res, err = sb.ResumeOffline(); err != nil {
+			_, _ = s.drv.Stop(ctx, id, 0)
+			return fmt.Errorf("storage is unreachable and %w", err)
+		}
+	} else {
+		if err := timed("repository check", func() error { return sb.Init(ctx) }); err != nil {
+			return err
+		}
+		err = timed("resume (all sync)", func() error {
+			var e error
+			res, e = sb.Resume(ctx, boxsync.ResumeOptions{TakeOver: *takeOver})
+			return e
+		})
 	}
-	res, err := sb.Resume(ctx, boxsync.ResumeOptions{TakeOver: *takeOver})
 	var held *boxsync.LeaseHeldError
 	if errors.As(err, &held) {
 		_, _ = s.drv.Stop(ctx, id, 0)
@@ -132,20 +349,26 @@ func cmdResume(ctx context.Context, e *env, name string, args []string) error {
 			return err
 		}
 	case boxsync.ActionRestored, boxsync.ActionRestoredKeptLocal:
-		if err := s.restart(ctx, false); err != nil {
+		if err := timed("restart after restore", func() error { return s.restart(ctx, false) }); err != nil {
 			return err
 		}
 	}
-	state, detail, err := waitAgent(ctx, s.drv, id, "READY", "FAILED")
+	var state, detail string
+	err = timed("agent ready (final)", func() error { var e error; state, detail, e = waitAgent(ctx, s.drv, id, "READY", "FAILED"); return e })
 	if err != nil {
 		return err
 	}
 	if state != "READY" {
 		return fmt.Errorf("the box failed to start: %s", detail)
 	}
+	if res.Offline {
+		fmt.Printf("%s is open on %s, offline (Offline · will save later)\n", name, e.machine)
+		return nil
+	}
 	fmt.Printf("%s is open on %s (resume rule %d: %s)\n", name, e.machine, res.Rule, res.Action)
 	if res.Orphaned != nil {
-		fmt.Printf("unsaved work from this machine was kept as save %s before restoring the newer one\n", res.Orphaned.ID[:8])
+		fmt.Printf("unsaved work from %s was kept as a separate save, %s (%s), before restoring the newer one; see portenv history %s\n",
+			res.Orphaned.Machine, res.Orphaned.ID[:8], res.Orphaned.Time.Local().Format(time.DateTime), name)
 	}
 	return nil
 }
@@ -190,6 +413,9 @@ func save(ctx context.Context, e *env, name string, args []string, kind boxsync.
 	if err := s.requireRunning(ctx); err != nil {
 		return nil, err
 	}
+	if !s.storageReachable() {
+		return nil, errOffline
+	}
 	sb, err := s.sync()
 	if err != nil {
 		return nil, err
@@ -206,6 +432,11 @@ func save(ctx context.Context, e *env, name string, args []string, kind boxsync.
 	fmt.Printf("saved %s (%s) in %s\n", snap.ID[:8], snap.Kind, time.Since(start).Round(100*time.Millisecond))
 	return s, nil
 }
+
+// errOffline: storage is unreachable, so the save waits. Nothing is lost:
+// the work stays in the box, which stays open (and dirty) until a save
+// reaches storage.
+var errOffline = errors.New("storage is unreachable (Offline · will save later): your work stays in the box")
 
 func cmdSave(ctx context.Context, e *env, name string, args []string) error {
 	_, err := save(ctx, e, name, args, boxsync.SaveAutosave)
@@ -312,6 +543,7 @@ func cmdStatus(ctx context.Context, e *env, name string, args []string) error {
 			last := hist[n-1]
 			fmt.Printf("saved    %s, %s from %s (%d saves)\n", last.Time.Local().Format(time.DateTime), last.Kind, last.Machine, n)
 		}
+		printKept(hist)
 		return nil
 	})
 }
@@ -333,13 +565,34 @@ func cmdHistory(ctx context.Context, e *env, name string, args []string) error {
 			fmt.Println("no saves yet")
 		}
 		for _, h := range hist {
-			lease := ""
+			note := ""
 			if h.Active != "" {
-				lease = "  open on " + h.Active
+				note = "  open on " + h.Active
 			}
-			fmt.Printf("%s  %s  %-8s  %s%s\n", h.ID[:8], h.Time.Local().Format(time.DateTime), h.Kind, h.Machine, lease)
+			if h.Kind == boxsync.KindOrphaned {
+				note = "  unsaved work from " + h.Machine + ", kept as a separate save"
+			}
+			fmt.Printf("%s  %s  %-8s  %s%s\n", h.ID[:8], h.Time.Local().Format(time.DateTime), h.Kind, h.Machine, note)
 		}
 		return nil
+	})
+}
+
+// cmdHousekeep tidies the repository while nothing else is happening:
+// leftover lease tags on older saves, then retention (never the current
+// save). It is not part of close, so closing stays fast.
+func cmdHousekeep(ctx context.Context, e *env, name string, args []string) error {
+	fs := flags("housekeep")
+	prune := fs.Bool("prune", false, "also delete data no snapshot uses")
+	if err := parse(fs, args); err != nil {
+		return err
+	}
+	s, err := e.open(name)
+	if err != nil {
+		return err
+	}
+	return s.whileRunning(ctx, func(sb *boxsync.Box) error {
+		return sb.Housekeep(ctx, *prune)
 	})
 }
 
@@ -347,6 +600,7 @@ func cmdMove(ctx context.Context, e *env, name string, args []string) error {
 	fs := flags("move")
 	to := fs.String("to", "", "SSH host to resume the box on")
 	confirm := fs.Bool("confirm", false, "save even though the box changed on another machine")
+	joinStorage := fs.String("join-storage", "", "first enrol the box on the host, which reaches its storage here (a directory, or sftp:...)")
 	if err := parse(fs, args); err != nil {
 		return err
 	}
@@ -360,13 +614,71 @@ func cmdMove(ctx context.Context, e *env, name string, args []string) error {
 	if err := cmdClose(ctx, e, name, closeArgs); err != nil {
 		return err
 	}
+	if *joinStorage != "" {
+		c, err := e.loadBox(name)
+		if err != nil {
+			return err
+		}
+		key, err := e.keyStore().Get(c.ID)
+		if err != nil {
+			return err
+		}
+		keys := joinKeys{RepositoryKey: string(key)}
+		joinArgs := []string{"sudo", "portenv", "join", name, "--id", c.ID, "--image", c.Image, "--storage", *joinStorage}
+		if strings.HasPrefix(*joinStorage, "sftp:") {
+			sk, err := e.keyStore().Get(storageKeyID(c.ID))
+			if err != nil {
+				return fmt.Errorf("storage key: %w", err)
+			}
+			keys.StorageKey = string(sk)
+			joinArgs = append(joinArgs, "--storage-host-key", "'"+c.StorageHostKey+"'")
+			if c.StorageREST != "" {
+				rp, err := e.keyStore().Get(restKeyID(c.ID))
+				if err != nil {
+					return fmt.Errorf("REST storage password: %w", err)
+				}
+				keys.RESTPassword = string(rp)
+				joinArgs = append(joinArgs, "--storage-rest", c.StorageREST)
+			}
+		}
+		payload, err := json.Marshal(keys)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(os.Stderr, "enrolling %s on %s\n", name, *to)
+		join := remote(ctx, *to, joinArgs...)
+		join.Stdin = bytes.NewReader(payload) // the keys travel on SSH's stdin, never on disk
+		join.Stdout, join.Stderr = os.Stdout, os.Stderr
+		if err := join.Run(); err != nil {
+			return fmt.Errorf("enrol on %s: %w (the box is saved and released)", *to, err)
+		}
+	}
 	fmt.Fprintf(os.Stderr, "resuming %s on %s\n", name, *to)
-	cmd := exec.CommandContext(ctx, "ssh", "--", *to, "portenv", "resume", name) // #nosec G204 G702 -- the user's own SSH host, after -- so it cannot be an option
-	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
-	if err := cmd.Run(); err != nil {
+	if err := runRemote(ctx, *to, "sudo", "portenv", "resume", name); err != nil {
 		return fmt.Errorf("resume on %s: %w (the box is saved and released; resume it anywhere)", *to, err)
 	}
 	return nil
+}
+
+// remote runs a command on host over SSH. PORTENV_SSH overrides the ssh
+// command and its options (tests).
+func remote(ctx context.Context, host string, argv ...string) *exec.Cmd {
+	sshCmd := []string{"ssh"}
+	if v := os.Getenv("PORTENV_SSH"); v != "" {
+		sshCmd = strings.Fields(v)
+	}
+	full := append(append(sshCmd[1:], "--", host), argv...)
+	return exec.CommandContext(ctx, sshCmd[0], full...) // #nosec G204 G702 -- the user's own SSH host, after -- so it cannot be an option
+}
+
+// runRemote runs a non-interactive command on host, showing its output. It
+// never forwards stdin: an ssh that inherits an open stdin can wait forever
+// after the remote command has finished.
+func runRemote(ctx context.Context, host string, argv ...string) error {
+	cmd := remote(ctx, host, argv...)
+	cmd.Stdin = nil // /dev/null
+	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+	return cmd.Run()
 }
 
 func stateName(s driver.State) string {
@@ -374,4 +686,37 @@ func stateName(s driver.State) string {
 		driver.StateCreated: "created", driver.StateStarting: "starting", driver.StateRunning: "running",
 		driver.StateStopping: "stopping", driver.StateStopped: "stopped", driver.StateFailed: "failed",
 	}[s]
+}
+
+// printKept lists unsaved work that was kept as separate saves (resume rule
+// 4, usually after a take over), newest first, at most three.
+func printKept(hist []boxsync.Snapshot) {
+	var kept []boxsync.Snapshot
+	for i := len(hist) - 1; i >= 0; i-- {
+		if hist[i].Kind == boxsync.KindOrphaned {
+			kept = append(kept, hist[i])
+		}
+	}
+	for i, k := range kept {
+		if i == 3 {
+			fmt.Printf("kept     … and %d more (portenv history)\n", len(kept)-3)
+			break
+		}
+		fmt.Printf("kept     unsaved work from %s as a separate save, %s (%s)\n", k.Machine, k.ID[:8], k.Time.Local().Format(time.DateTime))
+	}
+}
+
+// fromRegistry reports whether an image reference names a registry host
+// ("ghcr.io/portenv/toolbox-node:main"), as opposed to a local image
+// ("portenv/toolbox-node:dev").
+func fromRegistry(ref string) bool {
+	first, _, ok := strings.Cut(ref, "/")
+	return ok && (strings.ContainsAny(first, ".:") || first == "localhost")
+}
+
+// loopbackAddr reports whether addr is 127.0.0.1:PORT: the REST server must
+// never listen anywhere a network can reach.
+func loopbackAddr(addr string) bool {
+	host, port, err := net.SplitHostPort(addr)
+	return err == nil && host == "127.0.0.1" && port != ""
 }

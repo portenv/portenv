@@ -5,11 +5,16 @@ package sync
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -20,8 +25,9 @@ import (
 // machines where the home is a plain directory) or inside the box through
 // portenv-agent (ADR 0005).
 type Executor interface {
-	// Restic runs restic with args, giving it password through a pipe.
-	Restic(ctx context.Context, args []string, password []byte, env []string) (ExecResult, error)
+	// Restic runs restic with args and the credentials, the password
+	// through a pipe.
+	Restic(ctx context.Context, args []string, cred Credentials) (ExecResult, error)
 	// PathInfo describes a path where restic runs (the home, the excludes
 	// file).
 	PathInfo(ctx context.Context, path string) (PathInfo, error)
@@ -32,6 +38,18 @@ type PathInfo struct {
 	Exists bool `json:"exists"`
 	IsDir  bool `json:"is_dir"`
 	Empty  bool `json:"empty"` // a directory with no entries
+}
+
+// Credentials are what one restic run needs besides its arguments.
+type Credentials struct {
+	Password []byte
+	Env      []string // storage credentials, e.g. AWS_*
+	// SFTP storage: a private key (OpenSSH PEM) and the storage server's
+	// pinned host key ("ssh-ed25519 AAAA...").
+	SSHKey     []byte
+	SSHHostKey string
+	// NewPassword, for key add only, reaches restic on fd 4.
+	NewPassword []byte
 }
 
 // ExecResult is the outcome of one restic run.
@@ -45,26 +63,73 @@ type ExitError struct{ Code int }
 
 func (e *ExitError) Error() string { return fmt.Sprintf("exit status %d", e.Code) }
 
-// LocalExecutor runs a restic binary on this machine.
+// LocalExecutor runs a restic binary on this machine: in tests, and on the
+// host for everything that does not need a box's /home.
 type LocalExecutor struct {
 	Bin      string
 	CacheDir string
+	// ControlDir is a private directory (0700, this user) for SFTP storage:
+	// the in-memory key agent's socket, the pinned host key and the reused
+	// SSH connection.
+	ControlDir string
+	// REST, when set, reaches restic's REST server on the storage server
+	// through a forward over the reused SSH connection, instead of SFTP
+	// (far fewer round trips for listing and lease tags).
+	REST *RESTForward
+}
+
+// RESTForward is restic's REST server on the storage server's loopback,
+// forwarded to a unix socket in ControlDir over the reused SSH connection.
+// No inbound port: the server listens on 127.0.0.1 only.
+type RESTForward struct {
+	Via      string // user@host of the SSH connection
+	Port     string // its SSH port; empty means 22
+	Remote   string // the server's REST address, 127.0.0.1:PORT
+	User     string
+	Password string
+}
+
+// Socket is the local end of the forward.
+func (f *RESTForward) Socket(controlDir string) string {
+	sum := sha256.Sum256([]byte(f.Via + " " + f.Port + " " + f.Remote))
+	return filepath.Join(controlDir, "rest-"+hex.EncodeToString(sum[:6])+".sock")
 }
 
 // Restic implements Executor. The password reaches restic through an
 // inherited pipe (RESTIC_PASSWORD_FILE=/dev/fd/3): never on disk, never in
 // the environment. Inherited RESTIC_* variables are dropped.
-func (l LocalExecutor) Restic(ctx context.Context, args []string, password []byte, env []string) (ExecResult, error) {
-	pr, pw, err := os.Pipe()
+func (l LocalExecutor) Restic(ctx context.Context, args []string, cred Credentials) (ExecResult, error) {
+	password, env := cred.Password, cred.Env
+	var extraEnv []string
+	if len(cred.SSHKey) > 0 {
+		h, opts, henv, err := startHostSFTP(l.ControlDir, cred.SSHKey, cred.SSHHostKey)
+		if err != nil {
+			return ExecResult{}, err
+		}
+		defer h.stop()
+		args = append(opts, args...)
+		extraEnv = henv
+		if l.REST != nil {
+			if err := l.REST.ensure(ctx, l.ControlDir, opts, henv); err != nil {
+				return ExecResult{}, fmt.Errorf("REST forward: %w", err)
+			}
+			extraEnv = append(extraEnv, "RESTIC_REST_USERNAME="+l.REST.User, "RESTIC_REST_PASSWORD="+l.REST.Password)
+		}
+	}
+	pr, err := passwordPipe(password)
 	if err != nil {
 		return ExecResult{}, err
 	}
 	defer func() { _ = pr.Close() }()
-	if _, err := pw.Write(password); err != nil {
-		_ = pw.Close()
-		return ExecResult{}, err
+	files := []*os.File{pr}
+	if cred.NewPassword != nil {
+		npr, err := passwordPipe(cred.NewPassword)
+		if err != nil {
+			return ExecResult{}, err
+		}
+		defer func() { _ = npr.Close() }()
+		files = append(files, npr)
 	}
-	_ = pw.Close()
 
 	if l.CacheDir != "" {
 		args = append([]string{"--cache-dir", l.CacheDir}, args...)
@@ -76,8 +141,8 @@ func (l LocalExecutor) Restic(ctx context.Context, args []string, password []byt
 			procEnv = append(procEnv, kv)
 		}
 	}
-	cmd.Env = append(append(procEnv, env...), "RESTIC_PASSWORD_FILE=/dev/fd/3")
-	cmd.ExtraFiles = []*os.File{pr}
+	cmd.Env = append(append(append(procEnv, env...), extraEnv...), "RESTIC_PASSWORD_FILE=/dev/fd/3")
+	cmd.ExtraFiles = files
 	var out, errb bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errb
 	err = cmd.Run()
@@ -89,6 +154,21 @@ func (l LocalExecutor) Restic(ctx context.Context, args []string, password []byt
 		return ExecResult{}, err
 	}
 	return ExecResult{Stdout: out.Bytes(), Stderr: errb.Bytes()}, nil
+}
+
+// passwordPipe returns the read end of a pipe already holding secret.
+func passwordPipe(secret []byte) (*os.File, error) {
+	pr, pw, err := os.Pipe()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := pw.Write(secret); err != nil {
+		_ = pw.Close()
+		_ = pr.Close()
+		return nil, err
+	}
+	_ = pw.Close()
+	return pr, nil
 }
 
 // PathInfo implements Executor.
@@ -128,13 +208,15 @@ type AgentExecutor struct {
 const agentRefused = 125
 
 // Restic implements Executor.
-func (a AgentExecutor) Restic(ctx context.Context, args []string, password []byte, env []string) (ExecResult, error) {
-	// The password is meant to be in this JSON: it goes to the agent on
+func (a AgentExecutor) Restic(ctx context.Context, args []string, cred Credentials) (ExecResult, error) {
+	// The secrets are meant to be in this JSON: it goes to the agent on
 	// stdin and is never written anywhere.
 	input, err := json.Marshal(struct { // #nosec G117 -- deliberate, see above
-		Password string   `json:"password"`
-		Env      []string `json:"env,omitempty"`
-	}{string(password), env})
+		Password   string   `json:"password"`
+		Env        []string `json:"env,omitempty"`
+		SSHKey     string   `json:"ssh_key,omitempty"`
+		SSHHostKey string   `json:"ssh_host_key,omitempty"`
+	}{string(cred.Password), cred.Env, string(cred.SSHKey), cred.SSHHostKey})
 	if err != nil {
 		return ExecResult{}, err
 	}
@@ -162,4 +244,45 @@ func (a AgentExecutor) PathInfo(ctx context.Context, path string) (PathInfo, err
 		return PathInfo{}, fmt.Errorf("inspect %s in box: exit %d: %s", path, res.ExitCode, strings.TrimSpace(string(res.Stderr)))
 	}
 	return info, nil
+}
+
+// ensure makes sure the SSH master connection and the forward exist. The
+// master is the same one restic's SFTP runs reuse (same ControlPath).
+func (f *RESTForward) ensure(ctx context.Context, controlDir string, opts, env []string) error {
+	sock := f.Socket(controlDir)
+	if c, err := net.DialTimeout("unix", sock, time.Second); err == nil {
+		_ = c.Close()
+		return nil
+	}
+	// opts is ["-o", "sftp.args=<ssh options>"]; reuse those options.
+	var base []string
+	for _, a := range strings.Fields(strings.TrimPrefix(opts[1], "sftp.args=")) {
+		if a == "ClearAllForwardings=yes" {
+			base = base[:len(base)-1] // drop its "-o" too
+			continue
+		}
+		base = append(base, a)
+	}
+	if f.Port != "" {
+		base = append(base, "-p", f.Port)
+	}
+	ssh := func(extra ...string) error {
+		cmd := exec.CommandContext(ctx, "ssh", append(append(slices.Clone(base), extra...), f.Via)...) // #nosec G204 -- options built here
+		cmd.Env = append(os.Environ(), env...)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("ssh %s: %w: %s", extra[0], err, strings.TrimSpace(string(out)))
+		}
+		return nil
+	}
+	// Nothing answers on the socket: it is missing or left by a connection
+	// that has gone. The master binds the socket, so it needs the unlink
+	// option too.
+	_ = os.Remove(sock)
+	if ssh("-O", "check") != nil {
+		if err := ssh("-M", "-N", "-f", "-o", "StreamLocalBindUnlink=yes"); err != nil {
+			return err
+		}
+	}
+	return ssh("-O", "forward", "-L", sock+":"+f.Remote)
 }

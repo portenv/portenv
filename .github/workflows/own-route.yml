@@ -1,0 +1,36 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Own-route guarantee (ADR 0008): the full own-route journey with every
+# Portenv-hosted endpoint unreachable, using only locally built artifacts.
+# Runs on every pull request and every merge to main; releases require it
+# (docs/PLAN.md, 1.8).
+name: Own route
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: own-route-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  own-route:
+    name: own-route
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: core/go.mod
+          cache-dependency-path: '**/go.sum'
+      - name: Build the CLI, agent and tools locally
+        run: make build tools
+      - name: Build the toolbox image locally
+        run: docker build -f images/toolbox-node/Dockerfile -t toolbox-node:own-route .
+      - name: Own-route journey with hosted endpoints blocked
+        run: tests/e2e/own-route.sh toolbox-node:own-route

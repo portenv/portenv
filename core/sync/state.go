@@ -19,10 +19,28 @@ type State struct {
 	// synced to (saved from or restored to). Comparing trees, not snapshot
 	// IDs, survives restic tag rewriting IDs.
 	Tree string `json:"tree"`
+	// Snapshot is the original ID of that snapshot (restic tag rewrites a
+	// snapshot's ID but keeps the first one as "original"). A save records
+	// it straight from restic's summary; Tree is filled in at the next
+	// listing.
+	Snapshot string `json:"snapshot,omitempty"`
+	// KeyHint is the ID of this machine's own repository key, so restic
+	// tries it first instead of deriving every key in turn.
+	KeyHint string `json:"key_hint,omitempty"`
 	// Dirty means the box was opened since that sync, so the local home may
 	// hold unsaved changes.
 	Dirty bool `json:"dirty"`
+	// Lease records this machine's last lease action: LeaseHeld after a
+	// resume or an autosave or save point, LeaseReleased after a clean
+	// close. Empty when unknown (for example a resume cut short).
+	Lease string `json:"lease,omitempty"`
 }
+
+// Recorded lease states.
+const (
+	LeaseHeld     = "held"
+	LeaseReleased = "released"
+)
 
 // loadState reads the state in dir. ok is false when there is none.
 func loadState(dir string) (st State, ok bool, err error) {

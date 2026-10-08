@@ -37,6 +37,8 @@ func TestParseResticRun(t *testing.T) {
 		{[]string{"--repo", "/r", "snapshots"}, `{"password":"pw","env":["LD_PRELOAD=/x.so"]}`, "LD_PRELOAD"},
 		{[]string{"--repo", "/r", "snapshots"}, `{"password":"pw","env":["RESTIC_PASSWORD=x"]}`, "RESTIC_PASSWORD"},
 		{[]string{"--repo", "/r", "snapshots"}, `not json`, "parse input"},
+		{[]string{"--repo", "sftp:s@h:/r", "snapshots"}, `{"password":"pw","ssh_key":"k"}`, "host key"},
+		{[]string{"-o", "sftp.args=-o ProxyCommand=evil", "--repo", "sftp:s@h:/r", "snapshots"}, `{"password":"pw"}`, "not allowed"},
 	}
 	for _, c := range bad {
 		_, _, err := parseResticRun(c.args, strings.NewReader(c.input))

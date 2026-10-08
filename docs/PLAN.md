@@ -200,7 +200,7 @@ Each box has its own restic repository; saves happen automatically, and a lease 
 
 **When saves happen**
 
-- Every 5 minutes while there are changes, and when the Mac sleeps or the lid closes (a power assertion holds sleep until the upload finishes, up to 60 seconds).
+- Every 30 seconds while there are changes (so the newest save is never more than a minute behind), and when the Mac sleeps or the lid closes (a power assertion holds sleep until the upload finishes, up to 60 seconds).
 - Before Move To, before closing the window, before an approved privileged action, on ⌘S (Make Save Point), and as a save point when a stand-in agent connects (so Revert To ▸ Last Save Point undoes its work).
 - The box agent tracks changed paths with inotify, so the toolbar can show unsaved state without scanning.
 - An optional `~/.portenv/hooks/pre-save` runs first, for example to dump a database running in the box.
@@ -224,13 +224,31 @@ Each box has its own restic repository; saves happen automatically, and a lease 
 
 **Leases**
 
+- The lease is checked before the box starts, in every phase. Before Phase 3 that check is a snapshot listing, so on a high-latency link a resume costs at least a few round trips; the resume budget is therefore stated at a round-trip time of 50 ms or less (and offline). Phase 3's authoritative leases replace the listing with one control-plane call.
 - From Phase 3, the control plane holds leases (box, machine, since, last heartbeat) and is authoritative.
-- Before Phase 3, and whenever the control plane is unreachable, the `active:` tag on the newest snapshot is the lease.
+- Before Phase 3, and whenever the control plane is unreachable, the `active:` tag on the current save is the lease. A save is created already carrying it (`restic backup --tag active:<machine-id>`), with no separate tag step, and is complete once its snapshot ID from restic's summary is recorded, with no listing afterwards. Readers look only at the current save's tag; tags left on older saves are cleared by housekeeping.
 - A lease with no heartbeat for 10 minutes is shown as stale, not released: the user decides.
+
+**Where restic runs (ADR 0005)**
+
+- Backup and restore run inside the box, where `/home` is. Everything else (the lease check, snapshot listing, lease tags, init, keys, forget and prune) runs on the host (`portenvd` or the runner), which can keep one SSH connection to storage open without exposing it to anything in a box.
+- On SFTP servers, the host reaches the repository through restic's REST server (`rest-server`, set up by `server/setup.sh`) on the server's loopback address, through a forward over the storage account's reused SSH connection: no inbound port, and the storage key may forward to that one port only. Each box has its own REST user; only the bcrypt hash is on the server. Backup and restore in the box keep using SFTP. Measured in the 0.5 spike (2026-10-08, 31 Mbit/s up, 42 ms, same box): online resume median 2.84 s (worst 4.6 s) through REST against 5.32 s (worst 7.74 s) over SFTP, because listing and lease tags need far fewer round trips.
+- Every machine has its own repository key, added on that machine so the key's derivation cost is tuned for it; a machine never stores another's key.
+- Offline: a machine starts from its local home only if its state says the home equals the last save it made or restored and it holds the lease or released it cleanly; saves wait ("Offline · will save later"), and on reconnect the resume rules apply (rule 4 keeps the offline work if another machine saved meanwhile).
+
+**Append-only storage credentials (milestone 2.6, before any outside agent gets access)**
+
+The storage credential that enters a box (today the SFTP key served by the agent during a restic run) can delete and overwrite repository files, so root in a box during a run could destroy history. Proposal:
+
+- The box's credential becomes append-only: it can add files but never delete or overwrite them. Forget, prune and unlocking stale locks use a separate credential that never enters a box and lives only on the host.
+- For SFTP storage, plain `sshd` cannot enforce append-only. The clean way is restic's REST server (`rest-server --append-only`), which already runs on servers since 0.5 for the host's own calls: boxes move from SFTP to an append-only REST user, the host keeps a full user for forget and prune, and the boxes' SFTP access ends. No new inbound port: it is tunnelled over the existing SSH.
+- For S3 (and Portenv storage on R2), the same split uses two credentials: put-only for boxes, full for the host.
+- Cost: restic's lock removal must happen on the host (append-only clients cannot delete their own locks). The REST server process already exists (0.5).
+- A box's SFTP upload is round-trip bound: in the 0.5 traces a 5 MB backup spent 5 to 6 s reading and uploading on a 31 to 33 Mbit/s link (about one 32 KB SFTP write per round trip), against about 1.3 s for the bytes. Moving box backups to REST here should remove most of it; measure it in 2.6.
 
 **Retention**
 
-Keep the last 20 saves, hourly for 24 hours, daily for 14 days, weekly for 8 weeks, monthly for 12 months, and every `orphaned` snapshot. Prune weekly, in the background.
+Keep the last 20 saves, hourly for 24 hours, daily for 14 days, weekly for 8 weeks, monthly for 12 months, and every `orphaned` snapshot. The current save is always kept, whatever the policy says. Housekeeping runs when the machine is idle, never on close: it clears leftover `active:` tags and applies retention; prune weekly, in the background.
 
 ## Encryption and key management
 
@@ -240,7 +258,7 @@ Data is encrypted everywhere it rests, keys are per device and revocable, and in
 | --- | --- |
 | Snapshots in any storage | restic encryption (AES-256 with authentication) before upload |
 | Working copy on a Mac | FileVault; the app checks it is on and warns if not |
-| Working copy on a server | Box homes on a LUKS-encrypted volume, unlocked by the runner when a box starts |
+| Working copy on a server | Box homes on a LUKS-encrypted volume. In Phase 0 it unlocks automatically at boot from a root-only key file on the server, so it never protects against root on the running server, and protects a leaked disk or snapshot only when the homes volume is on its own device (see Phase 0 minimum) |
 | Working copy on Portenv Cloud | One encrypted volume per box with its own data key |
 | Running box | Readable in memory by the host: the stated runtime trust boundary |
 | Secrets (e.g. production database credentials) | A vault with per-secret grants, encrypted on top of the above |
@@ -268,6 +286,14 @@ Data is encrypted everywhere it rests, keys are per device and revocable, and in
 **Phase 0 minimum**
 
 Repository password in the Keychain on the Mac, a root-only file on the server, a LUKS volume for box homes on the server, and a printed recovery key.
+
+What the server's LUKS volume does and does not protect, plainly. Its key is a random 64-byte file, `/etc/portenv/luks/homes.key` (root-only, 0400), on the server's root disk, and a systemd unit unlocks the volume with it at every boot before Docker starts. So:
+
+- It never protects box homes from root, or from anyone with access to the running server.
+- With the homes volume on its own device (`setup.sh --homes-device`), it protects homes on that device, or a snapshot of it, that leaves the server without the root disk.
+- With the homes volume as a file on the root disk (the default, and the Phase 0 gate server), a copy of that disk carries both the volume and its key, so it adds nothing beyond the disk's own encryption at rest. The app and docs describe this default as **encrypted at rest by your provider** (for example encrypted EBS), never as extra protection. The LUKS file keeps the layout the same as servers that have a separate device.
+
+Unlocking without a key on the server (for example a key released by the user's device when a box starts) is later work.
 
 ## Networking and access
 
@@ -639,22 +665,35 @@ Each milestone ends with a demo note in `docs/milestones/<id>.md` and its checkl
 
 **0.5 Server setup**
 
-- [ ] The setup script installs Docker and an encrypted volume for box homes on Ubuntu 24.04
+- [x] The setup script installs Docker and an encrypted volume for box homes on Ubuntu 24.04
 - [ ] `ssh portenv` lands in the box's tmux session
-- [ ] After a take over, the next resume on the machine that had the box tells the user that its unsaved work was kept as a separate save, with the save's time; `portenv status` and `portenv history` show it too (the app does the same from Phase 1)
-- [ ] The Phase 0 gate below passes
+- [x] After a take over, the next resume on the machine that had the box tells the user that its unsaved work was kept as a separate save, with the save's time; `portenv status` and `portenv history` show it too (the app does the same from Phase 1)
+- [x] The Phase 0 gate below passes (final round 2026-10-08; numbers in docs/milestones/0.5.md)
 
 **Phase 0 gate**
 
-- [ ] Mac → server → Mac round trip loses nothing (checksums of `/home` match)
+- [x] Mac → server → Mac round trip loses nothing (checksums of `/home` match)
 - [x] All five resume rules and every invariant have passing tests, including two simulated machines
-- [ ] A 5 MB change saves in under 10 seconds; resuming on the same machine takes under 5 seconds
+- [x] Resume: under 5 seconds to a ready box (a ready terminal from Phase 1), including starting it, with storage reachable at a round-trip time of 50 ms or less and with storage unreachable (offline); the median of 5 runs, with the worst run reported too. Measured: 3.1 s online (worst 3.23 s), 2.22 s offline (worst 2.34 s), at 40 ms
+- [x] Close and Move: the final save and release of a box with a 5 MB unsaved change take under 15 seconds at 20 Mbit/s up and a 50 ms round trip, reported with the measured bandwidth. Measured: 8.52 s at 20.05 Mbit/s
+- [x] Freshness: with continuous editing and autosave every 30 seconds, the newest save is never more than 60 seconds behind. Measured: at most 41.1 s
+- [x] The gate measures bandwidth and round-trip time, prints them next to each result, and prints the per-phase trace of every measured command
+
+Budgets changed on 2026-10-08: they now measure what the user waits for (a ready box, a finished close or move, how much work is at risk) instead of save overhead, which users never see on its own.
 - [x] Killing the process mid-save leaves the repository consistent and the next save succeeds
 - [x] The toolbox image builds for arm64 and amd64 from one Dockerfile
 
 ### Phase 1: Native Mac app, local boxes
 
 Milestones: 1.1 `portenvd` with the local gRPC API · 1.2 main window with a terminal view (evaluate SwiftTerm, MIT-licensed) and tmux-backed tabs · 1.3 `apple` driver shim, `docker` as fallback (the box agent drops the forbidden capabilities from every process it starts, since a VM's root holds them by default) · 1.4 autosave, sync symbol, Changes, Browse Saves · 1.5 first run (reduced, no sign-in; see Desktop app UX), Keychain keys, recovery key · 1.6 port relay · 1.7 shared folder, then the File Provider · 1.8 signing, notarization, Sparkle updates.
+
+**1.4 Autosave, the sync symbol, Changes and Browse Saves: slow links are normal**
+
+Slow uplinks are a real user condition, not an edge case (the Phase 0 gate ran over about 50 KB/s up). So:
+
+- A Move, or any save that takes more than a few seconds, shows visible progress and a time estimate in the title subtitle, from the bytes still to send and the measured bandwidth.
+- Closing the laptop or quitting mid-upload never loses work and never leaves the lease in a bad state: the local home stays as it was (dirty), no partial save counts as complete, the lease stays with this machine until a save completes, and the upload resumes (restic deduplicates what already arrived) when the Mac wakes.
+- Same-machine resume never waits on the network: offline, the box starts from the local home and saves queue.
 
 **1.8 Releases and where the app is downloaded from**
 
@@ -668,6 +707,7 @@ Milestones: 1.1 `portenvd` with the local gRPC API · 1.2 main window with a ter
 
 - [ ] A new user goes from download to a working box without typing a command or creating an account
 - [ ] Closing the window saves and releases; reopening restores within 5 seconds
+- [ ] On a throttled uplink (for example 400 kbit/s), a Move shows progress and an estimate, and closing the lid mid-upload loses nothing and leaves the lease with this machine
 - [ ] A version tag produces a signed, notarized, stapled `Portenv.dmg` and a signed `appcast.xml` on the GitHub release; `portenv.com/download` and `portenv.com/appcast.xml` redirect to them, and an installed build updates through Sparkle
 - [ ] The Sparkle key's offline backups exist and a restore test passed
 - [ ] Offline: work continues and saves upload when the network returns
@@ -676,6 +716,8 @@ Milestones: 1.1 `portenvd` with the local gRPC API · 1.2 main window with a ter
 - [ ] Inside an `apple` box (a VM), the restic password probe (`tests/e2e/restic-isolation.sh`) passes: root in the box cannot read the password, because the agent drops the forbidden capabilities itself
 
 ### Phase 2: Developer servers
+
+The toolbox image is published from CI ahead of the rest of 2.5: each architecture builds and tests on its native runner, then one multi-arch manifest goes to `ghcr.io/portenv/toolbox-node`, tagged `sha-<commit>` and `main` (and `vN` on version tags), with a build provenance attestation. Macs, servers and the setup script pull by digest, and the CLI pins a box's image to its digest on first use. Local builds stay possible for development; nothing requires them.
 
 Milestones: 2.1 runner (server build of the core) installed over SSH · 2.2 Add a Server wizard with preflight · 2.3 Move To in the title menu · 2.4 lease sheet · 2.5 toolbox registry, versions and drift warnings · 2.6 append-only storage · 2.7 stand-in agents over SSH and the CLI · 2.8 webhooks · 2.9 stdio MCP.
 
@@ -767,7 +809,7 @@ The save engine is tested hardest, because a bug there loses someone's work; eve
 | Keys | Device add, revoke, recovery, re-encrypt; verify no key material on disk outside approved stores | Every merge touching keys |
 | Agent isolation | Adversarial suite: an agent lane tries to read other homes and secrets, escalate privilege, reach blocked hosts, persist after revoke | Every merge from Phase 4 |
 | Mac app | XCUITest for first run, title menu, lease sheet; accessibility audit; light and dark snapshots | Every merge touching the app |
-| Performance | Budgets: 5 MB save under 10 s, same-machine resume under 5 s, port relay adds under 5 ms locally | Nightly |
+| Performance | Budgets: resume under 5 s to a ready box (median of 5, worst reported), online at a round-trip time of 50 ms or less and offline; close or move with a 5 MB change under 15 s at 20 Mbit/s up and 50 ms; newest save at most 60 s behind with continuous editing; port relay adds under 5 ms locally. Bandwidth and round-trip time are measured and reported with every result | Nightly |
 | Recovery drill | Restore a box from the recovery phrase on a clean Mac | Before each release |
 | Own route | `own-route` job: the own-route journey with every Portenv-hosted endpoint blocked at DNS and the firewall, from locally built artifacts; from Phase 1 it also drives the app with the hosted options visible and untouched (ADR 0008, G3) | Every pull request and merge to main; blocks releases |
 

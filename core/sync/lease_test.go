@@ -32,9 +32,10 @@ func TestSnapshotConventions(t *testing.T) {
 	if !hasTag(point, "point") || !hasTag(release, "release") {
 		t.Fatalf("point tags %v, release tags %v", point.Tags, release.Tags)
 	}
-	// Release ends the lease: no snapshot carries an active tag.
-	if got := tagsWithPrefix(w.snapshots(), "active:"); len(got) != 0 {
-		t.Fatalf("active tags after release: %v", got)
+	// Release ends the lease: the current save carries no active tag (older
+	// ones keep theirs until housekeeping).
+	if cur, _ := current(w.snapshots()); len(tagsWithPrefix([]Snapshot{cur}, "active:")) != 0 {
+		t.Fatalf("current save after release tags %v", cur.Tags)
 	}
 	if lease, err := a.Lease(context.Background()); err != nil || lease != nil {
 		t.Fatalf("lease after release = %+v, %v; want none", lease, err)
@@ -48,6 +49,10 @@ func TestOnlyNewestSnapshotCarriesTheLease(t *testing.T) {
 	for i := range 3 {
 		a.write("f", string(rune('a'+i)))
 		mustSave(t, a, SaveAutosave)
+	}
+	// Each save is created with the tag; housekeeping clears older ones.
+	if err := a.Housekeep(context.Background(), false); err != nil {
+		t.Fatal(err)
 	}
 	snaps := w.snapshots()
 	active := tagsWithPrefix(snaps, "active:")

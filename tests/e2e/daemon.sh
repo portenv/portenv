@@ -138,6 +138,24 @@ out=$(type_in 'echo quit=$(cat ~/quit.txt)')
 expect "the edit made just before quitting is in the save" grep -q "quit=before-quit" <<<"$out"
 "$portenv" app close d >/dev/null 2>&1 || true
 
+# Closing the last window: the app closes the box for the window, then
+# again when it quits, so two closes meet. The second finds the box closed;
+# it once crashed portenvd (a cleared agent connection, dereferenced).
+"$portenv" app open d >/dev/null 2>&1 || true
+type_in 'echo window > ~/window.txt' 1 >/dev/null
+"$portenv" app close d >"$root/close1.txt" 2>&1 & c1=$!
+"$portenv" app close d >"$root/close2.txt" 2>&1 & c2=$!
+st1=0; wait "$c1" || st1=$?
+st2=0; wait "$c2" || st2=$?
+echo "  $(cat "$root/close1.txt") / $(cat "$root/close2.txt")"
+expect "closing the last window: both closes succeed ($st1, $st2)" test "$st1" = 0 -a "$st2" = 0
+expect "and portenvd keeps running" kill -0 "$dpid"
+expect "and the box was saved and released" grep -q "closed and released" "$root/close1.txt" "$root/close2.txt"
+out=$("$portenv" app open d 2>&1) || true
+out=$(type_in 'echo window=$(cat ~/window.txt)')
+expect "the window's last edit is in the box" grep -q "window=window" <<<"$out"
+"$portenv" app close d >/dev/null 2>&1 || true
+
 # An impostor on the agent's port (ADR 0010, conditions): root in the box
 # kills the agent and serves a self-made certificate there. portenvd
 # refuses it and reports the box agent as unavailable; nothing is saved.

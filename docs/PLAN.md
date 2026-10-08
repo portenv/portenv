@@ -722,7 +722,7 @@ Slow uplinks are a real user condition, not an edge case (the Phase 0 gate ran o
 - [ ] A version tag produces a signed, notarized, stapled `Portenv.dmg` and a signed `appcast.xml` on the GitHub release; `portenv.com/download` and `portenv.com/appcast.xml` redirect to them, and an installed build updates through Sparkle
 - [ ] The Sparkle key's offline backups exist and a restore test passed
 - [ ] Offline: work continues and saves upload when the network returns
-- [ ] The Phase 0 CLI's `docker exec` path is removed or moved behind `portenvd`: nothing reaches a box except through the agent channel (ADR 0010, conditions)
+- [ ] No docker exec as an access path anywhere, on the Mac or on servers: boxes on a server are reached through the runner and the agent channel (ADR 0010), the same as on the Mac. The Phase 0 CLI's docker exec path is removed or moved behind portenvd and the runner.
 - [ ] Every control has a VoiceOver label; light and dark appearance both pass review
 - [ ] A dev server bound to the box's localhost opens in Safari through the relay
 - [ ] Inside an `apple` box (a VM), the restic password probe (`tests/e2e/restic-isolation.sh`) passes: root in the box cannot read the password, because the agent drops the forbidden capabilities itself
@@ -731,7 +731,7 @@ Slow uplinks are a real user condition, not an edge case (the Phase 0 gate ran o
 
 The toolbox image is published from CI ahead of the rest of 2.5: each architecture builds and tests on its native runner, then one multi-arch manifest goes to `ghcr.io/portenv/toolbox-node`, tagged `sha-<commit>` and `main` (and `vN` on version tags), with a build provenance attestation. Macs, servers and the setup script pull by digest, and the CLI pins a box's image to its digest on first use. Local builds stay possible for development; nothing requires them.
 
-Milestones: 2.1 runner (server build of the core) installed over SSH · 2.2 Add a Server wizard with preflight · 2.3 Move To in the title menu · 2.4 lease sheet · 2.5 toolbox registry, versions and drift warnings · 2.6 append-only storage · 2.7 stand-in agents over SSH and the CLI · 2.8 webhooks · 2.9 stdio MCP.
+Milestones: 2.1 runner (server build of the core) installed over SSH; a minimal `portenv-runner` serving the agent channel for server boxes is needed by Phase 1's gate (no docker exec on servers either), ahead of the rest of 2.1 · 2.2 Add a Server wizard with preflight · 2.3 Move To in the title menu · 2.4 lease sheet · 2.5 toolbox registry, versions and drift warnings · 2.6 append-only storage · 2.7 stand-in agents over SSH and the CLI · 2.8 webhooks · 2.9 stdio MCP.
 
 **2.6 Append-only storage** (must land before 2.7, which gives outside agents stand-in access to boxes)
 

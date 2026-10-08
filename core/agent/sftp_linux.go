@@ -69,10 +69,12 @@ func startSFTPAgent(privateKey, hostKey string) (*sftpAgent, []string, []string,
 	if err != nil {
 		return fail(err)
 	}
-	if err := os.Chown(sock, syncUID, syncGID); err != nil {
+	// Mode first, then the owner: once portenv-sync owns the socket, this
+	// process (without cap_fowner) may no longer change its mode.
+	if err := os.Chmod(sock, 0o600); err != nil {
 		return fail(err)
 	}
-	if err := os.Chmod(sock, 0o600); err != nil {
+	if err := os.Chown(sock, syncUID, syncGID); err != nil {
 		return fail(err)
 	}
 	go func() {

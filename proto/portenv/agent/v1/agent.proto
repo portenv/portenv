@@ -15,6 +15,66 @@ service AgentService {
   // Reports whether the box has finished starting (users created, home
   // checked, packages installed).
   rpc GetReadiness(GetReadinessRequest) returns (GetReadinessResponse);
+  // Runs one allow-listed restic command as portenv-sync (ADR 0005). The
+  // input carries the password and storage credentials; it is never logged.
+  rpc RunRestic(RunResticRequest) returns (RunResticResponse);
+  // Describes a path under /home for the sync engine.
+  rpc GetPathInfo(GetPathInfoRequest) returns (GetPathInfoResponse);
+  // Attaches a terminal to one of work's tmux sessions (created if needed).
+  // The first message from the client must be open.
+  rpc Terminal(stream TerminalRequest) returns (stream TerminalResponse);
+}
+
+message RunResticRequest {
+  // restic's arguments, without the binary name.
+  repeated string args = 1;
+  // The JSON input of portenv-agent restic: password, storage environment
+  // and SFTP key.
+  bytes input = 2;
+}
+
+message RunResticResponse {
+  bytes stdout = 1;
+  bytes stderr = 2;
+  int32 exit_code = 3;
+}
+
+message GetPathInfoRequest {
+  string path = 1;
+}
+
+message GetPathInfoResponse {
+  bool exists = 1;
+  bool is_dir = 2;
+  bool empty = 3;
+}
+
+message TerminalRequest {
+  oneof msg {
+    TerminalOpen open = 1;
+    // Keystrokes and pasted text.
+    bytes input = 2;
+    TerminalSize resize = 3;
+  }
+}
+
+message TerminalOpen {
+  // The tmux session, for example "main".
+  string session = 1;
+  TerminalSize size = 2;
+}
+
+message TerminalSize {
+  uint32 cols = 1;
+  uint32 rows = 2;
+}
+
+message TerminalResponse {
+  oneof msg {
+    bytes output = 1;
+    // The terminal ended (the tmux client exited or detached).
+    int32 exit_code = 2;
+  }
 }
 
 message GetVersionRequest {}

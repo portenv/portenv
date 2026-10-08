@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-package main
+package local
 
 import "testing"
 
@@ -11,16 +11,16 @@ func TestSFTPAddr(t *testing.T) {
 		"sftp://portenv-storage@127.0.0.1:2222//storage/boxes/b":        "127.0.0.1:2222",
 		"sftp://portenv-storage@host.portenv.internal//storage/boxes/b": "host.portenv.internal:22",
 	} {
-		if got := sftpAddr(in); got != want {
-			t.Errorf("sftpAddr(%q) = %q, want %q", in, got, want)
+		if got := SFTPAddr(in); got != want {
+			t.Errorf("SFTPAddr(%q) = %q, want %q", in, got, want)
 		}
 	}
 }
 
 func TestHostRepoRewritesTheBoxHostAddress(t *testing.T) {
-	s := &session{cfg: boxConfig{ID: "b", Storage: "sftp://portenv-storage@host.portenv.internal:2222//storage"},
-		repo: "sftp://portenv-storage@host.portenv.internal:2222//storage/boxes/b"}
-	if got, want := s.hostRepo(), "sftp://portenv-storage@127.0.0.1:2222//storage/boxes/b"; got != want {
+	s := &Session{Cfg: BoxConfig{ID: "b", Storage: "sftp://portenv-storage@host.portenv.internal:2222//storage"},
+		Repo: "sftp://portenv-storage@host.portenv.internal:2222//storage/boxes/b"}
+	if got, want := s.HostRepo(), "sftp://portenv-storage@127.0.0.1:2222//storage/boxes/b"; got != want {
 		t.Fatalf("hostRepo = %q, want %q", got, want)
 	}
 }
@@ -34,8 +34,8 @@ func TestFromRegistry(t *testing.T) {
 		"portenv/toolbox-node:dev@sha256:89cb7465493": false,
 		"toolbox": false,
 	} {
-		if got := fromRegistry(ref); got != want {
-			t.Errorf("fromRegistry(%q) = %v, want %v", ref, got, want)
+		if got := FromRegistry(ref); got != want {
+			t.Errorf("FromRegistry(%q) = %v, want %v", ref, got, want)
 		}
 	}
 }

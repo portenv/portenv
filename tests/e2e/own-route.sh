@@ -54,7 +54,8 @@ echo "== own-route journey"
 "$repo/tests/e2e/two-machines.sh" "$image"
 # A server reached over SSH (SFTP storage), offline resume.
 "$repo/tests/e2e/sftp-storage.sh" "$image"
-echo "pending  Revert To ▸ Last Save Point (milestone 1.0)"
+# portenvd as the app uses it: terminal, save point, Revert To, reopen.
+"$repo/tests/e2e/daemon.sh" "$image"
 echo "pending  the app's own-route flows with hosted options visible and untouched (Phase 1)"
 echo "pending  an agent connecting over SSH and the CLI and relaying a question (milestone 2.7)"
 echo

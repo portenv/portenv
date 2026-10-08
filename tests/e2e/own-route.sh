@@ -57,6 +57,7 @@ echo "== own-route journey"
 # portenvd as the app uses it: terminal, save point, Revert To, reopen.
 "$repo/tests/e2e/daemon.sh" "$image"
 echo "pending  the app's own-route flows with hosted options visible and untouched (Phase 1)"
+echo "pending  first run completes through Continue without an account on the Welcome screen (Phase 3 first run)"
 echo "pending  an agent connecting over SSH and the CLI and relaying a question (milestone 2.7)"
 echo
 echo "own route: all checks passed with every hosted endpoint unreachable"

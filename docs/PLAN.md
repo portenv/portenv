@@ -506,7 +506,7 @@ Rename… · Move To ▸ (this Mac, each server, Portenv Cloud once it exists, A
 
 This is the first run once the control plane exists (Phase 3). The mockups show this version.
 
-1. Welcome: Continue with Apple, Continue with GitHub, Use email instead, and Continue without an account (the own route needs none; the remaining steps then skip sign-in and Portenv storage).
+1. Welcome: Continue with Apple, Continue with GitHub, Continue without an account (a button like the others: the own route needs no account; the remaining steps then skip sign-in and Portenv storage), and Use email instead.
 2. Protection: Only you (default) or You, with Portenv's help.
 3. Recovery key: Save to Passwords, Print, Copy; Continue enabled only after "I've saved my recovery key".
 4. Storage: Portenv storage can be preselected, but "Use my own server or bucket" and "Keep on this Mac for now" are visible on the same screen, each one click, with no account needed.
@@ -823,7 +823,7 @@ The save engine is tested hardest, because a bug there loses someone's work; eve
 | Mac app | XCUITest for first run, title menu, lease sheet; accessibility audit; light and dark snapshots | Every merge touching the app |
 | Performance | Budgets: resume under 5 s to a ready box (median of 5, worst reported), online at a round-trip time of 50 ms or less and offline; close or move with a 5 MB change under 15 s at 20 Mbit/s up and 50 ms; newest save at most 60 s behind with continuous editing; port relay adds under 5 ms locally. Bandwidth and round-trip time are measured and reported with every result | Nightly |
 | Recovery drill | Restore a box from the recovery phrase on a clean Mac | Before each release |
-| Own route | `own-route` job: the own-route journey with every Portenv-hosted endpoint blocked at DNS and the firewall, from locally built artifacts; from Phase 1 it also drives the app with the hosted options visible and untouched (ADR 0008, G3) | Every pull request and merge to main; blocks releases |
+| Own route | `own-route` job: the own-route journey with every Portenv-hosted endpoint blocked at DNS and the firewall, from locally built artifacts; from Phase 1 it also drives the app with the hosted options visible and untouched, and from Phase 3 completes first run through Continue without an account (ADR 0008, G3) | Every pull request and merge to main; blocks releases |
 
 CI runs the Go suites on Linux arm64 and amd64 and the app suites on macOS arm64 runners. A release is blocked by any failing gate.
 

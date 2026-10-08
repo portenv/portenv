@@ -24,7 +24,8 @@ expect() { local name=$1; shift; if "$@" >/dev/null 2>&1; then pass "$name"; els
 box_id() { python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["id"])' "$root/mac/boxes/sftp.json"; }
 in_box() { docker exec -u work -w /home/work "portenv-sftp-$(box_id)" bash -lc "$*"; }
 cleanup() {
-	[[ -n ${dpid:-} ]] && kill "$dpid" 2>/dev/null
+	# Nothing in the cleanup may fail: under set -e that would fail the run.
+	if [[ -n ${dpid:-} ]]; then kill "$dpid" 2>/dev/null || true; wait "$dpid" 2>/dev/null || true; fi
 	local id; id=$(box_id 2>/dev/null || true)
 	if [[ -n $id ]]; then
 		docker rm -f "portenv-sftp-$id" >/dev/null 2>&1 || true

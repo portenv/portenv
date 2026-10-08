@@ -81,6 +81,12 @@ jobs:
         with:
           go-version-file: core/go.mod
           cache-dependency-path: '**/go.sum'
+      # The Makefile needs GNU Make 4 or later; macOS ships 3.81.
+      - name: GNU Make 4
+        run: |
+          brew install make
+          echo "$(brew --prefix)/opt/make/libexec/gnubin" >> "$GITHUB_PATH"
+      - run: make --version | head -1
       - run: make swift-test
       - run: make swift-env-check
 

@@ -10,6 +10,7 @@
 # the canary, so a search that can't find anything doesn't pass by accident.
 set -euo pipefail
 repo=$(cd "$(dirname "$0")/.." && pwd)
+make=${MAKE:-make} # the GNU Make 4 that runs this (gmake on a Mac)
 canary="portenv-canary-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/portenv-swiftenv.XXXXXX")
 trap 'rm -rf "$scratch"' EXIT
@@ -27,8 +28,8 @@ fi
 echo "ok    control: a plain build records the canary"
 
 echo "== make swift-test and make app with the canary in the environment"
-(cd "$repo" && PORTENV_FAKE_SECRET=$canary make swift-test >/dev/null)
-(cd "$repo" && PORTENV_FAKE_SECRET=$canary make app APP_BUILD="$scratch/app-build" >/dev/null)
+(cd "$repo" && PORTENV_FAKE_SECRET=$canary "$make" swift-test >/dev/null)
+(cd "$repo" && PORTENV_FAKE_SECRET=$canary "$make" app APP_BUILD="$scratch/app-build" >/dev/null)
 leaks=$(found "$repo/apps/mac/.build" "$repo/shims/containerization/.build" "$scratch/app-build")
 if [[ -n $leaks ]]; then
 	echo "FAIL  the canary reached the build folders:"

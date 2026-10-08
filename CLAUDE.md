@@ -15,6 +15,7 @@ Phase 0: Foundations (owner only). Start with milestone 0.1 (repository, CI and 
 - Only driver packages (`core/driver/`) may talk to Docker, containerd or Apple Containerization. From Phase 1 on, never use `docker exec` as an access path; go through the box agent.
 - Never weaken a security default to make something work: no plaintext keys or secrets on disk, no public or inbound ports, no disabled encryption. Stop and ask.
 - Save, resume, lease and key code are data-loss paths: write the tests first and keep the invariants in `docs/PLAN.md` (Save, resume and leases) true at every commit.
+- Never pipe build or test output in a way that hides the exit code: use `set -o pipefail` (or `set -euo pipefail`), or check the exit status before trimming output. A command whose result you report must have its real exit status checked.
 - Work one milestone at a time in small, reviewable changes. End each milestone with a demo note in `docs/milestones/<id>.md` and the milestone's checklist ticked in `docs/PLAN.md`.
 - Add unknowns to "Open questions" in `docs/PLAN.md` instead of guessing.
 - Ask before touching real production credentials, deleting snapshots or repositories, or publishing anything.

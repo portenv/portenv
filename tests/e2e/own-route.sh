@@ -56,6 +56,7 @@ echo "== own-route journey"
 "$repo/tests/e2e/sftp-storage.sh" "$image"
 echo "pending  Revert To ▸ Last Save Point (milestone 1.0)"
 echo "pending  the app's own-route flows with hosted options visible and untouched (Phase 1)"
+echo "pending  first run completes through Continue without an account on the Welcome screen (Phase 3 first run)"
 echo "pending  an agent connecting over SSH and the CLI and relaying a question (milestone 2.7)"
 echo
 echo "own route: all checks passed with every hosted endpoint unreachable"

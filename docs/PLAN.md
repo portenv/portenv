@@ -666,7 +666,7 @@ Each milestone ends with a demo note in `docs/milestones/<id>.md` and its checkl
 **0.5 Server setup**
 
 - [x] The setup script installs Docker and an encrypted volume for box homes on Ubuntu 24.04
-- [ ] `ssh portenv` lands in the box's tmux session
+- [x] `ssh portenv` lands in the box's tmux session (checked through a real terminal on 2026-10-08; the gate checks it from now on)
 - [x] After a take over, the next resume on the machine that had the box tells the user that its unsaved work was kept as a separate save, with the save's time; `portenv status` and `portenv history` show it too (the app does the same from Phase 1)
 - [x] The Phase 0 gate below passes (final round 2026-10-08; numbers in docs/milestones/0.5.md)
 
@@ -685,7 +685,17 @@ Budgets changed on 2026-10-08: they now measure what the user waits for (a ready
 
 ### Phase 1: Native Mac app, local boxes
 
-Milestones: 1.1 `portenvd` with the local gRPC API · 1.2 main window with a terminal view (evaluate SwiftTerm, MIT-licensed) and tmux-backed tabs · 1.3 `apple` driver shim, `docker` as fallback (the box agent drops the forbidden capabilities from every process it starts, since a VM's root holds them by default) · 1.4 autosave, sync symbol, Changes, Browse Saves · 1.5 first run (reduced, no sign-in; see Desktop app UX), Keychain keys, recovery key · 1.6 port relay · 1.7 shared folder, then the File Provider · 1.8 signing, notarization, Sparkle updates.
+Milestones: 1.0 walking skeleton · 1.1 `portenvd` with the local gRPC API · 1.2 main window with a terminal view (evaluate SwiftTerm, MIT-licensed) and tmux-backed tabs · 1.3 `apple` driver shim, `docker` as fallback (the box agent drops the forbidden capabilities from every process it starts, since a VM's root holds them by default) · 1.4 autosave, sync symbol, Changes, Browse Saves · 1.5 first run (reduced, no sign-in; see Desktop app UX), Keychain keys, recovery key · 1.6 port relay · 1.7 shared folder, then the File Provider · 1.8 signing, notarization, Sparkle updates.
+
+**1.0 Walking skeleton** (docker driver only, no first run, unsigned, run from Xcode; demo: docs/demo/1.0.md)
+
+A thin slice through every layer, in the code where 1.1 and 1.2 continue: a minimal `portenvd`, the main window with a SwiftTerm terminal in the box's tmux session over the box agent's channel (ADR 0010, never `docker exec`), and the title menu, where only Move To ▸ (This Mac, each server) and Revert To ▸ Last Save Point work. File › Make Save Point makes the save point to revert to. Until 1.1 the app reaches `portenvd` through the `portenv` CLI.
+
+- [x] The terminal lands in the box's tmux session as `work`, through `portenvd` and the agent channel; no `docker exec` into the box but the engine's own health check (`tests/e2e/daemon.sh`, counted from the engine's exec events)
+- [x] Revert To ▸ Last Save Point puts the save point back and keeps the replaced home as a save (sync tests, the model test, `tests/e2e/daemon.sh`)
+- [x] Move To ▸ a server and back to This Mac through `portenvd`, files intact both ways (`tests/e2e/daemon-server.sh`, 2026-10-08: 29.0 s there including enrolling the server, 21.0 s back)
+- [x] Quitting the app (or SIGTERM) saves and releases the open box
+- [x] The restic password stays unreadable in the box with the channel (`TestChannelPasswordIsUnreadable`)
 
 **1.4 Autosave, the sync symbol, Changes and Browse Saves: slow links are normal**
 

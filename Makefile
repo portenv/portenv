@@ -30,7 +30,7 @@ TOOLS := \
 	github.com/restic/restic/cmd/restic@v0.19.1
 TOOLS_STAMP := $(BIN)/.tools-stamp
 
-.PHONY: all build app test lint fmt proto proto-check agent-linux swift-test \
+.PHONY: all build app test lint fmt proto proto-check agent-linux swift-test swift-env-check \
 	secrets spdx-check check tools clean image image-test driver-test e2e
 
 all: build test lint proto-check
@@ -90,8 +90,12 @@ proto-check: proto
 # for access to Documents at launch. (A proper Xcode project, 1.8, embeds
 # resources the usual way.)
 APP_BUILD := $(HOME)/Library/Caches/Portenv/app-build
+# Swift builds run with a clean environment: SwiftPM's plugin caches record
+# the environment they ran in, so a session token or other secret in the
+# shell would end up on disk under .build (scripts/check-swift-env.sh).
+SWIFT := env -i PATH="$(PATH)" HOME="$(HOME)" TMPDIR="$(or $(TMPDIR),/tmp)" LANG=en_US.UTF-8 swift
 app: build
-	cd apps/mac && swift build -c release --scratch-path "$(APP_BUILD)"
+	cd apps/mac && $(SWIFT) build -c release --scratch-path "$(APP_BUILD)"
 	rm -rf $(BIN)/Portenv.app && mkdir -p $(BIN)/Portenv.app/Contents/MacOS
 	cp "$(APP_BUILD)/release/Portenv" $(BIN)/Portenv.app/Contents/MacOS/Portenv
 	# Helpers, not MacOS/: on a case-insensitive disk portenv would replace Portenv.
@@ -103,8 +107,12 @@ app: build
 
 ## swift-test: build and test the Swift packages (macOS only)
 swift-test:
-	cd shims/containerization && swift build && swift test
-	cd apps/mac && swift build && swift test
+	cd shims/containerization && $(SWIFT) build && $(SWIFT) test
+	cd apps/mac && $(SWIFT) build && $(SWIFT) test
+
+## swift-env-check: a secret in the environment never reaches the Swift build folders
+swift-env-check:
+	scripts/check-swift-env.sh
 
 ## image: build the toolbox image for this machine's architecture only
 IMAGE ?= portenv/toolbox-node:dev
@@ -139,7 +147,7 @@ spdx-check:
 
 ## check: everything CI runs that works on this machine
 check: all agent-linux secrets
-	if [ "$$(uname)" = Darwin ]; then $(MAKE) swift-test; fi
+	if [ "$$(uname)" = Darwin ]; then $(MAKE) swift-test swift-env-check; fi
 
 clean:
 	rm -rf $(BIN) shims/containerization/.build

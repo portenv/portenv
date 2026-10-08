@@ -37,6 +37,9 @@ type restic struct {
 	meta     Executor
 	metaRepo string
 	keyHint  string // this machine's key ID, tried first
+	// lastStart is when the last backup started, from restic's summary:
+	// the time restic gives that snapshot.
+	lastStart time.Time
 }
 
 // boxCommands are the restic commands that must run where /home is.
@@ -214,6 +217,7 @@ func (r *restic) backup(ctx context.Context, a backupArgs) (string, error) {
 		var msg backupSummary
 		if json.Unmarshal(sc.Bytes(), &msg) == nil && msg.Type == "summary" && msg.SnapshotID != "" {
 			r.traceBackup(start, time.Now(), a.parent != "", msg)
+			r.lastStart = msg.Start
 			return msg.SnapshotID, nil
 		}
 	}

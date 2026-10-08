@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -11,6 +12,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"syscall"
+	"time"
 
 	"golang.org/x/term"
 	"google.golang.org/grpc"
@@ -41,6 +43,8 @@ func dialDaemon(e *local.Env) (daemonv1.DaemonServiceClient, func(), error) {
 //	portenv app move BOX this-mac|USER@HOST
 //	portenv app servers BOX         (the Move To targets, one per line)
 //	portenv app ping                (exit 0 when portenvd answers)
+//	portenv app state BOX           (the save state and location, JSON)
+//	portenv app channel BOX         (a runner's box channel for a Mac, JSON on stdout)
 func cmdApp(ctx context.Context, e *local.Env, op string, args []string) error {
 	if op == "ping" {
 		c, done, err := dialDaemon(e)
@@ -98,6 +102,43 @@ func cmdApp(ctx context.Context, e *local.Env, op string, args []string) error {
 			return plain(err)
 		}
 		summary = fmt.Sprintf("reverted to save point %s; the work it replaced is save %s", short(r.GetRestored().GetId()), short(r.GetSavedBefore().GetId()))
+	case "channel":
+		// The box's agent channel, for a Mac reaching this server's box:
+		// printed once on stdout (read over SSH, kept in memory there),
+		// never logged or written.
+		r, err := c.GetChannel(ctx, &daemonv1.GetChannelRequest{Name: name})
+		if err != nil {
+			return plain(err)
+		}
+		b, err := json.Marshal(struct {
+			Address string `json:"address"`
+			CertPEM []byte `json:"cert_pem"`
+			Token   string `json:"token"` // #nosec G117 -- deliberate: handed to the Mac over SSH
+		}{r.GetAddress(), r.GetCertPem(), r.GetToken()})
+		if err != nil {
+			return err
+		}
+		_, err = os.Stdout.Write(append(b, '\n'))
+		return err
+	case "state":
+		r, err := c.GetBoxState(ctx, &daemonv1.GetBoxStateRequest{Name: name})
+		if err != nil {
+			return plain(err)
+		}
+		var at time.Time
+		if r.GetSavedAt() != nil {
+			at = r.GetSavedAt().AsTime()
+		}
+		b, err := json.Marshal(struct {
+			State    string    `json:"state"`
+			SavedAt  time.Time `json:"saved_at,omitzero"`
+			Location string    `json:"location,omitempty"`
+		}{r.GetState().String(), at, r.GetLocation()})
+		if err != nil {
+			return err
+		}
+		fmt.Println(string(b))
+		return nil
 	case "check":
 		r, err := c.CheckBox(ctx, &daemonv1.CheckBoxRequest{Name: name})
 		if err != nil {

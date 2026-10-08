@@ -3,8 +3,71 @@
 import Foundation
 import Observation
 
-/// One box's window: where the box is, what the title subtitle says, and the
-/// title-menu actions. Every action goes through portenvd.
+/// The box's save state as portenvd records it (`portenv app state`): the
+/// only source of what the title says about saving (docs/PLAN.md, 1.4).
+public struct BoxState: Equatable, Sendable {
+    public enum Save: String, Sendable {
+        case notSavedYet = "SAVE_STATE_NOT_SAVED_YET"
+        case saving = "SAVE_STATE_SAVING"
+        case saved = "SAVE_STATE_SAVED"
+        case offline = "SAVE_STATE_OFFLINE"
+        case agentUnavailable = "SAVE_STATE_AGENT_UNAVAILABLE"
+        case closed = "SAVE_STATE_CLOSED"
+    }
+
+    public var save: Save
+    public var savedAt: Date?
+    /// The server the box runs on; nil for this Mac.
+    public var location: String?
+
+    public init(save: Save, savedAt: Date? = nil, location: String? = nil) {
+        self.save = save
+        self.savedAt = savedAt
+        self.location = location
+    }
+
+    /// Parses `portenv app state` output.
+    public static func parse(_ json: String) -> BoxState? {
+        struct Wire: Decodable {
+            let state: String
+            let saved_at: Date?
+            let location: String?
+        }
+        let d = JSONDecoder()
+        d.dateDecodingStrategy = .custom { dec in
+            let s = try dec.singleValueContainer().decode(String.self)
+            let f = ISO8601DateFormatter()
+            f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            if let date = f.date(from: s) { return date }
+            f.formatOptions = [.withInternetDateTime]
+            if let date = f.date(from: s) { return date }
+            throw DecodingError.dataCorruptedError(in: try dec.singleValueContainer(), debugDescription: "date")
+        }
+        guard let w = try? d.decode(Wire.self, from: Data(json.utf8)), let save = Save(rawValue: w.state) else { return nil }
+        return BoxState(save: save, savedAt: w.saved_at, location: (w.location?.isEmpty ?? true) ? nil : w.location)
+    }
+
+    /// The title's state line, from this state alone.
+    public func line(timeZone: TimeZone = .current) -> String {
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm"
+        f.timeZone = timeZone
+        let save: String
+        switch self.save {
+        case .notSavedYet: save = "Not saved yet"
+        case .saving: save = "Saving…"
+        case .saved: save = savedAt.map { "Saved at " + f.string(from: $0) } ?? "Saved"
+        case .offline: save = "Offline · will save later"
+        case .agentUnavailable: save = "Not saved · box agent unavailable"
+        case .closed: save = "Closed"
+        }
+        if let location { return "On \(location) · \(save)" }
+        return save
+    }
+}
+
+/// One box's window: where the box is, what the title's state line says,
+/// and the box actions. Every action goes through portenvd.
 @MainActor
 @Observable
 public final class BoxController {
@@ -17,17 +80,16 @@ public final class BoxController {
 
     public let box: String
     public private(set) var location: Location = .closed
-    public private(set) var subtitle = "Opening…"
+    public private(set) var state: BoxState?
+    /// Opening or moving, which are not save states; nil otherwise.
+    public private(set) var progress: String? = "Opening…"
     public private(set) var servers: [String] = []
     public private(set) var busy = false
     /// The last failure, shown in a sheet; cleared by dismissError.
     public private(set) var error: String?
-    /// Changes whenever the box starts on this Mac again, so the terminal
-    /// reattaches to the new start's tmux session.
+    /// Changes whenever the box starts again (here or on a server), so the
+    /// terminal reattaches to the new start.
     public private(set) var terminalGeneration = 0
-    /// The box agent stopped answering: nothing can be saved, and unsaved
-    /// changes stay in the box until Restart Box.
-    public private(set) var agentUnavailable = false
 
     private let cli: CLIRunning
 
@@ -36,59 +98,81 @@ public final class BoxController {
         self.cli = cli
     }
 
-    /// Opens the box on this Mac.
+    /// The title's state line: progress while opening or moving, otherwise
+    /// the recorded save state only.
+    public var subtitle: String { progress ?? state?.line() ?? "" }
+
+    /// The box agent stopped answering: nothing can be saved, and unsaved
+    /// changes stay in the box until Restart Box.
+    public var agentUnavailable: Bool { state?.save == .agentUnavailable }
+
+    /// The box is open somewhere this window can act on.
+    public var isOpen: Bool { location != .closed }
+
+    /// Whether a Move To target is where the box runs (shown checked).
+    public func isCurrent(_ target: String) -> Bool {
+        switch location {
+        case .thisMac: return target == "this-mac"
+        case .server(let s): return target == s
+        case .closed: return false
+        }
+    }
+
+    /// Opens the box (on this Mac, or shows it where it runs).
     public func open() async {
-        await perform("Opening…") {
+        progress = "Opening…"
+        await perform {
             self.servers = (try? await self.cli.run(["app", "servers", self.box]))?
                 .split(separator: "\n").map(String.init) ?? []
-            let summary = try await self.cli.run(["app", "open", self.box])
-            self.location = .thisMac
+            _ = try await self.cli.run(["app", "open", self.box])
             self.terminalGeneration += 1
-            return summary.contains("Offline") ? "Offline · will save later" : "Saved"
+        }
+        progress = nil
+        await refresh()
+    }
+
+    /// Reads the recorded state from portenvd.
+    public func refresh() async {
+        guard let out = try? await cli.run(["app", "state", box]), let st = BoxState.parse(out) else { return }
+        state = st
+        switch st.save {
+        case .closed: location = .closed
+        default: location = st.location.map { .server($0) } ?? .thisMac
         }
     }
 
     /// File › Make Save Point (⌘S).
     public func makeSavePoint() async {
-        guard location == .thisMac else { return }
-        await perform("Saving…") {
-            _ = try await self.cli.run(["app", "point", self.box])
-            return "Save point made " + Self.time()
-        }
+        guard isOpen else { return }
+        await perform { _ = try await self.cli.run(["app", "point", self.box]) }
+        await refresh()
     }
 
-    /// Revert To ▸ Last Save Point. The home as it was is saved first.
+    /// Revert To ▸ Last Save Point, wherever the box runs. The home as it
+    /// was is saved first.
     public func revertToLastSavePoint() async {
-        guard location == .thisMac else { return }
-        await perform("Reverting…") {
-            _ = try await self.cli.run(["app", "revert", self.box])
-            return "Reverted to the last save point " + Self.time()
-        }
+        guard isOpen else { return }
+        await perform { _ = try await self.cli.run(["app", "revert", self.box]) }
+        await refresh()
     }
 
-    /// Move To ▸ This Mac or a server.
+    /// Move To ▸ This Mac or a server. The current location is a no-op.
     public func move(to target: String) async {
-        let label = target == "this-mac" ? "this Mac" : target
-        await perform("Moving to \(label)…") {
+        guard !isCurrent(target) else { return }
+        progress = "Moving to \(target == "this-mac" ? "this Mac" : target)…"
+        await perform {
             _ = try await self.cli.run(["app", "move", self.box, target])
-            if target == "this-mac" {
-                self.location = .thisMac
-                self.terminalGeneration += 1
-                return "Moved to this Mac " + Self.time()
-            }
-            self.location = .server(target)
-            return "Open on \(target)"
+            self.terminalGeneration += 1
         }
+        progress = nil
+        await refresh()
     }
 
-    /// Closing the window saves and releases the box.
+    /// Closing the window saves and releases a box open on this Mac.
     public func close() async {
         guard location == .thisMac else { return }
-        await perform("Saving…") {
-            _ = try await self.cli.run(["app", "close", self.box])
-            self.location = .closed
-            return "Closed"
-        }
+        await perform { _ = try await self.cli.run(["app", "close", self.box]) }
+        location = .closed
     }
 
     public func dismissError() { error = nil }
@@ -96,53 +180,33 @@ public final class BoxController {
     /// The terminal's connection ended without the user leaving it: ask
     /// portenvd whether the box agent still answers; reattach if it does.
     public func terminalEnded() async {
-        guard location == .thisMac, !busy else { return }
-        do {
-            _ = try await cli.run(["app", "check", box])
+        guard isOpen, !busy else { return }
+        if (try? await cli.run(["app", "check", box])) != nil {
             terminalGeneration += 1
-        } catch {
-            if Self.isAgentUnavailable(error) { agentUnavailable = true }
         }
+        await refresh()
     }
 
-    /// Restart Box: stops the box and opens it again; the local home and
-    /// its unsaved changes stay (portenvd's resume rules never restore over
+    /// Restart Box: stops the box and opens it again where it runs; the home
+    /// and its unsaved changes stay (the resume rules never restore over
     /// them).
     public func restartBox() async {
-        guard location == .thisMac, !busy else { return }
-        busy = true
-        defer { busy = false }
-        do {
-            _ = try await cli.run(["app", "restart", box])
-            agentUnavailable = false
-            terminalGeneration += 1
-        } catch {
-            self.error = error.localizedDescription
+        guard isOpen else { return }
+        await perform {
+            _ = try await self.cli.run(["app", "restart", self.box])
+            self.terminalGeneration += 1
         }
+        await refresh()
     }
 
-    static func isAgentUnavailable(_ error: Error) -> Bool {
-        error.localizedDescription.contains("the box agent is unavailable")
-    }
-
-    private func perform(_ progress: String, _ action: @escaping @MainActor () async throws -> String) async {
+    private func perform(_ action: @escaping @MainActor () async throws -> Void) async {
         guard !busy else { return }
         busy = true
-        let before = subtitle
-        subtitle = progress
         defer { busy = false }
         do {
-            subtitle = try await action()
+            try await action()
         } catch {
-            subtitle = before
             self.error = error.localizedDescription
-            if Self.isAgentUnavailable(error) { agentUnavailable = true }
         }
-    }
-
-    private static func time() -> String {
-        let f = DateFormatter()
-        f.timeStyle = .short
-        return "at " + f.string(from: Date())
     }
 }

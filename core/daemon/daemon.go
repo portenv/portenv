@@ -18,6 +18,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"google.golang.org/grpc"
@@ -44,8 +45,17 @@ type Server struct {
 	env *local.Env
 	log *slog.Logger
 
-	mu   sync.Mutex
-	open map[string]*openBox // by box name
+	// KeepBoxesOnStop leaves boxes running when the daemon stops (the
+	// runner on a server: a runner restart must not stop anyone's box).
+	// portenvd on a Mac closes them: quitting the app saves and releases.
+	KeepBoxesOnStop bool
+
+	mu     sync.Mutex
+	open   map[string]*openBox   // by box name
+	remote map[string]*remoteBox // boxes this Mac opened on a server
+	// gen counts each box's moves, closes and restarts by this daemon, so
+	// a terminal that ends because of one is not reported as a failure.
+	gen map[string]uint64
 }
 
 // openBox is a box this daemon opened: its session, sync engine and agent
@@ -56,11 +66,14 @@ type openBox struct {
 	sb    *boxsync.Box
 	conn  *grpc.ClientConn
 	agent agentv1.AgentServiceClient
+
+	// What the save state is derived from besides the sync state.
+	saving, offline, agentDown atomic.Bool
 }
 
 // New returns a daemon for this machine's Portenv directory.
 func New(env *local.Env, log *slog.Logger) *Server {
-	return &Server{env: env, log: log, open: map[string]*openBox{}}
+	return &Server{env: env, log: log, open: map[string]*openBox{}, remote: map[string]*remoteBox{}, gen: map[string]uint64{}}
 }
 
 // Serve listens on the socket in the Portenv directory (mode 0600 in a 0700
@@ -86,8 +99,10 @@ func (s *Server) Serve(ctx context.Context) error {
 		<-ctx.Done()
 		// Save and release first, while the agent channels are up; then end
 		// every call, open terminals included (a graceful stop would wait
-		// for terminals forever).
-		s.closeAll()
+		// for terminals forever). A runner leaves boxes running.
+		if !s.KeepBoxesOnStop {
+			s.closeAll()
+		}
 		srv.Stop()
 	}()
 	s.log.Info("serving", "socket", sock)
@@ -148,6 +163,15 @@ func (s *Server) ListBoxes(context.Context, *daemonv1.ListBoxesRequest) (*daemon
 
 // OpenBox applies the resume rules and starts the box on this Mac.
 func (s *Server) OpenBox(ctx context.Context, req *daemonv1.OpenBoxRequest) (*daemonv1.OpenBoxResponse, error) {
+	// A box this Mac moved to a server stays there until Move To brings it
+	// back: show it where it runs.
+	if host := s.location(req.GetName()); host != "" {
+		if st, err := remoteState(ctx, host, req.GetName()); err == nil && st.GetState() != daemonv1.SaveState_SAVE_STATE_CLOSED {
+			s.attachRemote(req.GetName(), host)
+			return &daemonv1.OpenBoxResponse{Summary: "open on " + host, Location: host}, nil
+		}
+		s.detachRemote(req.GetName())
+	}
 	s.mu.Lock()
 	if _, open := s.open[req.GetName()]; open {
 		s.mu.Unlock()
@@ -162,6 +186,7 @@ func (s *Server) OpenBox(ctx context.Context, req *daemonv1.OpenBoxRequest) (*da
 		}
 		return nil, err
 	}
+	ob.offline.Store(res.Offline)
 	s.mu.Lock()
 	s.open[req.GetName()] = ob
 	s.mu.Unlock()
@@ -315,10 +340,14 @@ func (s *Server) closeBox(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
+	s.leaving(name)
 	ob.mu.Lock()
 	defer ob.mu.Unlock()
-	if _, err := ob.sb.Save(ctx, boxsync.SaveOptions{Kind: boxsync.SaveRelease}); err != nil {
-		return agentError(err)
+	ob.saving.Store(true)
+	_, err = ob.sb.Save(ctx, boxsync.SaveOptions{Kind: boxsync.SaveRelease})
+	ob.saving.Store(false)
+	if err != nil {
+		return ob.noteErr(err)
 	}
 	ob.stop(ctx)
 	s.mu.Lock()
@@ -329,34 +358,54 @@ func (s *Server) closeBox(ctx context.Context, name string) error {
 
 // MakeSavePoint saves the home as a save point.
 func (s *Server) MakeSavePoint(ctx context.Context, req *daemonv1.MakeSavePointRequest) (*daemonv1.MakeSavePointResponse, error) {
+	if out, err := s.onServer(ctx, req.GetName(), "point"); !errors.Is(err, errNotRemote) {
+		if err != nil {
+			return nil, err
+		}
+		return &daemonv1.MakeSavePointResponse{Snapshot: &typesv1.SnapshotRef{Id: strings.TrimPrefix(out, "save point ")}}, nil
+	}
 	ob, err := s.get(req.GetName())
 	if err != nil {
 		return nil, err
 	}
 	ob.mu.Lock()
 	defer ob.mu.Unlock()
+	ob.saving.Store(true)
 	snap, err := ob.sb.Save(ctx, boxsync.SaveOptions{Kind: boxsync.SavePoint})
+	ob.saving.Store(false)
 	if err != nil {
-		return nil, agentError(err)
+		return nil, ob.noteErr(err)
 	}
+	ob.offline.Store(false)
 	return &daemonv1.MakeSavePointResponse{Snapshot: ref(ob.sess.Cfg.ID, snap)}, nil
 }
 
 // RevertToLastSavePoint saves the home, then restores the newest save
 // point. Terminals keep running; their files change underneath them.
 func (s *Server) RevertToLastSavePoint(ctx context.Context, req *daemonv1.RevertToLastSavePointRequest) (*daemonv1.RevertToLastSavePointResponse, error) {
+	if out, err := s.onServer(ctx, req.GetName(), "revert"); !errors.Is(err, errNotRemote) {
+		if err != nil {
+			return nil, err
+		}
+		// "reverted to save point A; the work it replaced is save B"
+		var restored, before string
+		_, _ = fmt.Sscanf(strings.ReplaceAll(out, ";", " "), "reverted to save point %s the work it replaced is save %s", &restored, &before)
+		return &daemonv1.RevertToLastSavePointResponse{Restored: &typesv1.SnapshotRef{Id: restored}, SavedBefore: &typesv1.SnapshotRef{Id: before}}, nil
+	}
 	ob, err := s.get(req.GetName())
 	if err != nil {
 		return nil, err
 	}
 	ob.mu.Lock()
 	defer ob.mu.Unlock()
+	ob.saving.Store(true)
 	res, err := ob.sb.RevertToLastSavePoint(ctx)
+	ob.saving.Store(false)
 	if errors.Is(err, boxsync.ErrNoSavePoint) {
 		return nil, status.Error(codes.FailedPrecondition, "there is no save point yet")
 	}
 	if err != nil {
-		return nil, agentError(err)
+		return nil, ob.noteErr(err)
 	}
 	return &daemonv1.RevertToLastSavePointResponse{Restored: ref(ob.sess.Cfg.ID, res.Restored), SavedBefore: ref(ob.sess.Cfg.ID, res.SavedBefore)}, nil
 }
@@ -365,18 +414,19 @@ func (s *Server) RevertToLastSavePoint(ctx context.Context, req *daemonv1.Revert
 // "this-mac", or a server from the machine's servers list.
 func (s *Server) MoveBox(ctx context.Context, req *daemonv1.MoveBoxRequest) (*daemonv1.MoveBoxResponse, error) {
 	name, target := req.GetName(), req.GetTarget()
+	s.leaving(name)
 	mc, err := s.env.MachineConfig()
 	if err != nil {
 		return nil, err
 	}
-	out := logWriter{s.log.With("box", name, "target", target)}
 	if target == "this-mac" {
-		// Close it on whichever server has it open; a server where it is
-		// not open refuses, which is fine.
-		for _, srv := range mc.Servers {
-			if local.KnownOn(ctx, srv, name) {
-				_ = local.CloseOn(ctx, srv, name, out)
+		// Close it on the server it runs on, through that server's runner
+		// (save and release there).
+		if host := s.location(name); host != "" {
+			if _, err := local.AppOn(ctx, host, "close", name); err != nil && !strings.Contains(err.Error(), "is not open") {
+				return nil, status.Error(codes.FailedPrecondition, err.Error())
 			}
+			s.detachRemote(name)
 		}
 		res, err := s.OpenBox(ctx, &daemonv1.OpenBoxRequest{Name: name})
 		if err != nil {
@@ -391,19 +441,28 @@ func (s *Server) MoveBox(ctx context.Context, req *daemonv1.MoveBoxRequest) (*da
 	if err != nil {
 		return nil, err
 	}
+	if host := s.location(name); host != "" && host != target {
+		if _, err := local.AppOn(ctx, host, "close", name); err != nil {
+			return nil, status.Error(codes.FailedPrecondition, err.Error())
+		}
+		s.detachRemote(name)
+	}
 	if _, err := s.get(name); err == nil {
 		if err := s.closeBox(ctx, name); err != nil {
 			return nil, err
 		}
 	}
+	out := logWriter{s.log.With("box", name, "target", target)}
 	if !local.KnownOn(ctx, target, name) {
 		if err := local.EnrolOn(ctx, s.env, c, target, joinStorage(c, target), out); err != nil {
 			return nil, err
 		}
 	}
-	if err := local.ResumeOn(ctx, target, name, out); err != nil {
-		return nil, err
+	// Opened there by the runner, with the agent channel (never docker exec).
+	if _, err := local.AppOn(ctx, target, "open", name); err != nil {
+		return nil, status.Error(codes.FailedPrecondition, err.Error())
 	}
+	s.attachRemote(name, target)
 	return &daemonv1.MoveBoxResponse{Summary: "open on " + target}, nil
 }
 
@@ -430,12 +489,24 @@ func (s *Server) Terminal(stream daemonv1.DaemonService_TerminalServer) error {
 	if open == nil {
 		return status.Error(codes.InvalidArgument, "the first terminal message must be open")
 	}
-	ob, err := s.get(open.GetBox())
-	if err != nil {
-		return err
+	gen := s.boxGen(open.GetBox())
+	var ac agentv1.AgentServiceClient
+	if s.location(open.GetBox()) != "" {
+		if ac, err = s.remoteAgent(stream.Context(), open.GetBox()); err != nil {
+			return err
+		}
+	} else {
+		ob, err := s.get(open.GetBox())
+		if err != nil {
+			return err
+		}
+		ac = ob.agent
 	}
-	at, err := ob.agent.Terminal(stream.Context())
+	at, err := ac.Terminal(stream.Context())
 	if err != nil {
+		if s.location(open.GetBox()) != "" {
+			s.dropRemoteAgent(open.GetBox())
+		}
 		return agentError(err)
 	}
 	size := &agentv1.TerminalSize{Cols: open.GetSize().GetCols(), Rows: open.GetSize().GetRows()}
@@ -465,11 +536,8 @@ func (s *Server) Terminal(stream daemonv1.DaemonService_TerminalServer) error {
 	}()
 	for {
 		r, err := at.Recv()
-		if errors.Is(err, io.EOF) {
-			return nil
-		}
 		if err != nil {
-			return agentError(err)
+			return s.terminalEnd(open.GetBox(), gen, err)
 		}
 		var m daemonv1.TerminalResponse
 		switch v := r.GetMsg().(type) {
@@ -500,6 +568,31 @@ func (w logWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
+// leaving records that this daemon is moving, closing or restarting the
+// box: its open terminals are about to end, and that is not a failure.
+func (s *Server) leaving(name string) {
+	s.mu.Lock()
+	s.gen[name]++
+	s.mu.Unlock()
+}
+
+// boxGen is the box's count of moves, closes and restarts so far.
+func (s *Server) boxGen(name string) uint64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.gen[name]
+}
+
+// terminalEnd is how a terminal opened at gen ends after err from the
+// agent: quietly when the shell ended or the box was moved, closed or
+// restarted since (the app reconnects it), otherwise as agentError.
+func (s *Server) terminalEnd(name string, gen uint64, err error) error {
+	if errors.Is(err, io.EOF) || s.boxGen(name) != gen {
+		return nil
+	}
+	return agentError(err)
+}
+
 // agentError reports a channel that is down or fails verification (for
 // example something else answering on the agent's port) as the box agent
 // being unavailable: nothing was sent to it.
@@ -516,18 +609,34 @@ func agentError(err error) error {
 
 // CheckBox reports whether the box agent answers on its channel.
 func (s *Server) CheckBox(ctx context.Context, req *daemonv1.CheckBoxRequest) (*daemonv1.CheckBoxResponse, error) {
-	ob, err := s.get(req.GetName())
+	name := req.GetName()
+	if _, err := s.onServer(ctx, name, "check"); !errors.Is(err, errNotRemote) {
+		if err != nil {
+			return &daemonv1.CheckBoxResponse{Detail: status.Convert(err).Message()}, nil
+		}
+		return &daemonv1.CheckBoxResponse{AgentAvailable: true}, nil
+	}
+	ob, err := s.get(name)
 	if err != nil {
+		// Not open in this daemon (for example a runner that restarted)
+		// but still running: its channel's secrets are gone.
+		if sess, err2 := s.env.Open(name); err2 == nil && sess.Drv.Known(sess.ID()) {
+			if st, err3 := sess.Drv.Stats(ctx, sess.ID()); err3 == nil && st.State == driver.StateRunning {
+				return &daemonv1.CheckBoxResponse{Detail: "the box agent is unavailable (the box runs without a channel); restart the box"}, nil
+			}
+		}
 		return nil, err
 	}
 	if ob.agent == nil {
+		ob.agentDown.Store(true)
 		return &daemonv1.CheckBoxResponse{Detail: "the box agent is unavailable"}, nil
 	}
 	cctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 	if _, err := ob.agent.GetReadiness(cctx, &agentv1.GetReadinessRequest{}); err != nil {
-		return &daemonv1.CheckBoxResponse{Detail: status.Convert(agentError(err)).Message()}, nil
+		return &daemonv1.CheckBoxResponse{Detail: status.Convert(ob.noteErr(err)).Message()}, nil
 	}
+	ob.agentDown.Store(false)
 	return &daemonv1.CheckBoxResponse{AgentAvailable: true}, nil
 }
 
@@ -538,19 +647,38 @@ func (s *Server) CheckBox(ctx context.Context, req *daemonv1.CheckBoxRequest) (*
 // next save includes everything.
 func (s *Server) RestartBox(ctx context.Context, req *daemonv1.RestartBoxRequest) (*daemonv1.RestartBoxResponse, error) {
 	name := req.GetName()
-	ob, err := s.get(name)
-	if err != nil {
-		return nil, err
+	s.leaving(name)
+	if out, err := s.onServer(ctx, name, "restart"); !errors.Is(err, errNotRemote) {
+		if err != nil {
+			return nil, err
+		}
+		s.dropRemoteAgent(name) // a new start: new secrets
+		return &daemonv1.RestartBoxResponse{Summary: strings.TrimPrefix(out, "restarted: ")}, nil
 	}
-	ob.mu.Lock()
-	ob.stop(ctx)
-	s.mu.Lock()
-	delete(s.open, name)
-	s.mu.Unlock()
-	ob.mu.Unlock()
+	// A box this daemon does not hold open (for example after a runner
+	// restart) is reopened the usual way, which restarts it if it runs
+	// without a channel; the resume rules keep the local home (rule 3).
+	if ob, err := s.get(name); err == nil {
+		ob.mu.Lock()
+		ob.stop(ctx)
+		s.mu.Lock()
+		delete(s.open, name)
+		s.mu.Unlock()
+		ob.mu.Unlock()
+	}
 	res, err := s.OpenBox(ctx, &daemonv1.OpenBoxRequest{Name: name})
 	if err != nil {
 		return nil, err
 	}
 	return &daemonv1.RestartBoxResponse{Summary: res.GetSummary(), Rule: res.GetRule()}, nil
+}
+
+// noteErr reports an action's error, recording a channel that is down so
+// the save state says so.
+func (ob *openBox) noteErr(err error) error {
+	err = agentError(err)
+	if status.Code(err) == codes.Unavailable {
+		ob.agentDown.Store(true)
+	}
+	return err
 }

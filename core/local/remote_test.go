@@ -15,8 +15,9 @@ import (
 // closes. Forwarding it would block until the timeout.
 func TestRunRemoteNeverForwardsStdin(t *testing.T) {
 	fake := filepath.Join(t.TempDir(), "fake-ssh")
-	// Stands in for ssh: drop "--" and the host, run the rest locally.
-	if err := os.WriteFile(fake, []byte("#!/bin/sh\nshift 2\nexec \"$@\"\n"), 0o700); err != nil { // #nosec G306 -- test helper
+	// Stands in for ssh: drop the options, "--" and the host, run the rest
+	// locally.
+	if err := os.WriteFile(fake, []byte("#!/bin/sh\nwhile [ \"$1\" != -- ]; do shift; done\nshift 2\nexec \"$@\"\n"), 0o700); err != nil { // #nosec G306 -- test helper
 		t.Fatal(err)
 	}
 	t.Setenv("PORTENV_SSH", fake)

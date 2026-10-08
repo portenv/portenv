@@ -3,16 +3,18 @@
 package agent
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/subtle"
 	"crypto/tls"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
-	"os"
-	"path/filepath"
 	"regexp"
+	"strings"
 	"time"
 
 	"google.golang.org/grpc"
@@ -24,14 +26,13 @@ import (
 	agentv1 "github.com/portenv/portenv/proto/gen/go/portenv/agent/v1"
 )
 
-// The agent channel (ADR 0010). The driver writes these before the box
-// starts; they live on the fresh root file system, root-only.
+// The agent channel (ADR 0010). The driver hands each start's secrets to
+// the box on its stdin (attach, never exec, never a file); init passes that
+// stdin on to the API process, which reads them.
 const (
-	ChannelDir  = "/run/portenv/agent"
 	ChannelPort = 7700
-	TokenFile   = "token"
-	CertFile    = "cert.pem"
-	KeyFile     = "key.pem"
+	// ChannelEnv set to "stdin" tells init that the secrets come on stdin.
+	ChannelEnv = "PORTENV_CHANNEL"
 )
 
 // The API process runs as portenv-agent from a copy of the agent with file
@@ -58,8 +59,8 @@ type apiServer struct {
 // ServeChannel serves the agent API on the channel described by dir until
 // ctx ends. The caller must already be non-dumpable (passwords pass
 // through this process).
-func ServeChannel(ctx context.Context, cfg Config, dir string, port int) error {
-	srv, err := newChannelServer(cfg, dir)
+func ServeChannel(ctx context.Context, cfg Config, sec ChannelSecrets, port int) error {
+	srv, err := newChannelServer(cfg, sec)
 	if err != nil {
 		return err
 	}
@@ -70,27 +71,27 @@ func ServeChannel(ctx context.Context, cfg Config, dir string, port int) error {
 	return serveOn(ctx, srv, lis)
 }
 
-// newChannelServer loads the channel's token, key and certificate from dir
-// into memory, then removes the files and dir: after this, nothing in the
-// box can read them (ADR 0010, conditions).
-func newChannelServer(cfg Config, dir string) (*grpc.Server, error) {
-	files := map[string][]byte{}
-	for _, name := range []string{TokenFile, CertFile, KeyFile} {
-		data, err := os.ReadFile(filepath.Join(dir, name)) // #nosec G304 -- fixed root-only path
-		if err != nil {
-			_ = removeChannelFiles(dir)
-			return nil, fmt.Errorf("read channel %s: %w", name, err)
-		}
-		files[name] = data
+// ReadChannelSecrets reads one start's secrets: one JSON line, as the
+// driver writes it. They stay in this process's memory only.
+func ReadChannelSecrets(r io.Reader) (ChannelSecrets, error) {
+	line, err := bufio.NewReader(io.LimitReader(r, 64<<10)).ReadBytes('\n')
+	if err != nil && !errors.Is(err, io.EOF) {
+		return ChannelSecrets{}, fmt.Errorf("read channel secrets: %w", err)
 	}
-	if err := removeChannelFiles(dir); err != nil {
-		return nil, fmt.Errorf("remove channel files: %w", err)
+	var sec ChannelSecrets
+	if err := json.Unmarshal(bytes.TrimSpace(line), &sec); err != nil {
+		return ChannelSecrets{}, fmt.Errorf("parse channel secrets: %w", err)
 	}
-	token := bytes.TrimSpace(files[TokenFile])
+	return sec, nil
+}
+
+// newChannelServer serves the API with one start's secrets.
+func newChannelServer(cfg Config, sec ChannelSecrets) (*grpc.Server, error) {
+	token := []byte(strings.TrimSpace(sec.Token))
 	if len(token) < 32 {
 		return nil, errors.New("channel token is too short")
 	}
-	cert, err := tls.X509KeyPair(files[CertFile], files[KeyFile])
+	cert, err := tls.X509KeyPair(sec.CertPEM, sec.KeyPEM)
 	if err != nil {
 		return nil, fmt.Errorf("load channel certificate: %w", err)
 	}
@@ -178,32 +179,17 @@ func (s *apiServer) Terminal(stream agentv1.AgentService_TerminalServer) error {
 	return runTerminal(stream, s.cfg, open)
 }
 
-// removeChannelFiles deletes the channel's files and their directory.
-func removeChannelFiles(dir string) error {
-	var first error
-	for _, name := range []string{TokenFile, CertFile, KeyFile} {
-		if err := os.Remove(filepath.Join(dir, name)); err != nil && !errors.Is(err, os.ErrNotExist) && first == nil {
-			first = err
-		}
-	}
-	// The directory belongs to portenv-agent but sits in a root-owned
-	// parent, so the API process cannot remove it; empty, it holds nothing.
-	_ = os.Remove(dir)
-	return first
-}
-
-// WaitChannelLoaded waits until the API process has read and removed the
-// channel files, so init starts no other process while they exist. On
-// timeout it removes them itself (the channel is then unavailable) and
-// reports it.
-func WaitChannelLoaded(dir string, timeout time.Duration) error {
+// WaitChannelListening waits until the API process listens on its port,
+// which it does only after reading the secrets: init starts no other process
+// before then.
+func WaitChannelListening(port int, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		if _, err := os.Stat(filepath.Join(dir, TokenFile)); errors.Is(err, os.ErrNotExist) {
+		if c, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", port), 200*time.Millisecond); err == nil {
+			_ = c.Close()
 			return nil
 		}
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(20 * time.Millisecond)
 	}
-	_ = removeChannelFiles(dir)
-	return errors.New("the agent channel did not load its secrets in time; removed them")
+	return errors.New("the agent channel did not start in time")
 }

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 const stateFile = "state.json"
@@ -34,6 +35,9 @@ type State struct {
 	// resume or an autosave or save point, LeaseReleased after a clean
 	// close. Empty when unknown (for example a resume cut short).
 	Lease string `json:"lease,omitempty"`
+	// SavedAt is when the snapshot the home was last synced to was made:
+	// what "Saved at …" shows. Zero when nothing was ever saved.
+	SavedAt time.Time `json:"saved_at,omitzero"`
 }
 
 // Recorded lease states.

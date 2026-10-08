@@ -76,12 +76,21 @@ func TestChannelConditions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Condition 2: the files are gone, and the API process runs as
-	// portenv-agent.
-	// The directory may stay (it sits in a root-owned parent the API
-	// process cannot write), but empty.
-	if got := sh("", "ls -A "+agent.ChannelDir+" 2>/dev/null | tr '\\n' ' '"); got != "" {
-		t.Errorf("channel files after start: %q, want none", got)
+	// Condition 2: the secrets came on stdin and were never written: the
+	// token is in no file in the box (the root file system is on the
+	// machine's disk), init holds no stdin any more, and the API process
+	// runs as portenv-agent.
+	if got := sh("", "grep -rlsF "+ch.Token+" / --exclude-dir=proc --exclude-dir=sys --exclude-dir=dev 2>/dev/null | head -3"); got != "" {
+		t.Errorf("the token is in a file in the box: %s", got)
+	}
+	// Root in the box gets nothing from init's stdin: it is /dev/null, or
+	// not even readable (the container's init is not dumpable), and reading
+	// it never yields the token.
+	if got := sh("", "readlink /proc/1/fd/0"); got != "" && got != "/dev/null" {
+		t.Errorf("init's fd 0 is %q, want /dev/null or unreadable", got)
+	}
+	if got := sh("", "timeout 2 cat /proc/1/fd/0 2>/dev/null | head -c 65536"); strings.Contains(got, ch.Token) {
+		t.Error("root read the token from init's stdin")
 	}
 	servePid := sh("", "pgrep -f '^portenv-agent serve'")
 	if uid := sh("", "ps -o uid= -p "+servePid); uid != "991" {

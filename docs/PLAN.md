@@ -698,10 +698,21 @@ A thin slice through every layer, in the code where 1.1 and 1.2 continue: a mini
 - [x] The restic password stays unreadable in the box with the channel (`TestChannelPasswordIsUnreadable`)
 - [x] ADR 0010's conditions hold, each with its test: the channel's files never reach a save and are gone once loaded, root in the box cannot read the key or token, and an impostor on the agent's port gets nothing while the app reports the box agent unavailable
 
+**1.0b A box on a server, the same as on the Mac** (demo: docs/demo/1.0.md)
+
+The minimal server-side piece that 2.1's runner grows from: `portenv-runner` (the same daemon code as `portenvd`, as a systemd service) opens boxes on the server with the agent channel. The Mac moves a box there by enrolling it and opening it through the runner (`sudo /usr/local/bin/portenv app open`, the only sudo command its SSH user `portenv` may run), fetches each start's channel secrets from the runner over the SSH session and keeps them in memory, and reaches the agent's port on the server's loopback through an SSH forward. The same window shows the same terminal on the server, with the state line saying where it runs; save points, Revert To and Restart Box work there exactly as on the Mac. The secrets reach a box only on its stdin, never a file. A runner restart leaves boxes running; the app shows the box agent unavailable and offers Restart Box.
+
+- [x] The window's terminal runs on the server after Move To; save point and Revert To there; Move To ▸ This Mac brings the edits back (`tests/e2e/server-session.sh`, 2026-10-08: 28 checks, Move To 16.8 s)
+- [x] A runner restart loses nothing; an impostor on the server box's agent port gets nothing; no channel secret on the server's disk, journal or shell history (`tests/e2e/server-session.sh`)
+- [x] The title shows the box's name over its state line and opens the box menu; Move To checks the current location (checked through accessibility in Portenv.app)
+
+
+
 **1.4 Autosave, the sync symbol, Changes and Browse Saves: slow links are normal**
 
 Slow uplinks are a real user condition, not an edge case (the Phase 0 gate ran over about 50 KB/s up). So:
 
+- Save status is honest: the title's save state comes only from the recorded save state (the last recorded snapshot and its time, the dirty flag, a save in progress) and what portenvd knows is happening (storage unreachable, the box agent's channel down), never from "open succeeded" or other events. A new box shows "Not saved yet". The states: Not saved yet, Saving…, Saved at (time), Offline · will save later, Not saved · box agent unavailable. Tested per state (`daemon/savestate_test.go`, `PortenvKitTests`).
 - A Move, or any save that takes more than a few seconds, shows visible progress and a time estimate in the title subtitle, from the bytes still to send and the measured bandwidth.
 - Closing the laptop or quitting mid-upload never loses work and never leaves the lease in a bad state: the local home stays as it was (dirty), no partial save counts as complete, the lease stays with this machine until a save completes, and the upload resumes (restic deduplicates what already arrived) when the Mac wakes.
 - Same-machine resume never waits on the network: offline, the box starts from the local home and saves queue.
@@ -722,7 +733,7 @@ Slow uplinks are a real user condition, not an edge case (the Phase 0 gate ran o
 - [ ] A version tag produces a signed, notarized, stapled `Portenv.dmg` and a signed `appcast.xml` on the GitHub release; `portenv.com/download` and `portenv.com/appcast.xml` redirect to them, and an installed build updates through Sparkle
 - [ ] The Sparkle key's offline backups exist and a restore test passed
 - [ ] Offline: work continues and saves upload when the network returns
-- [ ] No docker exec as an access path to boxes on the Mac: they are reached only through `portenvd` and the agent channel (ADR 0010). Server boxes follow in 2.1, when the runner lands; until then Move To a server in the app is a preview path, used only on the owner's test server.
+- [ ] No docker exec as an access path, on the Mac or on servers: boxes are reached only through `portenvd` on the Mac and the runner on servers, with the agent channel (ADR 0010). The Phase 0 CLI's docker exec path is removed or moved behind them.
 - [ ] Every control has a VoiceOver label; light and dark appearance both pass review
 - [ ] A dev server bound to the box's localhost opens in Safari through the relay
 - [ ] Inside an `apple` box (a VM), the restic password probe (`tests/e2e/restic-isolation.sh`) passes: root in the box cannot read the password, because the agent drops the forbidden capabilities itself
@@ -731,7 +742,7 @@ Slow uplinks are a real user condition, not an edge case (the Phase 0 gate ran o
 
 The toolbox image is published from CI ahead of the rest of 2.5: each architecture builds and tests on its native runner, then one multi-arch manifest goes to `ghcr.io/portenv/toolbox-node`, tagged `sha-<commit>` and `main` (and `vN` on version tags), with a build provenance attestation. Macs, servers and the setup script pull by digest, and the CLI pins a box's image to its digest on first use. Local builds stay possible for development; nothing requires them.
 
-Milestones: 2.1 runner (server build of the core) installed over SSH; from here server boxes, too, are reached only through the runner and the agent channel, never docker exec · 2.2 Add a Server wizard with preflight · 2.3 Move To in the title menu · 2.4 lease sheet · 2.5 toolbox registry, versions and drift warnings · 2.6 append-only storage · 2.7 stand-in agents over SSH and the CLI · 2.8 webhooks · 2.9 stdio MCP.
+Milestones: 2.1 runner (server build of the core) installed over SSH, grown from 1.0b's minimal runner: the Mac's SSH user may run only `/usr/local/bin/portenv` with sudo, never a shell · 2.2 Add a Server wizard with preflight · 2.3 Move To in the title menu · 2.4 lease sheet · 2.5 toolbox registry, versions and drift warnings · 2.6 append-only storage · 2.7 stand-in agents over SSH and the CLI · 2.8 webhooks · 2.9 stdio MCP.
 
 **2.6 Append-only storage** (must land before 2.7, which gives outside agents stand-in access to boxes)
 

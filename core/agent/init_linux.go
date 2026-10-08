@@ -10,7 +10,6 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"slices"
 	"sync"
 	"syscall"
@@ -50,9 +49,10 @@ func Init(ctx context.Context, cfg Config, log *slog.Logger) error {
 	// and restarted when it exits. Its restic and terminal processes are its
 	// own children, so this process's reaper never takes their exit status.
 	servePid := startServe(log)
-	// No other process starts while the channel's secrets are on disk.
+	// No other process starts until the API process has taken the secrets
+	// off stdin and listens.
 	if servePid != 0 {
-		if err := WaitChannelLoaded(ChannelDir, 10*time.Second); err != nil {
+		if err := WaitChannelListening(ChannelPort, 30*time.Second); err != nil {
 			log.Error("agent channel", "err", err)
 		}
 	}
@@ -117,15 +117,26 @@ func reap() []int {
 
 // startServe starts portenv-agent serve when the driver provided a channel,
 // and returns its PID (0 when there is none).
+// The secrets arrive on stdin (ADR 0010): init hands its stdin to the API
+// process without reading it, then closes its own copy, so nothing else in
+// the box can reach them.
 func startServe(log *slog.Logger) int {
-	if _, err := os.Stat(filepath.Join(ChannelDir, TokenFile)); err != nil {
+	if os.Getenv(ChannelEnv) != "stdin" {
 		log.Info("no agent channel provided; serving the local socket only")
 		return 0
 	}
+	// Then point init's own fd 0 at /dev/null: the stdin pipe is the API
+	// process's alone.
+	defer func() {
+		if null, err := os.Open(os.DevNull); err == nil {
+			_ = unix.Dup2(int(null.Fd()), 0)
+			_ = null.Close()
+		}
+	}()
 	// As portenv-agent, from the copy with file capabilities: non-dumpable
 	// from its first instruction (ADR 0010, conditions).
 	p, err := os.StartProcess(ServeBinary, []string{"portenv-agent", "serve"}, &os.ProcAttr{
-		Files: []*os.File{nil, os.Stdout, os.Stderr},
+		Files: []*os.File{os.Stdin, os.Stdout, os.Stderr},
 		Env:   []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"},
 		// portenv-sync as a supplementary group only to read and run the
 		// restic binary (root:portenv-sync, 0750).
@@ -141,9 +152,9 @@ func startServe(log *slog.Logger) int {
 // restartIfReaped restarts the channel process when it is among the reaped.
 func restartIfReaped(reaped []int, servePid int, log *slog.Logger) int {
 	if servePid != 0 && slices.Contains(reaped, servePid) {
-		log.Warn("agent channel exited; restarting it")
-		time.Sleep(200 * time.Millisecond)
-		return startServe(log)
+		// Its secrets are gone with it: a new channel needs a new start.
+		log.Warn("agent channel exited; restart the box for a new one")
+		return 0
 	}
 	return servePid
 }

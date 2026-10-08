@@ -192,6 +192,7 @@ type Driver interface {
 // the certificate the agent must present, Token goes with every call.
 type AgentChannel struct {
 	Dial    func(ctx context.Context) (net.Conn, error)
+	Addr    string // where Dial connects, 127.0.0.1:PORT on this machine
 	CertPEM []byte
 	Token   string
 }

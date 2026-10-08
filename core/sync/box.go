@@ -265,7 +265,7 @@ func (b *Box) Resume(ctx context.Context, opts ResumeOptions) (ResumeResult, err
 		// Rule 3.
 		res = ResumeResult{Rule: 3, Action: ActionStartLocal}
 		if newest.Machine == me {
-			st.Tree, st.Snapshot = newest.Tree, newest.origin()
+			st.Tree, st.Snapshot, st.SavedAt = newest.Tree, newest.origin(), newest.Time
 		}
 	case !known || st.Dirty:
 		// Rule 4: possibly unsaved local changes, and a newer save. Keep the
@@ -285,7 +285,7 @@ func (b *Box) Resume(ctx context.Context, opts ResumeOptions) (ResumeResult, err
 			return ResumeResult{}, err
 		}
 		res.Restored = &newest
-		st.Tree, st.Snapshot = newest.Tree, newest.origin()
+		st.Tree, st.Snapshot, st.SavedAt = newest.Tree, newest.origin(), newest.Time
 	}
 
 	// Take the lease: move the active tag to this machine.
@@ -358,7 +358,9 @@ func (b *Box) RevertToLastSavePoint(ctx context.Context) (RevertResult, error) {
 	if err := b.restic.restoreTo(ctx, point, b.cfg.HomeDir, true); err != nil {
 		return RevertResult{}, fmt.Errorf("restore save point %s: %w", point.short(), err)
 	}
-	st.Tree, st.Snapshot, st.Dirty, st.Lease = point.Tree, point.origin(), true, LeaseHeld
+	// The home now holds the save point's content, which is saved; the save
+	// made just before is the newest recorded save.
+	st.Tree, st.Snapshot, st.Dirty, st.Lease, st.SavedAt = point.Tree, point.origin(), true, LeaseHeld, before.Time
 	if err := saveState(b.cfg.StateDir, st); err != nil {
 		return RevertResult{}, err
 	}
@@ -403,7 +405,7 @@ func (b *Box) saveOrphan(ctx context.Context, snaps []Snapshot, st State) (Snaps
 	if err != nil {
 		return Snapshot{}, err
 	}
-	if err := saveState(b.cfg.StateDir, State{Tree: s.Tree, Snapshot: s.origin(), Dirty: false, KeyHint: st.KeyHint}); err != nil {
+	if err := saveState(b.cfg.StateDir, State{Tree: s.Tree, Snapshot: s.origin(), Dirty: false, KeyHint: st.KeyHint, SavedAt: s.Time}); err != nil {
 		return Snapshot{}, err
 	}
 	return s, nil
@@ -426,7 +428,7 @@ func (b *Box) restoreSnapshot(ctx context.Context, s Snapshot) error {
 	if err := b.restic.restoreTo(ctx, s, b.cfg.HomeDir, true); err != nil {
 		return fmt.Errorf("restore %s: %w", s.short(), err)
 	}
-	return saveState(b.cfg.StateDir, State{Tree: s.Tree, Snapshot: s.origin(), Dirty: false, KeyHint: st.KeyHint})
+	return saveState(b.cfg.StateDir, State{Tree: s.Tree, Snapshot: s.origin(), Dirty: false, KeyHint: st.KeyHint, SavedAt: s.Time})
 }
 
 // SaveKind says what a save is for.
@@ -504,13 +506,17 @@ func (b *Box) saveListed(ctx context.Context, snaps []Snapshot, opts SaveOptions
 	if err != nil {
 		return Snapshot{}, err
 	}
-	s := Snapshot{ID: id, Tags: tags, Hostname: snapshotHost, Time: b.cfg.Now()}
+	when := b.restic.lastStart // restic's own time for this snapshot
+	if when.IsZero() {
+		when = b.cfg.Now()
+	}
+	s := Snapshot{ID: id, Tags: tags, Hostname: snapshotHost, Time: when}
 	s.parseTags()
 	lease := LeaseHeld
 	if opts.Kind == SaveRelease {
 		lease = LeaseReleased
 	}
-	if err := saveState(b.cfg.StateDir, State{Snapshot: id, Dirty: opts.Kind != SaveRelease, Lease: lease, KeyHint: st.KeyHint}); err != nil {
+	if err := saveState(b.cfg.StateDir, State{Snapshot: id, Dirty: opts.Kind != SaveRelease, Lease: lease, KeyHint: st.KeyHint, SavedAt: s.Time}); err != nil {
 		return Snapshot{}, fmt.Errorf("save %s made but not recorded: %w", s.short(), err)
 	}
 	// Older snapshots may still carry active tags; readers only look at the

@@ -687,6 +687,7 @@ func (d *Driver) AgentChannel(ctx context.Context, id driver.BoxID) (driver.Agen
 		Dial: func(ctx context.Context) (net.Conn, error) {
 			return (&net.Dialer{Timeout: 5 * time.Second}).DialContext(ctx, "tcp", addr)
 		},
+		Addr:    addr,
 		CertPEM: sec.CertPEM,
 		Token:   sec.Token,
 	}, nil

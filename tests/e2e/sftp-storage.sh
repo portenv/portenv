@@ -88,6 +88,12 @@ expect "portenvd opens the box (rule 3)" grep -q "rule 3" <<<"$out"
 { printf 'echo through-the-channel > ~/channel.txt\r'; sleep 2; } | "$portenv" attach sftp >/dev/null 2>&1 || true
 out=$("$portenv" app point sftp 2>&1) || true; echo "  $out"
 expect "a save over SFTP through the agent channel" grep -q "^save point" <<<"$out"
+# The REST forward's SSH connection drops (network change, idle limit): the
+# next save rebuilds it.
+pkill -f "ssh .*-M -N -f .*ControlPersist=4h" || true
+sleep 1
+out=$("$portenv" app point sftp 2>&1) || true; echo "  $out"
+expect "a save after the REST forward's connection dropped" grep -q "^save point" <<<"$out"
 out=$("$portenv" app close sftp 2>&1) || true; echo "  $out"
 expect "close over SFTP through the agent channel" grep -q "closed and released" <<<"$out"
 kill "$dpid" 2>/dev/null; wait "$dpid" 2>/dev/null || true

@@ -175,6 +175,8 @@ Requires=docker.service
 
 [Service]
 ExecStart=/usr/local/bin/portenv-runner
+# The same Portenv directory as `sudo portenv` (root's).
+Environment=HOME=/root
 Restart=on-failure
 UMask=0077
 

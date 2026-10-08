@@ -94,7 +94,7 @@ APP_BUILD := $(HOME)/Library/Caches/Portenv/app-build
 # the environment they ran in, so a session token or other secret in the
 # shell would end up on disk under .build (scripts/check-swift-env.sh).
 SWIFT := env -i PATH="$(PATH)" HOME="$(HOME)" TMPDIR="$(or $(TMPDIR),/tmp)" LANG=en_US.UTF-8 swift
-app: build
+app: build $(TOOLS_STAMP)
 	cd apps/mac && $(SWIFT) build -c release --scratch-path "$(APP_BUILD)"
 	rm -rf $(BIN)/Portenv.app && mkdir -p $(BIN)/Portenv.app/Contents/MacOS
 	cp "$(APP_BUILD)/release/Portenv" $(BIN)/Portenv.app/Contents/MacOS/Portenv

@@ -18,6 +18,7 @@ Phase 0: Foundations (owner only). Start with milestone 0.1 (repository, CI and 
 - Never weaken a security default to make something work: no plaintext keys or secrets on disk, no public or inbound ports, no disabled encryption. Stop and ask.
 - Save, resume, lease and key code are data-loss paths: write the tests first and keep the invariants in `docs/PLAN.md` (Save, resume and leases) true at every commit.
 - Never pipe build or test output in a way that hides the exit code: use `set -o pipefail` (or `set -euo pipefail`), or check the exit status before trimming output. A command whose result you report must have its real exit status checked.
+- Builds run with a clean environment: Swift builds go through the Makefile's `$(SWIFT)` (`env -i` with only PATH, HOME, TMPDIR and LANG), because SwiftPM's plugin caches record the environment on disk. Never run a bare `swift build` with secrets or session tokens in the shell; `make swift-env-check` proves nothing leaks.
 - Work one milestone at a time in small, reviewable changes. End each milestone with a demo note in `docs/milestones/<id>.md` and the milestone's checklist ticked in `docs/PLAN.md`.
 - Add unknowns to "Open questions" in `docs/PLAN.md` instead of guessing.
 - Ask before touching real production credentials, deleting snapshots or repositories, or publishing anything.
@@ -47,7 +48,8 @@ Phase 0: Foundations (owner only). Start with milestone 0.1 (repository, CI and 
 - `make fmt`: format Go and proto sources.
 - `make proto`: regenerate `proto/gen/go` after editing `proto/`; commit the result. `make proto-check` fails if it is stale.
 - `make agent-linux`: static `portenv-agent` for linux/arm64 and amd64.
-- `make swift-test`: build and test the Swift shim (macOS).
+- `make swift-test`: build and test the Swift packages (macOS), with a clean environment.
+- `make swift-env-check`: build with a fake secret in the environment and confirm it reaches no build folder.
 - `make image` / `make image-test`: build the toolbox image for this Mac's architecture only (never emulate amd64) and run `images/toolbox-node/test.sh`.
 - `make driver-test` / `make e2e`: driver conformance (with the capability-refusal test) and the end-to-end checks (restic isolation probe, two-machine round trip) against `IMAGE`.
 - `make secrets`: gitleaks over the full history and the working tree.

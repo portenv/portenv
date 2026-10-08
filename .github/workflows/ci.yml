@@ -76,7 +76,13 @@ jobs:
     runs-on: macos-26
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # make app (in swift-env-check) builds the Go helpers into the bundle.
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: core/go.mod
+          cache-dependency-path: '**/go.sum'
       - run: make swift-test
+      - run: make swift-env-check
 
   secrets:
     name: Secret scan

@@ -31,18 +31,7 @@ struct PortenvApp: App {
             }
             // The title menu's box actions, also in the menu bar.
             CommandMenu("Box") {
-                Menu("Move To") {
-                    Button("This Mac") { Task { await controller.move(to: "this-mac") } }
-                        .disabled(controller.location == .thisMac || controller.busy)
-                    ForEach(controller.servers, id: \.self) { server in
-                        Button(server) { Task { await controller.move(to: server) } }
-                            .disabled(controller.location == .server(server) || controller.busy)
-                    }
-                }
-                Menu("Revert To") {
-                    Button("Last Save Point") { Task { await controller.revertToLastSavePoint() } }
-                        .disabled(controller.location != .thisMac || controller.busy)
-                }
+                BoxMenu(controller: controller)
             }
         }
     }

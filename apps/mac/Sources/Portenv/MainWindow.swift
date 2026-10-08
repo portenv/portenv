@@ -13,30 +13,28 @@ struct MainWindow: View {
         content
             .frame(minWidth: 640, minHeight: 400)
             .navigationTitle(controller.box)
-            .navigationSubtitle(controller.subtitle)
-            // The title is a menu only in a window with a toolbar; its one
-            // item is the sync symbol next to the title (docs/PLAN.md, Main
-            // window).
+            // The title is the box's menu (Apple's document-menu pattern):
+            // the system title is replaced by a menu button showing the
+            // box's name and state, next to the sync symbol.
+            .toolbar(removing: .title)
             .toolbar {
                 ToolbarItem(placement: .navigation) {
                     Image(systemName: controller.busy ? "arrow.triangle.2.circlepath" : "checkmark.circle")
                         .foregroundStyle(.secondary)
                         .help(controller.subtitle)
                 }
-            }
-            .toolbarTitleMenu {
-                Menu("Move To") {
-                    Button("This Mac") { Task { await controller.move(to: "this-mac") } }
-                        .disabled(controller.location == .thisMac)
-                    if !controller.servers.isEmpty { Divider() }
-                    ForEach(controller.servers, id: \.self) { server in
-                        Button(server) { Task { await controller.move(to: server) } }
-                            .disabled(controller.location == .server(server))
+                ToolbarItem(placement: .navigation) {
+                    Menu {
+                        BoxMenu(controller: controller)
+                    } label: {
+                        VStack(alignment: .leading, spacing: 0) {
+                            Text(controller.box).font(.headline)
+                            Text(controller.subtitle).font(.caption).foregroundStyle(.secondary)
+                        }
                     }
-                }
-                Menu("Revert To") {
-                    Button("Last Save Point") { Task { await controller.revertToLastSavePoint() } }
-                        .disabled(controller.location != .thisMac)
+                    .menuIndicator(.visible)
+                    .fixedSize()
+                    .help("Box actions")
                 }
             }
             .disabled(controller.busy)
@@ -66,5 +64,27 @@ struct MainWindow: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(.background)
+    }
+}
+
+/// The box's actions, shared by the title menu and the Box menu in the
+/// menu bar. In 1.0 only Move To and Revert To work.
+struct BoxMenu: View {
+    @Bindable var controller: BoxController
+
+    var body: some View {
+        Menu("Move To") {
+            Button("This Mac") { Task { await controller.move(to: "this-mac") } }
+                .disabled(controller.location == .thisMac || controller.busy)
+            if !controller.servers.isEmpty { Divider() }
+            ForEach(controller.servers, id: \.self) { server in
+                Button(server) { Task { await controller.move(to: server) } }
+                    .disabled(controller.location == .server(server) || controller.busy)
+            }
+        }
+        Menu("Revert To") {
+            Button("Last Save Point") { Task { await controller.revertToLastSavePoint() } }
+                .disabled(controller.location != .thisMac || controller.busy)
+        }
     }
 }

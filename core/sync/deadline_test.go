@@ -208,3 +208,38 @@ func boolsToStrings(b []bool) []string {
 	}
 	return s
 }
+
+// TestEveryRunHasADeadline: the runs outside the usual path (opening a
+// repository with cat config, the version check, adding a key) end at their
+// deadline too. A broken forward once hung cat config for good.
+func TestEveryRunHasADeadline(t *testing.T) {
+	for _, c := range []struct {
+		cmd string
+		run func(r *restic) error
+	}{
+		{"cat", func(r *restic) error { return r.initIfMissing(context.Background()) }},
+		{"version", func(r *restic) error { return r.checkVersion(context.Background()) }},
+		{"key", func(r *restic) error {
+			r.meta, r.metaRepo = r.exec, r.repo
+			b := &Box{restic: r}
+			return b.AddKey(context.Background(), []byte("new"), "mac-1")
+		}},
+	} {
+		t.Run(c.cmd, func(t *testing.T) {
+			f := newFakeRestic(t)
+			f.hang(c.cmd, 100)
+			var retrying []bool
+			start := time.Now()
+			err := c.run(f.restic(&retrying))
+			if err == nil {
+				t.Fatal("a run that never ends returned no error")
+			}
+			if d := time.Since(start); d > 40*time.Second {
+				t.Fatalf("took %v; every run must end at its deadline", d)
+			}
+			if !f.noneRunning() {
+				t.Fatal("a stopped restic is still running")
+			}
+		})
+	}
+}

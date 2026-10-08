@@ -168,7 +168,9 @@ var versionRE = regexp.MustCompile(`^restic (\d+)\.(\d+)\.(\d+)`)
 // checkVersion fails if restic is older than minResticVersion.
 func (r *restic) checkVersion(ctx context.Context) error {
 	ex, _ := r.pick([]string{"version"})
-	res, err := ex.Restic(ctx, []string{"version"}, Credentials{})
+	vctx, cancel := context.WithTimeout(ctx, r.deadlines.withDefaults().Short)
+	defer cancel()
+	res, err := ex.Restic(vctx, []string{"version"}, Credentials{})
 	if err != nil {
 		return fmt.Errorf("run restic version: %w", err)
 	}
@@ -198,9 +200,13 @@ func (r *restic) checkVersion(ctx context.Context) error {
 
 // initIfMissing creates the repository unless it exists.
 func (r *restic) initIfMissing(ctx context.Context) error {
-	_, stderr, err := r.runOnce(ctx, "cat", "config")
+	_, stderr, err := r.runWithin(ctx, 0, "cat", "config")
 	if err == nil {
 		return nil
+	}
+	var de *DeadlineError
+	if errors.As(err, &de) {
+		return err
 	}
 	var exit *ExitError
 	// restic exits 10 when the repository does not exist.

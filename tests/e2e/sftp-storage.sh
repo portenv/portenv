@@ -73,7 +73,18 @@ PORTENV_TEST_RESTIC_DEADLINES=20s "$repo/bin/portenvd" 2>"$root/portenvd.log" &
 dpid=$!
 for _ in $(seq 50); do [[ -S $root/mac/portenvd.sock ]] && break; sleep 0.1; done
 # Each call has a time limit: a hang fails its check instead of the run.
-limit() { perl -e 'alarm shift; exec @ARGV' 180 "$@"; }
+# (SIGTERM, then SIGKILL: a Go program doesn't exit on SIGALRM.) The
+# watcher's output goes nowhere, so $(...) never waits for it.
+limit() {
+	"$@" &
+	local p=$! st=0
+	( sleep 180; kill -TERM "$p" 2>/dev/null; sleep 5; kill -KILL "$p" 2>/dev/null ) >/dev/null 2>&1 &
+	local w=$!
+	wait "$p" || st=$?
+	kill "$w" 2>/dev/null || true
+	wait "$w" 2>/dev/null || true
+	return "$st"
+}
 app() { limit "$portenv" app "$@" 2>&1; }
 state() { app state sftp | python3 -c 'import json,sys; print(json.load(sys.stdin)["state"])'; }
 type_in() { { printf '%s\r' "$1"; sleep 2; } | "$portenv" attach sftp >/dev/null 2>&1 || true; }
@@ -102,7 +113,8 @@ expect "same-machine open over SFTP (rule 3)" grep -q "rule 3" <<<"$out"
 expect "the file is there" in_box 'grep -qx "over sftp" note.txt'
 expect "restic's cache survived the restart" bash -c "[[ -n \$(docker exec portenv-sftp-$(box_id) sh -c 'ls /var/cache/portenv-sync') ]]"
 docker exec "$srv" bash -c "sed -i 's/^restrict/#restrict/' /etc/ssh/portenv-storage.authorized_keys"
-expect "an unknown key is refused (no save without the server's consent)" bash -c "! perl -e 'alarm shift; exec @ARGV' 180 $portenv app point sftp"
+st=0; app point sftp >/dev/null || st=$?
+expect "an unknown key is refused (no save without the server's consent)" test "$st" -ne 0
 docker exec "$srv" sed -i 's/^#restrict/restrict/' /etc/ssh/portenv-storage.authorized_keys
 out=$(app close sftp) || true; echo "  $out"
 expect "close after restoring the key" grep -q "closed and released" <<<"$out"

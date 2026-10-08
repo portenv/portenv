@@ -165,7 +165,11 @@ func (b *Box) AddKey(ctx context.Context, newPassword []byte, host string) error
 	}
 	cred := b.restic.cred
 	cred.NewPassword = newPassword
-	res, err := b.restic.meta.Restic(ctx, []string{"--repo", b.restic.metaRepo, "key", "add",
+	// Bounded like every restic run (ADR 0012); a key is never added twice
+	// by retrying, so a missed deadline is just an error.
+	kctx, cancel := context.WithTimeout(ctx, b.restic.deadlines.withDefaults().Short)
+	defer cancel()
+	res, err := b.restic.meta.Restic(kctx, []string{"--repo", b.restic.metaRepo, "key", "add",
 		"--new-password-file", "/dev/fd/4", "--host", host}, cred)
 	if err != nil {
 		return err

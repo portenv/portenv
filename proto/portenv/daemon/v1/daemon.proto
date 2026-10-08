@@ -41,6 +41,10 @@ service DaemonService {
   // The box's save state, derived only from what is recorded (the last
   // saved snapshot, the dirty flag, a save in progress) and where it runs.
   rpc GetBoxState(GetBoxStateRequest) returns (GetBoxStateResponse);
+  // The system's network status, as the app sees it (NWPathMonitor on the
+  // Mac). A fresh "down" (from a running app, at most 30 s old) opens a
+  // box offline at once, without probing storage; anything else probes.
+  rpc SetNetworkPath(SetNetworkPathRequest) returns (SetNetworkPathResponse);
 }
 
 message CheckBoxRequest {
@@ -192,3 +196,20 @@ message GetBoxStateResponse {
   // Where the box runs: empty for this machine, else the server.
   string location = 3;
 }
+
+enum NetworkPath {
+  NETWORK_PATH_UNSPECIFIED = 0;
+  // Some network is usable: probe the storage before opening online.
+  NETWORK_PATH_SATISFIED = 1;
+  // No network at all: storage cannot be reachable.
+  NETWORK_PATH_UNSATISFIED = 2;
+}
+
+message SetNetworkPathRequest {
+  NetworkPath path = 1;
+  // The app that saw this status (the portenv command's parent). A "down"
+  // counts only while that process runs and for 30 s after the report.
+  int32 reporter_pid = 2;
+}
+
+message SetNetworkPathResponse {}

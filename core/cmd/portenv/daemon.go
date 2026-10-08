@@ -45,7 +45,26 @@ func dialDaemon(e *local.Env) (daemonv1.DaemonServiceClient, func(), error) {
 //	portenv app ping                (exit 0 when portenvd answers)
 //	portenv app state BOX           (the save state and location, JSON)
 //	portenv app channel BOX         (a runner's box channel for a Mac, JSON on stdout)
+//	portenv app network up|down     (the system's network status, from the app)
 func cmdApp(ctx context.Context, e *local.Env, op string, args []string) error {
+	if op == "network" {
+		path := map[string]daemonv1.NetworkPath{"up": daemonv1.NetworkPath_NETWORK_PATH_SATISFIED, "down": daemonv1.NetworkPath_NETWORK_PATH_UNSATISFIED}
+		if len(args) != 1 || path[args[0]] == daemonv1.NetworkPath_NETWORK_PATH_UNSPECIFIED {
+			return usageError{Msg: "app network needs up or down"}
+		}
+		c, done, err := dialDaemon(e)
+		if err != nil {
+			return err
+		}
+		defer done()
+		// The reporter is this command's parent (the app): portenvd trusts a
+		// "down" only while it runs, and for 30 s.
+		_, err = c.SetNetworkPath(ctx, &daemonv1.SetNetworkPathRequest{Path: path[args[0]], ReporterPid: int32(os.Getppid())}) // #nosec G115 -- a process ID
+		if err != nil {
+			return plain(err)
+		}
+		return nil
+	}
 	if op == "ping" {
 		c, done, err := dialDaemon(e)
 		if err != nil {

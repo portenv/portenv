@@ -18,6 +18,9 @@ import (
 	"strings"
 	"time"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	"github.com/portenv/portenv/core/driver"
 	agentv1 "github.com/portenv/portenv/proto/gen/go/portenv/agent/v1"
 )
@@ -77,6 +80,21 @@ type LocalExecutor struct {
 	// through a forward over the reused SSH connection, instead of SFTP
 	// (far fewer round trips for listing and lease tags).
 	REST *RESTForward
+}
+
+// BinaryID identifies the restic binary this executor runs without running
+// it (path, size and modification time): a version check holds until it
+// changes.
+func (l LocalExecutor) BinaryID() (string, error) {
+	p, err := exec.LookPath(l.Bin)
+	if err != nil {
+		return "", err
+	}
+	fi, err := os.Stat(p)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%s %d %d", p, fi.Size(), fi.ModTime().UnixNano()), nil
 }
 
 // RESTForward is restic's REST server on the storage server's loopback,
@@ -253,6 +271,24 @@ func agentInput(cred Credentials) ([]byte, error) {
 // channel (ADR 0010): what portenvd uses from Phase 1, never docker exec.
 type ChannelExecutor struct {
 	Agent agentv1.AgentServiceClient
+	// Client, when set, returns the client to use instead of Agent: the
+	// box's current channel, which changes when the box restarts.
+	Client func() agentv1.AgentServiceClient
+}
+
+// errNoChannel: the box has no agent connection (it was just closed or
+// is restarting).
+var errNoChannel = status.Error(codes.Unavailable, "the box agent is unavailable (no channel)")
+
+func (c ChannelExecutor) agent() (agentv1.AgentServiceClient, error) {
+	a := c.Agent
+	if c.Client != nil {
+		a = c.Client()
+	}
+	if a == nil {
+		return nil, errNoChannel
+	}
+	return a, nil
 }
 
 // Restic implements Executor.
@@ -261,7 +297,11 @@ func (c ChannelExecutor) Restic(ctx context.Context, args []string, cred Credent
 	if err != nil {
 		return ExecResult{}, err
 	}
-	res, err := c.Agent.RunRestic(ctx, &agentv1.RunResticRequest{Args: args, Input: input})
+	a, err := c.agent()
+	if err != nil {
+		return ExecResult{}, err
+	}
+	res, err := a.RunRestic(ctx, &agentv1.RunResticRequest{Args: args, Input: input})
 	if err != nil {
 		return ExecResult{}, fmt.Errorf("run restic in box: %w", err)
 	}
@@ -270,7 +310,11 @@ func (c ChannelExecutor) Restic(ctx context.Context, args []string, cred Credent
 
 // PathInfo implements Executor.
 func (c ChannelExecutor) PathInfo(ctx context.Context, path string) (PathInfo, error) {
-	res, err := c.Agent.GetPathInfo(ctx, &agentv1.GetPathInfoRequest{Path: path})
+	a, err := c.agent()
+	if err != nil {
+		return PathInfo{}, err
+	}
+	res, err := a.GetPathInfo(ctx, &agentv1.GetPathInfoRequest{Path: path})
 	if err != nil {
 		return PathInfo{}, fmt.Errorf("inspect %s in box: %w", path, err)
 	}

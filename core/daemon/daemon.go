@@ -56,16 +56,23 @@ type Server struct {
 	// gen counts each box's moves, closes and restarts by this daemon, so
 	// a terminal that ends because of one is not reported as a failure.
 	gen map[string]uint64
+
+	network networkReport      // the app's last network report
+	now     func() time.Time   // the clock (tests set it)
+	alive   func(pid int) bool // whether a reporting app still runs
 }
 
 // openBox is a box this daemon opened: its session, sync engine and agent
 // channel.
 type openBox struct {
-	mu    sync.Mutex // one box operation at a time
-	sess  *local.Session
-	sb    *boxsync.Box
-	conn  *grpc.ClientConn
-	agent agentv1.AgentServiceClient
+	mu sync.Mutex // one box operation at a time
+	// closed: saved, released and stopped (set under mu); a close that
+	// waited for that one finds nothing left to do.
+	closed bool
+	sess   *local.Session
+	sb     *boxsync.Box
+	conn   *grpc.ClientConn
+	agent  agentv1.AgentServiceClient
 
 	// What the save state is derived from besides the sync state.
 	saving, offline, agentDown atomic.Bool
@@ -73,7 +80,8 @@ type openBox struct {
 
 // New returns a daemon for this machine's Portenv directory.
 func New(env *local.Env, log *slog.Logger) *Server {
-	return &Server{env: env, log: log, open: map[string]*openBox{}, remote: map[string]*remoteBox{}, gen: map[string]uint64{}}
+	return &Server{env: env, log: log, open: map[string]*openBox{}, remote: map[string]*remoteBox{}, gen: map[string]uint64{},
+		now: time.Now, alive: processAlive}
 }
 
 // Serve listens on the socket in the Portenv directory (mode 0600 in a 0700
@@ -93,7 +101,7 @@ func (s *Server) Serve(ctx context.Context) error {
 	if err := os.Chmod(sock, 0o600); err != nil {
 		return err
 	}
-	srv := grpc.NewServer()
+	srv := s.grpcServer()
 	daemonv1.RegisterDaemonServiceServer(srv, s)
 	go func() {
 		<-ctx.Done()
@@ -199,6 +207,8 @@ func (s *Server) OpenBox(ctx context.Context, req *daemonv1.OpenBoxRequest) (*da
 
 func (s *Server) openBox(ctx context.Context, name string) (*openBox, boxsync.ResumeResult, error) {
 	var none boxsync.ResumeResult
+	t0 := time.Now()
+	step := func(what string) { s.log.Info(what, "box", name, "after", time.Since(t0).Round(time.Millisecond)) }
 	sess, err := s.env.Open(name)
 	if err != nil {
 		return nil, none, err
@@ -206,8 +216,19 @@ func (s *Server) openBox(ctx context.Context, name string) (*openBox, boxsync.Re
 	if err := sess.EnsureCreated(ctx, func(msg string) { s.log.Info(msg, "box", name) }); err != nil {
 		return nil, none, err
 	}
+	// Storage reachability, alongside the box's start: no probe when the
+	// app has just reported no network at all; otherwise a short probe.
 	reach := make(chan bool, 1)
-	go func() { reach <- sess.StorageReachable() }()
+	if s.skipProbe() {
+		step("no network (the app's report): offline without a probe")
+		reach <- false
+	} else {
+		go func() {
+			ok := sess.StorageReachable()
+			step(fmt.Sprintf("storage probe: reachable=%v", ok))
+			reach <- ok
+		}()
+	}
 
 	// A box left running without this process's channel secrets (for
 	// example after portenvd restarted) is restarted to open a new channel.
@@ -219,15 +240,20 @@ func (s *Server) openBox(ctx context.Context, name string) (*openBox, boxsync.Re
 	if _, err := sess.Drv.Start(ctx, sess.ID()); err != nil {
 		return nil, none, err
 	}
+	step("box started")
 	ob := &openBox{sess: sess}
 	// An empty home makes the agent report FAILED; restic still runs.
 	if _, err := ob.connect(ctx, true); err != nil {
 		return nil, none, agentError(err)
 	}
-	if ob.sb, err = sess.SyncWith(boxsync.ChannelExecutor{Agent: ob.agent}); err != nil {
+	step("agent answers")
+	// One sync engine for the whole open: its executor follows the box's
+	// current channel, which changes when the box restarts below.
+	if ob.sb, err = sess.SyncWith(boxsync.ChannelExecutor{Client: func() agentv1.AgentServiceClient { return ob.agent }}); err != nil {
 		ob.stop(ctx)
 		return nil, none, err
 	}
+	step("sync engine ready")
 	var res boxsync.ResumeResult
 	if !<-reach {
 		if res, err = ob.sb.ResumeOffline(); err != nil {
@@ -244,6 +270,7 @@ func (s *Server) openBox(ctx context.Context, name string) (*openBox, boxsync.Re
 			return nil, none, err
 		}
 	}
+	step("resume rule decided")
 	switch res.Action {
 	case boxsync.ActionNewBox, boxsync.ActionRestored, boxsync.ActionRestoredKeptLocal:
 		// The start sequence runs again on the new home: a fresh one from
@@ -258,9 +285,7 @@ func (s *Server) openBox(ctx context.Context, name string) (*openBox, boxsync.Re
 	} else if state != agentv1.ReadinessState_READINESS_STATE_READY {
 		return nil, none, errors.New("the box failed to start")
 	}
-	if ob.sb, err = sess.SyncWith(boxsync.ChannelExecutor{Agent: ob.agent}); err != nil {
-		return nil, none, err
-	}
+	step("box ready")
 	return ob, res, nil
 }
 
@@ -343,6 +368,11 @@ func (s *Server) closeBox(ctx context.Context, name string) error {
 	s.leaving(name)
 	ob.mu.Lock()
 	defer ob.mu.Unlock()
+	// Closed while this call waited (closing the last window, then the app
+	// quitting): nothing left to do.
+	if ob.closed {
+		return nil
+	}
 	ob.saving.Store(true)
 	_, err = ob.sb.Save(ctx, boxsync.SaveOptions{Kind: boxsync.SaveRelease})
 	ob.saving.Store(false)
@@ -350,6 +380,7 @@ func (s *Server) closeBox(ctx context.Context, name string) error {
 		return ob.noteErr(err)
 	}
 	ob.stop(ctx)
+	ob.closed = true
 	s.mu.Lock()
 	delete(s.open, name)
 	s.mu.Unlock()

@@ -37,6 +37,7 @@ const (
 	DaemonService_RestartBox_FullMethodName            = "/portenv.daemon.v1.DaemonService/RestartBox"
 	DaemonService_GetChannel_FullMethodName            = "/portenv.daemon.v1.DaemonService/GetChannel"
 	DaemonService_GetBoxState_FullMethodName           = "/portenv.daemon.v1.DaemonService/GetBoxState"
+	DaemonService_SetNetworkPath_FullMethodName        = "/portenv.daemon.v1.DaemonService/SetNetworkPath"
 )
 
 // DaemonServiceClient is the client API for DaemonService service.
@@ -74,6 +75,10 @@ type DaemonServiceClient interface {
 	// The box's save state, derived only from what is recorded (the last
 	// saved snapshot, the dirty flag, a save in progress) and where it runs.
 	GetBoxState(ctx context.Context, in *GetBoxStateRequest, opts ...grpc.CallOption) (*GetBoxStateResponse, error)
+	// The system's network status, as the app sees it (NWPathMonitor on the
+	// Mac). A fresh "down" (from a running app, at most 30 s old) opens a
+	// box offline at once, without probing storage; anything else probes.
+	SetNetworkPath(ctx context.Context, in *SetNetworkPathRequest, opts ...grpc.CallOption) (*SetNetworkPathResponse, error)
 }
 
 type daemonServiceClient struct {
@@ -207,6 +212,16 @@ func (c *daemonServiceClient) GetBoxState(ctx context.Context, in *GetBoxStateRe
 	return out, nil
 }
 
+func (c *daemonServiceClient) SetNetworkPath(ctx context.Context, in *SetNetworkPathRequest, opts ...grpc.CallOption) (*SetNetworkPathResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetNetworkPathResponse)
+	err := c.cc.Invoke(ctx, DaemonService_SetNetworkPath_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DaemonServiceServer is the server API for DaemonService service.
 // All implementations must embed UnimplementedDaemonServiceServer
 // for forward compatibility.
@@ -242,6 +257,10 @@ type DaemonServiceServer interface {
 	// The box's save state, derived only from what is recorded (the last
 	// saved snapshot, the dirty flag, a save in progress) and where it runs.
 	GetBoxState(context.Context, *GetBoxStateRequest) (*GetBoxStateResponse, error)
+	// The system's network status, as the app sees it (NWPathMonitor on the
+	// Mac). A fresh "down" (from a running app, at most 30 s old) opens a
+	// box offline at once, without probing storage; anything else probes.
+	SetNetworkPath(context.Context, *SetNetworkPathRequest) (*SetNetworkPathResponse, error)
 	mustEmbedUnimplementedDaemonServiceServer()
 }
 
@@ -287,6 +306,9 @@ func (UnimplementedDaemonServiceServer) GetChannel(context.Context, *GetChannelR
 }
 func (UnimplementedDaemonServiceServer) GetBoxState(context.Context, *GetBoxStateRequest) (*GetBoxStateResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetBoxState not implemented")
+}
+func (UnimplementedDaemonServiceServer) SetNetworkPath(context.Context, *SetNetworkPathRequest) (*SetNetworkPathResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetNetworkPath not implemented")
 }
 func (UnimplementedDaemonServiceServer) mustEmbedUnimplementedDaemonServiceServer() {}
 func (UnimplementedDaemonServiceServer) testEmbeddedByValue()                       {}
@@ -514,6 +536,24 @@ func _DaemonService_GetBoxState_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
+func _DaemonService_SetNetworkPath_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetNetworkPathRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).SetNetworkPath(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_SetNetworkPath_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).SetNetworkPath(ctx, req.(*SetNetworkPathRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // DaemonService_ServiceDesc is the grpc.ServiceDesc for DaemonService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -564,6 +604,10 @@ var DaemonService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetBoxState",
 			Handler:    _DaemonService_GetBoxState_Handler,
+		},
+		{
+			MethodName: "SetNetworkPath",
+			Handler:    _DaemonService_SetNetworkPath_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

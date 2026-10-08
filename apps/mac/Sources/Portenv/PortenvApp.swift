@@ -19,6 +19,9 @@ struct PortenvApp: App {
             MainWindow(controller: controller)
                 .task {
                     await Daemon.shared.ensureRunning()
+                    // Before opening: with no network at all the box opens
+                    // offline at once instead of probing storage.
+                    await NetworkWatch.shared.start()
                     await controller.open()
                     // The state line follows the recorded save state.
                     while !Task.isCancelled {

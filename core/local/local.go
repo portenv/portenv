@@ -390,7 +390,9 @@ func (s *Session) StorageReachable() bool {
 		// unmounted external drive is not); the boxes folder comes later.
 		return fileExists(c.Storage) // #nosec G703 -- the user's own configured storage directory
 	}
-	conn, err := net.DialTimeout("tcp", addr, 2*time.Second) // #nosec G704 -- the user's own configured storage server
+	// Short: a reachable server answers within a second. "No network at
+	// all" never gets here on the Mac (the app reports it; no probe).
+	conn, err := net.DialTimeout("tcp", addr, time.Second) // #nosec G704 -- the user's own configured storage server
 	if err != nil {
 		return false
 	}

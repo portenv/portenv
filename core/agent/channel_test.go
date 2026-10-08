@@ -69,7 +69,12 @@ func TestChannelNeedsTheTokenAndThePinnedCertificate(t *testing.T) {
 	if err := call(t, addr, sec.CertPEM, ""); status.Code(err) != codes.Unauthenticated {
 		t.Fatalf("without token: %v, want Unauthenticated", err)
 	}
-	if err := call(t, addr, sec.CertPEM, sec.Token[:len(sec.Token)-1]+"0"); status.Code(err) != codes.Unauthenticated {
+	// One character changed, never to itself (the token is hex).
+	last := "0"
+	if strings.HasSuffix(sec.Token, "0") {
+		last = "1"
+	}
+	if err := call(t, addr, sec.CertPEM, sec.Token[:len(sec.Token)-1]+last); status.Code(err) != codes.Unauthenticated {
 		t.Fatalf("wrong token: %v, want Unauthenticated", err)
 	}
 }

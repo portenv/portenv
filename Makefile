@@ -87,6 +87,7 @@ proto-check: proto
 ## swift-test: build and test the Swift packages (macOS only)
 swift-test:
 	cd shims/containerization && swift build && swift test
+	cd apps/mac && swift build && swift test
 
 ## image: build the toolbox image for this machine's architecture only
 IMAGE ?= portenv/toolbox-node:dev

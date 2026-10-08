@@ -68,11 +68,15 @@ func New(env *local.Env, log *slog.Logger) *Server {
 // release).
 func (s *Server) Serve(ctx context.Context) error {
 	sock := filepath.Join(s.env.Dir, SocketName)
+	if len(sock) >= 104 {
+		return fmt.Errorf("socket path %s is longer than the 103 bytes Unix sockets allow; use a shorter PORTENV_HOME", sock)
+	}
 	_ = os.Remove(sock)
 	lis, err := (&net.ListenConfig{}).Listen(ctx, "unix", sock)
 	if err != nil {
 		return err
 	}
+	defer func() { _ = os.Remove(sock) }()
 	if err := os.Chmod(sock, 0o600); err != nil {
 		return err
 	}
@@ -80,11 +84,14 @@ func (s *Server) Serve(ctx context.Context) error {
 	daemonv1.RegisterDaemonServiceServer(srv, s)
 	go func() {
 		<-ctx.Done()
-		srv.GracefulStop()
+		// Save and release first, while the agent channels are up; then end
+		// every call, open terminals included (a graceful stop would wait
+		// for terminals forever).
+		s.closeAll()
+		srv.Stop()
 	}()
 	s.log.Info("serving", "socket", sock)
 	err = srv.Serve(lis)
-	s.closeAll()
 	if errors.Is(err, grpc.ErrServerStopped) {
 		return nil
 	}

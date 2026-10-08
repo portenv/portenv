@@ -40,7 +40,20 @@ func dialDaemon(e *local.Env) (daemonv1.DaemonServiceClient, func(), error) {
 //	portenv app open|close|point|revert BOX
 //	portenv app move BOX this-mac|USER@HOST
 //	portenv app servers BOX         (the Move To targets, one per line)
+//	portenv app ping                (exit 0 when portenvd answers)
 func cmdApp(ctx context.Context, e *local.Env, op string, args []string) error {
+	if op == "ping" {
+		c, done, err := dialDaemon(e)
+		if err != nil {
+			return err
+		}
+		defer done()
+		if _, err := c.GetVersion(ctx, &daemonv1.GetVersionRequest{}); err != nil {
+			return plain(err)
+		}
+		fmt.Println("portenvd is running")
+		return nil
+	}
 	if len(args) < 1 {
 		return usageError{Msg: "app needs a box name"}
 	}

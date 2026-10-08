@@ -15,6 +15,9 @@ on:
       - proto/gen/go/**
       - go.work
       - .dockerignore
+      - tests/e2e/**
+      - server/**
+      - Makefile
       - .github/workflows/images.yml
   push:
     branches: [main]
@@ -24,6 +27,9 @@ on:
       - proto/gen/go/**
       - go.work
       - .dockerignore
+      - tests/e2e/**
+      - server/**
+      - Makefile
       - .github/workflows/images.yml
     tags:
       - toolbox-node/v*

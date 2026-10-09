@@ -65,6 +65,8 @@ struct KeychainWaitTests {
         #expect(c.progressDetail == "Check for a password prompt. It may be behind other windows.")
         #expect(c.symbol == "lock" && !c.symbolSpins)
         #expect(c.title.consistent)
+        // The line changes first, then the notification goes out.
+        await waitUntil { n.count > 0 }
         #expect(n.count == 1)
         kc.release()
         await opening.value

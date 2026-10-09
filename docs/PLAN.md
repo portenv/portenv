@@ -732,11 +732,23 @@ Found closing `retest`: a new dev build's first Keychain read waited 14½ minute
   - check whether the prompt comes from the dev build's ad-hoc signature changing on every rebuild, so "Always Allow" no longer matches;
   - if so, an ADR (or a PLAN note) says the fix is a stable signing identity once Apple Developer enrolment lands;
   - until then, test boxes on this Mac are expected to prompt after a rebuild, and a–d make that visible.
+  - Confirmed, and recorded in ADR 0013. The fail-fast path (d) also needs `SecKeychainSetUserInteractionAllowed(false)`: `kSecUseAuthenticationUI = Fail` alone doesn't stop the prompt for these legacy keychain items.
+    - That call is deprecated and turns prompts off for the whole process, so it runs only on the daemon side (`core/keys`), never in the app, where prompts must work.
+    - Tests check this:
+      - a process that may prompt never turns it off;
+      - no Swift code names it;
+      - `make app` fails if the app imports it.
+    - The switch goes away when the stable signing identity lands (1.8): keys move to the data-protection keychain, where `kSecUseAuthenticationUI = Fail` is enough.
 - **f. Overnight runs:** Keychain calls follow the same rule as restic runs. Every call has an owner who answers it or gets a clear error, never a silent wait.
 - **g. Only the app reads the Keychain; no background process ever causes a prompt.**
   - Once a login item starts `portenvd` (1.1), it has no window, so a prompt it raised would have nothing to point at.
   - `portenvd`, the runner and the CLI without a TTY always use the fail-fast path (d). When the daemon needs a key, it asks the app over its API ("key needed for acme-api"). The app reads the Keychain in the foreground, with a–c, and hands over only the key, which stays in memory.
   - With no app running, the daemon reports "Keychain needs your approval. Open Portenv on this Mac to allow it." and the box waits.
+  - **When `portenvd` restarts while the app is open** (crash, update, login item relaunch), the keys it held are gone. The app handles it:
+    - it notices `portenvd` isn't answering and starts it again;
+    - it reopens the box once, sending the keys again; the new `portenvd` reports a box the old one left open (its lease still held) as interrupted, without needing a key;
+    - until then the state line shows the box's real state ("Not saved since 14:58"), never a frozen line, "is closed" or a prompt the person didn't cause;
+    - a reopen that fails isn't repeated until the next restart.
   - Test: the daemon's key store refuses interactive calls (the fail-fast flag is set on every daemon-side call). A daemon that needs a key with no app connected returns that error and raises no prompt (checked with a fake key store that records the flags it was called with).
 
 Tests:

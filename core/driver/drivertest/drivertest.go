@@ -8,6 +8,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"net"
 	"strings"
 	"testing"
@@ -26,6 +27,9 @@ type Env struct {
 	HomeRef func(id driver.BoxID) string
 	// Cleanup removes home storage after the test (drivers never do).
 	Cleanup func(ref string)
+	// Restarted returns a new instance of the driver on the same state, as
+	// a restarted portenvd or runner has: it holds no channel secrets.
+	Restarted func() driver.Driver
 }
 
 // Run runs the conformance suite.
@@ -36,6 +40,7 @@ func Run(t *testing.T, env Env) {
 	t.Run("ExecAndStdin", func(t *testing.T) { execStdin(t, env) })
 	t.Run("MissingHomeIsReported", func(t *testing.T) { missingHome(t, env) })
 	t.Run("AgentChannel", func(t *testing.T) { agentChannel(t, env) })
+	t.Run("TakeOverWithoutRestart", func(t *testing.T) { takeOver(t, env) })
 }
 
 type box struct {
@@ -317,5 +322,90 @@ func agentChannel(t *testing.T, env Env) {
 	}
 	if err != nil {
 		t.Fatalf("the new channel after a restart: %v", err)
+	}
+}
+
+// takeOver: a restarted daemon re-keys a running box instead of restarting
+// it (ADR 0014). A command started before keeps running, the tmux session
+// survives, and the old secrets stop working.
+func takeOver(t *testing.T, env Env) {
+	if env.Restarted == nil {
+		t.Fatal("the driver must support take-over: set Env.Restarted")
+	}
+	b := newBox(t, env)
+	b.create(true)
+	b.start()
+	b.waitReady("READY")
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	client := func(d driver.Driver) (agentv1.AgentServiceClient, driver.AgentChannel, func()) {
+		ch, err := d.AgentChannel(ctx, b.id)
+		if err != nil {
+			t.Fatalf("AgentChannel: %v", err)
+		}
+		conn, err := agent.DialChannel(ch.Dial, ch.CertPEM, ch.Token)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return agentv1.NewAgentServiceClient(conn), ch, func() { _ = conn.Close() }
+	}
+	// runIn types a command into the box's main tmux session and returns
+	// the output up to want.
+	runIn := func(c agentv1.AgentServiceClient, cmd, want string) string {
+		term, err := c.Terminal(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = term.CloseSend() }()
+		for _, r := range []*agentv1.TerminalRequest{
+			{Msg: &agentv1.TerminalRequest_Open{Open: &agentv1.TerminalOpen{Session: "main", Size: &agentv1.TerminalSize{Cols: 120, Rows: 30}}}},
+			{Msg: &agentv1.TerminalRequest_Input{Input: []byte(cmd + "\r")}},
+		} {
+			if err := term.Send(r); err != nil {
+				t.Fatal(err)
+			}
+		}
+		var out strings.Builder
+		for !strings.Contains(out.String(), want) {
+			r, err := term.Recv()
+			if err != nil {
+				t.Fatalf("terminal: %v; output so far %q", err, out.String())
+			}
+			out.Write(r.GetOutput())
+		}
+		return out.String()
+	}
+
+	first, firstCh, closeFirst := client(env.Driver)
+	defer closeFirst()
+	// A long command, started in the session before the daemon restarts.
+	runIn(first, "sleep 3600 & echo long=$((1+1))", "long=2")
+
+	restarted := env.Restarted()
+	if _, err := restarted.AgentChannel(ctx, b.id); !errors.Is(err, driver.ErrNoChannel) {
+		t.Fatalf("a restarted driver's channel before re-keying: %v, want ErrNoChannel", err)
+	}
+	if err := restarted.Rekey(ctx, b.id); err != nil {
+		t.Fatalf("Rekey: %v", err)
+	}
+	second, secondCh, closeSecond := client(restarted)
+	defer closeSecond()
+	if secondCh.Token == firstCh.Token {
+		t.Fatal("the re-key reused the old token")
+	}
+	out := runIn(second, "pgrep -x sleep >/dev/null && echo still=running", "still=")
+	if !strings.Contains(out, "still=running") {
+		t.Fatalf("the long command didn't survive the take-over: %q", out)
+	}
+	// The old secrets no longer work.
+	if _, err := first.GetVersion(ctx, &agentv1.GetVersionRequest{}); err == nil {
+		t.Fatal("the old channel still answers after the take-over")
+	}
+	// Re-keying a box that isn't running fails plainly; nothing is started.
+	if _, err := restarted.Stop(ctx, b.id, 5*time.Second); err != nil {
+		t.Fatal(err)
+	}
+	if err := restarted.Rekey(ctx, b.id); err == nil {
+		t.Fatal("re-keyed a stopped box")
 	}
 }

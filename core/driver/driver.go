@@ -186,6 +186,12 @@ type Driver interface {
 	// start the box (the secrets exist only in the process that started it);
 	// stopping and starting the box again opens a new channel.
 	AgentChannel(ctx context.Context, id BoxID) (AgentChannel, error)
+	// Rekey gives this process a new channel to the running box without
+	// restarting it (ADR 0014): fresh secrets reach the box agent the way
+	// the first ones did, and the old ones stop working. It returns once the
+	// agent answers on the new channel. A box that isn't running is an
+	// error; nothing is started.
+	Rekey(ctx context.Context, id BoxID) error
 }
 
 // AgentChannel reaches the box agent: Dial opens a connection, CertPEM is

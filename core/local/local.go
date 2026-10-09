@@ -40,6 +40,9 @@ const DefaultImage = "ghcr.io/portenv/toolbox-node:main"
 type Env struct {
 	Dir     string
 	Machine string
+	// Provided holds keys the app read from the Keychain and handed to
+	// portenvd (in memory only); they are used before the store's own.
+	Provided *keys.Memory
 }
 
 func NewEnv() (*Env, error) {
@@ -157,10 +160,27 @@ func (e *Env) LoadBox(name string) (BoxConfig, error) {
 }
 
 func (e *Env) KeyStore() keys.Store {
+	base := keys.Default(filepath.Join(e.Dir, "keys"))
 	if os.Getenv("PORTENV_KEYS") == "file" { // tests: keep keys out of the Keychain
-		return keys.FileStore{Dir: filepath.Join(e.Dir, "keys")}
+		base = keys.FileStore{Dir: filepath.Join(e.Dir, "keys")}
 	}
-	return keys.Default(filepath.Join(e.Dir, "keys"))
+	if e.Provided != nil {
+		return keys.Layered{First: e.Provided, Then: base}
+	}
+	return base
+}
+
+// KeyIDs are the key IDs a box's keys are stored under: its repository key,
+// and for SFTP storage its storage key and REST password.
+func KeyIDs(c BoxConfig) []string {
+	ids := []string{c.ID}
+	if strings.HasPrefix(c.Storage, "sftp:") {
+		ids = append(ids, StorageKeyID(c.ID))
+		if c.StorageREST != "" {
+			ids = append(ids, RESTKeyID(c.ID))
+		}
+	}
+	return ids
 }
 
 // storage resolves where the box's repository is, as restic inside the box

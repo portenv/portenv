@@ -11,7 +11,8 @@ struct PortenvApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @State private var controller = BoxController(
         box: ProcessInfo.processInfo.environment["PORTENV_BOX"] ?? "demo",
-        cli: CLI()
+        cli: CLI(),
+        notifier: Notifier.shared
     )
 
     var body: some Scene {

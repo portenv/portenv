@@ -67,6 +67,7 @@ The title shows the box name, a sync symbol and a chevron; the line under it is 
 | Open on a server | `checkmark.circle` | `Test server · Saved at 15:42` |
 | Box agent unavailable | `exclamationmark.triangle` | `This Mac · Not saved since 14:58` (and Restart Box offered) |
 | Just reverted | `checkmark.circle` | `Reverted to 14:31 · your changes were kept` for 5 s, then the normal line |
+| Waiting for Keychain access | `lock` | `Waiting for Keychain access`, with "Check for a password prompt. It may be behind other windows." under it and a Cancel button; shown when a Keychain read hasn't returned after 2 s, with a notification when the window isn't in front |
 | Portenv quit before saving it | `exclamationmark.triangle` | `This Mac · Not saved since 15:54 · Portenv quit before saving` until the save made on opening completes |
 
 Rules:

@@ -40,6 +40,7 @@ const (
 	DaemonService_SetNetworkPath_FullMethodName        = "/portenv.daemon.v1.DaemonService/SetNetworkPath"
 	DaemonService_Woke_FullMethodName                  = "/portenv.daemon.v1.DaemonService/Woke"
 	DaemonService_RetryPackages_FullMethodName         = "/portenv.daemon.v1.DaemonService/RetryPackages"
+	DaemonService_ProvideKeys_FullMethodName           = "/portenv.daemon.v1.DaemonService/ProvideKeys"
 )
 
 // DaemonServiceClient is the client API for DaemonService service.
@@ -87,6 +88,10 @@ type DaemonServiceClient interface {
 	Woke(ctx context.Context, in *WokeRequest, opts ...grpc.CallOption) (*WokeResponse, error)
 	// Try the box's packages that couldn't be installed again now.
 	RetryPackages(ctx context.Context, in *RetryPackagesRequest, opts ...grpc.CallOption) (*RetryPackagesResponse, error)
+	// Keys the app read from the Keychain for a box, held in memory only:
+	// portenvd never reads the Keychain interactively, so when a key needs the
+	// person's approval it fails fast and the app (in front of them) reads it.
+	ProvideKeys(ctx context.Context, in *ProvideKeysRequest, opts ...grpc.CallOption) (*ProvideKeysResponse, error)
 }
 
 type daemonServiceClient struct {
@@ -250,6 +255,16 @@ func (c *daemonServiceClient) RetryPackages(ctx context.Context, in *RetryPackag
 	return out, nil
 }
 
+func (c *daemonServiceClient) ProvideKeys(ctx context.Context, in *ProvideKeysRequest, opts ...grpc.CallOption) (*ProvideKeysResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ProvideKeysResponse)
+	err := c.cc.Invoke(ctx, DaemonService_ProvideKeys_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DaemonServiceServer is the server API for DaemonService service.
 // All implementations must embed UnimplementedDaemonServiceServer
 // for forward compatibility.
@@ -295,6 +310,10 @@ type DaemonServiceServer interface {
 	Woke(context.Context, *WokeRequest) (*WokeResponse, error)
 	// Try the box's packages that couldn't be installed again now.
 	RetryPackages(context.Context, *RetryPackagesRequest) (*RetryPackagesResponse, error)
+	// Keys the app read from the Keychain for a box, held in memory only:
+	// portenvd never reads the Keychain interactively, so when a key needs the
+	// person's approval it fails fast and the app (in front of them) reads it.
+	ProvideKeys(context.Context, *ProvideKeysRequest) (*ProvideKeysResponse, error)
 	mustEmbedUnimplementedDaemonServiceServer()
 }
 
@@ -349,6 +368,9 @@ func (UnimplementedDaemonServiceServer) Woke(context.Context, *WokeRequest) (*Wo
 }
 func (UnimplementedDaemonServiceServer) RetryPackages(context.Context, *RetryPackagesRequest) (*RetryPackagesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method RetryPackages not implemented")
+}
+func (UnimplementedDaemonServiceServer) ProvideKeys(context.Context, *ProvideKeysRequest) (*ProvideKeysResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ProvideKeys not implemented")
 }
 func (UnimplementedDaemonServiceServer) mustEmbedUnimplementedDaemonServiceServer() {}
 func (UnimplementedDaemonServiceServer) testEmbeddedByValue()                       {}
@@ -630,6 +652,24 @@ func _DaemonService_RetryPackages_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _DaemonService_ProvideKeys_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ProvideKeysRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).ProvideKeys(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_ProvideKeys_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).ProvideKeys(ctx, req.(*ProvideKeysRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // DaemonService_ServiceDesc is the grpc.ServiceDesc for DaemonService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -692,6 +732,10 @@ var DaemonService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RetryPackages",
 			Handler:    _DaemonService_RetryPackages_Handler,
+		},
+		{
+			MethodName: "ProvideKeys",
+			Handler:    _DaemonService_ProvideKeys_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

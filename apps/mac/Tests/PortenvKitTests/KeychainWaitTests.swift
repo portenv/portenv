@@ -1,0 +1,88 @@
+// SPDX-License-Identifier: Apache-2.0
+
+import Foundation
+import Testing
+
+@testable import PortenvKit
+
+/// A Keychain that blocks (macOS asking the person) until released.
+final class BlockingKeychain: KeychainReading, @unchecked Sendable {
+    private let gate = DispatchSemaphore(value: 0)
+    private let blocks: Bool
+    private let lock = NSLock()
+    private var _reads: [String] = []
+    var reads: [String] { lock.withLock { _reads } }
+    init(blocks: Bool) { self.blocks = blocks }
+    func release() { gate.signal() }
+
+    func read(account: String) throws -> Data? {
+        #expect(!Thread.isMainThread, "Keychain reads never run on the main thread")
+        lock.withLock { _reads.append(account) }
+        if blocks && reads.count == 1 { gate.wait() }
+        return Data("key-\(account)".utf8)
+    }
+}
+
+final class CountingNotifier: KeychainWaitNotifying, @unchecked Sendable {
+    private let lock = NSLock()
+    private var _count = 0
+    var count: Int { lock.withLock { _count } }
+    func keychainWaiting(box: String) async { lock.withLock { _count += 1 } }
+}
+
+@MainActor
+struct KeychainWaitTests {
+    func controller(_ keychain: BlockingKeychain, _ cli: FakeCLI, _ notifier: CountingNotifier) -> BoxController {
+        cli.failingOnce["open"] = KeychainWait.daemonError
+        return BoxController(box: "acme-api", cli: cli, keychain: keychain, notifier: notifier, keychainThreshold: .milliseconds(200))
+    }
+
+    func waitUntil(_ cond: @MainActor () -> Bool) async {
+        for _ in 0..<100 where !cond() { try? await Task.sleep(for: .milliseconds(20)) }
+    }
+
+    @Test func aBlockedReadSaysSoAndNotifiesOnce() async {
+        let kc = BlockingKeychain(blocks: true), cli = FakeCLI(), n = CountingNotifier()
+        let c = controller(kc, cli, n)
+        let opening = Task { await c.open() }
+        await waitUntil { c.waitingForKeychain }
+        #expect(c.subtitle == "Waiting for Keychain access")
+        #expect(c.progressDetail == "Check for a password prompt. It may be behind other windows.")
+        #expect(c.symbol == "lock" && !c.symbolSpins)
+        #expect(c.title.consistent)
+        #expect(n.count == 1)
+        kc.release()
+        await opening.value
+        #expect(!c.waitingForKeychain)
+        #expect(c.location == .thisMac)
+    }
+
+    @Test func cancelStopsTheOpenCleanly() async {
+        let kc = BlockingKeychain(blocks: true), cli = FakeCLI(), n = CountingNotifier()
+        let c = controller(kc, cli, n)
+        let opening = Task { await c.open() }
+        await waitUntil { c.waitingForKeychain }
+        cli.state = #"{"state":"SAVE_STATE_CLOSED"}"# // what portenvd says: nothing was opened
+        c.cancelKeychainWait()
+        await opening.value
+        let actions = cli.calls.map { $0.count > 1 ? $0[1] : "" }
+        #expect(!actions.contains("provide-keys"), "nothing handed over after Cancel")
+        #expect(actions.filter { $0 == "open" }.count == 1, "no second open after Cancel")
+        #expect(c.location == .closed && !c.busy && !c.waitingForKeychain && c.error == nil)
+        kc.release() // the prompt is answered later: its result is dropped
+    }
+
+    @Test func approvedKeysGoToPortenvdOnStdin() async {
+        let kc = BlockingKeychain(blocks: false), cli = FakeCLI(), n = CountingNotifier()
+        let c = controller(kc, cli, n)
+        await c.open()
+        #expect(kc.reads == ["box-1", "box-1-storage"])
+        let provide = cli.calls.first { $0.count > 1 && $0[1] == "provide-keys" }
+        #expect(provide == ["app", "provide-keys", "acme-api"], "keys never in argv")
+        let sent = try? JSONSerialization.jsonObject(with: cli.inputs.first ?? Data()) as? [String: String]
+        #expect(sent?["box-1"] == Data("key-box-1".utf8).base64EncodedString())
+        #expect(cli.calls.filter { $0.count > 1 && $0[1] == "open" }.count == 2)
+        #expect(n.count == 0, "a quick read never notifies")
+        #expect(c.location == .thisMac)
+    }
+}

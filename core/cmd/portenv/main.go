@@ -29,7 +29,10 @@ import (
 	"os/signal"
 	"syscall"
 
+	"golang.org/x/term"
+
 	"github.com/portenv/portenv/core/internal/version"
+	"github.com/portenv/portenv/core/keys"
 	"github.com/portenv/portenv/core/local"
 )
 
@@ -84,6 +87,12 @@ func run(ctx context.Context, args []string) int {
 		fmt.Fprintln(os.Stderr, "portenv:", err)
 		return 1
 	}
+	// Only a person at a terminal may be asked to approve a Keychain read.
+	// The app's helper calls (app …) and scripts never prompt: they get
+	// "Keychain needs your approval. Open Portenv on this Mac to allow it."
+	if promptsAllowed(args[0], term.IsTerminal(int(os.Stdin.Fd()))) { // #nosec G115 -- a file descriptor
+		keys.AllowPrompts()
+	}
 	if err := c.run(ctx, e, args[1], args[2:]); err != nil {
 		fmt.Fprintln(os.Stderr, "portenv:", err)
 		var u usageError
@@ -118,4 +127,11 @@ Commands:
   app ACTION BOX [TARGET]                 the app's actions through portenvd
   version
 `)
+}
+
+// promptsAllowed is whether a command may ask the person to approve a
+// Keychain read: only with a terminal attached, and never for the app's own
+// helper calls (app …), which run with no one watching this process.
+func promptsAllowed(command string, terminal bool) bool {
+	return terminal && command != "app"
 }

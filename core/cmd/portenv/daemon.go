@@ -48,6 +48,8 @@ func dialDaemon(e *local.Env) (daemonv1.DaemonServiceClient, func(), error) {
 //	portenv app network up|down     (the system's network status, from the app)
 //	portenv app woke                (after sleep: check every open box's channel)
 //	portenv app retry-packages BOX  (try apt-packages.txt's failed packages again)
+//	portenv app key-ids BOX         (the Keychain items the app reads for the box)
+//	portenv app provide-keys BOX    (keys the app read, JSON on stdin, held in memory)
 func cmdApp(ctx context.Context, e *local.Env, op string, args []string) error {
 	if op == "woke" {
 		c, done, err := dialDaemon(e)
@@ -139,6 +141,28 @@ func cmdApp(ctx context.Context, e *local.Env, op string, args []string) error {
 			return plain(err)
 		}
 		summary = "save point " + short(r.GetSnapshot().GetId())
+	case "key-ids":
+		// Which Keychain items the app reads for this box (service
+		// dev.portenv.repository), one per line.
+		c, err := e.LoadBox(name)
+		if err != nil {
+			return err
+		}
+		for _, id := range local.KeyIDs(c) {
+			fmt.Println(id)
+		}
+		return nil
+	case "provide-keys":
+		// Keys the app read from the Keychain, as JSON on stdin
+		// ({"<key id>": "<base64>"}): never in argv, never on disk.
+		var in map[string][]byte
+		if err := json.NewDecoder(io.LimitReader(os.Stdin, 64<<10)).Decode(&in); err != nil {
+			return fmt.Errorf("keys on stdin: %w", err)
+		}
+		if _, err := c.ProvideKeys(ctx, &daemonv1.ProvideKeysRequest{Name: name, Keys: in}); err != nil {
+			return plain(err)
+		}
+		return nil
 	case "retry-packages":
 		if _, err := c.RetryPackages(ctx, &daemonv1.RetryPackagesRequest{Name: name}); err != nil {
 			return plain(err)

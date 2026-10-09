@@ -17,8 +17,19 @@ final class FakeCLI: CLIRunning, @unchecked Sendable {
         set { lock.withLock { _state = newValue } }
     }
 
-    func run(_ arguments: [String]) async throws -> String {
-        lock.withLock { _calls.append(arguments) }
+    private var _inputs: [Data] = []
+    var inputs: [Data] { lock.withLock { _inputs } }
+    /// Answers for actions that should fail only the first time.
+    var failingOnce: [String: String] = [:]
+
+    func run(_ arguments: [String], input: Data?) async throws -> String {
+        lock.withLock {
+            _calls.append(arguments)
+            if let input { _inputs.append(input) }
+        }
+        let first = arguments.count > 1 ? arguments[1] : ""
+        if let message = lock.withLock({ failingOnce.removeValue(forKey: first) }) { throw CLIError(message) }
+        if first == "key-ids" { return "box-1\nbox-1-storage" }
         let action = arguments.count > 1 ? arguments[1] : ""
         if let message = failing[action] { throw CLIError(message) }
         switch action {

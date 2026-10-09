@@ -84,10 +84,24 @@ public final class BoxController {
     public private(set) var terminalGeneration = 0
 
     private let cli: CLIRunning
+    private let keychain: KeychainReading
+    private let notifier: KeychainWaitNotifying?
+    private let keychainThreshold: Duration
 
-    public init(box: String, cli: CLIRunning) {
+    /// macOS is (or may be) asking the person to approve a Keychain read:
+    /// the window says so and offers Cancel.
+    public private(set) var waitingForKeychain = false
+    /// A secondary line under a progress line (the Keychain wait's hint).
+    public private(set) var progressDetail: String?
+    private var cancelKeychain: (@MainActor () -> Void)?
+
+    public init(box: String, cli: CLIRunning, keychain: KeychainReading = SystemKeychain(),
+                notifier: KeychainWaitNotifying? = nil, keychainThreshold: Duration = KeychainWait.threshold) {
         self.box = box
         self.cli = cli
+        self.keychain = keychain
+        self.notifier = notifier
+        self.keychainThreshold = keychainThreshold
     }
 
     /// A message shown for StateLine.transientSeconds (a revert, a move
@@ -104,10 +118,15 @@ public final class BoxController {
     public var title: TitleLook { TitleLook(line: subtitle, symbol: symbol, spins: symbolSpins) }
 
     /// The sync symbol next to the title (§3.1).
-    public var symbol: String? { progress != nil ? "arrow.triangle.2.circlepath" : transient != nil ? "checkmark.circle" : state?.symbol }
+    public var symbol: String? {
+        if waitingForKeychain { return "lock" }
+        return progress != nil ? "arrow.triangle.2.circlepath" : transient != nil ? "checkmark.circle" : state?.symbol
+    }
 
     /// Whether the symbol animates (the view turns it off with Reduce Motion).
-    public var symbolSpins: Bool { progress != nil || (transient == nil && state?.symbolSpins == true) }
+    public var symbolSpins: Bool {
+        !waitingForKeychain && (progress != nil || (transient == nil && state?.symbolSpins == true))
+    }
 
     /// The box's menu (§3.2), for the title menu and the menu bar's Box menu.
     public func menuItems(optionHeld: Bool) -> [BoxMenuItem] {
@@ -163,11 +182,68 @@ public final class BoxController {
         await perform {
             self.servers = (try? await self.cli.run(["app", "servers", self.box]))?
                 .split(separator: "\n").map(String.init) ?? []
-            _ = try await self.cli.run(["app", "open", self.box])
+            do {
+                _ = try await self.cli.run(["app", "open", self.box])
+            } catch let e as CLIError where e.message.contains(KeychainWait.daemonError) {
+                // portenvd never prompts: read the keys here, in front of
+                // the person, and hand them over. Cancelled: nothing opened.
+                guard try await self.approveKeys() else {
+                    self.location = .closed
+                    return
+                }
+                _ = try await self.cli.run(["app", "open", self.box])
+            }
             self.terminalGeneration += 1
         }
         progress = nil
+        progressDetail = nil
         await refresh()
+    }
+
+    /// Cancel while macOS asks to approve the Keychain read: the open stops
+    /// before portenvd starts anything (no box, no lease). The read itself
+    /// ends whenever the prompt is answered; its result is dropped.
+    public func cancelKeychainWait() { cancelKeychain?() }
+
+    /// Reads the box's keys from the Keychain off the main thread and hands
+    /// them to portenvd. After keychainThreshold the window says it's
+    /// waiting (and a notification goes out); no timeout while the person
+    /// might be answering. Returns false when cancelled.
+    private func approveKeys() async throws -> Bool {
+        let ids = try await cli.run(["app", "key-ids", box]).split(separator: "\n").map(String.init)
+        let reader = keychain
+        let once = Once<Result<[String: Data], Error>?>()
+        let result = await withCheckedContinuation { (done: CheckedContinuation<Result<[String: Data], Error>?, Never>) in
+            once.set { done.resume(returning: $0) }
+            cancelKeychain = { once.resume(nil) }
+            Task.detached {
+                do {
+                    var keys: [String: Data] = [:]
+                    for id in ids {
+                        if let key = try reader.read(account: id) { keys[id] = key }
+                    }
+                    once.resume(.success(keys))
+                } catch {
+                    once.resume(.failure(error))
+                }
+            }
+            Task { @MainActor [keychainThreshold, notifier, box] in
+                try? await Task.sleep(for: keychainThreshold)
+                guard !once.isDone else { return }
+                self.waitingForKeychain = true
+                self.progress = KeychainWait.line
+                self.progressDetail = KeychainWait.detail
+                await notifier?.keychainWaiting(box: box)
+            }
+        }
+        waitingForKeychain = false
+        progressDetail = nil
+        cancelKeychain = nil
+        guard let result else { return false }
+        let keys = try result.get()
+        let json = try JSONSerialization.data(withJSONObject: keys.mapValues { $0.base64EncodedString() })
+        _ = try await cli.run(["app", "provide-keys", box], input: json)
+        return true
     }
 
     /// Reads the recorded state from portenvd.

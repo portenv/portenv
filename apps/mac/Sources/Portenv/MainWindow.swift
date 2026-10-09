@@ -25,7 +25,8 @@ struct MainWindow: View {
                     BoxTitle(controller: controller)
                 }
             }
-            .disabled(controller.busy)
+            // Busy disables the window, except Cancel while the Keychain asks.
+            .disabled(controller.busy && !controller.waitingForKeychain)
             // Closing the window doesn't close the box here: the app quits
             // after its last window, and quitting closes it, once (two
             // closes once crashed portenvd).
@@ -59,6 +60,16 @@ struct MainWindow: View {
                 Task { await controller.terminalEnded() }
             }
             .accessibilityLabel(A11y.terminal(box: controller.box))
+        case .closed where controller.waitingForKeychain:
+            VStack(spacing: 10) {
+                Text(KeychainWait.line).font(.title3)
+                Text(KeychainWait.detail).foregroundStyle(.secondary)
+                Button("Cancel") { controller.cancelKeychainWait() }
+                    .keyboardShortcut(.cancelAction)
+                    .accessibilityLabel("Cancel opening \(controller.box)")
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(.background)
         case .closed:
             placeholder(controller.busy ? controller.subtitle : "\(controller.box) is closed", "")
         }

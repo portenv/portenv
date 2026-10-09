@@ -83,3 +83,30 @@ func TestNewSSHKey(t *testing.T) {
 		t.Fatalf("public key %q does not match the private key", pub)
 	}
 }
+
+// TestHandedOverKeysComeFirst: keys the app read and handed to portenvd are
+// used before the daemon's own (no-prompt) store; writes go to the store.
+func TestHandedOverKeysComeFirst(t *testing.T) {
+	mem := NewMemory()
+	dir := t.TempDir()
+	if err := os.Chmod(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	disk := FileStore{Dir: dir}
+	l := Layered{First: mem, Then: disk}
+	if _, err := l.Get("box-1"); err == nil {
+		t.Fatal("an empty store returned a key")
+	}
+	if err := mem.Put("box-1", []byte("from-the-app")); err != nil {
+		t.Fatal(err)
+	}
+	if k, err := l.Get("box-1"); err != nil || string(k) != "from-the-app" {
+		t.Fatalf("handed-over key: %q, %v", k, err)
+	}
+	if err := l.Put("box-2", []byte("new")); err != nil {
+		t.Fatal(err)
+	}
+	if k, err := disk.Get("box-2"); err != nil || string(k) != "new" {
+		t.Fatalf("a new key goes to the store: %q, %v", k, err)
+	}
+}

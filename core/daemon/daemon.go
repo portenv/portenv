@@ -29,6 +29,7 @@ import (
 	"github.com/portenv/portenv/core/agent"
 	"github.com/portenv/portenv/core/driver"
 	"github.com/portenv/portenv/core/internal/version"
+	"github.com/portenv/portenv/core/keys"
 	"github.com/portenv/portenv/core/local"
 	boxsync "github.com/portenv/portenv/core/sync"
 	agentv1 "github.com/portenv/portenv/proto/gen/go/portenv/agent/v1"
@@ -94,6 +95,9 @@ type openBox struct {
 
 // New returns a daemon for this machine's Portenv directory.
 func New(env *local.Env, log *slog.Logger) *Server {
+	if env != nil && env.Provided == nil {
+		env.Provided = keys.NewMemory()
+	}
 	return &Server{env: env, log: log, open: map[string]*openBox{}, remote: map[string]*remoteBox{}, gen: map[string]uint64{},
 		now: time.Now, alive: processAlive}
 }
@@ -223,7 +227,7 @@ func (s *Server) openBox(ctx context.Context, name string) (*openBox, boxsync.Re
 	step := func(what string) { s.log.Info(what, "box", name, "after", time.Since(t0).Round(time.Millisecond)) }
 	sess, err := s.env.Open(name)
 	if err != nil {
-		return nil, none, err
+		return nil, none, keyError(err)
 	}
 	if err := sess.EnsureCreated(ctx, func(msg string) { s.log.Info(msg, "box", name) }); err != nil {
 		return nil, none, err

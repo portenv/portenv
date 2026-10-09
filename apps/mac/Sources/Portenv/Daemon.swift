@@ -27,7 +27,10 @@ actor Daemon {
         p.environment = env
         do { try p.run() } catch { return }
         process = p
-        for _ in 0..<50 where !FileManager.default.fileExists(atPath: Binaries.socket.path) {
+        // Until it answers, not until the socket file exists: after a crash
+        // the old one is still there.
+        for _ in 0..<100 {
+            if await answers() { break }
             try? await Task.sleep(for: .milliseconds(100))
         }
     }

@@ -7,6 +7,8 @@ package agent
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"net"
 	"os"
 
 	"golang.org/x/sys/unix"
@@ -19,11 +21,12 @@ func ServeChannelProcess(ctx context.Context, cfg Config) error {
 	if err := unix.Prctl(unix.PR_SET_DUMPABLE, 0, 0, 0, 0); err != nil {
 		return fmt.Errorf("make agent channel non-dumpable: %w", err)
 	}
-	// Read the secrets, then close stdin at once: nothing is left to read.
-	sec, err := ReadChannelSecrets(os.Stdin)
-	_ = os.Stdin.Close()
-	if err != nil {
-		return err
+	// The first line on stdin holds the secrets; stdin stays open for
+	// later lines, each a re-key from a restarted portenvd or runner (ADR
+	// 0014). The engine holds the pipe's other end; nothing in the box can
+	// write to it.
+	listen := func() (net.Listener, error) {
+		return (&net.ListenConfig{}).Listen(ctx, "tcp", fmt.Sprintf(":%d", ChannelPort))
 	}
-	return ServeChannel(ctx, cfg, sec, ChannelPort)
+	return serveStdinChannel(ctx, cfg, os.Stdin, listen, slog.Default())
 }

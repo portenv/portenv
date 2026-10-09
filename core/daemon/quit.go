@@ -52,7 +52,7 @@ func (s *Server) clearQuitMarker(boxID string) {
 func (s *Server) startOpening() (done func(), err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.stopping {
+	if s.stopping || s.relaunching.Load() {
 		return nil, status.Error(codes.Unavailable, "portenvd is stopping; open the box again when Portenv starts")
 	}
 	s.opening.Add(1)
@@ -145,4 +145,21 @@ func (s *Server) Woke(ctx context.Context, _ *daemonv1.WokeRequest) (*daemonv1.W
 		out.Boxes = append(out.Boxes, r)
 	}
 	return &out, nil
+}
+
+// Relaunch implements daemonv1.DaemonServiceServer: Portenv is relaunching
+// for an update. This daemon stops serving without closing any box, so
+// boxes and their programs keep running, and the next portenvd takes them
+// over by re-keying (ADR 0014). No new open starts meanwhile.
+func (s *Server) Relaunch(context.Context, *daemonv1.RelaunchRequest) (*daemonv1.RelaunchResponse, error) {
+	s.relaunching.Store(true)
+	s.log.Info("relaunching: leaving boxes running for the next portenvd")
+	s.mu.Lock()
+	stop := s.stop
+	s.mu.Unlock()
+	if stop != nil {
+		// After this reply has gone out.
+		time.AfterFunc(100*time.Millisecond, stop)
+	}
+	return &daemonv1.RelaunchResponse{}, nil
 }

@@ -48,6 +48,7 @@ func dialDaemon(e *local.Env) (daemonv1.DaemonServiceClient, func(), error) {
 //	portenv app channel BOX         (a runner's box channel for a Mac, JSON on stdout)
 //	portenv app network up|down     (the system's network status, from the app)
 //	portenv app woke                (after sleep: check every open box's channel)
+//	portenv app relaunch            (an update: portenvd stops, boxes keep running)
 //	portenv app retry-packages BOX  (try apt-packages.txt's failed packages again)
 //	portenv app key-ids BOX         (the Keychain items the app reads for the box)
 //	portenv app provide-keys BOX    (keys the app read, JSON on stdin, held in memory)
@@ -72,6 +73,18 @@ func cmdApp(ctx context.Context, e *local.Env, op string, args []string) error {
 				fmt.Printf("%s: the box agent is unavailable: %s\n", b.GetName(), b.GetDetail())
 			}
 		}
+		return nil
+	}
+	if op == "relaunch" {
+		c, done, err := dialDaemon(e)
+		if err != nil {
+			return err
+		}
+		defer done()
+		if _, err := c.Relaunch(ctx, &daemonv1.RelaunchRequest{}); err != nil {
+			return plain(err)
+		}
+		fmt.Println("portenvd is stopping; boxes keep running for the next one")
 		return nil
 	}
 	if op == "network" {

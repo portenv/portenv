@@ -100,6 +100,9 @@ public final class BoxController {
     /// One reopen per restart, so a failing one doesn't read the Keychain
     /// every few seconds.
     private var resumeTried = false
+    /// Portenv is quitting to relaunch for an update: portenvd was asked to
+    /// leave, and no new one may start before the app quits.
+    private var leaving = false
 
     /// macOS is (or may be) asking the person to approve a Keychain read:
     /// the window says so and offers Cancel.
@@ -223,10 +226,15 @@ public final class BoxController {
     /// saved since" its last save, and portenvd is started again. The next
     /// refresh finds the box interrupted and reopens it.
     private func daemonEnded() async {
-        guard location != .closed, (try? await cli.run(["app", "ping"])) == nil else { return }
+        guard !leaving, location != .closed, (try? await cli.run(["app", "ping"])) == nil else { return }
         state = BoxState(save: .notSaved, savedAt: state?.savedAt, location: state?.location)
         await restartDaemon?()
     }
+
+    /// Called before portenvd is asked to relaunch (an update): from now on
+    /// the app never starts portenvd again. A portenvd started now would be
+    /// this app's child and close the box when the app exits.
+    public func relaunchingForUpdate() { leaving = true }
 
     private func resume() async {
         resuming = true

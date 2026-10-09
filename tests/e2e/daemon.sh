@@ -32,7 +32,8 @@ sums() { probe "portenv-daemon-$(box_id)" sh -c 'cd /home && find . -type f -not
 start_daemon() {
 	"$repo/bin/portenvd" 2>>"$root/portenvd.log" &
 	dpid=$!
-	for _ in $(seq 50); do [[ -S $root/mac/portenvd.sock ]] && break; sleep 0.1; done
+	# Until it answers: after a kill -9 the old socket file is still there.
+	for _ in $(seq 100); do "$portenv" app ping >/dev/null 2>&1 && break; sleep 0.1; done
 }
 cleanup() {
 	# Nothing in the cleanup may fail: under set -e that would fail the run.
@@ -91,6 +92,44 @@ out=$("$portenv" app open d 2>&1) || true; echo "  $out"
 expect "reopen on the same machine (rule 3)" grep -q "rule 3" <<<"$out"
 out=$(type_in 'echo f=$(cat ~/f.txt)')
 expect "the reverted file is still there after reopening" grep -q "f=one" <<<"$out"
+
+# ADR 0014: one portenvd at a time, and a restarted portenvd takes over a
+# running box (re-keys it) instead of restarting it.
+out=$("$repo/bin/portenvd" 2>&1) && rc=0 || rc=$?
+expect "a second portenvd refuses to start while the first serves" test "$rc" -ne 0
+expect "  and says why" grep -q "another portenvd is already running" <<<"$out"
+out=$(type_in 'echo still=$((20+1))')
+expect "  and the first keeps its box's channel" grep -q "still=21" <<<"$out"
+type_in 'sleep 3600 & echo long=started' 1 >/dev/null
+started=$(docker inspect -f '{{.State.StartedAt}}' "portenv-daemon-$(box_id)")
+kill -9 "$dpid"; wait "$dpid" 2>/dev/null || true
+start_daemon
+out=$("$portenv" app state d 2>&1) || true; echo "  $out"
+expect "after kill -9: the new portenvd reports the box interrupted" grep -q '"interrupted":true' <<<"$out"
+out=$("$portenv" app open d 2>&1) || true; echo "  $out"
+expect "reopened by the new portenvd" grep -q "open on" <<<"$out"
+expect "  by re-keying it, not restarting it" grep -q "took over the running box" "$root/portenvd.log"
+expect "  the box never restarted (same start time)" test "$(docker inspect -f '{{.State.StartedAt}}' "portenv-daemon-$(box_id)")" = "$started"
+expect "  the long command is still running" probe "portenv-daemon-$(box_id)" pgrep -x sleep
+out=$(type_in 'echo back=$((40+2))')
+expect "  the terminal reconnects to the same session" grep -q "back=42" <<<"$out"
+out=$("$portenv" app state d 2>&1) || true; echo "  $out"
+expect "  and the state line recovers" bash -c "! grep -q interrupted <<<'$out' && grep -q SAVE_STATE_ <<<'$out'"
+# An update relaunch (Sparkle, 1.8): the app asks portenvd to relaunch; it
+# stops without closing the box, and the next portenvd takes it over.
+out=$("$portenv" app relaunch 2>&1) || true; echo "  $out"
+for _ in $(seq 40); do kill -0 "$dpid" 2>/dev/null || break; sleep 0.25; done
+expect "relaunch: portenvd stops" bash -c "! kill -0 $dpid 2>/dev/null"
+wait "$dpid" 2>/dev/null || true
+expect "  leaving the box running (same start time)" test "$(docker inspect -f '{{.State.Running}} {{.State.StartedAt}}' "portenv-daemon-$(box_id)")" = "true $started"
+expect "  and the long command too" probe "portenv-daemon-$(box_id)" pgrep -x sleep
+start_daemon
+out=$("$portenv" app open d 2>&1) || true; echo "  $out"
+expect "the next portenvd takes it over" test "$(grep -c "took over the running box" "$root/portenvd.log")" -ge 2
+expect "  still the same start" test "$(docker inspect -f '{{.State.StartedAt}}' "portenv-daemon-$(box_id)")" = "$started"
+out=$(type_in 'echo again=$((40+3))')
+expect "  and the terminal reconnects" grep -q "again=43" <<<"$out"
+type_in 'pkill -x sleep' 1 >/dev/null
 "$portenv" app close d >/dev/null 2>&1 || true
 
 # The box agent dies mid-session. Processes in the box keep editing files;

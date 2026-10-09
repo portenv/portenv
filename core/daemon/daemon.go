@@ -51,6 +51,11 @@ type Server struct {
 	// portenvd on a Mac closes them: quitting the app saves and releases.
 	KeepBoxesOnStop bool
 
+	// relaunching: Portenv is relaunching for an update, so this daemon
+	// stops without closing its boxes (ADR 0014); stop ends Serve.
+	relaunching atomic.Bool
+	stop        context.CancelFunc
+
 	mu     sync.Mutex
 	open   map[string]*openBox   // by box name
 	remote map[string]*remoteBox // boxes this Mac opened on a server
@@ -110,6 +115,18 @@ func (s *Server) Serve(ctx context.Context) error {
 	if len(sock) >= 104 {
 		return fmt.Errorf("socket path %s is longer than the 103 bytes Unix sockets allow; use a shorter PORTENV_HOME", sock)
 	}
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	s.mu.Lock()
+	s.stop = cancel
+	s.mu.Unlock()
+	// One daemon per directory, before touching the socket: a second one
+	// must not take the socket or any box from the first.
+	lock, err := lockDir(s.env.Dir)
+	if err != nil {
+		return err
+	}
+	defer lock.release()
 	_ = os.Remove(sock)
 	lis, err := (&net.ListenConfig{}).Listen(ctx, "unix", sock)
 	if err != nil {
@@ -126,7 +143,7 @@ func (s *Server) Serve(ctx context.Context) error {
 		// Save and release first, while the agent channels are up; then end
 		// every call, open terminals included (a graceful stop would wait
 		// for terminals forever). A runner leaves boxes running.
-		if !s.KeepBoxesOnStop {
+		if !s.KeepBoxesOnStop && !s.relaunching.Load() {
 			s.closeAll()
 		}
 		srv.Stop()
@@ -246,11 +263,21 @@ func (s *Server) openBox(ctx context.Context, name string) (*openBox, boxsync.Re
 		}()
 	}
 
-	// A box left running without this process's channel secrets (for
-	// example after portenvd restarted) is restarted to open a new channel.
+	// A box left running without this process's channel secrets (portenvd
+	// restarted: a crash, an update) is taken over: re-keyed in place, so
+	// it and its programs keep running (ADR 0014). Only if that fails is it
+	// restarted to open a new channel (its home stays: rule 3).
 	if _, err := sess.Drv.AgentChannel(ctx, sess.ID()); errors.Is(err, driver.ErrNoChannel) {
-		if _, err := sess.Drv.Stop(ctx, sess.ID(), 0); err != nil {
-			return nil, none, err
+		// Rekey refuses a box that isn't running; then it simply starts.
+		if err := sess.Drv.Rekey(ctx, sess.ID()); err == nil {
+			step("took over the running box (re-keyed, not restarted)")
+		} else {
+			s.log.Info("no running box to take over, or the re-key failed: starting it", "box", name, "err", err)
+		}
+		if _, err := sess.Drv.AgentChannel(ctx, sess.ID()); errors.Is(err, driver.ErrNoChannel) {
+			if _, err := sess.Drv.Stop(ctx, sess.ID(), 0); err != nil {
+				return nil, none, err
+			}
 		}
 	}
 	if _, err := sess.Drv.Start(ctx, sess.ID()); err != nil {

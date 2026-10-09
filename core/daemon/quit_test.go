@@ -3,8 +3,11 @@
 package daemon
 
 import (
+	"context"
 	"io"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -12,6 +15,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/portenv/portenv/core/local"
+	daemonv1 "github.com/portenv/portenv/proto/gen/go/portenv/daemon/v1"
 )
 
 func quietServer(t *testing.T) *Server {
@@ -63,5 +67,67 @@ func TestShutdownWaitsForBoxesStillOpening(t *testing.T) {
 	case <-closed:
 	case <-time.After(5 * time.Second):
 		t.Fatal("closeAll did not finish after the open ended")
+	}
+}
+
+// TestOneDaemonAtATime: a second portenvd (or runner) on the same Portenv
+// directory refuses to start while the first holds it, so it can never
+// re-key a box the first one still serves (ADR 0014). Once the first has
+// stopped, a new one starts.
+func TestOneDaemonAtATime(t *testing.T) {
+	dir := t.TempDir()
+	first, err := lockDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := lockDir(dir); err == nil || err.Error() != "another portenvd is already running for "+dir {
+		t.Fatalf("a second daemon: %v", err)
+	}
+	first.release()
+	again, err := lockDir(dir)
+	if err != nil {
+		t.Fatalf("after the first stopped: %v", err)
+	}
+	again.release()
+}
+
+// TestRelaunchLeavesBoxesRunning: when Portenv relaunches for an update,
+// portenvd stops serving without closing its boxes (closeAll never runs),
+// so the next portenvd takes them over (ADR 0014). No new open starts
+// meanwhile.
+func TestRelaunchLeavesBoxesRunning(t *testing.T) {
+	dir, err := os.MkdirTemp("", "pd") // short: a Unix socket path has 103 bytes
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	s := New(&local.Env{Dir: dir, Machine: "mac-1"}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	served := make(chan error, 1)
+	go func() { served <- s.Serve(context.Background()) }()
+	for range 50 {
+		if _, err := os.Stat(filepath.Join(dir, SocketName)); err == nil {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if _, err := s.Relaunch(context.Background(), &daemonv1.RelaunchRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.startOpening(); status.Code(err) != codes.Unavailable {
+		t.Fatalf("an open while relaunching: %v, want Unavailable", err)
+	}
+	select {
+	case err := <-served:
+		if err != nil {
+			t.Fatalf("Serve: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("portenvd kept serving after Relaunch")
+	}
+	s.mu.Lock()
+	closed := s.stopping
+	s.mu.Unlock()
+	if closed {
+		t.Fatal("relaunching closed the boxes (closeAll ran)")
 	}
 }

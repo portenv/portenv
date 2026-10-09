@@ -55,6 +55,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var signals: [DispatchSourceSignal] = []
     /// The window's box: quitting closes it, waking checks it.
     var controller: BoxController?
+    /// Set when Portenv quits to relaunch for an update (Sparkle's
+    /// updaterWillRelaunchApplication, 1.8): the box keeps running and the
+    /// next portenvd takes it over (ADR 0014). Cmd-Q still closes and saves.
+    var relaunchingForUpdate = false
 
     func applicationDidFinishLaunching(_: Notification) {
         // A Swift package executable starts as a background process; make
@@ -94,7 +98,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // modal mode, where main-actor tasks do not run: work off the main
         // actor and show the alert and the reply in that mode.
         let flow = controller?.quitFlow
+        let relaunching = relaunchingForUpdate
+        if relaunching { controller?.relaunchingForUpdate() }
         Task.detached {
+            if relaunching {
+                // portenvd stops by itself, leaving the box running.
+                _ = await flow?.relaunch()
+                RunLoop.main.perform(inModes: [.default, .modalPanel]) {
+                    NSApp.reply(toApplicationShouldTerminate: true)
+                }
+                return
+            }
             let quit = await flow?.run(ask: Self.ask) ?? true
             if quit { await Daemon.shared.stop() }
             RunLoop.main.perform(inModes: [.default, .modalPanel]) {

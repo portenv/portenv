@@ -382,7 +382,10 @@ func (ob *openBox) connect(ctx context.Context, allowFailed bool) (agentv1.Readi
 			return 0, ctx.Err()
 		case <-time.After(wait):
 		}
-		wait = min(2*wait, time.Second)
+		// At most 100 ms between asks: readiness is a cheap local call, and
+		// a longer backoff left the terminal waiting up to a second after
+		// the box was ready.
+		wait = min(2*wait, 100*time.Millisecond)
 	}
 	return 0, errors.New("the box did not finish starting within 15 minutes")
 }

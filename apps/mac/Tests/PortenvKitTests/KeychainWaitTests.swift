@@ -39,9 +39,9 @@ final class Seen: @unchecked Sendable {
 
 @MainActor
 struct KeychainWaitTests {
-    func controller(_ keychain: BlockingKeychain, _ cli: FakeCLI, _ notifier: CountingNotifier) -> BoxController {
+    func controller(_ keychain: BlockingKeychain, _ cli: FakeDaemon, _ notifier: CountingNotifier) -> BoxController {
         cli.failingOnce["open"] = KeychainWait.daemonError
-        return BoxController(box: "acme-api", cli: cli, keychain: keychain, notifier: notifier, keychainThreshold: .milliseconds(200))
+        return BoxController(box: "acme-api", daemon: cli, keychain: keychain, notifier: notifier, keychainThreshold: .milliseconds(200))
     }
 
     func waitUntil(_ cond: @MainActor () -> Bool) async {
@@ -49,7 +49,7 @@ struct KeychainWaitTests {
     }
 
     @Test func aBlockedReadSaysSoAndNotifiesOnce() async {
-        let kc = BlockingKeychain(blocks: true), cli = FakeCLI(), n = CountingNotifier()
+        let kc = BlockingKeychain(blocks: true), cli = FakeDaemon(), n = CountingNotifier()
         let c = controller(kc, cli, n)
         let opening = Task { await c.open() }
         await waitUntil { c.waitingForKeychain }
@@ -67,7 +67,7 @@ struct KeychainWaitTests {
     /// After the person allows the read, the window says the box is opening
     /// again (the wait line once stayed up, spinning, until the box opened).
     @Test func afterApprovalTheLineSaysOpening() async {
-        let kc = BlockingKeychain(blocks: true), cli = FakeCLI(), n = CountingNotifier()
+        let kc = BlockingKeychain(blocks: true), cli = FakeDaemon(), n = CountingNotifier()
         let c = controller(kc, cli, n)
         let seen = Seen()
         cli.onRun = { args in
@@ -82,7 +82,7 @@ struct KeychainWaitTests {
     }
 
     @Test func cancelStopsTheOpenCleanly() async {
-        let kc = BlockingKeychain(blocks: true), cli = FakeCLI(), n = CountingNotifier()
+        let kc = BlockingKeychain(blocks: true), cli = FakeDaemon(), n = CountingNotifier()
         let c = controller(kc, cli, n)
         let opening = Task { await c.open() }
         await waitUntil { c.waitingForKeychain }
@@ -96,15 +96,14 @@ struct KeychainWaitTests {
         kc.release() // the prompt is answered later: its result is dropped
     }
 
-    @Test func approvedKeysGoToPortenvdOnStdin() async {
-        let kc = BlockingKeychain(blocks: false), cli = FakeCLI(), n = CountingNotifier()
+    @Test func approvedKeysGoToPortenvd() async {
+        let kc = BlockingKeychain(blocks: false), cli = FakeDaemon(), n = CountingNotifier()
         let c = controller(kc, cli, n)
         await c.open()
         #expect(kc.reads == ["box-1", "box-1-storage"])
         let provide = cli.calls.first { $0.count > 1 && $0[1] == "provide-keys" }
-        #expect(provide == ["app", "provide-keys", "acme-api"], "keys never in argv")
-        let sent = try? JSONSerialization.jsonObject(with: cli.inputs.first ?? Data()) as? [String: String]
-        #expect(sent?["box-1"] == Data("key-box-1".utf8).base64EncodedString())
+        #expect(provide == ["app", "provide-keys", "acme-api"])
+        #expect(cli.provided.first?["box-1"] == Data("key-box-1".utf8), "the keys read, over portenvd's API")
         #expect(cli.calls.filter { $0.count > 1 && $0[1] == "open" }.count == 2)
         #expect(n.count == 0, "a quick read never notifies")
         #expect(c.location == .thisMac)

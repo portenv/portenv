@@ -256,6 +256,32 @@ public enum Portenv_Daemon_V1_DaemonService: Sendable {
                 type: .unary
             )
         }
+        /// Namespace for "ListServers" metadata.
+        public enum ListServers: Sendable {
+            /// Request type for "ListServers".
+            public typealias Input = Portenv_Daemon_V1_ListServersRequest
+            /// Response type for "ListServers".
+            public typealias Output = Portenv_Daemon_V1_ListServersResponse
+            /// Descriptor for "ListServers".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "ListServers",
+                type: .unary
+            )
+        }
+        /// Namespace for "GetKeyIDs" metadata.
+        public enum GetKeyIDs: Sendable {
+            /// Request type for "GetKeyIDs".
+            public typealias Input = Portenv_Daemon_V1_GetKeyIDsRequest
+            /// Response type for "GetKeyIDs".
+            public typealias Output = Portenv_Daemon_V1_GetKeyIDsResponse
+            /// Descriptor for "GetKeyIDs".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "GetKeyIDs",
+                type: .unary
+            )
+        }
         /// Descriptors for all methods in the "portenv.daemon.v1.DaemonService" service.
         public static let descriptors: [GRPCCore.MethodDescriptor] = [
             GetVersion.descriptor,
@@ -275,7 +301,9 @@ public enum Portenv_Daemon_V1_DaemonService: Sendable {
             Woke.descriptor,
             RetryPackages.descriptor,
             ProvideKeys.descriptor,
-            Relaunch.descriptor
+            Relaunch.descriptor,
+            ListServers.descriptor,
+            GetKeyIDs.descriptor
         ]
     }
 }
@@ -720,6 +748,53 @@ extension Portenv_Daemon_V1_DaemonService {
             deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_RelaunchResponse>,
             options: GRPCCore.CallOptions,
             onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_RelaunchResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "ListServers" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > The servers a box can move to (Move To), as user@host.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_ListServersRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_ListServersRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_ListServersResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func listServers<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_ListServersRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_ListServersRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_ListServersResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ListServersResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "GetKeyIDs" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > The Keychain items the app reads for a box (service
+        /// > dev.portenv.repository): its repository key, and its storage keys.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_GetKeyIDsRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_GetKeyIDsRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_GetKeyIDsResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func getKeyIDs<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_GetKeyIDsRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_GetKeyIDsRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_GetKeyIDsResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_GetKeyIDsResponse>) async throws -> Result
         ) async throws -> Result where Result: Sendable
     }
 
@@ -1359,6 +1434,75 @@ extension Portenv_Daemon_V1_DaemonService {
                 onResponse: handleResponse
             )
         }
+
+        /// Call the "ListServers" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > The servers a box can move to (Move To), as user@host.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_ListServersRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_ListServersRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_ListServersResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func listServers<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_ListServersRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_ListServersRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_ListServersResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ListServersResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.ListServers.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
+
+        /// Call the "GetKeyIDs" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > The Keychain items the app reads for a box (service
+        /// > dev.portenv.repository): its repository key, and its storage keys.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_GetKeyIDsRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_GetKeyIDsRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_GetKeyIDsResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func getKeyIDs<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_GetKeyIDsRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_GetKeyIDsRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_GetKeyIDsResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_GetKeyIDsResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.GetKeyIDs.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
     }
 }
 
@@ -1887,6 +2031,65 @@ extension Portenv_Daemon_V1_DaemonService.ClientProtocol {
             request: request,
             serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_RelaunchRequest>(),
             deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_RelaunchResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "ListServers" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > The servers a box can move to (Move To), as user@host.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_ListServersRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func listServers<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_ListServersRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ListServersResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.listServers(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_ListServersRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_ListServersResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "GetKeyIDs" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > The Keychain items the app reads for a box (service
+    /// > dev.portenv.repository): its repository key, and its storage keys.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_GetKeyIDsRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func getKeyIDs<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_GetKeyIDsRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_GetKeyIDsResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.getKeyIDs(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_GetKeyIDsRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_GetKeyIDsResponse>(),
             options: options,
             onResponse: handleResponse
         )
@@ -2490,6 +2693,73 @@ extension Portenv_Daemon_V1_DaemonService.ClientProtocol {
             metadata: metadata
         )
         return try await self.relaunch(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "ListServers" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > The servers a box can move to (Move To), as user@host.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func listServers<Result>(
+        _ message: Portenv_Daemon_V1_ListServersRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ListServersResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_ListServersRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.listServers(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "GetKeyIDs" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > The Keychain items the app reads for a box (service
+    /// > dev.portenv.repository): its repository key, and its storage keys.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func getKeyIDs<Result>(
+        _ message: Portenv_Daemon_V1_GetKeyIDsRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_GetKeyIDsResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_GetKeyIDsRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.getKeyIDs(
             request: request,
             options: options,
             onResponse: handleResponse

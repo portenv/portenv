@@ -14,17 +14,17 @@ public enum QuitChoice: Sendable, Equatable {
 /// whether to try again, quit anyway (the box stays as it is and is saved
 /// first thing on the next launch) or cancel.
 ///
-/// It uses the CLI directly, off the main actor: while AppKit waits for the
-/// quit reply, main-actor work does not run.
+/// It calls portenvd directly, off the main actor: while AppKit waits for
+/// the quit reply, main-actor work does not run.
 public struct QuitFlow: Sendable {
-    let cli: CLIRunning
+    let daemon: DaemonAPI
     let box: String
     /// Whether the box is open on this Mac (a box on a server, or closed,
     /// needs nothing here).
     let openHere: Bool
 
-    public init(cli: CLIRunning, box: String, openHere: Bool) {
-        self.cli = cli
+    public init(daemon: DaemonAPI, box: String, openHere: Bool) {
+        self.daemon = daemon
         self.box = box
         self.openHere = openHere
     }
@@ -38,7 +38,7 @@ public struct QuitFlow: Sendable {
     /// without closing the box, so it and its programs keep running and the
     /// next portenvd takes it over. Never asks, never blocks the update.
     public func relaunch() async -> Bool {
-        _ = try? await cli.run(["app", "relaunch"])
+        try? await daemon.relaunch()
         return true
     }
 
@@ -47,7 +47,7 @@ public struct QuitFlow: Sendable {
         guard openHere else { return true }
         while true {
             do {
-                _ = try await cli.run(["app", "close", box])
+                try await daemon.close(box)
                 return true
             } catch {
                 switch await ask(Self.message(box: box)) {

@@ -43,6 +43,8 @@ const (
 	DaemonService_RetryPackages_FullMethodName         = "/portenv.daemon.v1.DaemonService/RetryPackages"
 	DaemonService_ProvideKeys_FullMethodName           = "/portenv.daemon.v1.DaemonService/ProvideKeys"
 	DaemonService_Relaunch_FullMethodName              = "/portenv.daemon.v1.DaemonService/Relaunch"
+	DaemonService_ListServers_FullMethodName           = "/portenv.daemon.v1.DaemonService/ListServers"
+	DaemonService_GetKeyIDs_FullMethodName             = "/portenv.daemon.v1.DaemonService/GetKeyIDs"
 )
 
 // DaemonServiceClient is the client API for DaemonService service.
@@ -102,6 +104,11 @@ type DaemonServiceClient interface {
 	// box. Boxes and their programs keep running, and the next portenvd
 	// takes them over (ADR 0014). Quitting (Cmd-Q) still closes and saves.
 	Relaunch(ctx context.Context, in *RelaunchRequest, opts ...grpc.CallOption) (*RelaunchResponse, error)
+	// The servers a box can move to (Move To), as user@host.
+	ListServers(ctx context.Context, in *ListServersRequest, opts ...grpc.CallOption) (*ListServersResponse, error)
+	// The Keychain items the app reads for a box (service
+	// dev.portenv.repository): its repository key, and its storage keys.
+	GetKeyIDs(ctx context.Context, in *GetKeyIDsRequest, opts ...grpc.CallOption) (*GetKeyIDsResponse, error)
 }
 
 type daemonServiceClient struct {
@@ -304,6 +311,26 @@ func (c *daemonServiceClient) Relaunch(ctx context.Context, in *RelaunchRequest,
 	return out, nil
 }
 
+func (c *daemonServiceClient) ListServers(ctx context.Context, in *ListServersRequest, opts ...grpc.CallOption) (*ListServersResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListServersResponse)
+	err := c.cc.Invoke(ctx, DaemonService_ListServers_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) GetKeyIDs(ctx context.Context, in *GetKeyIDsRequest, opts ...grpc.CallOption) (*GetKeyIDsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetKeyIDsResponse)
+	err := c.cc.Invoke(ctx, DaemonService_GetKeyIDs_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DaemonServiceServer is the server API for DaemonService service.
 // All implementations must embed UnimplementedDaemonServiceServer
 // for forward compatibility.
@@ -361,6 +388,11 @@ type DaemonServiceServer interface {
 	// box. Boxes and their programs keep running, and the next portenvd
 	// takes them over (ADR 0014). Quitting (Cmd-Q) still closes and saves.
 	Relaunch(context.Context, *RelaunchRequest) (*RelaunchResponse, error)
+	// The servers a box can move to (Move To), as user@host.
+	ListServers(context.Context, *ListServersRequest) (*ListServersResponse, error)
+	// The Keychain items the app reads for a box (service
+	// dev.portenv.repository): its repository key, and its storage keys.
+	GetKeyIDs(context.Context, *GetKeyIDsRequest) (*GetKeyIDsResponse, error)
 	mustEmbedUnimplementedDaemonServiceServer()
 }
 
@@ -424,6 +456,12 @@ func (UnimplementedDaemonServiceServer) ProvideKeys(context.Context, *ProvideKey
 }
 func (UnimplementedDaemonServiceServer) Relaunch(context.Context, *RelaunchRequest) (*RelaunchResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Relaunch not implemented")
+}
+func (UnimplementedDaemonServiceServer) ListServers(context.Context, *ListServersRequest) (*ListServersResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListServers not implemented")
+}
+func (UnimplementedDaemonServiceServer) GetKeyIDs(context.Context, *GetKeyIDsRequest) (*GetKeyIDsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetKeyIDs not implemented")
 }
 func (UnimplementedDaemonServiceServer) mustEmbedUnimplementedDaemonServiceServer() {}
 func (UnimplementedDaemonServiceServer) testEmbeddedByValue()                       {}
@@ -752,6 +790,42 @@ func _DaemonService_Relaunch_Handler(srv interface{}, ctx context.Context, dec f
 	return interceptor(ctx, in, info, handler)
 }
 
+func _DaemonService_ListServers_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListServersRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).ListServers(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_ListServers_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).ListServers(ctx, req.(*ListServersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_GetKeyIDs_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetKeyIDsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).GetKeyIDs(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_GetKeyIDs_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).GetKeyIDs(ctx, req.(*GetKeyIDsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // DaemonService_ServiceDesc is the grpc.ServiceDesc for DaemonService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -822,6 +896,14 @@ var DaemonService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Relaunch",
 			Handler:    _DaemonService_Relaunch_Handler,
+		},
+		{
+			MethodName: "ListServers",
+			Handler:    _DaemonService_ListServers_Handler,
+		},
+		{
+			MethodName: "GetKeyIDs",
+			Handler:    _DaemonService_GetKeyIDs_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

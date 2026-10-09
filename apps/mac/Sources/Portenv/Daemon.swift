@@ -60,6 +60,6 @@ actor Daemon {
     }
 
     private func answers() async -> Bool {
-        (try? await CLI().run(["app", "ping"])) != nil
+        await SharedDaemon.client.ping()
     }
 }

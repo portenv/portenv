@@ -63,6 +63,11 @@ service DaemonService {
   // box. Boxes and their programs keep running, and the next portenvd
   // takes them over (ADR 0014). Quitting (Cmd-Q) still closes and saves.
   rpc Relaunch(RelaunchRequest) returns (RelaunchResponse);
+  // The servers a box can move to (Move To), as user@host.
+  rpc ListServers(ListServersRequest) returns (ListServersResponse);
+  // The Keychain items the app reads for a box (service
+  // dev.portenv.repository): its repository key, and its storage keys.
+  rpc GetKeyIDs(GetKeyIDsRequest) returns (GetKeyIDsResponse);
 }
 
 message CheckBoxRequest {
@@ -293,4 +298,18 @@ message WatchBoxStateRequest {
 
 message WatchBoxStateResponse {
   GetBoxStateResponse state = 1;
+}
+
+message ListServersRequest {}
+
+message ListServersResponse {
+  repeated string servers = 1;
+}
+
+message GetKeyIDsRequest {
+  string name = 1;
+}
+
+message GetKeyIDsResponse {
+  repeated string key_ids = 1;
 }

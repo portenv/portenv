@@ -88,7 +88,7 @@ public final class BoxController {
     /// terminal reattaches to the new start.
     public private(set) var terminalGeneration = 0
 
-    private let cli: CLIRunning
+    private let daemon: DaemonAPI
     private let keychain: KeychainReading
     private let notifier: KeychainWaitNotifying?
     private let keychainThreshold: Duration
@@ -103,6 +103,8 @@ public final class BoxController {
     /// Portenv is quitting to relaunch for an update: portenvd was asked to
     /// leave, and no new one may start before the app quits.
     private var leaving = false
+    /// How long follow waits before watching again after portenvd went.
+    private let followRetry: Duration
 
     /// macOS is (or may be) asking the person to approve a Keychain read:
     /// the window says so and offers Cancel.
@@ -111,15 +113,16 @@ public final class BoxController {
     public private(set) var progressDetail: String?
     private var cancelKeychain: (@MainActor () -> Void)?
 
-    public init(box: String, cli: CLIRunning, keychain: KeychainReading = SystemKeychain(),
+    public init(box: String, daemon: DaemonAPI, keychain: KeychainReading = SystemKeychain(),
                 notifier: KeychainWaitNotifying? = nil, keychainThreshold: Duration = KeychainWait.threshold,
-                restartDaemon: (@Sendable () async -> Void)? = nil) {
+                restartDaemon: (@Sendable () async -> Void)? = nil, followRetry: Duration = .seconds(1)) {
         self.box = box
-        self.cli = cli
+        self.daemon = daemon
         self.keychain = keychain
         self.notifier = notifier
         self.keychainThreshold = keychainThreshold
         self.restartDaemon = restartDaemon
+        self.followRetry = followRetry
     }
 
     /// A message shown for StateLine.transientSeconds (a revert, a move
@@ -198,18 +201,17 @@ public final class BoxController {
     public func open() async {
         progress = resuming ? nil : "Opening…"
         await perform {
-            self.servers = (try? await self.cli.run(["app", "servers", self.box]))?
-                .split(separator: "\n").map(String.init) ?? []
+            self.servers = (try? await self.daemon.servers()) ?? []
             do {
-                _ = try await self.cli.run(["app", "open", self.box])
-            } catch let e as CLIError where e.message.contains(KeychainWait.daemonError) {
+                try await self.daemon.open(self.box)
+            } catch let e as DaemonError where e.message.contains(KeychainWait.daemonError) {
                 // portenvd never prompts: read the keys here, in front of
                 // the person, and hand them over. Cancelled: nothing opened.
                 guard try await self.approveKeys() else {
                     self.location = .closed
                     return
                 }
-                _ = try await self.cli.run(["app", "open", self.box])
+                try await self.daemon.open(self.box)
             }
             self.terminalGeneration += 1
             // Learn where it runs before the busy state ends, so the window
@@ -226,7 +228,7 @@ public final class BoxController {
     /// saved since" its last save, and portenvd is started again. The next
     /// refresh finds the box interrupted and reopens it.
     private func daemonEnded() async {
-        guard !leaving, location != .closed, (try? await cli.run(["app", "ping"])) == nil else { return }
+        guard !leaving, location != .closed, !(await daemon.ping()) else { return }
         state = BoxState(save: .notSaved, savedAt: state?.savedAt, location: state?.location)
         await restartDaemon?()
     }
@@ -252,7 +254,7 @@ public final class BoxController {
     /// waiting (and a notification goes out); no timeout while the person
     /// might be answering. Returns false when cancelled.
     private func approveKeys() async throws -> Bool {
-        let ids = try await cli.run(["app", "key-ids", box]).split(separator: "\n").map(String.init)
+        let ids = try await daemon.keyIDs(box)
         let reader = keychain
         let once = Once<Result<[String: Data], Error>?>()
         let result = await withCheckedContinuation { (done: CheckedContinuation<Result<[String: Data], Error>?, Never>) in
@@ -284,19 +286,42 @@ public final class BoxController {
         cancelKeychain = nil
         guard let result else { return false }
         let keys = try result.get()
-        let json = try JSONSerialization.data(withJSONObject: keys.mapValues { $0.base64EncodedString() })
-        _ = try await cli.run(["app", "provide-keys", box], input: json)
+        try await daemon.provideKeys(box, keys)
         return true
     }
 
     /// Reads the recorded state from portenvd.
     public func refresh() async {
-        guard let out = try? await cli.run(["app", "state", box]) else {
+        guard let st = try? await daemon.state(box) else {
             await daemonEnded()
             return
         }
-        guard let st = BoxState.parse(out) else { return }
+        await apply(st, pushed: false)
+    }
+
+    /// Follows the box's state as portenvd pushes it (WatchBoxState), in
+    /// place of a poll. When the stream ends, portenvd has gone: the line
+    /// shows the real state and portenvd is started again (item 1g); then
+    /// the box is followed again. Runs until the task is cancelled.
+    public func follow() async {
+        while !Task.isCancelled {
+            do {
+                for try await st in daemon.watch(box) {
+                    await apply(st, pushed: true)
+                }
+            } catch {}
+            if Task.isCancelled { return }
+            await daemonEnded()
+            try? await Task.sleep(for: followRetry)
+        }
+    }
+
+    /// Applies a state from portenvd. A pushed state, while an action runs,
+    /// only updates the line: the action itself sets where the box is
+    /// (refreshing before its busy state ends).
+    private func apply(_ st: BoxState, pushed: Bool) async {
         state = st
+        if pushed && busy { return }
         if st.interrupted {
             // portenvd restarted while this window had the box open: open it
             // again, handing the keys over (the window stays on the box).
@@ -316,7 +341,7 @@ public final class BoxController {
     /// File › Make Save Point (⌘S).
     public func makeSavePoint() async {
         guard isOpen else { return }
-        await perform { _ = try await self.cli.run(["app", "point", self.box]) }
+        await perform { try await self.daemon.makeSavePoint(self.box) }
         await refresh()
     }
 
@@ -325,13 +350,8 @@ public final class BoxController {
     public func revertToLastSavePoint() async {
         guard isOpen else { return }
         await perform {
-            let out = try await self.cli.run(["app", "revert", self.box])
-            // "…; save point time 2026-10-08T12:31:00Z": say which save
-            // point, in local time, for a few seconds.
-            if let r = out.range(of: "save point time ") {
-                let iso = String(out[r.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
-                if let t = ISO8601DateFormatter().date(from: iso) { self.show(StateLine.reverted(to: t)) }
-            }
+            // Say which save point, in local time, for a few seconds.
+            if let t = try await self.daemon.revert(self.box) { self.show(StateLine.reverted(to: t)) }
         }
         await refresh()
     }
@@ -341,7 +361,7 @@ public final class BoxController {
         guard !isCurrent(target) else { return }
         progress = StateLine.moving(to: target)
         await perform {
-            _ = try await self.cli.run(["app", "move", self.box, target])
+            try await self.daemon.move(self.box, to: target)
             self.terminalGeneration += 1
             self.show(StateLine.moved(to: target))
             await self.refresh()
@@ -353,20 +373,20 @@ public final class BoxController {
     /// Closing the window saves and releases a box open on this Mac.
     public func close() async {
         guard location == .thisMac else { return }
-        await perform { _ = try await self.cli.run(["app", "close", self.box]) }
+        await perform { try await self.daemon.close(self.box) }
         location = .closed
     }
 
     public func dismissError() { error = nil }
 
     /// What quitting needs: this box, and whether it is open on this Mac.
-    public var quitFlow: QuitFlow { QuitFlow(cli: cli, box: box, openHere: location == .thisMac) }
+    public var quitFlow: QuitFlow { QuitFlow(daemon: daemon, box: box, openHere: location == .thisMac) }
 
     /// The Mac woke from sleep: portenvd checks the box agent's channel and
     /// restarts a box whose channel is gone; reconnect the terminal then.
     public func woke() async {
         guard isOpen else { return }
-        if let out = try? await cli.run(["app", "woke"]), out.contains("restarted") {
+        if (try? await daemon.woke()) == true {
             terminalGeneration += 1
         }
         await refresh()
@@ -376,7 +396,7 @@ public final class BoxController {
     /// portenvd whether the box agent still answers; reattach if it does.
     public func terminalEnded() async {
         guard isOpen, !busy else { return }
-        if (try? await cli.run(["app", "check", box])) != nil {
+        if (try? await daemon.check(box)) == true {
             terminalGeneration += 1
         }
         await refresh()
@@ -388,7 +408,7 @@ public final class BoxController {
     public func restartBox() async {
         guard isOpen else { return }
         await perform {
-            _ = try await self.cli.run(["app", "restart", self.box])
+            try await self.daemon.restart(self.box)
             self.terminalGeneration += 1
         }
         await refresh()

@@ -57,3 +57,33 @@ func TestNeedsApprovalIsOnePlainLine(t *testing.T) {
 		t.Fatalf("message %q", msg)
 	}
 }
+
+// TestTheAppAsksForKeyIDsAndServers: the app reads both from portenvd
+// (1.1), not from the CLI.
+func TestTheAppAsksForKeyIDsAndServers(t *testing.T) {
+	s := quietServer(t)
+	c := local.BoxConfig{ID: "box-1", Name: "acme-api", Image: "img", Storage: "sftp:portenv-storage@host:/storage", StorageREST: "127.0.0.1:7422"}
+	if err := os.MkdirAll(filepath.Join(s.env.Dir, "boxes"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.env.SaveBox(c); err != nil {
+		t.Fatal(err)
+	}
+	r, err := s.GetKeyIDs(context.Background(), &daemonv1.GetKeyIDsRequest{Name: "acme-api"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fmt.Sprint(r.GetKeyIds()) != "[box-1 box-1-storage box-1-rest]" {
+		t.Fatalf("key IDs %v", r.GetKeyIds())
+	}
+	if _, err := s.GetKeyIDs(context.Background(), &daemonv1.GetKeyIDsRequest{Name: "nope"}); err == nil {
+		t.Fatal("key IDs for a box that doesn't exist")
+	}
+	srv, err := s.ListServers(context.Background(), &daemonv1.ListServersRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(srv.GetServers()) != 0 {
+		t.Fatalf("servers on a new machine: %v", srv.GetServers())
+	}
+}

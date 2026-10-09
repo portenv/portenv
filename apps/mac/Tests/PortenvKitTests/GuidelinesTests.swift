@@ -166,8 +166,8 @@ struct AccessibilityLabelTests {
 @MainActor
 struct TitleLookTests {
     @Test func everyStateAgrees() async {
-        let cli = FakeCLI()
-        let c = BoxController(box: "acme-api", cli: cli)
+        let cli = FakeDaemon()
+        let c = BoxController(box: "acme-api", daemon: cli)
         #expect(c.title.consistent, "opening: \(c.title)")
         await c.open()
         for json in [
@@ -188,8 +188,8 @@ struct TitleLookTests {
     }
 
     @Test func savedNeverSpins() async {
-        let cli = FakeCLI()
-        let c = BoxController(box: "acme-api", cli: cli)
+        let cli = FakeDaemon()
+        let c = BoxController(box: "acme-api", daemon: cli)
         await c.open()
         cli.state = #"{"state":"SAVE_STATE_SAVING"}"#
         await c.refresh()

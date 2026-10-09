@@ -16,6 +16,7 @@ import (
 
 	"golang.org/x/term"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 
@@ -264,11 +265,29 @@ func plain(err error) error {
 	return err
 }
 
+// attachEnd is how attach ends when the stream does: nil when the session
+// ended, and never gRPC's own text when portenvd went away (a crash, an
+// update, a relaunch): in the app's terminal nothing at all, since the
+// window's state line says what's happening; at a person's terminal one
+// plain line.
+func attachEnd(err error, fromApp bool) error {
+	switch {
+	case errors.Is(err, io.EOF):
+		return nil
+	case status.Code(err) == codes.Unavailable && fromApp:
+		return quietError{err}
+	case status.Code(err) == codes.Unavailable:
+		return errors.New("lost the connection to portenvd")
+	}
+	return plain(err)
+}
+
 // cmdAttach attaches this terminal to the box's tmux session through
 // portenvd and the box agent (never docker exec).
 func cmdAttach(ctx context.Context, e *local.Env, name string, args []string) error {
 	fs := flags("attach")
 	session := fs.String("session", "main", "tmux session")
+	fromApp := fs.Bool("from-app", false, "the app's terminal: end without a message when portenvd goes away")
 	if err := parse(fs, args); err != nil {
 		return err
 	}
@@ -325,11 +344,8 @@ func cmdAttach(ctx context.Context, e *local.Env, name string, args []string) er
 	}()
 	for {
 		r, err := stream.Recv()
-		if errors.Is(err, io.EOF) {
-			return nil
-		}
 		if err != nil {
-			return plain(err)
+			return attachEnd(err, *fromApp)
 		}
 		switch m := r.GetMsg().(type) {
 		case *daemonv1.TerminalResponse_Output:

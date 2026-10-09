@@ -94,6 +94,9 @@ func run(ctx context.Context, args []string) int {
 		keys.AllowPrompts()
 	}
 	if err := c.run(ctx, e, args[1], args[2:]); err != nil {
+		if errors.As(err, new(quietError)) {
+			return 1
+		}
 		fmt.Fprintln(os.Stderr, "portenv:", err)
 		var u usageError
 		if errors.As(err, &u) {
@@ -106,6 +109,10 @@ func run(ctx context.Context, args []string) int {
 }
 
 type usageError = local.UsageError
+
+// quietError fails the command without printing anything: someone else
+// (the app's window) already says what happened.
+type quietError struct{ error }
 
 func usage() {
 	fmt.Fprint(os.Stderr, `portenv (Phase 0, temporary): drive a box with the docker driver.

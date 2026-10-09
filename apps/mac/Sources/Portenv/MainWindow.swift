@@ -128,12 +128,25 @@ struct SyncSymbol: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        if let name = controller.symbol {
-            Image(systemName: name)
-                .foregroundStyle(.secondary)
-                .symbolEffect(.rotate, options: .repeat(.continuous), isActive: controller.symbolSpins && !reduceMotion)
-                .help(controller.subtitle)
-                .accessibilityLabel(A11y.symbolLabel(controller.state))
+        // One snapshot gives the symbol, the spin and the text. A symbol
+        // that doesn't spin is a plain image with no effect attached, and a
+        // new symbol is a new view (keyed by name), so a rotation can never
+        // carry over to the checkmark after a save (it once kept turning
+        // for seconds next to "Saved just now").
+        let look = controller.title
+        if let name = look.symbol {
+            Group {
+                if look.spins && !reduceMotion {
+                    Image(systemName: name)
+                        .symbolEffect(.rotate, options: .repeat(.continuous))
+                } else {
+                    Image(systemName: name)
+                }
+            }
+            .id(name + (look.spins ? "/spin" : ""))
+            .foregroundStyle(.secondary)
+            .help(look.line)
+            .accessibilityLabel(A11y.symbolLabel(controller.state))
         }
     }
 }

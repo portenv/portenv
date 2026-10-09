@@ -93,6 +93,10 @@ public final class BoxController {
     /// message, otherwise the recorded save state only.
     public var subtitle: String { progress ?? transient ?? state?.line() ?? "" }
 
+    /// The title's look from one snapshot: the state line, the symbol and
+    /// whether it spins always agree (§3.1).
+    public var title: TitleLook { TitleLook(line: subtitle, symbol: symbol, spins: symbolSpins) }
+
     /// The sync symbol next to the title (§3.1).
     public var symbol: String? { progress != nil ? "arrow.triangle.2.circlepath" : transient != nil ? "checkmark.circle" : state?.symbol }
 

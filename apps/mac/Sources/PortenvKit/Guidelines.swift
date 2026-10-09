@@ -79,6 +79,20 @@ extension BoxState {
     public var symbolSpins: Bool { save == .saving || save == .retrying }
 }
 
+/// What the title shows: the state line, its symbol and whether the symbol
+/// spins, taken together so they always describe the same state.
+public struct TitleLook: Equatable, Sendable {
+    public var line: String
+    public var symbol: String?
+    public var spins: Bool
+
+    /// A symbol spins only while the line says something is in progress.
+    public var consistent: Bool {
+        let inProgress = line.contains("Saving…") || line.contains("Moving to") || line.contains("Opening…") || line.hasSuffix("· retrying")
+        return spins == inProgress && (!spins || symbol == "arrow.triangle.2.circlepath")
+    }
+}
+
 /// One item of the box's menu (§3.2): the title menu and the menu bar's Box
 /// menu are built from the same list, in the same order. "—" is a separator.
 public struct BoxMenuItem: Equatable, Sendable {

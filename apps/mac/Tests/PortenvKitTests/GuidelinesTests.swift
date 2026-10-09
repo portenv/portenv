@@ -152,3 +152,43 @@ struct AccessibilityLabelTests {
         #expect(A11y.terminal(box: "acme-api") == "Terminal in acme-api")
     }
 }
+
+/// The symbol and the text always come from the same state: the symbol
+/// spins only while the line says something is in progress (a rotation once
+/// kept going next to "Saved just now").
+@MainActor
+struct TitleLookTests {
+    @Test func everyStateAgrees() async {
+        let cli = FakeCLI()
+        let c = BoxController(box: "acme-api", cli: cli)
+        #expect(c.title.consistent, "opening: \(c.title)")
+        await c.open()
+        for json in [
+            #"{"state":"SAVE_STATE_NOT_SAVED_YET"}"#,
+            #"{"state":"SAVE_STATE_SAVING","saved_at":"2026-10-08T12:58:00Z"}"#,
+            #"{"state":"SAVE_STATE_SAVED","saved_at":"2026-10-08T12:58:00Z"}"#,
+            #"{"state":"SAVE_STATE_OFFLINE","saved_at":"2026-10-08T12:58:00Z"}"#,
+            #"{"state":"SAVE_STATE_AGENT_UNAVAILABLE","saved_at":"2026-10-08T12:58:00Z"}"#,
+            #"{"state":"SAVE_STATE_RETRYING","saved_at":"2026-10-08T12:58:00Z"}"#,
+            #"{"state":"SAVE_STATE_NOT_SAVED","saved_at":"2026-10-08T12:58:00Z"}"#,
+            #"{"state":"SAVE_STATE_QUIT_UNSAVED","saved_at":"2026-10-08T12:58:00Z"}"#,
+            #"{"state":"SAVE_STATE_SAVED","saved_at":"2026-10-08T12:58:00Z","location":"portenv@test.example.net"}"#,
+        ] {
+            cli.state = json
+            await c.refresh()
+            #expect(c.title.consistent, "\(json) → \(c.title)")
+        }
+    }
+
+    @Test func savedNeverSpins() async {
+        let cli = FakeCLI()
+        let c = BoxController(box: "acme-api", cli: cli)
+        await c.open()
+        cli.state = #"{"state":"SAVE_STATE_SAVING"}"#
+        await c.refresh()
+        #expect(c.title.spins)
+        cli.state = #"{"state":"SAVE_STATE_SAVED","saved_at":"2026-10-08T12:58:00Z"}"#
+        await c.refresh()
+        #expect(!c.title.spins && c.title.symbol == "checkmark.circle")
+    }
+}

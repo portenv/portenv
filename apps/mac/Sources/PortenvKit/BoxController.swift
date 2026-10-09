@@ -50,31 +50,6 @@ public struct BoxState: Equatable, Sendable {
         return BoxState(save: save, savedAt: w.saved_at, location: (w.location?.isEmpty ?? true) ? nil : w.location)
     }
 
-    /// The title's state line, from this state alone.
-    public func line(timeZone: TimeZone = .current) -> String {
-        let f = DateFormatter()
-        f.dateFormat = "HH:mm"
-        f.timeZone = timeZone
-        let save: String
-        switch self.save {
-        case .notSavedYet: save = "Not saved yet"
-        case .saving: save = "Saving…"
-        case .saved: save = savedAt.map { "Saved at " + f.string(from: $0) } ?? "Saved"
-        case .offline: save = "Offline · will save later"
-        case .agentUnavailable: save = "Not saved · box agent unavailable"
-        case .closed: save = "Closed"
-        case .retrying: save = notSavedSince(f) + " · retrying"
-        case .notSaved: save = notSavedSince(f)
-        case .quitUnsaved: save = notSavedSince(f) + " · Portenv quit before saving"
-        }
-        if let location { return "On \(location) · \(save)" }
-        return save
-    }
-
-    /// "Not saved since 14:58", or "Not saved" when nothing was ever saved.
-    private func notSavedSince(_ f: DateFormatter) -> String {
-        savedAt.map { "Not saved since " + f.string(from: $0) } ?? "Not saved"
-    }
 }
 
 /// One box's window: where the box is, what the title's state line says,
@@ -109,9 +84,52 @@ public final class BoxController {
         self.cli = cli
     }
 
-    /// The title's state line: progress while opening or moving, otherwise
-    /// the recorded save state only.
-    public var subtitle: String { progress ?? state?.line() ?? "" }
+    /// A message shown for StateLine.transientSeconds (a revert, a move
+    /// finished), then the normal line again.
+    public private(set) var transient: String?
+    private var transientTask: Task<Void, Never>?
+
+    /// The title's state line: progress while opening or moving, a transient
+    /// message, otherwise the recorded save state only.
+    public var subtitle: String { progress ?? transient ?? state?.line() ?? "" }
+
+    /// The sync symbol next to the title (§3.1).
+    public var symbol: String? { progress != nil ? "arrow.triangle.2.circlepath" : transient != nil ? "checkmark.circle" : state?.symbol }
+
+    /// Whether the symbol animates (the view turns it off with Reduce Motion).
+    public var symbolSpins: Bool { progress != nil || (transient == nil && state?.symbolSpins == true) }
+
+    /// The box's menu (§3.2), for the title menu and the menu bar's Box menu.
+    public func menuItems(optionHeld: Bool) -> [BoxMenuItem] {
+        let here: String? = switch location {
+        case .thisMac: "this-mac"
+        case .server(let s): s
+        case .closed: nil
+        }
+        return BoxMenuModel.items(open: isOpen, busy: busy, agentUnavailable: agentUnavailable,
+                                  optionHeld: optionHeld, location: here, servers: servers)
+    }
+
+    /// Runs a menu item's action.
+    public func run(_ action: BoxMenuItem.Action) async {
+        switch action {
+        case .none: break
+        case .move(let target): await move(to: target)
+        case .revertToLastSavePoint: await revertToLastSavePoint()
+        case .makeSavePoint: await makeSavePoint()
+        case .restartBox: await restartBox()
+        }
+    }
+
+    private func show(_ message: String) {
+        transient = message
+        transientTask?.cancel()
+        transientTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(StateLine.transientSeconds))
+            guard !Task.isCancelled else { return }
+            self?.transient = nil
+        }
+    }
 
     /// The box agent stopped answering: nothing can be saved, and unsaved
     /// changes stay in the box until Restart Box.
@@ -163,17 +181,26 @@ public final class BoxController {
     /// was is saved first.
     public func revertToLastSavePoint() async {
         guard isOpen else { return }
-        await perform { _ = try await self.cli.run(["app", "revert", self.box]) }
+        await perform {
+            let out = try await self.cli.run(["app", "revert", self.box])
+            // "…; save point time 2026-10-08T12:31:00Z": say which save
+            // point, in local time, for a few seconds.
+            if let r = out.range(of: "save point time ") {
+                let iso = String(out[r.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+                if let t = ISO8601DateFormatter().date(from: iso) { self.show(StateLine.reverted(to: t)) }
+            }
+        }
         await refresh()
     }
 
     /// Move To ▸ This Mac or a server. The current location is a no-op.
     public func move(to target: String) async {
         guard !isCurrent(target) else { return }
-        progress = "Moving to \(target == "this-mac" ? "this Mac" : target)…"
+        progress = StateLine.moving(to: target)
         await perform {
             _ = try await self.cli.run(["app", "move", self.box, target])
             self.terminalGeneration += 1
+            self.show(StateLine.moved(to: target))
         }
         progress = nil
         await refresh()

@@ -33,11 +33,8 @@ struct PortenvApp: App {
         }
         .windowToolbarStyle(.unified(showsTitle: true))
         .commands {
-            CommandGroup(replacing: .saveItem) {
-                Button("Make Save Point") { Task { await controller.makeSavePoint() } }
-                    .keyboardShortcut("s")
-                    .disabled(!controller.isOpen || controller.busy)
-            }
+            // Make a Save Point (⌘S) is in the Box menu (§3.2), not File.
+            CommandGroup(replacing: .saveItem) {}
             // The title menu's box actions, also in the menu bar.
             CommandMenu("Box") {
                 BoxMenu(controller: controller)

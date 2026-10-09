@@ -430,10 +430,17 @@ func (s *Server) RevertToLastSavePoint(ctx context.Context, req *daemonv1.Revert
 		if err != nil {
 			return nil, err
 		}
-		// "reverted to save point A; the work it replaced is save B"
+		// "reverted to save point A; the work it replaced is save B; save
+		// point time T" (the time since the UI compliance pass)
 		var restored, before string
 		_, _ = fmt.Sscanf(strings.ReplaceAll(out, ";", " "), "reverted to save point %s the work it replaced is save %s", &restored, &before)
-		return &daemonv1.RevertToLastSavePointResponse{Restored: &typesv1.SnapshotRef{Id: restored}, SavedBefore: &typesv1.SnapshotRef{Id: before}}, nil
+		ref := &typesv1.SnapshotRef{Id: restored}
+		if _, after, ok := strings.Cut(out, "save point time "); ok {
+			if t, err := time.Parse(time.RFC3339, strings.TrimSpace(after)); err == nil {
+				ref.Time = timestamppb.New(t)
+			}
+		}
+		return &daemonv1.RevertToLastSavePointResponse{Restored: ref, SavedBefore: &typesv1.SnapshotRef{Id: before}}, nil
 	}
 	ob, err := s.get(req.GetName())
 	if err != nil {

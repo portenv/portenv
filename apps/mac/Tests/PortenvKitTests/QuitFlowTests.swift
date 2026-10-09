@@ -73,7 +73,7 @@ struct QuitFlowTests {
 
     @Test func theStateLineSaysPortenvQuitBeforeSaving() {
         let at = ISO8601DateFormatter().date(from: "2026-10-08T13:54:00Z")!
-        #expect(BoxState(save: .quitUnsaved, savedAt: at).line(timeZone: utc) == "Not saved since 13:54 · Portenv quit before saving")
+        #expect(BoxState(save: .quitUnsaved, savedAt: at).line(timeZone: utc, locale: Locale(identifier: "en_GB")) == "This Mac · Not saved since 13:54 · Portenv quit before saving")
         #expect(BoxState.parse(#"{"state":"SAVE_STATE_QUIT_UNSAVED","saved_at":"2026-10-08T13:54:00Z"}"#)?.save == .quitUnsaved)
     }
 }

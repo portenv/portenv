@@ -66,6 +66,16 @@ expect "open: a new box (rule 1)" grep -q "rule 1" <<<"$out"
 
 out=$(type_in 'echo who=$(id -un) tmux=${TMUX%%,*}')
 expect "attach lands in work's tmux session" grep -q "who=work tmux=/tmp/tmux-1000" <<<"$out"
+# tmux is plumbing (GUIDELINES.md §4.1): no status bar, no prefix key, even
+# with the user's own tmux config asking for them.
+tmuxopt() { probe -u work "portenv-daemon-$(box_id)" tmux show-options -gv "$1" 2>/dev/null; }
+expect "tmux's status bar is off" test "$(tmuxopt status)" = off
+expect "tmux's prefix key never surfaces (None, Ctrl-B reaches the shell)" test "$(tmuxopt prefix)" = None
+type_in 'printf "set -g status on\nset -g prefix C-a\n" > ~/.tmux.conf; tmux source-file ~/.tmux.conf' 1 >/dev/null
+"$portenv" app restart d >/dev/null 2>&1 || true
+type_in 'true' 1 >/dev/null
+expect "still off after the user's own tmux config (on the next attach)" test "$(tmuxopt status)" = off -a "$(tmuxopt prefix)" = None
+type_in 'rm -f ~/.tmux.conf' 1 >/dev/null
 type_in 'echo one > ~/f.txt' 1 >/dev/null
 out=$("$portenv" app point d 2>&1) || true; echo "  $out"
 expect "save point" grep -q "^save point " <<<"$out"

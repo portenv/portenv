@@ -19,6 +19,16 @@ import (
 
 // runTerminal attaches a PTY to tmux new-session -A as the main user, so
 // reopening lands in the same session, and relays it over the stream.
+
+// tmuxHidden are tmux commands chained after new-session: no status bar, no
+// prefix key (§4.1).
+var tmuxHidden = []string{
+	";", "set-option", "-g", "status", "off",
+	";", "set-option", "-g", "prefix", "None",
+	";", "set-option", "-g", "prefix2", "None",
+	";", "unbind-key", "C-b",
+}
+
 func runTerminal(stream agentv1.AgentService_TerminalServer, cfg Config, open *agentv1.TerminalOpen) error {
 	if err := CheckSwitch(cfg.UID, ForUser); err != nil {
 		return err
@@ -27,7 +37,11 @@ func runTerminal(stream agentv1.AgentService_TerminalServer, cfg Config, open *a
 	if err != nil {
 		return err
 	}
-	cmd := exec.CommandContext(stream.Context(), "tmux", "new-session", "-A", "-s", open.GetSession()) // #nosec G204 -- session name validated
+	// tmux is plumbing (GUIDELINES.md §4.1): its status bar is always off
+	// and its prefix key never surfaces, so Ctrl-B reaches the shell. Set
+	// after the user's own tmux config, on every attach.
+	args := append([]string{"new-session", "-A", "-s", open.GetSession()}, tmuxHidden...)
+	cmd := exec.CommandContext(stream.Context(), "tmux", args...) // #nosec G204 -- session name validated; fixed options
 	cmd.Dir = cfg.Home()
 	cmd.Env = envFor(cfg)
 	uid := uint32(cfg.UID) // #nosec G115 -- 1000

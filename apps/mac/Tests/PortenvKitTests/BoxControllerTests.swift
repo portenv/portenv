@@ -32,28 +32,19 @@ final class FakeCLI: CLIRunning, @unchecked Sendable {
 
 let utc = TimeZone(identifier: "UTC")!
 
-/// Each state line comes from the recorded state alone.
+/// Each state line comes from the recorded state alone (the full table is
+/// in GuidelinesTests).
 struct StateLineTests {
-    @Test func everyState() {
-        let at = ISO8601DateFormatter().date(from: "2026-10-08T09:42:00Z")!
-        #expect(BoxState(save: .notSavedYet).line(timeZone: utc) == "Not saved yet")
-        #expect(BoxState(save: .saving, savedAt: at).line(timeZone: utc) == "Saving…")
-        #expect(BoxState(save: .retrying, savedAt: at).line(timeZone: utc) == "Not saved since 09:42 · retrying")
-        #expect(BoxState(save: .notSaved, savedAt: at).line(timeZone: utc) == "Not saved since 09:42")
-        #expect(BoxState(save: .notSaved).line(timeZone: utc) == "Not saved")
-        #expect(BoxState.parse(#"{"state":"SAVE_STATE_RETRYING","saved_at":"2026-10-08T09:42:00Z"}"#)?.save == .retrying)
-        #expect(BoxState(save: .saved, savedAt: at).line(timeZone: utc) == "Saved at 09:42")
-        #expect(BoxState(save: .offline, savedAt: at).line(timeZone: utc) == "Offline · will save later")
-        #expect(BoxState(save: .agentUnavailable, savedAt: at).line(timeZone: utc) == "Not saved · box agent unavailable")
-        #expect(BoxState(save: .saved, savedAt: at, location: "portenv@server-a").line(timeZone: utc) == "On portenv@server-a · Saved at 09:42")
-    }
+    let gb = Locale(identifier: "en_GB")
+    let later = ISO8601DateFormatter().date(from: "2026-10-08T12:00:00Z")!
 
     @Test func parsesPortenvdState() {
         let s = BoxState.parse(#"{"state":"SAVE_STATE_SAVED","saved_at":"2026-10-08T09:42:01.123456Z","location":"portenv@server-a"}"#)
         #expect(s?.save == .saved)
         #expect(s?.location == "portenv@server-a")
-        #expect(s?.line(timeZone: utc) == "On portenv@server-a · Saved at 09:42")
-        #expect(BoxState.parse(#"{"state":"SAVE_STATE_NOT_SAVED_YET"}"#)?.line() == "Not saved yet")
+        #expect(s?.line(now: later, timeZone: utc, locale: gb) == "server-a · Saved at 09:42")
+        #expect(BoxState.parse(#"{"state":"SAVE_STATE_NOT_SAVED_YET"}"#)?.line() == "This Mac · Not saved yet")
+        #expect(BoxState.parse(#"{"state":"SAVE_STATE_RETRYING","saved_at":"2026-10-08T09:42:00Z"}"#)?.save == .retrying)
         #expect(BoxState.parse("not json") == nil)
     }
 }
@@ -67,7 +58,7 @@ struct BoxControllerTests {
         let c = BoxController(box: "demo", cli: cli)
         await c.open()
         #expect(c.location == .thisMac)
-        #expect(c.subtitle == "Not saved yet")
+        #expect(c.subtitle == "This Mac · Not saved yet")
         #expect(c.servers == ["portenv@server-a"])
     }
 
@@ -76,10 +67,10 @@ struct BoxControllerTests {
         let c = BoxController(box: "demo", cli: cli)
         await c.open()
         for (json, line) in [
-            (#"{"state":"SAVE_STATE_SAVING"}"#, "Saving…"),
-            (#"{"state":"SAVE_STATE_SAVED","saved_at":"2026-10-08T09:42:00Z"}"#, "Saved at " + Self.local("2026-10-08T09:42:00Z")),
-            (#"{"state":"SAVE_STATE_OFFLINE"}"#, "Offline · will save later"),
-            (#"{"state":"SAVE_STATE_AGENT_UNAVAILABLE"}"#, "Not saved · box agent unavailable"),
+            (#"{"state":"SAVE_STATE_SAVING"}"#, "This Mac · Saving…"),
+            (#"{"state":"SAVE_STATE_SAVED","saved_at":"2026-10-08T09:42:00Z"}"#, "This Mac · Saved at " + Self.local("2026-10-08T09:42:00Z")),
+            (#"{"state":"SAVE_STATE_OFFLINE"}"#, "This Mac · Offline · will save later"),
+            (#"{"state":"SAVE_STATE_AGENT_UNAVAILABLE"}"#, "This Mac · Not saved"),
         ] {
             cli.state = json
             await c.refresh()
@@ -139,8 +130,7 @@ struct BoxControllerTests {
     }
 
     static func local(_ iso: String) -> String {
-        let f = DateFormatter()
-        f.dateFormat = "HH:mm"
-        return f.string(from: ISO8601DateFormatter().date(from: iso)!)
+        // The user's own 12/24-hour setting, as the app shows it.
+        StateLine.clock(ISO8601DateFormatter().date(from: iso)!, timeZone: .current, locale: .current)
     }
 }

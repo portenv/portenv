@@ -19,9 +19,7 @@ struct MainWindow: View {
             .toolbar(removing: .title)
             .toolbar {
                 ToolbarItem(placement: .navigation) {
-                    Image(systemName: controller.busy ? "arrow.triangle.2.circlepath" : "checkmark.circle")
-                        .foregroundStyle(.secondary)
-                        .help(controller.subtitle)
+                    SyncSymbol(controller: controller)
                 }
                 ToolbarItem(placement: .navigation) {
                     BoxTitle(controller: controller)
@@ -48,6 +46,7 @@ struct MainWindow: View {
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 420)
                 Button("Restart Box") { Task { await controller.restartBox() } }
+                    .accessibilityLabel("Restart Box: the box restarts and keeps your unsaved changes")
                     .keyboardShortcut(.defaultAction)
                     .disabled(controller.busy)
             }
@@ -59,6 +58,7 @@ struct MainWindow: View {
             BoxTerminal(box: controller.box, generation: controller.terminalGeneration) {
                 Task { await controller.terminalEnded() }
             }
+            .accessibilityLabel(A11y.terminal(box: controller.box))
         case .closed:
             placeholder(controller.busy ? controller.subtitle : "\(controller.box) is closed", "")
         }
@@ -74,35 +74,66 @@ struct MainWindow: View {
     }
 }
 
-/// The box's actions, shared by the title menu and the Box menu in the
-/// menu bar. In 1.0 only Move To and Revert To work.
+/// The menu bar's Box menu: the same items, in the same order, as the title
+/// menu (§3.2), from BoxMenuModel.
 struct BoxMenu: View {
     @Bindable var controller: BoxController
 
     var body: some View {
-        Menu("Move To") {
-            // The current location is checked (macOS convention); every
-            // other location stays available.
-            target("This Mac", "this-mac")
-            if !controller.servers.isEmpty { Divider() }
-            ForEach(controller.servers, id: \.self) { server in
-                target(server, server)
-            }
+        ForEach(Array(controller.menuItems(optionHeld: false).enumerated()), id: \.offset) { _, item in
+            entry(item)
         }
-        Menu("Revert To") {
-            Button("Last Save Point") { Task { await controller.revertToLastSavePoint() } }
-                .disabled(!controller.isOpen || controller.busy)
-        }
-        Divider()
-        Button("Restart Box") { Task { await controller.restartBox() } }
-            .disabled(!controller.isOpen || controller.busy)
     }
 
-    private func target(_ title: String, _ id: String) -> some View {
-        Toggle(title, isOn: Binding(
-            get: { controller.isCurrent(id) },
-            set: { on in if on { Task { await controller.move(to: id) } } }
-        ))
-        .disabled(controller.busy)
+    @ViewBuilder private func entry(_ item: BoxMenuItem) -> some View {
+        if item.isSeparator {
+            Divider()
+        } else if !item.submenu.isEmpty {
+            Menu(item.title) {
+                ForEach(Array(item.submenu.enumerated()), id: \.offset) { _, sub in
+                    if sub.isSeparator { Divider() } else { leaf(sub) }
+                }
+            }
+            .disabled(!item.enabled)
+        } else {
+            leaf(item)
+        }
+    }
+
+    @ViewBuilder private func leaf(_ item: BoxMenuItem) -> some View {
+        if case .move = item.action {
+            // The current location is checked (macOS convention); every
+            // other location stays available.
+            Toggle(item.title, isOn: Binding(
+                get: { item.checked },
+                set: { on in if on { Task { await controller.run(item.action) } } }
+            ))
+            .disabled(!item.enabled)
+        } else {
+            let button = Button(item.title) { Task { await controller.run(item.action) } }
+                .disabled(!item.enabled)
+            switch item.shortcut {
+            case "⌘S": button.keyboardShortcut("s", modifiers: .command)
+            case "⌥⌘R": button.keyboardShortcut("r", modifiers: [.command, .option])
+            default: button
+            }
+        }
+    }
+}
+
+/// The sync symbol next to the title (§3.1): none for a new box, spinning
+/// while saving or moving (never with Reduce Motion).
+struct SyncSymbol: View {
+    @Bindable var controller: BoxController
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        if let name = controller.symbol {
+            Image(systemName: name)
+                .foregroundStyle(.secondary)
+                .symbolEffect(.rotate, options: .repeat(.continuous), isActive: controller.symbolSpins && !reduceMotion)
+                .help(controller.subtitle)
+                .accessibilityLabel(A11y.symbolLabel(controller.state))
+        }
     }
 }

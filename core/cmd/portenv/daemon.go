@@ -16,6 +16,7 @@ import (
 
 	"golang.org/x/term"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 
@@ -48,6 +49,8 @@ func dialDaemon(e *local.Env) (daemonv1.DaemonServiceClient, func(), error) {
 //	portenv app network up|down     (the system's network status, from the app)
 //	portenv app woke                (after sleep: check every open box's channel)
 //	portenv app retry-packages BOX  (try apt-packages.txt's failed packages again)
+//	portenv app key-ids BOX         (the Keychain items the app reads for the box)
+//	portenv app provide-keys BOX    (keys the app read, JSON on stdin, held in memory)
 func cmdApp(ctx context.Context, e *local.Env, op string, args []string) error {
 	if op == "woke" {
 		c, done, err := dialDaemon(e)
@@ -139,6 +142,28 @@ func cmdApp(ctx context.Context, e *local.Env, op string, args []string) error {
 			return plain(err)
 		}
 		summary = "save point " + short(r.GetSnapshot().GetId())
+	case "key-ids":
+		// Which Keychain items the app reads for this box (service
+		// dev.portenv.repository), one per line.
+		c, err := e.LoadBox(name)
+		if err != nil {
+			return err
+		}
+		for _, id := range local.KeyIDs(c) {
+			fmt.Println(id)
+		}
+		return nil
+	case "provide-keys":
+		// Keys the app read from the Keychain, as JSON on stdin
+		// ({"<key id>": "<base64>"}): never in argv, never on disk.
+		var in map[string][]byte
+		if err := json.NewDecoder(io.LimitReader(os.Stdin, 64<<10)).Decode(&in); err != nil {
+			return fmt.Errorf("keys on stdin: %w", err)
+		}
+		if _, err := c.ProvideKeys(ctx, &daemonv1.ProvideKeysRequest{Name: name, Keys: in}); err != nil {
+			return plain(err)
+		}
+		return nil
 	case "retry-packages":
 		if _, err := c.RetryPackages(ctx, &daemonv1.RetryPackagesRequest{Name: name}); err != nil {
 			return plain(err)
@@ -187,7 +212,8 @@ func cmdApp(ctx context.Context, e *local.Env, op string, args []string) error {
 			Location       string    `json:"location,omitempty"`
 			FailedPackages []string  `json:"failed_packages,omitempty"`
 			PackagesError  string    `json:"packages_error,omitempty"`
-		}{r.GetState().String(), at, r.GetLocation(), r.GetFailedPackages(), r.GetPackagesError()})
+			Interrupted    bool      `json:"interrupted,omitempty"`
+		}{r.GetState().String(), at, r.GetLocation(), r.GetFailedPackages(), r.GetPackagesError(), r.GetInterrupted()})
 		if err != nil {
 			return err
 		}
@@ -239,11 +265,29 @@ func plain(err error) error {
 	return err
 }
 
+// attachEnd is how attach ends when the stream does: nil when the session
+// ended, and never gRPC's own text when portenvd went away (a crash, an
+// update, a relaunch): in the app's terminal nothing at all, since the
+// window's state line says what's happening; at a person's terminal one
+// plain line.
+func attachEnd(err error, fromApp bool) error {
+	switch {
+	case errors.Is(err, io.EOF):
+		return nil
+	case status.Code(err) == codes.Unavailable && fromApp:
+		return quietError{err}
+	case status.Code(err) == codes.Unavailable:
+		return errors.New("lost the connection to portenvd")
+	}
+	return plain(err)
+}
+
 // cmdAttach attaches this terminal to the box's tmux session through
 // portenvd and the box agent (never docker exec).
 func cmdAttach(ctx context.Context, e *local.Env, name string, args []string) error {
 	fs := flags("attach")
 	session := fs.String("session", "main", "tmux session")
+	fromApp := fs.Bool("from-app", false, "the app's terminal: end without a message when portenvd goes away")
 	if err := parse(fs, args); err != nil {
 		return err
 	}
@@ -300,11 +344,8 @@ func cmdAttach(ctx context.Context, e *local.Env, name string, args []string) er
 	}()
 	for {
 		r, err := stream.Recv()
-		if errors.Is(err, io.EOF) {
-			return nil
-		}
 		if err != nil {
-			return plain(err)
+			return attachEnd(err, *fromApp)
 		}
 		switch m := r.GetMsg().(type) {
 		case *daemonv1.TerminalResponse_Output:

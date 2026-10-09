@@ -17,8 +17,22 @@ final class FakeCLI: CLIRunning, @unchecked Sendable {
         set { lock.withLock { _state = newValue } }
     }
 
-    func run(_ arguments: [String]) async throws -> String {
-        lock.withLock { _calls.append(arguments) }
+    private var _inputs: [Data] = []
+    var inputs: [Data] { lock.withLock { _inputs } }
+    /// Answers for actions that should fail only the first time.
+    var failingOnce: [String: String] = [:]
+    /// Runs before each answer (to look at the app mid-call).
+    var onRun: (@Sendable ([String]) async -> Void)?
+
+    func run(_ arguments: [String], input: Data?) async throws -> String {
+        await onRun?(arguments)
+        lock.withLock {
+            _calls.append(arguments)
+            if let input { _inputs.append(input) }
+        }
+        let first = arguments.count > 1 ? arguments[1] : ""
+        if let message = lock.withLock({ failingOnce.removeValue(forKey: first) }) { throw CLIError(message) }
+        if first == "key-ids" { return "box-1\nbox-1-storage" }
         let action = arguments.count > 1 ? arguments[1] : ""
         if let message = failing[action] { throw CLIError(message) }
         switch action {
@@ -60,6 +74,21 @@ struct BoxControllerTests {
         #expect(c.location == .thisMac)
         #expect(c.subtitle == "This Mac · Not saved yet")
         #expect(c.servers == ["portenv@server-a"])
+    }
+
+    /// The window never says "is closed" between a successful open and the
+    /// terminal (it once did while asking portenvd where the box runs).
+    @Test func neverClosedWhileOpening() async {
+        let cli = FakeCLI()
+        let c = BoxController(box: "demo", cli: cli)
+        let seen = Seen()
+        cli.onRun = { args in
+            guard args.count > 1, args[1] == "state" else { return }
+            await MainActor.run { seen.add(c.busy || c.location != .closed ? "ok" : "says closed") }
+        }
+        await c.open()
+        #expect(!seen.all.contains("says closed"), "\(seen.all)")
+        #expect(c.location == .thisMac)
     }
 
     @Test func theStateLineFollowsRecordedState() async {

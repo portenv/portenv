@@ -51,6 +51,10 @@ service DaemonService {
   rpc Woke(WokeRequest) returns (WokeResponse);
   // Try the box's packages that couldn't be installed again now.
   rpc RetryPackages(RetryPackagesRequest) returns (RetryPackagesResponse);
+  // Keys the app read from the Keychain for a box, held in memory only:
+  // portenvd never reads the Keychain interactively, so when a key needs the
+  // person's approval it fails fast and the app (in front of them) reads it.
+  rpc ProvideKeys(ProvideKeysRequest) returns (ProvideKeysResponse);
 }
 
 message CheckBoxRequest {
@@ -216,6 +220,11 @@ message GetBoxStateResponse {
   // inspector's Where it is section with Retry; never in the state line).
   repeated string failed_packages = 4;
   string packages_error = 5;
+  // The box was open when the previous portenvd ended without closing it
+  // (crash, update, relaunch): it isn't closed, but this portenvd hasn't
+  // opened it and holds none of its keys. The app opens it again, handing
+  // the keys over; state and saved_at say when it was last saved.
+  bool interrupted = 6;
 }
 
 enum NetworkPath {
@@ -257,3 +266,11 @@ message RetryPackagesRequest {
 }
 
 message RetryPackagesResponse {}
+
+message ProvideKeysRequest {
+  string name = 1;
+  // Key ID (the box ID, its storage key, its REST password) to key.
+  map<string, bytes> keys = 2;
+}
+
+message ProvideKeysResponse {}

@@ -229,7 +229,7 @@ func (s *Server) GetBoxState(ctx context.Context, req *daemonv1.GetBoxStateReque
 	}
 	ob, err := s.get(name)
 	if err != nil {
-		return &daemonv1.GetBoxStateResponse{State: daemonv1.SaveState_SAVE_STATE_CLOSED}, nil
+		return s.notOpenState(name), nil
 	}
 	st, _, err := ob.sb.LocalState()
 	if err != nil {
@@ -250,6 +250,33 @@ func (s *Server) GetBoxState(ctx context.Context, req *daemonv1.GetBoxStateReque
 		cancel()
 	}
 	return r, nil
+}
+
+// notOpenState is the state of a box this portenvd hasn't opened: closed,
+// unless the previous portenvd ended (crash, update, relaunch) while it was
+// open, which its recorded lease shows. Then it reports when the box was
+// last saved and that it needs opening again. It needs no key.
+func (s *Server) notOpenState(name string) *daemonv1.GetBoxStateResponse {
+	closed := &daemonv1.GetBoxStateResponse{State: daemonv1.SaveState_SAVE_STATE_CLOSED}
+	c, err := s.env.LoadBox(name)
+	if err != nil {
+		return closed
+	}
+	st, ok, err := boxsync.LoadState(filepath.Join(s.env.Dir, "state", c.ID))
+	if err != nil || !ok || st.Lease != boxsync.LeaseHeld {
+		return closed
+	}
+	r := &daemonv1.GetBoxStateResponse{State: daemonv1.SaveState_SAVE_STATE_NOT_SAVED, Interrupted: true}
+	switch {
+	case s.hasQuitMarker(c.ID):
+		r.State = daemonv1.SaveState_SAVE_STATE_QUIT_UNSAVED
+	case st.Snapshot == "" && st.Tree == "":
+		r.State = daemonv1.SaveState_SAVE_STATE_NOT_SAVED_YET
+	}
+	if !st.SavedAt.IsZero() {
+		r.SavedAt = timestamppb.New(st.SavedAt)
+	}
+	return r
 }
 
 // RetryPackages asks the box's agent to try the packages that couldn't be

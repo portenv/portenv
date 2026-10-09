@@ -25,7 +25,8 @@ struct MainWindow: View {
                     BoxTitle(controller: controller)
                 }
             }
-            .disabled(controller.busy)
+            // Busy disables the window, except Cancel while the Keychain asks.
+            .disabled(controller.busy && !controller.waitingForKeychain)
             // Closing the window doesn't close the box here: the app quits
             // after its last window, and quitting closes it, once (two
             // closes once crashed portenvd).
@@ -38,6 +39,18 @@ struct MainWindow: View {
 
     @ViewBuilder private var content: some View {
         switch controller.location {
+        // Also while reopening after portenvd restarted, so Cancel is
+        // always in reach while macOS asks.
+        case _ where controller.waitingForKeychain:
+            VStack(spacing: 10) {
+                Text(KeychainWait.line).font(.title3)
+                Text(KeychainWait.detail).foregroundStyle(.secondary)
+                Button("Cancel") { controller.cancelKeychainWait() }
+                    .keyboardShortcut(.cancelAction)
+                    .accessibilityLabel("Cancel opening \(controller.box)")
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(.background)
         case _ where controller.agentUnavailable && controller.isOpen:
             VStack(spacing: 10) {
                 Text("The box agent is unavailable").font(.title3)

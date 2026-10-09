@@ -11,7 +11,11 @@ struct PortenvApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @State private var controller = BoxController(
         box: ProcessInfo.processInfo.environment["PORTENV_BOX"] ?? "demo",
-        cli: CLI()
+        cli: CLI(),
+        notifier: Notifier.shared,
+        // portenvd ended while the app is open: start it again (the box is
+        // then reopened and its keys sent again).
+        restartDaemon: restartPortenvd
     )
 
     var body: some Scene {
@@ -42,6 +46,9 @@ struct PortenvApp: App {
         }
     }
 }
+
+/// Starts portenvd again after it ended while the app is open.
+@Sendable func restartPortenvd() async { await Daemon.shared.ensureRunning() }
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {

@@ -4,9 +4,17 @@ import Foundation
 
 /// Runs the portenv CLI, which talks to portenvd (`portenv app …`).
 public protocol CLIRunning: Sendable {
-    /// Runs `portenv` with arguments and returns its standard output, or
-    /// throws with its standard error.
-    func run(_ arguments: [String]) async throws -> String
+    /// Runs `portenv` with arguments, writing input to its standard input
+    /// (never argv), and returns its standard output, or throws with its
+    /// standard error.
+    func run(_ arguments: [String], input: Data?) async throws -> String
+}
+
+extension CLIRunning {
+    /// Runs `portenv` with nothing on standard input.
+    public func run(_ arguments: [String]) async throws -> String {
+        try await run(arguments, input: nil)
+    }
 }
 
 /// A failed portenv command, with what it said.
@@ -56,7 +64,7 @@ public struct CLI: CLIRunning {
     public let executable: URL
     public init(executable: URL = Binaries.portenv) { self.executable = executable }
 
-    public func run(_ arguments: [String]) async throws -> String {
+    public func run(_ arguments: [String], input: Data?) async throws -> String {
         let executable = self.executable
         return try await withCheckedThrowingContinuation { continuation in
             let process = Process()
@@ -65,7 +73,8 @@ public struct CLI: CLIRunning {
             let out = Pipe(), err = Pipe()
             process.standardOutput = out
             process.standardError = err
-            process.standardInput = FileHandle.nullDevice
+            let stdin = Pipe()
+            process.standardInput = input == nil ? FileHandle.nullDevice : stdin
             process.terminationHandler = { p in
                 let stdout = String(decoding: out.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
                 let stderr = String(decoding: err.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
@@ -76,7 +85,13 @@ public struct CLI: CLIRunning {
                     continuation.resume(throwing: CLIError(message.replacingOccurrences(of: "portenv: ", with: "")))
                 }
             }
-            do { try process.run() } catch { continuation.resume(throwing: error) }
+            do {
+                try process.run()
+                if let input {
+                    stdin.fileHandleForWriting.write(input)
+                    try? stdin.fileHandleForWriting.close()
+                }
+            } catch { continuation.resume(throwing: error) }
         }
     }
 }

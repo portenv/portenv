@@ -19,8 +19,8 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
-	"time"
 
 	"github.com/portenv/portenv/core/daemon"
 	"github.com/portenv/portenv/core/internal/version"
@@ -32,17 +32,20 @@ func main() {
 		fmt.Println("portenvd", version.String())
 		return
 	}
-	log := slog.New(slog.NewTextHandler(os.Stderr, nil)).With("component", "portenvd")
+	// launchd runs portenvd (the app's login item, PORTENVD_LOG=file): the
+	// log goes to ~/Library/Logs/Portenv/portenvd.log, which a plist inside
+	// the app bundle can't name. Run by hand, stderr.
+	out := os.Stderr
+	if os.Getenv("PORTENVD_LOG") == "file" {
+		if home, err := os.UserHomeDir(); err == nil {
+			if f, err := openLog(home); err == nil {
+				out = f
+			}
+		}
+	}
+	log := slog.New(slog.NewTextHandler(out, nil)).With("component", "portenvd")
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	// Started by the app: stop (saving and releasing open boxes) when the
-	// app is gone, however it ended.
-	if os.Getenv("PORTENVD_EXIT_WITH_PARENT") == "1" {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithCancel(ctx)
-		defer cancel()
-		go exitWithParent(cancel, log)
-	}
 	env, err := local.NewEnv()
 	if err != nil {
 		log.Error("portenv directory", "err", err)
@@ -55,16 +58,14 @@ func main() {
 	}
 }
 
-// exitWithParent cancels when this process's parent changes: the app that
-// started it has ended and this process was handed to launchd.
-func exitWithParent(cancel context.CancelFunc, log *slog.Logger) {
-	parent := os.Getppid()
-	for {
-		time.Sleep(time.Second)
-		if os.Getppid() != parent {
-			log.Info("the app that started portenvd has ended; closing open boxes")
-			cancel()
-			return
-		}
+// openLog opens portenvd's log for appending: 0600 in a 0700 folder.
+func openLog(home string) (*os.File, error) {
+	dir := filepath.Join(home, "Library", "Logs", "Portenv")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return nil, err
 	}
+	if err := os.Chmod(dir, 0o700); err != nil { // #nosec G302 -- a directory: 0700 is owner-only
+		return nil, err
+	}
+	return os.OpenFile(filepath.Join(dir, "portenvd.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600) // #nosec G304 -- fixed name in the user's log folder
 }

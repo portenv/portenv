@@ -16,10 +16,12 @@ import (
 
 	"golang.org/x/term"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 
 	"github.com/portenv/portenv/core/daemon"
+	"github.com/portenv/portenv/core/internal/bounded"
 	"github.com/portenv/portenv/core/local"
 	daemonv1 "github.com/portenv/portenv/proto/gen/go/portenv/daemon/v1"
 )
@@ -39,14 +41,58 @@ func dialDaemon(e *local.Env) (daemonv1.DaemonServiceClient, func(), error) {
 
 // cmdApp runs one of the app's actions through portenvd:
 //
-//	portenv app open|close|point|revert|check|restart BOX
+//	portenv app open BOX [--take-over]
+//	portenv app close|point|save|revert|check|restart BOX
+//	portenv app history BOX         (every save, oldest first)
+//	portenv app housekeep BOX [--prune]
+//	portenv app leave-unsaved BOX   (Quit Anyway: the marker; saved in the background until it works)
+//	portenv app unregister-service  (dev builds: remove portenvd's login item; this portenv's app)
 //	portenv app move BOX this-mac|USER@HOST
 //	portenv app servers BOX         (the Move To targets, one per line)
 //	portenv app ping                (exit 0 when portenvd answers)
 //	portenv app state BOX           (the save state and location, JSON)
 //	portenv app channel BOX         (a runner's box channel for a Mac, JSON on stdout)
 //	portenv app network up|down     (the system's network status, from the app)
+//	portenv app woke                (after sleep: check every open box's channel)
+//	portenv app relaunch            (an update: portenvd stops, boxes keep running)
+//	portenv app retry-packages BOX  (try apt-packages.txt's failed packages again)
+//	portenv app key-ids BOX         (the Keychain items the app reads for the box)
+//	portenv app provide-keys BOX    (keys the app read, JSON on stdin, held in memory)
 func cmdApp(ctx context.Context, e *local.Env, op string, args []string) error {
+	if op == "woke" {
+		c, done, err := dialDaemon(e)
+		if err != nil {
+			return err
+		}
+		defer done()
+		r, err := c.Woke(ctx, &daemonv1.WokeRequest{})
+		if err != nil {
+			return plain(err)
+		}
+		for _, b := range r.GetBoxes() {
+			switch {
+			case b.GetRestarted():
+				fmt.Printf("%s: the box agent's channel was gone; restarted\n", b.GetName())
+			case b.GetAgentAvailable():
+				fmt.Printf("%s: the box agent answers\n", b.GetName())
+			default:
+				fmt.Printf("%s: the box agent is unavailable: %s\n", b.GetName(), b.GetDetail())
+			}
+		}
+		return nil
+	}
+	if op == "relaunch" {
+		c, done, err := dialDaemon(e)
+		if err != nil {
+			return err
+		}
+		defer done()
+		if _, err := c.Relaunch(ctx, &daemonv1.RelaunchRequest{}); err != nil {
+			return plain(err)
+		}
+		fmt.Println("portenvd is stopping; boxes keep running for the next one")
+		return nil
+	}
 	if op == "network" {
 		path := map[string]daemonv1.NetworkPath{"up": daemonv1.NetworkPath_NETWORK_PATH_SATISFIED, "down": daemonv1.NetworkPath_NETWORK_PATH_UNSATISFIED}
 		if len(args) != 1 || path[args[0]] == daemonv1.NetworkPath_NETWORK_PATH_UNSPECIFIED {
@@ -64,6 +110,9 @@ func cmdApp(ctx context.Context, e *local.Env, op string, args []string) error {
 			return plain(err)
 		}
 		return nil
+	}
+	if op == "unregister-service" {
+		return unregisterService(ctx)
 	}
 	if op == "ping" {
 		c, done, err := dialDaemon(e)
@@ -99,7 +148,8 @@ func cmdApp(ctx context.Context, e *local.Env, op string, args []string) error {
 	var summary string
 	switch op {
 	case "open":
-		r, err := c.OpenBox(ctx, &daemonv1.OpenBoxRequest{Name: name})
+		takeOver := len(args) > 1 && args[1] == "--take-over"
+		r, err := c.OpenBox(ctx, &daemonv1.OpenBoxRequest{Name: name, TakeOver: takeOver})
 		if err != nil {
 			return plain(err)
 		}
@@ -109,18 +159,85 @@ func cmdApp(ctx context.Context, e *local.Env, op string, args []string) error {
 			return plain(err)
 		}
 		summary = "closed and released"
+	case "save":
+		r, err := c.SaveNow(ctx, &daemonv1.SaveNowRequest{Name: name})
+		if err != nil {
+			return plain(err)
+		}
+		summary = "saved " + short(r.GetSnapshot().GetId())
+	case "history":
+		r, err := c.ListSaves(ctx, &daemonv1.ListSavesRequest{Name: name})
+		if err != nil {
+			return plain(err)
+		}
+		if len(r.GetSaves()) == 0 {
+			fmt.Println("no saves yet")
+		}
+		for _, h := range r.GetSaves() {
+			note := ""
+			if h.GetOpenOn() != "" {
+				note = "  open on " + h.GetOpenOn()
+			}
+			if h.GetKind() == "orphaned" {
+				note = "  unsaved work from " + h.GetMachine() + ", kept as a separate save"
+			}
+			fmt.Printf("%s  %s  %-8s  %s%s\n", short(h.GetId()), h.GetTime().AsTime().Local().Format(time.DateTime), h.GetKind(), h.GetMachine(), note)
+		}
+		return nil
+	case "leave-unsaved":
+		if _, err := c.LeaveUnsaved(ctx, &daemonv1.LeaveUnsavedRequest{Name: name}); err != nil {
+			return plain(err)
+		}
+		summary = "left unsaved: portenvd keeps saving it in the background (the lease stays here until it's saved)"
+	case "housekeep":
+		prune := len(args) > 1 && args[1] == "--prune"
+		if _, err := c.Housekeep(ctx, &daemonv1.HousekeepRequest{Name: name, Prune: prune}); err != nil {
+			return plain(err)
+		}
+		summary = "housekept"
 	case "point":
 		r, err := c.MakeSavePoint(ctx, &daemonv1.MakeSavePointRequest{Name: name})
 		if err != nil {
 			return plain(err)
 		}
 		summary = "save point " + short(r.GetSnapshot().GetId())
+	case "key-ids":
+		// Which Keychain items the app reads for this box (service
+		// dev.portenv.repository), one per line.
+		c, err := e.LoadBox(name)
+		if err != nil {
+			return err
+		}
+		for _, id := range local.KeyIDs(c) {
+			fmt.Println(id)
+		}
+		return nil
+	case "provide-keys":
+		// Keys the app read from the Keychain, as JSON on stdin
+		// ({"<key id>": "<base64>"}): never in argv, never on disk.
+		var in map[string][]byte
+		if err := json.NewDecoder(io.LimitReader(os.Stdin, 64<<10)).Decode(&in); err != nil {
+			return fmt.Errorf("keys on stdin: %w", err)
+		}
+		if _, err := c.ProvideKeys(ctx, &daemonv1.ProvideKeysRequest{Name: name, Keys: in}); err != nil {
+			return plain(err)
+		}
+		return nil
+	case "retry-packages":
+		if _, err := c.RetryPackages(ctx, &daemonv1.RetryPackagesRequest{Name: name}); err != nil {
+			return plain(err)
+		}
+		summary = "retrying the packages that couldn't be installed"
 	case "revert":
 		r, err := c.RevertToLastSavePoint(ctx, &daemonv1.RevertToLastSavePointRequest{Name: name})
 		if err != nil {
 			return plain(err)
 		}
 		summary = fmt.Sprintf("reverted to save point %s; the work it replaced is save %s", short(r.GetRestored().GetId()), short(r.GetSavedBefore().GetId()))
+		// The app says "Reverted to 14:31" in local time (GUIDELINES.md §3.1).
+		if t := r.GetRestored().GetTime(); t != nil && !t.AsTime().IsZero() {
+			summary += "; save point time " + t.AsTime().UTC().Format(time.RFC3339)
+		}
 	case "channel":
 		// The box's agent channel, for a Mac reaching this server's box:
 		// printed once on stdout (read over SSH, kept in memory there),
@@ -149,10 +266,13 @@ func cmdApp(ctx context.Context, e *local.Env, op string, args []string) error {
 			at = r.GetSavedAt().AsTime()
 		}
 		b, err := json.Marshal(struct {
-			State    string    `json:"state"`
-			SavedAt  time.Time `json:"saved_at,omitzero"`
-			Location string    `json:"location,omitempty"`
-		}{r.GetState().String(), at, r.GetLocation()})
+			State          string    `json:"state"`
+			SavedAt        time.Time `json:"saved_at,omitzero"`
+			Location       string    `json:"location,omitempty"`
+			FailedPackages []string  `json:"failed_packages,omitempty"`
+			PackagesError  string    `json:"packages_error,omitempty"`
+			Interrupted    bool      `json:"interrupted,omitempty"`
+		}{r.GetState().String(), at, r.GetLocation(), r.GetFailedPackages(), r.GetPackagesError(), r.GetInterrupted()})
 		if err != nil {
 			return err
 		}
@@ -204,11 +324,29 @@ func plain(err error) error {
 	return err
 }
 
+// attachEnd is how attach ends when the stream does: nil when the session
+// ended, and never gRPC's own text when portenvd went away (a crash, an
+// update, a relaunch): in the app's terminal nothing at all, since the
+// window's state line says what's happening; at a person's terminal one
+// plain line.
+func attachEnd(err error, fromApp bool) error {
+	switch {
+	case errors.Is(err, io.EOF):
+		return nil
+	case status.Code(err) == codes.Unavailable && fromApp:
+		return quietError{err}
+	case status.Code(err) == codes.Unavailable:
+		return errors.New("lost the connection to portenvd")
+	}
+	return plain(err)
+}
+
 // cmdAttach attaches this terminal to the box's tmux session through
 // portenvd and the box agent (never docker exec).
 func cmdAttach(ctx context.Context, e *local.Env, name string, args []string) error {
 	fs := flags("attach")
 	session := fs.String("session", "main", "tmux session")
+	fromApp := fs.Bool("from-app", false, "the app's terminal: end without a message when portenvd goes away")
 	if err := parse(fs, args); err != nil {
 		return err
 	}
@@ -265,11 +403,8 @@ func cmdAttach(ctx context.Context, e *local.Env, name string, args []string) er
 	}()
 	for {
 		r, err := stream.Recv()
-		if errors.Is(err, io.EOF) {
-			return nil
-		}
 		if err != nil {
-			return plain(err)
+			return attachEnd(err, *fromApp)
 		}
 		switch m := r.GetMsg().(type) {
 		case *daemonv1.TerminalResponse_Output:
@@ -278,4 +413,24 @@ func cmdAttach(ctx context.Context, e *local.Env, name string, args []string) er
 			return nil
 		}
 	}
+}
+
+// unregisterService removes portenvd's login item (dev builds and tests).
+// Only the app can (SMAppService), so this runs the app this portenv came
+// with: Portenv.app/Contents/Helpers/portenv → Contents/MacOS/Portenv.
+func unregisterService(ctx context.Context) error {
+	self, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	app := filepath.Join(filepath.Dir(filepath.Dir(self)), "MacOS", "Portenv")
+	if _, err := os.Stat(app); err != nil {
+		return errors.New("this portenv isn't inside Portenv.app; run make unregister-service, or Portenv.app/Contents/MacOS/Portenv --unregister-service")
+	}
+	cmd, err := bounded.Command(ctx, 30*time.Second, app, "--unregister-service")
+	if err != nil {
+		return err
+	}
+	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+	return cmd.Run()
 }

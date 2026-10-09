@@ -32,9 +32,12 @@ A() { "${ssh_cmd[@]}" -- "ubuntu@$host" "$@" </dev/null; }
 Ain() { "${ssh_cmd[@]}" -- "ubuntu@$host" "$@"; }
 
 arch=$(A dpkg --print-architecture)
+# The CLI CI built for this commit (PORTENV_LOCAL_BUILD=1 builds it here).
+# shellcheck source=server-bins.sh
+. "$repo/scripts/server-bins.sh"
+server_bins "$arch" "$tmp/bins"
 for b in portenv portenv-runner; do
-	(cd "$repo" && CGO_ENABLED=0 GOOS=linux GOARCH=$arch go build -trimpath -ldflags="-s -w" -o "$tmp/$b" "./core/cmd/$b")
-	gzip -9c "$tmp/$b" | Ain "gunzip > /tmp/$b && chmod +x /tmp/$b"
+	gzip -9c "$tmp/bins/$b" | Ain "gunzip > /tmp/$b && chmod +x /tmp/$b"
 done
 Ain 'cat > /tmp/portenv-setup.sh' < "$repo/server/setup.sh"
 A sudo install -m 0755 /tmp/portenv /usr/local/bin/portenv

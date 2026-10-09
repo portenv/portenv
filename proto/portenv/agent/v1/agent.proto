@@ -15,6 +15,9 @@ service AgentService {
   // Reports whether the box has finished starting (users created, home
   // checked, packages installed).
   rpc GetReadiness(GetReadinessRequest) returns (GetReadinessResponse);
+  // Try the packages that couldn't be installed again now (the Retry in the
+  // inspector); the result shows in GetReadiness.
+  rpc RetryPackages(RetryPackagesRequest) returns (RetryPackagesResponse);
   // Runs one allow-listed restic command as portenv-sync (ADR 0005). The
   // input carries the password and storage credentials; it is never logged.
   rpc RunRestic(RunResticRequest) returns (RunResticResponse);
@@ -101,4 +104,13 @@ message GetReadinessResponse {
   ReadinessState state = 1;
   // Human-readable step or failure, e.g. "installing 2 packages".
   string detail = 2;
+  // Packages from apt-packages.txt that couldn't be installed. They never
+  // stop the box from starting; the agent retries them in the background.
+  repeated string failed_packages = 3;
+  // The last installation error for them (the log has the rest).
+  string packages_error = 4;
 }
+
+message RetryPackagesRequest {}
+
+message RetryPackagesResponse {}

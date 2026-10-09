@@ -29,6 +29,7 @@ import (
 	"github.com/portenv/portenv/core/agent"
 	"github.com/portenv/portenv/core/driver"
 	"github.com/portenv/portenv/core/internal/version"
+	"github.com/portenv/portenv/core/keys"
 	"github.com/portenv/portenv/core/local"
 	boxsync "github.com/portenv/portenv/core/sync"
 	agentv1 "github.com/portenv/portenv/proto/gen/go/portenv/agent/v1"
@@ -50,12 +51,34 @@ type Server struct {
 	// portenvd on a Mac closes them: quitting the app saves and releases.
 	KeepBoxesOnStop bool
 
+	// relaunching: Portenv is relaunching for an update, so this daemon
+	// stops without closing its boxes (ADR 0014); stop ends Serve.
+	relaunching atomic.Bool
+	stop        context.CancelFunc
+
+	// peerUID reads a connection's peer uid (nil: the system's; tests set
+	// another before Serve).
+	peerUID func(fd int) (int, error)
+
+	// The background saves after Quit Anyway: they run until bgCtx ends
+	// (portenvd stopping). sleep and closeForQuit are the clock and the
+	// close (nil: the real ones; tests set fakes).
+	bgCtx        context.Context
+	bgCancel     context.CancelFunc
+	sleep        func(ctx context.Context, d time.Duration) bool
+	closeForQuit func(ctx context.Context, name string) error
+
 	mu     sync.Mutex
 	open   map[string]*openBox   // by box name
 	remote map[string]*remoteBox // boxes this Mac opened on a server
 	// gen counts each box's moves, closes and restarts by this daemon, so
 	// a terminal that ends because of one is not reported as a failure.
 	gen map[string]uint64
+
+	// stopping: shutdown has begun (no new opens); opening: opens in
+	// progress, which shutdown waits for.
+	stopping bool
+	opening  sync.WaitGroup
 
 	network networkReport      // the app's last network report
 	now     func() time.Time   // the clock (tests set it)
@@ -79,12 +102,25 @@ type openBox struct {
 	// retrying: a restic run missed its deadline and is being retried;
 	// failed: the last save failed (after its retry), until one succeeds.
 	retrying, failed atomic.Bool
+	// quitUnsaved: Portenv quit before this box could be saved; it is
+	// being saved first thing (the quit marker).
+	quitUnsaved atomic.Bool
+	// background: left unsaved by Quit Anyway; portenvd retries the save
+	// on its own until it works or the app takes the box back.
+	background atomic.Bool
+	// agentMu guards conn and agent for readers outside mu (the state
+	// poll), so they never wait behind a save.
+	agentMu sync.RWMutex
 }
 
 // New returns a daemon for this machine's Portenv directory.
 func New(env *local.Env, log *slog.Logger) *Server {
+	if env != nil && env.Provided == nil {
+		env.Provided = keys.NewMemory()
+	}
+	bg, cancel := context.WithCancel(context.Background())
 	return &Server{env: env, log: log, open: map[string]*openBox{}, remote: map[string]*remoteBox{}, gen: map[string]uint64{},
-		now: time.Now, alive: processAlive}
+		now: time.Now, alive: processAlive, bgCtx: bg, bgCancel: cancel}
 }
 
 // Serve listens on the socket in the Portenv directory (mode 0600 in a 0700
@@ -95,6 +131,21 @@ func (s *Server) Serve(ctx context.Context) error {
 	if len(sock) >= 104 {
 		return fmt.Errorf("socket path %s is longer than the 103 bytes Unix sockets allow; use a shorter PORTENV_HOME", sock)
 	}
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	s.mu.Lock()
+	s.stop = cancel
+	s.mu.Unlock()
+	if err := privateDir(s.env.Dir); err != nil {
+		return err
+	}
+	// One daemon per directory, before touching the socket: a second one
+	// must not take the socket or any box from the first.
+	lock, err := lockDir(s.env.Dir)
+	if err != nil {
+		return err
+	}
+	defer lock.release()
 	_ = os.Remove(sock)
 	lis, err := (&net.ListenConfig{}).Listen(ctx, "unix", sock)
 	if err != nil {
@@ -111,33 +162,22 @@ func (s *Server) Serve(ctx context.Context) error {
 		// Save and release first, while the agent channels are up; then end
 		// every call, open terminals included (a graceful stop would wait
 		// for terminals forever). A runner leaves boxes running.
-		if !s.KeepBoxesOnStop {
+		s.stopBackground()
+		if !s.KeepBoxesOnStop && !s.relaunching.Load() {
 			s.closeAll()
 		}
 		srv.Stop()
 	}()
 	s.log.Info("serving", "socket", sock)
-	err = srv.Serve(lis)
+	peer := s.peerUID
+	if peer == nil {
+		peer = socketPeerUID
+	}
+	err = srv.Serve(ownerOnly{Listener: lis, peerUID: peer})
 	if errors.Is(err, grpc.ErrServerStopped) {
 		return nil
 	}
 	return err
-}
-
-func (s *Server) closeAll() {
-	s.mu.Lock()
-	names := make([]string, 0, len(s.open))
-	for n := range s.open {
-		names = append(names, n)
-	}
-	s.mu.Unlock()
-	for _, n := range names {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-		if err := s.closeBox(ctx, n); err != nil {
-			s.log.Error("close on shutdown", "box", n, "err", err)
-		}
-		cancel()
-	}
 }
 
 // GetVersion implements daemonv1.DaemonServiceServer.
@@ -184,12 +224,26 @@ func (s *Server) OpenBox(ctx context.Context, req *daemonv1.OpenBoxRequest) (*da
 		s.detachRemote(req.GetName())
 	}
 	s.mu.Lock()
-	if _, open := s.open[req.GetName()]; open {
-		s.mu.Unlock()
-		return &daemonv1.OpenBoxResponse{Summary: "already open"}, nil
-	}
+	ob, open := s.open[req.GetName()]
 	s.mu.Unlock()
-	ob, res, err := s.openBox(ctx, req.GetName())
+	if open {
+		if !ob.background.Load() {
+			return &daemonv1.OpenBoxResponse{Summary: "already open"}, nil
+		}
+		// Left unsaved by Quit Anyway and still being saved in the
+		// background: take it back as it is and save it first thing.
+		if s.takeBackBox(ob) {
+			go s.saveAfterQuit(req.GetName(), ob) // #nosec G118 -- the save outlives this open request on purpose
+			return &daemonv1.OpenBoxResponse{Summary: "open on " + s.env.Machine + "; Portenv quit before saving it last time, saving now"}, nil
+		}
+		// Saved in the background meanwhile: it's closed; open it anew.
+	}
+	done, err := s.startOpening()
+	if err != nil {
+		return nil, err
+	}
+	defer done()
+	ob, res, err := s.openBox(ctx, req.GetName(), req.GetTakeOver())
 	if err != nil {
 		var held *boxsync.LeaseHeldError
 		if errors.As(err, &held) {
@@ -202,19 +256,33 @@ func (s *Server) OpenBox(ctx context.Context, req *daemonv1.OpenBoxRequest) (*da
 	s.open[req.GetName()] = ob
 	s.mu.Unlock()
 	summary := fmt.Sprintf("open on %s (resume rule %d: %s)", s.env.Machine, res.Rule, res.Action)
+	// Rule 4: say where the unsaved work went, with its time.
+	if o := res.Orphaned; o != nil {
+		summary += fmt.Sprintf("; unsaved work from %s was kept as a separate save, %s (%s), before restoring the newer one",
+			o.Machine, short8(o.ID), o.Time.Local().Format(time.DateTime))
+	}
 	if res.Offline {
 		summary = "Offline · will save later"
+	}
+	// Portenv quit before this box was saved: say so, and save it first
+	// thing (offline, the next save does it).
+	if s.hasQuitMarker(ob.sess.Cfg.ID) {
+		ob.quitUnsaved.Store(true)
+		summary += "; Portenv quit before saving it last time, saving now"
+		if !res.Offline {
+			go s.saveAfterQuit(req.GetName(), ob) // #nosec G118 -- the save outlives this open request on purpose
+		}
 	}
 	return &daemonv1.OpenBoxResponse{Summary: summary, Rule: int32(res.Rule)}, nil // #nosec G115 -- rules 1 to 5
 }
 
-func (s *Server) openBox(ctx context.Context, name string) (*openBox, boxsync.ResumeResult, error) {
+func (s *Server) openBox(ctx context.Context, name string, takeOver bool) (*openBox, boxsync.ResumeResult, error) {
 	var none boxsync.ResumeResult
 	t0 := time.Now()
 	step := func(what string) { s.log.Info(what, "box", name, "after", time.Since(t0).Round(time.Millisecond)) }
 	sess, err := s.env.Open(name)
 	if err != nil {
-		return nil, none, err
+		return nil, none, keyError(err)
 	}
 	if err := sess.EnsureCreated(ctx, func(msg string) { s.log.Info(msg, "box", name) }); err != nil {
 		return nil, none, err
@@ -233,11 +301,21 @@ func (s *Server) openBox(ctx context.Context, name string) (*openBox, boxsync.Re
 		}()
 	}
 
-	// A box left running without this process's channel secrets (for
-	// example after portenvd restarted) is restarted to open a new channel.
+	// A box left running without this process's channel secrets (portenvd
+	// restarted: a crash, an update) is taken over: re-keyed in place, so
+	// it and its programs keep running (ADR 0014). Only if that fails is it
+	// restarted to open a new channel (its home stays: rule 3).
 	if _, err := sess.Drv.AgentChannel(ctx, sess.ID()); errors.Is(err, driver.ErrNoChannel) {
-		if _, err := sess.Drv.Stop(ctx, sess.ID(), 0); err != nil {
-			return nil, none, err
+		// Rekey refuses a box that isn't running; then it simply starts.
+		if err := sess.Drv.Rekey(ctx, sess.ID()); err == nil {
+			step("took over the running box (re-keyed, not restarted)")
+		} else {
+			s.log.Info("no running box to take over, or the re-key failed: starting it", "box", name, "err", err)
+		}
+		if _, err := sess.Drv.AgentChannel(ctx, sess.ID()); errors.Is(err, driver.ErrNoChannel) {
+			if _, err := sess.Drv.Stop(ctx, sess.ID(), 0); err != nil {
+				return nil, none, err
+			}
 		}
 	}
 	if _, err := sess.Drv.Start(ctx, sess.ID()); err != nil {
@@ -269,7 +347,7 @@ func (s *Server) openBox(ctx context.Context, name string) (*openBox, boxsync.Re
 			ob.stop(ctx)
 			return nil, none, err
 		}
-		if res, err = ob.sb.Resume(ctx, boxsync.ResumeOptions{}); err != nil {
+		if res, err = ob.sb.Resume(ctx, boxsync.ResumeOptions{TakeOver: takeOver}); err != nil {
 			ob.stop(ctx)
 			return nil, none, err
 		}
@@ -305,7 +383,9 @@ func (ob *openBox) connect(ctx context.Context, allowFailed bool) (agentv1.Readi
 	if err != nil {
 		return 0, err
 	}
+	ob.agentMu.Lock()
 	ob.conn, ob.agent = conn, agentv1.NewAgentServiceClient(conn)
+	ob.agentMu.Unlock()
 	deadline := time.Now().Add(15 * time.Minute)
 	wait := 50 * time.Millisecond
 	for time.Now().Before(deadline) {
@@ -329,12 +409,24 @@ func (ob *openBox) connect(ctx context.Context, allowFailed bool) (agentv1.Readi
 			return 0, ctx.Err()
 		case <-time.After(wait):
 		}
-		wait = min(2*wait, time.Second)
+		// At most 100 ms between asks: readiness is a cheap local call, and
+		// a longer backoff left the terminal waiting up to a second after
+		// the box was ready.
+		wait = min(2*wait, 100*time.Millisecond)
 	}
 	return 0, errors.New("the box did not finish starting within 15 minutes")
 }
 
+// client is the box's current agent client, or nil (safe outside mu).
+func (ob *openBox) client() agentv1.AgentServiceClient {
+	ob.agentMu.RLock()
+	defer ob.agentMu.RUnlock()
+	return ob.agent
+}
+
 func (ob *openBox) closeConn() {
+	ob.agentMu.Lock()
+	defer ob.agentMu.Unlock()
 	if ob.conn != nil {
 		_ = ob.conn.Close()
 		ob.conn, ob.agent = nil, nil
@@ -424,10 +516,17 @@ func (s *Server) RevertToLastSavePoint(ctx context.Context, req *daemonv1.Revert
 		if err != nil {
 			return nil, err
 		}
-		// "reverted to save point A; the work it replaced is save B"
+		// "reverted to save point A; the work it replaced is save B; save
+		// point time T" (the time since the UI compliance pass)
 		var restored, before string
 		_, _ = fmt.Sscanf(strings.ReplaceAll(out, ";", " "), "reverted to save point %s the work it replaced is save %s", &restored, &before)
-		return &daemonv1.RevertToLastSavePointResponse{Restored: &typesv1.SnapshotRef{Id: restored}, SavedBefore: &typesv1.SnapshotRef{Id: before}}, nil
+		ref := &typesv1.SnapshotRef{Id: restored}
+		if _, after, ok := strings.Cut(out, "save point time "); ok {
+			if t, err := time.Parse(time.RFC3339, strings.TrimSpace(after)); err == nil {
+				ref.Time = timestamppb.New(t)
+			}
+		}
+		return &daemonv1.RevertToLastSavePointResponse{Restored: ref, SavedBefore: &typesv1.SnapshotRef{Id: before}}, nil
 	}
 	ob, err := s.get(req.GetName())
 	if err != nil {
@@ -719,4 +818,12 @@ func (ob *openBox) noteErr(err error) error {
 		ob.agentDown.Store(true)
 	}
 	return err
+}
+
+// short8 is a save's short ID.
+func short8(id string) string {
+	if len(id) > 8 {
+		return id[:8]
+	}
+	return id
 }

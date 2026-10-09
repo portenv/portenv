@@ -402,9 +402,6 @@ func (r *restic) forgetIDs(ctx context.Context, ids []string, prune bool) error 
 // currentKeyID returns the ID of the key the password opens. Key commands
 // run only on the host; without a host executor there is no hint.
 func (r *restic) currentKeyID(ctx context.Context) (string, error) {
-	if _, inBox := r.exec.(AgentExecutor); inBox && r.meta == nil {
-		return "", nil
-	}
 	out, err := r.run(ctx, "key", "list", "--json", "--no-lock")
 	if err != nil {
 		return "", err

@@ -50,9 +50,12 @@ trap cleanup EXIT
 
 echo "== server: this build, the runner, the SSH user portenv, the image"
 arch=$(A dpkg --print-architecture)
+# The CLI CI built for this commit (PORTENV_LOCAL_BUILD=1 builds it here).
+# shellcheck source=../../scripts/server-bins.sh
+. "$repo/scripts/server-bins.sh"
+server_bins "$arch" "$root/bins"
 for b in portenv portenv-runner; do
-	(cd "$repo" && CGO_ENABLED=0 GOOS=linux GOARCH=$arch go build -trimpath -ldflags="-s -w" -o "$root/$b-linux" "./core/cmd/$b")
-	gzip -9c "$root/$b-linux" | Ain "gunzip > /tmp/$b && chmod +x /tmp/$b"
+	gzip -9c "$root/bins/$b" | Ain "gunzip > /tmp/$b && chmod +x /tmp/$b"
 done
 Ain 'cat > /tmp/portenv-setup.sh' < "$repo/server/setup.sh"
 A sudo bash /tmp/portenv-setup.sh --portenv-bin /tmp/portenv --runner-bin /tmp/portenv-runner --mac-key "'$mac_key'" 2>&1 | grep -E "^== |portenv-runner|error|FAIL" | sed 's/^/  /' || true

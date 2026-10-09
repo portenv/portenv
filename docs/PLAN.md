@@ -468,8 +468,8 @@ Agents driving Claude Code headlessly use `claude -p` with `--resume`, `--output
 
   From 2.7, the docs pages are generated from this repository's generated files.
 - **Registries:**
-  - **Held as placeholders, 2026-10-09:** npm `portenv` and `@portenv/cli`, and PyPI `portenv-cli`.
-  - **PyPI `portenv`** was refused as too similar to `port-env`; a request to PyPI support is drafted.
+  - **Held as placeholders, 2026-10-09:** npm `@portenv/cli` (and the npm org `portenv`), and PyPI `portenv-cli`.
+  - **Refused as too similar to existing packages:** npm `portenv` (to `dotenv`) and PyPI `portenv` (to `port-env`). A request to PyPI support is drafted.
   - See Open questions for publishing the real CLI through them.
 
 **Agent evals (from 2.7)**

@@ -569,7 +569,7 @@ Docker Desktop and OrbStack carry commercial-use license terms, so they are opti
 
 **Minimum requirements**
 
-Mac app: macOS 26 on Apple silicon for local boxes. Older Macs run as clients of remote boxes, or use the Docker fallback. Servers: Ubuntu 22.04/24.04 or Debian 12, arm64 or amd64.
+Mac app: macOS 26. Local boxes need Apple silicon (the `apple` driver), or the Docker fallback. The app doesn't launch on older macOS, so older Macs can't use Portenv for now (see Open questions). Servers: Ubuntu 22.04/24.04 or Debian 12, arm64 or amd64.
 
 ## Tech stack and repository layout
 
@@ -770,7 +770,11 @@ Small and visible, so they go before 1.1, which is big:
 - The app talks to `portenvd` over gRPC on its socket instead of running the `portenv` helper for each action.
   - That removes the "main-actor work doesn't run during the quit wait" workaround.
   - It also gives push updates for the state line instead of the 3 s poll.
-- A login item (`SMAppService`) starts `portenvd`. It never reads the Keychain itself (item 1g).
+- **A login item starts `portenvd`, and only launchd does.**
+  - `SMAppService` registers `portenvd` as a launch agent with KeepAlive. It never reads the Keychain itself (item 1g).
+  - The app's own start path is removed entirely, so `portenvd` can never be the app's child.
+  - **If a relaunch doesn't finish,** launchd brings `portenvd` back. While the app waits, it shows "Not saved since …", and after a deadline a clear error.
+  - **Test:** `kill -9 portenvd` with the app closed, and launchd restarts it.
 - **The wait before the terminal is usable on open** (about 1.6 s of polling for the agent today) goes: push updates replace the poll, and the terminal attaches the moment the agent reports ready.
 - **The Phase 0 CLI's `docker exec` path is removed** (ADR 0010 condition 4, and the gate). `portenv init`, and the server-side `join` and `status` used by Move To enrolment, move into the daemon API or stay as plain commands that never touch a box. The audit lists them.
 - **A new `portenvd` takes over running boxes; it doesn't restart them** (required in 1.1, before Sparkle updates in 1.8).
@@ -1011,7 +1015,7 @@ These need an owner decision; Claude Code should add new ones here instead of gu
 
 - [ ] Default protection mode for new users: Only you (current default) or recoverable?
 - [ ] Phase 2: install the runner as a service from the start, or plain SSH first? The plan assumes the runner.
-- [ ] Support Intel Macs and macOS before 26 with the Docker fallback, or make them remote-only clients?
+- [ ] Before the public release: lower the app's deployment target from macOS 26 to macOS 15 (gRPC Swift 2's floor, ADR 0014), so older Macs can use the Docker fallback? Today the app targets macOS 26 and doesn't launch on them. Intel Macs would also need a universal build.
 - [ ] Trademark and domain check for Portenv in the EU and US; confirm portenv.com is registrable.
 - [ ] Docker inside the box (Phase 1): how to provide it without granting the box `CAP_SYS_ADMIN` or privileged mode (for example rootless Docker or a nested sandbox), or whether the setting ships with a plain warning that it weakens the repository-password protection (ADR 0005).
 - [ ] Point-in-time autosaves while the box runs: worth a file system with snapshots (for example btrfs on the Apple disk image), or are file-consistent saves plus the pre-save hook enough? (ADR 0005)

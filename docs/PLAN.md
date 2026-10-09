@@ -987,14 +987,35 @@ Developer ID signing, notarisation and Sparkle, with the key backups. Signed pub
       - the version, the macOS version and the architecture;
       - `c=<install month, YYYY-MM>`;
       - `w=1` on the first check of each ISO week, and `m=1` on the first of each month;
-      - on the weekly check only: `moved=1` (a box was moved this week), `agent=1` (an agent worked in a box this week), and `boxes=1|2-5|6+`.
+      - on the weekly check only: `moved=1` (a box was moved this week), `agent=1` (an agent worked in a box this week), `boxes=1|2-5|6+`, and `servers=0|1|2-3|4+` (connected servers).
     - **At most one check a day,** sent only on days a box was opened.
     - **What they give, all as plain counts:** daily, weekly and monthly actives, cohort retention (actives per install month, per week), activation and depth.
     - **The server keeps aggregated counts only,** with no IP logs. If this needs a minimal Cloudflare Worker behind portenv.com/appcast.xml, it's the named exception to ADR 0008's "no backend before Phase 3" (the Backend row in Decisions already made).
     - **Settings:** "Count me in usage numbers (no ID, nothing about your work)", on by default, and one click turns it off. Off removes every counting field, but the update check itself stays, for security updates.
     - **An unreachable endpoint never blocks or slows anything** (own-route).
+  - **Servers count themselves too, under the same rules:** no identifier, coarse fields, a published list, and an opt-out.
+    - **When:** the runner sends its own check, at most once a day, only on days it ran a box.
+    - **The fields:**
+      - the version and the architecture;
+      - the OS family (for example `ubuntu-24.04`);
+      - `c=<install month>`;
+      - weekly only, `boxes=1|2-5|6+`, plus `doors=1` if public doors (ADR 0015) are on.
+    - **The opt-out:** a flag in the runner's configuration, documented in the runner's install output and on /privacy.
+  - **What servers give, as plain counts:**
+    - the share of active users with a server;
+    - active servers, daily, weekly and monthly;
+    - server cohort retention;
+    - public-door adoption.
   - **/privacy and first run (1.5)** list the exact fields, in plain words.
-  - **A monthly metrics snapshot,** in the same format every month, generated from the counts: downloads, daily/weekly/monthly actives, growth, the cohort retention table, the share of installs that moved a box, the share where an agent worked, and stars.
+  - **A monthly metrics snapshot,** in the same format every month, generated from the counts:
+    - downloads;
+    - daily, weekly and monthly actives, and growth;
+    - the cohort retention table;
+    - the share of installs that moved a box, and the share where an agent worked;
+    - the share of active users with a server;
+    - active servers (daily, weekly, monthly) and server cohort retention;
+    - public-door adoption;
+    - stars.
   - **Release checklist:** check the CNIL's guidance on audience measurement before launch.
 
 **Standing items**

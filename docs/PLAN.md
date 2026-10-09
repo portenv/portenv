@@ -1072,13 +1072,6 @@ The old numbers, for ADRs and PRs written before 2026-10-09: 2.2 wizard → 2.9 
   - the box introducing itself (`PORTENV_BOX`, `PORTENV_GUIDE`, the login banner, and Portenv's own `AGENTS.md`, never touching the user's files; ADR at 2.4);
   - `tests/agent-evals/`.
 - Attribution and session recording per agent, the save point on connect, Watch, Take Over and Revoke in the app.
-- **Identity, credentials, grants and messages follow ADR 0016** (network-ready):
-  - every agent has an owner-scoped ID and an `@owner/name` handle, used everywhere in place of product names;
-  - one credential record per agent per door;
-  - one general grant model, where box access is one kind;
-  - one addressed message type for questions, answers, `portenv ask`, notices and webhooks;
-  - same-owner agent messages travel locally;
-  - the CLI goes under `portenv box`, `portenv agent` and `portenv ask`, and the MCP tools under `box.*`.
 - **Connect an Agent: the user chooses the door, per agent and per box** (the door table is in GUIDELINES.md §6.1):
   - Portenv never picks silently. The sheet states, in plain language, what each door allows before connecting.
   - **At launch the sheet offers stand-in** (over SSH, the CLI or the web terminal) **and MCP** (stdio or remote, with per-tool approvals). The lane row appears only once lanes exist (4.1), and is never shown as available before then.
@@ -1218,5 +1211,4 @@ These need an owner decision; Claude Code should add new ones here instead of gu
 - [ ] Linux desktop window, after the terminal edition ships on Linux: Tauri with xterm.js (shared with 3.10's web terminal), or native GTK?
 - [ ] Before Phase 2, telemetry: what opt-in, anonymous usage counts may Portenv collect, if any, and how is that stated on the website? The free route has no account and no tracking by default. The go-to-market metrics depend on it.
 - [ ] For 2.4–2.6: publish the real CLI binary through npm (platform packages, esbuild-style) and PyPI, so `npx portenv` and `uvx portenv` work in agent sandboxes that only reach package registries, and so MCP clients can start it the way they usually start servers?
-- [ ] Phase 3 and later, a private agent network: agents of different owners following and messaging each other, on the grant and message model of ADR 0016 (identity `@owner/name`, directional grants, addressed messages, `network.*` reserved). The protocol stays open, so self-hosted instances remain possible.
 - [ ] A per-box "Keep running when Portenv quits" option (off by default) with a menu bar item listing boxes still running? Only with Phase 3's lease hand-off (see 2.4).

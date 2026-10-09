@@ -88,13 +88,16 @@ func remoteState(ctx context.Context, host, name string) (*daemonv1.GetBoxStateR
 		return nil, err
 	}
 	var st struct {
-		State   string    `json:"state"`
-		SavedAt time.Time `json:"saved_at"`
+		State          string    `json:"state"`
+		SavedAt        time.Time `json:"saved_at"`
+		FailedPackages []string  `json:"failed_packages"`
+		PackagesError  string    `json:"packages_error"`
 	}
 	if err := json.Unmarshal([]byte(out), &st); err != nil {
 		return nil, fmt.Errorf("state from %s: %w", host, err)
 	}
-	r := &daemonv1.GetBoxStateResponse{State: daemonv1.SaveState(daemonv1.SaveState_value[st.State]), Location: host}
+	r := &daemonv1.GetBoxStateResponse{State: daemonv1.SaveState(daemonv1.SaveState_value[st.State]), Location: host,
+		FailedPackages: st.FailedPackages, PackagesError: st.PackagesError}
 	if !st.SavedAt.IsZero() {
 		r.SavedAt = timestamppb.New(st.SavedAt)
 	}
@@ -237,7 +240,39 @@ func (s *Server) GetBoxState(ctx context.Context, req *daemonv1.GetBoxStateReque
 	if !at.IsZero() {
 		r.SavedAt = timestamppb.New(at)
 	}
+	// Packages that couldn't be installed, for the inspector (never the
+	// state line). A quick question to the agent; no answer, nothing shown.
+	if a := ob.client(); a != nil {
+		actx, cancel := context.WithTimeout(ctx, time.Second)
+		if rd, err := a.GetReadiness(actx, &agentv1.GetReadinessRequest{}); err == nil {
+			r.FailedPackages, r.PackagesError = rd.GetFailedPackages(), rd.GetPackagesError()
+		}
+		cancel()
+	}
 	return r, nil
+}
+
+// RetryPackages asks the box's agent to try the packages that couldn't be
+// installed again now (Retry in the inspector).
+func (s *Server) RetryPackages(ctx context.Context, req *daemonv1.RetryPackagesRequest) (*daemonv1.RetryPackagesResponse, error) {
+	if _, err := s.onServer(ctx, req.GetName(), "retry-packages"); !errors.Is(err, errNotRemote) {
+		if err != nil {
+			return nil, err
+		}
+		return &daemonv1.RetryPackagesResponse{}, nil
+	}
+	ob, err := s.get(req.GetName())
+	if err != nil {
+		return nil, err
+	}
+	a := ob.client()
+	if a == nil {
+		return nil, agentError(status.Error(codes.Unavailable, "no channel"))
+	}
+	if _, err := a.RetryPackages(ctx, &agentv1.RetryPackagesRequest{}); err != nil {
+		return nil, agentError(err)
+	}
+	return &daemonv1.RetryPackagesResponse{}, nil
 }
 
 // errNotRemote: the box is not open on a server.

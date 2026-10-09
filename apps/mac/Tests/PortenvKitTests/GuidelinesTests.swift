@@ -192,3 +192,20 @@ struct TitleLookTests {
         #expect(!c.title.spins && c.title.symbol == "checkmark.circle")
     }
 }
+
+/// PLAN.md 1.4: a package that can't be installed shows in the inspector,
+/// never in the state line.
+struct FailedPackagesTests {
+    @Test func theInspectorLine() {
+        #expect(InspectorText.packages([]) == nil)
+        #expect(InspectorText.packages(["tree"]) == "1 package couldn't be installed: tree · Retry")
+        #expect(InspectorText.packages(["tree", "jq"]) == "2 packages couldn't be installed: tree, jq · Retry")
+    }
+
+    @Test func theStateLineStaysNormal() {
+        let at = ISO8601DateFormatter().date(from: "2026-10-08T12:58:00Z")!
+        let s = BoxState.parse(#"{"state":"SAVE_STATE_SAVED","saved_at":"2026-10-08T12:58:00Z","failed_packages":["no-such-package"]}"#)
+        #expect(s?.failedPackages == ["no-such-package"])
+        #expect(s?.line(now: at.addingTimeInterval(3600), timeZone: TimeZone(identifier: "Europe/Paris")!, locale: Locale(identifier: "en_GB")) == "This Mac · Saved at 14:58")
+    }
+}

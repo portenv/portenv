@@ -39,6 +39,7 @@ const (
 	DaemonService_GetBoxState_FullMethodName           = "/portenv.daemon.v1.DaemonService/GetBoxState"
 	DaemonService_SetNetworkPath_FullMethodName        = "/portenv.daemon.v1.DaemonService/SetNetworkPath"
 	DaemonService_Woke_FullMethodName                  = "/portenv.daemon.v1.DaemonService/Woke"
+	DaemonService_RetryPackages_FullMethodName         = "/portenv.daemon.v1.DaemonService/RetryPackages"
 )
 
 // DaemonServiceClient is the client API for DaemonService service.
@@ -84,6 +85,8 @@ type DaemonServiceClient interface {
 	// restart a box whose channel is gone (its home stays: rule 3), so a
 	// dropped channel never sits unnoticed until the next save.
 	Woke(ctx context.Context, in *WokeRequest, opts ...grpc.CallOption) (*WokeResponse, error)
+	// Try the box's packages that couldn't be installed again now.
+	RetryPackages(ctx context.Context, in *RetryPackagesRequest, opts ...grpc.CallOption) (*RetryPackagesResponse, error)
 }
 
 type daemonServiceClient struct {
@@ -237,6 +240,16 @@ func (c *daemonServiceClient) Woke(ctx context.Context, in *WokeRequest, opts ..
 	return out, nil
 }
 
+func (c *daemonServiceClient) RetryPackages(ctx context.Context, in *RetryPackagesRequest, opts ...grpc.CallOption) (*RetryPackagesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RetryPackagesResponse)
+	err := c.cc.Invoke(ctx, DaemonService_RetryPackages_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DaemonServiceServer is the server API for DaemonService service.
 // All implementations must embed UnimplementedDaemonServiceServer
 // for forward compatibility.
@@ -280,6 +293,8 @@ type DaemonServiceServer interface {
 	// restart a box whose channel is gone (its home stays: rule 3), so a
 	// dropped channel never sits unnoticed until the next save.
 	Woke(context.Context, *WokeRequest) (*WokeResponse, error)
+	// Try the box's packages that couldn't be installed again now.
+	RetryPackages(context.Context, *RetryPackagesRequest) (*RetryPackagesResponse, error)
 	mustEmbedUnimplementedDaemonServiceServer()
 }
 
@@ -331,6 +346,9 @@ func (UnimplementedDaemonServiceServer) SetNetworkPath(context.Context, *SetNetw
 }
 func (UnimplementedDaemonServiceServer) Woke(context.Context, *WokeRequest) (*WokeResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Woke not implemented")
+}
+func (UnimplementedDaemonServiceServer) RetryPackages(context.Context, *RetryPackagesRequest) (*RetryPackagesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RetryPackages not implemented")
 }
 func (UnimplementedDaemonServiceServer) mustEmbedUnimplementedDaemonServiceServer() {}
 func (UnimplementedDaemonServiceServer) testEmbeddedByValue()                       {}
@@ -594,6 +612,24 @@ func _DaemonService_Woke_Handler(srv interface{}, ctx context.Context, dec func(
 	return interceptor(ctx, in, info, handler)
 }
 
+func _DaemonService_RetryPackages_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RetryPackagesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).RetryPackages(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_RetryPackages_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).RetryPackages(ctx, req.(*RetryPackagesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // DaemonService_ServiceDesc is the grpc.ServiceDesc for DaemonService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -652,6 +688,10 @@ var DaemonService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Woke",
 			Handler:    _DaemonService_Woke_Handler,
+		},
+		{
+			MethodName: "RetryPackages",
+			Handler:    _DaemonService_RetryPackages_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

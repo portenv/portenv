@@ -131,6 +131,22 @@ expect "checksums of the whole home match after the restore ($(wc -l <<<"$after"
 out=$(type_in 'echo tree-at:$(command -v tree)')
 expect "apt-packages.txt is replayed on the restored box" grep -q "tree-at:/usr/bin/tree" <<<"$out"
 
+# A package that can't be installed never stops the box (PLAN.md 1.4): it
+# starts, the state line stays normal, and the package is listed for the
+# inspector (with the error in the log) until a retry installs it.
+type_in 'echo portenv-no-such-package >> ~/.portenv/apt-packages.txt' 1 >/dev/null
+out=$("$portenv" app restart d 2>&1) || true; echo "  $out"
+expect "a package that can't be installed: the box starts all the same" grep -q "rule 3" <<<"$out"
+st=$("$portenv" app state d 2>&1) || true; echo "  $st"
+expect "the state line stays normal" python3 -c "import json,sys; sys.exit(0 if json.loads(sys.argv[1])['state'] in ('SAVE_STATE_SAVED','SAVE_STATE_NOT_SAVED_YET') else 1)" "$st"
+expect "the package is listed for the inspector" python3 -c "import json,sys; sys.exit(0 if json.loads(sys.argv[1]).get('failed_packages') == ['portenv-no-such-package'] else 1)" "$st"
+expect "with apt-get's error" grep -q "Unable to locate package portenv-no-such-package" <<<"$st"
+expect "and the error is in the box's log" bash -c "docker logs portenv-daemon-$(box_id) 2>&1 | grep -q 'portenv-no-such-package'"
+type_in "sed -i '/portenv-no-such-package/d' ~/.portenv/apt-packages.txt" 1 >/dev/null
+"$portenv" app retry-packages d >/dev/null 2>&1 || true
+for _ in $(seq 60); do "$portenv" app state d 2>/dev/null | grep -q failed_packages || break; sleep 1; done
+expect "after the list is fixed, Retry clears it" bash -c "! '$portenv' app state d 2>/dev/null | grep -q failed_packages"
+
 # Quitting the app stops portenvd (SIGTERM) with the box open: it saves,
 # releases and stops the box. Proof: drop the local home; the next open
 # restores the last edit from storage.

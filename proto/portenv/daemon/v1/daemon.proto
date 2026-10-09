@@ -49,6 +49,8 @@ service DaemonService {
   // restart a box whose channel is gone (its home stays: rule 3), so a
   // dropped channel never sits unnoticed until the next save.
   rpc Woke(WokeRequest) returns (WokeResponse);
+  // Try the box's packages that couldn't be installed again now.
+  rpc RetryPackages(RetryPackagesRequest) returns (RetryPackagesResponse);
 }
 
 message CheckBoxRequest {
@@ -210,6 +212,10 @@ message GetBoxStateResponse {
   google.protobuf.Timestamp saved_at = 2;
   // Where the box runs: empty for this machine, else the server.
   string location = 3;
+  // Packages from apt-packages.txt that couldn't be installed (shown in the
+  // inspector's Where it is section with Retry; never in the state line).
+  repeated string failed_packages = 4;
+  string packages_error = 5;
 }
 
 enum NetworkPath {
@@ -245,3 +251,9 @@ message WokeBox {
   // Why a restart failed, when it did.
   string detail = 4;
 }
+
+message RetryPackagesRequest {
+  string name = 1;
+}
+
+message RetryPackagesResponse {}

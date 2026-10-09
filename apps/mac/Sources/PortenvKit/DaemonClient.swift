@@ -150,6 +150,69 @@ public final class DaemonClient: DaemonAPI, Sendable {
     public func leaveUnsaved(_ box: String) async throws {
         _ = try await call { try await api.leaveUnsaved(Self.named(box, Portenv_Daemon_V1_LeaveUnsavedRequest.self)) }
     }
+
+    public func tabs(_ box: String) async throws -> [TabInfo] {
+        var req = Portenv_Daemon_V1_ListTabsRequest()
+        req.box = box
+        return try await call { try await api.listTabs(req).tabs.map(TabInfo.init) }
+    }
+
+    public func newTab(_ box: String, name: String) async throws -> TabInfo {
+        var req = Portenv_Daemon_V1_NewTabRequest()
+        req.box = box
+        req.name = name
+        return try await call { TabInfo(try await api.newTab(req).tab) }
+    }
+
+    public func closeTab(_ box: String, id: String) async throws {
+        var req = Portenv_Daemon_V1_CloseTabRequest()
+        req.box = box
+        req.id = id
+        _ = try await call { try await api.closeTab(req) }
+    }
+
+    public func renameTab(_ box: String, id: String, name: String) async throws {
+        var req = Portenv_Daemon_V1_RenameTabRequest()
+        req.box = box
+        req.id = id
+        req.name = name
+        _ = try await call { try await api.renameTab(req) }
+    }
+
+    public func selectTab(_ box: String, id: String) async throws {
+        var req = Portenv_Daemon_V1_SelectTabRequest()
+        req.box = box
+        req.id = id
+        _ = try await call { try await api.selectTab(req) }
+    }
+
+    public func watchTabs(_ box: String) -> AsyncThrowingStream<[TabInfo], Error> {
+        let api = self.api
+        let req = Portenv_Daemon_V1_WatchTabsRequest.with { $0.box = box }
+        return AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    try await api.watchTabs(req) { response in
+                        for try await message in response.messages {
+                            continuation.yield(message.tabs.map(TabInfo.init))
+                        }
+                    }
+                    continuation.finish()
+                } catch let e as RPCError {
+                    continuation.finish(throwing: DaemonError(e.message, unavailable: e.code == .unavailable))
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+}
+
+extension TabInfo {
+    init(_ t: Portenv_Types_V1_Tab) {
+        self.init(id: t.id, name: t.name, active: t.active)
+    }
 }
 
 /// Requests that carry only the box's name.

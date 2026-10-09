@@ -35,4 +35,13 @@ private struct Unreachable: DaemonAPI {
     func relaunch() async throws { throw gone }
     func leaveUnsaved(_: String) async throws { throw gone }
     func takeSavedAfterQuit() async throws -> [SavedAfterQuit] { throw gone }
+    func tabs(_: String) async throws -> [TabInfo] { throw gone }
+    func newTab(_: String, name _: String) async throws -> TabInfo { throw gone }
+    func closeTab(_: String, id _: String) async throws { throw gone }
+    func renameTab(_: String, id _: String, name _: String) async throws { throw gone }
+    func selectTab(_: String, id _: String) async throws { throw gone }
+    func watchTabs(_: String) -> AsyncThrowingStream<[TabInfo], Error> {
+        let error = gone
+        return AsyncThrowingStream { $0.finish(throwing: error) }
+    }
 }

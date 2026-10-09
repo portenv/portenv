@@ -9,8 +9,10 @@ import SwiftUI
 @main
 struct PortenvApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
+    private static let box = ProcessInfo.processInfo.environment["PORTENV_BOX"] ?? "demo"
+    @State private var tabs = TabsController(box: box, daemon: SharedDaemon.client)
     @State private var controller = BoxController(
-        box: ProcessInfo.processInfo.environment["PORTENV_BOX"] ?? "demo",
+        box: box,
         daemon: SharedDaemon.client,
         notifier: Notifier.shared,
         // launchd runs portenvd (the login item): the app only makes sure
@@ -28,7 +30,7 @@ struct PortenvApp: App {
 
     var body: some Scene {
         WindowGroup {
-            MainWindow(controller: controller)
+            MainWindow(controller: controller, tabs: tabs)
                 .task {
                     delegate.controller = controller
                     _ = await LoginItem.ensureRegistered()

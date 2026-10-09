@@ -91,4 +91,18 @@ struct DaemonRestartTests {
         await c.refresh()
         #expect(cli.calls.filter { $0.count > 1 && $0[1] == "open" }.count == 2, "the first open, then one reopen")
     }
+
+    /// Relaunching for an update: portenvd has been asked to leave, and the
+    /// app must not start another one before it quits (that one, a child of
+    /// the old app, would close the box when the app exits).
+    @Test func noRestartWhileRelaunching() async {
+        let cli = FakeCLI(), restarts = Counter()
+        let c = BoxController(box: "acme-api", cli: cli, restartDaemon: { restarts.add() })
+        await c.open()
+        c.relaunchingForUpdate()
+        cli.failing["state"] = "portenvd is not running"
+        cli.failing["ping"] = "portenvd is not running"
+        await c.refresh()
+        #expect(restarts.n == 0)
+    }
 }

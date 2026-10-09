@@ -99,6 +99,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // actor and show the alert and the reply in that mode.
         let flow = controller?.quitFlow
         let relaunching = relaunchingForUpdate
+        if relaunching { controller?.relaunchingForUpdate() }
         Task.detached {
             if relaunching {
                 // portenvd stops by itself, leaving the box running.

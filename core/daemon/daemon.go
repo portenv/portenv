@@ -253,11 +253,21 @@ func (s *Server) openBox(ctx context.Context, name string) (*openBox, boxsync.Re
 		}()
 	}
 
-	// A box left running without this process's channel secrets (for
-	// example after portenvd restarted) is restarted to open a new channel.
+	// A box left running without this process's channel secrets (portenvd
+	// restarted: a crash, an update) is taken over: re-keyed in place, so
+	// it and its programs keep running (ADR 0014). Only if that fails is it
+	// restarted to open a new channel (its home stays: rule 3).
 	if _, err := sess.Drv.AgentChannel(ctx, sess.ID()); errors.Is(err, driver.ErrNoChannel) {
-		if _, err := sess.Drv.Stop(ctx, sess.ID(), 0); err != nil {
-			return nil, none, err
+		// Rekey refuses a box that isn't running; then it simply starts.
+		if err := sess.Drv.Rekey(ctx, sess.ID()); err == nil {
+			step("took over the running box (re-keyed, not restarted)")
+		} else {
+			s.log.Info("no running box to take over, or the re-key failed: starting it", "box", name, "err", err)
+		}
+		if _, err := sess.Drv.AgentChannel(ctx, sess.ID()); errors.Is(err, driver.ErrNoChannel) {
+			if _, err := sess.Drv.Stop(ctx, sess.ID(), 0); err != nil {
+				return nil, none, err
+			}
 		}
 	}
 	if _, err := sess.Drv.Start(ctx, sess.ID()); err != nil {

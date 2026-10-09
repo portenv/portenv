@@ -77,7 +77,7 @@ These were settled in planning on 7 October 2026. Reopen one only with the owner
 | Finder | File Provider extension shows each box in Documents › Portenv › \<box> | Native, works when the box runs remotely |
 | Developer servers | An open-source runner, installed by an in-app wizard | Full control for developers, same features |
 | Ownership | The user owns every box; agents are guests the user invites. Any agent that can open a terminal or use a connector can join, and be connected and disconnected without moving work; nothing is specific to one agent. Work done by agents stays in the user's box, and history attributes every change to the agent that made it. Portenv ships no agent of its own (ADR 0006) | Users keep their work and choose their agents freely |
-| Backend | No Portenv backend before Phase 3 (one named exception, only if needed: a counts-only Cloudflare Worker behind portenv.com/appcast.xml for update-check counts, 1.8): Phases 0 to 2 run only on the user's Mac, servers and storage. Everything that runs on your own machines and storage (the app, local boxes, your servers, your storage, SSH and CLI access, webhooks from the box) works without Portenv's servers or an account. Hosted services (gateway, push, remote MCP, web terminal, Portenv storage, Portenv Cloud) are separate. (ADR 0008) | The product works without Portenv's servers |
+| Backend | No Portenv backend before Phase 3 (one named exception, only if needed: a counts-only Cloudflare Worker behind portenv.com/appcast.xml for the update check's usage counts, 1.8): Phases 0 to 2 run only on the user's Mac, servers and storage. Everything that runs on your own machines and storage (the app, local boxes, your servers, your storage, SSH and CLI access, webhooks from the box) works without Portenv's servers or an account. Hosted services (gateway, push, remote MCP, web terminal, Portenv storage, Portenv Cloud) are separate. (ADR 0008) | The product works without Portenv's servers |
 | Repositories and license | `portenv/portenv` is public under Apache-2.0 (apps, core, shims, images, proto, docs); the control plane and gateway live in the private `portenv/cloud` repository (decided 7 October 2026) | Box agent, runner and protocols must be auditable; the hosted service is not |
 
 ## Architecture
@@ -962,7 +962,7 @@ The Containerization shim, with `docker` as the fallback. The agent drops the fo
 
 **7. 1.5: first run**
 
-Reduced: no sign-in, Only you, Keychain keys, the recovery key; the Welcome screen has "Continue without an account" (#16). First run says in one plain line that active installs are counted without any ID, and how to turn it off (1.8).
+Reduced: no sign-in, Only you, Keychain keys, the recovery key; the Welcome screen has "Continue without an account" (#16). First run lists, in plain words, the exact fields the update check counts (no ID, nothing about the user's work), and how to turn counting off (1.8).
 
 **8. 1.6: the port relay**
 
@@ -978,15 +978,23 @@ Developer ID signing, notarisation and Sparkle, with the key backups. Signed pub
 - Needs Apple Developer enrolment (open question), which is also the stable-signing fix for item 1e.
 - **Look at again once signing is stable:** run `portenvd` inside a small helper app bundle (`Contents/Helpers/Portenv Helper.app`), so it can post a notification the moment a background save succeeds after Quit Anyway. Until then the next launch of the app shows it (1.1).
 - **Release checklist:** test `portenvd`'s socket with a real second macOS account. A process running as another user is refused; 1.1's test simulated the other uid.
-- **Measuring downloads and active use without identifying anyone** (decided 2026-10-09). No email collection.
-  - **Downloads:** GitHub release asset download counts (the DMG and the CLI builds), plus Cloudflare's counts for the portenv.com/download redirect. No scripts on the site.
-  - **Active use, through the Sparkle update check** (the same rule applies to the CLI and the runner):
-    - **No identifier of any kind:** no install ID, no account, no fingerprint. The only fields allowed are the app version, the macOS version and the architecture.
-    - **At most one check a day,** sent only on days a box was opened. The first check of each ISO week adds `w=1`, and the first of each month adds `m=1`. Daily, weekly and monthly actives are then plain request counts.
-    - **The server keeps counts only,** with no IP logs. If this needs a minimal Cloudflare Worker behind portenv.com/appcast.xml, it's the named exception to ADR 0008's "no backend before Phase 3" (the Backend row in Decisions already made).
-    - **Settings:** "Count me in active-install numbers (no ID, nothing about your work)", on by default, and one click turns it off. Off removes the flags; the update check itself stays, for security updates.
+- **Investor-grade metrics without identifying anyone** (decided 2026-10-09). No email collection.
+  - **Downloads:** GitHub release asset counts (the DMG and the CLI builds), and Cloudflare's counts for portenv.com/download. No scripts on the site.
+  - **The repository's traffic is archived daily:** a scheduled job saves views, clones, referrers and stars, since GitHub keeps them for only 14 days.
+  - **Active use, through the update check** (the same rule applies to the CLI and the runner):
+    - **No identifier of any kind:** no install ID, no account, no fingerprint.
+    - **The fields are a fixed, published list, all coarse:**
+      - the version, the macOS version and the architecture;
+      - `c=<install month, YYYY-MM>`;
+      - `w=1` on the first check of each ISO week, and `m=1` on the first of each month;
+      - on the weekly check only: `moved=1` (a box was moved this week), `agent=1` (an agent worked in a box this week), and `boxes=1|2-5|6+`.
+    - **At most one check a day,** sent only on days a box was opened.
+    - **What they give, all as plain counts:** daily, weekly and monthly actives, cohort retention (actives per install month, per week), activation and depth.
+    - **The server keeps aggregated counts only,** with no IP logs. If this needs a minimal Cloudflare Worker behind portenv.com/appcast.xml, it's the named exception to ADR 0008's "no backend before Phase 3" (the Backend row in Decisions already made).
+    - **Settings:** "Count me in usage numbers (no ID, nothing about your work)", on by default, and one click turns it off. Off removes every counting field, but the update check itself stays, for security updates.
     - **An unreachable endpoint never blocks or slows anything** (own-route).
-  - **/privacy and first run (1.5)** each say this in one plain line.
+  - **/privacy and first run (1.5)** list the exact fields, in plain words.
+  - **A monthly metrics snapshot,** in the same format every month, generated from the counts: downloads, daily/weekly/monthly actives, growth, the cohort retention table, the share of installs that moved a box, the share where an agent worked, and stars.
   - **Release checklist:** check the CNIL's guidance on audience measurement before launch.
 
 **Standing items**
@@ -1219,6 +1227,6 @@ These need an owner decision; Claude Code should add new ones here instead of gu
 - [ ] Scope of the iPhone companion: approvals only, or also status and a read-only terminal?
 - [ ] Name of the CLI binary: `portenv` assumed.
 - [ ] Linux desktop window, after the terminal edition ships on Linux: Tauri with xterm.js (shared with 3.10's web terminal), or native GTK?
-- [x] Before Phase 2, telemetry: what opt-in, anonymous usage counts may Portenv collect, if any, and how is that stated on the website? **Answered for counting only (2026-10-09):** download counts, and active-install counts through the update check with no identifier, on by default with one click off (see 1.8). Anything beyond plain counts stays opt-in and undecided.
+- [x] Before Phase 2, telemetry: what opt-in, anonymous usage counts may Portenv collect, if any, and how is that stated on the website? **Answered for counting (2026-10-09):** download counts, repository traffic archived daily, and usage counts through the update check, from a fixed, published list of coarse fields with no identifier, on by default with one click off (see 1.8). Anything beyond these counts stays opt-in and undecided.
 - [ ] For 2.4–2.6: publish the real CLI binary through npm (platform packages, esbuild-style) and PyPI, so `npx portenv` and `uvx portenv` work in agent sandboxes that only reach package registries, and so MCP clients can start it the way they usually start servers?
 - [ ] A per-box "Keep running when Portenv quits" option (off by default) with a menu bar item listing boxes still running? Only with Phase 3's lease hand-off (see 2.4).

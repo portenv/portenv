@@ -41,6 +41,10 @@ service DaemonService {
   // The box's save state, derived only from what is recorded (the last
   // saved snapshot, the dirty flag, a save in progress) and where it runs.
   rpc GetBoxState(GetBoxStateRequest) returns (GetBoxStateResponse);
+  // The box's state as it changes: the current state at once, then a
+  // message whenever anything in it changes, and the state again every 30 s
+  // as a heartbeat. The stream ends when portenvd stops (ADR 0014).
+  rpc WatchBoxState(WatchBoxStateRequest) returns (stream GetBoxStateResponse);
   // The system's network status, as the app sees it (NWPathMonitor on the
   // Mac). A fresh "down" (from a running app, at most 30 s old) opens a
   // box offline at once, without probing storage; anything else probes.
@@ -282,3 +286,7 @@ message ProvideKeysResponse {}
 message RelaunchRequest {}
 
 message RelaunchResponse {}
+
+message WatchBoxStateRequest {
+  string name = 1;
+}

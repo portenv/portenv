@@ -844,6 +844,7 @@ Show in Finder (⌥⌘R) stops being disabled here.
 
 Developer ID signing, notarisation and Sparkle, with the key backups. Signed public CLI releases and their signing key are already on the first-release checklist (#27).
 - Needs Apple Developer enrolment (open question), which is also the stable-signing fix for item 1e.
+- **Look at again once signing is stable:** run `portenvd` inside a small helper app bundle (`Contents/Helpers/Portenv Helper.app`), so it can post a notification the moment a background save succeeds after Quit Anyway. Until then the next launch of the app shows it (1.1).
 - **Release checklist:** test `portenvd`'s socket with a real second macOS account. A process running as another user is refused; 1.1's test simulated the other uid.
 
 **Standing items**

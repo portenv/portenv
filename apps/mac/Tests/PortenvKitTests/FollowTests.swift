@@ -33,7 +33,7 @@ struct FollowTests {
 
     @Test func whenTheStreamEndsPortenvdIsStartedAgain() async {
         let cli = FakeDaemon(), restarts = Counter()
-        let c = BoxController(box: "acme-api", daemon: cli, restartDaemon: { restarts.add() }, followRetry: .milliseconds(50))
+        let c = BoxController(box: "acme-api", daemon: cli, ensureDaemon: { restarts.add(); return nil }, followRetry: .milliseconds(50))
         await c.open()
         cli.state = #"{"state":"SAVE_STATE_SAVED","saved_at":"2026-10-09T08:00:00Z"}"#
         let following = Task { await c.follow() }

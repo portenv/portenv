@@ -4,10 +4,13 @@ package daemon
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -129,5 +132,165 @@ func TestRelaunchLeavesBoxesRunning(t *testing.T) {
 	s.mu.Unlock()
 	if closed {
 		t.Fatal("relaunching closed the boxes (closeAll ran)")
+	}
+}
+
+// fakeClock is the background save's clock: sleeping only records the
+// wait and moves time on.
+type fakeClock struct {
+	mu     sync.Mutex
+	now    time.Duration
+	waits  []time.Duration
+	notify chan struct{}
+}
+
+func (c *fakeClock) sleep(ctx context.Context, d time.Duration) bool {
+	c.mu.Lock()
+	c.now += d
+	c.waits = append(c.waits, d)
+	c.mu.Unlock()
+	select {
+	case c.notify <- struct{}{}:
+	default:
+	}
+	return ctx.Err() == nil
+}
+
+func (c *fakeClock) elapsed() time.Duration {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.now
+}
+
+// leftBox is an open box as Quit Anyway finds it.
+func leftBox(s *Server) {
+	s.open["acme-api"] = &openBox{sess: &local.Session{Cfg: local.BoxConfig{ID: "box-1", Name: "acme-api"}}}
+}
+
+// TestQuitAnywayKeepsRetrying: after Quit Anyway, portenvd retries the
+// save in the background (30 s, 1, 2 and 5 minutes, then every 5) and
+// never stops while the box holds unsaved work: still retrying after 30
+// minutes. Until a save succeeds the box stays open here, so the lease
+// stays with this Mac (a failed close never releases it).
+func TestQuitAnywayKeepsRetrying(t *testing.T) {
+	s := quietServer(t)
+	clock := &fakeClock{notify: make(chan struct{}, 1)}
+	s.sleep = clock.sleep
+	var attempts atomic.Int32
+	s.closeForQuit = func(context.Context, string) error {
+		attempts.Add(1)
+		return errors.New("storage unreachable")
+	}
+	leftBox(s)
+	if _, err := s.LeaveUnsaved(context.Background(), &daemonv1.LeaveUnsavedRequest{Name: "acme-api"}); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for clock.elapsed() < 35*time.Minute && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	if clock.elapsed() < 35*time.Minute {
+		t.Fatalf("stopped retrying after %v of fake time", clock.elapsed())
+	}
+	clock.mu.Lock()
+	waits := append([]time.Duration(nil), clock.waits...)
+	clock.mu.Unlock()
+	want := []time.Duration{30 * time.Second, time.Minute, 2 * time.Minute, 5 * time.Minute, 5 * time.Minute, 5 * time.Minute}
+	for i, w := range want {
+		if waits[i] != w {
+			t.Fatalf("waits %v, want them to start %v", waits[:len(want)], want)
+		}
+	}
+	if attempts.Load() < 8 {
+		t.Fatalf("%d attempts in 35 minutes", attempts.Load())
+	}
+	if _, err := s.get("acme-api"); err != nil {
+		t.Fatal("the box was let go of while unsaved: the lease would have no holder here")
+	}
+	if !s.hasQuitMarker("box-1") {
+		t.Fatal("no quit marker while unsaved")
+	}
+	s.stopBackground()
+}
+
+// TestQuitAnywaySavedInTheBackground: once a background save succeeds the
+// box is closed (saved, released, stopped), the marker is cleared, and a
+// record is kept for the next launch's one notification.
+func TestQuitAnywaySavedInTheBackground(t *testing.T) {
+	s := quietServer(t)
+	clock := &fakeClock{notify: make(chan struct{}, 1)}
+	s.sleep = clock.sleep
+	var attempts atomic.Int32
+	s.closeForQuit = func(_ context.Context, name string) error {
+		if attempts.Add(1) < 3 {
+			return errors.New("storage unreachable")
+		}
+		s.mu.Lock()
+		delete(s.open, name)
+		s.mu.Unlock()
+		return nil
+	}
+	leftBox(s)
+	if _, err := s.LeaveUnsaved(context.Background(), &daemonv1.LeaveUnsavedRequest{Name: "acme-api"}); err != nil {
+		t.Fatal(err)
+	}
+	var saved []*daemonv1.SavedAfterQuit
+	for range 500 {
+		r, err := s.TakeSavedAfterQuit(context.Background(), &daemonv1.TakeSavedAfterQuitRequest{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if saved = r.GetSaved(); len(saved) > 0 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if len(saved) != 1 || saved[0].GetName() != "acme-api" || saved[0].GetSavedAt() == nil {
+		t.Fatalf("saved after quit: %v", saved)
+	}
+	if s.hasQuitMarker("box-1") {
+		t.Fatal("the marker is still there after the save")
+	}
+	if attempts.Load() != 3 {
+		t.Fatalf("%d attempts, want 3 (it stops once saved)", attempts.Load())
+	}
+	// One notification: taken once, then gone.
+	r, _ := s.TakeSavedAfterQuit(context.Background(), &daemonv1.TakeSavedAfterQuitRequest{})
+	if len(r.GetSaved()) != 0 {
+		t.Fatalf("the record was given out twice: %v", r.GetSaved())
+	}
+}
+
+// TestOpeningStopsTheBackgroundSave: the app opens the box before a
+// background save succeeded: it stays open as it is and saves first thing
+// ("Portenv quit before saving"); the background loop stops.
+func TestOpeningStopsTheBackgroundSave(t *testing.T) {
+	s := quietServer(t)
+	clock := &fakeClock{notify: make(chan struct{}, 1)}
+	gate := make(chan struct{})
+	s.sleep = func(ctx context.Context, d time.Duration) bool {
+		select {
+		case <-gate:
+		case <-ctx.Done():
+		}
+		return clock.sleep(ctx, d)
+	}
+	var attempts atomic.Int32
+	s.closeForQuit = func(context.Context, string) error { attempts.Add(1); return errors.New("unreachable") }
+	leftBox(s)
+	if _, err := s.LeaveUnsaved(context.Background(), &daemonv1.LeaveUnsavedRequest{Name: "acme-api"}); err != nil {
+		t.Fatal(err)
+	}
+	ob, _ := s.get("acme-api")
+	if !s.takeBackBox(ob) {
+		t.Fatal("the app couldn't take the box back from the background save")
+	}
+	close(gate)
+	time.Sleep(100 * time.Millisecond)
+	if attempts.Load() != 0 {
+		t.Fatalf("the background save ran %d times after the app took the box back", attempts.Load())
+	}
+	if !ob.quitUnsaved.Load() {
+		t.Fatal("the line must still say Portenv quit before saving, until the save")
 	}
 }

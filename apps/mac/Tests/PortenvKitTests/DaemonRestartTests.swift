@@ -27,7 +27,7 @@ struct DaemonRestartTests {
     @Test func theAppRestartsPortenvdAndSendsTheKeysAgain() async {
         let cli = FakeDaemon(), restarts = Counter()
         let c = BoxController(box: "acme-api", daemon: cli, keychain: BlockingKeychain(blocks: false),
-                              restartDaemon: { restarts.add() })
+                              ensureDaemon: { restarts.add(); return nil })
         await c.open()
         cli.state = #"{"state":"SAVE_STATE_SAVED","saved_at":"\#(savedAt)"}"#
         await c.refresh()
@@ -36,7 +36,7 @@ struct DaemonRestartTests {
         cli.failing["state"] = "portenvd is not running"
         cli.failing["ping"] = "portenvd is not running"
         await c.refresh()
-        #expect(restarts.n == 1, "the app starts portenvd again")
+        #expect(restarts.n == 1, "the app makes sure launchd runs portenvd")
         #expect(c.subtitle == notSavedSince, "the real state, not the last line frozen")
         #expect(c.location == .thisMac, "the box isn't closed")
 
@@ -68,7 +68,7 @@ struct DaemonRestartTests {
     /// A box closed in this window is not reopened behind the person's back.
     @Test func aClosedWindowIsNotReopened() async {
         let cli = FakeDaemon(), restarts = Counter()
-        let c = BoxController(box: "acme-api", daemon: cli, restartDaemon: { restarts.add() })
+        let c = BoxController(box: "acme-api", daemon: cli, ensureDaemon: { restarts.add(); return nil })
         cli.state = #"{"state":"SAVE_STATE_NOT_SAVED","saved_at":"\#(savedAt)","interrupted":true}"#
         await c.refresh()
         #expect(!cli.calls.contains { $0.count > 1 && $0[1] == "open" })
@@ -82,7 +82,7 @@ struct DaemonRestartTests {
     /// (it would read the Keychain again and again).
     @Test func aFailedReopenIsNotRepeated() async {
         let cli = FakeDaemon()
-        let c = BoxController(box: "acme-api", daemon: cli, keychain: BlockingKeychain(blocks: false), restartDaemon: {})
+        let c = BoxController(box: "acme-api", daemon: cli, keychain: BlockingKeychain(blocks: false), ensureDaemon: { nil })
         await c.open()
         cli.state = #"{"state":"SAVE_STATE_NOT_SAVED","saved_at":"\#(savedAt)","interrupted":true}"#
         cli.failing["open"] = "the box failed to start"
@@ -97,12 +97,56 @@ struct DaemonRestartTests {
     /// the old app, would close the box when the app exits).
     @Test func noRestartWhileRelaunching() async {
         let cli = FakeDaemon(), restarts = Counter()
-        let c = BoxController(box: "acme-api", daemon: cli, restartDaemon: { restarts.add() })
+        let c = BoxController(box: "acme-api", daemon: cli, ensureDaemon: { restarts.add(); return nil })
         await c.open()
         c.relaunchingForUpdate()
         cli.failing["state"] = "portenvd is not running"
         cli.failing["ping"] = "portenvd is not running"
         await c.refresh()
         #expect(restarts.n == 0)
+    }
+
+    /// launchd brings portenvd back; until then the line shows the real
+    /// state. Past the deadline the window says so plainly, and the message
+    /// goes once portenvd answers again.
+    @Test func pastTheDeadlineTheWindowSaysSo() async {
+        let cli = FakeDaemon()
+        let c = BoxController(box: "acme-api", daemon: cli, ensureDaemon: { nil }, daemonDeadline: .milliseconds(150))
+        await c.open()
+        cli.failing["state"] = "portenvd is not running"
+        cli.failing["ping"] = "portenvd is not running"
+        await c.refresh()
+        #expect(c.error == nil, "not yet: launchd is starting it")
+        #expect(c.state?.save == .notSaved)
+        try? await Task.sleep(for: .milliseconds(200))
+        await c.refresh()
+        #expect(c.error == BoxController.daemonGone)
+        cli.failing = [:]
+        cli.state = #"{"state":"SAVE_STATE_SAVED","saved_at":"\#(savedAt)"}"#
+        await c.refresh()
+        #expect(c.error == nil, "portenvd is back")
+    }
+
+    /// The login item needs the person's approval: said at once, in their
+    /// words (Login Items), not after a timeout.
+    @Test func aLoginItemNeedingApprovalIsSaidAtOnce() async {
+        let cli = FakeDaemon()
+        let approval = "Open System Settings › General › Login Items and allow Portenv."
+        let c = BoxController(box: "acme-api", daemon: cli, ensureDaemon: { approval })
+        cli.failing["ping"] = "portenvd is not running"
+        let waiting = Task { await c.waitForDaemon() }
+        for _ in 0..<50 where c.error == nil { try? await Task.sleep(for: .milliseconds(20)) }
+        #expect(c.error == approval)
+        cli.failing = [:]
+        await waiting.value
+    }
+
+    /// At launch the app waits for launchd's portenvd, never starting one.
+    @Test func atLaunchTheAppWaitsWithADeadline() async {
+        let cli = FakeDaemon()
+        let c = BoxController(box: "acme-api", daemon: cli, ensureDaemon: { nil }, daemonDeadline: .milliseconds(150))
+        cli.failing["ping"] = "portenvd is not running"
+        await c.waitForDaemon()
+        #expect(c.error == BoxController.daemonGone)
     }
 }

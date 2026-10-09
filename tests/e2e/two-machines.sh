@@ -16,6 +16,8 @@ repo=$(cd "$(dirname "$0")/../.." && pwd)
 portenv=$repo/bin/portenv
 root=$(mktemp -d "${TMPDIR:-/tmp}/portenv-e2e.XXXXXX")
 export PORTENV_KEYS=file
+# Quit Anyway's background save retries every few seconds here, not minutes.
+export PORTENV_TEST_QUIT_RETRY=fast
 failures=0
 
 A() { PORTENV_HOME=$root/a PORTENV_DOCKER_NAMESPACE=e2ea "$portenv" "$@"; }
@@ -123,6 +125,49 @@ sleep 1
 others=$(grep -E "portenv-e2e[ab]-" "$root/execs.txt" | grep -vc 'exec_create: /usr/local/bin/portenv-agent ready$' || true)
 probes=$(wc -l <"$root/probes.txt" | tr -d ' ')
 expect "no docker exec into the boxes but the health check and this script's $probes probes ($others)" test "$others" = "$probes"
+
+echo "== Quit Anyway: A's background save, then B opens with A's work"
+# storage_away and storage_back move the box's repository aside and back, as
+# root in a container: on Linux its files belong to restic's uid 990 in the
+# box, and on a Mac Docker's file sharing refuses chmod; a rename works on both.
+repo_in_container() { docker run --rm -u 0 -v "$root/storage:/s" --entrypoint mv "$image" "$@"; }
+storage_away() { repo_in_container "/s/boxes/$(box_id)" "/s/boxes/$(box_id).away"; }
+storage_back() { repo_in_container "/s/boxes/$(box_id).away" "/s/boxes/$(box_id)"; }
+out=$(A app open demo 2>&1); echo "  $out"
+in_box a 'echo "unsaved at quit" > acme-api/quit-anyway.txt'
+storage_away   # A's saves fail: the repository is gone
+expect "A's close fails while the repository is gone" bash -c "! PORTENV_HOME=$root/a $portenv app close demo"
+out=$(A app leave-unsaved demo 2>&1); echo "  $out"
+expect "A says Portenv quit before saving" bash -c "PORTENV_HOME=$root/a $portenv app state demo | grep -q SAVE_STATE_QUIT_UNSAVED"
+storage_back   # the repository is back
+for _ in $(seq 60); do PORTENV_HOME=$root/a "$portenv" app state demo 2>/dev/null | grep -q SAVE_STATE_CLOSED && break; sleep 1; done
+expect "A's background save succeeds: closed and released" bash -c "PORTENV_HOME=$root/a $portenv app state demo | grep -q SAVE_STATE_CLOSED"
+expect "  the quit marker is cleared" bash -c "! ls $root/a/state/*/quit-unsaved 2>/dev/null | grep -q ."
+expect "  and the next launch has one notification to show" bash -c "ls $root/a/state/*/saved-after-quit.json"
+out=$(B app open demo 2>&1); echo "  $out"
+expect "B opens the box now (rule 5)" grep -q "rule 5" <<<"$out"
+expect "B has A's work from before the quit" in_box b 'grep -q "unsaved at quit" acme-api/quit-anyway.txt'
+expect "B closes" B app close demo
+
+echo "== Quit Anyway: B is refused by A's lease while A's work is unsaved"
+# A's box agent is stopped, so A can't save; the repository stays readable,
+# so B's open is refused by A's lease, not by missing storage.
+out=$(A app open demo 2>&1); echo "  $out"
+in_box a 'echo "unsaved, lease held" > acme-api/lease.txt'
+echo a >>"$root/probes.txt"; docker exec "portenv-e2ea-$(box_id)" pkill -f '^portenv-agent serve' || true
+expect "A's close fails without its box agent" bash -c "! PORTENV_HOME=$root/a $portenv app close demo"
+out=$(A app leave-unsaved demo 2>&1); echo "  $out"
+out=$(B app open demo 2>&1) && rc=0 || rc=$?; echo "  B: $out"
+expect "B is refused while A holds unsaved work" test "$rc" -ne 0
+expect "  by A's lease (it names A)" grep -q "box is open on $(cat "$root/a/machine-id")" <<<"$out"
+# A recovers: opening takes the box back, Restart Box brings its agent back
+# and keeps the home (rule 3), and the close saves and releases.
+A app open demo >/dev/null 2>&1 || true
+out=$(A app restart demo 2>&1) || true; echo "  $out"
+expect "A closes with the work, releasing the lease" A app close demo
+out=$(B app open demo 2>&1); echo "  $out"
+expect "B opens it now, with A's work" in_box b 'grep -q "unsaved, lease held" acme-api/lease.txt'
+expect "B closes" B app close demo
 
 echo
 if (( failures )); then echo "$failures check(s) failed"; exit 1; fi

@@ -46,6 +46,21 @@ public struct SystemKeychain: KeychainReading {
 /// never at launch; denied, nothing nags).
 public protocol KeychainWaitNotifying: Sendable {
     func keychainWaiting(box: String) async
+    /// A box left unsaved by Quit Anyway was saved in the background.
+    func savedAfterQuit(box: String, at: Date) async
+}
+
+extension KeychainWaitNotifying {
+    public func savedAfterQuit(box _: String, at _: Date) async {}
+}
+
+/// The background-save notification's text (GUIDELINES.md §5: "<box> ·
+/// <event>", one line of result).
+public enum SavedAfterQuitNote {
+    public static func title(box: String) -> String { "\(box) · Saved after Portenv quit" }
+    public static func body(at: Date, timeZone: TimeZone = .current, locale: Locale = .current) -> String {
+        "Saved at \(StateLine.clock(at, timeZone: timeZone, locale: locale)) and closed. Nothing was lost."
+    }
 }
 
 /// The texts of the Keychain wait (GUIDELINES.md §3.1).

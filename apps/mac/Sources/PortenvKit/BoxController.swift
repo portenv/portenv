@@ -92,8 +92,16 @@ public final class BoxController {
     private let keychain: KeychainReading
     private let notifier: KeychainWaitNotifying?
     private let keychainThreshold: Duration
-    /// Starts portenvd again when it has ended (the app's Daemon).
-    private let restartDaemon: (@Sendable () async -> Void)?
+    /// Makes sure launchd runs portenvd (the login item); returns a plain
+    /// problem to show (for example, Login Items needs the person's
+    /// approval), or nil. The app never starts portenvd itself.
+    private let ensureDaemon: (@Sendable () async -> String?)?
+    /// How long portenvd may be away before the window says so plainly.
+    private let daemonDeadline: Duration
+    private var daemonGoneSince: ContinuousClock.Instant?
+
+    /// What the window says when portenvd has been away past the deadline.
+    public static let daemonGone = "Portenv's background service isn't running, so nothing is being saved. It's started again automatically; if this lasts, quit and reopen Portenv."
     /// Reopening after portenvd restarted: the state line keeps the real
     /// state instead of "Opening…".
     private var resuming = false
@@ -115,13 +123,15 @@ public final class BoxController {
 
     public init(box: String, daemon: DaemonAPI, keychain: KeychainReading = SystemKeychain(),
                 notifier: KeychainWaitNotifying? = nil, keychainThreshold: Duration = KeychainWait.threshold,
-                restartDaemon: (@Sendable () async -> Void)? = nil, followRetry: Duration = .seconds(1)) {
+                ensureDaemon: (@Sendable () async -> String?)? = nil, followRetry: Duration = .seconds(1),
+                daemonDeadline: Duration = .seconds(30)) {
         self.box = box
         self.daemon = daemon
         self.keychain = keychain
         self.notifier = notifier
         self.keychainThreshold = keychainThreshold
-        self.restartDaemon = restartDaemon
+        self.ensureDaemon = ensureDaemon
+        self.daemonDeadline = daemonDeadline
         self.followRetry = followRetry
     }
 
@@ -225,17 +235,50 @@ public final class BoxController {
 
     /// portenvd isn't answering while the box is open (it crashed, is being
     /// updated or relaunched): the line shows the box's real state, "Not
-    /// saved since" its last save, and portenvd is started again. The next
-    /// refresh finds the box interrupted and reopens it.
+    /// saved since" its last save, while launchd starts portenvd again. Past
+    /// the deadline, or when the login item needs approval, the window says
+    /// so plainly. Once portenvd is back, the box is reopened.
     private func daemonEnded() async {
         guard !leaving, location != .closed, !(await daemon.ping()) else { return }
         state = BoxState(save: .notSaved, savedAt: state?.savedAt, location: state?.location)
-        await restartDaemon?()
+        let since = daemonGoneSince ?? .now
+        daemonGoneSince = since
+        if let problem = await ensureDaemon?() {
+            error = problem
+        } else if ContinuousClock.now - since >= daemonDeadline {
+            error = Self.daemonGone
+        }
     }
 
-    /// Called before portenvd is asked to relaunch (an update): from now on
-    /// the app never starts portenvd again. A portenvd started now would be
-    /// this app's child and close the box when the app exits.
+    /// Waits for portenvd at launch (launchd starts it with the login item),
+    /// saying so plainly if it doesn't come within the deadline.
+    public func waitForDaemon() async {
+        let start = ContinuousClock.now
+        while !(await daemon.ping()) {
+            if let problem = await ensureDaemon?() {
+                error = problem
+            } else if ContinuousClock.now - start >= daemonDeadline {
+                error = Self.daemonGone
+                return
+            }
+            try? await Task.sleep(for: .milliseconds(200))
+        }
+        if error == Self.daemonGone || error == nil { error = nil }
+    }
+
+    /// At launch: one notification for each box saved in the background
+    /// after Quit Anyway since Portenv last ran (PLAN.md 1.1; at once from
+    /// portenvd itself is a 1.8 note).
+    public func announceBackgroundSaves() async {
+        guard let saved = try? await daemon.takeSavedAfterQuit() else { return }
+        for s in saved {
+            await notifier?.savedAfterQuit(box: s.box, at: s.savedAt)
+        }
+    }
+
+    /// Called before portenvd is asked to relaunch (an update): the app
+    /// stops reacting to portenvd's absence while it quits; launchd starts
+    /// the next portenvd, which takes the box over.
     public func relaunchingForUpdate() { leaving = true }
 
     private func resume() async {
@@ -324,6 +367,9 @@ public final class BoxController {
     /// (refreshing before its busy state ends).
     private func apply(_ st: BoxState, pushed: Bool) async {
         state = st
+        // portenvd answers again: whatever said it was away no longer holds.
+        daemonGoneSince = nil
+        if error == Self.daemonGone { error = nil }
         if pushed && busy { return }
         if st.interrupted {
             // portenvd restarted while this window had the box open: open it

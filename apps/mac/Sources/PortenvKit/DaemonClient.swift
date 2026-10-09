@@ -142,6 +142,14 @@ public final class DaemonClient: DaemonAPI, Sendable {
     public func relaunch() async throws {
         _ = try await call { try await api.relaunch(.init()) }
     }
+
+    public func takeSavedAfterQuit() async throws -> [SavedAfterQuit] {
+        try await call { try await api.takeSavedAfterQuit(.init()).saved.map { SavedAfterQuit(box: $0.name, savedAt: $0.savedAt.date) } }
+    }
+
+    public func leaveUnsaved(_ box: String) async throws {
+        _ = try await call { try await api.leaveUnsaved(Self.named(box, Portenv_Daemon_V1_LeaveUnsavedRequest.self)) }
+    }
 }
 
 /// Requests that carry only the box's name.
@@ -156,6 +164,7 @@ extension Portenv_Daemon_V1_GetBoxStateRequest: NamedRequest {}
 extension Portenv_Daemon_V1_WatchBoxStateRequest: NamedRequest {}
 extension Portenv_Daemon_V1_GetKeyIDsRequest: NamedRequest {}
 extension Portenv_Daemon_V1_RetryPackagesRequest: NamedRequest {}
+extension Portenv_Daemon_V1_LeaveUnsavedRequest: NamedRequest {}
 
 extension BoxState {
     /// The state as portenvd sends it; nil for a state this app doesn't know.

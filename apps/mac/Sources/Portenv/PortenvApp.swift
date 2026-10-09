@@ -13,17 +13,28 @@ struct PortenvApp: App {
         box: ProcessInfo.processInfo.environment["PORTENV_BOX"] ?? "demo",
         daemon: SharedDaemon.client,
         notifier: Notifier.shared,
-        // portenvd ended while the app is open: start it again (the box is
-        // then reopened and its keys sent again).
-        restartDaemon: restartPortenvd
+        // launchd runs portenvd (the login item): the app only makes sure
+        // it's registered, and says plainly when it needs approval.
+        ensureDaemon: LoginItem.ensureRegistered
     )
+
+    init() {
+        // Dev builds and tests: unregister the login item and exit, with no
+        // window (make unregister-service, portenv app unregister-service).
+        if CommandLine.arguments.contains("--unregister-service") {
+            exit(LoginItem.unregister())
+        }
+    }
 
     var body: some Scene {
         WindowGroup {
             MainWindow(controller: controller)
                 .task {
                     delegate.controller = controller
-                    await Daemon.shared.ensureRunning()
+                    _ = await LoginItem.ensureRegistered()
+                    await controller.waitForDaemon()
+                    // Boxes saved in the background after Quit Anyway: say so once.
+                    await controller.announceBackgroundSaves()
                     // Before opening: with no network at all the box opens
                     // offline at once instead of probing storage.
                     await NetworkWatch.shared.start()
@@ -44,9 +55,6 @@ struct PortenvApp: App {
         }
     }
 }
-
-/// Starts portenvd again after it ended while the app is open.
-@Sendable func restartPortenvd() async { await Daemon.shared.ensureRunning() }
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -107,8 +115,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 return
             }
+            // The box is closed, saved and released through portenvd's API;
+            // portenvd itself stays with launchd, with nothing open.
             let quit = await flow?.run(ask: Self.ask) ?? true
-            if quit { await Daemon.shared.stop() }
             RunLoop.main.perform(inModes: [.default, .modalPanel]) {
                 NSApp.reply(toApplicationShouldTerminate: quit)
             }

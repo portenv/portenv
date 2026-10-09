@@ -48,6 +48,8 @@ const (
 	DaemonService_SaveNow_FullMethodName               = "/portenv.daemon.v1.DaemonService/SaveNow"
 	DaemonService_ListSaves_FullMethodName             = "/portenv.daemon.v1.DaemonService/ListSaves"
 	DaemonService_Housekeep_FullMethodName             = "/portenv.daemon.v1.DaemonService/Housekeep"
+	DaemonService_LeaveUnsaved_FullMethodName          = "/portenv.daemon.v1.DaemonService/LeaveUnsaved"
+	DaemonService_TakeSavedAfterQuit_FullMethodName    = "/portenv.daemon.v1.DaemonService/TakeSavedAfterQuit"
 )
 
 // DaemonServiceClient is the client API for DaemonService service.
@@ -120,6 +122,16 @@ type DaemonServiceClient interface {
 	// Clear old lease tags and apply retention; with prune, also delete data
 	// no save uses. For an idle box.
 	Housekeep(ctx context.Context, in *HousekeepRequest, opts ...grpc.CallOption) (*HousekeepResponse, error)
+	// Quit Anyway: the box couldn't be saved before Portenv quits. portenvd
+	// records the quit marker and keeps retrying the save in the background
+	// (30 s, 1, 2 and 5 minutes, then every 5) until one succeeds; then it
+	// closes the box and releases the lease. Until then the lease stays with
+	// this Mac. Opening the box first stops the retries and saves it first
+	// thing ("Portenv quit before saving").
+	LeaveUnsaved(ctx context.Context, in *LeaveUnsavedRequest, opts ...grpc.CallOption) (*LeaveUnsavedResponse, error)
+	// Boxes saved in the background after Quit Anyway since the app last
+	// asked: the app shows one notification for each. Given out once.
+	TakeSavedAfterQuit(ctx context.Context, in *TakeSavedAfterQuitRequest, opts ...grpc.CallOption) (*TakeSavedAfterQuitResponse, error)
 }
 
 type daemonServiceClient struct {
@@ -372,6 +384,26 @@ func (c *daemonServiceClient) Housekeep(ctx context.Context, in *HousekeepReques
 	return out, nil
 }
 
+func (c *daemonServiceClient) LeaveUnsaved(ctx context.Context, in *LeaveUnsavedRequest, opts ...grpc.CallOption) (*LeaveUnsavedResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(LeaveUnsavedResponse)
+	err := c.cc.Invoke(ctx, DaemonService_LeaveUnsaved_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) TakeSavedAfterQuit(ctx context.Context, in *TakeSavedAfterQuitRequest, opts ...grpc.CallOption) (*TakeSavedAfterQuitResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(TakeSavedAfterQuitResponse)
+	err := c.cc.Invoke(ctx, DaemonService_TakeSavedAfterQuit_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DaemonServiceServer is the server API for DaemonService service.
 // All implementations must embed UnimplementedDaemonServiceServer
 // for forward compatibility.
@@ -442,6 +474,16 @@ type DaemonServiceServer interface {
 	// Clear old lease tags and apply retention; with prune, also delete data
 	// no save uses. For an idle box.
 	Housekeep(context.Context, *HousekeepRequest) (*HousekeepResponse, error)
+	// Quit Anyway: the box couldn't be saved before Portenv quits. portenvd
+	// records the quit marker and keeps retrying the save in the background
+	// (30 s, 1, 2 and 5 minutes, then every 5) until one succeeds; then it
+	// closes the box and releases the lease. Until then the lease stays with
+	// this Mac. Opening the box first stops the retries and saves it first
+	// thing ("Portenv quit before saving").
+	LeaveUnsaved(context.Context, *LeaveUnsavedRequest) (*LeaveUnsavedResponse, error)
+	// Boxes saved in the background after Quit Anyway since the app last
+	// asked: the app shows one notification for each. Given out once.
+	TakeSavedAfterQuit(context.Context, *TakeSavedAfterQuitRequest) (*TakeSavedAfterQuitResponse, error)
 	mustEmbedUnimplementedDaemonServiceServer()
 }
 
@@ -520,6 +562,12 @@ func (UnimplementedDaemonServiceServer) ListSaves(context.Context, *ListSavesReq
 }
 func (UnimplementedDaemonServiceServer) Housekeep(context.Context, *HousekeepRequest) (*HousekeepResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Housekeep not implemented")
+}
+func (UnimplementedDaemonServiceServer) LeaveUnsaved(context.Context, *LeaveUnsavedRequest) (*LeaveUnsavedResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method LeaveUnsaved not implemented")
+}
+func (UnimplementedDaemonServiceServer) TakeSavedAfterQuit(context.Context, *TakeSavedAfterQuitRequest) (*TakeSavedAfterQuitResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method TakeSavedAfterQuit not implemented")
 }
 func (UnimplementedDaemonServiceServer) mustEmbedUnimplementedDaemonServiceServer() {}
 func (UnimplementedDaemonServiceServer) testEmbeddedByValue()                       {}
@@ -938,6 +986,42 @@ func _DaemonService_Housekeep_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _DaemonService_LeaveUnsaved_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(LeaveUnsavedRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).LeaveUnsaved(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_LeaveUnsaved_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).LeaveUnsaved(ctx, req.(*LeaveUnsavedRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_TakeSavedAfterQuit_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(TakeSavedAfterQuitRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).TakeSavedAfterQuit(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_TakeSavedAfterQuit_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).TakeSavedAfterQuit(ctx, req.(*TakeSavedAfterQuitRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // DaemonService_ServiceDesc is the grpc.ServiceDesc for DaemonService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1028,6 +1112,14 @@ var DaemonService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Housekeep",
 			Handler:    _DaemonService_Housekeep_Handler,
+		},
+		{
+			MethodName: "LeaveUnsaved",
+			Handler:    _DaemonService_LeaveUnsaved_Handler,
+		},
+		{
+			MethodName: "TakeSavedAfterQuit",
+			Handler:    _DaemonService_TakeSavedAfterQuit_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

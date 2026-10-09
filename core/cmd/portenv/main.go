@@ -1,23 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Command portenv is the Portenv CLI for agents and power users, a thin
-// client of the same APIs.
-//
-// In Phase 0 it is a temporary tool that drives a box directly through the
-// docker driver and the sync engine:
+// client of the same APIs. It sets boxes up and drives them through
+// portenvd (on servers, the runner); it never reaches into a box itself
+// (ADR 0010 condition 4):
 //
 //	portenv init <box> [--image IMAGE] [--storage DIR|s3:URL]
-//	portenv resume <box> [--take-over]
-//	portenv save <box> [--confirm]      autosave now
-//	portenv point <box> [--confirm]     make a save point
-//	portenv close <box> [--confirm]     save, release the lease, stop the box
-//	portenv status <box>
-//	portenv history <box>
-//	portenv housekeep <box> [--prune]   clear old lease tags, apply retention
-//	portenv move <box> --to SSH-HOST [--join-storage DIR]
-//	                                    close here, resume on SSH-HOST
-//	portenv join <box> --id ID --storage DIR    enrol a box (key on stdin)
-//	portenv ssh-config <box> --host SERVER      print the "ssh portenv" entry
+//	portenv status <box>                       what this machine recorded
+//	portenv join <box> --id ID --storage DIR   enrol a box (keys on stdin)
+//	portenv ssh-config <box> --host SERVER     print the "ssh portenv" entry
+//	portenv attach <box> [--session NAME]      this terminal in the box's tmux session
+//	portenv app ACTION BOX [TARGET]            the box's actions through portenvd
 //	portenv version
 package main
 

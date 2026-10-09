@@ -95,11 +95,32 @@ If the attach or the dial fails, or the box isn't running, the current behaviour
 
 ## The login item
 
-- **How it starts:** `SMAppService.agent` registers a LaunchAgent plist in the app bundle (`Contents/Library/LaunchAgents`). launchd starts `portenvd` at login and restarts it if it exits.
-  - The app stops starting `portenvd` itself, and `PORTENVD_EXIT_WITH_PARENT` goes.
+- **launchd runs `portenvd`, never the app.**
+  - `SMAppService.agent` registers `Contents/Library/LaunchAgents/com.portenv.portenvd.plist` (`BundleProgram` `Contents/Helpers/portenvd`, KeepAlive, RunAtLoad).
+  - launchd starts `portenvd` at login and again whenever it exits, whether from a crash, `kill -9` or an update relaunch.
+  - The app's own start and stop path is removed, and so is `PORTENVD_EXIT_WITH_PARENT`, so `portenvd` is never the app's child.
   - It never reads the Keychain (item 1g).
-- **Quitting the app** still closes and saves its open boxes (the quit alert flow), then leaves `portenvd` running with nothing open.
-- **Dev builds run from `bin/`:** the app registers the agent from wherever the bundle is. The README says how to unregister it.
+- **While `portenvd` is away,** the line shows "Not saved since …".
+  - After a deadline (30 s), the window says plainly that Portenv's background service isn't running.
+  - When Login Items needs the person's approval, it says so at once.
+  - Both messages go when `portenvd` answers again.
+- **⌘Q is unchanged** (the owner's decision, 2026-10-09). It closes, saves and releases the open box through the API, and leaves `portenvd` with launchd, with nothing open.
+  - **Quit Anyway** calls `LeaveUnsaved`, because `portenvd` now outlives the app:
+    - the quit marker is written, and `portenvd` keeps the box;
+    - it retries the save in the background after 30 s, then 1, 2 and 5 minutes, then every 5 minutes, and never stops while the box holds unsaved work;
+    - **the lease stays with this Mac until a save completes,** so another machine never opens an older save while unsaved work sits here;
+    - once a save succeeds, the box is closed, the marker cleared and the lease released, and the next launch of the app shows one notification ("acme-api · Saved after Portenv quit");
+    - if the app opens the box first, the retries stop and the box saves first thing, with "Portenv quit before saving" on the line.
+    - **Tests:** the schedule on a fake clock (still retrying after 30 minutes, mutation-checked), success clearing the marker and giving the record out once, taking the box back, `two-machines.sh` (B refused while A's work is unsaved; A's background save; then B opens with A's work), and `daemon.sh`.
+    - **Limit:** keys live only in `portenvd`'s memory. If `portenvd` restarts while a background save is pending, the retries stop until the app next opens the box, which shows it on the state line.
+  - Only an update relaunch leaves boxes running.
+- **The log:** run by launchd (`PORTENVD_LOG=file`), `portenvd` writes `~/Library/Logs/Portenv/portenvd.log`, 0600 in a 0700 folder, since a plist inside the bundle can't name the user's home.
+- **Dev and test runs** with their own `PORTENV_HOME` start `portenvd` themselves, as the e2e scripts do. The app only connects.
+- **Tests:**
+  - with the app closed, `kill -9 portenvd`, and launchd restarts it;
+  - `portenv app relaunch`, and launchd starts the next `portenvd`;
+  - `LeaveUnsaved`, unit-tested and in `daemon.sh`;
+  - the deadline and the approval message, in the Swift tests.
 
 ## The Phase 0 CLI's `docker exec` path
 

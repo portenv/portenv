@@ -35,6 +35,22 @@ public protocol DaemonAPI: Sendable {
     func woke() async throws -> Bool
     /// An update relaunch: portenvd stops, leaving boxes running.
     func relaunch() async throws
+    /// Quit Anyway: portenvd records the quit marker and lets go of the
+    /// box unsaved; the next open saves it first thing.
+    func leaveUnsaved(_ box: String) async throws
+    /// Boxes saved in the background after Quit Anyway since last asked
+    /// (each given out once).
+    func takeSavedAfterQuit() async throws -> [SavedAfterQuit]
+}
+
+/// A box saved in the background after Quit Anyway.
+public struct SavedAfterQuit: Equatable, Sendable {
+    public let box: String
+    public let savedAt: Date
+    public init(box: String, savedAt: Date) {
+        self.box = box
+        self.savedAt = savedAt
+    }
 }
 
 /// A failed call to portenvd, with its plain message.

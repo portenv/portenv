@@ -18,4 +18,13 @@ final class Notifier: KeychainWaitNotifying, @unchecked Sendable {
         content.body = KeychainWait.detail
         try? await center.add(UNNotificationRequest(identifier: "keychain-\(box)", content: content, trigger: nil))
     }
+
+    func savedAfterQuit(box: String, at: Date) async {
+        let center = UNUserNotificationCenter.current()
+        guard (try? await center.requestAuthorization(options: [.alert])) == true else { return }
+        let content = UNMutableNotificationContent()
+        content.title = SavedAfterQuitNote.title(box: box)
+        content.body = SavedAfterQuitNote.body(at: at)
+        try? await center.add(UNNotificationRequest(identifier: "saved-after-quit-\(box)", content: content, trigger: nil))
+    }
 }

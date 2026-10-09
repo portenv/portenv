@@ -133,6 +133,11 @@ On the Mac, read top to bottom; on a server the runner takes the place of `porte
 
 The app never talks to an engine directly. It talks to `portenvd` over a local gRPC socket; `portenvd` talks to drivers; drivers talk to engines.
 
+**Product logic lives in `portenvd`, not in an app** (rule from 2026-10-09).
+- **What it covers:** the state line's wording, the menu model, and which actions are available when.
+- **Why:** the Mac app, the terminal edition and any later app then show the same thing.
+- **To do:** move today's Swift `Guidelines.swift` logic (the state-line table, `BoxMenuModel`, server names) into `portenvd` when convenient, with its tests. The apps then only display what `portenvd` sends.
+
 ## The box
 
 A box is a toolbox image plus a home. The image is rebuilt or pulled on each machine and never saved; `/home` is the only state that travels.
@@ -537,6 +542,27 @@ Reopen the last box directly. Show a sheet only if needed: lease held elsewhere,
 **Finder (File Provider)**
 
 Each box appears as Documents › Portenv › \<box> and under Locations in the Finder sidebar. Files download on demand when the box runs remotely. `node_modules` and caches are hidden. The home itself stays in the box (no bind mount of the whole home) for speed and Linux case sensitivity. Phase 1 may ship a simpler shared folder (`/home/work/Mac`) before the File Provider.
+
+## The terminal edition
+
+A first-class way to use Portenv on every platform, not a stopgap. It talks to the same `portenvd` API as the Mac app, so both always agree.
+
+- **`portenv open <box>`** puts your terminal inside the box, like ssh. Detach and the session keeps running; open again and you're back where you were.
+- **Every menu action is a command:** status, save, revert, move, rename, restart.
+- **The state line shows in the terminal title** (OSC 0/2), optionally with a one-line status bar.
+- **Approvals and notifications** go through the platform's own notifications.
+- **Plain `portenv`** lists boxes and commands. A small Bubble Tea picker can come later.
+
+**Linux: the terminal edition is the first Linux release, planned after Phase 2.** It needs:
+- a systemd user service instead of launchd;
+- Secret Service, with an encrypted-file fallback, instead of the Keychain;
+- NetworkManager instead of NWPathMonitor;
+- freedesktop notifications;
+- .deb and .rpm packages for arm64 and amd64.
+
+A Linux desktop window is decided later: Tauri with xterm.js, shared with 3.10's web terminal, or native GTK.
+
+**Public positioning stays as it is** (no "Linux" in public descriptions) until the Linux release is ready. Changing that is the owner's decision.
 
 ## Engines, dependencies and distribution
 
@@ -1036,4 +1062,5 @@ These need an owner decision; Claude Code should add new ones here instead of gu
 - [ ] Phase 3 control-plane milestones now live in `portenv/cloud`: how its CI pins and tests against `proto/gen/go` versions from this repository (tags, or a pseudo-version per merge).
 - [ ] Scope of the iPhone companion: approvals only, or also status and a read-only terminal?
 - [ ] Name of the CLI binary: `portenv` assumed.
+- [ ] Linux desktop window, after the terminal edition ships on Linux: Tauri with xterm.js (shared with 3.10's web terminal), or native GTK?
 - [ ] A per-box "Keep running when Portenv quits" option (off by default) with a menu bar item listing boxes still running? Only with Phase 3's lease hand-off (see 2.7).

@@ -25,8 +25,8 @@ struct DaemonRestartTests {
     }
 
     @Test func theAppRestartsPortenvdAndSendsTheKeysAgain() async {
-        let cli = FakeCLI(), restarts = Counter()
-        let c = BoxController(box: "acme-api", cli: cli, keychain: BlockingKeychain(blocks: false),
+        let cli = FakeDaemon(), restarts = Counter()
+        let c = BoxController(box: "acme-api", daemon: cli, keychain: BlockingKeychain(blocks: false),
                               restartDaemon: { restarts.add() })
         await c.open()
         cli.state = #"{"state":"SAVE_STATE_SAVED","saved_at":"\#(savedAt)"}"#
@@ -67,8 +67,8 @@ struct DaemonRestartTests {
 
     /// A box closed in this window is not reopened behind the person's back.
     @Test func aClosedWindowIsNotReopened() async {
-        let cli = FakeCLI(), restarts = Counter()
-        let c = BoxController(box: "acme-api", cli: cli, restartDaemon: { restarts.add() })
+        let cli = FakeDaemon(), restarts = Counter()
+        let c = BoxController(box: "acme-api", daemon: cli, restartDaemon: { restarts.add() })
         cli.state = #"{"state":"SAVE_STATE_NOT_SAVED","saved_at":"\#(savedAt)","interrupted":true}"#
         await c.refresh()
         #expect(!cli.calls.contains { $0.count > 1 && $0[1] == "open" })
@@ -81,8 +81,8 @@ struct DaemonRestartTests {
     /// One reopen per restart: a reopen that fails is not retried every 3 s
     /// (it would read the Keychain again and again).
     @Test func aFailedReopenIsNotRepeated() async {
-        let cli = FakeCLI()
-        let c = BoxController(box: "acme-api", cli: cli, keychain: BlockingKeychain(blocks: false), restartDaemon: {})
+        let cli = FakeDaemon()
+        let c = BoxController(box: "acme-api", daemon: cli, keychain: BlockingKeychain(blocks: false), restartDaemon: {})
         await c.open()
         cli.state = #"{"state":"SAVE_STATE_NOT_SAVED","saved_at":"\#(savedAt)","interrupted":true}"#
         cli.failing["open"] = "the box failed to start"
@@ -96,8 +96,8 @@ struct DaemonRestartTests {
     /// app must not start another one before it quits (that one, a child of
     /// the old app, would close the box when the app exits).
     @Test func noRestartWhileRelaunching() async {
-        let cli = FakeCLI(), restarts = Counter()
-        let c = BoxController(box: "acme-api", cli: cli, restartDaemon: { restarts.add() })
+        let cli = FakeDaemon(), restarts = Counter()
+        let c = BoxController(box: "acme-api", daemon: cli, restartDaemon: { restarts.add() })
         await c.open()
         c.relaunchingForUpdate()
         cli.failing["state"] = "portenvd is not running"

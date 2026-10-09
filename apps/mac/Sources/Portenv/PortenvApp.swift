@@ -11,7 +11,7 @@ struct PortenvApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @State private var controller = BoxController(
         box: ProcessInfo.processInfo.environment["PORTENV_BOX"] ?? "demo",
-        cli: CLI(),
+        daemon: SharedDaemon.client,
         notifier: Notifier.shared,
         // portenvd ended while the app is open: start it again (the box is
         // then reopened and its keys sent again).
@@ -28,11 +28,9 @@ struct PortenvApp: App {
                     // offline at once instead of probing storage.
                     await NetworkWatch.shared.start()
                     await controller.open()
-                    // The state line follows the recorded save state.
-                    while !Task.isCancelled {
-                        try? await Task.sleep(for: .seconds(3))
-                        if !controller.busy { await controller.refresh() }
-                    }
+                    // The state line follows the state portenvd pushes
+                    // (WatchBoxState), not a poll.
+                    await controller.follow()
                 }
         }
         .windowToolbarStyle(.unified(showsTitle: true))

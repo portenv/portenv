@@ -39,7 +39,13 @@ TOOLS := \
 	github.com/restic/restic/cmd/restic@v0.19.1
 TOOLS_STAMP := $(BIN)/.tools-stamp
 
-.PHONY: all build app test lint fmt proto proto-check agent-linux swift-test swift-env-check \
+# The Swift protoc plugins (macOS), built from tools/swift-protoc, whose
+# Package.swift and committed Package.resolved pin the same versions.
+SWIFT_PROTOBUF := 1.38.1
+GRPC_SWIFT_PROTOBUF := 2.4.1
+SWIFT_PLUGINS := $(BIN)/protoc-gen-swift $(BIN)/protoc-gen-grpc-swift-2
+
+.PHONY: all build app test lint fmt proto proto-go proto-swift proto-check proto-check-go agent-linux swift-test swift-env-check \
 	secrets spdx-check check tools clean image image-test driver-test e2e
 
 all: build test lint proto-check
@@ -84,14 +90,33 @@ fmt: $(TOOLS_STAMP)
 	cd proto && $(BIN)/buf format -w
 
 ## proto: regenerate Go code from proto/
-proto: $(TOOLS_STAMP)
+proto: proto-go proto-swift
+
+proto-go: $(TOOLS_STAMP)
 	rm -rf proto/gen/go/portenv
 	cd proto && $(BIN)/buf generate
 
-## proto-check: fail if generated code is out of date
+## proto-swift: regenerate proto/gen/swift (macOS) with the pinned plugins
+proto-swift: $(TOOLS_STAMP) $(SWIFT_PLUGINS)
+	rm -rf proto/gen/swift/Sources/PortenvProto
+	cd proto && $(BIN)/buf generate --template buf.gen.swift.yaml --path portenv/daemon/v1 --path portenv/types/v1
+
+# The plugins, after checking the Makefile's pins match tools/swift-protoc's.
+$(SWIFT_PLUGINS): tools/swift-protoc/Package.swift tools/swift-protoc/Package.resolved Makefile
+	grep -q 'swift-protobuf.git", exact: "$(SWIFT_PROTOBUF)"' tools/swift-protoc/Package.swift
+	grep -q 'grpc-swift-protobuf.git", exact: "$(GRPC_SWIFT_PROTOBUF)"' tools/swift-protoc/Package.swift
+	cd tools/swift-protoc && $(SWIFT) build -c release --product protoc-gen-swift && $(SWIFT) build -c release --product protoc-gen-grpc-swift-2
+	cp tools/swift-protoc/.build/release/protoc-gen-swift tools/swift-protoc/.build/release/protoc-gen-grpc-swift-2 $(BIN)/
+
+## proto-check: fail if generated Go or Swift is out of date (macOS: both)
 proto-check: proto
 	git diff --exit-code -- proto/gen
 	test -z "$$(git status --porcelain -- proto/gen | tee /dev/stderr)"
+
+## proto-check-go: the same for Go only (CI's Linux job; the macOS job checks both)
+proto-check-go: proto-go
+	git diff --exit-code -- proto/gen/go
+	test -z "$$(git status --porcelain -- proto/gen/go | tee /dev/stderr)"
 
 ## app: build Portenv.app into bin/, with portenv, portenvd and restic inside (1.0: ad-hoc signed to run here)
 # Built outside the repository: SwiftPM's resource accessor falls back to the

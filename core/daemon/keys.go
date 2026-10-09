@@ -46,3 +46,22 @@ func (s *Server) ProvideKeys(_ context.Context, req *daemonv1.ProvideKeysRequest
 	}
 	return &daemonv1.ProvideKeysResponse{}, nil
 }
+
+// GetKeyIDs implements daemonv1.DaemonServiceServer: the Keychain items the
+// app reads for the box.
+func (s *Server) GetKeyIDs(_ context.Context, req *daemonv1.GetKeyIDsRequest) (*daemonv1.GetKeyIDsResponse, error) {
+	c, err := s.env.LoadBox(req.GetName())
+	if err != nil {
+		return nil, status.Error(codes.NotFound, err.Error())
+	}
+	return &daemonv1.GetKeyIDsResponse{KeyIds: local.KeyIDs(c)}, nil
+}
+
+// ListServers implements daemonv1.DaemonServiceServer: the Move To targets.
+func (s *Server) ListServers(context.Context, *daemonv1.ListServersRequest) (*daemonv1.ListServersResponse, error) {
+	mc, err := s.env.MachineConfig()
+	if err != nil {
+		return nil, err
+	}
+	return &daemonv1.ListServersResponse{Servers: mc.Servers}, nil
+}

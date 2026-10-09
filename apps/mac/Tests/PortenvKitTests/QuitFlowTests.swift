@@ -25,39 +25,39 @@ struct QuitFlowTests {
     /// box running for the next one; nothing is closed, nothing is asked,
     /// even if portenvd doesn't answer.
     @Test func anUpdateRelaunchLeavesTheBoxRunning() async {
-        let cli = FakeCLI()
-        #expect(await QuitFlow(cli: cli, box: "acme-api", openHere: true).relaunch())
+        let cli = FakeDaemon()
+        #expect(await QuitFlow(daemon: cli, box: "acme-api", openHere: true).relaunch())
         let actions = cli.calls.map { $0.count > 1 ? $0[1] : "" }
         #expect(actions == ["relaunch"], "\(cli.calls)")
         cli.failing["relaunch"] = "portenvd is not running"
-        #expect(await QuitFlow(cli: cli, box: "acme-api", openHere: true).relaunch(), "an update never waits on portenvd")
+        #expect(await QuitFlow(daemon: cli, box: "acme-api", openHere: true).relaunch(), "an update never waits on portenvd")
     }
 
-    func closes(_ cli: FakeCLI) -> Int { cli.calls.filter { $0.count > 1 && $0[1] == "close" }.count }
+    func closes(_ cli: FakeDaemon) -> Int { cli.calls.filter { $0.count > 1 && $0[1] == "close" }.count }
 
     @Test func aSavedBoxQuitsWithoutAsking() async {
-        let cli = FakeCLI()
+        let cli = FakeDaemon()
         let answers = ScriptedAnswers([])
-        let quit = await QuitFlow(cli: cli, box: "acme-api", openHere: true).run { answers.ask($0) }
+        let quit = await QuitFlow(daemon: cli, box: "acme-api", openHere: true).run { answers.ask($0) }
         #expect(quit)
         #expect(answers.shown.isEmpty)
         #expect(closes(cli) == 1)
     }
 
     @Test func aFailedSaveAsksWithTheGuidelineText() async {
-        let cli = FakeCLI()
+        let cli = FakeDaemon()
         cli.failing["close"] = "the box agent is unavailable"
         let answers = ScriptedAnswers([.cancel])
-        let quit = await QuitFlow(cli: cli, box: "acme-api", openHere: true).run { answers.ask($0) }
+        let quit = await QuitFlow(daemon: cli, box: "acme-api", openHere: true).run { answers.ask($0) }
         #expect(!quit, "Cancel stays")
         #expect(answers.shown == ["acme-api couldn't be saved before quitting. Its work is still on this Mac."])
     }
 
     @Test func tryAgainClosesAgainThenQuits() async {
-        let cli = FakeCLI()
+        let cli = FakeDaemon()
         cli.failing["close"] = "the box agent is unavailable"
         let answers = ScriptedAnswers([.tryAgain, .tryAgain])
-        let flow = QuitFlow(cli: cli, box: "acme-api", openHere: true)
+        let flow = QuitFlow(daemon: cli, box: "acme-api", openHere: true)
         let task = Task { await flow.run { m in
             let a = answers.ask(m)
             if answers.shown.count == 2 { cli.failing = [:] } // the agent is back for the third try
@@ -68,17 +68,17 @@ struct QuitFlowTests {
     }
 
     @Test func quitAnywayQuitsWithoutClosing() async {
-        let cli = FakeCLI()
+        let cli = FakeDaemon()
         cli.failing["close"] = "the box agent is unavailable"
         let answers = ScriptedAnswers([.quitAnyway])
-        let quit = await QuitFlow(cli: cli, box: "acme-api", openHere: true).run { answers.ask($0) }
+        let quit = await QuitFlow(daemon: cli, box: "acme-api", openHere: true).run { answers.ask($0) }
         #expect(quit)
         #expect(closes(cli) == 1)
     }
 
     @Test func aBoxNotOnThisMacNeedsNothing() async {
-        let cli = FakeCLI()
-        let quit = await QuitFlow(cli: cli, box: "acme-api", openHere: false).run { _ in .cancel }
+        let cli = FakeDaemon()
+        let quit = await QuitFlow(daemon: cli, box: "acme-api", openHere: false).run { _ in .cancel }
         #expect(quit)
         #expect(cli.calls.isEmpty)
     }

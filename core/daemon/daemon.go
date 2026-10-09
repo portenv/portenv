@@ -110,6 +110,13 @@ func (s *Server) Serve(ctx context.Context) error {
 	if len(sock) >= 104 {
 		return fmt.Errorf("socket path %s is longer than the 103 bytes Unix sockets allow; use a shorter PORTENV_HOME", sock)
 	}
+	// One daemon per directory, before touching the socket: a second one
+	// must not take the socket or any box from the first.
+	lock, err := lockDir(s.env.Dir)
+	if err != nil {
+		return err
+	}
+	defer lock.release()
 	_ = os.Remove(sock)
 	lis, err := (&net.ListenConfig{}).Listen(ctx, "unix", sock)
 	if err != nil {

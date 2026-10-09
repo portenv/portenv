@@ -23,10 +23,11 @@ func startChannel(t *testing.T) (ChannelSecrets, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv, err := newChannelServer(DefaultConfig(), sec)
+	keys, err := newChannelKeys(sec)
 	if err != nil {
 		t.Fatal(err)
 	}
+	srv := newChannelServer(DefaultConfig(), keys)
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -85,31 +86,32 @@ func TestChannelRefusesAnImpostor(t *testing.T) {
 }
 
 // TestChannelSecretsComeOnStdin: the driver writes one JSON line on the
-// box's stdin; the API process reads exactly that, and nothing else.
+// box's stdin; the API process reads exactly that. Later lines are re-keys
+// (ADR 0014, rekey_test.go).
 func TestChannelSecretsComeOnStdin(t *testing.T) {
 	sec, _ := NewChannelSecrets()
 	line, err := sec.Line()
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := ReadChannelSecrets(bytes.NewReader(append(line, []byte("trailing input is ignored\n")...)))
-	if err != nil {
-		t.Fatal(err)
+	got, ok, err := newSecretsLines(bytes.NewReader(line)).next()
+	if err != nil || !ok {
+		t.Fatalf("read: ok %v, %v", ok, err)
 	}
 	if got.Token != sec.Token || !bytes.Equal(got.CertPEM, sec.CertPEM) || !bytes.Equal(got.KeyPEM, sec.KeyPEM) {
 		t.Fatal("secrets changed on the way")
 	}
-	if _, err := newChannelServer(DefaultConfig(), got); err != nil {
+	if _, err := newChannelKeys(got); err != nil {
 		t.Fatal(err)
 	}
-	for _, bad := range []string{"", "not json\n", `{"Token":"short"}` + "\n"} {
-		s, err := ReadChannelSecrets(strings.NewReader(bad))
-		if err == nil {
-			_, err = newChannelServer(DefaultConfig(), s)
+	for _, bad := range []string{"not json\n", `{"Token":"short"}` + "\n", "{}\n"} {
+		if _, ok, err := newSecretsLines(strings.NewReader(bad)).next(); ok || err != nil {
+			t.Errorf("accepted %q (or failed: %v)", bad, err)
 		}
-		if err == nil {
-			t.Errorf("accepted %q", bad)
-		}
+	}
+	// A line cut short by the end of input is not a line.
+	if _, ok, _ := newSecretsLines(bytes.NewReader(line[:len(line)-1])).next(); ok {
+		t.Error("accepted a line without its newline")
 	}
 }
 

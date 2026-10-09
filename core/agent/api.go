@@ -3,18 +3,13 @@
 package agent
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"crypto/subtle"
-	"crypto/tls"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"regexp"
-	"strings"
 	"time"
 
 	"google.golang.org/grpc"
@@ -52,52 +47,15 @@ var sessionRE = regexp.MustCompile(`^[A-Za-z0-9_-]{1,32}$`)
 // portenv-agent serve.
 type apiServer struct {
 	agentv1.UnimplementedAgentServiceServer
-	cfg   Config
-	token []byte
+	cfg  Config
+	keys *channelKeys
 }
 
-// ServeChannel serves the agent API on the channel described by dir until
-// ctx ends. The caller must already be non-dumpable (passwords pass
-// through this process).
-func ServeChannel(ctx context.Context, cfg Config, sec ChannelSecrets, port int) error {
-	srv, err := newChannelServer(cfg, sec)
-	if err != nil {
-		return err
-	}
-	lis, err := (&net.ListenConfig{}).Listen(ctx, "tcp", fmt.Sprintf(":%d", port))
-	if err != nil {
-		return err
-	}
-	return serveOn(ctx, srv, lis)
-}
-
-// ReadChannelSecrets reads one start's secrets: one JSON line, as the
-// driver writes it. They stay in this process's memory only.
-func ReadChannelSecrets(r io.Reader) (ChannelSecrets, error) {
-	line, err := bufio.NewReader(io.LimitReader(r, 64<<10)).ReadBytes('\n')
-	if err != nil && !errors.Is(err, io.EOF) {
-		return ChannelSecrets{}, fmt.Errorf("read channel secrets: %w", err)
-	}
-	var sec ChannelSecrets
-	if err := json.Unmarshal(bytes.TrimSpace(line), &sec); err != nil {
-		return ChannelSecrets{}, fmt.Errorf("parse channel secrets: %w", err)
-	}
-	return sec, nil
-}
-
-// newChannelServer serves the API with one start's secrets.
-func newChannelServer(cfg Config, sec ChannelSecrets) (*grpc.Server, error) {
-	token := []byte(strings.TrimSpace(sec.Token))
-	if len(token) < 32 {
-		return nil, errors.New("channel token is too short")
-	}
-	cert, err := tls.X509KeyPair(sec.CertPEM, sec.KeyPEM)
-	if err != nil {
-		return nil, fmt.Errorf("load channel certificate: %w", err)
-	}
-	s := &apiServer{cfg: cfg, token: token}
+// newChannelServer serves the API with the channel's current secrets.
+func newChannelServer(cfg Config, keys *channelKeys) *grpc.Server {
+	s := &apiServer{cfg: cfg, keys: keys}
 	srv := grpc.NewServer(
-		grpc.Creds(credentials.NewTLS(&tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS13})),
+		grpc.Creds(credentials.NewTLS(keys.tlsConfig())),
 		grpc.UnaryInterceptor(func(ctx context.Context, req any, _ *grpc.UnaryServerInfo, h grpc.UnaryHandler) (any, error) {
 			if err := s.authorize(ctx); err != nil {
 				return nil, err
@@ -112,7 +70,7 @@ func newChannelServer(cfg Config, sec ChannelSecrets) (*grpc.Server, error) {
 		}),
 	)
 	agentv1.RegisterAgentServiceServer(srv, s)
-	return srv, nil
+	return srv
 }
 
 func serveOn(ctx context.Context, srv *grpc.Server, lis net.Listener) error {
@@ -126,7 +84,7 @@ func serveOn(ctx context.Context, srv *grpc.Server, lis net.Listener) error {
 func (s *apiServer) authorize(ctx context.Context) error {
 	md, _ := metadata.FromIncomingContext(ctx)
 	for _, v := range md.Get(TokenHeader) {
-		if subtle.ConstantTimeCompare([]byte(v), s.token) == 1 {
+		if subtle.ConstantTimeCompare([]byte(v), s.keys.token()) == 1 {
 			return nil
 		}
 	}

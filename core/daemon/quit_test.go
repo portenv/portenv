@@ -65,3 +65,24 @@ func TestShutdownWaitsForBoxesStillOpening(t *testing.T) {
 		t.Fatal("closeAll did not finish after the open ended")
 	}
 }
+
+// TestOneDaemonAtATime: a second portenvd (or runner) on the same Portenv
+// directory refuses to start while the first holds it, so it can never
+// re-key a box the first one still serves (ADR 0014). Once the first has
+// stopped, a new one starts.
+func TestOneDaemonAtATime(t *testing.T) {
+	dir := t.TempDir()
+	first, err := lockDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := lockDir(dir); err == nil || err.Error() != "another portenvd is already running for "+dir {
+		t.Fatalf("a second daemon: %v", err)
+	}
+	first.release()
+	again, err := lockDir(dir)
+	if err != nil {
+		t.Fatalf("after the first stopped: %v", err)
+	}
+	again.release()
+}

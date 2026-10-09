@@ -21,6 +21,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/portenv/portenv/core/driver"
 	"github.com/portenv/portenv/core/internal/bounded"
 	agentv1 "github.com/portenv/portenv/proto/gen/go/portenv/agent/v1"
 )
@@ -231,6 +232,36 @@ func LocalPathInfo(path string) (PathInfo, error) {
 	return info, nil
 }
 
+// AgentExecutor runs restic inside a box through portenv-agent. In Phase 0
+// the agent is reached with the driver's Exec; Phase 1 moves this onto the
+// agent's own channel. The password travels on the command's stdin.
+type AgentExecutor struct {
+	Driver driver.Driver
+	Box    driver.BoxID
+}
+
+// agentRefused is the agent's exit code when it refuses a run.
+const agentRefused = 125
+
+// Restic implements Executor.
+func (a AgentExecutor) Restic(ctx context.Context, args []string, cred Credentials) (ExecResult, error) {
+	input, err := agentInput(cred)
+	if err != nil {
+		return ExecResult{}, err
+	}
+	res, err := a.Driver.Exec(ctx, a.Box, driver.ExecRequest{
+		Argv:  append([]string{"portenv-agent", "restic"}, args...),
+		Stdin: input,
+	})
+	if err != nil {
+		return ExecResult{}, fmt.Errorf("run restic in box: %w", err)
+	}
+	if res.ExitCode == agentRefused {
+		return ExecResult{}, fmt.Errorf("agent refused the restic run: %s", strings.TrimSpace(string(res.Stderr)))
+	}
+	return ExecResult{Stdout: res.Stdout, Stderr: res.Stderr, ExitCode: res.ExitCode}, nil
+}
+
 // agentInput is the JSON portenv-agent restic reads: the password and
 // storage credentials. The secrets are meant to be in it: it goes to the
 // agent on a pipe or the agent channel and is never written anywhere.
@@ -295,6 +326,19 @@ func (c ChannelExecutor) PathInfo(ctx context.Context, path string) (PathInfo, e
 		return PathInfo{}, fmt.Errorf("inspect %s in box: %w", path, err)
 	}
 	return PathInfo{Exists: res.GetExists(), IsDir: res.GetIsDir(), Empty: res.GetEmpty()}, nil
+}
+
+// PathInfo implements Executor.
+func (a AgentExecutor) PathInfo(ctx context.Context, path string) (PathInfo, error) {
+	res, err := a.Driver.Exec(ctx, a.Box, driver.ExecRequest{Argv: []string{"portenv-agent", "path-info", path}, Timeout: 30 * time.Second})
+	if err != nil {
+		return PathInfo{}, fmt.Errorf("inspect %s in box: %w", path, err)
+	}
+	var info PathInfo
+	if res.ExitCode != 0 || json.Unmarshal(res.Stdout, &info) != nil {
+		return PathInfo{}, fmt.Errorf("inspect %s in box: exit %d: %s", path, res.ExitCode, strings.TrimSpace(string(res.Stderr)))
+	}
+	return info, nil
 }
 
 // ensureFresh makes sure the forward's SSH connection (the master restic's

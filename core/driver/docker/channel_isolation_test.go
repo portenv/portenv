@@ -16,7 +16,6 @@ import (
 
 	"github.com/portenv/portenv/core/agent"
 	"github.com/portenv/portenv/core/driver"
-	"github.com/portenv/portenv/core/driver/drivertest"
 	agentv1 "github.com/portenv/portenv/proto/gen/go/portenv/agent/v1"
 )
 
@@ -86,7 +85,7 @@ func TestChannelPasswordIsUnreadable(t *testing.T) {
 	}
 	exec := func(user string, argv ...string) string {
 		t.Helper()
-		res, err := d.probe(ctx, id, drivertest.ProbeRequest{Argv: argv, User: user, Timeout: time.Minute})
+		res, err := d.Exec(ctx, id, driver.ExecRequest{Argv: argv, User: user, Timeout: time.Minute})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -142,7 +141,7 @@ func TestChannelPasswordIsUnreadable(t *testing.T) {
 	exec("", "sh", "-c", "cat > /tmp/memprobe.py <<'PY'\n"+memProbe+"\nPY")
 	// Control: an ordinary root process holding the secret is readable, so
 	// the probe really detects a leak.
-	if _, err := d.probe(ctx, id, drivertest.ProbeRequest{Argv: []string{"sh", "-c", "PORTENV_CANARY=" + secret + " setsid sleep 120 >/dev/null 2>&1 &"}, Timeout: time.Minute}); err != nil {
+	if _, err := d.Exec(ctx, id, driver.ExecRequest{Argv: []string{"sh", "-c", "PORTENV_CANARY=" + secret + " setsid sleep 120 >/dev/null 2>&1 &"}, Timeout: time.Minute}); err != nil {
 		t.Fatal(err)
 	}
 	control := exec("", "pgrep", "-n", "-x", "sleep")

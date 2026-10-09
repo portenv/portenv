@@ -117,12 +117,12 @@ func cmdInit(_ context.Context, e *local.Env, name string, args []string) error 
 		// Only the bcrypt hash leaves this machine.
 		fmt.Printf("add this REST user on the server (setup.sh --rest-user):\nrest-user %s\n", restUser)
 	}
-	fmt.Printf("next: open it in Portenv (PORTENV_BOX=%s), or portenv app open %s\n", name, name)
+	fmt.Printf("next: portenv resume %s\n", name)
 	return nil
 }
 
 // cmdJoin enrols an existing box on this machine: the repository key comes
-// on stdin (from Move To, over SSH) and goes only into the key store.
+// on stdin (from portenv move, over SSH) and goes only into the key store.
 func cmdJoin(ctx context.Context, e *local.Env, name string, args []string) error {
 	fs := flags("join")
 	id := fs.String("id", "", "the box's ID")
@@ -150,7 +150,7 @@ func cmdJoin(ctx context.Context, e *local.Env, name string, args []string) erro
 	if _, _, _, err := e.Storage(c); err != nil {
 		return err
 	}
-	// The keys arrive on stdin as JSON (Move To sends them over SSH);
+	// The keys arrive on stdin as JSON (portenv move sends them over SSH);
 	// they go only into this machine's key store.
 	var in local.JoinKeys
 	if err := json.NewDecoder(io.LimitReader(os.Stdin, 16<<10)).Decode(&in); err != nil {
@@ -245,6 +245,207 @@ func cmdSSHConfig(_ context.Context, e *local.Env, name string, args []string) e
 	return nil
 }
 
+func cmdResume(ctx context.Context, e *local.Env, name string, args []string) error {
+	fs := flags("resume")
+	takeOver := fs.Bool("take-over", false, "take the box over from the machine that has it open")
+	if err := parse(fs, args); err != nil {
+		return err
+	}
+	var s *local.Session
+	if err := local.Timed("open", func() error { var e2 error; s, e2 = e.Open(name); return e2 }); err != nil {
+		return err
+	}
+	id := s.ID()
+	// Probe storage while the box starts: an unreachable server costs its
+	// timeout once, in parallel, not before every offline start.
+	reach := make(chan bool, 1)
+	go func() {
+		start := time.Now()
+		ok := s.StorageReachable()
+		local.Trace("storage probe (parallel)", time.Since(start))
+		reach <- ok
+	}()
+	if err := s.EnsureCreated(ctx, func(msg string) { fmt.Fprintln(os.Stderr, msg) }); err != nil {
+		return err
+	}
+	fmt.Fprintln(os.Stderr, "starting the box")
+	if err := local.Timed("box start", func() error { _, err := s.Drv.Start(ctx, id); return err }); err != nil {
+		return err
+	}
+	// An empty home makes the agent report FAILED; restic still runs.
+	if err := local.Timed("agent ready", func() error { _, _, err := local.WaitAgent(ctx, s.Drv, id, "READY", "FAILED"); return err }); err != nil {
+		return err
+	}
+	var sb *boxsync.Box
+	if err := local.Timed("sync open", func() error { var e2 error; sb, e2 = s.Sync(); return e2 }); err != nil {
+		return err
+	}
+	var reachable bool
+	_ = local.Timed("storage probe (wait)", func() error { reachable = <-reach; return nil })
+	var res boxsync.ResumeResult
+	var err error
+	if !reachable {
+		// Offline: start from the local home if this machine's state allows
+		// it; saves wait until storage is reachable again.
+		if res, err = sb.ResumeOffline(); err != nil {
+			_, _ = s.Drv.Stop(ctx, id, 0)
+			return fmt.Errorf("storage is unreachable and %w", err)
+		}
+	} else {
+		if err := local.Timed("repository check", func() error { return sb.Init(ctx) }); err != nil {
+			return err
+		}
+		err = local.Timed("resume (all sync)", func() error {
+			var e error
+			res, e = sb.Resume(ctx, boxsync.ResumeOptions{TakeOver: *takeOver})
+			return e
+		})
+	}
+	var held *boxsync.LeaseHeldError
+	if errors.As(err, &held) {
+		_, _ = s.Drv.Stop(ctx, id, 0)
+		hint := "run portenv resume " + name + " --take-over to take it over"
+		if held.Lease.Stale {
+			hint = "it looks stale; " + hint
+		}
+		return fmt.Errorf("%w; %s", err, hint)
+	}
+	if err != nil {
+		return err
+	}
+
+	switch res.Action {
+	case boxsync.ActionNewBox:
+		fmt.Fprintln(os.Stderr, "nothing saved yet: creating a fresh home")
+		if err := s.Restart(ctx, true); err != nil {
+			return err
+		}
+	case boxsync.ActionRestored, boxsync.ActionRestoredKeptLocal:
+		if err := local.Timed("restart after restore", func() error { return s.Restart(ctx, false) }); err != nil {
+			return err
+		}
+	}
+	var state, detail string
+	err = local.Timed("agent ready (final)", func() error {
+		var e error
+		state, detail, e = local.WaitAgent(ctx, s.Drv, id, "READY", "FAILED")
+		return e
+	})
+	if err != nil {
+		return err
+	}
+	if state != "READY" {
+		return fmt.Errorf("the box failed to start: %s", detail)
+	}
+	if res.Offline {
+		fmt.Printf("%s is open on %s, offline (Offline · will save later)\n", name, e.Machine)
+		return nil
+	}
+	fmt.Printf("%s is open on %s (resume rule %d: %s)\n", name, e.Machine, res.Rule, res.Action)
+	if res.Orphaned != nil {
+		fmt.Printf("unsaved work from %s was kept as a separate save, %s (%s), before restoring the newer one; see portenv history %s\n",
+			res.Orphaned.Machine, res.Orphaned.ID[:8], res.Orphaned.Time.Local().Format(time.DateTime), name)
+	}
+	return nil
+}
+
+func requireRunning(ctx context.Context, s *local.Session) error {
+	st, err := s.Drv.Stats(ctx, s.ID())
+	if err != nil {
+		return err
+	}
+	if st.State != driver.StateRunning {
+		return fmt.Errorf("%s is not open on this machine; run portenv resume %s", s.Cfg.Name, s.Cfg.Name)
+	}
+	return nil
+}
+
+func save(ctx context.Context, e *local.Env, name string, args []string, kind boxsync.SaveKind) (*local.Session, error) {
+	fs := flags(kind.String())
+	confirm := fs.Bool("confirm", false, "save even though the box changed on another machine")
+	if err := parse(fs, args); err != nil {
+		return nil, err
+	}
+	s, err := e.Open(name)
+	if err != nil {
+		return nil, err
+	}
+	if err := requireRunning(ctx, s); err != nil {
+		return nil, err
+	}
+	if !s.StorageReachable() {
+		return nil, errOffline
+	}
+	sb, err := s.Sync()
+	if err != nil {
+		return nil, err
+	}
+	start := time.Now()
+	snap, err := sb.Save(ctx, boxsync.SaveOptions{Kind: kind, ConfirmLeaseChange: *confirm})
+	var changed *boxsync.LeaseChangedError
+	if errors.As(err, &changed) {
+		return nil, fmt.Errorf("%w; your version and that one both stay in history: add --confirm to save yours", err)
+	}
+	if err != nil {
+		return nil, err
+	}
+	fmt.Printf("saved %s (%s) in %s\n", snap.ID[:8], snap.Kind, time.Since(start).Round(100*time.Millisecond))
+	return s, nil
+}
+
+// errOffline: storage is unreachable, so the save waits. Nothing is lost:
+// the work stays in the box, which stays open (and dirty) until a save
+// reaches storage.
+var errOffline = errors.New("storage is unreachable (Offline · will save later): your work stays in the box")
+
+func cmdSave(ctx context.Context, e *local.Env, name string, args []string) error {
+	_, err := save(ctx, e, name, args, boxsync.SaveAutosave)
+	return err
+}
+
+func cmdPoint(ctx context.Context, e *local.Env, name string, args []string) error {
+	_, err := save(ctx, e, name, args, boxsync.SavePoint)
+	return err
+}
+
+func cmdClose(ctx context.Context, e *local.Env, name string, args []string) error {
+	s, err := save(ctx, e, name, args, boxsync.SaveRelease)
+	if err != nil {
+		return err
+	}
+	if _, err := s.Drv.Stop(ctx, s.ID(), 0); err != nil {
+		return err
+	}
+	fmt.Printf("%s is closed and released\n", name)
+	return nil
+}
+
+// whileRunning runs fn with the box running, starting it for the duration
+// if needed (read-only queries: no lease is taken).
+func whileRunning(ctx context.Context, s *local.Session, fn func(*boxsync.Box) error) error {
+	st, err := s.Drv.Stats(ctx, s.ID())
+	if err != nil {
+		return err
+	}
+	if !s.Drv.Known(s.ID()) {
+		return errors.New("the box has never been opened on this machine")
+	}
+	if st.State != driver.StateRunning {
+		if _, err := s.Drv.Start(ctx, s.ID()); err != nil {
+			return err
+		}
+		defer func() { _, _ = s.Drv.Stop(context.Background(), s.ID(), 0) }()
+		if _, _, err := local.WaitAgent(ctx, s.Drv, s.ID(), "READY", "FAILED"); err != nil {
+			return err
+		}
+	}
+	sb, err := s.Sync()
+	if err != nil {
+		return err
+	}
+	return fn(sb)
+}
+
 func cmdStatus(ctx context.Context, e *local.Env, name string, args []string) error {
 	if err := parse(flags("status"), args); err != nil {
 		return err
@@ -266,23 +467,126 @@ func cmdStatus(ctx context.Context, e *local.Env, name string, args []string) er
 	if st.State == driver.StateRunning {
 		fmt.Printf("memory   %d MiB, %d processes\n", st.MemoryBytes>>20, st.ProcessCount)
 	}
-	// What this machine recorded, read from disk: status never starts the
-	// box or runs restic (no docker exec, ADR 0010). The lease and every
-	// save: portenv app history, through portenvd.
-	local, ok, err := boxsync.LoadState(filepath.Join(e.Dir, "state", s.Cfg.ID))
+	if !s.Drv.Known(s.ID()) {
+		return nil
+	}
+	return whileRunning(ctx, s, func(sb *boxsync.Box) error {
+		local, ok, err := sb.LocalState()
+		if err != nil {
+			return err
+		}
+		switch {
+		case !ok:
+			fmt.Println("local    never synced on this machine")
+		case local.Dirty:
+			fmt.Println("local    open (may hold unsaved changes)")
+		default:
+			fmt.Println("local    in sync with its last save")
+		}
+		lease, err := sb.Lease(ctx)
+		if err != nil {
+			return err
+		}
+		switch {
+		case lease == nil:
+			fmt.Println("lease    free")
+		case lease.Stale:
+			fmt.Printf("lease    %s (stale, last seen %s)\n", lease.Machine, lease.LastSeen.Local().Format(time.DateTime))
+		default:
+			fmt.Printf("lease    %s (last seen %s)\n", lease.Machine, lease.LastSeen.Local().Format(time.DateTime))
+		}
+		hist, err := sb.History(ctx)
+		if err != nil {
+			return err
+		}
+		if n := len(hist); n > 0 {
+			last := hist[n-1]
+			fmt.Printf("saved    %s, %s from %s (%d saves)\n", last.Time.Local().Format(time.DateTime), last.Kind, last.Machine, n)
+		}
+		printKept(hist)
+		return nil
+	})
+}
+
+func cmdHistory(ctx context.Context, e *local.Env, name string, args []string) error {
+	if err := parse(flags("history"), args); err != nil {
+		return err
+	}
+	s, err := e.Open(name)
 	if err != nil {
 		return err
 	}
-	switch {
-	case !ok:
-		fmt.Println("local    never synced on this machine")
-	case local.Dirty:
-		fmt.Println("local    open (may hold unsaved changes)")
-	default:
-		fmt.Println("local    in sync with its last save")
+	return whileRunning(ctx, s, func(sb *boxsync.Box) error {
+		hist, err := sb.History(ctx)
+		if err != nil {
+			return err
+		}
+		if len(hist) == 0 {
+			fmt.Println("no saves yet")
+		}
+		for _, h := range hist {
+			note := ""
+			if h.Active != "" {
+				note = "  open on " + h.Active
+			}
+			if h.Kind == boxsync.KindOrphaned {
+				note = "  unsaved work from " + h.Machine + ", kept as a separate save"
+			}
+			fmt.Printf("%s  %s  %-8s  %s%s\n", h.ID[:8], h.Time.Local().Format(time.DateTime), h.Kind, h.Machine, note)
+		}
+		return nil
+	})
+}
+
+// cmdHousekeep tidies the repository while nothing else is happening:
+// leftover lease tags on older saves, then retention (never the current
+// save). It is not part of close, so closing stays fast.
+func cmdHousekeep(ctx context.Context, e *local.Env, name string, args []string) error {
+	fs := flags("housekeep")
+	prune := fs.Bool("prune", false, "also delete data no snapshot uses")
+	if err := parse(fs, args); err != nil {
+		return err
 	}
-	if ok && !local.SavedAt.IsZero() {
-		fmt.Printf("saved    %s (lease %s here)\n", local.SavedAt.Local().Format(time.DateTime), local.Lease)
+	s, err := e.Open(name)
+	if err != nil {
+		return err
+	}
+	return whileRunning(ctx, s, func(sb *boxsync.Box) error {
+		return sb.Housekeep(ctx, *prune)
+	})
+}
+
+func cmdMove(ctx context.Context, e *local.Env, name string, args []string) error {
+	fs := flags("move")
+	to := fs.String("to", "", "SSH host to resume the box on")
+	confirm := fs.Bool("confirm", false, "save even though the box changed on another machine")
+	joinStorage := fs.String("join-storage", "", "first enrol the box on the host, which reaches its storage here (a directory, or sftp:...)")
+	if err := parse(fs, args); err != nil {
+		return err
+	}
+	if *to == "" || (*to)[0] == '-' {
+		return usageError{Msg: "move needs --to SSH-HOST"}
+	}
+	closeArgs := []string{}
+	if *confirm {
+		closeArgs = append(closeArgs, "--confirm")
+	}
+	if err := cmdClose(ctx, e, name, closeArgs); err != nil {
+		return err
+	}
+	if *joinStorage != "" {
+		c, err := e.LoadBox(name)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(os.Stderr, "enrolling %s on %s\n", name, *to)
+		if err := local.EnrolOn(ctx, e, c, *to, *joinStorage, os.Stdout); err != nil {
+			return err
+		}
+	}
+	fmt.Fprintf(os.Stderr, "resuming %s on %s\n", name, *to)
+	if err := local.ResumeOn(ctx, *to, name, os.Stdout); err != nil {
+		return err
 	}
 	return nil
 }
@@ -293,4 +597,22 @@ func stateName(s driver.State) string {
 		driver.StateCreated: "created", driver.StateStarting: "starting", driver.StateRunning: "running",
 		driver.StateStopping: "stopping", driver.StateStopped: "stopped", driver.StateFailed: "failed",
 	}[s]
+}
+
+// printKept lists unsaved work that was kept as separate saves (resume rule
+// 4, usually after a take over), newest first, at most three.
+func printKept(hist []boxsync.Snapshot) {
+	var kept []boxsync.Snapshot
+	for i := len(hist) - 1; i >= 0; i-- {
+		if hist[i].Kind == boxsync.KindOrphaned {
+			kept = append(kept, hist[i])
+		}
+	}
+	for i, k := range kept {
+		if i == 3 {
+			fmt.Printf("kept     … and %d more (portenv history)\n", len(kept)-3)
+			break
+		}
+		fmt.Printf("kept     unsaved work from %s as a separate save, %s (%s)\n", k.Machine, k.ID[:8], k.Time.Local().Format(time.DateTime))
+	}
 }

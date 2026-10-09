@@ -711,12 +711,7 @@ type GetReadinessResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	State ReadinessState         `protobuf:"varint,1,opt,name=state,proto3,enum=portenv.agent.v1.ReadinessState" json:"state,omitempty"`
 	// Human-readable step or failure, e.g. "installing 2 packages".
-	Detail string `protobuf:"bytes,2,opt,name=detail,proto3" json:"detail,omitempty"`
-	// Packages from apt-packages.txt that couldn't be installed. They never
-	// stop the box from starting; the agent retries them in the background.
-	FailedPackages []string `protobuf:"bytes,3,rep,name=failed_packages,json=failedPackages,proto3" json:"failed_packages,omitempty"`
-	// The last installation error for them (the log has the rest).
-	PackagesError string `protobuf:"bytes,4,opt,name=packages_error,json=packagesError,proto3" json:"packages_error,omitempty"`
+	Detail        string `protobuf:"bytes,2,opt,name=detail,proto3" json:"detail,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -765,92 +760,6 @@ func (x *GetReadinessResponse) GetDetail() string {
 	return ""
 }
 
-func (x *GetReadinessResponse) GetFailedPackages() []string {
-	if x != nil {
-		return x.FailedPackages
-	}
-	return nil
-}
-
-func (x *GetReadinessResponse) GetPackagesError() string {
-	if x != nil {
-		return x.PackagesError
-	}
-	return ""
-}
-
-type RetryPackagesRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *RetryPackagesRequest) Reset() {
-	*x = RetryPackagesRequest{}
-	mi := &file_portenv_agent_v1_agent_proto_msgTypes[12]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *RetryPackagesRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*RetryPackagesRequest) ProtoMessage() {}
-
-func (x *RetryPackagesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_agent_v1_agent_proto_msgTypes[12]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use RetryPackagesRequest.ProtoReflect.Descriptor instead.
-func (*RetryPackagesRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_agent_v1_agent_proto_rawDescGZIP(), []int{12}
-}
-
-type RetryPackagesResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *RetryPackagesResponse) Reset() {
-	*x = RetryPackagesResponse{}
-	mi := &file_portenv_agent_v1_agent_proto_msgTypes[13]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *RetryPackagesResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*RetryPackagesResponse) ProtoMessage() {}
-
-func (x *RetryPackagesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_agent_v1_agent_proto_msgTypes[13]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use RetryPackagesResponse.ProtoReflect.Descriptor instead.
-func (*RetryPackagesResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_agent_v1_agent_proto_rawDescGZIP(), []int{13}
-}
-
 var File_portenv_agent_v1_agent_proto protoreflect.FileDescriptor
 
 const file_portenv_agent_v1_agent_proto_rawDesc = "" +
@@ -887,24 +796,19 @@ const file_portenv_agent_v1_agent_proto_rawDesc = "" +
 	"\x11GetVersionRequest\"G\n" +
 	"\x12GetVersionResponse\x121\n" +
 	"\x05build\x18\x01 \x01(\v2\x1b.portenv.types.v1.BuildInfoR\x05build\"\x15\n" +
-	"\x13GetReadinessRequest\"\xb6\x01\n" +
+	"\x13GetReadinessRequest\"f\n" +
 	"\x14GetReadinessResponse\x126\n" +
 	"\x05state\x18\x01 \x01(\x0e2 .portenv.agent.v1.ReadinessStateR\x05state\x12\x16\n" +
-	"\x06detail\x18\x02 \x01(\tR\x06detail\x12'\n" +
-	"\x0ffailed_packages\x18\x03 \x03(\tR\x0efailedPackages\x12%\n" +
-	"\x0epackages_error\x18\x04 \x01(\tR\rpackagesError\"\x16\n" +
-	"\x14RetryPackagesRequest\"\x17\n" +
-	"\x15RetryPackagesResponse*\x86\x01\n" +
+	"\x06detail\x18\x02 \x01(\tR\x06detail*\x86\x01\n" +
 	"\x0eReadinessState\x12\x1f\n" +
 	"\x1bREADINESS_STATE_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18READINESS_STATE_STARTING\x10\x01\x12\x19\n" +
 	"\x15READINESS_STATE_READY\x10\x02\x12\x1a\n" +
-	"\x16READINESS_STATE_FAILED\x10\x032\xb1\x04\n" +
+	"\x16READINESS_STATE_FAILED\x10\x032\xcf\x03\n" +
 	"\fAgentService\x12W\n" +
 	"\n" +
 	"GetVersion\x12#.portenv.agent.v1.GetVersionRequest\x1a$.portenv.agent.v1.GetVersionResponse\x12]\n" +
-	"\fGetReadiness\x12%.portenv.agent.v1.GetReadinessRequest\x1a&.portenv.agent.v1.GetReadinessResponse\x12`\n" +
-	"\rRetryPackages\x12&.portenv.agent.v1.RetryPackagesRequest\x1a'.portenv.agent.v1.RetryPackagesResponse\x12T\n" +
+	"\fGetReadiness\x12%.portenv.agent.v1.GetReadinessRequest\x1a&.portenv.agent.v1.GetReadinessResponse\x12T\n" +
 	"\tRunRestic\x12\".portenv.agent.v1.RunResticRequest\x1a#.portenv.agent.v1.RunResticResponse\x12Z\n" +
 	"\vGetPathInfo\x12$.portenv.agent.v1.GetPathInfoRequest\x1a%.portenv.agent.v1.GetPathInfoResponse\x12U\n" +
 	"\bTerminal\x12!.portenv.agent.v1.TerminalRequest\x1a\".portenv.agent.v1.TerminalResponse(\x010\x01B\xc6\x01\n" +
@@ -924,45 +828,41 @@ func file_portenv_agent_v1_agent_proto_rawDescGZIP() []byte {
 }
 
 var file_portenv_agent_v1_agent_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_portenv_agent_v1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
+var file_portenv_agent_v1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_portenv_agent_v1_agent_proto_goTypes = []any{
-	(ReadinessState)(0),           // 0: portenv.agent.v1.ReadinessState
-	(*RunResticRequest)(nil),      // 1: portenv.agent.v1.RunResticRequest
-	(*RunResticResponse)(nil),     // 2: portenv.agent.v1.RunResticResponse
-	(*GetPathInfoRequest)(nil),    // 3: portenv.agent.v1.GetPathInfoRequest
-	(*GetPathInfoResponse)(nil),   // 4: portenv.agent.v1.GetPathInfoResponse
-	(*TerminalRequest)(nil),       // 5: portenv.agent.v1.TerminalRequest
-	(*TerminalOpen)(nil),          // 6: portenv.agent.v1.TerminalOpen
-	(*TerminalSize)(nil),          // 7: portenv.agent.v1.TerminalSize
-	(*TerminalResponse)(nil),      // 8: portenv.agent.v1.TerminalResponse
-	(*GetVersionRequest)(nil),     // 9: portenv.agent.v1.GetVersionRequest
-	(*GetVersionResponse)(nil),    // 10: portenv.agent.v1.GetVersionResponse
-	(*GetReadinessRequest)(nil),   // 11: portenv.agent.v1.GetReadinessRequest
-	(*GetReadinessResponse)(nil),  // 12: portenv.agent.v1.GetReadinessResponse
-	(*RetryPackagesRequest)(nil),  // 13: portenv.agent.v1.RetryPackagesRequest
-	(*RetryPackagesResponse)(nil), // 14: portenv.agent.v1.RetryPackagesResponse
-	(*v1.BuildInfo)(nil),          // 15: portenv.types.v1.BuildInfo
+	(ReadinessState)(0),          // 0: portenv.agent.v1.ReadinessState
+	(*RunResticRequest)(nil),     // 1: portenv.agent.v1.RunResticRequest
+	(*RunResticResponse)(nil),    // 2: portenv.agent.v1.RunResticResponse
+	(*GetPathInfoRequest)(nil),   // 3: portenv.agent.v1.GetPathInfoRequest
+	(*GetPathInfoResponse)(nil),  // 4: portenv.agent.v1.GetPathInfoResponse
+	(*TerminalRequest)(nil),      // 5: portenv.agent.v1.TerminalRequest
+	(*TerminalOpen)(nil),         // 6: portenv.agent.v1.TerminalOpen
+	(*TerminalSize)(nil),         // 7: portenv.agent.v1.TerminalSize
+	(*TerminalResponse)(nil),     // 8: portenv.agent.v1.TerminalResponse
+	(*GetVersionRequest)(nil),    // 9: portenv.agent.v1.GetVersionRequest
+	(*GetVersionResponse)(nil),   // 10: portenv.agent.v1.GetVersionResponse
+	(*GetReadinessRequest)(nil),  // 11: portenv.agent.v1.GetReadinessRequest
+	(*GetReadinessResponse)(nil), // 12: portenv.agent.v1.GetReadinessResponse
+	(*v1.BuildInfo)(nil),         // 13: portenv.types.v1.BuildInfo
 }
 var file_portenv_agent_v1_agent_proto_depIdxs = []int32{
 	6,  // 0: portenv.agent.v1.TerminalRequest.open:type_name -> portenv.agent.v1.TerminalOpen
 	7,  // 1: portenv.agent.v1.TerminalRequest.resize:type_name -> portenv.agent.v1.TerminalSize
 	7,  // 2: portenv.agent.v1.TerminalOpen.size:type_name -> portenv.agent.v1.TerminalSize
-	15, // 3: portenv.agent.v1.GetVersionResponse.build:type_name -> portenv.types.v1.BuildInfo
+	13, // 3: portenv.agent.v1.GetVersionResponse.build:type_name -> portenv.types.v1.BuildInfo
 	0,  // 4: portenv.agent.v1.GetReadinessResponse.state:type_name -> portenv.agent.v1.ReadinessState
 	9,  // 5: portenv.agent.v1.AgentService.GetVersion:input_type -> portenv.agent.v1.GetVersionRequest
 	11, // 6: portenv.agent.v1.AgentService.GetReadiness:input_type -> portenv.agent.v1.GetReadinessRequest
-	13, // 7: portenv.agent.v1.AgentService.RetryPackages:input_type -> portenv.agent.v1.RetryPackagesRequest
-	1,  // 8: portenv.agent.v1.AgentService.RunRestic:input_type -> portenv.agent.v1.RunResticRequest
-	3,  // 9: portenv.agent.v1.AgentService.GetPathInfo:input_type -> portenv.agent.v1.GetPathInfoRequest
-	5,  // 10: portenv.agent.v1.AgentService.Terminal:input_type -> portenv.agent.v1.TerminalRequest
-	10, // 11: portenv.agent.v1.AgentService.GetVersion:output_type -> portenv.agent.v1.GetVersionResponse
-	12, // 12: portenv.agent.v1.AgentService.GetReadiness:output_type -> portenv.agent.v1.GetReadinessResponse
-	14, // 13: portenv.agent.v1.AgentService.RetryPackages:output_type -> portenv.agent.v1.RetryPackagesResponse
-	2,  // 14: portenv.agent.v1.AgentService.RunRestic:output_type -> portenv.agent.v1.RunResticResponse
-	4,  // 15: portenv.agent.v1.AgentService.GetPathInfo:output_type -> portenv.agent.v1.GetPathInfoResponse
-	8,  // 16: portenv.agent.v1.AgentService.Terminal:output_type -> portenv.agent.v1.TerminalResponse
-	11, // [11:17] is the sub-list for method output_type
-	5,  // [5:11] is the sub-list for method input_type
+	1,  // 7: portenv.agent.v1.AgentService.RunRestic:input_type -> portenv.agent.v1.RunResticRequest
+	3,  // 8: portenv.agent.v1.AgentService.GetPathInfo:input_type -> portenv.agent.v1.GetPathInfoRequest
+	5,  // 9: portenv.agent.v1.AgentService.Terminal:input_type -> portenv.agent.v1.TerminalRequest
+	10, // 10: portenv.agent.v1.AgentService.GetVersion:output_type -> portenv.agent.v1.GetVersionResponse
+	12, // 11: portenv.agent.v1.AgentService.GetReadiness:output_type -> portenv.agent.v1.GetReadinessResponse
+	2,  // 12: portenv.agent.v1.AgentService.RunRestic:output_type -> portenv.agent.v1.RunResticResponse
+	4,  // 13: portenv.agent.v1.AgentService.GetPathInfo:output_type -> portenv.agent.v1.GetPathInfoResponse
+	8,  // 14: portenv.agent.v1.AgentService.Terminal:output_type -> portenv.agent.v1.TerminalResponse
+	10, // [10:15] is the sub-list for method output_type
+	5,  // [5:10] is the sub-list for method input_type
 	5,  // [5:5] is the sub-list for extension type_name
 	5,  // [5:5] is the sub-list for extension extendee
 	0,  // [0:5] is the sub-list for field type_name
@@ -988,7 +888,7 @@ func file_portenv_agent_v1_agent_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_portenv_agent_v1_agent_proto_rawDesc), len(file_portenv_agent_v1_agent_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   14,
+			NumMessages:   12,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

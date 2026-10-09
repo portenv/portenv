@@ -70,10 +70,6 @@ func Init(ctx context.Context, cfg Config, log *slog.Logger) error {
 		}
 		readiness.Ready()
 		log.Info("box ready")
-		if failed, msg := readiness.Packages(); len(failed) > 0 {
-			log.Error("packages from apt-packages.txt couldn't be installed; the box started anyway, retrying in the background", "packages", failed, "err", msg)
-		}
-		go retryPackages(ctx, cfg, ExecRunner{Mu: &mu}, readiness, log)
 	}()
 
 	bootDone := booted
@@ -187,31 +183,6 @@ func stopAll(log *slog.Logger) {
 		var ws unix.WaitStatus
 		if _, err := unix.Wait4(-1, &ws, 0, nil); err != nil {
 			return
-		}
-	}
-}
-
-// retryPackages retries the packages that couldn't be installed, in the
-// background (1, 5, 15 minutes, then hourly), or at once on RetryPackages.
-func retryPackages(ctx context.Context, cfg Config, run Runner, r *Readiness, log *slog.Logger) {
-	for n := 0; ; {
-		var wait <-chan time.Time
-		if failed, _ := r.Packages(); len(failed) > 0 {
-			wait = time.After(retryDelay(n))
-		}
-		select {
-		case <-ctx.Done():
-			return
-		case <-wait:
-			n++
-		case <-r.Retries():
-			n = 0
-		}
-		RetryPackages(ctx, cfg, run, r)
-		if failed, msg := r.Packages(); len(failed) > 0 {
-			log.Error("packages still couldn't be installed", "packages", failed, "err", msg)
-		} else {
-			log.Info("packages from apt-packages.txt installed")
 		}
 	}
 }

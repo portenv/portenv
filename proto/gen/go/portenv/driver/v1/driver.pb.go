@@ -490,6 +490,154 @@ func (*DestroyResponse) Descriptor() ([]byte, []int) {
 	return file_portenv_driver_v1_driver_proto_rawDescGZIP(), []int{7}
 }
 
+type ExecRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	BoxId string                 `protobuf:"bytes,1,opt,name=box_id,json=boxId,proto3" json:"box_id,omitempty"`
+	// Program and arguments. Not run through a shell.
+	Argv []string `protobuf:"bytes,2,rep,name=argv,proto3" json:"argv,omitempty"`
+	// Extra environment, as "KEY=value".
+	Env []string `protobuf:"bytes,3,rep,name=env,proto3" json:"env,omitempty"`
+	// User to run as. Empty means root.
+	User  string `protobuf:"bytes,4,opt,name=user,proto3" json:"user,omitempty"`
+	Stdin []byte `protobuf:"bytes,5,opt,name=stdin,proto3" json:"stdin,omitempty"`
+	// Unset means no timeout.
+	Timeout       *durationpb.Duration `protobuf:"bytes,6,opt,name=timeout,proto3" json:"timeout,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExecRequest) Reset() {
+	*x = ExecRequest{}
+	mi := &file_portenv_driver_v1_driver_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExecRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExecRequest) ProtoMessage() {}
+
+func (x *ExecRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_portenv_driver_v1_driver_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExecRequest.ProtoReflect.Descriptor instead.
+func (*ExecRequest) Descriptor() ([]byte, []int) {
+	return file_portenv_driver_v1_driver_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *ExecRequest) GetBoxId() string {
+	if x != nil {
+		return x.BoxId
+	}
+	return ""
+}
+
+func (x *ExecRequest) GetArgv() []string {
+	if x != nil {
+		return x.Argv
+	}
+	return nil
+}
+
+func (x *ExecRequest) GetEnv() []string {
+	if x != nil {
+		return x.Env
+	}
+	return nil
+}
+
+func (x *ExecRequest) GetUser() string {
+	if x != nil {
+		return x.User
+	}
+	return ""
+}
+
+func (x *ExecRequest) GetStdin() []byte {
+	if x != nil {
+		return x.Stdin
+	}
+	return nil
+}
+
+func (x *ExecRequest) GetTimeout() *durationpb.Duration {
+	if x != nil {
+		return x.Timeout
+	}
+	return nil
+}
+
+type ExecResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ExitCode      int32                  `protobuf:"varint,1,opt,name=exit_code,json=exitCode,proto3" json:"exit_code,omitempty"`
+	Stdout        []byte                 `protobuf:"bytes,2,opt,name=stdout,proto3" json:"stdout,omitempty"`
+	Stderr        []byte                 `protobuf:"bytes,3,opt,name=stderr,proto3" json:"stderr,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExecResponse) Reset() {
+	*x = ExecResponse{}
+	mi := &file_portenv_driver_v1_driver_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExecResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExecResponse) ProtoMessage() {}
+
+func (x *ExecResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_portenv_driver_v1_driver_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExecResponse.ProtoReflect.Descriptor instead.
+func (*ExecResponse) Descriptor() ([]byte, []int) {
+	return file_portenv_driver_v1_driver_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *ExecResponse) GetExitCode() int32 {
+	if x != nil {
+		return x.ExitCode
+	}
+	return 0
+}
+
+func (x *ExecResponse) GetStdout() []byte {
+	if x != nil {
+		return x.Stdout
+	}
+	return nil
+}
+
+func (x *ExecResponse) GetStderr() []byte {
+	if x != nil {
+		return x.Stderr
+	}
+	return nil
+}
+
 type LogsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	BoxId string                 `protobuf:"bytes,1,opt,name=box_id,json=boxId,proto3" json:"box_id,omitempty"`
@@ -505,7 +653,7 @@ type LogsRequest struct {
 
 func (x *LogsRequest) Reset() {
 	*x = LogsRequest{}
-	mi := &file_portenv_driver_v1_driver_proto_msgTypes[8]
+	mi := &file_portenv_driver_v1_driver_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -517,7 +665,7 @@ func (x *LogsRequest) String() string {
 func (*LogsRequest) ProtoMessage() {}
 
 func (x *LogsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_driver_v1_driver_proto_msgTypes[8]
+	mi := &file_portenv_driver_v1_driver_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -530,7 +678,7 @@ func (x *LogsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogsRequest.ProtoReflect.Descriptor instead.
 func (*LogsRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_driver_v1_driver_proto_rawDescGZIP(), []int{8}
+	return file_portenv_driver_v1_driver_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *LogsRequest) GetBoxId() string {
@@ -572,7 +720,7 @@ type LogsResponse struct {
 
 func (x *LogsResponse) Reset() {
 	*x = LogsResponse{}
-	mi := &file_portenv_driver_v1_driver_proto_msgTypes[9]
+	mi := &file_portenv_driver_v1_driver_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -584,7 +732,7 @@ func (x *LogsResponse) String() string {
 func (*LogsResponse) ProtoMessage() {}
 
 func (x *LogsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_driver_v1_driver_proto_msgTypes[9]
+	mi := &file_portenv_driver_v1_driver_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -597,7 +745,7 @@ func (x *LogsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogsResponse.ProtoReflect.Descriptor instead.
 func (*LogsResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_driver_v1_driver_proto_rawDescGZIP(), []int{9}
+	return file_portenv_driver_v1_driver_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *LogsResponse) GetStream() LogStream {
@@ -630,7 +778,7 @@ type StatsRequest struct {
 
 func (x *StatsRequest) Reset() {
 	*x = StatsRequest{}
-	mi := &file_portenv_driver_v1_driver_proto_msgTypes[10]
+	mi := &file_portenv_driver_v1_driver_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -642,7 +790,7 @@ func (x *StatsRequest) String() string {
 func (*StatsRequest) ProtoMessage() {}
 
 func (x *StatsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_driver_v1_driver_proto_msgTypes[10]
+	mi := &file_portenv_driver_v1_driver_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -655,7 +803,7 @@ func (x *StatsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StatsRequest.ProtoReflect.Descriptor instead.
 func (*StatsRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_driver_v1_driver_proto_rawDescGZIP(), []int{10}
+	return file_portenv_driver_v1_driver_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *StatsRequest) GetBoxId() string {
@@ -681,7 +829,7 @@ type StatsResponse struct {
 
 func (x *StatsResponse) Reset() {
 	*x = StatsResponse{}
-	mi := &file_portenv_driver_v1_driver_proto_msgTypes[11]
+	mi := &file_portenv_driver_v1_driver_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -693,7 +841,7 @@ func (x *StatsResponse) String() string {
 func (*StatsResponse) ProtoMessage() {}
 
 func (x *StatsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_driver_v1_driver_proto_msgTypes[11]
+	mi := &file_portenv_driver_v1_driver_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -706,7 +854,7 @@ func (x *StatsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StatsResponse.ProtoReflect.Descriptor instead.
 func (*StatsResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_driver_v1_driver_proto_rawDescGZIP(), []int{11}
+	return file_portenv_driver_v1_driver_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *StatsResponse) GetState() v1.BoxState {
@@ -761,7 +909,7 @@ type SetResourcesRequest struct {
 
 func (x *SetResourcesRequest) Reset() {
 	*x = SetResourcesRequest{}
-	mi := &file_portenv_driver_v1_driver_proto_msgTypes[12]
+	mi := &file_portenv_driver_v1_driver_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -773,7 +921,7 @@ func (x *SetResourcesRequest) String() string {
 func (*SetResourcesRequest) ProtoMessage() {}
 
 func (x *SetResourcesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_driver_v1_driver_proto_msgTypes[12]
+	mi := &file_portenv_driver_v1_driver_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -786,7 +934,7 @@ func (x *SetResourcesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetResourcesRequest.ProtoReflect.Descriptor instead.
 func (*SetResourcesRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_driver_v1_driver_proto_rawDescGZIP(), []int{12}
+	return file_portenv_driver_v1_driver_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *SetResourcesRequest) GetBoxId() string {
@@ -814,7 +962,7 @@ type SetResourcesResponse struct {
 
 func (x *SetResourcesResponse) Reset() {
 	*x = SetResourcesResponse{}
-	mi := &file_portenv_driver_v1_driver_proto_msgTypes[13]
+	mi := &file_portenv_driver_v1_driver_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -826,7 +974,7 @@ func (x *SetResourcesResponse) String() string {
 func (*SetResourcesResponse) ProtoMessage() {}
 
 func (x *SetResourcesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_driver_v1_driver_proto_msgTypes[13]
+	mi := &file_portenv_driver_v1_driver_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -839,7 +987,7 @@ func (x *SetResourcesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetResourcesResponse.ProtoReflect.Descriptor instead.
 func (*SetResourcesResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_driver_v1_driver_proto_rawDescGZIP(), []int{13}
+	return file_portenv_driver_v1_driver_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *SetResourcesResponse) GetRestartRequired() bool {
@@ -864,7 +1012,7 @@ type HomeStorage struct {
 
 func (x *HomeStorage) Reset() {
 	*x = HomeStorage{}
-	mi := &file_portenv_driver_v1_driver_proto_msgTypes[14]
+	mi := &file_portenv_driver_v1_driver_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -876,7 +1024,7 @@ func (x *HomeStorage) String() string {
 func (*HomeStorage) ProtoMessage() {}
 
 func (x *HomeStorage) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_driver_v1_driver_proto_msgTypes[14]
+	mi := &file_portenv_driver_v1_driver_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -889,7 +1037,7 @@ func (x *HomeStorage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HomeStorage.ProtoReflect.Descriptor instead.
 func (*HomeStorage) Descriptor() ([]byte, []int) {
-	return file_portenv_driver_v1_driver_proto_rawDescGZIP(), []int{14}
+	return file_portenv_driver_v1_driver_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *HomeStorage) GetRef() string {
@@ -916,7 +1064,7 @@ type MountHomeRequest struct {
 
 func (x *MountHomeRequest) Reset() {
 	*x = MountHomeRequest{}
-	mi := &file_portenv_driver_v1_driver_proto_msgTypes[15]
+	mi := &file_portenv_driver_v1_driver_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -928,7 +1076,7 @@ func (x *MountHomeRequest) String() string {
 func (*MountHomeRequest) ProtoMessage() {}
 
 func (x *MountHomeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_driver_v1_driver_proto_msgTypes[15]
+	mi := &file_portenv_driver_v1_driver_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -941,7 +1089,7 @@ func (x *MountHomeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MountHomeRequest.ProtoReflect.Descriptor instead.
 func (*MountHomeRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_driver_v1_driver_proto_rawDescGZIP(), []int{15}
+	return file_portenv_driver_v1_driver_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *MountHomeRequest) GetBoxId() string {
@@ -966,7 +1114,7 @@ type MountHomeResponse struct {
 
 func (x *MountHomeResponse) Reset() {
 	*x = MountHomeResponse{}
-	mi := &file_portenv_driver_v1_driver_proto_msgTypes[16]
+	mi := &file_portenv_driver_v1_driver_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -978,7 +1126,7 @@ func (x *MountHomeResponse) String() string {
 func (*MountHomeResponse) ProtoMessage() {}
 
 func (x *MountHomeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_driver_v1_driver_proto_msgTypes[16]
+	mi := &file_portenv_driver_v1_driver_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -991,7 +1139,7 @@ func (x *MountHomeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MountHomeResponse.ProtoReflect.Descriptor instead.
 func (*MountHomeResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_driver_v1_driver_proto_rawDescGZIP(), []int{16}
+	return file_portenv_driver_v1_driver_proto_rawDescGZIP(), []int{18}
 }
 
 type CapabilitiesRequest struct {
@@ -1002,7 +1150,7 @@ type CapabilitiesRequest struct {
 
 func (x *CapabilitiesRequest) Reset() {
 	*x = CapabilitiesRequest{}
-	mi := &file_portenv_driver_v1_driver_proto_msgTypes[17]
+	mi := &file_portenv_driver_v1_driver_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1014,7 +1162,7 @@ func (x *CapabilitiesRequest) String() string {
 func (*CapabilitiesRequest) ProtoMessage() {}
 
 func (x *CapabilitiesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_driver_v1_driver_proto_msgTypes[17]
+	mi := &file_portenv_driver_v1_driver_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1027,7 +1175,7 @@ func (x *CapabilitiesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CapabilitiesRequest.ProtoReflect.Descriptor instead.
 func (*CapabilitiesRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_driver_v1_driver_proto_rawDescGZIP(), []int{17}
+	return file_portenv_driver_v1_driver_proto_rawDescGZIP(), []int{19}
 }
 
 type CapabilitiesResponse struct {
@@ -1045,7 +1193,7 @@ type CapabilitiesResponse struct {
 
 func (x *CapabilitiesResponse) Reset() {
 	*x = CapabilitiesResponse{}
-	mi := &file_portenv_driver_v1_driver_proto_msgTypes[18]
+	mi := &file_portenv_driver_v1_driver_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1057,7 +1205,7 @@ func (x *CapabilitiesResponse) String() string {
 func (*CapabilitiesResponse) ProtoMessage() {}
 
 func (x *CapabilitiesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_driver_v1_driver_proto_msgTypes[18]
+	mi := &file_portenv_driver_v1_driver_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1070,7 +1218,7 @@ func (x *CapabilitiesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CapabilitiesResponse.ProtoReflect.Descriptor instead.
 func (*CapabilitiesResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_driver_v1_driver_proto_rawDescGZIP(), []int{18}
+	return file_portenv_driver_v1_driver_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *CapabilitiesResponse) GetDriver() string {
@@ -1124,7 +1272,7 @@ type AgentChannelRequest struct {
 
 func (x *AgentChannelRequest) Reset() {
 	*x = AgentChannelRequest{}
-	mi := &file_portenv_driver_v1_driver_proto_msgTypes[19]
+	mi := &file_portenv_driver_v1_driver_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1136,7 +1284,7 @@ func (x *AgentChannelRequest) String() string {
 func (*AgentChannelRequest) ProtoMessage() {}
 
 func (x *AgentChannelRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_driver_v1_driver_proto_msgTypes[19]
+	mi := &file_portenv_driver_v1_driver_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1149,7 +1297,7 @@ func (x *AgentChannelRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentChannelRequest.ProtoReflect.Descriptor instead.
 func (*AgentChannelRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_driver_v1_driver_proto_rawDescGZIP(), []int{19}
+	return file_portenv_driver_v1_driver_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *AgentChannelRequest) GetBoxId() string {
@@ -1174,7 +1322,7 @@ type AgentChannelResponse struct {
 
 func (x *AgentChannelResponse) Reset() {
 	*x = AgentChannelResponse{}
-	mi := &file_portenv_driver_v1_driver_proto_msgTypes[20]
+	mi := &file_portenv_driver_v1_driver_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1186,7 +1334,7 @@ func (x *AgentChannelResponse) String() string {
 func (*AgentChannelResponse) ProtoMessage() {}
 
 func (x *AgentChannelResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_driver_v1_driver_proto_msgTypes[20]
+	mi := &file_portenv_driver_v1_driver_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1199,7 +1347,7 @@ func (x *AgentChannelResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentChannelResponse.ProtoReflect.Descriptor instead.
 func (*AgentChannelResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_driver_v1_driver_proto_rawDescGZIP(), []int{20}
+	return file_portenv_driver_v1_driver_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *AgentChannelResponse) GetAddress() string {
@@ -1223,86 +1371,6 @@ func (x *AgentChannelResponse) GetToken() string {
 	return ""
 }
 
-type RekeyRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	BoxId         string                 `protobuf:"bytes,1,opt,name=box_id,json=boxId,proto3" json:"box_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *RekeyRequest) Reset() {
-	*x = RekeyRequest{}
-	mi := &file_portenv_driver_v1_driver_proto_msgTypes[21]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *RekeyRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*RekeyRequest) ProtoMessage() {}
-
-func (x *RekeyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_driver_v1_driver_proto_msgTypes[21]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use RekeyRequest.ProtoReflect.Descriptor instead.
-func (*RekeyRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_driver_v1_driver_proto_rawDescGZIP(), []int{21}
-}
-
-func (x *RekeyRequest) GetBoxId() string {
-	if x != nil {
-		return x.BoxId
-	}
-	return ""
-}
-
-type RekeyResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *RekeyResponse) Reset() {
-	*x = RekeyResponse{}
-	mi := &file_portenv_driver_v1_driver_proto_msgTypes[22]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *RekeyResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*RekeyResponse) ProtoMessage() {}
-
-func (x *RekeyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_driver_v1_driver_proto_msgTypes[22]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use RekeyResponse.ProtoReflect.Descriptor instead.
-func (*RekeyResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_driver_v1_driver_proto_rawDescGZIP(), []int{22}
-}
-
 var File_portenv_driver_v1_driver_proto protoreflect.FileDescriptor
 
 const file_portenv_driver_v1_driver_proto_rawDesc = "" +
@@ -1323,7 +1391,18 @@ const file_portenv_driver_v1_driver_proto_rawDesc = "" +
 	"\x05state\x18\x01 \x01(\x0e2\x1a.portenv.types.v1.BoxStateR\x05state\"'\n" +
 	"\x0eDestroyRequest\x12\x15\n" +
 	"\x06box_id\x18\x01 \x01(\tR\x05boxId\"\x11\n" +
-	"\x0fDestroyResponse\"\x8d\x01\n" +
+	"\x0fDestroyResponse\"\xa9\x01\n" +
+	"\vExecRequest\x12\x15\n" +
+	"\x06box_id\x18\x01 \x01(\tR\x05boxId\x12\x12\n" +
+	"\x04argv\x18\x02 \x03(\tR\x04argv\x12\x10\n" +
+	"\x03env\x18\x03 \x03(\tR\x03env\x12\x12\n" +
+	"\x04user\x18\x04 \x01(\tR\x04user\x12\x14\n" +
+	"\x05stdin\x18\x05 \x01(\fR\x05stdin\x123\n" +
+	"\atimeout\x18\x06 \x01(\v2\x19.google.protobuf.DurationR\atimeout\"[\n" +
+	"\fExecResponse\x12\x1b\n" +
+	"\texit_code\x18\x01 \x01(\x05R\bexitCode\x12\x16\n" +
+	"\x06stdout\x18\x02 \x01(\fR\x06stdout\x12\x16\n" +
+	"\x06stderr\x18\x03 \x01(\fR\x06stderr\"\x8d\x01\n" +
 	"\vLogsRequest\x12\x15\n" +
 	"\x06box_id\x18\x01 \x01(\tR\x05boxId\x12\x16\n" +
 	"\x06follow\x18\x02 \x01(\bR\x06follow\x120\n" +
@@ -1368,10 +1447,7 @@ const file_portenv_driver_v1_driver_proto_rawDesc = "" +
 	"\x14AgentChannelResponse\x12\x18\n" +
 	"\aaddress\x18\x01 \x01(\tR\aaddress\x12\x19\n" +
 	"\bcert_pem\x18\x02 \x01(\fR\acertPem\x12\x14\n" +
-	"\x05token\x18\x03 \x01(\tR\x05token\"%\n" +
-	"\fRekeyRequest\x12\x15\n" +
-	"\x06box_id\x18\x01 \x01(\tR\x05boxId\"\x0f\n" +
-	"\rRekeyResponse*U\n" +
+	"\x05token\x18\x03 \x01(\tR\x05token*U\n" +
 	"\tLogStream\x12\x1a\n" +
 	"\x16LOG_STREAM_UNSPECIFIED\x10\x00\x12\x15\n" +
 	"\x11LOG_STREAM_STDOUT\x10\x01\x12\x15\n" +
@@ -1379,19 +1455,19 @@ const file_portenv_driver_v1_driver_proto_rawDesc = "" +
 	"\tIsolation\x12\x19\n" +
 	"\x15ISOLATION_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13ISOLATION_CONTAINER\x10\x01\x12\x10\n" +
-	"\fISOLATION_VM\x10\x022\xa3\a\n" +
+	"\fISOLATION_VM\x10\x022\xa0\a\n" +
 	"\rDriverService\x12M\n" +
 	"\x06Create\x12 .portenv.driver.v1.CreateRequest\x1a!.portenv.driver.v1.CreateResponse\x12J\n" +
 	"\x05Start\x12\x1f.portenv.driver.v1.StartRequest\x1a .portenv.driver.v1.StartResponse\x12G\n" +
 	"\x04Stop\x12\x1e.portenv.driver.v1.StopRequest\x1a\x1f.portenv.driver.v1.StopResponse\x12P\n" +
-	"\aDestroy\x12!.portenv.driver.v1.DestroyRequest\x1a\".portenv.driver.v1.DestroyResponse\x12I\n" +
+	"\aDestroy\x12!.portenv.driver.v1.DestroyRequest\x1a\".portenv.driver.v1.DestroyResponse\x12G\n" +
+	"\x04Exec\x12\x1e.portenv.driver.v1.ExecRequest\x1a\x1f.portenv.driver.v1.ExecResponse\x12I\n" +
 	"\x04Logs\x12\x1e.portenv.driver.v1.LogsRequest\x1a\x1f.portenv.driver.v1.LogsResponse0\x01\x12J\n" +
 	"\x05Stats\x12\x1f.portenv.driver.v1.StatsRequest\x1a .portenv.driver.v1.StatsResponse\x12_\n" +
 	"\fSetResources\x12&.portenv.driver.v1.SetResourcesRequest\x1a'.portenv.driver.v1.SetResourcesResponse\x12V\n" +
 	"\tMountHome\x12#.portenv.driver.v1.MountHomeRequest\x1a$.portenv.driver.v1.MountHomeResponse\x12_\n" +
 	"\fCapabilities\x12&.portenv.driver.v1.CapabilitiesRequest\x1a'.portenv.driver.v1.CapabilitiesResponse\x12_\n" +
-	"\fAgentChannel\x12&.portenv.driver.v1.AgentChannelRequest\x1a'.portenv.driver.v1.AgentChannelResponse\x12J\n" +
-	"\x05Rekey\x12\x1f.portenv.driver.v1.RekeyRequest\x1a .portenv.driver.v1.RekeyResponseB\xce\x01\n" +
+	"\fAgentChannel\x12&.portenv.driver.v1.AgentChannelRequest\x1a'.portenv.driver.v1.AgentChannelResponseB\xce\x01\n" +
 	"\x15com.portenv.driver.v1B\vDriverProtoP\x01ZBgithub.com/portenv/portenv/proto/gen/go/portenv/driver/v1;driverv1\xa2\x02\x03PDX\xaa\x02\x11Portenv.Driver.V1\xca\x02\x11Portenv\\Driver\\V1\xe2\x02\x1dPortenv\\Driver\\V1\\GPBMetadata\xea\x02\x13Portenv::Driver::V1b\x06proto3"
 
 var (
@@ -1419,21 +1495,21 @@ var file_portenv_driver_v1_driver_proto_goTypes = []any{
 	(*StopResponse)(nil),          // 7: portenv.driver.v1.StopResponse
 	(*DestroyRequest)(nil),        // 8: portenv.driver.v1.DestroyRequest
 	(*DestroyResponse)(nil),       // 9: portenv.driver.v1.DestroyResponse
-	(*LogsRequest)(nil),           // 10: portenv.driver.v1.LogsRequest
-	(*LogsResponse)(nil),          // 11: portenv.driver.v1.LogsResponse
-	(*StatsRequest)(nil),          // 12: portenv.driver.v1.StatsRequest
-	(*StatsResponse)(nil),         // 13: portenv.driver.v1.StatsResponse
-	(*SetResourcesRequest)(nil),   // 14: portenv.driver.v1.SetResourcesRequest
-	(*SetResourcesResponse)(nil),  // 15: portenv.driver.v1.SetResourcesResponse
-	(*HomeStorage)(nil),           // 16: portenv.driver.v1.HomeStorage
-	(*MountHomeRequest)(nil),      // 17: portenv.driver.v1.MountHomeRequest
-	(*MountHomeResponse)(nil),     // 18: portenv.driver.v1.MountHomeResponse
-	(*CapabilitiesRequest)(nil),   // 19: portenv.driver.v1.CapabilitiesRequest
-	(*CapabilitiesResponse)(nil),  // 20: portenv.driver.v1.CapabilitiesResponse
-	(*AgentChannelRequest)(nil),   // 21: portenv.driver.v1.AgentChannelRequest
-	(*AgentChannelResponse)(nil),  // 22: portenv.driver.v1.AgentChannelResponse
-	(*RekeyRequest)(nil),          // 23: portenv.driver.v1.RekeyRequest
-	(*RekeyResponse)(nil),         // 24: portenv.driver.v1.RekeyResponse
+	(*ExecRequest)(nil),           // 10: portenv.driver.v1.ExecRequest
+	(*ExecResponse)(nil),          // 11: portenv.driver.v1.ExecResponse
+	(*LogsRequest)(nil),           // 12: portenv.driver.v1.LogsRequest
+	(*LogsResponse)(nil),          // 13: portenv.driver.v1.LogsResponse
+	(*StatsRequest)(nil),          // 14: portenv.driver.v1.StatsRequest
+	(*StatsResponse)(nil),         // 15: portenv.driver.v1.StatsResponse
+	(*SetResourcesRequest)(nil),   // 16: portenv.driver.v1.SetResourcesRequest
+	(*SetResourcesResponse)(nil),  // 17: portenv.driver.v1.SetResourcesResponse
+	(*HomeStorage)(nil),           // 18: portenv.driver.v1.HomeStorage
+	(*MountHomeRequest)(nil),      // 19: portenv.driver.v1.MountHomeRequest
+	(*MountHomeResponse)(nil),     // 20: portenv.driver.v1.MountHomeResponse
+	(*CapabilitiesRequest)(nil),   // 21: portenv.driver.v1.CapabilitiesRequest
+	(*CapabilitiesResponse)(nil),  // 22: portenv.driver.v1.CapabilitiesResponse
+	(*AgentChannelRequest)(nil),   // 23: portenv.driver.v1.AgentChannelRequest
+	(*AgentChannelResponse)(nil),  // 24: portenv.driver.v1.AgentChannelResponse
 	(*v1.Box)(nil),                // 25: portenv.types.v1.Box
 	(v1.BoxState)(0),              // 26: portenv.types.v1.BoxState
 	(*durationpb.Duration)(nil),   // 27: google.protobuf.Duration
@@ -1447,43 +1523,44 @@ var file_portenv_driver_v1_driver_proto_depIdxs = []int32{
 	26, // 2: portenv.driver.v1.StartResponse.state:type_name -> portenv.types.v1.BoxState
 	27, // 3: portenv.driver.v1.StopRequest.timeout:type_name -> google.protobuf.Duration
 	26, // 4: portenv.driver.v1.StopResponse.state:type_name -> portenv.types.v1.BoxState
-	28, // 5: portenv.driver.v1.LogsRequest.since:type_name -> google.protobuf.Timestamp
-	0,  // 6: portenv.driver.v1.LogsResponse.stream:type_name -> portenv.driver.v1.LogStream
-	28, // 7: portenv.driver.v1.LogsResponse.time:type_name -> google.protobuf.Timestamp
-	26, // 8: portenv.driver.v1.StatsResponse.state:type_name -> portenv.types.v1.BoxState
-	28, // 9: portenv.driver.v1.StatsResponse.time:type_name -> google.protobuf.Timestamp
-	27, // 10: portenv.driver.v1.StatsResponse.cpu_time:type_name -> google.protobuf.Duration
-	29, // 11: portenv.driver.v1.SetResourcesRequest.resources:type_name -> portenv.types.v1.Resources
-	16, // 12: portenv.driver.v1.MountHomeRequest.home:type_name -> portenv.driver.v1.HomeStorage
-	1,  // 13: portenv.driver.v1.CapabilitiesResponse.isolation:type_name -> portenv.driver.v1.Isolation
-	30, // 14: portenv.driver.v1.CapabilitiesResponse.architectures:type_name -> portenv.types.v1.Architecture
-	2,  // 15: portenv.driver.v1.DriverService.Create:input_type -> portenv.driver.v1.CreateRequest
-	4,  // 16: portenv.driver.v1.DriverService.Start:input_type -> portenv.driver.v1.StartRequest
-	6,  // 17: portenv.driver.v1.DriverService.Stop:input_type -> portenv.driver.v1.StopRequest
-	8,  // 18: portenv.driver.v1.DriverService.Destroy:input_type -> portenv.driver.v1.DestroyRequest
-	10, // 19: portenv.driver.v1.DriverService.Logs:input_type -> portenv.driver.v1.LogsRequest
-	12, // 20: portenv.driver.v1.DriverService.Stats:input_type -> portenv.driver.v1.StatsRequest
-	14, // 21: portenv.driver.v1.DriverService.SetResources:input_type -> portenv.driver.v1.SetResourcesRequest
-	17, // 22: portenv.driver.v1.DriverService.MountHome:input_type -> portenv.driver.v1.MountHomeRequest
-	19, // 23: portenv.driver.v1.DriverService.Capabilities:input_type -> portenv.driver.v1.CapabilitiesRequest
-	21, // 24: portenv.driver.v1.DriverService.AgentChannel:input_type -> portenv.driver.v1.AgentChannelRequest
-	23, // 25: portenv.driver.v1.DriverService.Rekey:input_type -> portenv.driver.v1.RekeyRequest
-	3,  // 26: portenv.driver.v1.DriverService.Create:output_type -> portenv.driver.v1.CreateResponse
-	5,  // 27: portenv.driver.v1.DriverService.Start:output_type -> portenv.driver.v1.StartResponse
-	7,  // 28: portenv.driver.v1.DriverService.Stop:output_type -> portenv.driver.v1.StopResponse
-	9,  // 29: portenv.driver.v1.DriverService.Destroy:output_type -> portenv.driver.v1.DestroyResponse
-	11, // 30: portenv.driver.v1.DriverService.Logs:output_type -> portenv.driver.v1.LogsResponse
-	13, // 31: portenv.driver.v1.DriverService.Stats:output_type -> portenv.driver.v1.StatsResponse
-	15, // 32: portenv.driver.v1.DriverService.SetResources:output_type -> portenv.driver.v1.SetResourcesResponse
-	18, // 33: portenv.driver.v1.DriverService.MountHome:output_type -> portenv.driver.v1.MountHomeResponse
-	20, // 34: portenv.driver.v1.DriverService.Capabilities:output_type -> portenv.driver.v1.CapabilitiesResponse
-	22, // 35: portenv.driver.v1.DriverService.AgentChannel:output_type -> portenv.driver.v1.AgentChannelResponse
-	24, // 36: portenv.driver.v1.DriverService.Rekey:output_type -> portenv.driver.v1.RekeyResponse
-	26, // [26:37] is the sub-list for method output_type
-	15, // [15:26] is the sub-list for method input_type
-	15, // [15:15] is the sub-list for extension type_name
-	15, // [15:15] is the sub-list for extension extendee
-	0,  // [0:15] is the sub-list for field type_name
+	27, // 5: portenv.driver.v1.ExecRequest.timeout:type_name -> google.protobuf.Duration
+	28, // 6: portenv.driver.v1.LogsRequest.since:type_name -> google.protobuf.Timestamp
+	0,  // 7: portenv.driver.v1.LogsResponse.stream:type_name -> portenv.driver.v1.LogStream
+	28, // 8: portenv.driver.v1.LogsResponse.time:type_name -> google.protobuf.Timestamp
+	26, // 9: portenv.driver.v1.StatsResponse.state:type_name -> portenv.types.v1.BoxState
+	28, // 10: portenv.driver.v1.StatsResponse.time:type_name -> google.protobuf.Timestamp
+	27, // 11: portenv.driver.v1.StatsResponse.cpu_time:type_name -> google.protobuf.Duration
+	29, // 12: portenv.driver.v1.SetResourcesRequest.resources:type_name -> portenv.types.v1.Resources
+	18, // 13: portenv.driver.v1.MountHomeRequest.home:type_name -> portenv.driver.v1.HomeStorage
+	1,  // 14: portenv.driver.v1.CapabilitiesResponse.isolation:type_name -> portenv.driver.v1.Isolation
+	30, // 15: portenv.driver.v1.CapabilitiesResponse.architectures:type_name -> portenv.types.v1.Architecture
+	2,  // 16: portenv.driver.v1.DriverService.Create:input_type -> portenv.driver.v1.CreateRequest
+	4,  // 17: portenv.driver.v1.DriverService.Start:input_type -> portenv.driver.v1.StartRequest
+	6,  // 18: portenv.driver.v1.DriverService.Stop:input_type -> portenv.driver.v1.StopRequest
+	8,  // 19: portenv.driver.v1.DriverService.Destroy:input_type -> portenv.driver.v1.DestroyRequest
+	10, // 20: portenv.driver.v1.DriverService.Exec:input_type -> portenv.driver.v1.ExecRequest
+	12, // 21: portenv.driver.v1.DriverService.Logs:input_type -> portenv.driver.v1.LogsRequest
+	14, // 22: portenv.driver.v1.DriverService.Stats:input_type -> portenv.driver.v1.StatsRequest
+	16, // 23: portenv.driver.v1.DriverService.SetResources:input_type -> portenv.driver.v1.SetResourcesRequest
+	19, // 24: portenv.driver.v1.DriverService.MountHome:input_type -> portenv.driver.v1.MountHomeRequest
+	21, // 25: portenv.driver.v1.DriverService.Capabilities:input_type -> portenv.driver.v1.CapabilitiesRequest
+	23, // 26: portenv.driver.v1.DriverService.AgentChannel:input_type -> portenv.driver.v1.AgentChannelRequest
+	3,  // 27: portenv.driver.v1.DriverService.Create:output_type -> portenv.driver.v1.CreateResponse
+	5,  // 28: portenv.driver.v1.DriverService.Start:output_type -> portenv.driver.v1.StartResponse
+	7,  // 29: portenv.driver.v1.DriverService.Stop:output_type -> portenv.driver.v1.StopResponse
+	9,  // 30: portenv.driver.v1.DriverService.Destroy:output_type -> portenv.driver.v1.DestroyResponse
+	11, // 31: portenv.driver.v1.DriverService.Exec:output_type -> portenv.driver.v1.ExecResponse
+	13, // 32: portenv.driver.v1.DriverService.Logs:output_type -> portenv.driver.v1.LogsResponse
+	15, // 33: portenv.driver.v1.DriverService.Stats:output_type -> portenv.driver.v1.StatsResponse
+	17, // 34: portenv.driver.v1.DriverService.SetResources:output_type -> portenv.driver.v1.SetResourcesResponse
+	20, // 35: portenv.driver.v1.DriverService.MountHome:output_type -> portenv.driver.v1.MountHomeResponse
+	22, // 36: portenv.driver.v1.DriverService.Capabilities:output_type -> portenv.driver.v1.CapabilitiesResponse
+	24, // 37: portenv.driver.v1.DriverService.AgentChannel:output_type -> portenv.driver.v1.AgentChannelResponse
+	27, // [27:38] is the sub-list for method output_type
+	16, // [16:27] is the sub-list for method input_type
+	16, // [16:16] is the sub-list for extension type_name
+	16, // [16:16] is the sub-list for extension extendee
+	0,  // [0:16] is the sub-list for field type_name
 }
 
 func init() { file_portenv_driver_v1_driver_proto_init() }

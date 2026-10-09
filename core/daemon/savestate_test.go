@@ -22,27 +22,23 @@ func TestSaveStateComesOnlyFromRecordedState(t *testing.T) {
 		st                         boxsync.State
 		saving, offline, agentDown bool
 		retrying, failed           bool
-		quitUnsaved                bool
 		want                       daemonv1.SaveState
 		wantAt                     time.Time
 	}{
-		{"a new box, open", never, false, false, false, false, false, false, daemonv1.SaveState_SAVE_STATE_NOT_SAVED_YET, time.Time{}},
-		{"saving", done, true, false, false, false, false, false, daemonv1.SaveState_SAVE_STATE_SAVING, saved},
-		{"saved", done, false, false, false, false, false, false, daemonv1.SaveState_SAVE_STATE_SAVED, saved},
-		{"offline", done, false, true, false, false, false, false, daemonv1.SaveState_SAVE_STATE_OFFLINE, saved},
-		{"agent unavailable", done, false, false, true, false, false, false, daemonv1.SaveState_SAVE_STATE_AGENT_UNAVAILABLE, saved},
-		{"agent unavailable wins over saving", done, true, false, true, false, false, false, daemonv1.SaveState_SAVE_STATE_AGENT_UNAVAILABLE, saved},
-		{"retrying after a missed deadline", done, true, false, false, true, false, false, daemonv1.SaveState_SAVE_STATE_RETRYING, saved},
-		{"a failed save", done, false, false, false, false, true, false, daemonv1.SaveState_SAVE_STATE_NOT_SAVED, saved},
-		{"retrying wins over a failed save", done, false, false, false, true, true, false, daemonv1.SaveState_SAVE_STATE_RETRYING, saved},
-		{"agent unavailable wins over retrying", done, false, false, true, true, false, false, daemonv1.SaveState_SAVE_STATE_AGENT_UNAVAILABLE, saved},
-		{"offline wins over a failed save", done, false, true, false, false, true, false, daemonv1.SaveState_SAVE_STATE_OFFLINE, saved},
-		{"quit before saving: said until the first save completes", done, true, false, false, false, false, true, daemonv1.SaveState_SAVE_STATE_QUIT_UNSAVED, saved},
-		{"quit before saving, then offline: still said", done, false, true, false, false, false, true, daemonv1.SaveState_SAVE_STATE_QUIT_UNSAVED, saved},
-		{"agent unavailable wins over quit before saving", done, false, false, true, false, false, true, daemonv1.SaveState_SAVE_STATE_AGENT_UNAVAILABLE, saved},
-		{"a restored box counts as saved", boxsync.State{Tree: "t", SavedAt: saved}, false, false, false, false, false, false, daemonv1.SaveState_SAVE_STATE_SAVED, saved},
+		{"a new box, open", never, false, false, false, false, false, daemonv1.SaveState_SAVE_STATE_NOT_SAVED_YET, time.Time{}},
+		{"saving", done, true, false, false, false, false, daemonv1.SaveState_SAVE_STATE_SAVING, saved},
+		{"saved", done, false, false, false, false, false, daemonv1.SaveState_SAVE_STATE_SAVED, saved},
+		{"offline", done, false, true, false, false, false, daemonv1.SaveState_SAVE_STATE_OFFLINE, saved},
+		{"agent unavailable", done, false, false, true, false, false, daemonv1.SaveState_SAVE_STATE_AGENT_UNAVAILABLE, saved},
+		{"agent unavailable wins over saving", done, true, false, true, false, false, daemonv1.SaveState_SAVE_STATE_AGENT_UNAVAILABLE, saved},
+		{"retrying after a missed deadline", done, true, false, false, true, false, daemonv1.SaveState_SAVE_STATE_RETRYING, saved},
+		{"a failed save", done, false, false, false, false, true, daemonv1.SaveState_SAVE_STATE_NOT_SAVED, saved},
+		{"retrying wins over a failed save", done, false, false, false, true, true, daemonv1.SaveState_SAVE_STATE_RETRYING, saved},
+		{"agent unavailable wins over retrying", done, false, false, true, true, false, daemonv1.SaveState_SAVE_STATE_AGENT_UNAVAILABLE, saved},
+		{"offline wins over a failed save", done, false, true, false, false, true, daemonv1.SaveState_SAVE_STATE_OFFLINE, saved},
+		{"a restored box counts as saved", boxsync.State{Tree: "t", SavedAt: saved}, false, false, false, false, false, daemonv1.SaveState_SAVE_STATE_SAVED, saved},
 	} {
-		got, at := saveState(c.st, c.saving, c.offline, c.agentDown, c.retrying, c.failed, c.quitUnsaved)
+		got, at := saveState(c.st, c.saving, c.offline, c.agentDown, c.retrying, c.failed)
 		if got != c.want || !at.Equal(c.wantAt) {
 			t.Errorf("%s: %v at %v, want %v at %v", c.name, got, at, c.want, c.wantAt)
 		}

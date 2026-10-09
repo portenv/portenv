@@ -27,19 +27,43 @@ struct BoxTitle: View {
         }
         .buttonStyle(.plain)
         .fixedSize()
-        .accessibilityLabel(A11y.titleLabel(box: controller.box))
+        .accessibilityLabel(controller.box)
         .accessibilityValue(controller.subtitle)
         .help("Box actions")
     }
 }
 
-/// The box's menu as a native NSMenu, under the title (§3.2: the same items,
-/// in the same order, as the menu bar's Box menu).
+/// The box's menu as a native NSMenu, under the title.
 @MainActor
 enum BoxMenuPopup {
     static func show(_ controller: BoxController) {
-        let optionHeld = NSEvent.modifierFlags.contains(.option)
-        let menu = nsMenu(controller.menuItems(optionHeld: optionHeld), controller)
+        let menu = NSMenu()
+        let move = NSMenuItem(title: "Move To", action: nil, keyEquivalent: "")
+        let moveMenu = NSMenu()
+        let targets = [("This Mac", "this-mac")] + controller.servers.map { ($0, $0) }
+        for (i, (title, id)) in targets.enumerated() {
+            if i == 1 { moveMenu.addItem(.separator()) }
+            let item = ActionItem(title) { Task { await controller.move(to: id) } }
+            // The current location is checked; the others stay available.
+            item.state = controller.isCurrent(id) ? .on : .off
+            item.isEnabled = !controller.busy
+            moveMenu.addItem(item)
+        }
+        move.submenu = moveMenu
+        menu.addItem(move)
+        let revert = NSMenuItem(title: "Revert To", action: nil, keyEquivalent: "")
+        let revertMenu = NSMenu()
+        let last = ActionItem("Last Save Point") { Task { await controller.revertToLastSavePoint() } }
+        last.isEnabled = controller.isOpen && !controller.busy
+        revertMenu.addItem(last)
+        revert.submenu = revertMenu
+        menu.addItem(revert)
+        menu.addItem(.separator())
+        let restart = ActionItem("Restart Box") { Task { await controller.restartBox() } }
+        restart.isEnabled = controller.isOpen && !controller.busy
+        menu.addItem(restart)
+        menu.autoenablesItems = false
+
         // Under the title: the key window's top-left area, in screen points.
         if let window = NSApp.keyWindow ?? NSApp.windows.first(where: { $0.isVisible }) {
             let point = NSPoint(x: window.frame.minX + 120, y: window.frame.maxY - 54)
@@ -47,25 +71,6 @@ enum BoxMenuPopup {
         } else {
             menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
         }
-    }
-
-    static func nsMenu(_ items: [BoxMenuItem], _ controller: BoxController) -> NSMenu {
-        let menu = NSMenu()
-        menu.autoenablesItems = false
-        for item in items {
-            if item.isSeparator { menu.addItem(.separator()); continue }
-            let ns = ActionItem(item.title) { Task { await controller.run(item.action) } }
-            ns.isEnabled = item.enabled
-            ns.state = item.checked ? .on : .off
-            switch item.shortcut {
-            case "⌘S": ns.keyEquivalent = "s"; ns.keyEquivalentModifierMask = [.command]
-            case "⌥⌘R": ns.keyEquivalent = "r"; ns.keyEquivalentModifierMask = [.command, .option]
-            default: break
-            }
-            if !item.submenu.isEmpty { ns.submenu = nsMenu(item.submenu, controller) }
-            menu.addItem(ns)
-        }
-        return menu
     }
 }
 

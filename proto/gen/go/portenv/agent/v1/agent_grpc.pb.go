@@ -25,12 +25,11 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	AgentService_GetVersion_FullMethodName    = "/portenv.agent.v1.AgentService/GetVersion"
-	AgentService_GetReadiness_FullMethodName  = "/portenv.agent.v1.AgentService/GetReadiness"
-	AgentService_RetryPackages_FullMethodName = "/portenv.agent.v1.AgentService/RetryPackages"
-	AgentService_RunRestic_FullMethodName     = "/portenv.agent.v1.AgentService/RunRestic"
-	AgentService_GetPathInfo_FullMethodName   = "/portenv.agent.v1.AgentService/GetPathInfo"
-	AgentService_Terminal_FullMethodName      = "/portenv.agent.v1.AgentService/Terminal"
+	AgentService_GetVersion_FullMethodName   = "/portenv.agent.v1.AgentService/GetVersion"
+	AgentService_GetReadiness_FullMethodName = "/portenv.agent.v1.AgentService/GetReadiness"
+	AgentService_RunRestic_FullMethodName    = "/portenv.agent.v1.AgentService/RunRestic"
+	AgentService_GetPathInfo_FullMethodName  = "/portenv.agent.v1.AgentService/GetPathInfo"
+	AgentService_Terminal_FullMethodName     = "/portenv.agent.v1.AgentService/Terminal"
 )
 
 // AgentServiceClient is the client API for AgentService service.
@@ -43,9 +42,6 @@ type AgentServiceClient interface {
 	// Reports whether the box has finished starting (users created, home
 	// checked, packages installed).
 	GetReadiness(ctx context.Context, in *GetReadinessRequest, opts ...grpc.CallOption) (*GetReadinessResponse, error)
-	// Try the packages that couldn't be installed again now (the Retry in the
-	// inspector); the result shows in GetReadiness.
-	RetryPackages(ctx context.Context, in *RetryPackagesRequest, opts ...grpc.CallOption) (*RetryPackagesResponse, error)
 	// Runs one allow-listed restic command as portenv-sync (ADR 0005). The
 	// input carries the password and storage credentials; it is never logged.
 	RunRestic(ctx context.Context, in *RunResticRequest, opts ...grpc.CallOption) (*RunResticResponse, error)
@@ -78,16 +74,6 @@ func (c *agentServiceClient) GetReadiness(ctx context.Context, in *GetReadinessR
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetReadinessResponse)
 	err := c.cc.Invoke(ctx, AgentService_GetReadiness_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *agentServiceClient) RetryPackages(ctx context.Context, in *RetryPackagesRequest, opts ...grpc.CallOption) (*RetryPackagesResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(RetryPackagesResponse)
-	err := c.cc.Invoke(ctx, AgentService_RetryPackages_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -137,9 +123,6 @@ type AgentServiceServer interface {
 	// Reports whether the box has finished starting (users created, home
 	// checked, packages installed).
 	GetReadiness(context.Context, *GetReadinessRequest) (*GetReadinessResponse, error)
-	// Try the packages that couldn't be installed again now (the Retry in the
-	// inspector); the result shows in GetReadiness.
-	RetryPackages(context.Context, *RetryPackagesRequest) (*RetryPackagesResponse, error)
 	// Runs one allow-listed restic command as portenv-sync (ADR 0005). The
 	// input carries the password and storage credentials; it is never logged.
 	RunRestic(context.Context, *RunResticRequest) (*RunResticResponse, error)
@@ -163,9 +146,6 @@ func (UnimplementedAgentServiceServer) GetVersion(context.Context, *GetVersionRe
 }
 func (UnimplementedAgentServiceServer) GetReadiness(context.Context, *GetReadinessRequest) (*GetReadinessResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetReadiness not implemented")
-}
-func (UnimplementedAgentServiceServer) RetryPackages(context.Context, *RetryPackagesRequest) (*RetryPackagesResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method RetryPackages not implemented")
 }
 func (UnimplementedAgentServiceServer) RunRestic(context.Context, *RunResticRequest) (*RunResticResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method RunRestic not implemented")
@@ -233,24 +213,6 @@ func _AgentService_GetReadiness_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
-func _AgentService_RetryPackages_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(RetryPackagesRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(AgentServiceServer).RetryPackages(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: AgentService_RetryPackages_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AgentServiceServer).RetryPackages(ctx, req.(*RetryPackagesRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 func _AgentService_RunRestic_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(RunResticRequest)
 	if err := dec(in); err != nil {
@@ -308,10 +270,6 @@ var AgentService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetReadiness",
 			Handler:    _AgentService_GetReadiness_Handler,
-		},
-		{
-			MethodName: "RetryPackages",
-			Handler:    _AgentService_RetryPackages_Handler,
 		},
 		{
 			MethodName: "RunRestic",

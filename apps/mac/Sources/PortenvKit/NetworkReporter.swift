@@ -10,13 +10,13 @@ import Foundation
 public actor NetworkReporter {
     public static let downRefresh: Duration = .seconds(10)
 
-    private let daemon: DaemonAPI
+    private let cli: CLIRunning
     private let now: @Sendable () -> ContinuousClock.Instant
     private var last: Bool?
     private var sentAt: ContinuousClock.Instant?
 
-    public init(daemon: DaemonAPI, now: @escaping @Sendable () -> ContinuousClock.Instant = { .now }) {
-        self.daemon = daemon
+    public init(cli: CLIRunning = CLI(), now: @escaping @Sendable () -> ContinuousClock.Instant = { .now }) {
+        self.cli = cli
         self.now = now
     }
 
@@ -28,7 +28,7 @@ public actor NetworkReporter {
             return true
         }
         do {
-            try await daemon.setNetwork(usable: usable)
+            _ = try await cli.run(["app", "network", usable ? "up" : "down"])
             last = usable
             sentAt = now()
             return true

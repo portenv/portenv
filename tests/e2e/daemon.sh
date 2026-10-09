@@ -5,8 +5,7 @@
 # type into its tmux session through the agent channel, make a save point,
 # change a file, revert, close, reopen, restore from storage (whole-home
 # checksums, apt packages replayed), quit with a box open, and the agent's
-# failures, quitting when a box can't be saved, waking from sleep, and
-# quitting while a box opens. portenvd reaches the box only through the agent channel: a
+# failures. portenvd reaches the box only through the agent channel: a
 # watcher over the whole run allows no docker exec but the engine's health
 # check and this script's own probes (inspection and simulated failures).
 #
@@ -32,8 +31,7 @@ sums() { probe "portenv-daemon-$(box_id)" sh -c 'cd /home && find . -type f -not
 start_daemon() {
 	"$repo/bin/portenvd" 2>>"$root/portenvd.log" &
 	dpid=$!
-	# Until it answers: after a kill -9 the old socket file is still there.
-	for _ in $(seq 100); do "$portenv" app ping >/dev/null 2>&1 && break; sleep 0.1; done
+	for _ in $(seq 50); do [[ -S $root/mac/portenvd.sock ]] && break; sleep 0.1; done
 }
 cleanup() {
 	# Nothing in the cleanup may fail: under set -e that would fail the run.
@@ -67,16 +65,6 @@ expect "open: a new box (rule 1)" grep -q "rule 1" <<<"$out"
 
 out=$(type_in 'echo who=$(id -un) tmux=${TMUX%%,*}')
 expect "attach lands in work's tmux session" grep -q "who=work tmux=/tmp/tmux-1000" <<<"$out"
-# tmux is plumbing (GUIDELINES.md §4.1): no status bar, no prefix key, even
-# with the user's own tmux config asking for them.
-tmuxopt() { probe -u work "portenv-daemon-$(box_id)" tmux show-options -gv "$1" 2>/dev/null; }
-expect "tmux's status bar is off" test "$(tmuxopt status)" = off
-expect "tmux's prefix key never surfaces (None, Ctrl-B reaches the shell)" test "$(tmuxopt prefix)" = None
-type_in 'printf "set -g status on\nset -g prefix C-a\n" > ~/.tmux.conf; tmux source-file ~/.tmux.conf' 1 >/dev/null
-"$portenv" app restart d >/dev/null 2>&1 || true
-type_in 'true' 1 >/dev/null
-expect "still off after the user's own tmux config (on the next attach)" test "$(tmuxopt status)" = off -a "$(tmuxopt prefix)" = None
-type_in 'rm -f ~/.tmux.conf' 1 >/dev/null
 type_in 'echo one > ~/f.txt' 1 >/dev/null
 out=$("$portenv" app point d 2>&1) || true; echo "  $out"
 expect "save point" grep -q "^save point " <<<"$out"
@@ -92,56 +80,6 @@ out=$("$portenv" app open d 2>&1) || true; echo "  $out"
 expect "reopen on the same machine (rule 3)" grep -q "rule 3" <<<"$out"
 out=$(type_in 'echo f=$(cat ~/f.txt)')
 expect "the reverted file is still there after reopening" grep -q "f=one" <<<"$out"
-
-# ADR 0014: one portenvd at a time, and a restarted portenvd takes over a
-# running box (re-keys it) instead of restarting it.
-out=$("$repo/bin/portenvd" 2>&1) && rc=0 || rc=$?
-expect "a second portenvd refuses to start while the first serves" test "$rc" -ne 0
-expect "  and says why" grep -q "another portenvd is already running" <<<"$out"
-out=$(type_in 'echo still=$((20+1))')
-expect "  and the first keeps its box's channel" grep -q "still=21" <<<"$out"
-type_in 'sleep 3600 & echo long=started' 1 >/dev/null
-started=$(docker inspect -f '{{.State.StartedAt}}' "portenv-daemon-$(box_id)")
-kill -9 "$dpid"; wait "$dpid" 2>/dev/null || true
-start_daemon
-out=$("$portenv" app state d 2>&1) || true; echo "  $out"
-expect "after kill -9: the new portenvd reports the box interrupted" grep -q '"interrupted":true' <<<"$out"
-out=$("$portenv" app open d 2>&1) || true; echo "  $out"
-expect "reopened by the new portenvd" grep -q "open on" <<<"$out"
-expect "  by re-keying it, not restarting it" grep -q "took over the running box" "$root/portenvd.log"
-expect "  the box never restarted (same start time)" test "$(docker inspect -f '{{.State.StartedAt}}' "portenv-daemon-$(box_id)")" = "$started"
-expect "  the long command is still running" probe "portenv-daemon-$(box_id)" pgrep -x sleep
-out=$(type_in 'echo back=$((40+2))')
-expect "  the terminal reconnects to the same session" grep -q "back=42" <<<"$out"
-out=$("$portenv" app state d 2>&1) || true; echo "  $out"
-expect "  and the state line recovers" bash -c "! grep -q interrupted <<<'$out' && grep -q SAVE_STATE_ <<<'$out'"
-# An update relaunch (Sparkle, 1.8): the app asks portenvd to relaunch; it
-# stops without closing the box, and the next portenvd takes it over.
-out=$("$portenv" app relaunch 2>&1) || true; echo "  $out"
-for _ in $(seq 40); do kill -0 "$dpid" 2>/dev/null || break; sleep 0.25; done
-expect "relaunch: portenvd stops" bash -c "! kill -0 $dpid 2>/dev/null"
-wait "$dpid" 2>/dev/null || true
-expect "  leaving the box running (same start time)" test "$(docker inspect -f '{{.State.Running}} {{.State.StartedAt}}' "portenv-daemon-$(box_id)")" = "true $started"
-expect "  and the long command too" probe "portenv-daemon-$(box_id)" pgrep -x sleep
-start_daemon
-out=$("$portenv" app open d 2>&1) || true; echo "  $out"
-expect "the next portenvd takes it over" test "$(grep -c "took over the running box" "$root/portenvd.log")" -ge 2
-expect "  still the same start" test "$(docker inspect -f '{{.State.StartedAt}}' "portenv-daemon-$(box_id)")" = "$started"
-out=$(type_in 'echo again=$((40+3))')
-expect "  and the terminal reconnects" grep -q "again=43" <<<"$out"
-# Quit Anyway with portenvd run by launchd (1.1): portenvd outlives the app,
-# so it records the quit marker and saves the box in the background; an
-# open before that save works takes the box back and saves it first thing.
-type_in 'echo qa2=left-unsaved > ~/qa2.txt' 1 >/dev/null
-out=$("$portenv" app leave-unsaved d 2>&1) || true; echo "  $out"
-out=$("$portenv" app state d 2>&1) || true
-expect "Quit Anyway: the line says Portenv quit before saving" grep -q 'SAVE_STATE_QUIT_UNSAVED' <<<"$out"
-out=$("$portenv" app open d 2>&1) || true; echo "  $out"
-expect "  the next open says Portenv quit before saving, and saves first thing" grep -q "Portenv quit before saving" <<<"$out"
-expect "  taken back, never restarted" test "$(docker inspect -f '{{.State.StartedAt}}' "portenv-daemon-$(box_id)")" = "$started"
-for _ in $(seq 60); do "$portenv" app state d 2>/dev/null | grep -q SAVE_STATE_SAVED && break; sleep 1; done
-expect "  and the save completes" bash -c "$portenv app state d | grep -q SAVE_STATE_SAVED"
-type_in 'pkill -x sleep' 1 >/dev/null
 "$portenv" app close d >/dev/null 2>&1 || true
 
 # The box agent dies mid-session. Processes in the box keep editing files;
@@ -182,22 +120,6 @@ expect "checksums of the whole home match after the restore ($(wc -l <<<"$after"
 out=$(type_in 'echo tree-at:$(command -v tree)')
 expect "apt-packages.txt is replayed on the restored box" grep -q "tree-at:/usr/bin/tree" <<<"$out"
 
-# A package that can't be installed never stops the box (PLAN.md 1.4): it
-# starts, the state line stays normal, and the package is listed for the
-# inspector (with the error in the log) until a retry installs it.
-type_in 'echo portenv-no-such-package >> ~/.portenv/apt-packages.txt' 1 >/dev/null
-out=$("$portenv" app restart d 2>&1) || true; echo "  $out"
-expect "a package that can't be installed: the box starts all the same" grep -q "rule 3" <<<"$out"
-st=$("$portenv" app state d 2>&1) || true; echo "  $st"
-expect "the state line stays normal" python3 -c "import json,sys; sys.exit(0 if json.loads(sys.argv[1])['state'] in ('SAVE_STATE_SAVED','SAVE_STATE_NOT_SAVED_YET') else 1)" "$st"
-expect "the package is listed for the inspector" python3 -c "import json,sys; sys.exit(0 if json.loads(sys.argv[1]).get('failed_packages') == ['portenv-no-such-package'] else 1)" "$st"
-expect "with apt-get's error" grep -q "Unable to locate package portenv-no-such-package" <<<"$st"
-expect "and the error is in the box's log" bash -c "docker logs portenv-daemon-$(box_id) 2>&1 | grep -q 'portenv-no-such-package'"
-type_in "sed -i '/portenv-no-such-package/d' ~/.portenv/apt-packages.txt" 1 >/dev/null
-"$portenv" app retry-packages d >/dev/null 2>&1 || true
-for _ in $(seq 60); do "$portenv" app state d 2>/dev/null | grep -q failed_packages || break; sleep 1; done
-expect "after the list is fixed, Retry clears it" bash -c "! '$portenv' app state d 2>/dev/null | grep -q failed_packages"
-
 # Quitting the app stops portenvd (SIGTERM) with the box open: it saves,
 # releases and stops the box. Proof: drop the local home; the next open
 # restores the last edit from storage.
@@ -233,76 +155,6 @@ out=$("$portenv" app open d 2>&1) || true
 out=$(type_in 'echo window=$(cat ~/window.txt)')
 expect "the window's last edit is in the box" grep -q "window=window" <<<"$out"
 "$portenv" app close d >/dev/null 2>&1 || true
-
-# Quit with a box that can't be saved (the box agent is down): the close
-# fails, which the app turns into the alert "couldn't be saved before
-# quitting". Quit Anyway then stops portenvd: the box is left as it is,
-# with the quit marker; the next open says so and saves first thing.
-st_json() { "$portenv" app state d 2>/dev/null; }
-state_of() { st_json | python3 -c 'import json,sys; print(json.load(sys.stdin)["state"])' 2>/dev/null; }
-saved_at() { st_json | python3 -c 'import json,sys; print(json.load(sys.stdin).get("saved_at",""))' 2>/dev/null; }
-marker() { echo "$root/mac/state/$(box_id)/quit-unsaved"; }
-"$portenv" app open d >/dev/null 2>&1 || true
-c=portenv-daemon-$(box_id)
-type_in 'echo before-quit-anyway > ~/qa.txt' 1 >/dev/null
-before_qa=$(saved_at)
-probe "$c" pkill -f '^portenv-agent serve' || true
-sleep 1
-out=$("$portenv" app close d 2>&1) && st=0 || st=$?; echo "  $out"
-expect "quit with the agent down: the close fails, so the app asks (the alert)" test "$st" -ne 0
-expect "and says why: the box agent is unavailable" grep -q "the box agent is unavailable" <<<"$out"
-kill -TERM "$dpid"   # Quit Anyway
-for _ in $(seq 240); do kill -0 "$dpid" 2>/dev/null || break; sleep 0.5; done
-wait "$dpid" 2>/dev/null || true
-expect "Quit Anyway: portenvd stops" bash -c "! kill -0 $dpid 2>/dev/null"
-expect "the quit marker is recorded for the box" test -f "$(marker)"
-expect "the box is left as it is (still running)" test "$(docker inspect -f '{{.State.Running}}' "$c" 2>/dev/null)" = true
-start_daemon
-out=$("$portenv" app open d 2>&1) || true; echo "  $out"
-expect "relaunch: the open says Portenv quit before saving" grep -q "Portenv quit before saving" <<<"$out"
-seen=""
-for _ in $(seq 120); do s1=$(state_of); seen="$seen $s1"; [[ $s1 == SAVE_STATE_SAVED ]] && break; sleep 0.5; done
-echo "  states after relaunch:$(tr ' ' '\n' <<<"$seen" | awk 'NF && $0!=p {printf " %s", $0; p=$0}')"
-expect "the state line said so until the save" grep -qE "SAVE_STATE_(QUIT_UNSAVED|SAVING)" <<<"$seen"
-expect "then the box was saved first thing" test "$(state_of)" = SAVE_STATE_SAVED
-expect "with a newer save time than before quitting" test "$(saved_at)" != "$before_qa"
-expect "and the quit marker is gone" test ! -f "$(marker)"
-"$portenv" app close d >/dev/null 2>&1 || true
-docker rm -f "$c" >/dev/null 2>&1 || true
-docker volume rm -f "portenv-home-daemon-$(box_id)" >/dev/null 2>&1 || true
-"$portenv" app open d >/dev/null 2>&1 || true
-out=$(type_in 'echo qa=$(cat ~/qa.txt)')
-expect "the edit made before Quit Anyway is in that save (restored from storage)" grep -q "qa=before-quit-anyway" <<<"$out"
-
-# Waking from sleep: the box agent's channel dropped while the Mac slept.
-# The app reports the wake; portenvd checks every open box's channel and
-# restarts a box whose channel is gone (its home stays: rule 3).
-type_in 'echo before-sleep > ~/sleep.txt' 1 >/dev/null
-probe "$c" pkill -f '^portenv-agent serve' || true
-sleep 1
-out=$("$portenv" app woke 2>&1) || true; echo "  $out"
-expect "after waking: the dropped channel is noticed and the box restarted" grep -q "restarted" <<<"$out"
-out=$("$portenv" app check d 2>&1) || true
-expect "the box agent answers again" bash -c "! grep -q unavailable <<<'$out'"
-out=$(type_in 'echo sleep=$(cat ~/sleep.txt)')
-expect "the edit made before sleeping is still there" grep -q "sleep=before-sleep" <<<"$out"
-out=$("$portenv" app point d 2>&1) || true
-expect "and the next save goes through" grep -q "^save point" <<<"$out"
-"$portenv" app close d >/dev/null 2>&1 || true
-
-# Quit while a box is still opening: portenvd waits for the open, then
-# saves, releases and stops it (it once forgot boxes still opening).
-"$portenv" app open d >/dev/null 2>&1 &
-opener=$!
-sleep 1
-kill -TERM "$dpid"
-for _ in $(seq 360); do kill -0 "$dpid" 2>/dev/null || break; sleep 0.5; done
-wait "$dpid" 2>/dev/null || true
-wait "$opener" 2>/dev/null || true
-expect "quit while opening: portenvd stops within 3 minutes" bash -c "! kill -0 $dpid 2>/dev/null"
-expect "and the box it was opening is stopped" test "$(docker inspect -f '{{.State.Running}}' "$c" 2>/dev/null)" != true
-expect "and released (lease released, nothing unsaved)" python3 -c "import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if d.get('lease')=='released' and not d.get('dirty') else 1)" "$root/mac/state/$(box_id)/state.json"
-start_daemon
 
 # An impostor on the agent's port (ADR 0010, conditions): root in the box
 # kills the agent and serves a self-made certificate there. portenvd

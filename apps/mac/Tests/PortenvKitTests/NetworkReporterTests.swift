@@ -14,16 +14,16 @@ final class TestClock: @unchecked Sendable {
 }
 
 struct NetworkReporterTests {
-    func networkCalls(_ cli: FakeDaemon) -> [String] {
+    func networkCalls(_ cli: FakeCLI) -> [String] {
         cli.calls.filter { $0.count > 1 && $0[1] == "network" }.map { $0[2] }
     }
 
     /// "up" goes out on changes only; "down" again every 10 s while it lasts,
     /// so portenvd's 30 s limit never expires it while the app runs.
     @Test func downIsRefreshedUpIsNot() async {
-        let cli = FakeDaemon()
+        let cli = FakeCLI()
         let clock = TestClock()
-        let r = NetworkReporter(daemon: cli, now: { clock.now })
+        let r = NetworkReporter(cli: cli, now: { clock.now })
         await r.report(usable: true)
         await r.report(usable: true)
         #expect(networkCalls(cli) == ["up"])
@@ -42,9 +42,9 @@ struct NetworkReporterTests {
 
     /// A failed report is retried on the next call.
     @Test func failedReportIsRetried() async {
-        let cli = FakeDaemon()
+        let cli = FakeCLI()
         cli.failing["network"] = "portenvd is not running"
-        let r = NetworkReporter(daemon: cli)
+        let r = NetworkReporter(cli: cli)
         #expect(await r.report(usable: false) == false)
         cli.failing = [:]
         #expect(await r.report(usable: false) == true)

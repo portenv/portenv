@@ -41,51 +41,10 @@ service DaemonService {
   // The box's save state, derived only from what is recorded (the last
   // saved snapshot, the dirty flag, a save in progress) and where it runs.
   rpc GetBoxState(GetBoxStateRequest) returns (GetBoxStateResponse);
-  // The box's state as it changes: the current state at once, then a
-  // message whenever anything in it changes, and the state again every 30 s
-  // as a heartbeat. The stream ends when portenvd stops (ADR 0014).
-  rpc WatchBoxState(WatchBoxStateRequest) returns (stream WatchBoxStateResponse);
   // The system's network status, as the app sees it (NWPathMonitor on the
   // Mac). A fresh "down" (from a running app, at most 30 s old) opens a
   // box offline at once, without probing storage; anything else probes.
   rpc SetNetworkPath(SetNetworkPathRequest) returns (SetNetworkPathResponse);
-  // The system woke from sleep: check every open box's agent channel and
-  // restart a box whose channel is gone (its home stays: rule 3), so a
-  // dropped channel never sits unnoticed until the next save.
-  rpc Woke(WokeRequest) returns (WokeResponse);
-  // Try the box's packages that couldn't be installed again now.
-  rpc RetryPackages(RetryPackagesRequest) returns (RetryPackagesResponse);
-  // Keys the app read from the Keychain for a box, held in memory only:
-  // portenvd never reads the Keychain interactively, so when a key needs the
-  // person's approval it fails fast and the app (in front of them) reads it.
-  rpc ProvideKeys(ProvideKeysRequest) returns (ProvideKeysResponse);
-  // Portenv is relaunching (an update): stop serving without closing any
-  // box. Boxes and their programs keep running, and the next portenvd
-  // takes them over (ADR 0014). Quitting (Cmd-Q) still closes and saves.
-  rpc Relaunch(RelaunchRequest) returns (RelaunchResponse);
-  // The servers a box can move to (Move To), as user@host.
-  rpc ListServers(ListServersRequest) returns (ListServersResponse);
-  // The Keychain items the app reads for a box (service
-  // dev.portenv.repository): its repository key, and its storage keys.
-  rpc GetKeyIDs(GetKeyIDsRequest) returns (GetKeyIDsResponse);
-  // An autosave now (the Phase 0 CLI's save, moved here in 1.1).
-  rpc SaveNow(SaveNowRequest) returns (SaveNowResponse);
-  // Every save of the box, oldest first: autosaves, save points, closes and
-  // orphaned saves, with the machine that made each.
-  rpc ListSaves(ListSavesRequest) returns (ListSavesResponse);
-  // Clear old lease tags and apply retention; with prune, also delete data
-  // no save uses. For an idle box.
-  rpc Housekeep(HousekeepRequest) returns (HousekeepResponse);
-  // Quit Anyway: the box couldn't be saved before Portenv quits. portenvd
-  // records the quit marker and keeps retrying the save in the background
-  // (30 s, 1, 2 and 5 minutes, then every 5) until one succeeds; then it
-  // closes the box and releases the lease. Until then the lease stays with
-  // this Mac. Opening the box first stops the retries and saves it first
-  // thing ("Portenv quit before saving").
-  rpc LeaveUnsaved(LeaveUnsavedRequest) returns (LeaveUnsavedResponse);
-  // Boxes saved in the background after Quit Anyway since the app last
-  // asked: the app shows one notification for each. Given out once.
-  rpc TakeSavedAfterQuit(TakeSavedAfterQuitRequest) returns (TakeSavedAfterQuitResponse);
 }
 
 message CheckBoxRequest {
@@ -109,10 +68,6 @@ message RestartBoxResponse {
 
 message OpenBoxRequest {
   string name = 1;
-  // Take the lease from the machine that holds it (only on the user's
-  // explicit choice). That machine's unsaved work is kept as a separate
-  // save (resume rule 4).
-  bool take_over = 2;
 }
 
 message OpenBoxResponse {
@@ -239,11 +194,6 @@ enum SaveState {
   // The last save failed (after its retry); saved_at is the last one that
   // completed ("Not saved since 14:58"), until a save succeeds.
   SAVE_STATE_NOT_SAVED = 8;
-  // Portenv quit before this box could be saved (Quit Anyway, or the app
-  // ended); saved_at is the last save that completed. The box is saved first
-  // thing when it opens ("Not saved since 15:54 · Portenv quit before
-  // saving"), and this clears once a save succeeds.
-  SAVE_STATE_QUIT_UNSAVED = 9;
 }
 
 message GetBoxStateResponse {
@@ -251,15 +201,6 @@ message GetBoxStateResponse {
   google.protobuf.Timestamp saved_at = 2;
   // Where the box runs: empty for this machine, else the server.
   string location = 3;
-  // Packages from apt-packages.txt that couldn't be installed (shown in the
-  // inspector's Where it is section with Retry; never in the state line).
-  repeated string failed_packages = 4;
-  string packages_error = 5;
-  // The box was open when the previous portenvd ended without closing it
-  // (crash, update, relaunch): it isn't closed, but this portenvd hasn't
-  // opened it and holds none of its keys. The app opens it again, handing
-  // the keys over; state and saved_at say when it was last saved.
-  bool interrupted = 6;
 }
 
 enum NetworkPath {
@@ -278,113 +219,3 @@ message SetNetworkPathRequest {
 }
 
 message SetNetworkPathResponse {}
-
-message WokeRequest {}
-
-message WokeResponse {
-  repeated WokeBox boxes = 1;
-}
-
-// One open box after a wake.
-message WokeBox {
-  string name = 1;
-  // The channel answered.
-  bool agent_available = 2;
-  // The channel was gone and the box was restarted.
-  bool restarted = 3;
-  // Why a restart failed, when it did.
-  string detail = 4;
-}
-
-message RetryPackagesRequest {
-  string name = 1;
-}
-
-message RetryPackagesResponse {}
-
-message ProvideKeysRequest {
-  string name = 1;
-  // Key ID (the box ID, its storage key, its REST password) to key.
-  map<string, bytes> keys = 2;
-}
-
-message ProvideKeysResponse {}
-
-message RelaunchRequest {}
-
-message RelaunchResponse {}
-
-message WatchBoxStateRequest {
-  string name = 1;
-}
-
-message WatchBoxStateResponse {
-  GetBoxStateResponse state = 1;
-}
-
-message ListServersRequest {}
-
-message ListServersResponse {
-  repeated string servers = 1;
-}
-
-message GetKeyIDsRequest {
-  string name = 1;
-}
-
-message GetKeyIDsResponse {
-  repeated string key_ids = 1;
-}
-
-message SaveNowRequest {
-  string name = 1;
-}
-
-message SaveNowResponse {
-  portenv.types.v1.SnapshotRef snapshot = 1;
-}
-
-message ListSavesRequest {
-  string name = 1;
-}
-
-message ListSavesResponse {
-  repeated SaveEntry saves = 1;
-}
-
-// One save in a box's history.
-message SaveEntry {
-  string id = 1;
-  google.protobuf.Timestamp time = 2;
-  // autosave, point, release (a close) or orphaned.
-  string kind = 3;
-  // The machine that made it.
-  string machine = 4;
-  // The machine the box is open on, for the current save only.
-  string open_on = 5;
-}
-
-message HousekeepRequest {
-  string name = 1;
-  bool prune = 2;
-}
-
-message HousekeepResponse {}
-
-message LeaveUnsavedRequest {
-  string name = 1;
-}
-
-message LeaveUnsavedResponse {}
-
-message TakeSavedAfterQuitRequest {}
-
-message TakeSavedAfterQuitResponse {
-  repeated SavedAfterQuit saved = 1;
-}
-
-// A box saved in the background after Quit Anyway.
-message SavedAfterQuit {
-  string name = 1;
-  google.protobuf.Timestamp saved_at = 2;
-}

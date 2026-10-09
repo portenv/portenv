@@ -10,7 +10,6 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	agentv1 "github.com/portenv/portenv/proto/gen/go/portenv/agent/v1"
 )
@@ -23,7 +22,6 @@ type fakeRunner struct {
 	installed map[string]bool // dpkg-query answers
 	uid       string          // "" means the user does not exist
 	fail      string          // a command prefix that fails
-	badPkg    string          // apt-get install fails whenever this package is asked for
 }
 
 func (f *fakeRunner) Run(_ context.Context, env []string, name string, args ...string) ([]byte, error) {
@@ -49,16 +47,6 @@ func (f *fakeRunner) Run(_ context.Context, env []string, name string, args ...s
 	case "apt-get":
 		if args[0] == "install" && !slices.Contains(env, "DEBIAN_FRONTEND=noninteractive") {
 			return nil, errors.New("apt-get install without DEBIAN_FRONTEND")
-		}
-		if args[0] == "install" && f.badPkg != "" && slices.Contains(args, f.badPkg) {
-			return []byte("E: Unable to locate package " + f.badPkg), errors.New("exit status 100")
-		}
-		if args[0] == "install" {
-			for _, a := range args[1:] {
-				if f.installed != nil && !strings.HasPrefix(a, "-") {
-					f.installed[packageName(a)] = true
-				}
-			}
 		}
 	}
 	return nil, nil
@@ -208,74 +196,13 @@ func TestBootSkipsAptWhenNothingMissing(t *testing.T) {
 	}
 }
 
-// TestAFailedPackageNeverStopsTheBox: a package that can't be installed is
-// found (the others still install), recorded with the error, and the box
-// starts all the same (PLAN.md 1.4).
-func TestAFailedPackageNeverStopsTheBox(t *testing.T) {
+func TestBootReportsInstallFailure(t *testing.T) {
 	cfg := testConfig(t)
-	write(t, filepath.Join(cfg.Home(), ".portenv", "apt-packages.txt"), "jq\nno-such-package\ntree\n")
-	run := &fakeRunner{uid: "1000", installed: map[string]bool{}, badPkg: "no-such-package"}
-	r := NewReadiness()
-	if err := Boot(context.Background(), cfg, run, r); err != nil {
-		t.Fatalf("Boot: %v, want the box to start", err)
-	}
-	failed, msg := r.Packages()
-	if !slices.Equal(failed, []string{"no-such-package"}) {
-		t.Fatalf("failed packages %q, want only no-such-package", failed)
-	}
-	if !strings.Contains(msg, "Unable to locate package no-such-package") {
-		t.Fatalf("error %q, want apt-get's message", msg)
-	}
-	if !run.installed["jq"] || !run.installed["tree"] {
-		t.Fatalf("the other packages were not installed; calls %q", run.calls)
-	}
-}
-
-// TestNoPackageListsStillStarts: apt-get update failing (no network) marks
-// every missing package as failed; the box still starts.
-func TestNoPackageListsStillStarts(t *testing.T) {
-	cfg := testConfig(t)
-	write(t, filepath.Join(cfg.Home(), ".portenv", "apt-packages.txt"), "jq\ntree\n")
-	run := &fakeRunner{uid: "1000", installed: map[string]bool{}, fail: "apt-get update"}
-	r := NewReadiness()
-	if err := Boot(context.Background(), cfg, run, r); err != nil {
-		t.Fatalf("Boot: %v, want the box to start", err)
-	}
-	if failed, _ := r.Packages(); !slices.Equal(failed, []string{"jq", "tree"}) {
-		t.Fatalf("failed packages %q, want both", failed)
-	}
-}
-
-// TestRetryInstallsWhatFailed: once the package can be installed (the list
-// fixed, the network back), a retry installs it and clears the record.
-func TestRetryInstallsWhatFailed(t *testing.T) {
-	cfg := testConfig(t)
-	write(t, filepath.Join(cfg.Home(), ".portenv", "apt-packages.txt"), "jq\n")
-	run := &fakeRunner{uid: "1000", installed: map[string]bool{}, fail: "apt-get update"}
-	r := NewReadiness()
-	if err := Boot(context.Background(), cfg, run, r); err != nil {
-		t.Fatal(err)
-	}
-	if failed, _ := r.Packages(); len(failed) != 1 {
-		t.Fatalf("failed %q, want jq", failed)
-	}
-	run.fail = ""
-	RetryPackages(context.Background(), cfg, run, r)
-	if failed, msg := r.Packages(); len(failed) != 0 || msg != "" {
-		t.Fatalf("after the retry: %q %q, want nothing failed", failed, msg)
-	}
-	if !run.installed["jq"] {
-		t.Fatal("jq was not installed by the retry")
-	}
-}
-
-// TestRetryDelaysBackOff: background retries slow down, to at most an hour.
-func TestRetryDelaysBackOff(t *testing.T) {
-	want := []time.Duration{time.Minute, 5 * time.Minute, 15 * time.Minute, time.Hour, time.Hour}
-	for i, w := range want {
-		if got := retryDelay(i); got != w {
-			t.Errorf("retry %d: %v, want %v", i, got, w)
-		}
+	write(t, filepath.Join(cfg.Home(), ".portenv", "apt-packages.txt"), "no-such-package\n")
+	run := &fakeRunner{uid: "1000", fail: "apt-get install"}
+	err := Boot(context.Background(), cfg, run, NewReadiness())
+	if err == nil || !strings.Contains(err.Error(), "E: something broke") {
+		t.Fatalf("got %v, want the apt-get output in the error", err)
 	}
 }
 

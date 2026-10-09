@@ -16,17 +16,17 @@ struct BoxTerminal: NSViewRepresentable {
     /// agent went away).
     var onEnded: @MainActor () -> Void = {}
 
-    func makeNSView(context: Context) -> PaddedTerminal {
-        let view = PaddedTerminal(margin: TerminalLayout.margin)
-        view.terminal.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
+    func makeNSView(context: Context) -> LocalProcessTerminalView {
+        let view = LocalProcessTerminalView(frame: .zero)
+        view.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
         context.coordinator.onEnded = onEnded
-        context.coordinator.attach(view.terminal, box: box, generation: generation)
+        context.coordinator.attach(view, box: box, generation: generation)
         return view
     }
 
-    func updateNSView(_ view: PaddedTerminal, context: Context) {
+    func updateNSView(_ view: LocalProcessTerminalView, context: Context) {
         if context.coordinator.generation != generation {
-            context.coordinator.attach(view.terminal, box: box, generation: generation)
+            context.coordinator.attach(view, box: box, generation: generation)
         }
     }
 
@@ -45,7 +45,7 @@ struct BoxTerminal: NSViewRepresentable {
             env["TERM"] = "xterm-256color"
             view.startProcess(
                 executable: Binaries.portenv.path,
-                args: ["attach", box, "--from-app"],
+                args: ["attach", box],
                 environment: env.map { "\($0.key)=\($0.value)" },
                 execName: "portenv"
             )
@@ -57,39 +57,5 @@ struct BoxTerminal: NSViewRepresentable {
         nonisolated func processTerminated(source _: SwiftTerm.TerminalView, exitCode _: Int32?) {
             Task { @MainActor in self.onEnded() }
         }
-    }
-}
-
-/// The terminal inset by a margin (GUIDELINES.md §4.5) painted in the
-/// terminal's own background, so the text never touches the window's edge
-/// and the margin reads as part of the terminal. A click in the margin
-/// focuses the terminal.
-final class PaddedTerminal: NSView {
-    let terminal = LocalProcessTerminalView(frame: .zero)
-
-    init(margin: CGFloat) {
-        super.init(frame: .zero)
-        wantsLayer = true
-        terminal.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(terminal)
-        NSLayoutConstraint.activate([
-            terminal.leadingAnchor.constraint(equalTo: leadingAnchor, constant: margin),
-            terminal.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -margin),
-            terminal.topAnchor.constraint(equalTo: topAnchor, constant: margin),
-            terminal.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -margin),
-        ])
-    }
-
-    @available(*, unavailable)
-    required init?(coder _: NSCoder) { fatalError("not used") }
-
-    override var wantsUpdateLayer: Bool { true }
-
-    override func updateLayer() {
-        layer?.backgroundColor = terminal.nativeBackgroundColor.cgColor
-    }
-
-    override func mouseDown(with _: NSEvent) {
-        window?.makeFirstResponder(terminal)
     }
 }

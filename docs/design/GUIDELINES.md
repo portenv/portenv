@@ -67,8 +67,6 @@ The title shows the box name, a sync symbol and a chevron; the line under it is 
 | Open on a server | `checkmark.circle` | `Test server · Saved at 15:42` |
 | Box agent unavailable | `exclamationmark.triangle` | `This Mac · Not saved since 14:58` (and Restart Box offered) |
 | Just reverted | `checkmark.circle` | `Reverted to 14:31 · your changes were kept` for 5 s, then the normal line |
-| Waiting for Keychain access | `lock` | `Waiting for Keychain access`, with "Check for a password prompt. It may be behind other windows." under it and a Cancel button; shown when a Keychain read hasn't returned after 2 s, with a notification when the window isn't in front |
-| Portenv quit before saving it | `exclamationmark.triangle` | `This Mac · Not saved since 15:54 · Portenv quit before saving` until the save made on opening completes |
 
 Rules:
 - Times are local wall-clock time in the user's 12/24-hour setting. Never UTC.
@@ -138,7 +136,6 @@ Shown when a program in the visible tab is waiting for an answer that Portenv ca
 ### 4.5 Type and colour
 
 - Monospace: SF Mono (user's choice in Settings), 13 pt default.
-- The terminal has an 8 pt margin on every side, in the terminal's own background colour: its text never touches the window's edge (`TerminalLayout.margin`).
 - Terminal colours come from the user's chosen theme; Portenv's own decorations (block tint, headers, card) use system semantic colours so they work in light and dark mode.
 
 ---
@@ -167,7 +164,7 @@ Opened with ⌥⌘I, the toolbar button (`sidebar.right`) or View › Show Inspe
 
 Sections, always in this order, each with a small grey heading:
 
-1. **Where it is.** "Running on <place>" with how long and where it came from; "Saves go to <place>" with "Encrypted on this Mac before they leave it" (or the right equivalent); a Move To… button. When packages from `apt-packages.txt` couldn't be installed: "1 package couldn't be installed: <name> · Retry" ("2 packages couldn't be installed: <a>, <b> · Retry"). The state line stays normal; the box started all the same and Portenv retries in the background.
+1. **Where it is.** "Running on <place>" with how long and where it came from; "Saves go to <place>" with "Encrypted on this Mac before they leave it" (or the right equivalent); a Move To… button.
    - During a move, this section becomes the move's progress, in four steps with a check, current or pending marker each: Saved on <source> (time, size of changes) → Sending changes (progress bar, "x of y MB") → Starting on <destination> → Reconnecting this window. Above the steps: a time estimate once known. Below: "You can keep reading. Typing comes back when the box is running there. If the move stops, the box stays here, saved."
 2. **Saves.** "Last saved <time>", then the five most recent saves, newest first: time, kind and optional name. Kinds: Autosave, Save point ("name"), Saved before moving, Arrived from <place>, Kept when you reverted (with "Nothing reverted away is lost"). Hovering a row shows Revert. "Browse All Saves…" link below.
 3. **Who's here.** You first, then each connected agent: avatar, name, mode ("On your behalf" or "Own lane"), "since <time>", any waiting state in orange text, and a Revoke button (destructive style, confirmation alert).
@@ -176,6 +173,25 @@ Sections, always in this order, each with a small grey heading:
 Empty states use one short sentence ("No agents connected. Connect an Agent…").
 
 ---
+
+### 6.1 Connect an Agent sheet
+
+The user chooses the door for each agent, per box, and the sheet says honestly what each door allows. Portenv never picks silently. The sheet shows this wording, in plain language, before connecting.
+
+**At launch the sheet offers two doors:** stand-in (over SSH, the CLI or the web terminal) and MCP (stdio or remote, with per-tool approvals). **The lane row appears only once lanes exist (Phase 4, 4.1).** It is never shown as available before then.
+
+| Door | What the agent can do | Where limits are enforced |
+| --- | --- | --- |
+| Stand-in over SSH or the CLI | Anything you can, as you, in your session | It's recorded and revertible, and the vault rules hold (enforced by the operating system). Command approvals are only a speed bump: a shell can rephrase any command. |
+| Lane (SSH, its own user) | Only what the lane allows | The operating system: a separate user, its own files, network limits, the vault rules |
+| MCP (stdio or remote) | Only the tools you enable | Every call is structured, so you can approve, deny or be asked, action by action |
+| Web terminal | What the SSH mode it's tied to allows, through a one-time link | The same as that SSH mode (stand-in at launch; a lane once lanes exist) |
+
+- **A default suggestion only:** MCP for an agent you haven't used before (or a lane, once lanes exist), and stand-in when you trust the agent like yourself. The user can always choose otherwise.
+- **Changing an agent's door or mode** takes effect immediately and is recorded.
+- **A command an agent refused** (by its own safety checks or its permissions) reaches the user with the reason. Nothing hands it to another agent automatically.
+- **Never describe SSH command rules as a security boundary,** anywhere: in the app, the docs or the website.
+- Each door appears once its milestone lands: stand-in in 2.4, MCP in 2.6 and 2.7, the web terminal in 2.8, lanes in 4.1 (PLAN.md). A door that doesn't exist yet is never listed.
 
 ## 7. Command palette
 
@@ -211,6 +227,7 @@ From the own-route rule (ADR 0008):
 - Sentence case for buttons and headings. Ellipsis on commands that open a sheet or ask more ("Move To…", "Connect an Agent…").
 - No exclamation marks, no blame ("You entered…"), no internal terms (section 2).
 - Numbers: "8.2 of 12 MB", "about 6 seconds left", "3 min".
+- **Errors say what to do next,** everywhere: the app, the CLI, `portenvd`'s messages, the guide. Give what happened, then the next step, as one plain line: "Keychain needs your approval. Open Portenv on this Mac to allow it." Agents read these too (PLAN.md, Agent readiness).
 
 ---
 

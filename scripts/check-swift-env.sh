@@ -28,16 +28,7 @@ fi
 echo "ok    control: a plain build records the canary"
 
 echo "== make swift-test and make app with the canary in the environment"
-# The output goes to a log, shown if the run fails (a failing test must be
-# named, not hidden).
-log=$(mktemp)
-if ! (cd "$repo" && PORTENV_FAKE_SECRET=$canary "$make" swift-test >"$log" 2>&1); then
-	grep -E '✘|error:' "$log" | head -20 >&2 || true
-	tail -20 "$log" >&2
-	rm -f "$log"
-	exit 1
-fi
-rm -f "$log"
+(cd "$repo" && PORTENV_FAKE_SECRET=$canary "$make" swift-test >/dev/null)
 (cd "$repo" && PORTENV_FAKE_SECRET=$canary "$make" app APP_BUILD="$scratch/app-build" >/dev/null)
 leaks=$(found "$repo/apps/mac/.build" "$repo/shims/containerization/.build" "$scratch/app-build")
 if [[ -n $leaks ]]; then

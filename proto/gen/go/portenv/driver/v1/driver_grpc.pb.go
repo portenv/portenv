@@ -33,13 +33,13 @@ const (
 	DriverService_Start_FullMethodName        = "/portenv.driver.v1.DriverService/Start"
 	DriverService_Stop_FullMethodName         = "/portenv.driver.v1.DriverService/Stop"
 	DriverService_Destroy_FullMethodName      = "/portenv.driver.v1.DriverService/Destroy"
+	DriverService_Exec_FullMethodName         = "/portenv.driver.v1.DriverService/Exec"
 	DriverService_Logs_FullMethodName         = "/portenv.driver.v1.DriverService/Logs"
 	DriverService_Stats_FullMethodName        = "/portenv.driver.v1.DriverService/Stats"
 	DriverService_SetResources_FullMethodName = "/portenv.driver.v1.DriverService/SetResources"
 	DriverService_MountHome_FullMethodName    = "/portenv.driver.v1.DriverService/MountHome"
 	DriverService_Capabilities_FullMethodName = "/portenv.driver.v1.DriverService/Capabilities"
 	DriverService_AgentChannel_FullMethodName = "/portenv.driver.v1.DriverService/AgentChannel"
-	DriverService_Rekey_FullMethodName        = "/portenv.driver.v1.DriverService/Rekey"
 )
 
 // DriverServiceClient is the client API for DriverService service.
@@ -56,6 +56,9 @@ type DriverServiceClient interface {
 	Stop(ctx context.Context, in *StopRequest, opts ...grpc.CallOption) (*StopResponse, error)
 	// Removes the box's instance. Never deletes its home storage.
 	Destroy(ctx context.Context, in *DestroyRequest, opts ...grpc.CallOption) (*DestroyResponse, error)
+	// Runs one non-interactive command in the box. Bootstrap only (for example
+	// before the box agent is up); never an access path for people or agents.
+	Exec(ctx context.Context, in *ExecRequest, opts ...grpc.CallOption) (*ExecResponse, error)
 	// Streams the box's console output.
 	Logs(ctx context.Context, in *LogsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[LogsResponse], error)
 	// Returns a point-in-time snapshot of the box's state and resource use.
@@ -70,10 +73,6 @@ type DriverServiceClient interface {
 	// the address to dial, the certificate the agent must present, and the
 	// token for every call. Fresh at every start.
 	AgentChannel(ctx context.Context, in *AgentChannelRequest, opts ...grpc.CallOption) (*AgentChannelResponse, error)
-	// A new channel to the running box without restarting it (ADR 0014):
-	// fresh secrets reach the agent the way the first ones did, and the old
-	// ones stop working. For a restarted daemon taking over a running box.
-	Rekey(ctx context.Context, in *RekeyRequest, opts ...grpc.CallOption) (*RekeyResponse, error)
 }
 
 type driverServiceClient struct {
@@ -118,6 +117,16 @@ func (c *driverServiceClient) Destroy(ctx context.Context, in *DestroyRequest, o
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(DestroyResponse)
 	err := c.cc.Invoke(ctx, DriverService_Destroy_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *driverServiceClient) Exec(ctx context.Context, in *ExecRequest, opts ...grpc.CallOption) (*ExecResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ExecResponse)
+	err := c.cc.Invoke(ctx, DriverService_Exec_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -193,16 +202,6 @@ func (c *driverServiceClient) AgentChannel(ctx context.Context, in *AgentChannel
 	return out, nil
 }
 
-func (c *driverServiceClient) Rekey(ctx context.Context, in *RekeyRequest, opts ...grpc.CallOption) (*RekeyResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(RekeyResponse)
-	err := c.cc.Invoke(ctx, DriverService_Rekey_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 // DriverServiceServer is the server API for DriverService service.
 // All implementations must embed UnimplementedDriverServiceServer
 // for forward compatibility.
@@ -217,6 +216,9 @@ type DriverServiceServer interface {
 	Stop(context.Context, *StopRequest) (*StopResponse, error)
 	// Removes the box's instance. Never deletes its home storage.
 	Destroy(context.Context, *DestroyRequest) (*DestroyResponse, error)
+	// Runs one non-interactive command in the box. Bootstrap only (for example
+	// before the box agent is up); never an access path for people or agents.
+	Exec(context.Context, *ExecRequest) (*ExecResponse, error)
 	// Streams the box's console output.
 	Logs(*LogsRequest, grpc.ServerStreamingServer[LogsResponse]) error
 	// Returns a point-in-time snapshot of the box's state and resource use.
@@ -231,10 +233,6 @@ type DriverServiceServer interface {
 	// the address to dial, the certificate the agent must present, and the
 	// token for every call. Fresh at every start.
 	AgentChannel(context.Context, *AgentChannelRequest) (*AgentChannelResponse, error)
-	// A new channel to the running box without restarting it (ADR 0014):
-	// fresh secrets reach the agent the way the first ones did, and the old
-	// ones stop working. For a restarted daemon taking over a running box.
-	Rekey(context.Context, *RekeyRequest) (*RekeyResponse, error)
 	mustEmbedUnimplementedDriverServiceServer()
 }
 
@@ -257,6 +255,9 @@ func (UnimplementedDriverServiceServer) Stop(context.Context, *StopRequest) (*St
 func (UnimplementedDriverServiceServer) Destroy(context.Context, *DestroyRequest) (*DestroyResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Destroy not implemented")
 }
+func (UnimplementedDriverServiceServer) Exec(context.Context, *ExecRequest) (*ExecResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Exec not implemented")
+}
 func (UnimplementedDriverServiceServer) Logs(*LogsRequest, grpc.ServerStreamingServer[LogsResponse]) error {
 	return status.Error(codes.Unimplemented, "method Logs not implemented")
 }
@@ -274,9 +275,6 @@ func (UnimplementedDriverServiceServer) Capabilities(context.Context, *Capabilit
 }
 func (UnimplementedDriverServiceServer) AgentChannel(context.Context, *AgentChannelRequest) (*AgentChannelResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method AgentChannel not implemented")
-}
-func (UnimplementedDriverServiceServer) Rekey(context.Context, *RekeyRequest) (*RekeyResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method Rekey not implemented")
 }
 func (UnimplementedDriverServiceServer) mustEmbedUnimplementedDriverServiceServer() {}
 func (UnimplementedDriverServiceServer) testEmbeddedByValue()                       {}
@@ -367,6 +365,24 @@ func _DriverService_Destroy_Handler(srv interface{}, ctx context.Context, dec fu
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(DriverServiceServer).Destroy(ctx, req.(*DestroyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DriverService_Exec_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ExecRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DriverServiceServer).Exec(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DriverService_Exec_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DriverServiceServer).Exec(ctx, req.(*ExecRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -472,24 +488,6 @@ func _DriverService_AgentChannel_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
-func _DriverService_Rekey_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(RekeyRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(DriverServiceServer).Rekey(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: DriverService_Rekey_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DriverServiceServer).Rekey(ctx, req.(*RekeyRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 // DriverService_ServiceDesc is the grpc.ServiceDesc for DriverService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -514,6 +512,10 @@ var DriverService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _DriverService_Destroy_Handler,
 		},
 		{
+			MethodName: "Exec",
+			Handler:    _DriverService_Exec_Handler,
+		},
+		{
 			MethodName: "Stats",
 			Handler:    _DriverService_Stats_Handler,
 		},
@@ -532,10 +534,6 @@ var DriverService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "AgentChannel",
 			Handler:    _DriverService_AgentChannel_Handler,
-		},
-		{
-			MethodName: "Rekey",
-			Handler:    _DriverService_Rekey_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

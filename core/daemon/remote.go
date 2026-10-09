@@ -88,13 +88,16 @@ func remoteState(ctx context.Context, host, name string) (*daemonv1.GetBoxStateR
 		return nil, err
 	}
 	var st struct {
-		State   string    `json:"state"`
-		SavedAt time.Time `json:"saved_at"`
+		State          string    `json:"state"`
+		SavedAt        time.Time `json:"saved_at"`
+		FailedPackages []string  `json:"failed_packages"`
+		PackagesError  string    `json:"packages_error"`
 	}
 	if err := json.Unmarshal([]byte(out), &st); err != nil {
 		return nil, fmt.Errorf("state from %s: %w", host, err)
 	}
-	r := &daemonv1.GetBoxStateResponse{State: daemonv1.SaveState(daemonv1.SaveState_value[st.State]), Location: host}
+	r := &daemonv1.GetBoxStateResponse{State: daemonv1.SaveState(daemonv1.SaveState_value[st.State]), Location: host,
+		FailedPackages: st.FailedPackages, PackagesError: st.PackagesError}
 	if !st.SavedAt.IsZero() {
 		r.SavedAt = timestamppb.New(st.SavedAt)
 	}
@@ -196,12 +199,15 @@ func (s *Server) GetChannel(ctx context.Context, req *daemonv1.GetChannelRequest
 // the sync state (last saved snapshot and its time) and what this daemon
 // knows is happening (a save running, storage unreachable, the agent's
 // channel down). Opening a box successfully says nothing about saves.
-func saveState(st boxsync.State, saving, offline, agentDown, retrying, failed bool) (daemonv1.SaveState, time.Time) {
+func saveState(st boxsync.State, saving, offline, agentDown, retrying, failed, quitUnsaved bool) (daemonv1.SaveState, time.Time) {
 	switch {
 	case agentDown:
 		return daemonv1.SaveState_SAVE_STATE_AGENT_UNAVAILABLE, st.SavedAt
 	case retrying:
 		return daemonv1.SaveState_SAVE_STATE_RETRYING, st.SavedAt
+	case quitUnsaved:
+		// Until the save made first thing on open completes.
+		return daemonv1.SaveState_SAVE_STATE_QUIT_UNSAVED, st.SavedAt
 	case saving:
 		return daemonv1.SaveState_SAVE_STATE_SAVING, st.SavedAt
 	case offline:
@@ -217,24 +223,89 @@ func saveState(st boxsync.State, saving, offline, agentDown, retrying, failed bo
 
 // GetBoxState implements daemonv1.DaemonServiceServer.
 func (s *Server) GetBoxState(ctx context.Context, req *daemonv1.GetBoxStateRequest) (*daemonv1.GetBoxStateResponse, error) {
-	name := req.GetName()
+	return s.boxState(ctx, req.GetName(), true)
+}
+
+// boxState is the box's state; withPackages also asks the agent which
+// packages couldn't be installed (a call to the box, so the watcher does it
+// less often).
+func (s *Server) boxState(ctx context.Context, name string, withPackages bool) (*daemonv1.GetBoxStateResponse, error) {
 	if host := s.location(name); host != "" {
 		return remoteState(ctx, host, name)
 	}
 	ob, err := s.get(name)
 	if err != nil {
-		return &daemonv1.GetBoxStateResponse{State: daemonv1.SaveState_SAVE_STATE_CLOSED}, nil
+		return s.notOpenState(name), nil
 	}
 	st, _, err := ob.sb.LocalState()
 	if err != nil {
 		return nil, err
 	}
-	state, at := saveState(st, ob.saving.Load(), ob.offline.Load(), ob.agentDown.Load(), ob.retrying.Load(), ob.failed.Load())
+	state, at := saveState(st, ob.saving.Load(), ob.offline.Load(), ob.agentDown.Load(), ob.retrying.Load(), ob.failed.Load(), ob.quitUnsaved.Load())
 	r := &daemonv1.GetBoxStateResponse{State: state}
 	if !at.IsZero() {
 		r.SavedAt = timestamppb.New(at)
 	}
+	// Packages that couldn't be installed, for the inspector (never the
+	// state line). A quick question to the agent; no answer, nothing shown.
+	if a := ob.client(); a != nil && withPackages {
+		actx, cancel := context.WithTimeout(ctx, time.Second)
+		if rd, err := a.GetReadiness(actx, &agentv1.GetReadinessRequest{}); err == nil {
+			r.FailedPackages, r.PackagesError = rd.GetFailedPackages(), rd.GetPackagesError()
+		}
+		cancel()
+	}
 	return r, nil
+}
+
+// notOpenState is the state of a box this portenvd hasn't opened: closed,
+// unless the previous portenvd ended (crash, update, relaunch) while it was
+// open, which its recorded lease shows. Then it reports when the box was
+// last saved and that it needs opening again. It needs no key.
+func (s *Server) notOpenState(name string) *daemonv1.GetBoxStateResponse {
+	closed := &daemonv1.GetBoxStateResponse{State: daemonv1.SaveState_SAVE_STATE_CLOSED}
+	c, err := s.env.LoadBox(name)
+	if err != nil {
+		return closed
+	}
+	st, ok, err := boxsync.LoadState(filepath.Join(s.env.Dir, "state", c.ID))
+	if err != nil || !ok || st.Lease != boxsync.LeaseHeld {
+		return closed
+	}
+	r := &daemonv1.GetBoxStateResponse{State: daemonv1.SaveState_SAVE_STATE_NOT_SAVED, Interrupted: true}
+	switch {
+	case s.hasQuitMarker(c.ID):
+		r.State = daemonv1.SaveState_SAVE_STATE_QUIT_UNSAVED
+	case st.Snapshot == "" && st.Tree == "":
+		r.State = daemonv1.SaveState_SAVE_STATE_NOT_SAVED_YET
+	}
+	if !st.SavedAt.IsZero() {
+		r.SavedAt = timestamppb.New(st.SavedAt)
+	}
+	return r
+}
+
+// RetryPackages asks the box's agent to try the packages that couldn't be
+// installed again now (Retry in the inspector).
+func (s *Server) RetryPackages(ctx context.Context, req *daemonv1.RetryPackagesRequest) (*daemonv1.RetryPackagesResponse, error) {
+	if _, err := s.onServer(ctx, req.GetName(), "retry-packages"); !errors.Is(err, errNotRemote) {
+		if err != nil {
+			return nil, err
+		}
+		return &daemonv1.RetryPackagesResponse{}, nil
+	}
+	ob, err := s.get(req.GetName())
+	if err != nil {
+		return nil, err
+	}
+	a := ob.client()
+	if a == nil {
+		return nil, agentError(status.Error(codes.Unavailable, "no channel"))
+	}
+	if _, err := a.RetryPackages(ctx, &agentv1.RetryPackagesRequest{}); err != nil {
+		return nil, agentError(err)
+	}
+	return &daemonv1.RetryPackagesResponse{}, nil
 }
 
 // errNotRemote: the box is not open on a server.

@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 // Config describes the box's fixed layout. DefaultConfig matches the plan.
@@ -142,20 +143,62 @@ func ensureHome(ctx context.Context, cfg Config, run Runner) error {
 	return os.Chmod(home, 0o700) // #nosec G302 -- a directory: owner-only
 }
 
+// replayPackages installs what apt-packages.txt lists and the box lacks. A
+// package that can't be installed never stops the box from starting
+// (PLAN.md 1.4): it is recorded in r (for the inspector), and the agent
+// retries it in the background. Only an unreadable or invalid list is an
+// error.
 func replayPackages(ctx context.Context, cfg Config, run Runner, r *Readiness) error {
+	pkgs, err := listedPackages(cfg)
+	if err != nil || len(pkgs) == 0 {
+		return err
+	}
+	installMissing(ctx, run, r, pkgs)
+	return nil
+}
+
+// RetryPackages installs the listed packages the box still lacks (the
+// background retry, or Retry in the inspector) and records what still fails.
+func RetryPackages(ctx context.Context, cfg Config, run Runner, r *Readiness) {
+	pkgs, err := listedPackages(cfg)
+	if err != nil {
+		r.SetPackages(nil, "")
+		return
+	}
+	installMissing(ctx, run, r, pkgs)
+}
+
+// retryDelay is the wait before background retry n (from 0): 1, 5, 15 min,
+// then hourly.
+func retryDelay(n int) time.Duration {
+	switch n {
+	case 0:
+		return time.Minute
+	case 1:
+		return 5 * time.Minute
+	case 2:
+		return 15 * time.Minute
+	}
+	return time.Hour
+}
+
+func listedPackages(cfg Config) ([]string, error) {
 	path := filepath.Join(cfg.Home(), ".portenv", "apt-packages.txt")
 	f, err := os.Open(path) // #nosec G304 -- fixed path inside the box's home.
 	if errors.Is(err, os.ErrNotExist) {
-		return nil
+		return nil, nil
 	}
 	if err != nil {
-		return fmt.Errorf("open %s: %w", path, err)
+		return nil, fmt.Errorf("open %s: %w", path, err)
 	}
-	pkgs, err := ParsePackages(f)
-	_ = f.Close()
-	if err != nil {
-		return err
-	}
+	defer func() { _ = f.Close() }()
+	return ParsePackages(f)
+}
+
+// installMissing installs the packages not installed yet. When the batch
+// fails, each package is tried on its own, so one bad name doesn't keep the
+// others out; whatever still fails is recorded in r.
+func installMissing(ctx context.Context, run Runner, r *Readiness, pkgs []string) {
 	var missing []string
 	for _, p := range pkgs {
 		out, err := run.Run(ctx, nil, "dpkg-query", "-W", "-f=${db:Status-Status}", packageName(p))
@@ -164,19 +207,32 @@ func replayPackages(ctx context.Context, cfg Config, run Runner, r *Readiness) e
 		}
 	}
 	if len(missing) == 0 {
-		return nil
+		r.SetPackages(nil, "")
+		return
 	}
 	env := []string{"DEBIAN_FRONTEND=noninteractive"}
 	r.Step("updating package lists")
 	if out, err := run.Run(ctx, env, "apt-get", "update"); err != nil {
-		return cmdError("apt-get update", out, err)
+		r.SetPackages(missing, cmdError("apt-get update", out, err).Error())
+		return
 	}
 	r.Step(fmt.Sprintf("installing %d packages: %s", len(missing), strings.Join(missing, " ")))
-	args := append([]string{"install", "-y", "--no-install-recommends", "--"}, missing...)
-	if out, err := run.Run(ctx, env, "apt-get", args...); err != nil {
-		return cmdError("install packages from apt-packages.txt", out, err)
+	install := func(p ...string) ([]byte, error) {
+		return run.Run(ctx, env, "apt-get", append([]string{"install", "-y", "--no-install-recommends", "--"}, p...)...)
 	}
-	return nil
+	if _, err := install(missing...); err == nil {
+		r.SetPackages(nil, "")
+		return
+	}
+	var failed []string
+	var last string
+	for _, p := range missing {
+		if out, err := install(p); err != nil {
+			failed = append(failed, p)
+			last = cmdError("install "+p, out, err).Error()
+		}
+	}
+	r.SetPackages(failed, last)
 }
 
 // cmdError wraps a failed command with the last lines of its output.

@@ -39,7 +39,13 @@ TOOLS := \
 	github.com/restic/restic/cmd/restic@v0.19.1
 TOOLS_STAMP := $(BIN)/.tools-stamp
 
-.PHONY: all build app test lint fmt proto proto-check agent-linux cli-linux cli-darwin swift-test swift-env-check \
+# The Swift protoc plugins (macOS), built from tools/swift-protoc, whose
+# Package.swift and committed Package.resolved pin the same versions.
+SWIFT_PROTOBUF := 1.38.1
+GRPC_SWIFT_PROTOBUF := 2.4.1
+SWIFT_PLUGINS := $(BIN)/protoc-gen-swift $(BIN)/protoc-gen-grpc-swift-2
+
+.PHONY: all build app unregister-service test lint fmt proto proto-go proto-swift proto-check proto-check-go agent-linux cli-linux cli-darwin swift-test swift-env-check \
 	secrets spdx-check check tools clean image image-test driver-test e2e
 
 all: build test lint proto-check
@@ -47,7 +53,9 @@ all: build test lint proto-check
 ## tools: build the pinned developer tools into bin/
 tools: $(TOOLS_STAMP)
 $(TOOLS_STAMP): Makefile
-	for t in $(TOOLS); do GOWORK=off GOBIN=$(BIN) go install $$t; done
+	# -trimpath: restic ships inside Portenv.app, and no build may carry
+	# the paths of the machine that built it.
+	for t in $(TOOLS); do GOWORK=off GOBIN=$(BIN) go install -trimpath $$t; done
 	touch $@
 
 ## build: build all commands for this machine into bin/
@@ -55,6 +63,7 @@ build:
 	for c in $(CMDS); do \
 		go build -trimpath -ldflags "$(LDFLAGS)" -o $(BIN)/$$c ./core/cmd/$$c; \
 	done
+	scripts/check-build-paths.sh $(addprefix $(BIN)/,$(CMDS))
 
 ## cli-linux: portenv and portenv-runner for linux/arm64 and amd64 (static) into bin/dist
 DIST := $(BIN)/dist
@@ -77,6 +86,7 @@ agent-linux:
 		CGO_ENABLED=0 GOOS=linux GOARCH=$$a go build -trimpath -ldflags "$(LDFLAGS)" \
 			-o $(BIN)/linux-$$a/portenv-agent ./core/cmd/portenv-agent; \
 		file $(BIN)/linux-$$a/portenv-agent | tee /dev/stderr | grep -q 'statically linked'; \
+		scripts/check-build-paths.sh $(BIN)/linux-$$a/portenv-agent; \
 	done
 
 ## test: run Go tests with the race detector (sync tests use the pinned restic)
@@ -92,6 +102,7 @@ lint: $(TOOLS_STAMP) spdx-check
 	done
 	cd proto && $(BIN)/buf lint && $(BIN)/buf format --diff --exit-code
 	$(BIN)/actionlint
+	scripts/check-no-binaries.sh
 
 ## fmt: format Go and proto sources
 fmt: $(TOOLS_STAMP)
@@ -99,14 +110,37 @@ fmt: $(TOOLS_STAMP)
 	cd proto && $(BIN)/buf format -w
 
 ## proto: regenerate Go code from proto/
-proto: $(TOOLS_STAMP)
+proto: proto-go proto-swift
+
+proto-go: $(TOOLS_STAMP)
 	rm -rf proto/gen/go/portenv
 	cd proto && $(BIN)/buf generate
 
-## proto-check: fail if generated code is out of date
+## proto-swift: regenerate proto/gen/swift (macOS) with the pinned plugins
+proto-swift: $(TOOLS_STAMP) $(SWIFT_PLUGINS)
+	rm -rf proto/gen/swift/Sources/PortenvProto
+	cd proto && $(BIN)/buf generate --template buf.gen.swift.yaml --path portenv/daemon/v1 --path portenv/types/v1
+
+# The plugins, after checking the Makefile's pins match tools/swift-protoc's.
+$(SWIFT_PLUGINS): tools/swift-protoc/Package.swift tools/swift-protoc/Package.resolved Makefile
+	grep -q 'swift-protobuf.git", exact: "$(SWIFT_PROTOBUF)"' tools/swift-protoc/Package.swift
+	grep -q 'grpc-swift-protobuf.git", exact: "$(GRPC_SWIFT_PROTOBUF)"' tools/swift-protoc/Package.swift
+	cd tools/swift-protoc && $(SWIFT) build -c release --product protoc-gen-swift && $(SWIFT) build -c release --product protoc-gen-grpc-swift-2
+	cp tools/swift-protoc/.build/release/protoc-gen-swift tools/swift-protoc/.build/release/protoc-gen-grpc-swift-2 $(BIN)/
+
+## unregister-service: remove bin/Portenv.app's login item (portenvd under launchd); end any test that registered it with this
+unregister-service:
+	$(BIN)/Portenv.app/Contents/MacOS/Portenv --unregister-service
+
+## proto-check: fail if generated Go or Swift is out of date (macOS: both)
 proto-check: proto
 	git diff --exit-code -- proto/gen
 	test -z "$$(git status --porcelain -- proto/gen | tee /dev/stderr)"
+
+## proto-check-go: the same for Go only (CI's Linux job; the macOS job checks both)
+proto-check-go: proto-go
+	git diff --exit-code -- proto/gen/go
+	test -z "$$(git status --porcelain -- proto/gen/go | tee /dev/stderr)"
 
 ## app: build Portenv.app into bin/, with portenv, portenvd and restic inside (1.0: ad-hoc signed to run here)
 # Built outside the repository: SwiftPM's resource accessor falls back to the
@@ -119,20 +153,34 @@ APP_BUILD := $(HOME)/Library/Caches/Portenv/app-build
 # shell would end up on disk under .build (scripts/check-swift-env.sh).
 SWIFT := env -i PATH="$(PATH)" HOME="$(HOME)" TMPDIR="$(or $(TMPDIR),/tmp)" LANG=en_US.UTF-8 swift
 app: build $(TOOLS_STAMP)
-	cd apps/mac && $(SWIFT) build -c release --scratch-path "$(APP_BUILD)"
+	# Source paths remapped: a release build never carries this machine's paths.
+	cd apps/mac && $(SWIFT) build -c release --scratch-path "$(APP_BUILD)" \
+		-Xswiftc -file-prefix-map -Xswiftc "$(CURDIR)/=" -Xcc -ffile-prefix-map="$(CURDIR)/=" \
+		-Xswiftc -file-prefix-map -Xswiftc "$(APP_BUILD)/=build/" -Xcc -ffile-prefix-map="$(APP_BUILD)/=build/"
 	rm -rf $(BIN)/Portenv.app && mkdir -p $(BIN)/Portenv.app/Contents/MacOS
 	cp "$(APP_BUILD)/release/Portenv" $(BIN)/Portenv.app/Contents/MacOS/Portenv
+	# No debug map in a release app: it lists source and object paths.
+	strip -S $(BIN)/Portenv.app/Contents/MacOS/Portenv
+	# The app must be able to prompt: it never links the process-wide no-prompt switch (core/keys).
+	if nm -u $(BIN)/Portenv.app/Contents/MacOS/Portenv | grep -q SecKeychainSetUserInteractionAllowed; then echo "Portenv imports SecKeychainSetUserInteractionAllowed: prompts would stop working in the app" >&2; exit 1; fi
 	# Helpers, not MacOS/: on a case-insensitive disk portenv would replace Portenv.
 	mkdir -p $(BIN)/Portenv.app/Contents/Helpers && cp $(BIN)/portenv $(BIN)/portenvd $(BIN)/restic $(BIN)/Portenv.app/Contents/Helpers/
 	for f in portenv portenvd restic; do codesign --force --sign - $(BIN)/Portenv.app/Contents/Helpers/$$f; done
 	cp apps/mac/Info.plist $(BIN)/Portenv.app/Contents/Info.plist
+	# portenvd's launch agent (the login item; SMAppService.agent registers it).
+	mkdir -p $(BIN)/Portenv.app/Contents/Library/LaunchAgents
+	cp apps/mac/LaunchAgents/com.portenv.portenvd.plist $(BIN)/Portenv.app/Contents/Library/LaunchAgents/
 	mkdir -p $(BIN)/Portenv.app/Contents/Resources && for b in "$(APP_BUILD)"/release/*.bundle; do [ -e "$$b" ] && cp -R "$$b" $(BIN)/Portenv.app/Contents/Resources/; done; true
+	scripts/check-build-paths.sh $(BIN)/Portenv.app/Contents/MacOS/Portenv $(addprefix $(BIN)/Portenv.app/Contents/Helpers/,portenv portenvd restic)
 	codesign --force --sign - $(BIN)/Portenv.app
 
 ## swift-test: build and test the Swift packages (macOS only)
 swift-test:
 	cd shims/containerization && $(SWIFT) build && $(SWIFT) test
-	cd apps/mac && $(SWIFT) build && $(SWIFT) test
+	# The app's tests run with a one-thread cooperative pool: a call that
+	# blocks a pool thread (a Keychain prompt) hangs here, not only on CI's
+	# three cores.
+	cd apps/mac && $(SWIFT) build && env -i PATH="$(PATH)" HOME="$(HOME)" TMPDIR="$(or $(TMPDIR),/tmp)" LANG=en_US.UTF-8 LIBDISPATCH_COOPERATIVE_POOL_STRICT=1 swift test
 
 ## swift-env-check: a secret in the environment never reaches the Swift build folders
 swift-env-check:

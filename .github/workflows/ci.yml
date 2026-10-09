@@ -25,6 +25,7 @@ jobs:
           - arch: arm64
             os: ubuntu-24.04-arm
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -45,6 +46,7 @@ jobs:
   agent-static:
     name: Static agent (linux/arm64, linux/amd64)
     runs-on: ubuntu-24.04
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -56,6 +58,7 @@ jobs:
   proto:
     name: Protocols
     runs-on: ubuntu-24.04
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -69,11 +72,12 @@ jobs:
           key: tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Makefile') }}
       # Lint and format run in the go job; this checks generated code is current.
       # Breaking-change checks (buf breaking) stay off until Phase 1.
-      - run: make proto-check
+      - run: make proto-check-go
 
   swift:
     name: Swift (macOS arm64)
     runs-on: macos-26
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # make app (in swift-env-check) builds the Go helpers into the bundle.
@@ -87,6 +91,9 @@ jobs:
           brew install make
           echo "$(brew --prefix)/opt/make/libexec/gnubin" >> "$GITHUB_PATH"
       - run: make --version | head -1
+      # Regenerates Go and Swift from proto/ with the pinned plugins and fails
+      # on any difference.
+      - run: make proto-check
       - run: make swift-test
       - run: make swift-env-check
       # Internal CLI artifacts (signed public releases: ADR 0009, later).
@@ -140,6 +147,7 @@ jobs:
   secrets:
     name: Secret scan
     runs-on: ubuntu-24.04
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

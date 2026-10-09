@@ -67,6 +67,8 @@ The title shows the box name, a sync symbol and a chevron; the line under it is 
 | Open on a server | `checkmark.circle` | `Test server · Saved at 15:42` |
 | Box agent unavailable | `exclamationmark.triangle` | `This Mac · Not saved since 14:58` (and Restart Box offered) |
 | Just reverted | `checkmark.circle` | `Reverted to 14:31 · your changes were kept` for 5 s, then the normal line |
+| Waiting for Keychain access | `lock` | `Waiting for Keychain access`, with "Check for a password prompt. It may be behind other windows." under it and a Cancel button; shown when a Keychain read hasn't returned after 2 s, with a notification when the window isn't in front |
+| Portenv quit before saving it | `exclamationmark.triangle` | `This Mac · Not saved since 15:54 · Portenv quit before saving` until the save made on opening completes |
 
 Rules:
 - Times are local wall-clock time in the user's 12/24-hour setting. Never UTC.
@@ -136,6 +138,7 @@ Shown when a program in the visible tab is waiting for an answer that Portenv ca
 ### 4.5 Type and colour
 
 - Monospace: SF Mono (user's choice in Settings), 13 pt default.
+- The terminal has an 8 pt margin on every side, in the terminal's own background colour: its text never touches the window's edge (`TerminalLayout.margin`).
 - Terminal colours come from the user's chosen theme; Portenv's own decorations (block tint, headers, card) use system semantic colours so they work in light and dark mode.
 
 ---
@@ -164,7 +167,7 @@ Opened with ⌥⌘I, the toolbar button (`sidebar.right`) or View › Show Inspe
 
 Sections, always in this order, each with a small grey heading:
 
-1. **Where it is.** "Running on <place>" with how long and where it came from; "Saves go to <place>" with "Encrypted on this Mac before they leave it" (or the right equivalent); a Move To… button.
+1. **Where it is.** "Running on <place>" with how long and where it came from; "Saves go to <place>" with "Encrypted on this Mac before they leave it" (or the right equivalent); a Move To… button. When packages from `apt-packages.txt` couldn't be installed: "1 package couldn't be installed: <name> · Retry" ("2 packages couldn't be installed: <a>, <b> · Retry"). The state line stays normal; the box started all the same and Portenv retries in the background.
    - During a move, this section becomes the move's progress, in four steps with a check, current or pending marker each: Saved on <source> (time, size of changes) → Sending changes (progress bar, "x of y MB") → Starting on <destination> → Reconnecting this window. Above the steps: a time estimate once known. Below: "You can keep reading. Typing comes back when the box is running there. If the move stops, the box stays here, saved."
 2. **Saves.** "Last saved <time>", then the five most recent saves, newest first: time, kind and optional name. Kinds: Autosave, Save point ("name"), Saved before moving, Arrived from <place>, Kept when you reverted (with "Nothing reverted away is lost"). Hovering a row shows Revert. "Browse All Saves…" link below.
 3. **Who's here.** You first, then each connected agent: avatar, name, mode ("On your behalf" or "Own lane"), "since <time>", any waiting state in orange text, and a Revoke button (destructive style, confirmation alert).

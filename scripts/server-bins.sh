@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 #
-# Sourced by the server scripts (server-gate.sh, server-session.sh,
+# Sourced by the server scripts (tests/e2e/server-session.sh,
 # demo-server-box.sh): puts portenv and portenv-runner for a server into a
 # directory. By default the binaries CI built for this commit
 # (scripts/fetch-cli.sh), so a server runs exactly what CI built and tested;

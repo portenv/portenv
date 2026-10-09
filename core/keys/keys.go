@@ -12,12 +12,60 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 
 	"golang.org/x/crypto/ssh"
 )
 
 // ErrNotFound means the store holds no key for the box.
 var ErrNotFound = errors.New("no key stored for this box")
+
+// ErrNeedsApproval means the Keychain would have to ask the person first.
+// Background processes and scripts never raise that prompt: they get this
+// one plain line instead, and the app (in front of the person) reads the key.
+var ErrNeedsApproval = errors.New("Keychain needs your approval. Open Portenv on this Mac to allow it.") //nolint:staticcheck // ST1005: a sentence shown to people as it is (PLAN.md, Phase 1 item 1d)
+
+// Memory holds keys in memory only: the keys the app read from the Keychain
+// and handed to portenvd. Safe for concurrent use.
+type Memory struct {
+	mu   sync.Mutex
+	keys map[string][]byte
+}
+
+// NewMemory returns an empty in-memory store.
+func NewMemory() *Memory { return &Memory{keys: map[string][]byte{}} }
+
+// Get returns a key handed over, or ErrNotFound.
+func (m *Memory) Get(id string) ([]byte, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if k, ok := m.keys[id]; ok {
+		return append([]byte(nil), k...), nil
+	}
+	return nil, ErrNotFound
+}
+
+// Put keeps a key in memory.
+func (m *Memory) Put(id string, key []byte) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.keys[id] = append([]byte(nil), key...)
+	return nil
+}
+
+// Layered reads First, then Then; it writes to Then.
+type Layered struct{ First, Then Store }
+
+// Get returns First's key, else Then's.
+func (l Layered) Get(id string) ([]byte, error) {
+	if k, err := l.First.Get(id); err == nil {
+		return k, nil
+	}
+	return l.Then.Get(id)
+}
+
+// Put stores in Then.
+func (l Layered) Put(id string, key []byte) error { return l.Then.Put(id, key) }
 
 // Store keeps one repository key per box. Phase 0 minimum (docs/PLAN.md):
 // the Keychain on a Mac, a root-only file on a server.

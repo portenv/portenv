@@ -64,7 +64,7 @@ func (k Keychain) Get(boxID string) ([]byte, error) {
 		noPrompts()
 	}
 	res, err := keychain.QueryItem(k.query(boxID))
-	if errors.Is(err, keychain.ErrorInteractionNotAllowed) {
+	if needsApproval(k.Interactive, err) {
 		return nil, ErrNeedsApproval
 	}
 	if err != nil {
@@ -90,10 +90,21 @@ func (k Keychain) Put(boxID string, key []byte) error {
 	if errors.Is(err, keychain.ErrorDuplicateItem) {
 		return errors.New("a key for box " + boxID + " already exists in the Keychain")
 	}
-	if errors.Is(err, keychain.ErrorInteractionNotAllowed) {
+	if needsApproval(k.Interactive, err) {
 		return ErrNeedsApproval
 	}
 	return err
+}
+
+// needsApproval: with interaction off, the legacy keychain refuses a read
+// its access list doesn't allow with errSecAuthFailed, and data-protection
+// items with errSecInteractionNotAllowed; either way the person must
+// approve it in the app.
+func needsApproval(interactive bool, err error) bool {
+	if errors.Is(err, keychain.ErrorInteractionNotAllowed) {
+		return true
+	}
+	return !interactive && errors.Is(err, keychain.ErrorAuthFailed)
 }
 
 // Default is the Keychain, without prompts unless AllowPrompts was called.

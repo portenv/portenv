@@ -30,6 +30,13 @@ final class CountingNotifier: KeychainWaitNotifying, @unchecked Sendable {
     func keychainWaiting(box: String) async { lock.withLock { _count += 1 } }
 }
 
+final class Seen: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _all: [String] = []
+    var all: [String] { lock.withLock { _all } }
+    func add(_ s: String) { lock.withLock { _all.append(s) } }
+}
+
 @MainActor
 struct KeychainWaitTests {
     func controller(_ keychain: BlockingKeychain, _ cli: FakeCLI, _ notifier: CountingNotifier) -> BoxController {
@@ -55,6 +62,23 @@ struct KeychainWaitTests {
         await opening.value
         #expect(!c.waitingForKeychain)
         #expect(c.location == .thisMac)
+    }
+
+    /// After the person allows the read, the window says the box is opening
+    /// again (the wait line once stayed up, spinning, until the box opened).
+    @Test func afterApprovalTheLineSaysOpening() async {
+        let kc = BlockingKeychain(blocks: true), cli = FakeCLI(), n = CountingNotifier()
+        let c = controller(kc, cli, n)
+        let seen = Seen()
+        cli.onRun = { args in
+            guard args.count > 1, args[1] == "open" else { return }
+            await MainActor.run { seen.add(c.subtitle) }
+        }
+        let opening = Task { await c.open() }
+        await waitUntil { c.waitingForKeychain }
+        kc.release()
+        await opening.value
+        #expect(seen.all == ["Opening…", "Opening…"], "the second open says Opening…, not the wait line")
     }
 
     @Test func cancelStopsTheOpenCleanly() async {

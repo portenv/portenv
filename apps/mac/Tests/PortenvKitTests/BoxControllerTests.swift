@@ -21,8 +21,11 @@ final class FakeCLI: CLIRunning, @unchecked Sendable {
     var inputs: [Data] { lock.withLock { _inputs } }
     /// Answers for actions that should fail only the first time.
     var failingOnce: [String: String] = [:]
+    /// Runs before each answer (to look at the app mid-call).
+    var onRun: (@Sendable ([String]) async -> Void)?
 
     func run(_ arguments: [String], input: Data?) async throws -> String {
+        await onRun?(arguments)
         lock.withLock {
             _calls.append(arguments)
             if let input { _inputs.append(input) }

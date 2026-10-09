@@ -237,6 +237,7 @@ public final class BoxController {
             }
         }
         waitingForKeychain = false
+        progress = "Opening…"
         progressDetail = nil
         cancelKeychain = nil
         guard let result else { return false }

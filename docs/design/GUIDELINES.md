@@ -138,6 +138,7 @@ Shown when a program in the visible tab is waiting for an answer that Portenv ca
 ### 4.5 Type and colour
 
 - Monospace: SF Mono (user's choice in Settings), 13 pt default.
+- The terminal has an 8 pt margin on every side, in the terminal's own background colour: its text never touches the window's edge (`TerminalLayout.margin`).
 - Terminal colours come from the user's chosen theme; Portenv's own decorations (block tint, headers, card) use system semantic colours so they work in light and dark mode.
 
 ---

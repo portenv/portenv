@@ -49,11 +49,13 @@ type apiServer struct {
 	agentv1.UnimplementedAgentServiceServer
 	cfg  Config
 	keys *channelKeys
+	// tmux runs tmux as the main user (tmuxAs; a fake in tests).
+	tmux func(Config) (tmuxFunc, error)
 }
 
 // newChannelServer serves the API with the channel's current secrets.
 func newChannelServer(cfg Config, keys *channelKeys) *grpc.Server {
-	s := &apiServer{cfg: cfg, keys: keys}
+	s := &apiServer{cfg: cfg, keys: keys, tmux: tmuxAs}
 	srv := grpc.NewServer(
 		grpc.Creds(credentials.NewTLS(keys.tlsConfig())),
 		grpc.UnaryInterceptor(func(ctx context.Context, req any, _ *grpc.UnaryServerInfo, h grpc.UnaryHandler) (any, error) {

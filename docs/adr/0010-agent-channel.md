@@ -1,6 +1,6 @@
 # 0010. The agent channel: gRPC to the box agent over pinned TLS, loopback only, per-start token
 
-Date: 2026-10-08 · Status: accepted, with conditions (below)
+Date: 2026-10-08 · Status: accepted, with conditions (below). The condition that the API process reads one line and closes stdin is superseded by ADR 0014 (re-key over stdin, so a restarted `portenvd` takes over a running box); the other conditions stand.
 
 ## Context
 

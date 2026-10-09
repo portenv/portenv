@@ -40,7 +40,10 @@ func dialDaemon(e *local.Env) (daemonv1.DaemonServiceClient, func(), error) {
 
 // cmdApp runs one of the app's actions through portenvd:
 //
-//	portenv app open|close|point|revert|check|restart BOX
+//	portenv app open BOX [--take-over]
+//	portenv app close|point|save|revert|check|restart BOX
+//	portenv app history BOX         (every save, oldest first)
+//	portenv app housekeep BOX [--prune]
 //	portenv app move BOX this-mac|USER@HOST
 //	portenv app servers BOX         (the Move To targets, one per line)
 //	portenv app ping                (exit 0 when portenvd answers)
@@ -139,7 +142,8 @@ func cmdApp(ctx context.Context, e *local.Env, op string, args []string) error {
 	var summary string
 	switch op {
 	case "open":
-		r, err := c.OpenBox(ctx, &daemonv1.OpenBoxRequest{Name: name})
+		takeOver := len(args) > 1 && args[1] == "--take-over"
+		r, err := c.OpenBox(ctx, &daemonv1.OpenBoxRequest{Name: name, TakeOver: takeOver})
 		if err != nil {
 			return plain(err)
 		}
@@ -149,6 +153,37 @@ func cmdApp(ctx context.Context, e *local.Env, op string, args []string) error {
 			return plain(err)
 		}
 		summary = "closed and released"
+	case "save":
+		r, err := c.SaveNow(ctx, &daemonv1.SaveNowRequest{Name: name})
+		if err != nil {
+			return plain(err)
+		}
+		summary = "saved " + short(r.GetSnapshot().GetId())
+	case "history":
+		r, err := c.ListSaves(ctx, &daemonv1.ListSavesRequest{Name: name})
+		if err != nil {
+			return plain(err)
+		}
+		if len(r.GetSaves()) == 0 {
+			fmt.Println("no saves yet")
+		}
+		for _, h := range r.GetSaves() {
+			note := ""
+			if h.GetOpenOn() != "" {
+				note = "  open on " + h.GetOpenOn()
+			}
+			if h.GetKind() == "orphaned" {
+				note = "  unsaved work from " + h.GetMachine() + ", kept as a separate save"
+			}
+			fmt.Printf("%s  %s  %-8s  %s%s\n", short(h.GetId()), h.GetTime().AsTime().Local().Format(time.DateTime), h.GetKind(), h.GetMachine(), note)
+		}
+		return nil
+	case "housekeep":
+		prune := len(args) > 1 && args[1] == "--prune"
+		if _, err := c.Housekeep(ctx, &daemonv1.HousekeepRequest{Name: name, Prune: prune}); err != nil {
+			return plain(err)
+		}
+		summary = "housekept"
 	case "point":
 		r, err := c.MakeSavePoint(ctx, &daemonv1.MakeSavePointRequest{Name: name})
 		if err != nil {

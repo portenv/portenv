@@ -25,9 +25,6 @@ service DriverService {
   rpc Stop(StopRequest) returns (StopResponse);
   // Removes the box's instance. Never deletes its home storage.
   rpc Destroy(DestroyRequest) returns (DestroyResponse);
-  // Runs one non-interactive command in the box. Bootstrap only (for example
-  // before the box agent is up); never an access path for people or agents.
-  rpc Exec(ExecRequest) returns (ExecResponse);
   // Streams the box's console output.
   rpc Logs(LogsRequest) returns (stream LogsResponse);
   // Returns a point-in-time snapshot of the box's state and resource use.
@@ -80,25 +77,6 @@ message DestroyRequest {
 }
 
 message DestroyResponse {}
-
-message ExecRequest {
-  string box_id = 1;
-  // Program and arguments. Not run through a shell.
-  repeated string argv = 2;
-  // Extra environment, as "KEY=value".
-  repeated string env = 3;
-  // User to run as. Empty means root.
-  string user = 4;
-  bytes stdin = 5;
-  // Unset means no timeout.
-  google.protobuf.Duration timeout = 6;
-}
-
-message ExecResponse {
-  int32 exit_code = 1;
-  bytes stdout = 2;
-  bytes stderr = 3;
-}
 
 // Which console stream a log chunk came from.
 enum LogStream {

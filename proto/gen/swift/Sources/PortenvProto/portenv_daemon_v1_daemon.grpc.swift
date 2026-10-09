@@ -282,6 +282,45 @@ public enum Portenv_Daemon_V1_DaemonService: Sendable {
                 type: .unary
             )
         }
+        /// Namespace for "SaveNow" metadata.
+        public enum SaveNow: Sendable {
+            /// Request type for "SaveNow".
+            public typealias Input = Portenv_Daemon_V1_SaveNowRequest
+            /// Response type for "SaveNow".
+            public typealias Output = Portenv_Daemon_V1_SaveNowResponse
+            /// Descriptor for "SaveNow".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "SaveNow",
+                type: .unary
+            )
+        }
+        /// Namespace for "ListSaves" metadata.
+        public enum ListSaves: Sendable {
+            /// Request type for "ListSaves".
+            public typealias Input = Portenv_Daemon_V1_ListSavesRequest
+            /// Response type for "ListSaves".
+            public typealias Output = Portenv_Daemon_V1_ListSavesResponse
+            /// Descriptor for "ListSaves".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "ListSaves",
+                type: .unary
+            )
+        }
+        /// Namespace for "Housekeep" metadata.
+        public enum Housekeep: Sendable {
+            /// Request type for "Housekeep".
+            public typealias Input = Portenv_Daemon_V1_HousekeepRequest
+            /// Response type for "Housekeep".
+            public typealias Output = Portenv_Daemon_V1_HousekeepResponse
+            /// Descriptor for "Housekeep".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "Housekeep",
+                type: .unary
+            )
+        }
         /// Descriptors for all methods in the "portenv.daemon.v1.DaemonService" service.
         public static let descriptors: [GRPCCore.MethodDescriptor] = [
             GetVersion.descriptor,
@@ -303,7 +342,10 @@ public enum Portenv_Daemon_V1_DaemonService: Sendable {
             ProvideKeys.descriptor,
             Relaunch.descriptor,
             ListServers.descriptor,
-            GetKeyIDs.descriptor
+            GetKeyIDs.descriptor,
+            SaveNow.descriptor,
+            ListSaves.descriptor,
+            Housekeep.descriptor
         ]
     }
 }
@@ -795,6 +837,77 @@ extension Portenv_Daemon_V1_DaemonService {
             deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_GetKeyIDsResponse>,
             options: GRPCCore.CallOptions,
             onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_GetKeyIDsResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "SaveNow" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > An autosave now (the Phase 0 CLI's save, moved here in 1.1).
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_SaveNowRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_SaveNowRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_SaveNowResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func saveNow<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_SaveNowRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_SaveNowRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_SaveNowResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_SaveNowResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "ListSaves" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Every save of the box, oldest first: autosaves, save points, closes and
+        /// > orphaned saves, with the machine that made each.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_ListSavesRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_ListSavesRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_ListSavesResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func listSaves<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_ListSavesRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_ListSavesRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_ListSavesResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ListSavesResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "Housekeep" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Clear old lease tags and apply retention; with prune, also delete data
+        /// > no save uses. For an idle box.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_HousekeepRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_HousekeepRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_HousekeepResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func housekeep<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_HousekeepRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_HousekeepRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_HousekeepResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_HousekeepResponse>) async throws -> Result
         ) async throws -> Result where Result: Sendable
     }
 
@@ -1503,6 +1616,110 @@ extension Portenv_Daemon_V1_DaemonService {
                 onResponse: handleResponse
             )
         }
+
+        /// Call the "SaveNow" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > An autosave now (the Phase 0 CLI's save, moved here in 1.1).
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_SaveNowRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_SaveNowRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_SaveNowResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func saveNow<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_SaveNowRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_SaveNowRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_SaveNowResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_SaveNowResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.SaveNow.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
+
+        /// Call the "ListSaves" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Every save of the box, oldest first: autosaves, save points, closes and
+        /// > orphaned saves, with the machine that made each.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_ListSavesRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_ListSavesRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_ListSavesResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func listSaves<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_ListSavesRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_ListSavesRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_ListSavesResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ListSavesResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.ListSaves.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
+
+        /// Call the "Housekeep" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Clear old lease tags and apply retention; with prune, also delete data
+        /// > no save uses. For an idle box.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_HousekeepRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_HousekeepRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_HousekeepResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func housekeep<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_HousekeepRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_HousekeepRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_HousekeepResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_HousekeepResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.Housekeep.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
     }
 }
 
@@ -2090,6 +2307,95 @@ extension Portenv_Daemon_V1_DaemonService.ClientProtocol {
             request: request,
             serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_GetKeyIDsRequest>(),
             deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_GetKeyIDsResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "SaveNow" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > An autosave now (the Phase 0 CLI's save, moved here in 1.1).
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_SaveNowRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func saveNow<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_SaveNowRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_SaveNowResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.saveNow(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_SaveNowRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_SaveNowResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "ListSaves" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Every save of the box, oldest first: autosaves, save points, closes and
+    /// > orphaned saves, with the machine that made each.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_ListSavesRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func listSaves<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_ListSavesRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ListSavesResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.listSaves(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_ListSavesRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_ListSavesResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "Housekeep" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Clear old lease tags and apply retention; with prune, also delete data
+    /// > no save uses. For an idle box.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_HousekeepRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func housekeep<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_HousekeepRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_HousekeepResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.housekeep(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_HousekeepRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_HousekeepResponse>(),
             options: options,
             onResponse: handleResponse
         )
@@ -2760,6 +3066,107 @@ extension Portenv_Daemon_V1_DaemonService.ClientProtocol {
             metadata: metadata
         )
         return try await self.getKeyIDs(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "SaveNow" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > An autosave now (the Phase 0 CLI's save, moved here in 1.1).
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func saveNow<Result>(
+        _ message: Portenv_Daemon_V1_SaveNowRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_SaveNowResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_SaveNowRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.saveNow(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "ListSaves" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Every save of the box, oldest first: autosaves, save points, closes and
+    /// > orphaned saves, with the machine that made each.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func listSaves<Result>(
+        _ message: Portenv_Daemon_V1_ListSavesRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ListSavesResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_ListSavesRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.listSaves(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "Housekeep" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Clear old lease tags and apply retention; with prune, also delete data
+    /// > no save uses. For an idle box.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func housekeep<Result>(
+        _ message: Portenv_Daemon_V1_HousekeepRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_HousekeepResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_HousekeepRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.housekeep(
             request: request,
             options: options,
             onResponse: handleResponse

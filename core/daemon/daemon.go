@@ -221,7 +221,7 @@ func (s *Server) OpenBox(ctx context.Context, req *daemonv1.OpenBoxRequest) (*da
 		return nil, err
 	}
 	defer done()
-	ob, res, err := s.openBox(ctx, req.GetName())
+	ob, res, err := s.openBox(ctx, req.GetName(), req.GetTakeOver())
 	if err != nil {
 		var held *boxsync.LeaseHeldError
 		if errors.As(err, &held) {
@@ -234,6 +234,11 @@ func (s *Server) OpenBox(ctx context.Context, req *daemonv1.OpenBoxRequest) (*da
 	s.open[req.GetName()] = ob
 	s.mu.Unlock()
 	summary := fmt.Sprintf("open on %s (resume rule %d: %s)", s.env.Machine, res.Rule, res.Action)
+	// Rule 4: say where the unsaved work went, with its time.
+	if o := res.Orphaned; o != nil {
+		summary += fmt.Sprintf("; unsaved work from %s was kept as a separate save, %s (%s), before restoring the newer one",
+			o.Machine, short8(o.ID), o.Time.Local().Format(time.DateTime))
+	}
 	if res.Offline {
 		summary = "Offline · will save later"
 	}
@@ -249,7 +254,7 @@ func (s *Server) OpenBox(ctx context.Context, req *daemonv1.OpenBoxRequest) (*da
 	return &daemonv1.OpenBoxResponse{Summary: summary, Rule: int32(res.Rule)}, nil // #nosec G115 -- rules 1 to 5
 }
 
-func (s *Server) openBox(ctx context.Context, name string) (*openBox, boxsync.ResumeResult, error) {
+func (s *Server) openBox(ctx context.Context, name string, takeOver bool) (*openBox, boxsync.ResumeResult, error) {
 	var none boxsync.ResumeResult
 	t0 := time.Now()
 	step := func(what string) { s.log.Info(what, "box", name, "after", time.Since(t0).Round(time.Millisecond)) }
@@ -320,7 +325,7 @@ func (s *Server) openBox(ctx context.Context, name string) (*openBox, boxsync.Re
 			ob.stop(ctx)
 			return nil, none, err
 		}
-		if res, err = ob.sb.Resume(ctx, boxsync.ResumeOptions{}); err != nil {
+		if res, err = ob.sb.Resume(ctx, boxsync.ResumeOptions{TakeOver: takeOver}); err != nil {
 			ob.stop(ctx)
 			return nil, none, err
 		}
@@ -791,4 +796,12 @@ func (ob *openBox) noteErr(err error) error {
 		ob.agentDown.Store(true)
 	}
 	return err
+}
+
+// short8 is a save's short ID.
+func short8(id string) string {
+	if len(id) > 8 {
+		return id[:8]
+	}
+	return id
 }

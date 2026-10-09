@@ -18,6 +18,7 @@ import (
 
 	"github.com/portenv/portenv/core/agent"
 	"github.com/portenv/portenv/core/driver"
+	"github.com/portenv/portenv/core/driver/drivertest"
 	agentv1 "github.com/portenv/portenv/proto/gen/go/portenv/agent/v1"
 )
 
@@ -60,7 +61,7 @@ func TestChannelConditions(t *testing.T) {
 	// access path.
 	sh := func(user, script string) string {
 		t.Helper()
-		res, err := d.Exec(ctx, id, driver.ExecRequest{Argv: []string{"sh", "-c", script}, User: user, Timeout: time.Minute})
+		res, err := d.probe(ctx, id, drivertest.ProbeRequest{Argv: []string{"sh", "-c", script}, User: user, Timeout: time.Minute})
 		if err != nil {
 			t.Fatal(err)
 		}

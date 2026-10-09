@@ -31,6 +31,7 @@ func TestConformance(t *testing.T) {
 	}
 	drivertest.Run(t, drivertest.Env{
 		Driver: d,
+		Probe:  d.probe,
 		Restarted: func() driver.Driver {
 			again, err := New(Config{StateDir: state})
 			if err != nil {

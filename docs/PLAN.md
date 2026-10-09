@@ -1067,6 +1067,13 @@ The old numbers, for ADRs and PRs written before 2026-10-09: 2.2 wizard → 2.9 
   - the box introducing itself (`PORTENV_BOX`, `PORTENV_GUIDE`, the login banner, and Portenv's own `AGENTS.md`, never touching the user's files; ADR at 2.4);
   - `tests/agent-evals/`.
 - Attribution and session recording per agent, the save point on connect, Watch, Take Over and Revoke in the app.
+- **Connect an Agent: the user chooses the door, per agent and per box** (the door table is in GUIDELINES.md §6.1):
+  - Portenv never picks silently. The sheet states, in plain language, what each door allows before connecting.
+  - **A default suggestion only:** MCP or a lane for agents the user hasn't used before, and stand-in when they trust the agent like themselves. The user can always choose otherwise.
+  - **Changing an agent's door or mode** takes effect immediately and is recorded.
+  - **The relay rule:** when one agent's command is refused (by its own safety checks or its permissions), the refusal goes to the user with the reason. Nothing automatically hands the command to another agent. A re-run happens only on the user's explicit instruction, and it's attributed as "you, through <agent>", next to the original refusal.
+  - **SSH command rules are never described as a security boundary,** anywhere: the app, the docs, the website. A shell can rephrase any command. What holds is the recording, Revert, and the vault rules enforced by the operating system.
+  - Each door appears as it lands: stand-in here (2.4), MCP in 2.6 and 2.7, the web terminal in 2.8, lanes in 4.1.
 - Not in 2.4: lanes (4.1), approvals (4.2), the gateway and its CA (Phase 3), phone notifications (4.6).
 - **Open question:** a per-box "Keep running when Portenv quits" option, off by default, so a stand-in agent's work can go on after the app quits, with a menu bar item listing the boxes still running. Only worth building with Phase 3's lease hand-off, so a sleeping Mac never blocks resuming the box elsewhere. No ADR until then.
 

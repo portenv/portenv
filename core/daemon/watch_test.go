@@ -61,10 +61,11 @@ func TestWatchPushesChanges(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	first, err := stream.Recv()
+	firstM, err := stream.Recv()
 	if err != nil {
 		t.Fatal(err)
 	}
+	first := firstM.GetState()
 	if first.GetState() != daemonv1.SaveState_SAVE_STATE_CLOSED {
 		t.Fatalf("first message %v, want CLOSED", first.GetState())
 	}
@@ -76,10 +77,11 @@ func TestWatchPushesChanges(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(s.env.Dir, "state", "box-1", "state.json"), []byte(`{"snapshot":"abc","lease":"held","saved_at":"2026-10-09T05:56:40Z"}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	next, err := stream.Recv()
+	nextM, err := stream.Recv()
 	if err != nil {
 		t.Fatal(err)
 	}
+	next := nextM.GetState()
 	if !next.GetInterrupted() || next.GetState() != daemonv1.SaveState_SAVE_STATE_NOT_SAVED {
 		t.Fatalf("after the change: %v", next)
 	}
@@ -88,10 +90,11 @@ func TestWatchPushesChanges(t *testing.T) {
 	}
 	// Nothing changes: the next message is the heartbeat, not sooner.
 	start = time.Now()
-	beat, err := stream.Recv()
+	beatM, err := stream.Recv()
 	if err != nil {
 		t.Fatal(err)
 	}
+	beat := beatM.GetState()
 	if d := time.Since(start); d < 400*time.Millisecond {
 		t.Fatalf("a message %v after the last with no change", d)
 	}

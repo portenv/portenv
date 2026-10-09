@@ -83,7 +83,7 @@ type DaemonServiceClient interface {
 	// The box's state as it changes: the current state at once, then a
 	// message whenever anything in it changes, and the state again every 30 s
 	// as a heartbeat. The stream ends when portenvd stops (ADR 0014).
-	WatchBoxState(ctx context.Context, in *WatchBoxStateRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[GetBoxStateResponse], error)
+	WatchBoxState(ctx context.Context, in *WatchBoxStateRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[WatchBoxStateResponse], error)
 	// The system's network status, as the app sees it (NWPathMonitor on the
 	// Mac). A fresh "down" (from a running app, at most 30 s old) opens a
 	// box offline at once, without probing storage; anything else probes.
@@ -235,13 +235,13 @@ func (c *daemonServiceClient) GetBoxState(ctx context.Context, in *GetBoxStateRe
 	return out, nil
 }
 
-func (c *daemonServiceClient) WatchBoxState(ctx context.Context, in *WatchBoxStateRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[GetBoxStateResponse], error) {
+func (c *daemonServiceClient) WatchBoxState(ctx context.Context, in *WatchBoxStateRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[WatchBoxStateResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	stream, err := c.cc.NewStream(ctx, &DaemonService_ServiceDesc.Streams[1], DaemonService_WatchBoxState_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
-	x := &grpc.GenericClientStream[WatchBoxStateRequest, GetBoxStateResponse]{ClientStream: stream}
+	x := &grpc.GenericClientStream[WatchBoxStateRequest, WatchBoxStateResponse]{ClientStream: stream}
 	if err := x.ClientStream.SendMsg(in); err != nil {
 		return nil, err
 	}
@@ -252,7 +252,7 @@ func (c *daemonServiceClient) WatchBoxState(ctx context.Context, in *WatchBoxSta
 }
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type DaemonService_WatchBoxStateClient = grpc.ServerStreamingClient[GetBoxStateResponse]
+type DaemonService_WatchBoxStateClient = grpc.ServerStreamingClient[WatchBoxStateResponse]
 
 func (c *daemonServiceClient) SetNetworkPath(ctx context.Context, in *SetNetworkPathRequest, opts ...grpc.CallOption) (*SetNetworkPathResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
@@ -342,7 +342,7 @@ type DaemonServiceServer interface {
 	// The box's state as it changes: the current state at once, then a
 	// message whenever anything in it changes, and the state again every 30 s
 	// as a heartbeat. The stream ends when portenvd stops (ADR 0014).
-	WatchBoxState(*WatchBoxStateRequest, grpc.ServerStreamingServer[GetBoxStateResponse]) error
+	WatchBoxState(*WatchBoxStateRequest, grpc.ServerStreamingServer[WatchBoxStateResponse]) error
 	// The system's network status, as the app sees it (NWPathMonitor on the
 	// Mac). A fresh "down" (from a running app, at most 30 s old) opens a
 	// box offline at once, without probing storage; anything else probes.
@@ -407,7 +407,7 @@ func (UnimplementedDaemonServiceServer) GetChannel(context.Context, *GetChannelR
 func (UnimplementedDaemonServiceServer) GetBoxState(context.Context, *GetBoxStateRequest) (*GetBoxStateResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetBoxState not implemented")
 }
-func (UnimplementedDaemonServiceServer) WatchBoxState(*WatchBoxStateRequest, grpc.ServerStreamingServer[GetBoxStateResponse]) error {
+func (UnimplementedDaemonServiceServer) WatchBoxState(*WatchBoxStateRequest, grpc.ServerStreamingServer[WatchBoxStateResponse]) error {
 	return status.Error(codes.Unimplemented, "method WatchBoxState not implemented")
 }
 func (UnimplementedDaemonServiceServer) SetNetworkPath(context.Context, *SetNetworkPathRequest) (*SetNetworkPathResponse, error) {
@@ -656,11 +656,11 @@ func _DaemonService_WatchBoxState_Handler(srv interface{}, stream grpc.ServerStr
 	if err := stream.RecvMsg(m); err != nil {
 		return err
 	}
-	return srv.(DaemonServiceServer).WatchBoxState(m, &grpc.GenericServerStream[WatchBoxStateRequest, GetBoxStateResponse]{ServerStream: stream})
+	return srv.(DaemonServiceServer).WatchBoxState(m, &grpc.GenericServerStream[WatchBoxStateRequest, WatchBoxStateResponse]{ServerStream: stream})
 }
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type DaemonService_WatchBoxStateServer = grpc.ServerStreamingServer[GetBoxStateResponse]
+type DaemonService_WatchBoxStateServer = grpc.ServerStreamingServer[WatchBoxStateResponse]
 
 func _DaemonService_SetNetworkPath_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(SetNetworkPathRequest)

@@ -42,7 +42,7 @@ func (s *Server) WatchBoxState(req *daemonv1.WatchBoxStateRequest, stream daemon
 					st.FailedPackages, st.PackagesError = packages, packagesErr
 				}
 				if last == nil || !proto.Equal(st, last) || time.Since(lastSent) >= watchHeartbeat {
-					if err := stream.Send(st); err != nil {
+					if err := stream.Send(&daemonv1.WatchBoxStateResponse{State: st}); err != nil {
 						return err
 					}
 					last, lastSent = st, time.Now()

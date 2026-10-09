@@ -144,6 +144,10 @@ func cmdApp(ctx context.Context, e *local.Env, op string, args []string) error {
 			return plain(err)
 		}
 		summary = fmt.Sprintf("reverted to save point %s; the work it replaced is save %s", short(r.GetRestored().GetId()), short(r.GetSavedBefore().GetId()))
+		// The app says "Reverted to 14:31" in local time (GUIDELINES.md §3.1).
+		if t := r.GetRestored().GetTime(); t != nil && !t.AsTime().IsZero() {
+			summary += "; save point time " + t.AsTime().UTC().Format(time.RFC3339)
+		}
 	case "channel":
 		// The box's agent channel, for a Mac reaching this server's box:
 		// printed once on stdout (read over SSH, kept in memory there),

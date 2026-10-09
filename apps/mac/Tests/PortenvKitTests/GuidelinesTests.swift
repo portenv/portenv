@@ -141,6 +141,13 @@ struct BoxMenuOrderTests {
     }
 }
 
+/// §4.5: the terminal's text never touches the window's edge.
+struct TerminalLayoutTests {
+    @Test func anEightPointMargin() {
+        #expect(TerminalLayout.margin == 8)
+    }
+}
+
 /// §12: every control says what it is or does.
 struct AccessibilityLabelTests {
     @Test func theTitleAndTheSyncSymbol() {

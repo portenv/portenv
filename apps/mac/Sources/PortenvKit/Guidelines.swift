@@ -144,6 +144,13 @@ public enum BoxMenuModel {
     }
 }
 
+/// §4.5: the terminal's layout.
+public enum TerminalLayout {
+    /// Space between the terminal's text and the window's edges, in points,
+    /// painted in the terminal's background.
+    public static let margin: CGFloat = 8
+}
+
 /// §12: what VoiceOver says for the window's controls.
 public enum A11y {
     public static func titleLabel(box: String) -> String { "\(box), box menu" }

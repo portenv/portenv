@@ -204,7 +204,7 @@ func (d *Driver) recreate(ctx context.Context, s spec) error {
 		Name: name,
 		Config: &container.Config{
 			Image:        s.Box.ToolboxImage,
-			Hostname:     "portenv",
+			Hostname:     driver.Hostname(s.Box.Name, s.Box.ID),
 			Env:          env,
 			Labels:       map[string]string{labelBox: string(s.Box.ID)},
 			ExposedPorts: network.PortSet{agentPort: {}},

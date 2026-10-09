@@ -103,10 +103,30 @@ If the attach or the dial fails, or the box isn't running, the current behaviour
 
 ## The Phase 0 CLI's `docker exec` path
 
-- **`init`** becomes a daemon call.
-- **`resume`, `save`, `point`, `close`, `history`, `housekeep` and `move`** reach a box through the driver's `Exec`. Each one either moves into the daemon API or goes. The app already does all of them through `portenvd`.
-- **`join`, `status` and `ssh-config`** stay as plain commands that never touch a box. On servers, `join` and `status` are the enrolment that Move To uses.
-- **An audit** lists every command and where it went. Then the driver's `Exec` is removed if nothing uses it any more, and `tests/e2e/daemon.sh` checks the engine's exec events: none.
+Done in 1.1. The audit, command by command:
+
+| Command | Touched a box? | Where it went |
+| --- | --- | --- |
+| `init` | No | Stays as a plain command |
+| `join` | No | Stays as a plain command: the server-side enrolment Move To uses |
+| `ssh-config` | No | Stays as a plain command |
+| `status` | Yes: started the box and ran restic for the lease and the kept saves | Stays, reading local state only (the driver's stats and the recorded sync state). The lease and every save come from `portenv app history`. |
+| `attach`, `app …` | Through `portenvd` | Stay |
+| `resume` | Yes | `portenv app open` (`OpenBox`); `--take-over` is `OpenBoxRequest.take_over` |
+| `save` | Yes | `portenv app save` (`SaveNow`, new) |
+| `point`, `close` | Yes | `portenv app point` and `close` (existing RPCs) |
+| `history` | Yes | `portenv app history` (`ListSaves`, new) |
+| `housekeep` | Yes | `portenv app housekeep [--prune]` (`Housekeep`, new) |
+| `move` | Yes, and `portenv resume` on the server | `portenv app move` (`MoveBox`: enrolment with `join`, then the runner) |
+
+- **Removed with them:**
+  - `Session.Sync` and `AgentExecutor` (restic through `docker exec`);
+  - `WaitAgent`;
+  - `ResumeOn` and `CloseOn` (the CLI on a server).
+- **The driver's `Exec` is gone** from the `Driver` interface and from `DriverService`. The Docker driver's exec code now lives in a test file, so the shipped binaries can't exec into a box. The conformance suite inspects boxes through a `Probe` function that each driver's test supplies.
+- **Tests moved over:**
+  - `two-machines.sh` now drives two `portenvd`s and counts exec events (only its own probes);
+  - `server-gate.sh` (Phase 0) is retired; `server-session.sh` is the server test.
 
 ## Order of work (small PRs)
 

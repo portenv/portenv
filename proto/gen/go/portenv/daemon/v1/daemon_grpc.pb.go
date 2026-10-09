@@ -45,6 +45,9 @@ const (
 	DaemonService_Relaunch_FullMethodName              = "/portenv.daemon.v1.DaemonService/Relaunch"
 	DaemonService_ListServers_FullMethodName           = "/portenv.daemon.v1.DaemonService/ListServers"
 	DaemonService_GetKeyIDs_FullMethodName             = "/portenv.daemon.v1.DaemonService/GetKeyIDs"
+	DaemonService_SaveNow_FullMethodName               = "/portenv.daemon.v1.DaemonService/SaveNow"
+	DaemonService_ListSaves_FullMethodName             = "/portenv.daemon.v1.DaemonService/ListSaves"
+	DaemonService_Housekeep_FullMethodName             = "/portenv.daemon.v1.DaemonService/Housekeep"
 )
 
 // DaemonServiceClient is the client API for DaemonService service.
@@ -109,6 +112,14 @@ type DaemonServiceClient interface {
 	// The Keychain items the app reads for a box (service
 	// dev.portenv.repository): its repository key, and its storage keys.
 	GetKeyIDs(ctx context.Context, in *GetKeyIDsRequest, opts ...grpc.CallOption) (*GetKeyIDsResponse, error)
+	// An autosave now (the Phase 0 CLI's save, moved here in 1.1).
+	SaveNow(ctx context.Context, in *SaveNowRequest, opts ...grpc.CallOption) (*SaveNowResponse, error)
+	// Every save of the box, oldest first: autosaves, save points, closes and
+	// orphaned saves, with the machine that made each.
+	ListSaves(ctx context.Context, in *ListSavesRequest, opts ...grpc.CallOption) (*ListSavesResponse, error)
+	// Clear old lease tags and apply retention; with prune, also delete data
+	// no save uses. For an idle box.
+	Housekeep(ctx context.Context, in *HousekeepRequest, opts ...grpc.CallOption) (*HousekeepResponse, error)
 }
 
 type daemonServiceClient struct {
@@ -331,6 +342,36 @@ func (c *daemonServiceClient) GetKeyIDs(ctx context.Context, in *GetKeyIDsReques
 	return out, nil
 }
 
+func (c *daemonServiceClient) SaveNow(ctx context.Context, in *SaveNowRequest, opts ...grpc.CallOption) (*SaveNowResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SaveNowResponse)
+	err := c.cc.Invoke(ctx, DaemonService_SaveNow_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) ListSaves(ctx context.Context, in *ListSavesRequest, opts ...grpc.CallOption) (*ListSavesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListSavesResponse)
+	err := c.cc.Invoke(ctx, DaemonService_ListSaves_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) Housekeep(ctx context.Context, in *HousekeepRequest, opts ...grpc.CallOption) (*HousekeepResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(HousekeepResponse)
+	err := c.cc.Invoke(ctx, DaemonService_Housekeep_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DaemonServiceServer is the server API for DaemonService service.
 // All implementations must embed UnimplementedDaemonServiceServer
 // for forward compatibility.
@@ -393,6 +434,14 @@ type DaemonServiceServer interface {
 	// The Keychain items the app reads for a box (service
 	// dev.portenv.repository): its repository key, and its storage keys.
 	GetKeyIDs(context.Context, *GetKeyIDsRequest) (*GetKeyIDsResponse, error)
+	// An autosave now (the Phase 0 CLI's save, moved here in 1.1).
+	SaveNow(context.Context, *SaveNowRequest) (*SaveNowResponse, error)
+	// Every save of the box, oldest first: autosaves, save points, closes and
+	// orphaned saves, with the machine that made each.
+	ListSaves(context.Context, *ListSavesRequest) (*ListSavesResponse, error)
+	// Clear old lease tags and apply retention; with prune, also delete data
+	// no save uses. For an idle box.
+	Housekeep(context.Context, *HousekeepRequest) (*HousekeepResponse, error)
 	mustEmbedUnimplementedDaemonServiceServer()
 }
 
@@ -462,6 +511,15 @@ func (UnimplementedDaemonServiceServer) ListServers(context.Context, *ListServer
 }
 func (UnimplementedDaemonServiceServer) GetKeyIDs(context.Context, *GetKeyIDsRequest) (*GetKeyIDsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetKeyIDs not implemented")
+}
+func (UnimplementedDaemonServiceServer) SaveNow(context.Context, *SaveNowRequest) (*SaveNowResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SaveNow not implemented")
+}
+func (UnimplementedDaemonServiceServer) ListSaves(context.Context, *ListSavesRequest) (*ListSavesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListSaves not implemented")
+}
+func (UnimplementedDaemonServiceServer) Housekeep(context.Context, *HousekeepRequest) (*HousekeepResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Housekeep not implemented")
 }
 func (UnimplementedDaemonServiceServer) mustEmbedUnimplementedDaemonServiceServer() {}
 func (UnimplementedDaemonServiceServer) testEmbeddedByValue()                       {}
@@ -826,6 +884,60 @@ func _DaemonService_GetKeyIDs_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _DaemonService_SaveNow_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SaveNowRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).SaveNow(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_SaveNow_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).SaveNow(ctx, req.(*SaveNowRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_ListSaves_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListSavesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).ListSaves(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_ListSaves_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).ListSaves(ctx, req.(*ListSavesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_Housekeep_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(HousekeepRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).Housekeep(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_Housekeep_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).Housekeep(ctx, req.(*HousekeepRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // DaemonService_ServiceDesc is the grpc.ServiceDesc for DaemonService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -904,6 +1016,18 @@ var DaemonService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetKeyIDs",
 			Handler:    _DaemonService_GetKeyIDs_Handler,
+		},
+		{
+			MethodName: "SaveNow",
+			Handler:    _DaemonService_SaveNow_Handler,
+		},
+		{
+			MethodName: "ListSaves",
+			Handler:    _DaemonService_ListSaves_Handler,
+		},
+		{
+			MethodName: "Housekeep",
+			Handler:    _DaemonService_Housekeep_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

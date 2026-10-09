@@ -68,6 +68,14 @@ service DaemonService {
   // The Keychain items the app reads for a box (service
   // dev.portenv.repository): its repository key, and its storage keys.
   rpc GetKeyIDs(GetKeyIDsRequest) returns (GetKeyIDsResponse);
+  // An autosave now (the Phase 0 CLI's save, moved here in 1.1).
+  rpc SaveNow(SaveNowRequest) returns (SaveNowResponse);
+  // Every save of the box, oldest first: autosaves, save points, closes and
+  // orphaned saves, with the machine that made each.
+  rpc ListSaves(ListSavesRequest) returns (ListSavesResponse);
+  // Clear old lease tags and apply retention; with prune, also delete data
+  // no save uses. For an idle box.
+  rpc Housekeep(HousekeepRequest) returns (HousekeepResponse);
 }
 
 message CheckBoxRequest {
@@ -91,6 +99,10 @@ message RestartBoxResponse {
 
 message OpenBoxRequest {
   string name = 1;
+  // Take the lease from the machine that holds it (only on the user's
+  // explicit choice). That machine's unsaved work is kept as a separate
+  // save (resume rule 4).
+  bool take_over = 2;
 }
 
 message OpenBoxResponse {
@@ -313,3 +325,38 @@ message GetKeyIDsRequest {
 message GetKeyIDsResponse {
   repeated string key_ids = 1;
 }
+
+message SaveNowRequest {
+  string name = 1;
+}
+
+message SaveNowResponse {
+  portenv.types.v1.SnapshotRef snapshot = 1;
+}
+
+message ListSavesRequest {
+  string name = 1;
+}
+
+message ListSavesResponse {
+  repeated SaveEntry saves = 1;
+}
+
+// One save in a box's history.
+message SaveEntry {
+  string id = 1;
+  google.protobuf.Timestamp time = 2;
+  // autosave, point, release (a close) or orphaned.
+  string kind = 3;
+  // The machine that made it.
+  string machine = 4;
+  // The machine the box is open on, for the current save only.
+  string open_on = 5;
+}
+
+message HousekeepRequest {
+  string name = 1;
+  bool prune = 2;
+}
+
+message HousekeepResponse {}

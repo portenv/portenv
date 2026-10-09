@@ -11,7 +11,8 @@
 // method set.
 //
 // Terminals, ports and files never go through a driver: they go through the
-// box agent. Exec is for bootstrap only.
+// box agent. A driver has no way to exec into a box (ADR 0010 condition 4,
+// ADR 0014): tests inspect boxes with their own probe.
 package driver
 
 import (
@@ -91,22 +92,6 @@ type Resources struct {
 	GPU               bool
 }
 
-// ExecRequest is one non-interactive bootstrap command.
-type ExecRequest struct {
-	Argv    []string // not run through a shell
-	Env     []string // "KEY=value"
-	User    string   // empty means root
-	Stdin   []byte
-	Timeout time.Duration // 0 means no timeout
-}
-
-// ExecResult is the outcome of an ExecRequest.
-type ExecResult struct {
-	ExitCode int
-	Stdout   []byte
-	Stderr   []byte
-}
-
 // LogOptions select console output.
 type LogOptions struct {
 	// Follow keeps the stream open and yields new output as it arrives,
@@ -165,9 +150,6 @@ type Driver interface {
 	Stop(ctx context.Context, id BoxID, timeout time.Duration) (State, error)
 	// Destroy removes the box's instance. It never deletes home storage.
 	Destroy(ctx context.Context, id BoxID) error
-	// Exec runs one non-interactive command in the box. Bootstrap only;
-	// never an access path for people or agents.
-	Exec(ctx context.Context, id BoxID, req ExecRequest) (ExecResult, error)
 	// Logs yields the box's console output. A non-nil error ends the
 	// sequence.
 	Logs(ctx context.Context, id BoxID, opts LogOptions) iter.Seq2[LogChunk, error]

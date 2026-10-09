@@ -30,6 +30,25 @@ type Env struct {
 	// Restarted returns a new instance of the driver on the same state, as
 	// a restarted portenvd or runner has: it holds no channel secrets.
 	Restarted func() driver.Driver
+	// Probe runs a command in a box so the suite can inspect it. Test code
+	// only: drivers have no way to exec into a box (ADR 0010 condition 4).
+	Probe func(ctx context.Context, id driver.BoxID, req ProbeRequest) (ProbeResult, error)
+}
+
+// ProbeRequest is one command a test runs in a box to inspect it.
+type ProbeRequest struct {
+	Argv    []string // not run through a shell
+	Env     []string // "KEY=value"
+	User    string   // empty means root
+	Stdin   []byte
+	Timeout time.Duration // 0 means no timeout
+}
+
+// ProbeResult is what a probe printed and how it exited.
+type ProbeResult struct {
+	ExitCode int
+	Stdout   []byte
+	Stderr   []byte
 }
 
 // Run runs the conformance suite.
@@ -37,7 +56,6 @@ func Run(t *testing.T, env Env) {
 	t.Run("Capabilities", func(t *testing.T) { capabilities(t, env) })
 	t.Run("Lifecycle", func(t *testing.T) { lifecycle(t, env) })
 	t.Run("HomeSurvivesRestartAndDestroy", func(t *testing.T) { homeSurvives(t, env) })
-	t.Run("ExecAndStdin", func(t *testing.T) { execStdin(t, env) })
 	t.Run("MissingHomeIsReported", func(t *testing.T) { missingHome(t, env) })
 	t.Run("AgentChannel", func(t *testing.T) { agentChannel(t, env) })
 	t.Run("TakeOverWithoutRestart", func(t *testing.T) { takeOver(t, env) })
@@ -92,7 +110,7 @@ func (b *box) start() {
 // exec runs argv in the box as root and returns stdout.
 func (b *box) exec(argv ...string) (string, int) {
 	b.t.Helper()
-	res, err := b.env.Driver.Exec(context.Background(), b.id, driver.ExecRequest{Argv: argv, Timeout: time.Minute})
+	res, err := b.env.Probe(context.Background(), b.id, ProbeRequest{Argv: argv, Timeout: time.Minute})
 	if err != nil {
 		b.t.Fatalf("Exec %v: %v", argv, err)
 	}
@@ -104,7 +122,7 @@ func (b *box) waitReady(want string) string {
 	b.t.Helper()
 	var out string
 	for range 240 {
-		res, err := b.env.Driver.Exec(context.Background(), b.id, driver.ExecRequest{Argv: []string{"portenv-agent", "ready"}, Timeout: 10 * time.Second})
+		res, err := b.env.Probe(context.Background(), b.id, ProbeRequest{Argv: []string{"portenv-agent", "ready"}, Timeout: 10 * time.Second})
 		if err == nil {
 			out = string(res.Stdout)
 			if strings.Contains(out, want) {
@@ -197,26 +215,6 @@ func homeSurvives(t *testing.T, env Env) {
 	b.waitReady("READY")
 	if out, _ := b.exec("cat", "/home/work/marker"); strings.TrimSpace(out) != "kept" {
 		t.Fatalf("Destroy lost the home: %q", out)
-	}
-}
-
-func execStdin(t *testing.T, env Env) {
-	b := newBox(t, env)
-	b.create(true)
-	b.start()
-	b.waitReady("READY")
-	res, err := env.Driver.Exec(context.Background(), b.id, driver.ExecRequest{
-		Argv: []string{"sh", "-c", "cat; echo err >&2; exit 3"}, Stdin: []byte("hello from stdin"), Timeout: time.Minute,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(res.Stdout) != "hello from stdin" || strings.TrimSpace(string(res.Stderr)) != "err" || res.ExitCode != 3 {
-		t.Fatalf("got stdout %q stderr %q exit %d", res.Stdout, res.Stderr, res.ExitCode)
-	}
-	res, err = env.Driver.Exec(context.Background(), b.id, driver.ExecRequest{Argv: []string{"id", "-un"}, User: "work", Timeout: time.Minute})
-	if err != nil || strings.TrimSpace(string(res.Stdout)) != "work" {
-		t.Fatalf("exec as work: %q %v", res.Stdout, err)
 	}
 }
 

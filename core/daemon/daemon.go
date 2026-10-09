@@ -51,6 +51,11 @@ type Server struct {
 	// portenvd on a Mac closes them: quitting the app saves and releases.
 	KeepBoxesOnStop bool
 
+	// relaunching: Portenv is relaunching for an update, so this daemon
+	// stops without closing its boxes (ADR 0014); stop ends Serve.
+	relaunching atomic.Bool
+	stop        context.CancelFunc
+
 	mu     sync.Mutex
 	open   map[string]*openBox   // by box name
 	remote map[string]*remoteBox // boxes this Mac opened on a server
@@ -110,6 +115,11 @@ func (s *Server) Serve(ctx context.Context) error {
 	if len(sock) >= 104 {
 		return fmt.Errorf("socket path %s is longer than the 103 bytes Unix sockets allow; use a shorter PORTENV_HOME", sock)
 	}
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	s.mu.Lock()
+	s.stop = cancel
+	s.mu.Unlock()
 	// One daemon per directory, before touching the socket: a second one
 	// must not take the socket or any box from the first.
 	lock, err := lockDir(s.env.Dir)
@@ -133,7 +143,7 @@ func (s *Server) Serve(ctx context.Context) error {
 		// Save and release first, while the agent channels are up; then end
 		// every call, open terminals included (a graceful stop would wait
 		// for terminals forever). A runner leaves boxes running.
-		if !s.KeepBoxesOnStop {
+		if !s.KeepBoxesOnStop && !s.relaunching.Load() {
 			s.closeAll()
 		}
 		srv.Stop()

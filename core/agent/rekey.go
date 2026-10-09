@@ -98,7 +98,9 @@ func (k *channelKeys) token() []byte { return k.cur.Load().token }
 
 // listen wraps lis so the channel knows which secrets each connection was
 // accepted under.
-func (k *channelKeys) listen(lis net.Listener) net.Listener { return &trackingListener{Listener: lis, k: k} }
+func (k *channelKeys) listen(lis net.Listener) net.Listener {
+	return &trackingListener{Listener: lis, k: k}
+}
 
 type trackingListener struct {
 	net.Listener
@@ -137,7 +139,9 @@ func (c *trackedConn) Close() error {
 // whole; a line cut short by the end of input is dropped too.
 type secretsLines struct{ r *bufio.Reader }
 
-func newSecretsLines(r io.Reader) *secretsLines { return &secretsLines{r: bufio.NewReaderSize(r, 4096)} }
+func newSecretsLines(r io.Reader) *secretsLines {
+	return &secretsLines{r: bufio.NewReaderSize(r, 4096)}
+}
 
 // next returns the next line's secrets. err is nil for a bad line (ok is
 // false), and io.EOF when stdin is closed.

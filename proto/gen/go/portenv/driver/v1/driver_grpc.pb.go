@@ -40,6 +40,7 @@ const (
 	DriverService_MountHome_FullMethodName    = "/portenv.driver.v1.DriverService/MountHome"
 	DriverService_Capabilities_FullMethodName = "/portenv.driver.v1.DriverService/Capabilities"
 	DriverService_AgentChannel_FullMethodName = "/portenv.driver.v1.DriverService/AgentChannel"
+	DriverService_Rekey_FullMethodName        = "/portenv.driver.v1.DriverService/Rekey"
 )
 
 // DriverServiceClient is the client API for DriverService service.
@@ -73,6 +74,10 @@ type DriverServiceClient interface {
 	// the address to dial, the certificate the agent must present, and the
 	// token for every call. Fresh at every start.
 	AgentChannel(ctx context.Context, in *AgentChannelRequest, opts ...grpc.CallOption) (*AgentChannelResponse, error)
+	// A new channel to the running box without restarting it (ADR 0014):
+	// fresh secrets reach the agent the way the first ones did, and the old
+	// ones stop working. For a restarted daemon taking over a running box.
+	Rekey(ctx context.Context, in *RekeyRequest, opts ...grpc.CallOption) (*RekeyResponse, error)
 }
 
 type driverServiceClient struct {
@@ -202,6 +207,16 @@ func (c *driverServiceClient) AgentChannel(ctx context.Context, in *AgentChannel
 	return out, nil
 }
 
+func (c *driverServiceClient) Rekey(ctx context.Context, in *RekeyRequest, opts ...grpc.CallOption) (*RekeyResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RekeyResponse)
+	err := c.cc.Invoke(ctx, DriverService_Rekey_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DriverServiceServer is the server API for DriverService service.
 // All implementations must embed UnimplementedDriverServiceServer
 // for forward compatibility.
@@ -233,6 +248,10 @@ type DriverServiceServer interface {
 	// the address to dial, the certificate the agent must present, and the
 	// token for every call. Fresh at every start.
 	AgentChannel(context.Context, *AgentChannelRequest) (*AgentChannelResponse, error)
+	// A new channel to the running box without restarting it (ADR 0014):
+	// fresh secrets reach the agent the way the first ones did, and the old
+	// ones stop working. For a restarted daemon taking over a running box.
+	Rekey(context.Context, *RekeyRequest) (*RekeyResponse, error)
 	mustEmbedUnimplementedDriverServiceServer()
 }
 
@@ -275,6 +294,9 @@ func (UnimplementedDriverServiceServer) Capabilities(context.Context, *Capabilit
 }
 func (UnimplementedDriverServiceServer) AgentChannel(context.Context, *AgentChannelRequest) (*AgentChannelResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method AgentChannel not implemented")
+}
+func (UnimplementedDriverServiceServer) Rekey(context.Context, *RekeyRequest) (*RekeyResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Rekey not implemented")
 }
 func (UnimplementedDriverServiceServer) mustEmbedUnimplementedDriverServiceServer() {}
 func (UnimplementedDriverServiceServer) testEmbeddedByValue()                       {}
@@ -488,6 +510,24 @@ func _DriverService_AgentChannel_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
+func _DriverService_Rekey_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RekeyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DriverServiceServer).Rekey(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DriverService_Rekey_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DriverServiceServer).Rekey(ctx, req.(*RekeyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // DriverService_ServiceDesc is the grpc.ServiceDesc for DriverService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -534,6 +574,10 @@ var DriverService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "AgentChannel",
 			Handler:    _DriverService_AgentChannel_Handler,
+		},
+		{
+			MethodName: "Rekey",
+			Handler:    _DriverService_Rekey_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

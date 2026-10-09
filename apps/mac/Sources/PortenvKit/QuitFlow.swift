@@ -34,6 +34,14 @@ public struct QuitFlow: Sendable {
         "\(box) couldn't be saved before quitting. Its work is still on this Mac."
     }
 
+    /// Quitting to relaunch for an update (ADR 0014): portenvd stops
+    /// without closing the box, so it and its programs keep running and the
+    /// next portenvd takes it over. Never asks, never blocks the update.
+    public func relaunch() async -> Bool {
+        _ = try? await cli.run(["app", "relaunch"])
+        return true
+    }
+
     /// Closes the box, asking on failure. Returns true to quit, false to stay.
     public func run(ask: @Sendable (String) async -> QuitChoice) async -> Bool {
         guard openHere else { return true }

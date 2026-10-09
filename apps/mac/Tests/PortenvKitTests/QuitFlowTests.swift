@@ -21,6 +21,18 @@ final class ScriptedAnswers: @unchecked Sendable {
 
 /// Quitting never fails silently (PLAN.md 1.4).
 struct QuitFlowTests {
+    /// Relaunching for an update (ADR 0014): portenvd is told to leave the
+    /// box running for the next one; nothing is closed, nothing is asked,
+    /// even if portenvd doesn't answer.
+    @Test func anUpdateRelaunchLeavesTheBoxRunning() async {
+        let cli = FakeCLI()
+        #expect(await QuitFlow(cli: cli, box: "acme-api", openHere: true).relaunch())
+        let actions = cli.calls.map { $0.count > 1 ? $0[1] : "" }
+        #expect(actions == ["relaunch"], "\(cli.calls)")
+        cli.failing["relaunch"] = "portenvd is not running"
+        #expect(await QuitFlow(cli: cli, box: "acme-api", openHere: true).relaunch(), "an update never waits on portenvd")
+    }
+
     func closes(_ cli: FakeCLI) -> Int { cli.calls.filter { $0.count > 1 && $0[1] == "close" }.count }
 
     @Test func aSavedBoxQuitsWithoutAsking() async {

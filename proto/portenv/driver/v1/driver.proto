@@ -42,6 +42,10 @@ service DriverService {
   // the address to dial, the certificate the agent must present, and the
   // token for every call. Fresh at every start.
   rpc AgentChannel(AgentChannelRequest) returns (AgentChannelResponse);
+  // A new channel to the running box without restarting it (ADR 0014):
+  // fresh secrets reach the agent the way the first ones did, and the old
+  // ones stop working. For a restarted daemon taking over a running box.
+  rpc Rekey(RekeyRequest) returns (RekeyResponse);
 }
 
 message CreateRequest {
@@ -196,3 +200,9 @@ message AgentChannelResponse {
   // Sent with every call to the agent.
   string token = 3;
 }
+
+message RekeyRequest {
+  string box_id = 1;
+}
+
+message RekeyResponse {}

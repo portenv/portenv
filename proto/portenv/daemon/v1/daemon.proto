@@ -55,6 +55,10 @@ service DaemonService {
   // portenvd never reads the Keychain interactively, so when a key needs the
   // person's approval it fails fast and the app (in front of them) reads it.
   rpc ProvideKeys(ProvideKeysRequest) returns (ProvideKeysResponse);
+  // Portenv is relaunching (an update): stop serving without closing any
+  // box. Boxes and their programs keep running, and the next portenvd
+  // takes them over (ADR 0014). Quitting (Cmd-Q) still closes and saves.
+  rpc Relaunch(RelaunchRequest) returns (RelaunchResponse);
 }
 
 message CheckBoxRequest {
@@ -274,3 +278,7 @@ message ProvideKeysRequest {
 }
 
 message ProvideKeysResponse {}
+
+message RelaunchRequest {}
+
+message RelaunchResponse {}

@@ -54,7 +54,9 @@ func startRekeyable(t *testing.T, logTo io.Writer) (ChannelSecrets, string, *io.
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	log := slog.New(slog.NewTextHandler(logTo, nil))
-	go func() { _ = serveStdinChannel(ctx, DefaultConfig(), r, func() (net.Listener, error) { return lis, nil }, log) }()
+	go func() {
+		_ = serveStdinChannel(ctx, DefaultConfig(), r, func() (net.Listener, error) { return lis, nil }, log)
+	}()
 	if _, err := w.Write(line); err != nil {
 		t.Fatal(err)
 	}

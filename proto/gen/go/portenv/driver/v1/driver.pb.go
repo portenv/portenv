@@ -1371,6 +1371,86 @@ func (x *AgentChannelResponse) GetToken() string {
 	return ""
 }
 
+type RekeyRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	BoxId         string                 `protobuf:"bytes,1,opt,name=box_id,json=boxId,proto3" json:"box_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RekeyRequest) Reset() {
+	*x = RekeyRequest{}
+	mi := &file_portenv_driver_v1_driver_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RekeyRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RekeyRequest) ProtoMessage() {}
+
+func (x *RekeyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_portenv_driver_v1_driver_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RekeyRequest.ProtoReflect.Descriptor instead.
+func (*RekeyRequest) Descriptor() ([]byte, []int) {
+	return file_portenv_driver_v1_driver_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *RekeyRequest) GetBoxId() string {
+	if x != nil {
+		return x.BoxId
+	}
+	return ""
+}
+
+type RekeyResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RekeyResponse) Reset() {
+	*x = RekeyResponse{}
+	mi := &file_portenv_driver_v1_driver_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RekeyResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RekeyResponse) ProtoMessage() {}
+
+func (x *RekeyResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_portenv_driver_v1_driver_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RekeyResponse.ProtoReflect.Descriptor instead.
+func (*RekeyResponse) Descriptor() ([]byte, []int) {
+	return file_portenv_driver_v1_driver_proto_rawDescGZIP(), []int{24}
+}
+
 var File_portenv_driver_v1_driver_proto protoreflect.FileDescriptor
 
 const file_portenv_driver_v1_driver_proto_rawDesc = "" +
@@ -1447,7 +1527,10 @@ const file_portenv_driver_v1_driver_proto_rawDesc = "" +
 	"\x14AgentChannelResponse\x12\x18\n" +
 	"\aaddress\x18\x01 \x01(\tR\aaddress\x12\x19\n" +
 	"\bcert_pem\x18\x02 \x01(\fR\acertPem\x12\x14\n" +
-	"\x05token\x18\x03 \x01(\tR\x05token*U\n" +
+	"\x05token\x18\x03 \x01(\tR\x05token\"%\n" +
+	"\fRekeyRequest\x12\x15\n" +
+	"\x06box_id\x18\x01 \x01(\tR\x05boxId\"\x0f\n" +
+	"\rRekeyResponse*U\n" +
 	"\tLogStream\x12\x1a\n" +
 	"\x16LOG_STREAM_UNSPECIFIED\x10\x00\x12\x15\n" +
 	"\x11LOG_STREAM_STDOUT\x10\x01\x12\x15\n" +
@@ -1455,7 +1538,7 @@ const file_portenv_driver_v1_driver_proto_rawDesc = "" +
 	"\tIsolation\x12\x19\n" +
 	"\x15ISOLATION_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13ISOLATION_CONTAINER\x10\x01\x12\x10\n" +
-	"\fISOLATION_VM\x10\x022\xa0\a\n" +
+	"\fISOLATION_VM\x10\x022\xec\a\n" +
 	"\rDriverService\x12M\n" +
 	"\x06Create\x12 .portenv.driver.v1.CreateRequest\x1a!.portenv.driver.v1.CreateResponse\x12J\n" +
 	"\x05Start\x12\x1f.portenv.driver.v1.StartRequest\x1a .portenv.driver.v1.StartResponse\x12G\n" +
@@ -1467,7 +1550,8 @@ const file_portenv_driver_v1_driver_proto_rawDesc = "" +
 	"\fSetResources\x12&.portenv.driver.v1.SetResourcesRequest\x1a'.portenv.driver.v1.SetResourcesResponse\x12V\n" +
 	"\tMountHome\x12#.portenv.driver.v1.MountHomeRequest\x1a$.portenv.driver.v1.MountHomeResponse\x12_\n" +
 	"\fCapabilities\x12&.portenv.driver.v1.CapabilitiesRequest\x1a'.portenv.driver.v1.CapabilitiesResponse\x12_\n" +
-	"\fAgentChannel\x12&.portenv.driver.v1.AgentChannelRequest\x1a'.portenv.driver.v1.AgentChannelResponseB\xce\x01\n" +
+	"\fAgentChannel\x12&.portenv.driver.v1.AgentChannelRequest\x1a'.portenv.driver.v1.AgentChannelResponse\x12J\n" +
+	"\x05Rekey\x12\x1f.portenv.driver.v1.RekeyRequest\x1a .portenv.driver.v1.RekeyResponseB\xce\x01\n" +
 	"\x15com.portenv.driver.v1B\vDriverProtoP\x01ZBgithub.com/portenv/portenv/proto/gen/go/portenv/driver/v1;driverv1\xa2\x02\x03PDX\xaa\x02\x11Portenv.Driver.V1\xca\x02\x11Portenv\\Driver\\V1\xe2\x02\x1dPortenv\\Driver\\V1\\GPBMetadata\xea\x02\x13Portenv::Driver::V1b\x06proto3"
 
 var (
@@ -1483,7 +1567,7 @@ func file_portenv_driver_v1_driver_proto_rawDescGZIP() []byte {
 }
 
 var file_portenv_driver_v1_driver_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_portenv_driver_v1_driver_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
+var file_portenv_driver_v1_driver_proto_msgTypes = make([]protoimpl.MessageInfo, 25)
 var file_portenv_driver_v1_driver_proto_goTypes = []any{
 	(LogStream)(0),                // 0: portenv.driver.v1.LogStream
 	(Isolation)(0),                // 1: portenv.driver.v1.Isolation
@@ -1510,30 +1594,32 @@ var file_portenv_driver_v1_driver_proto_goTypes = []any{
 	(*CapabilitiesResponse)(nil),  // 22: portenv.driver.v1.CapabilitiesResponse
 	(*AgentChannelRequest)(nil),   // 23: portenv.driver.v1.AgentChannelRequest
 	(*AgentChannelResponse)(nil),  // 24: portenv.driver.v1.AgentChannelResponse
-	(*v1.Box)(nil),                // 25: portenv.types.v1.Box
-	(v1.BoxState)(0),              // 26: portenv.types.v1.BoxState
-	(*durationpb.Duration)(nil),   // 27: google.protobuf.Duration
-	(*timestamppb.Timestamp)(nil), // 28: google.protobuf.Timestamp
-	(*v1.Resources)(nil),          // 29: portenv.types.v1.Resources
-	(v1.Architecture)(0),          // 30: portenv.types.v1.Architecture
+	(*RekeyRequest)(nil),          // 25: portenv.driver.v1.RekeyRequest
+	(*RekeyResponse)(nil),         // 26: portenv.driver.v1.RekeyResponse
+	(*v1.Box)(nil),                // 27: portenv.types.v1.Box
+	(v1.BoxState)(0),              // 28: portenv.types.v1.BoxState
+	(*durationpb.Duration)(nil),   // 29: google.protobuf.Duration
+	(*timestamppb.Timestamp)(nil), // 30: google.protobuf.Timestamp
+	(*v1.Resources)(nil),          // 31: portenv.types.v1.Resources
+	(v1.Architecture)(0),          // 32: portenv.types.v1.Architecture
 }
 var file_portenv_driver_v1_driver_proto_depIdxs = []int32{
-	25, // 0: portenv.driver.v1.CreateRequest.box:type_name -> portenv.types.v1.Box
-	26, // 1: portenv.driver.v1.CreateResponse.state:type_name -> portenv.types.v1.BoxState
-	26, // 2: portenv.driver.v1.StartResponse.state:type_name -> portenv.types.v1.BoxState
-	27, // 3: portenv.driver.v1.StopRequest.timeout:type_name -> google.protobuf.Duration
-	26, // 4: portenv.driver.v1.StopResponse.state:type_name -> portenv.types.v1.BoxState
-	27, // 5: portenv.driver.v1.ExecRequest.timeout:type_name -> google.protobuf.Duration
-	28, // 6: portenv.driver.v1.LogsRequest.since:type_name -> google.protobuf.Timestamp
+	27, // 0: portenv.driver.v1.CreateRequest.box:type_name -> portenv.types.v1.Box
+	28, // 1: portenv.driver.v1.CreateResponse.state:type_name -> portenv.types.v1.BoxState
+	28, // 2: portenv.driver.v1.StartResponse.state:type_name -> portenv.types.v1.BoxState
+	29, // 3: portenv.driver.v1.StopRequest.timeout:type_name -> google.protobuf.Duration
+	28, // 4: portenv.driver.v1.StopResponse.state:type_name -> portenv.types.v1.BoxState
+	29, // 5: portenv.driver.v1.ExecRequest.timeout:type_name -> google.protobuf.Duration
+	30, // 6: portenv.driver.v1.LogsRequest.since:type_name -> google.protobuf.Timestamp
 	0,  // 7: portenv.driver.v1.LogsResponse.stream:type_name -> portenv.driver.v1.LogStream
-	28, // 8: portenv.driver.v1.LogsResponse.time:type_name -> google.protobuf.Timestamp
-	26, // 9: portenv.driver.v1.StatsResponse.state:type_name -> portenv.types.v1.BoxState
-	28, // 10: portenv.driver.v1.StatsResponse.time:type_name -> google.protobuf.Timestamp
-	27, // 11: portenv.driver.v1.StatsResponse.cpu_time:type_name -> google.protobuf.Duration
-	29, // 12: portenv.driver.v1.SetResourcesRequest.resources:type_name -> portenv.types.v1.Resources
+	30, // 8: portenv.driver.v1.LogsResponse.time:type_name -> google.protobuf.Timestamp
+	28, // 9: portenv.driver.v1.StatsResponse.state:type_name -> portenv.types.v1.BoxState
+	30, // 10: portenv.driver.v1.StatsResponse.time:type_name -> google.protobuf.Timestamp
+	29, // 11: portenv.driver.v1.StatsResponse.cpu_time:type_name -> google.protobuf.Duration
+	31, // 12: portenv.driver.v1.SetResourcesRequest.resources:type_name -> portenv.types.v1.Resources
 	18, // 13: portenv.driver.v1.MountHomeRequest.home:type_name -> portenv.driver.v1.HomeStorage
 	1,  // 14: portenv.driver.v1.CapabilitiesResponse.isolation:type_name -> portenv.driver.v1.Isolation
-	30, // 15: portenv.driver.v1.CapabilitiesResponse.architectures:type_name -> portenv.types.v1.Architecture
+	32, // 15: portenv.driver.v1.CapabilitiesResponse.architectures:type_name -> portenv.types.v1.Architecture
 	2,  // 16: portenv.driver.v1.DriverService.Create:input_type -> portenv.driver.v1.CreateRequest
 	4,  // 17: portenv.driver.v1.DriverService.Start:input_type -> portenv.driver.v1.StartRequest
 	6,  // 18: portenv.driver.v1.DriverService.Stop:input_type -> portenv.driver.v1.StopRequest
@@ -1545,19 +1631,21 @@ var file_portenv_driver_v1_driver_proto_depIdxs = []int32{
 	19, // 24: portenv.driver.v1.DriverService.MountHome:input_type -> portenv.driver.v1.MountHomeRequest
 	21, // 25: portenv.driver.v1.DriverService.Capabilities:input_type -> portenv.driver.v1.CapabilitiesRequest
 	23, // 26: portenv.driver.v1.DriverService.AgentChannel:input_type -> portenv.driver.v1.AgentChannelRequest
-	3,  // 27: portenv.driver.v1.DriverService.Create:output_type -> portenv.driver.v1.CreateResponse
-	5,  // 28: portenv.driver.v1.DriverService.Start:output_type -> portenv.driver.v1.StartResponse
-	7,  // 29: portenv.driver.v1.DriverService.Stop:output_type -> portenv.driver.v1.StopResponse
-	9,  // 30: portenv.driver.v1.DriverService.Destroy:output_type -> portenv.driver.v1.DestroyResponse
-	11, // 31: portenv.driver.v1.DriverService.Exec:output_type -> portenv.driver.v1.ExecResponse
-	13, // 32: portenv.driver.v1.DriverService.Logs:output_type -> portenv.driver.v1.LogsResponse
-	15, // 33: portenv.driver.v1.DriverService.Stats:output_type -> portenv.driver.v1.StatsResponse
-	17, // 34: portenv.driver.v1.DriverService.SetResources:output_type -> portenv.driver.v1.SetResourcesResponse
-	20, // 35: portenv.driver.v1.DriverService.MountHome:output_type -> portenv.driver.v1.MountHomeResponse
-	22, // 36: portenv.driver.v1.DriverService.Capabilities:output_type -> portenv.driver.v1.CapabilitiesResponse
-	24, // 37: portenv.driver.v1.DriverService.AgentChannel:output_type -> portenv.driver.v1.AgentChannelResponse
-	27, // [27:38] is the sub-list for method output_type
-	16, // [16:27] is the sub-list for method input_type
+	25, // 27: portenv.driver.v1.DriverService.Rekey:input_type -> portenv.driver.v1.RekeyRequest
+	3,  // 28: portenv.driver.v1.DriverService.Create:output_type -> portenv.driver.v1.CreateResponse
+	5,  // 29: portenv.driver.v1.DriverService.Start:output_type -> portenv.driver.v1.StartResponse
+	7,  // 30: portenv.driver.v1.DriverService.Stop:output_type -> portenv.driver.v1.StopResponse
+	9,  // 31: portenv.driver.v1.DriverService.Destroy:output_type -> portenv.driver.v1.DestroyResponse
+	11, // 32: portenv.driver.v1.DriverService.Exec:output_type -> portenv.driver.v1.ExecResponse
+	13, // 33: portenv.driver.v1.DriverService.Logs:output_type -> portenv.driver.v1.LogsResponse
+	15, // 34: portenv.driver.v1.DriverService.Stats:output_type -> portenv.driver.v1.StatsResponse
+	17, // 35: portenv.driver.v1.DriverService.SetResources:output_type -> portenv.driver.v1.SetResourcesResponse
+	20, // 36: portenv.driver.v1.DriverService.MountHome:output_type -> portenv.driver.v1.MountHomeResponse
+	22, // 37: portenv.driver.v1.DriverService.Capabilities:output_type -> portenv.driver.v1.CapabilitiesResponse
+	24, // 38: portenv.driver.v1.DriverService.AgentChannel:output_type -> portenv.driver.v1.AgentChannelResponse
+	26, // 39: portenv.driver.v1.DriverService.Rekey:output_type -> portenv.driver.v1.RekeyResponse
+	28, // [28:40] is the sub-list for method output_type
+	16, // [16:28] is the sub-list for method input_type
 	16, // [16:16] is the sub-list for extension type_name
 	16, // [16:16] is the sub-list for extension extendee
 	0,  // [0:16] is the sub-list for field type_name
@@ -1574,7 +1662,7 @@ func file_portenv_driver_v1_driver_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_portenv_driver_v1_driver_proto_rawDesc), len(file_portenv_driver_v1_driver_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   23,
+			NumMessages:   25,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -41,6 +41,7 @@ const (
 	DaemonService_Woke_FullMethodName                  = "/portenv.daemon.v1.DaemonService/Woke"
 	DaemonService_RetryPackages_FullMethodName         = "/portenv.daemon.v1.DaemonService/RetryPackages"
 	DaemonService_ProvideKeys_FullMethodName           = "/portenv.daemon.v1.DaemonService/ProvideKeys"
+	DaemonService_Relaunch_FullMethodName              = "/portenv.daemon.v1.DaemonService/Relaunch"
 )
 
 // DaemonServiceClient is the client API for DaemonService service.
@@ -92,6 +93,10 @@ type DaemonServiceClient interface {
 	// portenvd never reads the Keychain interactively, so when a key needs the
 	// person's approval it fails fast and the app (in front of them) reads it.
 	ProvideKeys(ctx context.Context, in *ProvideKeysRequest, opts ...grpc.CallOption) (*ProvideKeysResponse, error)
+	// Portenv is relaunching (an update): stop serving without closing any
+	// box. Boxes and their programs keep running, and the next portenvd
+	// takes them over (ADR 0014). Quitting (Cmd-Q) still closes and saves.
+	Relaunch(ctx context.Context, in *RelaunchRequest, opts ...grpc.CallOption) (*RelaunchResponse, error)
 }
 
 type daemonServiceClient struct {
@@ -265,6 +270,16 @@ func (c *daemonServiceClient) ProvideKeys(ctx context.Context, in *ProvideKeysRe
 	return out, nil
 }
 
+func (c *daemonServiceClient) Relaunch(ctx context.Context, in *RelaunchRequest, opts ...grpc.CallOption) (*RelaunchResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RelaunchResponse)
+	err := c.cc.Invoke(ctx, DaemonService_Relaunch_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DaemonServiceServer is the server API for DaemonService service.
 // All implementations must embed UnimplementedDaemonServiceServer
 // for forward compatibility.
@@ -314,6 +329,10 @@ type DaemonServiceServer interface {
 	// portenvd never reads the Keychain interactively, so when a key needs the
 	// person's approval it fails fast and the app (in front of them) reads it.
 	ProvideKeys(context.Context, *ProvideKeysRequest) (*ProvideKeysResponse, error)
+	// Portenv is relaunching (an update): stop serving without closing any
+	// box. Boxes and their programs keep running, and the next portenvd
+	// takes them over (ADR 0014). Quitting (Cmd-Q) still closes and saves.
+	Relaunch(context.Context, *RelaunchRequest) (*RelaunchResponse, error)
 	mustEmbedUnimplementedDaemonServiceServer()
 }
 
@@ -371,6 +390,9 @@ func (UnimplementedDaemonServiceServer) RetryPackages(context.Context, *RetryPac
 }
 func (UnimplementedDaemonServiceServer) ProvideKeys(context.Context, *ProvideKeysRequest) (*ProvideKeysResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ProvideKeys not implemented")
+}
+func (UnimplementedDaemonServiceServer) Relaunch(context.Context, *RelaunchRequest) (*RelaunchResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Relaunch not implemented")
 }
 func (UnimplementedDaemonServiceServer) mustEmbedUnimplementedDaemonServiceServer() {}
 func (UnimplementedDaemonServiceServer) testEmbeddedByValue()                       {}
@@ -670,6 +692,24 @@ func _DaemonService_ProvideKeys_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
+func _DaemonService_Relaunch_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RelaunchRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).Relaunch(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_Relaunch_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).Relaunch(ctx, req.(*RelaunchRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // DaemonService_ServiceDesc is the grpc.ServiceDesc for DaemonService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -736,6 +776,10 @@ var DaemonService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ProvideKeys",
 			Handler:    _DaemonService_ProvideKeys_Handler,
+		},
+		{
+			MethodName: "Relaunch",
+			Handler:    _DaemonService_Relaunch_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

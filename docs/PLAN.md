@@ -443,6 +443,11 @@ Agents driving Claude Code headlessly use `claude -p` with `--resume`, `--output
 2. **Machine-readable by default.** Every CLI command supports `--json`, uses stable exit codes (documented in one table), and never asks an interactive question without a TTY.
 3. **Errors say what to do next:** what happened plus the next step, as one plain line, in the style of "Keychain needs your approval. Open Portenv on this Mac to allow it." (GUIDELINES.md §10).
 4. **Agents read, they don't obey.** Everything Portenv shows an agent is written by Portenv. User files in a box can never change the guide. Docs never tell an agent to skip approvals or the vault rules (ADR 0005).
+5. **Tool-neutral.**
+   - **Detection works for any program:** waiting-for-input detection uses the general detector, combining OSC 133 marks, the process blocked on the tty, quiet output, and an on-screen prompt.
+   - **Any tool can report a question** through the public `portenv event question` interface.
+   - **Tool-specific adapters are optional.** Examples are Claude Code hooks and other agents' notify settings. Each one is off by default, uses only that same interface, and is never required.
+   - **No coding agent or agent vendor gets a capability others can't have.**
 
 **Where each piece lands**
 - **Now (Phase 1): rules only.** Principles 2 and 3 apply to every command added or changed from 2026-10-09. No other work.

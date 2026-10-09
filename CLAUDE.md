@@ -10,7 +10,7 @@ The approved app designs are in `docs/mockups/` (PNG plus static HTML per screen
 
 ## Current phase
 
-Phase 0: Foundations (owner only). Start with milestone 0.1 (repository, CI and protocol scaffold). Do not start a phase until the previous phase's acceptance checklist in `docs/PLAN.md` passes.
+Phase 1: Native Mac app, local boxes. Phase 0 is closed (`docs/PLAN.md`). Work through the Phase 1 plan's order of work in `docs/PLAN.md`, one item at a time, starting with item 1 (Keychain calls never wait silently). Do not start the next phase until Phase 1's acceptance checklist passes.
 
 ## Ground rules
 

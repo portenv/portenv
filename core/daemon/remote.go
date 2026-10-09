@@ -223,7 +223,13 @@ func saveState(st boxsync.State, saving, offline, agentDown, retrying, failed, q
 
 // GetBoxState implements daemonv1.DaemonServiceServer.
 func (s *Server) GetBoxState(ctx context.Context, req *daemonv1.GetBoxStateRequest) (*daemonv1.GetBoxStateResponse, error) {
-	name := req.GetName()
+	return s.boxState(ctx, req.GetName(), true)
+}
+
+// boxState is the box's state; withPackages also asks the agent which
+// packages couldn't be installed (a call to the box, so the watcher does it
+// less often).
+func (s *Server) boxState(ctx context.Context, name string, withPackages bool) (*daemonv1.GetBoxStateResponse, error) {
 	if host := s.location(name); host != "" {
 		return remoteState(ctx, host, name)
 	}
@@ -242,7 +248,7 @@ func (s *Server) GetBoxState(ctx context.Context, req *daemonv1.GetBoxStateReque
 	}
 	// Packages that couldn't be installed, for the inspector (never the
 	// state line). A quick question to the agent; no answer, nothing shown.
-	if a := ob.client(); a != nil {
+	if a := ob.client(); a != nil && withPackages {
 		actx, cancel := context.WithTimeout(ctx, time.Second)
 		if rd, err := a.GetReadiness(actx, &agentv1.GetReadinessRequest{}); err == nil {
 			r.FailedPackages, r.PackagesError = rd.GetFailedPackages(), rd.GetPackagesError()

@@ -42,7 +42,7 @@ func TestNoBackgroundProcessCanPrompt(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		if strings.Contains(string(b), "AllowPrompts()") && filepath.ToSlash(path) != "../../cmd/portenv/main.go" && filepath.Base(path) != "keys.go" {
+		if strings.Contains(string(b), "AllowPrompts()") && filepath.ToSlash(path) != "../../cmd/portenv/main.go" && !definesAllowPrompts(path) {
 			t.Errorf("%s calls keys.AllowPrompts: only the CLI, at a terminal, may prompt", path)
 		}
 		return nil
@@ -50,4 +50,14 @@ func TestNoBackgroundProcessCanPrompt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+}
+
+// definesAllowPrompts: the files that define keys.AllowPrompts (the Mac's
+// Keychain, and the no-op everywhere else) rather than call it.
+func definesAllowPrompts(path string) bool {
+	switch filepath.ToSlash(path) {
+	case "../../keys/keychain_darwin.go", "../../keys/default_other.go":
+		return true
+	}
+	return false
 }

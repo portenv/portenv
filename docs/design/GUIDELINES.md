@@ -270,7 +270,7 @@ Type: SF Pro for UI (13 pt body, 11 pt section headings semibold secondary, 12 p
 | Terminal rendering | SwiftTerm, with Portenv decorations (block tint, header rows, sticky header, inline card) drawn as native overlays aligned to the terminal's rows, not as text in the grid |
 | Persistent sessions, tabs | tmux in the box, status bar off; each app tab is one tmux window. Spike: tmux control mode (`-CC`, as iTerm2 uses) for structured per-tab output and native tab mapping |
 | Block boundaries and exit codes | Shell integration in the box's skeleton home emits OSC 133 prompt marks (prompt start, command start, output start, command end with exit code); the box agent tracks them per tab |
-| Attribution | All input reaches tmux through the box agent (the app, `portenv send`, SSH sessions via the forced command), so the agent knows who sent each Enter and tags the block. Agents never get raw tmux access |
+| Attribution | All input reaches tmux through the box agent (the app, `portenv box send`, SSH sessions via the forced command), so the agent knows who sent each Enter and tags the block. Agents never get raw tmux access |
 | Waiting for input | The agent's "waiting for input" signal (idle plus prompt on screen), sharpened by adapters such as Claude Code hooks, which also give the answer choices |
 | Tab badges, inline card | Driven by agent events over the agent channel |
 | Notifications | `UNUserNotificationCenter` with action buttons; answers go back through the agent channel |

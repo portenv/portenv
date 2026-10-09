@@ -34,7 +34,7 @@ Enforced for every agent, stand-in included: no agent can extract encryption key
 The box agent's core is **events, screen, send and wait for input**:
 
 - "Waiting for input": a tab is idle with a prompt on screen. "Command finished": from shell prompt markers, with the exit code. Both work the same for Claude Code, Codex or a plain y/n script. Optional adapters (for example Claude Code hooks) only make a signal more precise; no feature depends on one.
-- Agent-facing commands: `portenv events --follow`, `portenv screen <tab>`, `portenv send <tab> "<text>"`.
+- Agent-facing commands: `portenv events --follow`, `portenv screen <tab>`, `portenv box send <tab> "<text>"` (`portenv send` until ADR 0016).
 - How an agent asks its user (voice, chat) and what it answers on its own is between the user and their agent. Portenv does not enforce it.
 
 ### E. Doors, and the order they are built
@@ -59,7 +59,7 @@ Build order:
 ### Roadmap placement
 
 - **2.6 append-only storage comes first:** before any outside agent gets stand-in access, the storage credential inside a box becomes append-only (it cannot delete or overwrite a save), and forget and prune use a host-only credential.
-- **2.7, end of Phase 2 (no control plane, no lanes):** stand-in access over doors 1 and 2 to a box on the user's own server. Without the control plane, the runner on that server is the certificate authority for its boxes: the agent runs `portenv connect` (named `portenv login` until ADR 0016), the user approves the code in the app (which reaches the runner over SSH), and the runner issues a short-lived SSH certificate scoped to that box and mode. The core (events, screen, send, wait for input), attribution, recording, the connect save point, Take Over and Revoke ship here. Acceptance: a terminal agent (Grok Bot, or a test agent) relays a tool's question to the user and answers it.
+- **2.4 (2.7 before the reordering; no control plane, no lanes):** stand-in access over doors 1 and 2 to a box on the user's own server. Without the control plane, the runner on that server is the certificate authority for its boxes: the agent runs `portenv connect` (named `portenv login` until ADR 0016), the user approves the code in the app (which reaches the runner over SSH), and the runner issues a short-lived SSH certificate scoped to that box and mode. The core (events, screen, send, wait for input), attribution, recording, the connect save point, Take Over and Revoke ship here. Acceptance: a terminal agent (Grok Bot, or a test agent) relays a tool's question to the user and answers it.
 - **2.8 webhooks** and **2.9 stdio MCP** (`portenv mcp` on the agent's computer, over the CLI's connection): Phase 2, after 2.7.
 - **3.8 SSH door through the gateway**: certificates from the Portenv CA, routing by box name, ports 22 and 443 and `portenv ssh` over HTTPS. Depends on 3.1 (accounts), 3.2 (device enrollment and revocation) and 3.4 (tunnels and routing).
 - **3.9 remote MCP door with OAuth**, then the ChatGPT plugin listing. Depends on 3.1 (OAuth identities), 3.4 (gateway) and the 2.7 core. It does not depend on lanes, the approval helper or the vault.

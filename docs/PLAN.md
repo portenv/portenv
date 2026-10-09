@@ -397,7 +397,7 @@ Secrets live in the box's vault, not in readable files. The main user's sessions
 
 - The box agent's core is events, screen, send and wait for input. "Waiting for input" fires when a tab is idle with a prompt on screen; "command finished" comes from shell prompt markers, with the exit code. Both work the same for Claude Code, Codex or a plain y/n script.
 - Optional adapters (for example Claude Code hooks) only make a signal more precise. No feature may depend on an adapter.
-- Agent-facing commands: `portenv events --follow` (JSON lines), `portenv screen <tab>` (the current screen as text), `portenv send <tab> "<text>"`, `portenv wait --for question|idle|done [--tab] [--timeout]`, and `portenv ask` for the owner's input (Agent readiness, principle 5). ADR 0016 places the box-level verbs under `portenv box`. `docs/skill/SKILL.md` teaches the loop to any agent and names no specific tool.
+- Agent-facing commands: `portenv events --follow` (JSON lines), `portenv screen <tab>` (the current screen as text), `portenv box send <tab> "<text>"`, `portenv wait --for question|idle|done [--tab] [--timeout]`, and `portenv ask` for the owner's input (Agent readiness, principle 5). Short forms such as `portenv screen` are aliases of `portenv box screen`; `send` has only its grouped form (ADR 0016). `docs/skill/SKILL.md` teaches the loop to any agent and names no specific tool.
 - How an agent asks its user (voice, chat) and what it answers on its own is between the user and their agent. Portenv does not enforce it.
 
 **Doors: one core, thin doors**
@@ -433,7 +433,7 @@ Agents driving Claude Code headlessly use `claude -p` with `--resume`, `--output
 **The goal:** any agent can discover Portenv, learn its tools, and know where it is once inside a box. All of it comes from one source of truth, and real agents test it.
 
 **Principles**
-1. **One source.** Every command is defined once in `portenvd`: the proto, plus a command registry with each command's name, summary, arguments, an example, and whether it's read-only or destructive. Everything else is generated from the registry, and a CI check fails if any generated file drifts:
+1. **One source.** Every command is defined once in `portenvd`: the proto, plus a command registry with each command's name, summary, arguments, an example, and whether it's read-only or destructive. Commands live in groups (`portenv box …`, `portenv agent …`). The everyday verbs (open, status, save, ask, answer, wait, screen, events, connect, guide) also have a short top-level form, defined in the registry as an alias of the grouped form (ADR 0016). Everything else is generated from the registry, and a CI check fails if any generated file drifts:
    - the CLI's help;
    - `portenv guide`;
    - the skill's reference section;
@@ -982,7 +982,7 @@ In this order:
 1. **Rename… for boxes** (§3.2). It updates the title, the inspector and the hostname. If the hostname can only change on the box's next start, the rename sheet says so ("The box's hostname changes the next time it starts.").
 2. **The tab bar (early, §3 and §4.1), built before the spike** on a tab interface in the box agent: list, new, close and rename, plus events. Whether the agent uses tmux control mode or plain tmux commands stays inside the agent, so the tab bar doesn't change after the spike.
    - One tab per tmux window; `+` for a new tab; the app owns names and order.
-   - Until it exists, nothing (`portenv send`, agents) can create a tmux window the user can't see. The agent refuses `new-window` from anything but the app, or maps it to the single visible window.
+   - Until it exists, nothing (`portenv box send`, agents) can create a tmux window the user can't see. The agent refuses `new-window` from anything but the app, or maps it to the single visible window.
 3. **The inspector (§6):**
    - **Where it is**, including the move's four-step progress (the demo note), the packages line from #28, and Retry;
    - **Saves** (the latest five);
@@ -1163,7 +1163,7 @@ The old numbers, for ADRs and PRs written before 2026-10-09: 2.2 wizard → 2.9 
 
 - Doors 1 and 2 for a box on the user's own server, in Continue my work mode. Grok Bot, or any terminal agent, reaches the box, runs Claude Code there and relays its questions back.
 - Credentials (ADR 0007): enrolment is closed by default; Connect an agent opens it for 10 minutes or until one code is approved. The agent runs `portenv connect`; the user approves the code in the app, after seeing the agent's name, the box and the key fingerprint; the runner, as certificate authority for its boxes, issues a 30-minute SSH certificate scoped to that box and mode, renewed by proof of possession of the agent's key until the grant ends (default 8 hours, at most 24 hours until Phase 3). No new inbound port: everything goes through the server's existing SSH. The app lists every certificate with revoke.
-- The core in the box agent: events (waiting for input, command finished, new output), `portenv events --follow`, `portenv screen <tab>`, `portenv send <tab>`, `portenv wait`, and `docs/skill/SKILL.md`.
+- The core in the box agent: events (waiting for input, command finished, new output), `portenv events --follow`, `portenv screen <tab>`, `portenv box send <tab>`, `portenv wait`, and `docs/skill/SKILL.md`.
 - `portenv ask` for the owner's input, and secret prompts never relayed (Agent readiness, principle 5).
 - ADR 0016's foundations: the agent identity, pairing with `portenv connect`, the credential record, grants with their audit trail, the message type, the event log and the names.
 - Agent readiness (see that section):
@@ -1200,7 +1200,7 @@ The old numbers, for ADRs and PRs written before 2026-10-09: 2.2 wizard → 2.9 
 - The server is listed in the official MCP Registry.
 - It proves the tools without any public exposure, before 2.7.
 
-**2.7 Remote MCP on the runner**: MCP over HTTPS with OAuth, served by the runner on the user's own server, free, opt-in per server (ADR 0015). It's ChatGPT's way in (Dots), through the ChatGPT app (Apps SDK). It uses the same registry and tools as 2.6, per-agent sign-in, attribution and revoke.
+**2.7 Remote MCP on the runner**: MCP over HTTPS with OAuth, served by the runner on the user's own server, free, opt-in per server (ADR 0015). It's ChatGPT's way in (Dots), through the ChatGPT app (Apps SDK). It uses the same registry and tools as 2.6, per-agent sign-in, attribution and revoke. ChatGPT's OAuth sign-in to the runner is the pairing (ADR 0016): the runner's authorization page shows the code and "Approve this in your Portenv app", and the owner's approval in the app is the OAuth consent.
 
 **2.8 Web terminal on the runner**: the box's terminal in a browser, served by the runner, opt-in per server (ADR 0015). It's the way in for browser-only agents (Meta Muse). Each agent gets one-time links that expire within minutes, tied to one agent and one box. Attribution and revoke work as for the other doors.
 - **Readable by browser agents:**
@@ -1217,7 +1217,7 @@ The old numbers, for ADRs and PRs written before 2026-10-09: 2.2 wizard → 2.9 
 - [ ] A box, even as root, cannot delete or overwrite any existing save: with the box's credential, deleting, renaming or rewriting any repository file (snapshots, index, data, keys, config) fails, and `restic check` passes afterwards (2.2)
 - [ ] Forget, prune and unlocking run only with the host's credential, which no box ever receives (2.2)
 - [ ] A stand-in agent connects from its own computer with a short-lived certificate, drives the user's Claude Code session by keystrokes in `/home/work/<project>`, and the user sees its activity attributed by name
-- [ ] Relay loop: a tool in the box asks a y/n question; "waiting for input" fires; a test agent reads the screen, relays the question, sends "y"; the tool continues. Run once with Claude Code and once with a plain script, using only `portenv events`, `portenv screen` and `portenv send`
+- [ ] Relay loop: a tool in the box asks a y/n question; "waiting for input" fires; a test agent reads the screen, relays the question, sends "y"; the tool continues. Run once with Claude Code and once with a plain script, using only `portenv events`, `portenv screen` and `portenv box send`
 - [ ] Revert To ▸ Last Save Point undoes everything a stand-in did since it connected
 - [ ] Revoke ends the agent's session immediately and its certificate can no longer be renewed
 - [ ] Every condition in ADR 0007 has its test passing (CA key never leaves the server, one box and one mode per certificate, no new inbound port, `portenv-enroll` closed by default, locked down and silent, device codes expire, are single use and rate-limited, renewal bound to the agent's key, revoke kills renewal and sessions)
@@ -1322,6 +1322,7 @@ These need an owner decision; Claude Code should add new ones here instead of gu
 - [x] Before Phase 2, telemetry: what opt-in, anonymous usage counts may Portenv collect, if any, and how is that stated on the website? **Answered for counting (2026-10-09):** download counts, repository traffic archived daily, and usage counts through the update check, from a fixed, published list of coarse fields with no identifier, on by default with one click off (see 1.8). Anything beyond these counts stays opt-in and undecided.
 - [ ] For 2.4–2.6: publish the real CLI binary through npm (platform packages, esbuild-style) and PyPI, so `npx portenv` and `uvx portenv` work in agent sandboxes that only reach package registries, and so MCP clients can start it the way they usually start servers?
 - [ ] Private agent network (Phase 3 and later): agents following and messaging each other across owners, on ADR 0016's identity, grants and messages. What it offers, and whether it's built at all.
-- [ ] CLI names (ADR 0016): keep short top-level forms (`portenv screen`, `portenv wait`, `portenv send`) as aliases of `portenv box …`, or only the `portenv box` forms?
-- [ ] Remote MCP (2.7): ChatGPT connectors sign in with OAuth's authorization-code flow and their own redirect. How does the owner's pairing approval (ADR 0016) fit into that sign-in?
+- [x] CLI names (ADR 0016): keep short top-level forms as aliases of `portenv box …`? **Answered (2026-10-10):** yes, as the primary way in, for the everyday verbs only (open, status, save, ask, answer, wait, screen, events, connect, guide). Each is defined once in the command registry as an alias of its grouped form, so help and the generated docs show both. Everything else lives only under its group.
+- [x] Remote MCP (2.7): how does the owner's pairing approval fit ChatGPT's OAuth sign-in? **Answered (2026-10-10):** the sign-in is the pairing. The runner's authorization page shows the code and "Approve this in your Portenv app", and the owner's approval in the app is the OAuth consent, creating the identity, grant and credential as `portenv connect` does. One pairing flow for every door.
+- [ ] Which group holds the commands outside the everyday list that the plan names today (`portenv skill`, `portenv mcp`, `portenv event`, and the Phase 0 `portenv init`): `portenv box …`, `portenv agent …`, or a new group?
 - [ ] A per-box "Keep running when Portenv quits" option (off by default) with a menu bar item listing boxes still running? Only with Phase 3's lease hand-off (see 2.4).

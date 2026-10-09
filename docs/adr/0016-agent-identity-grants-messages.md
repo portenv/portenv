@@ -22,7 +22,10 @@ From 2.4, outside agents reach boxes through several doors: SSH and the CLI, MCP
      - its grant for that box (point 4);
      - its credential for the door it used (point 3), which is delivered to the agent.
    - There are no localhost redirects, so it works for an agent typing in its own cloud terminal.
-   - The same flow is used for SSH certificates, the CLI and MCP.
+   - **One pairing flow for every door:** SSH certificates, the CLI, stdio MCP and remote MCP.
+   - **Remote MCP (2.7):** ChatGPT's OAuth sign-in to the runner *is* the pairing.
+     - The runner's authorization page shows the code and "Approve this in your Portenv app".
+     - The owner's approval in the app is the OAuth consent. It creates the identity, the grant and the credential, as `portenv connect` does.
    - On the user's own server, ADR 0007 is the enrolment mechanism behind it. This ADR renames that command from `portenv login` to `portenv connect`.
 
 3. **Credentials:** one record per agent per door: an SSH certificate, an MCP OAuth grant, a web-terminal link. They're all listed, and revocable, from one place.
@@ -67,11 +70,12 @@ From 2.4, outside agents reach boxes through several doors: SSH and the CLI, MCP
    - at-least-once delivery, with de-duplication;
    - no fields specific to a model or vendor.
 
-10. **Namespacing.**
-    - Today's MCP tools live under `box.*`.
-    - The CLI uses `portenv box`, `portenv agent`, `portenv ask` and `portenv connect`.
+10. **Namespacing** (the owner, 2026-10-10).
+    - **Every CLI command lives in its group:** `portenv box …` for box verbs, `portenv agent …` for agent verbs. MCP tools live under `box.*`.
+    - **Everyday verbs also get a short top-level form, which is the primary way in.** These are open, status, save, ask, answer, wait, screen, events, connect and guide (for example `portenv screen` for `portenv box screen`).
+    - **Each short form is defined once in the command registry,** as an alias of its grouped form. Help and the generated docs show both, so they can't drift.
+    - **Everything else lives only under its group,** `portenv box send` for example.
     - `network.*` is reserved for later.
-    - The plan's box-level verbs (events, screen, send, answer, wait) take their place under `portenv box` and `box.*` when 2.4 builds them. Whether short top-level forms (`portenv screen`, `portenv wait`) are kept as aliases is an open question in PLAN.md.
 
 ## Where it's built (scope option 1)
 
@@ -91,5 +95,5 @@ From 2.4, outside agents reach boxes through several doors: SSH and the CLI, MCP
 - 2.4 to 2.8 build on one identity, one pairing flow, one credential registry, one grant model and one message type, rather than one per door.
 - A private agent network (Phase 3 and later) adds grant kinds, message types and cross-owner delivery without migrating what exists.
 - Nothing here creates a way for an agent to reach a box it wasn't granted. Messaging grants and box grants stay separate.
-- The CLI and MCP names the plan uses are box-level verbs. They move under `portenv box` and `box.*`, and `network.*` stays free.
+- The CLI and MCP names the plan uses are box-level verbs. They live under `portenv box` and `box.*`; the everyday ones keep a short top-level alias, and `network.*` stays free.
 - ADR 0007's enrolment command is now `portenv connect`, and an approved enrolment also records the agent, its grant and its credential here.

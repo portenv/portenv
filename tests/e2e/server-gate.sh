@@ -66,7 +66,11 @@ trap cleanup EXIT
 
 echo "== server setup"
 arch=$(R dpkg --print-architecture)
-(cd "$repo" && CGO_ENABLED=0 GOOS=linux GOARCH=$arch go build -trimpath -ldflags="-s -w" -o "$root/portenv-linux" ./core/cmd/portenv)
+# The CLI CI built for this commit (PORTENV_LOCAL_BUILD=1 builds it here).
+# shellcheck source=../../scripts/server-bins.sh
+. "$repo/scripts/server-bins.sh"
+server_bins "$arch" "$root/bins"
+cp "$root/bins/portenv" "$root/portenv-linux"
 "$portenv" init "$box" --image "$image" --storage "sftp:portenv-storage@${target#*@}:/storage" --storage-host-key "$host_key" --storage-rest 127.0.0.1:7422 > "$root/init.txt"
 storage_pub=$(grep '^ssh-ed25519 ' "$root/init.txt")
 rest_user=$(sed -n 's/^rest-user //p' "$root/init.txt")

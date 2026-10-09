@@ -39,7 +39,7 @@ TOOLS := \
 	github.com/restic/restic/cmd/restic@v0.19.1
 TOOLS_STAMP := $(BIN)/.tools-stamp
 
-.PHONY: all build app test lint fmt proto proto-check agent-linux swift-test swift-env-check \
+.PHONY: all build app test lint fmt proto proto-check agent-linux cli-linux cli-darwin swift-test swift-env-check \
 	secrets spdx-check check tools clean image image-test driver-test e2e
 
 all: build test lint proto-check
@@ -55,6 +55,21 @@ build:
 	for c in $(CMDS); do \
 		go build -trimpath -ldflags "$(LDFLAGS)" -o $(BIN)/$$c ./core/cmd/$$c; \
 	done
+
+## cli-linux: portenv and portenv-runner for linux/arm64 and amd64 (static) into bin/dist
+DIST := $(BIN)/dist
+cli-linux:
+	mkdir -p $(DIST)
+	for a in arm64 amd64; do \
+		for c in portenv portenv-runner; do \
+			CGO_ENABLED=0 GOOS=linux GOARCH=$$a go build -trimpath -ldflags "$(LDFLAGS)" -o $(DIST)/$$c-linux-$$a ./core/cmd/$$c; \
+		done; \
+	done
+
+## cli-darwin: portenv for macOS arm64 (with cgo, for the Keychain) into bin/dist; on a Mac
+cli-darwin:
+	mkdir -p $(DIST)
+	CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags "$(LDFLAGS)" -o $(DIST)/portenv-darwin-arm64 ./core/cmd/portenv
 
 ## agent-linux: build static portenv-agent binaries and check they are static
 agent-linux:

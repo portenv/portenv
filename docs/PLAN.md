@@ -774,7 +774,10 @@ Small and visible, so they go before 1.1, which is big:
   - `SMAppService` registers `portenvd` as a launch agent with KeepAlive. It never reads the Keychain itself (item 1g).
   - The app's own start path is removed entirely, so `portenvd` can never be the app's child.
   - **If a relaunch doesn't finish,** launchd brings `portenvd` back. While the app waits, it shows "Not saved since …", and after a deadline a clear error.
-  - **Test:** `kill -9 portenvd` with the app closed, and launchd restarts it.
+  - **⌘Q is unchanged:** it closes, saves and releases the open box (as tested and ticked). Only an update relaunch leaves boxes running (ADR 0014).
+  - **Tests:**
+    - `kill -9 portenvd` with the app closed, and launchd restarts it;
+    - an update-style relaunch leaves the box and its programs running.
 - **The wait before the terminal is usable on open** (about 1.6 s of polling for the agent today) goes: push updates replace the poll, and the terminal attaches the moment the agent reports ready.
 - **The Phase 0 CLI's `docker exec` path is removed** (ADR 0010 condition 4, and the gate). `portenv init`, and the server-side `join` and `status` used by Move To enrolment, move into the daemon API or stay as plain commands that never touch a box. The audit lists them.
 - **A new `portenvd` takes over running boxes; it doesn't restart them** (required in 1.1, before Sparkle updates in 1.8).
@@ -817,6 +820,7 @@ The Containerization shim, with `docker` as the fallback. The agent drops the fo
   - no change older than 60 s left unsaved while online;
   - close under 15 s;
   - reopen under 5 s, online at a round-trip time of 50 ms or less and offline.
+- **Open timing:** when these budget tests land, measure opening a box over at least 10 runs and report the median and the worst (1.1's single-run figures were indicative only).
 
   It runs through the bounded runner. A failed autosave retries on its own schedule (ADR 0012), so the "Not saved since · retrying" row becomes routine.
 - **Browse Saves**, which provides the time for **Revert To ▸ Last Save Point (#26 follow-up)**: `portenvd` keeps the save list from its last listing, so the menu shows the time without a new listing.
@@ -840,6 +844,7 @@ Show in Finder (⌥⌘R) stops being disabled here.
 
 Developer ID signing, notarisation and Sparkle, with the key backups. Signed public CLI releases and their signing key are already on the first-release checklist (#27).
 - Needs Apple Developer enrolment (open question), which is also the stable-signing fix for item 1e.
+- **Release checklist:** test `portenvd`'s socket with a real second macOS account. A process running as another user is refused; 1.1's test simulated the other uid.
 
 **Standing items**
 
@@ -926,6 +931,7 @@ Milestones: 2.1 runner (server build of the core) installed over SSH, grown from
 - The core in the box agent: events (waiting for input, command finished, new output), `portenv events --follow`, `portenv screen <tab>`, `portenv send <tab>`, and `docs/skill/SKILL.md`.
 - Attribution and session recording per agent, the save point on connect, Watch, Take Over and Revoke in the app.
 - Not in 2.7: lanes (4.1), approvals (4.2), the gateway and its CA (Phase 3), phone notifications (4.6).
+- **Open question:** a per-box "Keep running when Portenv quits" option, off by default, so a stand-in agent's work can go on after the app quits, with a menu bar item listing the boxes still running. Only worth building with Phase 3's lease hand-off, so a sleeping Mac never blocks resuming the box elsewhere. No ADR until then.
 
 **How agents get the skill and the CLI** (built with 2.7)
 
@@ -1029,3 +1035,4 @@ These need an owner decision; Claude Code should add new ones here instead of gu
 - [ ] Phase 3 control-plane milestones now live in `portenv/cloud`: how its CI pins and tests against `proto/gen/go` versions from this repository (tags, or a pseudo-version per merge).
 - [ ] Scope of the iPhone companion: approvals only, or also status and a read-only terminal?
 - [ ] Name of the CLI binary: `portenv` assumed.
+- [ ] A per-box "Keep running when Portenv quits" option (off by default) with a menu bar item listing boxes still running? Only with Phase 3's lease hand-off (see 2.7).

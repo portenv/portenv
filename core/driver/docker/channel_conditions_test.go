@@ -18,6 +18,7 @@ import (
 
 	"github.com/portenv/portenv/core/agent"
 	"github.com/portenv/portenv/core/driver"
+	"github.com/portenv/portenv/core/driver/drivertest"
 	agentv1 "github.com/portenv/portenv/proto/gen/go/portenv/agent/v1"
 )
 
@@ -60,7 +61,7 @@ func TestChannelConditions(t *testing.T) {
 	// access path.
 	sh := func(user, script string) string {
 		t.Helper()
-		res, err := d.Exec(ctx, id, driver.ExecRequest{Argv: []string{"sh", "-c", script}, User: user, Timeout: time.Minute})
+		res, err := d.probe(ctx, id, drivertest.ProbeRequest{Argv: []string{"sh", "-c", script}, User: user, Timeout: time.Minute})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -95,6 +96,56 @@ func TestChannelConditions(t *testing.T) {
 	servePid := sh("", "pgrep -f '^portenv-agent serve'")
 	if uid := sh("", "ps -o uid= -p "+servePid); uid != "991" {
 		t.Errorf("API process uid %q, want 991 (portenv-agent)", uid)
+	}
+
+	// ADR 0014: only the engine's attach can re-key. Root in the box writing
+	// a valid secrets line to the API process's stdin through /proc is
+	// refused (the process is non-dumpable and no box has CAP_SYS_PTRACE),
+	// and the injected secrets never work. The control: the same write to
+	// an ordinary root process's stdin pipe gets through.
+	{
+		forged, err := agent.NewChannelSecrets()
+		if err != nil {
+			t.Fatal(err)
+		}
+		line, _ := forged.Line()
+		write := func(pid string) string {
+			return sh("", "printf '%s' '"+strings.TrimSpace(string(line))+"\n' > /proc/"+pid+"/fd/0 2>/dev/null && echo WROTE || echo REFUSED")
+		}
+		ctl := sh("", "rm -f /tmp/ctl /tmp/ctlfifo; mkfifo /tmp/ctlfifo; sh -c 'read l; echo \"$l\" > /tmp/ctl' <> /tmp/ctlfifo >/dev/null 2>&1 & echo $!")
+		if got := write(ctl); got != "WROTE" {
+			t.Fatalf("control: writing to an ordinary process's stdin: %s (the probe proves nothing)", got)
+		}
+		for range 20 {
+			if strings.Contains(sh("", "cat /tmp/ctl 2>/dev/null"), forged.Token) {
+				break
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+		if !strings.Contains(sh("", "cat /tmp/ctl 2>/dev/null"), forged.Token) {
+			t.Fatal("control: the ordinary process never received the line")
+		}
+		if got := write(servePid); got != "REFUSED" {
+			t.Errorf("root in the box wrote to the API process's stdin: %s", got)
+		}
+		time.Sleep(500 * time.Millisecond)
+		works := func(cert []byte, token string) bool {
+			conn, err := agent.DialChannel(ch.Dial, cert, token)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = conn.Close() }()
+			cctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+			defer cancel()
+			_, err = agentv1.NewAgentServiceClient(conn).GetVersion(cctx, &agentv1.GetVersionRequest{})
+			return err == nil
+		}
+		if works(forged.CertPEM, forged.Token) {
+			t.Error("secrets injected from inside the box took over the channel")
+		}
+		if !works(ch.CertPEM, ch.Token) {
+			t.Error("the real secrets stopped working after the injection attempt")
+		}
 	}
 
 	// Processes started for users carry no capabilities: CapPrm, CapEff and

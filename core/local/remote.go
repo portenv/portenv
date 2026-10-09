@@ -190,23 +190,6 @@ func EnrolOn(ctx context.Context, e *Env, c BoxConfig, host, joinStorage string,
 	return nil
 }
 
-// ResumeOn opens the box on host with the Phase 0 CLI (portenv resume
-// there; the gate's path).
-func ResumeOn(ctx context.Context, host, name string, out io.Writer) error {
-	if err := RunRemote(ctx, LongRemote, host, out, "sudo", PortenvPath, "resume", name); err != nil {
-		return fmt.Errorf("resume on %s: %w (the box is saved and released; resume it anywhere)", host, err)
-	}
-	return nil
-}
-
-// CloseOn saves, releases and stops the box on host (portenv close there).
-func CloseOn(ctx context.Context, host, name string, out io.Writer) error {
-	if err := RunRemote(ctx, LongRemote, host, out, "sudo", PortenvPath, "close", name); err != nil {
-		return fmt.Errorf("close on %s: %w", host, err)
-	}
-	return nil
-}
-
 // KnownOn reports whether host has the box enrolled.
 func KnownOn(ctx context.Context, host, name string) bool {
 	return RunRemote(ctx, QuickRemote, host, io.Discard, "sudo", PortenvPath, "status", name) == nil

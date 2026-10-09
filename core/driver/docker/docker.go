@@ -16,7 +16,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"iter"
 	"net"
 	"net/netip"
@@ -37,6 +36,7 @@ import (
 
 	"github.com/portenv/portenv/core/agent"
 	"github.com/portenv/portenv/core/driver"
+	agentv1 "github.com/portenv/portenv/proto/gen/go/portenv/agent/v1"
 )
 
 const (
@@ -204,12 +204,14 @@ func (d *Driver) recreate(ctx context.Context, s spec) error {
 		Name: name,
 		Config: &container.Config{
 			Image:        s.Box.ToolboxImage,
-			Hostname:     "portenv",
+			Hostname:     driver.Hostname(s.Box.Name, s.Box.ID),
 			Env:          env,
 			Labels:       map[string]string{labelBox: string(s.Box.ID)},
 			ExposedPorts: network.PortSet{agentPort: {}},
-			// The agent channel's secrets arrive on stdin, once (ADR 0010).
-			OpenStdin: true, StdinOnce: true, AttachStdin: true,
+			// The agent channel's secrets arrive on stdin (ADR 0010). The
+			// engine keeps stdin open across attaches (StdinOnce off), so a
+			// restarted daemon can re-key the running box (ADR 0014).
+			OpenStdin: true, StdinOnce: false, AttachStdin: true,
 		},
 		HostConfig: host,
 	})
@@ -344,9 +346,8 @@ func (d *Driver) Start(ctx context.Context, id driver.BoxID) (driver.State, erro
 	if _, err := att.Conn.Write(line); err != nil {
 		return driver.StateFailed, fmt.Errorf("hand the agent channel its secrets: %w", err)
 	}
-	if err := att.CloseWrite(); err != nil {
-		return driver.StateFailed, fmt.Errorf("close the agent channel's stdin: %w", err)
-	}
+	// The attach closes when Start returns; the container's stdin stays
+	// open (StdinOnce off) for a later re-key.
 	// A fresh home is created once; later starts must find it in place.
 	if s.Home.Fresh {
 		s.Home.Fresh = false
@@ -382,74 +383,6 @@ func (d *Driver) Destroy(ctx context.Context, id driver.BoxID) error {
 		return err
 	}
 	return nil
-}
-
-// Exec runs one non-interactive command in the box and collects its output.
-func (d *Driver) Exec(ctx context.Context, id driver.BoxID, req driver.ExecRequest) (driver.ExecResult, error) {
-	if len(req.Argv) == 0 {
-		return driver.ExecResult{}, errors.New("exec: empty argv")
-	}
-	if req.Timeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, req.Timeout)
-		defer cancel()
-	}
-	return d.execNamed(ctx, d.containerName(id), req)
-}
-
-// execIn runs argv as root in a container by name (tests).
-func (d *Driver) execIn(ctx context.Context, name string, argv []string) (driver.ExecResult, error) {
-	return d.execNamed(ctx, name, driver.ExecRequest{Argv: argv})
-}
-
-func (d *Driver) execNamed(ctx context.Context, name string, req driver.ExecRequest) (driver.ExecResult, error) {
-	user := req.User
-	if user == "" {
-		user = "root"
-	}
-	created, err := d.cli.ExecCreate(ctx, name, client.ExecCreateOptions{
-		User: user, Cmd: req.Argv, Env: req.Env,
-		AttachStdin: true, AttachStdout: true, AttachStderr: true,
-	})
-	if err != nil {
-		return driver.ExecResult{}, fmt.Errorf("exec create: %w", err)
-	}
-	att, err := d.cli.ExecAttach(ctx, created.ID, client.ExecAttachOptions{})
-	if err != nil {
-		return driver.ExecResult{}, fmt.Errorf("exec attach: %w", err)
-	}
-	defer att.Close()
-
-	writeErr := make(chan error, 1)
-	go func() {
-		_, err := io.Copy(att.Conn, bytes.NewReader(req.Stdin))
-		if cerr := att.CloseWrite(); err == nil {
-			err = cerr
-		}
-		writeErr <- err
-	}()
-	var stdout, stderr bytes.Buffer
-	readDone := make(chan error, 1)
-	go func() {
-		_, err := stdcopy.StdCopy(&stdout, &stderr, att.Reader)
-		readDone <- err
-	}()
-	select {
-	case err := <-readDone:
-		if err != nil {
-			return driver.ExecResult{}, fmt.Errorf("exec output: %w", err)
-		}
-	case <-ctx.Done():
-		return driver.ExecResult{}, ctx.Err()
-	}
-	if err := <-writeErr; err != nil {
-		return driver.ExecResult{}, fmt.Errorf("exec stdin: %w", err)
-	}
-	insp, err := d.cli.ExecInspect(ctx, created.ID, client.ExecInspectOptions{})
-	if err != nil {
-		return driver.ExecResult{}, fmt.Errorf("exec inspect: %w", err)
-	}
-	return driver.ExecResult{ExitCode: insp.ExitCode, Stdout: stdout.Bytes(), Stderr: stderr.Bytes()}, nil
 }
 
 // Logs yields the box's console output.
@@ -654,6 +587,69 @@ func (d *Driver) ImageDigest(ctx context.Context, ref string) (string, error) {
 		}
 	}
 	return ref, nil
+}
+
+// Rekey implements driver.Driver (ADR 0014): new secrets for the running
+// box, written on its stdin through a fresh attach (never exec), as at
+// start. The engine holds the stdin pipe, so this works after the process
+// that started the box has gone. It returns once the agent answers with
+// the new secrets.
+func (d *Driver) Rekey(ctx context.Context, id driver.BoxID) error {
+	if running, err := d.running(ctx, id); err != nil {
+		return err
+	} else if !running {
+		return fmt.Errorf("box %s is not running", id)
+	}
+	sec, err := agent.NewChannelSecrets()
+	if err != nil {
+		return err
+	}
+	line, err := sec.Line()
+	if err != nil {
+		return err
+	}
+	att, err := d.cli.ContainerAttach(ctx, d.containerName(id), client.ContainerAttachOptions{Stream: true, Stdin: true})
+	if err != nil {
+		return fmt.Errorf("attach to re-key the agent channel: %w", err)
+	}
+	_, err = att.Conn.Write(line)
+	att.Close()
+	if err != nil {
+		return fmt.Errorf("re-key the agent channel: %w", err)
+	}
+	d.mu.Lock()
+	if d.channels == nil {
+		d.channels = map[driver.BoxID]agent.ChannelSecrets{}
+	}
+	d.channels[id] = sec
+	d.mu.Unlock()
+	// The agent applies the line on its own time: wait until it answers.
+	ch, err := d.AgentChannel(ctx, id)
+	if err != nil {
+		return err
+	}
+	conn, err := agent.DialChannel(ch.Dial, ch.CertPEM, ch.Token)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = conn.Close() }()
+	c := agentv1.NewAgentServiceClient(conn)
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		cctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+		_, err := c.GetVersion(cctx, &agentv1.GetVersionRequest{})
+		cancel()
+		if err == nil {
+			return nil
+		}
+		if time.Now().After(deadline) || ctx.Err() != nil {
+			d.mu.Lock()
+			delete(d.channels, id)
+			d.mu.Unlock()
+			return fmt.Errorf("the box agent didn't take the new channel: %w", err)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
 }
 
 // agentPort is the agent channel inside the box.

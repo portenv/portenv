@@ -1,5 +1,10 @@
 # Build output
 /bin/
+# Stray binaries from "go build" run inside core/ (make build writes to bin/)
+/core/portenv
+/core/portenvd
+/core/portenv-runner
+/core/portenv-agent
 .build/
 .swiftpm/
 *.xcodeproj/xcuserdata/

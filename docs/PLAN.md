@@ -1069,7 +1069,8 @@ The old numbers, for ADRs and PRs written before 2026-10-09: 2.2 wizard → 2.9 
 - Attribution and session recording per agent, the save point on connect, Watch, Take Over and Revoke in the app.
 - **Connect an Agent: the user chooses the door, per agent and per box** (the door table is in GUIDELINES.md §6.1):
   - Portenv never picks silently. The sheet states, in plain language, what each door allows before connecting.
-  - **A default suggestion only:** MCP or a lane for agents the user hasn't used before, and stand-in when they trust the agent like themselves. The user can always choose otherwise.
+  - **At launch the sheet offers stand-in** (over SSH, the CLI or the web terminal) **and MCP** (stdio or remote, with per-tool approvals). The lane row appears only once lanes exist (4.1), and is never shown as available before then.
+  - **A default suggestion only:** MCP for agents the user hasn't used before (a lane too, once lanes exist), and stand-in when they trust the agent like themselves. The user can always choose otherwise.
   - **Changing an agent's door or mode** takes effect immediately and is recorded.
   - **The relay rule:** when one agent's command is refused (by its own safety checks or its permissions), the refusal goes to the user with the reason. Nothing automatically hands the command to another agent. A re-run happens only on the user's explicit instruction, and it's attributed as "you, through <agent>", next to the original refusal.
   - **SSH command rules are never described as a security boundary,** anywhere: the app, the docs, the website. A shell can rephrase any command. What holds is the recording, Revert, and the vault rules enforced by the operating system.

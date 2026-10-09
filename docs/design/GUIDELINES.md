@@ -176,20 +176,22 @@ Empty states use one short sentence ("No agents connected. Connect an Agent…")
 
 ### 6.1 Connect an Agent sheet
 
-The user chooses the door for each agent, per box, and the sheet says honestly what each door allows. Portenv never picks silently. The sheet shows this wording, in plain language, before connecting:
+The user chooses the door for each agent, per box, and the sheet says honestly what each door allows. Portenv never picks silently. The sheet shows this wording, in plain language, before connecting.
+
+**At launch the sheet offers two doors:** stand-in (over SSH, the CLI or the web terminal) and MCP (stdio or remote, with per-tool approvals). **The lane row appears only once lanes exist (Phase 4, 4.1).** It is never shown as available before then.
 
 | Door | What the agent can do | Where limits are enforced |
 | --- | --- | --- |
 | Stand-in over SSH or the CLI | Anything you can, as you, in your session | It's recorded and revertible, and the vault rules hold (enforced by the operating system). Command approvals are only a speed bump: a shell can rephrase any command. |
 | Lane (SSH, its own user) | Only what the lane allows | The operating system: a separate user, its own files, network limits, the vault rules |
 | MCP (stdio or remote) | Only the tools you enable | Every call is structured, so you can approve, deny or be asked, action by action |
-| Web terminal | What the SSH mode it's tied to allows, through a one-time link | The same as that SSH mode (stand-in or lane) |
+| Web terminal | What the SSH mode it's tied to allows, through a one-time link | The same as that SSH mode (stand-in at launch; a lane once lanes exist) |
 
-- **A default suggestion only:** MCP or a lane for an agent you haven't used before, and stand-in when you trust the agent like yourself. The user can always choose otherwise.
+- **A default suggestion only:** MCP for an agent you haven't used before (or a lane, once lanes exist), and stand-in when you trust the agent like yourself. The user can always choose otherwise.
 - **Changing an agent's door or mode** takes effect immediately and is recorded.
 - **A command an agent refused** (by its own safety checks or its permissions) reaches the user with the reason. Nothing hands it to another agent automatically.
 - **Never describe SSH command rules as a security boundary,** anywhere: in the app, the docs or the website.
-- Each door appears once its milestone lands: stand-in in 2.4, MCP in 2.6 and 2.7, the web terminal in 2.8, lanes in 4.1 (PLAN.md).
+- Each door appears once its milestone lands: stand-in in 2.4, MCP in 2.6 and 2.7, the web terminal in 2.8, lanes in 4.1 (PLAN.md). A door that doesn't exist yet is never listed.
 
 ## 7. Command palette
 

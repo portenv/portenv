@@ -468,8 +468,12 @@ Agents driving Claude Code headlessly use `claude -p` with `--resume`, `--output
 
   From 2.7, the docs pages are generated from this repository's generated files.
 - **Registries:**
-  - **Held as placeholders, 2026-10-09:** npm `@portenv/cli` (and the npm org `portenv`), and PyPI `portenv-cli`.
-  - **Refused as too similar to existing packages:** npm `portenv` (to `dotenv`) and PyPI `portenv` (to `port-env`). A request to PyPI support is drafted.
+  - **Held as placeholders, 2026-10-09** (0.0.1, Apache-2.0, no command, no install-time code):
+    - npm `@portenv/cli`, in the npm org `@portenv` (owner `32bitsret`);
+    - PyPI `portenv-cli`.
+  - **Blocked by the registries' similarity checks:**
+    - npm `portenv` (too similar to `dotenv`);
+    - PyPI `portenv` (too similar to `port-env`). A request to PyPI support is pending.
   - See Open questions for publishing the real CLI through them.
 
 **Agent evals (from 2.7)**
@@ -1137,5 +1141,6 @@ These need an owner decision; Claude Code should add new ones here instead of gu
 - [ ] Scope of the iPhone companion: approvals only, or also status and a read-only terminal?
 - [ ] Name of the CLI binary: `portenv` assumed.
 - [ ] Linux desktop window, after the terminal edition ships on Linux: Tauri with xterm.js (shared with 3.10's web terminal), or native GTK?
+- [ ] Before Phase 2, telemetry: what opt-in, anonymous usage counts may Portenv collect, if any, and how is that stated on the website? The free route has no account and no tracking by default. The go-to-market metrics depend on it.
 - [ ] For 2.7–2.9: publish the real CLI binary through npm (platform packages, esbuild-style) and PyPI, so `npx portenv` and `uvx portenv` work in agent sandboxes that only reach package registries, and so MCP clients can start it the way they usually start servers?
 - [ ] A per-box "Keep running when Portenv quits" option (off by default) with a menu bar item listing boxes still running? Only with Phase 3's lease hand-off (see 2.7).

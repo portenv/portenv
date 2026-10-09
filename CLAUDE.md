@@ -15,7 +15,7 @@ Phase 1: Native Mac app, local boxes. Phase 0 is closed (`docs/PLAN.md`). Work t
 ## Ground rules
 
 - Only driver packages (`core/driver/`) may talk to Docker, containerd or Apple Containerization. From Phase 1 on, never use `docker exec` as an access path; go through the box agent.
-- Never weaken a security default to make something work: no plaintext keys or secrets on disk, no public or inbound ports, no disabled encryption. Stop and ask.
+- Never weaken a security default to make something work: no plaintext keys or secrets on disk, no public or inbound ports (the one exception: the opt-in public doors on a user's own server, under every condition of ADR 0015), no disabled encryption. Stop and ask.
 - Save, resume, lease and key code are data-loss paths: write the tests first and keep the invariants in `docs/PLAN.md` (Save, resume and leases) true at every commit.
 - Never pipe build or test output in a way that hides the exit code: use `set -o pipefail` (or `set -euo pipefail`), or check the exit status before trimming output. A command whose result you report must have its real exit status checked.
 - Local results count only when run with GNU Make 4 or later (`gmake` on a Mac: `brew install make`). macOS's own make (3.81) ignores the Makefile's shell flags and once hid failing tests and lint; the Makefile now refuses to run under it.

@@ -28,6 +28,7 @@ import "C"
 
 import (
 	"errors"
+	"sync"
 	"unsafe"
 
 	"github.com/keybase/go-keychain"
@@ -105,6 +106,51 @@ func needsApproval(interactive bool, err error) bool {
 		return true
 	}
 	return !interactive && errors.Is(err, keychain.ErrorAuthFailed)
+}
+
+// Whether this process may raise a Keychain prompt is decided once per
+// process: only the CLI in front of a person (AllowPrompts) may, never
+// portenvd, the runner, the app's helper calls or a script. Those turn
+// Keychain interaction off for the whole process before their first call
+// (SecKeychainSetUserInteractionAllowed, process-wide and never turned back
+// on), so the two exclude each other: a process that may prompt never
+// turns interaction off, and one that turned it off can't start prompting.
+// The app (Swift) never links this package and never calls the switch.
+var (
+	promptsMu   sync.Mutex
+	prompts     bool
+	switchedOff bool
+)
+
+// AllowPrompts lets this process ask the person to approve Keychain reads
+// (the CLI, when a terminal is attached). It panics if Keychain interaction
+// was already turned off in this process: that order is a bug.
+func AllowPrompts() {
+	promptsMu.Lock()
+	defer promptsMu.Unlock()
+	if switchedOff {
+		panic("keys: AllowPrompts after Keychain interaction was turned off for this process")
+	}
+	prompts = true
+}
+
+// mayTurnOffInteraction reports whether a non-interactive call may turn
+// Keychain interaction off for this process, and records it: never in a
+// process that may prompt.
+func mayTurnOffInteraction() bool {
+	promptsMu.Lock()
+	defer promptsMu.Unlock()
+	if prompts {
+		return false
+	}
+	switchedOff = true
+	return true
+}
+
+func promptsAllowed() bool {
+	promptsMu.Lock()
+	defer promptsMu.Unlock()
+	return prompts
 }
 
 // Default is the Keychain, without prompts unless AllowPrompts was called.

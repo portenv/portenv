@@ -50,6 +50,12 @@ public protocol KeychainWaitNotifying: Sendable {
 
 /// The texts of the Keychain wait (GUIDELINES.md §3.1).
 public enum KeychainWait {
+    /// Where Keychain reads run: a concurrent queue of their own. A read
+    /// waits as long as macOS's prompt is up, so it must never hold a thread
+    /// of Swift's cooperative pool; and no read waits behind another (a read
+    /// cancelled while its prompt is still up must not block the next).
+    public static let queue = DispatchQueue(label: "com.portenv.keychain", qos: .userInitiated, attributes: .concurrent)
+
     public static let line = "Waiting for Keychain access"
     public static let detail = "Check for a password prompt. It may be behind other windows."
     /// The error portenvd returns when a key needs the person's approval.

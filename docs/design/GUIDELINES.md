@@ -195,6 +195,7 @@ The user chooses the door for each agent, per box, and the sheet says honestly w
 - **A command an agent refused** (by its own safety checks or its permissions) reaches the user with the reason. Nothing hands it to another agent automatically.
 - **Never describe SSH command rules as a security boundary,** anywhere: in the app, the docs or the website.
 - Each door appears once its milestone lands: stand-in in 2.4, MCP in 2.6 and 2.7, the web terminal in 2.8, lanes in 4.1 (PLAN.md). A door that doesn't exist yet is never listed.
+- **Pairing approval** (ADR 0016): when an agent runs `portenv connect`, the app asks "<Agent> wants to join <box>, code <code>", for example "Grok Bot wants to join acme-api, code 7F3-K2Q". The code shown is the one the agent printed, so the user can match them.
 
 ## 7. Command palette
 
@@ -258,6 +259,7 @@ Type: SF Pro for UI (13 pt body, 11 pt section headings semibold secondary, 12 p
 - Contrast at least 4.5:1 for text, including grey details.
 - Reduce Motion: no spinning symbols, no animated progress shimmer.
 - Colour never carries meaning alone: dots have labels, status has symbols and words.
+- The web terminal (PLAN.md 2.8) keeps its screen as page text (xterm.js's DOM renderer or screen-reader mode), offers larger-font and high-contrast options, and shows the state line as plain text outside the terminal, so browser agents and screen readers can read it.
 
 ---
 

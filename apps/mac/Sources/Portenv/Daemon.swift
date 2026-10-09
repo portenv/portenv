@@ -14,6 +14,12 @@ actor Daemon {
         let p = Process()
         p.executableURL = Binaries.portenvd
         p.standardInput = FileHandle.nullDevice
+        // Its log goes to ~/Library/Logs/Portenv/portenvd.log: started from
+        // Finder or `open`, this app's own output goes nowhere.
+        if let log = Self.logFile() {
+            p.standardOutput = log
+            p.standardError = log
+        }
         // If this app ends without stopping it (killed, crashed), portenvd
         // still saves, releases and exits.
         var env = ProcessInfo.processInfo.environment
@@ -34,6 +40,20 @@ actor Daemon {
         for _ in 0..<1200 where p.isRunning {
             try? await Task.sleep(for: .milliseconds(100))
         }
+    }
+
+    /// The daemon's log file, appended to (created 0600 in a 0700 folder).
+    static func logFile() -> FileHandle? {
+        let fm = FileManager.default
+        let dir = fm.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs/Portenv")
+        try? fm.createDirectory(at: dir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        let url = dir.appendingPathComponent("portenvd.log")
+        if !fm.fileExists(atPath: url.path) {
+            fm.createFile(atPath: url.path, contents: nil, attributes: [.posixPermissions: 0o600])
+        }
+        guard let h = try? FileHandle(forWritingTo: url) else { return nil }
+        h.seekToEndOfFile()
+        return h
     }
 
     private func answers() async -> Bool {

@@ -28,7 +28,9 @@ struct MainWindow: View {
                 }
             }
             .disabled(controller.busy)
-            .onDisappear { Task { await controller.close() } }
+            // Closing the window doesn't close the box here: the app quits
+            // after its last window, and quitting closes it, once (two
+            // closes once crashed portenvd).
             .alert("Portenv", isPresented: Binding(get: { controller.error != nil }, set: { if !$0 { controller.dismissError() } })) {
                 Button("OK") { controller.dismissError() }
             } message: {

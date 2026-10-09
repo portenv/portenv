@@ -38,6 +38,7 @@ const (
 	DaemonService_GetChannel_FullMethodName            = "/portenv.daemon.v1.DaemonService/GetChannel"
 	DaemonService_GetBoxState_FullMethodName           = "/portenv.daemon.v1.DaemonService/GetBoxState"
 	DaemonService_SetNetworkPath_FullMethodName        = "/portenv.daemon.v1.DaemonService/SetNetworkPath"
+	DaemonService_Woke_FullMethodName                  = "/portenv.daemon.v1.DaemonService/Woke"
 )
 
 // DaemonServiceClient is the client API for DaemonService service.
@@ -79,6 +80,10 @@ type DaemonServiceClient interface {
 	// Mac). A fresh "down" (from a running app, at most 30 s old) opens a
 	// box offline at once, without probing storage; anything else probes.
 	SetNetworkPath(ctx context.Context, in *SetNetworkPathRequest, opts ...grpc.CallOption) (*SetNetworkPathResponse, error)
+	// The system woke from sleep: check every open box's agent channel and
+	// restart a box whose channel is gone (its home stays: rule 3), so a
+	// dropped channel never sits unnoticed until the next save.
+	Woke(ctx context.Context, in *WokeRequest, opts ...grpc.CallOption) (*WokeResponse, error)
 }
 
 type daemonServiceClient struct {
@@ -222,6 +227,16 @@ func (c *daemonServiceClient) SetNetworkPath(ctx context.Context, in *SetNetwork
 	return out, nil
 }
 
+func (c *daemonServiceClient) Woke(ctx context.Context, in *WokeRequest, opts ...grpc.CallOption) (*WokeResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WokeResponse)
+	err := c.cc.Invoke(ctx, DaemonService_Woke_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DaemonServiceServer is the server API for DaemonService service.
 // All implementations must embed UnimplementedDaemonServiceServer
 // for forward compatibility.
@@ -261,6 +276,10 @@ type DaemonServiceServer interface {
 	// Mac). A fresh "down" (from a running app, at most 30 s old) opens a
 	// box offline at once, without probing storage; anything else probes.
 	SetNetworkPath(context.Context, *SetNetworkPathRequest) (*SetNetworkPathResponse, error)
+	// The system woke from sleep: check every open box's agent channel and
+	// restart a box whose channel is gone (its home stays: rule 3), so a
+	// dropped channel never sits unnoticed until the next save.
+	Woke(context.Context, *WokeRequest) (*WokeResponse, error)
 	mustEmbedUnimplementedDaemonServiceServer()
 }
 
@@ -309,6 +328,9 @@ func (UnimplementedDaemonServiceServer) GetBoxState(context.Context, *GetBoxStat
 }
 func (UnimplementedDaemonServiceServer) SetNetworkPath(context.Context, *SetNetworkPathRequest) (*SetNetworkPathResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SetNetworkPath not implemented")
+}
+func (UnimplementedDaemonServiceServer) Woke(context.Context, *WokeRequest) (*WokeResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Woke not implemented")
 }
 func (UnimplementedDaemonServiceServer) mustEmbedUnimplementedDaemonServiceServer() {}
 func (UnimplementedDaemonServiceServer) testEmbeddedByValue()                       {}
@@ -554,6 +576,24 @@ func _DaemonService_SetNetworkPath_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _DaemonService_Woke_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WokeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).Woke(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_Woke_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).Woke(ctx, req.(*WokeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // DaemonService_ServiceDesc is the grpc.ServiceDesc for DaemonService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -608,6 +648,10 @@ var DaemonService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SetNetworkPath",
 			Handler:    _DaemonService_SetNetworkPath_Handler,
+		},
+		{
+			MethodName: "Woke",
+			Handler:    _DaemonService_Woke_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

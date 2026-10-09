@@ -57,6 +57,11 @@ type Server struct {
 	// a terminal that ends because of one is not reported as a failure.
 	gen map[string]uint64
 
+	// stopping: shutdown has begun (no new opens); opening: opens in
+	// progress, which shutdown waits for.
+	stopping bool
+	opening  sync.WaitGroup
+
 	network networkReport      // the app's last network report
 	now     func() time.Time   // the clock (tests set it)
 	alive   func(pid int) bool // whether a reporting app still runs
@@ -79,6 +84,9 @@ type openBox struct {
 	// retrying: a restic run missed its deadline and is being retried;
 	// failed: the last save failed (after its retry), until one succeeds.
 	retrying, failed atomic.Bool
+	// quitUnsaved: Portenv quit before this box could be saved; it is
+	// being saved first thing (the quit marker).
+	quitUnsaved atomic.Bool
 }
 
 // New returns a daemon for this machine's Portenv directory.
@@ -122,22 +130,6 @@ func (s *Server) Serve(ctx context.Context) error {
 		return nil
 	}
 	return err
-}
-
-func (s *Server) closeAll() {
-	s.mu.Lock()
-	names := make([]string, 0, len(s.open))
-	for n := range s.open {
-		names = append(names, n)
-	}
-	s.mu.Unlock()
-	for _, n := range names {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-		if err := s.closeBox(ctx, n); err != nil {
-			s.log.Error("close on shutdown", "box", n, "err", err)
-		}
-		cancel()
-	}
 }
 
 // GetVersion implements daemonv1.DaemonServiceServer.
@@ -189,6 +181,11 @@ func (s *Server) OpenBox(ctx context.Context, req *daemonv1.OpenBoxRequest) (*da
 		return &daemonv1.OpenBoxResponse{Summary: "already open"}, nil
 	}
 	s.mu.Unlock()
+	done, err := s.startOpening()
+	if err != nil {
+		return nil, err
+	}
+	defer done()
 	ob, res, err := s.openBox(ctx, req.GetName())
 	if err != nil {
 		var held *boxsync.LeaseHeldError
@@ -204,6 +201,15 @@ func (s *Server) OpenBox(ctx context.Context, req *daemonv1.OpenBoxRequest) (*da
 	summary := fmt.Sprintf("open on %s (resume rule %d: %s)", s.env.Machine, res.Rule, res.Action)
 	if res.Offline {
 		summary = "Offline · will save later"
+	}
+	// Portenv quit before this box was saved: say so, and save it first
+	// thing (offline, the next save does it).
+	if s.hasQuitMarker(ob.sess.Cfg.ID) {
+		ob.quitUnsaved.Store(true)
+		summary += "; Portenv quit before saving it last time, saving now"
+		if !res.Offline {
+			go s.saveAfterQuit(req.GetName(), ob) // #nosec G118 -- the save outlives this open request on purpose
+		}
 	}
 	return &daemonv1.OpenBoxResponse{Summary: summary, Rule: int32(res.Rule)}, nil // #nosec G115 -- rules 1 to 5
 }

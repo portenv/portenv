@@ -15,6 +15,7 @@ public struct BoxState: Equatable, Sendable {
         case closed = "SAVE_STATE_CLOSED"
         case retrying = "SAVE_STATE_RETRYING"
         case notSaved = "SAVE_STATE_NOT_SAVED"
+        case quitUnsaved = "SAVE_STATE_QUIT_UNSAVED"
     }
 
     public var save: Save
@@ -64,6 +65,7 @@ public struct BoxState: Equatable, Sendable {
         case .closed: save = "Closed"
         case .retrying: save = notSavedSince(f) + " · retrying"
         case .notSaved: save = notSavedSince(f)
+        case .quitUnsaved: save = notSavedSince(f) + " · Portenv quit before saving"
         }
         if let location { return "On \(location) · \(save)" }
         return save
@@ -185,6 +187,19 @@ public final class BoxController {
     }
 
     public func dismissError() { error = nil }
+
+    /// What quitting needs: this box, and whether it is open on this Mac.
+    public var quitFlow: QuitFlow { QuitFlow(cli: cli, box: box, openHere: location == .thisMac) }
+
+    /// The Mac woke from sleep: portenvd checks the box agent's channel and
+    /// restarts a box whose channel is gone; reconnect the terminal then.
+    public func woke() async {
+        guard isOpen else { return }
+        if let out = try? await cli.run(["app", "woke"]), out.contains("restarted") {
+            terminalGeneration += 1
+        }
+        await refresh()
+    }
 
     /// The terminal's connection ended without the user leaving it: ask
     /// portenvd whether the box agent still answers; reattach if it does.

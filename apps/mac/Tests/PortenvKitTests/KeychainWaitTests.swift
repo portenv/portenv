@@ -12,12 +12,16 @@ final class BlockingKeychain: KeychainReading, @unchecked Sendable {
     private let lock = NSLock()
     private var _reads: [String] = []
     var reads: [String] { lock.withLock { _reads } }
+    private var _queues: [String] = []
+    /// The dispatch queue each read ran on.
+    var queues: [String] { lock.withLock { _queues } }
     init(blocks: Bool) { self.blocks = blocks }
     func release() { gate.signal() }
 
     func read(account: String) throws -> Data? {
         #expect(!Thread.isMainThread, "Keychain reads never run on the main thread")
-        lock.withLock { _reads.append(account) }
+        let label = String(cString: __dispatch_queue_get_label(nil))
+        lock.withLock { _reads.append(account); _queues.append(label) }
         if blocks && reads.count == 1 { gate.wait() }
         return Data("key-\(account)".utf8)
     }
@@ -50,6 +54,7 @@ struct KeychainWaitTests {
 
     @Test func aBlockedReadSaysSoAndNotifiesOnce() async {
         let kc = BlockingKeychain(blocks: true), cli = FakeDaemon(), n = CountingNotifier()
+        defer { kc.release() } // never leave a read blocked, even when the test fails
         let c = controller(kc, cli, n)
         let opening = Task { await c.open() }
         await waitUntil { c.waitingForKeychain }
@@ -68,6 +73,7 @@ struct KeychainWaitTests {
     /// again (the wait line once stayed up, spinning, until the box opened).
     @Test func afterApprovalTheLineSaysOpening() async {
         let kc = BlockingKeychain(blocks: true), cli = FakeDaemon(), n = CountingNotifier()
+        defer { kc.release() } // never leave a read blocked, even when the test fails
         let c = controller(kc, cli, n)
         let seen = Seen()
         cli.onRun = { args in
@@ -83,6 +89,7 @@ struct KeychainWaitTests {
 
     @Test func cancelStopsTheOpenCleanly() async {
         let kc = BlockingKeychain(blocks: true), cli = FakeDaemon(), n = CountingNotifier()
+        defer { kc.release() } // never leave a read blocked, even when the test fails
         let c = controller(kc, cli, n)
         let opening = Task { await c.open() }
         await waitUntil { c.waitingForKeychain }
@@ -101,6 +108,7 @@ struct KeychainWaitTests {
         let c = controller(kc, cli, n)
         await c.open()
         #expect(kc.reads == ["box-1", "box-1-storage"])
+        #expect(kc.queues.allSatisfy { $0 == "com.portenv.keychain" }, "reads run on their own queue, never the cooperative pool: \(kc.queues)")
         let provide = cli.calls.first { $0.count > 1 && $0[1] == "provide-keys" }
         #expect(provide == ["app", "provide-keys", "acme-api"])
         #expect(cli.provided.first?["box-1"] == Data("key-box-1".utf8), "the keys read, over portenvd's API")

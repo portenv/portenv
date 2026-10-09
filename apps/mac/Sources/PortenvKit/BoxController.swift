@@ -293,7 +293,10 @@ public final class BoxController {
         let result = await withCheckedContinuation { (done: CheckedContinuation<Result<[String: Data], Error>?, Never>) in
             once.set { done.resume(returning: $0) }
             cancelKeychain = { once.resume(nil) }
-            Task.detached {
+            // On a queue of its own, never the cooperative pool: a read can
+            // block for as long as the prompt is up, and blocked pool
+            // threads starve every other task (CI's three cores hung).
+            KeychainWait.queue.async {
                 do {
                     var keys: [String: Data] = [:]
                     for id in ids {

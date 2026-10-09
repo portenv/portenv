@@ -158,7 +158,10 @@ app: build $(TOOLS_STAMP)
 ## swift-test: build and test the Swift packages (macOS only)
 swift-test:
 	cd shims/containerization && $(SWIFT) build && $(SWIFT) test
-	cd apps/mac && $(SWIFT) build && $(SWIFT) test
+	# The app's tests run with a one-thread cooperative pool: a call that
+	# blocks a pool thread (a Keychain prompt) hangs here, not only on CI's
+	# three cores.
+	cd apps/mac && $(SWIFT) build && env -i PATH="$(PATH)" HOME="$(HOME)" TMPDIR="$(or $(TMPDIR),/tmp)" LANG=en_US.UTF-8 LIBDISPATCH_COOPERATIVE_POOL_STRICT=1 swift test
 
 ## swift-env-check: a secret in the environment never reaches the Swift build folders
 swift-env-check:

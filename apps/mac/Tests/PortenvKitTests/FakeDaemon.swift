@@ -93,4 +93,10 @@ final class FakeDaemon: DaemonAPI, @unchecked Sendable {
     func woke() async throws -> Bool { try await record(["app", "woke"]); return wokeRestarted }
     func relaunch() async throws { try await record(["app", "relaunch"]) }
     func leaveUnsaved(_ box: String) async throws { try await record(["app", "leave-unsaved", box]) }
+    /// What takeSavedAfterQuit gives out (once).
+    var savedAfterQuit: [SavedAfterQuit] = []
+    func takeSavedAfterQuit() async throws -> [SavedAfterQuit] {
+        try await record(["app", "take-saved-after-quit"])
+        return lock.withLock { let s = savedAfterQuit; savedAfterQuit = []; return s }
+    }
 }

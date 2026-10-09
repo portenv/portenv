@@ -334,6 +334,19 @@ public enum Portenv_Daemon_V1_DaemonService: Sendable {
                 type: .unary
             )
         }
+        /// Namespace for "TakeSavedAfterQuit" metadata.
+        public enum TakeSavedAfterQuit: Sendable {
+            /// Request type for "TakeSavedAfterQuit".
+            public typealias Input = Portenv_Daemon_V1_TakeSavedAfterQuitRequest
+            /// Response type for "TakeSavedAfterQuit".
+            public typealias Output = Portenv_Daemon_V1_TakeSavedAfterQuitResponse
+            /// Descriptor for "TakeSavedAfterQuit".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "TakeSavedAfterQuit",
+                type: .unary
+            )
+        }
         /// Descriptors for all methods in the "portenv.daemon.v1.DaemonService" service.
         public static let descriptors: [GRPCCore.MethodDescriptor] = [
             GetVersion.descriptor,
@@ -359,7 +372,8 @@ public enum Portenv_Daemon_V1_DaemonService: Sendable {
             SaveNow.descriptor,
             ListSaves.descriptor,
             Housekeep.descriptor,
-            LeaveUnsaved.descriptor
+            LeaveUnsaved.descriptor,
+            TakeSavedAfterQuit.descriptor
         ]
     }
 }
@@ -929,9 +943,11 @@ extension Portenv_Daemon_V1_DaemonService {
         /// > Source IDL Documentation:
         /// >
         /// > Quit Anyway: the box couldn't be saved before Portenv quits. portenvd
-        /// > records the quit marker and lets go of the box without saving it (it
-        /// > keeps running as it is); the next open takes it over and saves it
-        /// > first thing ("Portenv quit before saving").
+        /// > records the quit marker and keeps retrying the save in the background
+        /// > (30 s, 1, 2 and 5 minutes, then every 5) until one succeeds; then it
+        /// > closes the box and releases the lease. Until then the lease stays with
+        /// > this Mac. Opening the box first stops the retries and saves it first
+        /// > thing ("Portenv quit before saving").
         ///
         /// - Parameters:
         ///   - request: A request containing a single `Portenv_Daemon_V1_LeaveUnsavedRequest` message.
@@ -948,6 +964,30 @@ extension Portenv_Daemon_V1_DaemonService {
             deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_LeaveUnsavedResponse>,
             options: GRPCCore.CallOptions,
             onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_LeaveUnsavedResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "TakeSavedAfterQuit" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Boxes saved in the background after Quit Anyway since the app last
+        /// > asked: the app shows one notification for each. Given out once.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_TakeSavedAfterQuitRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_TakeSavedAfterQuitRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_TakeSavedAfterQuitResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func takeSavedAfterQuit<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_TakeSavedAfterQuitRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_TakeSavedAfterQuitRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_TakeSavedAfterQuitResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_TakeSavedAfterQuitResponse>) async throws -> Result
         ) async throws -> Result where Result: Sendable
     }
 
@@ -1766,9 +1806,11 @@ extension Portenv_Daemon_V1_DaemonService {
         /// > Source IDL Documentation:
         /// >
         /// > Quit Anyway: the box couldn't be saved before Portenv quits. portenvd
-        /// > records the quit marker and lets go of the box without saving it (it
-        /// > keeps running as it is); the next open takes it over and saves it
-        /// > first thing ("Portenv quit before saving").
+        /// > records the quit marker and keeps retrying the save in the background
+        /// > (30 s, 1, 2 and 5 minutes, then every 5) until one succeeds; then it
+        /// > closes the box and releases the lease. Until then the lease stays with
+        /// > this Mac. Opening the box first stops the retries and saves it first
+        /// > thing ("Portenv quit before saving").
         ///
         /// - Parameters:
         ///   - request: A request containing a single `Portenv_Daemon_V1_LeaveUnsavedRequest` message.
@@ -1791,6 +1833,41 @@ extension Portenv_Daemon_V1_DaemonService {
             try await self.client.unary(
                 request: request,
                 descriptor: Portenv_Daemon_V1_DaemonService.Method.LeaveUnsaved.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
+
+        /// Call the "TakeSavedAfterQuit" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Boxes saved in the background after Quit Anyway since the app last
+        /// > asked: the app shows one notification for each. Given out once.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_TakeSavedAfterQuitRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_TakeSavedAfterQuitRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_TakeSavedAfterQuitResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func takeSavedAfterQuit<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_TakeSavedAfterQuitRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_TakeSavedAfterQuitRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_TakeSavedAfterQuitResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_TakeSavedAfterQuitResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.TakeSavedAfterQuit.descriptor,
                 serializer: serializer,
                 deserializer: deserializer,
                 options: options,
@@ -2483,9 +2560,11 @@ extension Portenv_Daemon_V1_DaemonService.ClientProtocol {
     /// > Source IDL Documentation:
     /// >
     /// > Quit Anyway: the box couldn't be saved before Portenv quits. portenvd
-    /// > records the quit marker and lets go of the box without saving it (it
-    /// > keeps running as it is); the next open takes it over and saves it
-    /// > first thing ("Portenv quit before saving").
+    /// > records the quit marker and keeps retrying the save in the background
+    /// > (30 s, 1, 2 and 5 minutes, then every 5) until one succeeds; then it
+    /// > closes the box and releases the lease. Until then the lease stays with
+    /// > this Mac. Opening the box first stops the retries and saves it first
+    /// > thing ("Portenv quit before saving").
     ///
     /// - Parameters:
     ///   - request: A request containing a single `Portenv_Daemon_V1_LeaveUnsavedRequest` message.
@@ -2505,6 +2584,36 @@ extension Portenv_Daemon_V1_DaemonService.ClientProtocol {
             request: request,
             serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_LeaveUnsavedRequest>(),
             deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_LeaveUnsavedResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "TakeSavedAfterQuit" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Boxes saved in the background after Quit Anyway since the app last
+    /// > asked: the app shows one notification for each. Given out once.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_TakeSavedAfterQuitRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func takeSavedAfterQuit<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_TakeSavedAfterQuitRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_TakeSavedAfterQuitResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.takeSavedAfterQuit(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_TakeSavedAfterQuitRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_TakeSavedAfterQuitResponse>(),
             options: options,
             onResponse: handleResponse
         )
@@ -3287,9 +3396,11 @@ extension Portenv_Daemon_V1_DaemonService.ClientProtocol {
     /// > Source IDL Documentation:
     /// >
     /// > Quit Anyway: the box couldn't be saved before Portenv quits. portenvd
-    /// > records the quit marker and lets go of the box without saving it (it
-    /// > keeps running as it is); the next open takes it over and saves it
-    /// > first thing ("Portenv quit before saving").
+    /// > records the quit marker and keeps retrying the save in the background
+    /// > (30 s, 1, 2 and 5 minutes, then every 5) until one succeeds; then it
+    /// > closes the box and releases the lease. Until then the lease stays with
+    /// > this Mac. Opening the box first stops the retries and saves it first
+    /// > thing ("Portenv quit before saving").
     ///
     /// - Parameters:
     ///   - message: request message to send.
@@ -3312,6 +3423,40 @@ extension Portenv_Daemon_V1_DaemonService.ClientProtocol {
             metadata: metadata
         )
         return try await self.leaveUnsaved(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "TakeSavedAfterQuit" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Boxes saved in the background after Quit Anyway since the app last
+    /// > asked: the app shows one notification for each. Given out once.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func takeSavedAfterQuit<Result>(
+        _ message: Portenv_Daemon_V1_TakeSavedAfterQuitRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_TakeSavedAfterQuitResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_TakeSavedAfterQuitRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.takeSavedAfterQuit(
             request: request,
             options: options,
             onResponse: handleResponse

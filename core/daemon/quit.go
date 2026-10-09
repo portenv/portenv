@@ -4,6 +4,7 @@ package daemon
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	boxsync "github.com/portenv/portenv/core/sync"
 	daemonv1 "github.com/portenv/portenv/proto/gen/go/portenv/daemon/v1"
@@ -165,26 +167,141 @@ func (s *Server) Relaunch(context.Context, *daemonv1.RelaunchRequest) (*daemonv1
 }
 
 // LeaveUnsaved implements daemonv1.DaemonServiceServer: Quit Anyway, with
-// portenvd run by launchd so it outlives the app. Like a shutdown that
-// couldn't save: the quit marker is written and portenvd lets go of the box
-// without saving it; the box keeps running as it is. The next open takes it
-// over (ADR 0014) and saves it first thing.
+// portenvd run by launchd so it outlives the app. The quit marker is
+// written and portenvd keeps the box, retrying the save in the background
+// until one succeeds (saveInBackground). Until then the box stays open
+// here, so the lease stays with this Mac: another machine never opens an
+// older save while unsaved work sits here.
 func (s *Server) LeaveUnsaved(_ context.Context, req *daemonv1.LeaveUnsavedRequest) (*daemonv1.LeaveUnsavedResponse, error) {
 	name := req.GetName()
-	s.mu.Lock()
-	ob, open := s.open[name]
-	if open {
-		delete(s.open, name)
+	ob, err := s.get(name)
+	if err != nil {
+		return &daemonv1.LeaveUnsavedResponse{}, nil // not open: nothing to do
 	}
-	s.mu.Unlock()
-	if !open {
-		return &daemonv1.LeaveUnsavedResponse{}, nil
-	}
-	s.leaving(name)
 	if err := s.writeQuitMarker(ob.sess.Cfg.ID); err != nil {
 		return nil, err
 	}
-	ob.closeConn()
-	s.log.Info("left unsaved (Quit Anyway): to save first thing on the next open", "box", name)
+	ob.quitUnsaved.Store(true)
+	if ob.background.CompareAndSwap(false, true) {
+		s.log.Info("left unsaved (Quit Anyway): saving in the background", "box", name)
+		go s.saveInBackground(name, ob) // #nosec G118 -- outlives the request on purpose
+	}
 	return &daemonv1.LeaveUnsavedResponse{}, nil
+}
+
+// quitRetry is when the background save after Quit Anyway tries again:
+// 30 s, 1, 2 and 5 minutes, then every 5 minutes, never giving up while the
+// box holds unsaved work. (Autosave's retries, 1.4, follow it.)
+var quitRetry = []time.Duration{30 * time.Second, time.Minute, 2 * time.Minute, 5 * time.Minute}
+
+func quitRetryDelay(attempt int) time.Duration {
+	d := quitRetry[min(attempt, len(quitRetry)-1)]
+	if os.Getenv("PORTENV_TEST_QUIT_RETRY") == "fast" { // e2e only: 1, 2, 4 s, then every 10 s
+		d /= 30
+	}
+	return d
+}
+
+// saveInBackground retries closing the box (save, release, stop) until it
+// works, the app takes the box back, or portenvd stops. On success the
+// marker is cleared and a record kept for the next launch's notification.
+func (s *Server) saveInBackground(name string, ob *openBox) {
+	ctx := s.bgCtx
+	for attempt := 0; ; attempt++ {
+		if !s.sleepFor(ctx, quitRetryDelay(attempt)) || !ob.background.Load() {
+			return
+		}
+		actx, cancel := context.WithTimeout(ctx, 30*time.Minute)
+		err := s.closeQuit(actx, name)
+		cancel()
+		if !ob.background.Load() {
+			return // taken back while that attempt ran
+		}
+		if err != nil {
+			s.log.Warn("background save after Quit Anyway failed; retrying", "box", name, "attempt", attempt+1, "err", err)
+			continue
+		}
+		s.clearQuitMarker(ob.sess.Cfg.ID)
+		if err := s.recordSavedAfterQuit(name, ob.sess.Cfg.ID, time.Now()); err != nil {
+			s.log.Error("record the background save", "box", name, "err", err)
+		}
+		s.log.Info("saved in the background after Quit Anyway; closed and released", "box", name)
+		return
+	}
+}
+
+// takeBackBox: the app opens a box that's being saved in the background.
+// It stops the background save (after any attempt in flight) and reports
+// whether the box is still open here to take back.
+func (s *Server) takeBackBox(ob *openBox) bool {
+	ob.mu.Lock()
+	defer ob.mu.Unlock()
+	if ob.closed {
+		return false
+	}
+	return ob.background.CompareAndSwap(true, false)
+}
+
+func (s *Server) sleepFor(ctx context.Context, d time.Duration) bool {
+	if s.sleep != nil {
+		return s.sleep(ctx, d)
+	}
+	select {
+	case <-ctx.Done():
+		return false
+	case <-time.After(d):
+		return true
+	}
+}
+
+func (s *Server) closeQuit(ctx context.Context, name string) error {
+	if s.closeForQuit != nil {
+		return s.closeForQuit(ctx, name)
+	}
+	return s.closeBox(ctx, name)
+}
+
+// stopBackground ends the background saves (portenvd stopping); boxes
+// still unsaved keep their marker.
+func (s *Server) stopBackground() { s.bgCancel() }
+
+const savedAfterQuitFile = "saved-after-quit.json"
+
+// recordSavedAfterQuit keeps, on disk, that a background save succeeded,
+// until the app takes it (survives a portenvd restart).
+func (s *Server) recordSavedAfterQuit(name, boxID string, at time.Time) error {
+	b, err := json.Marshal(struct {
+		Name    string    `json:"name"`
+		SavedAt time.Time `json:"saved_at"`
+	}{name, at})
+	if err != nil {
+		return err
+	}
+	dir := filepath.Join(s.env.Dir, "state", boxID)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(dir, savedAfterQuitFile), b, 0o600)
+}
+
+// TakeSavedAfterQuit implements daemonv1.DaemonServiceServer: the boxes
+// saved in the background after Quit Anyway, given out once.
+func (s *Server) TakeSavedAfterQuit(context.Context, *daemonv1.TakeSavedAfterQuitRequest) (*daemonv1.TakeSavedAfterQuitResponse, error) {
+	r := &daemonv1.TakeSavedAfterQuitResponse{}
+	files, _ := filepath.Glob(filepath.Join(s.env.Dir, "state", "*", savedAfterQuitFile))
+	for _, f := range files {
+		b, err := os.ReadFile(f) // #nosec G304 -- fixed name in portenvd's own state
+		if err != nil {
+			continue
+		}
+		var rec struct {
+			Name    string    `json:"name"`
+			SavedAt time.Time `json:"saved_at"`
+		}
+		if json.Unmarshal(b, &rec) == nil {
+			r.Saved = append(r.Saved, &daemonv1.SavedAfterQuit{Name: rec.Name, SavedAt: timestamppb.New(rec.SavedAt)})
+		}
+		_ = os.Remove(f)
+	}
+	return r, nil
 }

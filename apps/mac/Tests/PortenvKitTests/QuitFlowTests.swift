@@ -102,4 +102,20 @@ struct QuitFlowTests {
         #expect(BoxState(save: .quitUnsaved, savedAt: at).line(timeZone: utc, locale: Locale(identifier: "en_GB")) == "This Mac · Not saved since 13:54 · Portenv quit before saving")
         #expect(BoxState.parse(#"{"state":"SAVE_STATE_QUIT_UNSAVED","saved_at":"2026-10-08T13:54:00Z"}"#)?.save == .quitUnsaved)
     }
+
+    /// A box saved in the background after Quit Anyway: one notification at
+    /// the next launch, in the guideline's words; given out once.
+    @MainActor
+    @Test func aBackgroundSaveIsNotifiedOnceAtLaunch() async {
+        let cli = FakeDaemon(), n = CountingNotifier()
+        cli.savedAfterQuit = [SavedAfterQuit(box: "acme-api", savedAt: Date())]
+        let c = BoxController(box: "acme-api", daemon: cli, notifier: n)
+        await c.announceBackgroundSaves()
+        await c.announceBackgroundSaves()
+        #expect(n.saved == ["acme-api"])
+        let at = ISO8601DateFormatter().date(from: "2026-10-09T13:02:00Z")!
+        #expect(SavedAfterQuitNote.title(box: "acme-api") == "acme-api · Saved after Portenv quit")
+        #expect(SavedAfterQuitNote.body(at: at, timeZone: TimeZone(identifier: "Europe/Paris")!, locale: Locale(identifier: "en_GB"))
+            == "Saved at 15:02 and closed. Nothing was lost.")
+    }
 }

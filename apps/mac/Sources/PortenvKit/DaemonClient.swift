@@ -143,6 +143,10 @@ public final class DaemonClient: DaemonAPI, Sendable {
         _ = try await call { try await api.relaunch(.init()) }
     }
 
+    public func takeSavedAfterQuit() async throws -> [SavedAfterQuit] {
+        try await call { try await api.takeSavedAfterQuit(.init()).saved.map { SavedAfterQuit(box: $0.name, savedAt: $0.savedAt.date) } }
+    }
+
     public func leaveUnsaved(_ box: String) async throws {
         _ = try await call { try await api.leaveUnsaved(Self.named(box, Portenv_Daemon_V1_LeaveUnsavedRequest.self)) }
     }

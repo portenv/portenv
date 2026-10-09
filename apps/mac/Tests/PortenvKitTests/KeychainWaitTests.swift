@@ -32,6 +32,9 @@ final class CountingNotifier: KeychainWaitNotifying, @unchecked Sendable {
     private var _count = 0
     var count: Int { lock.withLock { _count } }
     func keychainWaiting(box: String) async { lock.withLock { _count += 1 } }
+    private var _saved: [String] = []
+    var saved: [String] { lock.withLock { _saved } }
+    func savedAfterQuit(box: String, at _: Date) async { lock.withLock { _saved.append(box) } }
 }
 
 final class Seen: @unchecked Sendable {

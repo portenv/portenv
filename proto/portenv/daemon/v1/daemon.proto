@@ -77,10 +77,15 @@ service DaemonService {
   // no save uses. For an idle box.
   rpc Housekeep(HousekeepRequest) returns (HousekeepResponse);
   // Quit Anyway: the box couldn't be saved before Portenv quits. portenvd
-  // records the quit marker and lets go of the box without saving it (it
-  // keeps running as it is); the next open takes it over and saves it
-  // first thing ("Portenv quit before saving").
+  // records the quit marker and keeps retrying the save in the background
+  // (30 s, 1, 2 and 5 minutes, then every 5) until one succeeds; then it
+  // closes the box and releases the lease. Until then the lease stays with
+  // this Mac. Opening the box first stops the retries and saves it first
+  // thing ("Portenv quit before saving").
   rpc LeaveUnsaved(LeaveUnsavedRequest) returns (LeaveUnsavedResponse);
+  // Boxes saved in the background after Quit Anyway since the app last
+  // asked: the app shows one notification for each. Given out once.
+  rpc TakeSavedAfterQuit(TakeSavedAfterQuitRequest) returns (TakeSavedAfterQuitResponse);
 }
 
 message CheckBoxRequest {
@@ -371,3 +376,15 @@ message LeaveUnsavedRequest {
 }
 
 message LeaveUnsavedResponse {}
+
+message TakeSavedAfterQuitRequest {}
+
+message TakeSavedAfterQuitResponse {
+  repeated SavedAfterQuit saved = 1;
+}
+
+// A box saved in the background after Quit Anyway.
+message SavedAfterQuit {
+  string name = 1;
+  google.protobuf.Timestamp saved_at = 2;
+}

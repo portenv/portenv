@@ -16,6 +16,8 @@ repo=$(cd "$(dirname "$0")/../.." && pwd)
 portenv=$repo/bin/portenv
 root=$(mktemp -d "${TMPDIR:-/tmp}/portenv-e2e.XXXXXX")
 export PORTENV_KEYS=file
+# Quit Anyway's background save retries every few seconds here, not minutes.
+export PORTENV_TEST_QUIT_RETRY=fast
 failures=0
 
 A() { PORTENV_HOME=$root/a PORTENV_DOCKER_NAMESPACE=e2ea "$portenv" "$@"; }
@@ -123,6 +125,24 @@ sleep 1
 others=$(grep -E "portenv-e2e[ab]-" "$root/execs.txt" | grep -vc 'exec_create: /usr/local/bin/portenv-agent ready$' || true)
 probes=$(wc -l <"$root/probes.txt" | tr -d ' ')
 expect "no docker exec into the boxes but the health check and this script's $probes probes ($others)" test "$others" = "$probes"
+
+echo "== Quit Anyway: the lease stays with A until A's work is saved"
+out=$(A app open demo 2>&1); echo "  $out"
+in_box a 'echo "unsaved at quit" > acme-api/quit-anyway.txt'
+chmod -R a-w "$root/storage"   # A's saves fail: storage can't be written
+expect "A's close fails while storage can't be written" bash -c "! PORTENV_HOME=$root/a $portenv app close demo"
+out=$(A app leave-unsaved demo 2>&1); echo "  $out"
+expect "A says Portenv quit before saving" bash -c "PORTENV_HOME=$root/a $portenv app state demo | grep -q SAVE_STATE_QUIT_UNSAVED"
+expect "B is refused: A still holds the lease, with unsaved work" bash -c "! PORTENV_HOME=$root/b $portenv app open demo"
+chmod -R u+w "$root/storage"   # storage is back
+for _ in $(seq 60); do PORTENV_HOME=$root/a "$portenv" app state demo 2>/dev/null | grep -q SAVE_STATE_CLOSED && break; sleep 1; done
+expect "A's background save succeeds: closed and released" bash -c "PORTENV_HOME=$root/a $portenv app state demo | grep -q SAVE_STATE_CLOSED"
+expect "  the quit marker is cleared" bash -c "! ls $root/a/state/*/quit-unsaved 2>/dev/null | grep -q ."
+expect "  and the next launch has one notification to show" bash -c "ls $root/a/state/*/saved-after-quit.json"
+out=$(B app open demo 2>&1); echo "  $out"
+expect "B opens the box now (rule 5)" grep -q "rule 5" <<<"$out"
+expect "B has A's work from before the quit" in_box b 'grep -q "unsaved at quit" acme-api/quit-anyway.txt'
+expect "B closes" B app close demo
 
 echo
 if (( failures )); then echo "$failures check(s) failed"; exit 1; fi

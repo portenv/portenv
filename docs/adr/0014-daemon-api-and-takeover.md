@@ -105,7 +105,14 @@ If the attach or the dial fails, or the box isn't running, the current behaviour
   - When Login Items needs the person's approval, it says so at once.
   - Both messages go when `portenvd` answers again.
 - **⌘Q is unchanged** (the owner's decision, 2026-10-09). It closes, saves and releases the open box through the API, and leaves `portenvd` with launchd, with nothing open.
-  - **Quit Anyway** calls `LeaveUnsaved`, because `portenvd` now outlives the app. It writes the quit marker and lets go of the box unsaved, as `portenvd`'s own shutdown used to. The next open takes the running box over and saves it first thing.
+  - **Quit Anyway** calls `LeaveUnsaved`, because `portenvd` now outlives the app:
+    - the quit marker is written, and `portenvd` keeps the box;
+    - it retries the save in the background after 30 s, then 1, 2 and 5 minutes, then every 5 minutes, and never stops while the box holds unsaved work;
+    - **the lease stays with this Mac until a save completes,** so another machine never opens an older save while unsaved work sits here;
+    - once a save succeeds, the box is closed, the marker cleared and the lease released, and the next launch of the app shows one notification ("acme-api · Saved after Portenv quit");
+    - if the app opens the box first, the retries stop and the box saves first thing, with "Portenv quit before saving" on the line.
+    - **Tests:** the schedule on a fake clock (still retrying after 30 minutes, mutation-checked), success clearing the marker and giving the record out once, taking the box back, `two-machines.sh` (B refused while A's work is unsaved; A's background save; then B opens with A's work), and `daemon.sh`.
+    - **Limit:** keys live only in `portenvd`'s memory. If `portenvd` restarts while a background save is pending, the retries stop until the app next opens the box, which shows it on the state line.
   - Only an update relaunch leaves boxes running.
 - **The log:** run by launchd (`PORTENVD_LOG=file`), `portenvd` writes `~/Library/Logs/Portenv/portenvd.log`, 0600 in a 0700 folder, since a plist inside the bundle can't name the user's home.
 - **Dev and test runs** with their own `PORTENV_HOME` start `portenvd` themselves, as the e2e scripts do. The app only connects.

@@ -266,6 +266,16 @@ public final class BoxController {
         if error == Self.daemonGone || error == nil { error = nil }
     }
 
+    /// At launch: one notification for each box saved in the background
+    /// after Quit Anyway since Portenv last ran (PLAN.md 1.1; at once from
+    /// portenvd itself is a 1.8 note).
+    public func announceBackgroundSaves() async {
+        guard let saved = try? await daemon.takeSavedAfterQuit() else { return }
+        for s in saved {
+            await notifier?.savedAfterQuit(box: s.box, at: s.savedAt)
+        }
+    }
+
     /// Called before portenvd is asked to relaunch (an update): the app
     /// stops reacting to portenvd's absence while it quits; launchd starts
     /// the next portenvd, which takes the box over.

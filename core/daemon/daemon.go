@@ -60,6 +60,14 @@ type Server struct {
 	// another before Serve).
 	peerUID func(fd int) (int, error)
 
+	// The background saves after Quit Anyway: they run until bgCtx ends
+	// (portenvd stopping). sleep and closeForQuit are the clock and the
+	// close (nil: the real ones; tests set fakes).
+	bgCtx        context.Context
+	bgCancel     context.CancelFunc
+	sleep        func(ctx context.Context, d time.Duration) bool
+	closeForQuit func(ctx context.Context, name string) error
+
 	mu     sync.Mutex
 	open   map[string]*openBox   // by box name
 	remote map[string]*remoteBox // boxes this Mac opened on a server
@@ -97,6 +105,9 @@ type openBox struct {
 	// quitUnsaved: Portenv quit before this box could be saved; it is
 	// being saved first thing (the quit marker).
 	quitUnsaved atomic.Bool
+	// background: left unsaved by Quit Anyway; portenvd retries the save
+	// on its own until it works or the app takes the box back.
+	background atomic.Bool
 	// agentMu guards conn and agent for readers outside mu (the state
 	// poll), so they never wait behind a save.
 	agentMu sync.RWMutex
@@ -107,8 +118,9 @@ func New(env *local.Env, log *slog.Logger) *Server {
 	if env != nil && env.Provided == nil {
 		env.Provided = keys.NewMemory()
 	}
+	bg, cancel := context.WithCancel(context.Background())
 	return &Server{env: env, log: log, open: map[string]*openBox{}, remote: map[string]*remoteBox{}, gen: map[string]uint64{},
-		now: time.Now, alive: processAlive}
+		now: time.Now, alive: processAlive, bgCtx: bg, bgCancel: cancel}
 }
 
 // Serve listens on the socket in the Portenv directory (mode 0600 in a 0700
@@ -150,6 +162,7 @@ func (s *Server) Serve(ctx context.Context) error {
 		// Save and release first, while the agent channels are up; then end
 		// every call, open terminals included (a graceful stop would wait
 		// for terminals forever). A runner leaves boxes running.
+		s.stopBackground()
 		if !s.KeepBoxesOnStop && !s.relaunching.Load() {
 			s.closeAll()
 		}
@@ -211,11 +224,20 @@ func (s *Server) OpenBox(ctx context.Context, req *daemonv1.OpenBoxRequest) (*da
 		s.detachRemote(req.GetName())
 	}
 	s.mu.Lock()
-	if _, open := s.open[req.GetName()]; open {
-		s.mu.Unlock()
-		return &daemonv1.OpenBoxResponse{Summary: "already open"}, nil
-	}
+	ob, open := s.open[req.GetName()]
 	s.mu.Unlock()
+	if open {
+		if !ob.background.Load() {
+			return &daemonv1.OpenBoxResponse{Summary: "already open"}, nil
+		}
+		// Left unsaved by Quit Anyway and still being saved in the
+		// background: take it back as it is and save it first thing.
+		if s.takeBackBox(ob) {
+			go s.saveAfterQuit(req.GetName(), ob) // #nosec G118 -- the save outlives this open request on purpose
+			return &daemonv1.OpenBoxResponse{Summary: "open on " + s.env.Machine + "; Portenv quit before saving it last time, saving now"}, nil
+		}
+		// Saved in the background meanwhile: it's closed; open it anew.
+	}
 	done, err := s.startOpening()
 	if err != nil {
 		return nil, err

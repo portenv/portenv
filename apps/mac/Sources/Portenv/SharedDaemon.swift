@@ -34,4 +34,5 @@ private struct Unreachable: DaemonAPI {
     func woke() async throws -> Bool { throw gone }
     func relaunch() async throws { throw gone }
     func leaveUnsaved(_: String) async throws { throw gone }
+    func takeSavedAfterQuit() async throws -> [SavedAfterQuit] { throw gone }
 }

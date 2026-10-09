@@ -33,6 +33,8 @@ struct PortenvApp: App {
                     delegate.controller = controller
                     _ = await LoginItem.ensureRegistered()
                     await controller.waitForDaemon()
+                    // Boxes saved in the background after Quit Anyway: say so once.
+                    await controller.announceBackgroundSaves()
                     // Before opening: with no network at all the box opens
                     // offline at once instead of probing storage.
                     await NetworkWatch.shared.start()

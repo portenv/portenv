@@ -9,7 +9,7 @@ import PortenvKit
 final class NetworkWatch: @unchecked Sendable {
     static let shared = NetworkWatch()
 
-    let reporter = NetworkReporter()
+    let reporter = NetworkReporter(daemon: SharedDaemon.client)
     private let monitor = NWPathMonitor()
     private let queue = DispatchQueue(label: "com.portenv.network")
     private var started = false

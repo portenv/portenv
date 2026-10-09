@@ -24,12 +24,21 @@ func TestConformance(t *testing.T) {
 	if image == "" {
 		t.Skip("PORTENV_TEST_IMAGE not set; run make driver-test")
 	}
-	d, err := New(Config{StateDir: t.TempDir()})
+	state := t.TempDir()
+	d, err := New(Config{StateDir: state})
 	if err != nil {
 		t.Fatal(err)
 	}
 	drivertest.Run(t, drivertest.Env{
-		Driver:  d,
+		Driver: d,
+		Probe:  d.probe,
+		Restarted: func() driver.Driver {
+			again, err := New(Config{StateDir: state})
+			if err != nil {
+				t.Fatal(err)
+			}
+			return again
+		},
 		Image:   image,
 		HomeRef: func(id driver.BoxID) string { return "portenv-test-home-" + string(id) },
 		Cleanup: func(ref string) {

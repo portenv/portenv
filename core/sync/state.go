@@ -96,3 +96,7 @@ func saveState(dir string, st State) error {
 	}
 	return nil
 }
+
+// LoadState reads the state recorded in dir without opening the box (no
+// key needed). ok is false when there is none.
+func LoadState(dir string) (st State, ok bool, err error) { return loadState(dir) }

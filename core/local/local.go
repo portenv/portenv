@@ -40,6 +40,9 @@ const DefaultImage = "ghcr.io/portenv/toolbox-node:main"
 type Env struct {
 	Dir     string
 	Machine string
+	// Provided holds keys the app read from the Keychain and handed to
+	// portenvd (in memory only); they are used before the store's own.
+	Provided *keys.Memory
 }
 
 func NewEnv() (*Env, error) {
@@ -157,10 +160,27 @@ func (e *Env) LoadBox(name string) (BoxConfig, error) {
 }
 
 func (e *Env) KeyStore() keys.Store {
+	base := keys.Default(filepath.Join(e.Dir, "keys"))
 	if os.Getenv("PORTENV_KEYS") == "file" { // tests: keep keys out of the Keychain
-		return keys.FileStore{Dir: filepath.Join(e.Dir, "keys")}
+		base = keys.FileStore{Dir: filepath.Join(e.Dir, "keys")}
 	}
-	return keys.Default(filepath.Join(e.Dir, "keys"))
+	if e.Provided != nil {
+		return keys.Layered{First: e.Provided, Then: base}
+	}
+	return base
+}
+
+// KeyIDs are the key IDs a box's keys are stored under: its repository key,
+// and for SFTP storage its storage key and REST password.
+func KeyIDs(c BoxConfig) []string {
+	ids := []string{c.ID}
+	if strings.HasPrefix(c.Storage, "sftp:") {
+		ids = append(ids, StorageKeyID(c.ID))
+		if c.StorageREST != "" {
+			ids = append(ids, RESTKeyID(c.ID))
+		}
+	}
+	return ids
 }
 
 // storage resolves where the box's repository is, as restic inside the box
@@ -400,14 +420,8 @@ func (s *Session) StorageReachable() bool {
 	return true
 }
 
-// sync opens the sync engine: backup and restore run inside the box,
-// everything else on this machine when it has restic.
-func (s *Session) Sync() (*boxsync.Box, error) {
-	return s.SyncWith(boxsync.AgentExecutor{Driver: s.Drv, Box: s.ID()})
-}
-
 // SyncWith opens the sync engine with in-box runs going through ex: the
-// agent channel for portenvd (ADR 0010), docker exec for the Phase 0 CLI.
+// agent channel (ADR 0010), never docker exec.
 func (s *Session) SyncWith(ex boxsync.Executor) (*boxsync.Box, error) {
 	return boxsync.Open(boxsync.Config{
 		MetaExecutor:   s.HostExecutor(),
@@ -459,39 +473,6 @@ func HomeVolume(boxID string) string {
 		return "portenv-home-" + ns + "-" + boxID
 	}
 	return "portenv-home-" + boxID
-}
-
-// WaitAgent waits until the agent reports one of the wanted states and
-// returns the state and detail. It polls quickly at first (a box is usually
-// ready within a second), then backs off to once a second.
-func WaitAgent(ctx context.Context, d driver.Driver, id driver.BoxID, want ...string) (string, string, error) {
-	deadline := time.Now().Add(15 * time.Minute)
-	last := ""
-	wait := 50 * time.Millisecond
-	for time.Now().Before(deadline) {
-		res, err := d.Exec(ctx, id, driver.ExecRequest{Argv: []string{"portenv-agent", "ready"}, Timeout: 10 * time.Second})
-		if err == nil {
-			out := strings.TrimSpace(string(res.Stdout))
-			state, detail, _ := strings.Cut(out, ": ")
-			state = strings.TrimPrefix(state, "READINESS_STATE_")
-			for _, w := range want {
-				if state == w {
-					return state, detail, nil
-				}
-			}
-			if out != last && out != "" {
-				fmt.Fprintf(os.Stderr, "  %s\n", strings.ToLower(detail))
-				last = out
-			}
-		}
-		select {
-		case <-ctx.Done():
-			return "", "", ctx.Err()
-		case <-time.After(wait):
-		}
-		wait = min(2*wait, time.Second)
-	}
-	return "", "", errors.New("the box did not finish starting within 15 minutes")
 }
 
 func (e *Env) SaveBox(c BoxConfig) error {

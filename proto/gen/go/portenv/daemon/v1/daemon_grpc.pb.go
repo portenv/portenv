@@ -37,7 +37,19 @@ const (
 	DaemonService_RestartBox_FullMethodName            = "/portenv.daemon.v1.DaemonService/RestartBox"
 	DaemonService_GetChannel_FullMethodName            = "/portenv.daemon.v1.DaemonService/GetChannel"
 	DaemonService_GetBoxState_FullMethodName           = "/portenv.daemon.v1.DaemonService/GetBoxState"
+	DaemonService_WatchBoxState_FullMethodName         = "/portenv.daemon.v1.DaemonService/WatchBoxState"
 	DaemonService_SetNetworkPath_FullMethodName        = "/portenv.daemon.v1.DaemonService/SetNetworkPath"
+	DaemonService_Woke_FullMethodName                  = "/portenv.daemon.v1.DaemonService/Woke"
+	DaemonService_RetryPackages_FullMethodName         = "/portenv.daemon.v1.DaemonService/RetryPackages"
+	DaemonService_ProvideKeys_FullMethodName           = "/portenv.daemon.v1.DaemonService/ProvideKeys"
+	DaemonService_Relaunch_FullMethodName              = "/portenv.daemon.v1.DaemonService/Relaunch"
+	DaemonService_ListServers_FullMethodName           = "/portenv.daemon.v1.DaemonService/ListServers"
+	DaemonService_GetKeyIDs_FullMethodName             = "/portenv.daemon.v1.DaemonService/GetKeyIDs"
+	DaemonService_SaveNow_FullMethodName               = "/portenv.daemon.v1.DaemonService/SaveNow"
+	DaemonService_ListSaves_FullMethodName             = "/portenv.daemon.v1.DaemonService/ListSaves"
+	DaemonService_Housekeep_FullMethodName             = "/portenv.daemon.v1.DaemonService/Housekeep"
+	DaemonService_LeaveUnsaved_FullMethodName          = "/portenv.daemon.v1.DaemonService/LeaveUnsaved"
+	DaemonService_TakeSavedAfterQuit_FullMethodName    = "/portenv.daemon.v1.DaemonService/TakeSavedAfterQuit"
 )
 
 // DaemonServiceClient is the client API for DaemonService service.
@@ -75,10 +87,51 @@ type DaemonServiceClient interface {
 	// The box's save state, derived only from what is recorded (the last
 	// saved snapshot, the dirty flag, a save in progress) and where it runs.
 	GetBoxState(ctx context.Context, in *GetBoxStateRequest, opts ...grpc.CallOption) (*GetBoxStateResponse, error)
+	// The box's state as it changes: the current state at once, then a
+	// message whenever anything in it changes, and the state again every 30 s
+	// as a heartbeat. The stream ends when portenvd stops (ADR 0014).
+	WatchBoxState(ctx context.Context, in *WatchBoxStateRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[WatchBoxStateResponse], error)
 	// The system's network status, as the app sees it (NWPathMonitor on the
 	// Mac). A fresh "down" (from a running app, at most 30 s old) opens a
 	// box offline at once, without probing storage; anything else probes.
 	SetNetworkPath(ctx context.Context, in *SetNetworkPathRequest, opts ...grpc.CallOption) (*SetNetworkPathResponse, error)
+	// The system woke from sleep: check every open box's agent channel and
+	// restart a box whose channel is gone (its home stays: rule 3), so a
+	// dropped channel never sits unnoticed until the next save.
+	Woke(ctx context.Context, in *WokeRequest, opts ...grpc.CallOption) (*WokeResponse, error)
+	// Try the box's packages that couldn't be installed again now.
+	RetryPackages(ctx context.Context, in *RetryPackagesRequest, opts ...grpc.CallOption) (*RetryPackagesResponse, error)
+	// Keys the app read from the Keychain for a box, held in memory only:
+	// portenvd never reads the Keychain interactively, so when a key needs the
+	// person's approval it fails fast and the app (in front of them) reads it.
+	ProvideKeys(ctx context.Context, in *ProvideKeysRequest, opts ...grpc.CallOption) (*ProvideKeysResponse, error)
+	// Portenv is relaunching (an update): stop serving without closing any
+	// box. Boxes and their programs keep running, and the next portenvd
+	// takes them over (ADR 0014). Quitting (Cmd-Q) still closes and saves.
+	Relaunch(ctx context.Context, in *RelaunchRequest, opts ...grpc.CallOption) (*RelaunchResponse, error)
+	// The servers a box can move to (Move To), as user@host.
+	ListServers(ctx context.Context, in *ListServersRequest, opts ...grpc.CallOption) (*ListServersResponse, error)
+	// The Keychain items the app reads for a box (service
+	// dev.portenv.repository): its repository key, and its storage keys.
+	GetKeyIDs(ctx context.Context, in *GetKeyIDsRequest, opts ...grpc.CallOption) (*GetKeyIDsResponse, error)
+	// An autosave now (the Phase 0 CLI's save, moved here in 1.1).
+	SaveNow(ctx context.Context, in *SaveNowRequest, opts ...grpc.CallOption) (*SaveNowResponse, error)
+	// Every save of the box, oldest first: autosaves, save points, closes and
+	// orphaned saves, with the machine that made each.
+	ListSaves(ctx context.Context, in *ListSavesRequest, opts ...grpc.CallOption) (*ListSavesResponse, error)
+	// Clear old lease tags and apply retention; with prune, also delete data
+	// no save uses. For an idle box.
+	Housekeep(ctx context.Context, in *HousekeepRequest, opts ...grpc.CallOption) (*HousekeepResponse, error)
+	// Quit Anyway: the box couldn't be saved before Portenv quits. portenvd
+	// records the quit marker and keeps retrying the save in the background
+	// (30 s, 1, 2 and 5 minutes, then every 5) until one succeeds; then it
+	// closes the box and releases the lease. Until then the lease stays with
+	// this Mac. Opening the box first stops the retries and saves it first
+	// thing ("Portenv quit before saving").
+	LeaveUnsaved(ctx context.Context, in *LeaveUnsavedRequest, opts ...grpc.CallOption) (*LeaveUnsavedResponse, error)
+	// Boxes saved in the background after Quit Anyway since the app last
+	// asked: the app shows one notification for each. Given out once.
+	TakeSavedAfterQuit(ctx context.Context, in *TakeSavedAfterQuitRequest, opts ...grpc.CallOption) (*TakeSavedAfterQuitResponse, error)
 }
 
 type daemonServiceClient struct {
@@ -212,10 +265,139 @@ func (c *daemonServiceClient) GetBoxState(ctx context.Context, in *GetBoxStateRe
 	return out, nil
 }
 
+func (c *daemonServiceClient) WatchBoxState(ctx context.Context, in *WatchBoxStateRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[WatchBoxStateResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &DaemonService_ServiceDesc.Streams[1], DaemonService_WatchBoxState_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[WatchBoxStateRequest, WatchBoxStateResponse]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type DaemonService_WatchBoxStateClient = grpc.ServerStreamingClient[WatchBoxStateResponse]
+
 func (c *daemonServiceClient) SetNetworkPath(ctx context.Context, in *SetNetworkPathRequest, opts ...grpc.CallOption) (*SetNetworkPathResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(SetNetworkPathResponse)
 	err := c.cc.Invoke(ctx, DaemonService_SetNetworkPath_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) Woke(ctx context.Context, in *WokeRequest, opts ...grpc.CallOption) (*WokeResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WokeResponse)
+	err := c.cc.Invoke(ctx, DaemonService_Woke_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) RetryPackages(ctx context.Context, in *RetryPackagesRequest, opts ...grpc.CallOption) (*RetryPackagesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RetryPackagesResponse)
+	err := c.cc.Invoke(ctx, DaemonService_RetryPackages_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) ProvideKeys(ctx context.Context, in *ProvideKeysRequest, opts ...grpc.CallOption) (*ProvideKeysResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ProvideKeysResponse)
+	err := c.cc.Invoke(ctx, DaemonService_ProvideKeys_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) Relaunch(ctx context.Context, in *RelaunchRequest, opts ...grpc.CallOption) (*RelaunchResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RelaunchResponse)
+	err := c.cc.Invoke(ctx, DaemonService_Relaunch_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) ListServers(ctx context.Context, in *ListServersRequest, opts ...grpc.CallOption) (*ListServersResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListServersResponse)
+	err := c.cc.Invoke(ctx, DaemonService_ListServers_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) GetKeyIDs(ctx context.Context, in *GetKeyIDsRequest, opts ...grpc.CallOption) (*GetKeyIDsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetKeyIDsResponse)
+	err := c.cc.Invoke(ctx, DaemonService_GetKeyIDs_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) SaveNow(ctx context.Context, in *SaveNowRequest, opts ...grpc.CallOption) (*SaveNowResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SaveNowResponse)
+	err := c.cc.Invoke(ctx, DaemonService_SaveNow_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) ListSaves(ctx context.Context, in *ListSavesRequest, opts ...grpc.CallOption) (*ListSavesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListSavesResponse)
+	err := c.cc.Invoke(ctx, DaemonService_ListSaves_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) Housekeep(ctx context.Context, in *HousekeepRequest, opts ...grpc.CallOption) (*HousekeepResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(HousekeepResponse)
+	err := c.cc.Invoke(ctx, DaemonService_Housekeep_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) LeaveUnsaved(ctx context.Context, in *LeaveUnsavedRequest, opts ...grpc.CallOption) (*LeaveUnsavedResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(LeaveUnsavedResponse)
+	err := c.cc.Invoke(ctx, DaemonService_LeaveUnsaved_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) TakeSavedAfterQuit(ctx context.Context, in *TakeSavedAfterQuitRequest, opts ...grpc.CallOption) (*TakeSavedAfterQuitResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(TakeSavedAfterQuitResponse)
+	err := c.cc.Invoke(ctx, DaemonService_TakeSavedAfterQuit_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -257,10 +439,51 @@ type DaemonServiceServer interface {
 	// The box's save state, derived only from what is recorded (the last
 	// saved snapshot, the dirty flag, a save in progress) and where it runs.
 	GetBoxState(context.Context, *GetBoxStateRequest) (*GetBoxStateResponse, error)
+	// The box's state as it changes: the current state at once, then a
+	// message whenever anything in it changes, and the state again every 30 s
+	// as a heartbeat. The stream ends when portenvd stops (ADR 0014).
+	WatchBoxState(*WatchBoxStateRequest, grpc.ServerStreamingServer[WatchBoxStateResponse]) error
 	// The system's network status, as the app sees it (NWPathMonitor on the
 	// Mac). A fresh "down" (from a running app, at most 30 s old) opens a
 	// box offline at once, without probing storage; anything else probes.
 	SetNetworkPath(context.Context, *SetNetworkPathRequest) (*SetNetworkPathResponse, error)
+	// The system woke from sleep: check every open box's agent channel and
+	// restart a box whose channel is gone (its home stays: rule 3), so a
+	// dropped channel never sits unnoticed until the next save.
+	Woke(context.Context, *WokeRequest) (*WokeResponse, error)
+	// Try the box's packages that couldn't be installed again now.
+	RetryPackages(context.Context, *RetryPackagesRequest) (*RetryPackagesResponse, error)
+	// Keys the app read from the Keychain for a box, held in memory only:
+	// portenvd never reads the Keychain interactively, so when a key needs the
+	// person's approval it fails fast and the app (in front of them) reads it.
+	ProvideKeys(context.Context, *ProvideKeysRequest) (*ProvideKeysResponse, error)
+	// Portenv is relaunching (an update): stop serving without closing any
+	// box. Boxes and their programs keep running, and the next portenvd
+	// takes them over (ADR 0014). Quitting (Cmd-Q) still closes and saves.
+	Relaunch(context.Context, *RelaunchRequest) (*RelaunchResponse, error)
+	// The servers a box can move to (Move To), as user@host.
+	ListServers(context.Context, *ListServersRequest) (*ListServersResponse, error)
+	// The Keychain items the app reads for a box (service
+	// dev.portenv.repository): its repository key, and its storage keys.
+	GetKeyIDs(context.Context, *GetKeyIDsRequest) (*GetKeyIDsResponse, error)
+	// An autosave now (the Phase 0 CLI's save, moved here in 1.1).
+	SaveNow(context.Context, *SaveNowRequest) (*SaveNowResponse, error)
+	// Every save of the box, oldest first: autosaves, save points, closes and
+	// orphaned saves, with the machine that made each.
+	ListSaves(context.Context, *ListSavesRequest) (*ListSavesResponse, error)
+	// Clear old lease tags and apply retention; with prune, also delete data
+	// no save uses. For an idle box.
+	Housekeep(context.Context, *HousekeepRequest) (*HousekeepResponse, error)
+	// Quit Anyway: the box couldn't be saved before Portenv quits. portenvd
+	// records the quit marker and keeps retrying the save in the background
+	// (30 s, 1, 2 and 5 minutes, then every 5) until one succeeds; then it
+	// closes the box and releases the lease. Until then the lease stays with
+	// this Mac. Opening the box first stops the retries and saves it first
+	// thing ("Portenv quit before saving").
+	LeaveUnsaved(context.Context, *LeaveUnsavedRequest) (*LeaveUnsavedResponse, error)
+	// Boxes saved in the background after Quit Anyway since the app last
+	// asked: the app shows one notification for each. Given out once.
+	TakeSavedAfterQuit(context.Context, *TakeSavedAfterQuitRequest) (*TakeSavedAfterQuitResponse, error)
 	mustEmbedUnimplementedDaemonServiceServer()
 }
 
@@ -307,8 +530,44 @@ func (UnimplementedDaemonServiceServer) GetChannel(context.Context, *GetChannelR
 func (UnimplementedDaemonServiceServer) GetBoxState(context.Context, *GetBoxStateRequest) (*GetBoxStateResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetBoxState not implemented")
 }
+func (UnimplementedDaemonServiceServer) WatchBoxState(*WatchBoxStateRequest, grpc.ServerStreamingServer[WatchBoxStateResponse]) error {
+	return status.Error(codes.Unimplemented, "method WatchBoxState not implemented")
+}
 func (UnimplementedDaemonServiceServer) SetNetworkPath(context.Context, *SetNetworkPathRequest) (*SetNetworkPathResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SetNetworkPath not implemented")
+}
+func (UnimplementedDaemonServiceServer) Woke(context.Context, *WokeRequest) (*WokeResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Woke not implemented")
+}
+func (UnimplementedDaemonServiceServer) RetryPackages(context.Context, *RetryPackagesRequest) (*RetryPackagesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RetryPackages not implemented")
+}
+func (UnimplementedDaemonServiceServer) ProvideKeys(context.Context, *ProvideKeysRequest) (*ProvideKeysResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ProvideKeys not implemented")
+}
+func (UnimplementedDaemonServiceServer) Relaunch(context.Context, *RelaunchRequest) (*RelaunchResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Relaunch not implemented")
+}
+func (UnimplementedDaemonServiceServer) ListServers(context.Context, *ListServersRequest) (*ListServersResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListServers not implemented")
+}
+func (UnimplementedDaemonServiceServer) GetKeyIDs(context.Context, *GetKeyIDsRequest) (*GetKeyIDsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetKeyIDs not implemented")
+}
+func (UnimplementedDaemonServiceServer) SaveNow(context.Context, *SaveNowRequest) (*SaveNowResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SaveNow not implemented")
+}
+func (UnimplementedDaemonServiceServer) ListSaves(context.Context, *ListSavesRequest) (*ListSavesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListSaves not implemented")
+}
+func (UnimplementedDaemonServiceServer) Housekeep(context.Context, *HousekeepRequest) (*HousekeepResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Housekeep not implemented")
+}
+func (UnimplementedDaemonServiceServer) LeaveUnsaved(context.Context, *LeaveUnsavedRequest) (*LeaveUnsavedResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method LeaveUnsaved not implemented")
+}
+func (UnimplementedDaemonServiceServer) TakeSavedAfterQuit(context.Context, *TakeSavedAfterQuitRequest) (*TakeSavedAfterQuitResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method TakeSavedAfterQuit not implemented")
 }
 func (UnimplementedDaemonServiceServer) mustEmbedUnimplementedDaemonServiceServer() {}
 func (UnimplementedDaemonServiceServer) testEmbeddedByValue()                       {}
@@ -536,6 +795,17 @@ func _DaemonService_GetBoxState_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
+func _DaemonService_WatchBoxState_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(WatchBoxStateRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(DaemonServiceServer).WatchBoxState(m, &grpc.GenericServerStream[WatchBoxStateRequest, WatchBoxStateResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type DaemonService_WatchBoxStateServer = grpc.ServerStreamingServer[WatchBoxStateResponse]
+
 func _DaemonService_SetNetworkPath_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(SetNetworkPathRequest)
 	if err := dec(in); err != nil {
@@ -550,6 +820,204 @@ func _DaemonService_SetNetworkPath_Handler(srv interface{}, ctx context.Context,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(DaemonServiceServer).SetNetworkPath(ctx, req.(*SetNetworkPathRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_Woke_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WokeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).Woke(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_Woke_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).Woke(ctx, req.(*WokeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_RetryPackages_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RetryPackagesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).RetryPackages(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_RetryPackages_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).RetryPackages(ctx, req.(*RetryPackagesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_ProvideKeys_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ProvideKeysRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).ProvideKeys(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_ProvideKeys_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).ProvideKeys(ctx, req.(*ProvideKeysRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_Relaunch_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RelaunchRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).Relaunch(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_Relaunch_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).Relaunch(ctx, req.(*RelaunchRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_ListServers_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListServersRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).ListServers(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_ListServers_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).ListServers(ctx, req.(*ListServersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_GetKeyIDs_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetKeyIDsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).GetKeyIDs(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_GetKeyIDs_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).GetKeyIDs(ctx, req.(*GetKeyIDsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_SaveNow_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SaveNowRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).SaveNow(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_SaveNow_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).SaveNow(ctx, req.(*SaveNowRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_ListSaves_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListSavesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).ListSaves(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_ListSaves_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).ListSaves(ctx, req.(*ListSavesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_Housekeep_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(HousekeepRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).Housekeep(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_Housekeep_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).Housekeep(ctx, req.(*HousekeepRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_LeaveUnsaved_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(LeaveUnsavedRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).LeaveUnsaved(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_LeaveUnsaved_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).LeaveUnsaved(ctx, req.(*LeaveUnsavedRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_TakeSavedAfterQuit_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(TakeSavedAfterQuitRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).TakeSavedAfterQuit(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_TakeSavedAfterQuit_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).TakeSavedAfterQuit(ctx, req.(*TakeSavedAfterQuitRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -609,6 +1077,50 @@ var DaemonService_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "SetNetworkPath",
 			Handler:    _DaemonService_SetNetworkPath_Handler,
 		},
+		{
+			MethodName: "Woke",
+			Handler:    _DaemonService_Woke_Handler,
+		},
+		{
+			MethodName: "RetryPackages",
+			Handler:    _DaemonService_RetryPackages_Handler,
+		},
+		{
+			MethodName: "ProvideKeys",
+			Handler:    _DaemonService_ProvideKeys_Handler,
+		},
+		{
+			MethodName: "Relaunch",
+			Handler:    _DaemonService_Relaunch_Handler,
+		},
+		{
+			MethodName: "ListServers",
+			Handler:    _DaemonService_ListServers_Handler,
+		},
+		{
+			MethodName: "GetKeyIDs",
+			Handler:    _DaemonService_GetKeyIDs_Handler,
+		},
+		{
+			MethodName: "SaveNow",
+			Handler:    _DaemonService_SaveNow_Handler,
+		},
+		{
+			MethodName: "ListSaves",
+			Handler:    _DaemonService_ListSaves_Handler,
+		},
+		{
+			MethodName: "Housekeep",
+			Handler:    _DaemonService_Housekeep_Handler,
+		},
+		{
+			MethodName: "LeaveUnsaved",
+			Handler:    _DaemonService_LeaveUnsaved_Handler,
+		},
+		{
+			MethodName: "TakeSavedAfterQuit",
+			Handler:    _DaemonService_TakeSavedAfterQuit_Handler,
+		},
 	},
 	Streams: []grpc.StreamDesc{
 		{
@@ -616,6 +1128,11 @@ var DaemonService_ServiceDesc = grpc.ServiceDesc{
 			Handler:       _DaemonService_Terminal_Handler,
 			ServerStreams: true,
 			ClientStreams: true,
+		},
+		{
+			StreamName:    "WatchBoxState",
+			Handler:       _DaemonService_WatchBoxState_Handler,
+			ServerStreams: true,
 		},
 	},
 	Metadata: "portenv/daemon/v1/daemon.proto",

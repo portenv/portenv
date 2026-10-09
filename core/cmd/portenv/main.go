@@ -1,23 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Command portenv is the Portenv CLI for agents and power users, a thin
-// client of the same APIs.
-//
-// In Phase 0 it is a temporary tool that drives a box directly through the
-// docker driver and the sync engine:
+// client of the same APIs. It sets boxes up and drives them through
+// portenvd (on servers, the runner); it never reaches into a box itself
+// (ADR 0010 condition 4):
 //
 //	portenv init <box> [--image IMAGE] [--storage DIR|s3:URL]
-//	portenv resume <box> [--take-over]
-//	portenv save <box> [--confirm]      autosave now
-//	portenv point <box> [--confirm]     make a save point
-//	portenv close <box> [--confirm]     save, release the lease, stop the box
-//	portenv status <box>
-//	portenv history <box>
-//	portenv housekeep <box> [--prune]   clear old lease tags, apply retention
-//	portenv move <box> --to SSH-HOST [--join-storage DIR]
-//	                                    close here, resume on SSH-HOST
-//	portenv join <box> --id ID --storage DIR    enrol a box (key on stdin)
-//	portenv ssh-config <box> --host SERVER      print the "ssh portenv" entry
+//	portenv status <box>                       what this machine recorded
+//	portenv join <box> --id ID --storage DIR   enrol a box (keys on stdin)
+//	portenv ssh-config <box> --host SERVER     print the "ssh portenv" entry
+//	portenv attach <box> [--session NAME]      this terminal in the box's tmux session
+//	portenv app ACTION BOX [TARGET]            the box's actions through portenvd
 //	portenv version
 package main
 
@@ -29,7 +22,10 @@ import (
 	"os/signal"
 	"syscall"
 
+	"golang.org/x/term"
+
 	"github.com/portenv/portenv/core/internal/version"
+	"github.com/portenv/portenv/core/keys"
 	"github.com/portenv/portenv/core/local"
 )
 
@@ -46,17 +42,10 @@ type command struct {
 
 var commands = map[string]command{
 	"init":       {"init <box> [--image IMAGE] [--storage DIR|s3:URL]", cmdInit},
-	"resume":     {"resume <box> [--take-over]", cmdResume},
-	"save":       {"save <box> [--confirm]", cmdSave},
-	"point":      {"point <box> [--confirm]", cmdPoint},
-	"close":      {"close <box> [--confirm]", cmdClose},
 	"status":     {"status <box>", cmdStatus},
-	"history":    {"history <box>", cmdHistory},
-	"housekeep":  {"housekeep <box> [--prune]", cmdHousekeep},
-	"move":       {"move <box> --to SSH-HOST [--join-storage DIR]", cmdMove},
 	"join":       {"join <box> --id BOX-ID --storage DIR [--image IMAGE]   (repository key on stdin)", cmdJoin},
 	"attach":     {"attach <box> [--session NAME]   (through portenvd)", cmdAttach},
-	"app":        {"app open|close|point|revert|check|restart|servers BOX | app move BOX this-mac|USER@HOST   (through portenvd)", cmdApp},
+	"app":        {"app open|close|save|point|revert|history|housekeep|check|restart|servers BOX | app move BOX this-mac|USER@HOST   (through portenvd)", cmdApp},
 	"ssh-config": {"ssh-config <box> --host SERVER [--user USER] [--alias portenv]", cmdSSHConfig},
 }
 
@@ -84,7 +73,16 @@ func run(ctx context.Context, args []string) int {
 		fmt.Fprintln(os.Stderr, "portenv:", err)
 		return 1
 	}
+	// Only a person at a terminal may be asked to approve a Keychain read.
+	// The app's helper calls (app …) and scripts never prompt: they get
+	// "Keychain needs your approval. Open Portenv on this Mac to allow it."
+	if promptsAllowed(args[0], term.IsTerminal(int(os.Stdin.Fd()))) { // #nosec G115 -- a file descriptor
+		keys.AllowPrompts()
+	}
 	if err := c.run(ctx, e, args[1], args[2:]); err != nil {
+		if errors.As(err, new(quietError)) {
+			return 1
+		}
 		fmt.Fprintln(os.Stderr, "portenv:", err)
 		var u usageError
 		if errors.As(err, &u) {
@@ -98,24 +96,29 @@ func run(ctx context.Context, args []string) int {
 
 type usageError = local.UsageError
 
+// quietError fails the command without printing anything: someone else
+// (the app's window) already says what happened.
+type quietError struct{ error }
+
 func usage() {
-	fmt.Fprint(os.Stderr, `portenv (Phase 0, temporary): drive a box with the docker driver.
+	fmt.Fprint(os.Stderr, `portenv: set up boxes, and drive them through portenvd (portenv app).
 
 Commands:
   init <box> [--image IMAGE] [--storage DIR|s3:URL]
-  resume <box> [--take-over]
-  save <box> [--confirm]       autosave now
-  point <box> [--confirm]      make a save point
-  close <box> [--confirm]      save, release the lease, stop the box
-  status <box>
-  history <box>
-  housekeep <box> [--prune]    clear old lease tags and apply retention (run when idle)
-  move <box> --to SSH-HOST [--join-storage DIR]
-                               close here, then resume on SSH-HOST (enrolling it first)
+  status <box>                            what this machine recorded (never starts the box)
   join <box> --id BOX-ID --storage DIR    enrol a box here; repository key on stdin
   ssh-config <box> --host SERVER          print the "ssh portenv" entry
   attach <box> [--session NAME]           this terminal in the box's tmux session (portenvd)
-  app ACTION BOX [TARGET]                 the app's actions through portenvd
+  app ACTION BOX [TARGET]                 the box's actions through portenvd: open [--take-over],
+                                          close, save, point, revert, history, housekeep [--prune],
+                                          move BOX this-mac|USER@HOST, …
   version
 `)
+}
+
+// promptsAllowed is whether a command may ask the person to approve a
+// Keychain read: only with a terminal attached, and never for the app's own
+// helper calls (app …), which run with no one watching this process.
+func promptsAllowed(command string, terminal bool) bool {
+	return terminal && command != "app"
 }

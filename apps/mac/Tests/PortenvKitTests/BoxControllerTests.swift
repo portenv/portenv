@@ -5,55 +5,21 @@ import Testing
 
 @testable import PortenvKit
 
-/// Answers like portenv app would; `state` returns whatever the test sets.
-final class FakeCLI: CLIRunning, @unchecked Sendable {
-    private let lock = NSLock()
-    private var _calls: [[String]] = []
-    private var _state = #"{"state":"SAVE_STATE_NOT_SAVED_YET"}"#
-    var failing: [String: String] = [:]
-    var calls: [[String]] { lock.withLock { _calls } }
-    var state: String {
-        get { lock.withLock { _state } }
-        set { lock.withLock { _state = newValue } }
-    }
-
-    func run(_ arguments: [String]) async throws -> String {
-        lock.withLock { _calls.append(arguments) }
-        let action = arguments.count > 1 ? arguments[1] : ""
-        if let message = failing[action] { throw CLIError(message) }
-        switch action {
-        case "servers": return "portenv@server-a"
-        case "open": return "open on mac (resume rule 1: new box)"
-        case "state": return state
-        default: return "ok"
-        }
-    }
-}
-
 let utc = TimeZone(identifier: "UTC")!
 
-/// Each state line comes from the recorded state alone.
+/// Each state line comes from the recorded state alone (the full table is
+/// in GuidelinesTests).
 struct StateLineTests {
-    @Test func everyState() {
-        let at = ISO8601DateFormatter().date(from: "2026-10-08T09:42:00Z")!
-        #expect(BoxState(save: .notSavedYet).line(timeZone: utc) == "Not saved yet")
-        #expect(BoxState(save: .saving, savedAt: at).line(timeZone: utc) == "Saving…")
-        #expect(BoxState(save: .retrying, savedAt: at).line(timeZone: utc) == "Not saved since 09:42 · retrying")
-        #expect(BoxState(save: .notSaved, savedAt: at).line(timeZone: utc) == "Not saved since 09:42")
-        #expect(BoxState(save: .notSaved).line(timeZone: utc) == "Not saved")
-        #expect(BoxState.parse(#"{"state":"SAVE_STATE_RETRYING","saved_at":"2026-10-08T09:42:00Z"}"#)?.save == .retrying)
-        #expect(BoxState(save: .saved, savedAt: at).line(timeZone: utc) == "Saved at 09:42")
-        #expect(BoxState(save: .offline, savedAt: at).line(timeZone: utc) == "Offline · will save later")
-        #expect(BoxState(save: .agentUnavailable, savedAt: at).line(timeZone: utc) == "Not saved · box agent unavailable")
-        #expect(BoxState(save: .saved, savedAt: at, location: "portenv@server-a").line(timeZone: utc) == "On portenv@server-a · Saved at 09:42")
-    }
+    let gb = Locale(identifier: "en_GB")
+    let later = ISO8601DateFormatter().date(from: "2026-10-08T12:00:00Z")!
 
     @Test func parsesPortenvdState() {
         let s = BoxState.parse(#"{"state":"SAVE_STATE_SAVED","saved_at":"2026-10-08T09:42:01.123456Z","location":"portenv@server-a"}"#)
         #expect(s?.save == .saved)
         #expect(s?.location == "portenv@server-a")
-        #expect(s?.line(timeZone: utc) == "On portenv@server-a · Saved at 09:42")
-        #expect(BoxState.parse(#"{"state":"SAVE_STATE_NOT_SAVED_YET"}"#)?.line() == "Not saved yet")
+        #expect(s?.line(now: later, timeZone: utc, locale: gb) == "server-a · Saved at 09:42")
+        #expect(BoxState.parse(#"{"state":"SAVE_STATE_NOT_SAVED_YET"}"#)?.line() == "This Mac · Not saved yet")
+        #expect(BoxState.parse(#"{"state":"SAVE_STATE_RETRYING","saved_at":"2026-10-08T09:42:00Z"}"#)?.save == .retrying)
         #expect(BoxState.parse("not json") == nil)
     }
 }
@@ -63,23 +29,38 @@ struct BoxControllerTests {
     /// A successful open says nothing about saves: a new box shows "Not
     /// saved yet" because that is what portenvd records.
     @Test func aNewBoxShowsNotSavedYet() async {
-        let cli = FakeCLI()
-        let c = BoxController(box: "demo", cli: cli)
+        let cli = FakeDaemon()
+        let c = BoxController(box: "demo", daemon: cli)
         await c.open()
         #expect(c.location == .thisMac)
-        #expect(c.subtitle == "Not saved yet")
+        #expect(c.subtitle == "This Mac · Not saved yet")
         #expect(c.servers == ["portenv@server-a"])
     }
 
+    /// The window never says "is closed" between a successful open and the
+    /// terminal (it once did while asking portenvd where the box runs).
+    @Test func neverClosedWhileOpening() async {
+        let cli = FakeDaemon()
+        let c = BoxController(box: "demo", daemon: cli)
+        let seen = Seen()
+        cli.onRun = { args in
+            guard args.count > 1, args[1] == "state" else { return }
+            await MainActor.run { seen.add(c.busy || c.location != .closed ? "ok" : "says closed") }
+        }
+        await c.open()
+        #expect(!seen.all.contains("says closed"), "\(seen.all)")
+        #expect(c.location == .thisMac)
+    }
+
     @Test func theStateLineFollowsRecordedState() async {
-        let cli = FakeCLI()
-        let c = BoxController(box: "demo", cli: cli)
+        let cli = FakeDaemon()
+        let c = BoxController(box: "demo", daemon: cli)
         await c.open()
         for (json, line) in [
-            (#"{"state":"SAVE_STATE_SAVING"}"#, "Saving…"),
-            (#"{"state":"SAVE_STATE_SAVED","saved_at":"2026-10-08T09:42:00Z"}"#, "Saved at " + Self.local("2026-10-08T09:42:00Z")),
-            (#"{"state":"SAVE_STATE_OFFLINE"}"#, "Offline · will save later"),
-            (#"{"state":"SAVE_STATE_AGENT_UNAVAILABLE"}"#, "Not saved · box agent unavailable"),
+            (#"{"state":"SAVE_STATE_SAVING"}"#, "This Mac · Saving…"),
+            (#"{"state":"SAVE_STATE_SAVED","saved_at":"2026-10-08T09:42:00Z"}"#, "This Mac · Saved at " + Self.local("2026-10-08T09:42:00Z")),
+            (#"{"state":"SAVE_STATE_OFFLINE"}"#, "This Mac · Offline · will save later"),
+            (#"{"state":"SAVE_STATE_AGENT_UNAVAILABLE"}"#, "This Mac · Not saved"),
         ] {
             cli.state = json
             await c.refresh()
@@ -90,8 +71,8 @@ struct BoxControllerTests {
 
     /// The current location is checked; the others stay available.
     @Test func moveToChecksTheCurrentLocation() async {
-        let cli = FakeCLI()
-        let c = BoxController(box: "demo", cli: cli)
+        let cli = FakeDaemon()
+        let c = BoxController(box: "demo", daemon: cli)
         await c.open()
         #expect(c.isCurrent("this-mac") && !c.isCurrent("portenv@server-a"))
         cli.state = #"{"state":"SAVE_STATE_SAVED","location":"portenv@server-a"}"#
@@ -106,9 +87,9 @@ struct BoxControllerTests {
 
     /// Revert To and Restart Box work on a box on a server as on this Mac.
     @Test func revertAndRestartWorkOnAServerBox() async {
-        let cli = FakeCLI()
+        let cli = FakeDaemon()
         cli.state = #"{"state":"SAVE_STATE_SAVED","location":"portenv@server-a"}"#
-        let c = BoxController(box: "demo", cli: cli)
+        let c = BoxController(box: "demo", daemon: cli)
         await c.open()
         await c.revertToLastSavePoint()
         await c.restartBox()
@@ -118,8 +99,8 @@ struct BoxControllerTests {
     }
 
     @Test func anUnavailableAgentIsReportedAndRestartIsOffered() async {
-        let cli = FakeCLI()
-        let c = BoxController(box: "demo", cli: cli)
+        let cli = FakeDaemon()
+        let c = BoxController(box: "demo", daemon: cli)
         await c.open()
         cli.failing["point"] = "the box agent is unavailable (its channel is down or failed verification); restart the box"
         cli.state = #"{"state":"SAVE_STATE_AGENT_UNAVAILABLE"}"#
@@ -130,8 +111,8 @@ struct BoxControllerTests {
     }
 
     @Test func closingSavesAndReleases() async {
-        let cli = FakeCLI()
-        let c = BoxController(box: "demo", cli: cli)
+        let cli = FakeDaemon()
+        let c = BoxController(box: "demo", daemon: cli)
         await c.open()
         await c.close()
         #expect(cli.calls.last == ["app", "close", "demo"])
@@ -139,8 +120,7 @@ struct BoxControllerTests {
     }
 
     static func local(_ iso: String) -> String {
-        let f = DateFormatter()
-        f.dateFormat = "HH:mm"
-        return f.string(from: ISO8601DateFormatter().date(from: iso)!)
+        // The user's own 12/24-hour setting, as the app shows it.
+        StateLine.clock(ISO8601DateFormatter().date(from: iso)!, timeZone: .current, locale: .current)
     }
 }

@@ -25,9 +25,6 @@ service DriverService {
   rpc Stop(StopRequest) returns (StopResponse);
   // Removes the box's instance. Never deletes its home storage.
   rpc Destroy(DestroyRequest) returns (DestroyResponse);
-  // Runs one non-interactive command in the box. Bootstrap only (for example
-  // before the box agent is up); never an access path for people or agents.
-  rpc Exec(ExecRequest) returns (ExecResponse);
   // Streams the box's console output.
   rpc Logs(LogsRequest) returns (stream LogsResponse);
   // Returns a point-in-time snapshot of the box's state and resource use.
@@ -42,6 +39,10 @@ service DriverService {
   // the address to dial, the certificate the agent must present, and the
   // token for every call. Fresh at every start.
   rpc AgentChannel(AgentChannelRequest) returns (AgentChannelResponse);
+  // A new channel to the running box without restarting it (ADR 0014):
+  // fresh secrets reach the agent the way the first ones did, and the old
+  // ones stop working. For a restarted daemon taking over a running box.
+  rpc Rekey(RekeyRequest) returns (RekeyResponse);
 }
 
 message CreateRequest {
@@ -76,25 +77,6 @@ message DestroyRequest {
 }
 
 message DestroyResponse {}
-
-message ExecRequest {
-  string box_id = 1;
-  // Program and arguments. Not run through a shell.
-  repeated string argv = 2;
-  // Extra environment, as "KEY=value".
-  repeated string env = 3;
-  // User to run as. Empty means root.
-  string user = 4;
-  bytes stdin = 5;
-  // Unset means no timeout.
-  google.protobuf.Duration timeout = 6;
-}
-
-message ExecResponse {
-  int32 exit_code = 1;
-  bytes stdout = 2;
-  bytes stderr = 3;
-}
 
 // Which console stream a log chunk came from.
 enum LogStream {
@@ -196,3 +178,9 @@ message AgentChannelResponse {
   // Sent with every call to the agent.
   string token = 3;
 }
+
+message RekeyRequest {
+  string box_id = 1;
+}
+
+message RekeyResponse {}

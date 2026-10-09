@@ -16,11 +16,18 @@ public enum Binaries {
            FileManager.default.isExecutableFile(atPath: inside.appendingPathComponent("portenv").path) {
             return inside
         }
-        // apps/mac/Sources/PortenvKit/Binaries.swift → the repository root.
-        return URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent().deletingLastPathComponent()
-            .deletingLastPathComponent().deletingLastPathComponent()
-            .deletingLastPathComponent().appendingPathComponent("bin")
+        // Run from Xcode or swift run: the repository's bin/ (make build),
+        // found above the executable (apps/mac/.build/…). Not #filePath: a
+        // build must never carry the path of the machine that built it.
+        var dir = Bundle.main.executableURL?.deletingLastPathComponent()
+        while let d = dir, d.path != "/" {
+            let bin = d.appendingPathComponent("bin")
+            if FileManager.default.isExecutableFile(atPath: bin.appendingPathComponent("portenv").path) {
+                return bin
+            }
+            dir = d.deletingLastPathComponent()
+        }
+        return URL(fileURLWithPath: "bin")
     }
     public static var portenv: URL { directory.appendingPathComponent("portenv") }
     public static var portenvd: URL { directory.appendingPathComponent("portenvd") }

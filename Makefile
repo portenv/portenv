@@ -53,7 +53,9 @@ all: build test lint proto-check
 ## tools: build the pinned developer tools into bin/
 tools: $(TOOLS_STAMP)
 $(TOOLS_STAMP): Makefile
-	for t in $(TOOLS); do GOWORK=off GOBIN=$(BIN) go install $$t; done
+	# -trimpath: restic ships inside Portenv.app, and no build may carry
+	# the paths of the machine that built it.
+	for t in $(TOOLS); do GOWORK=off GOBIN=$(BIN) go install -trimpath $$t; done
 	touch $@
 
 ## build: build all commands for this machine into bin/
@@ -61,6 +63,7 @@ build:
 	for c in $(CMDS); do \
 		go build -trimpath -ldflags "$(LDFLAGS)" -o $(BIN)/$$c ./core/cmd/$$c; \
 	done
+	scripts/check-build-paths.sh $(addprefix $(BIN)/,$(CMDS))
 
 ## agent-linux: build static portenv-agent binaries and check they are static
 agent-linux:
@@ -68,6 +71,7 @@ agent-linux:
 		CGO_ENABLED=0 GOOS=linux GOARCH=$$a go build -trimpath -ldflags "$(LDFLAGS)" \
 			-o $(BIN)/linux-$$a/portenv-agent ./core/cmd/portenv-agent; \
 		file $(BIN)/linux-$$a/portenv-agent | tee /dev/stderr | grep -q 'statically linked'; \
+		scripts/check-build-paths.sh $(BIN)/linux-$$a/portenv-agent; \
 	done
 
 ## test: run Go tests with the race detector (sync tests use the pinned restic)
@@ -83,6 +87,7 @@ lint: $(TOOLS_STAMP) spdx-check
 	done
 	cd proto && $(BIN)/buf lint && $(BIN)/buf format --diff --exit-code
 	$(BIN)/actionlint
+	scripts/check-no-binaries.sh
 
 ## fmt: format Go and proto sources
 fmt: $(TOOLS_STAMP)
@@ -129,9 +134,14 @@ APP_BUILD := $(HOME)/Library/Caches/Portenv/app-build
 # shell would end up on disk under .build (scripts/check-swift-env.sh).
 SWIFT := env -i PATH="$(PATH)" HOME="$(HOME)" TMPDIR="$(or $(TMPDIR),/tmp)" LANG=en_US.UTF-8 swift
 app: build $(TOOLS_STAMP)
-	cd apps/mac && $(SWIFT) build -c release --scratch-path "$(APP_BUILD)"
+	# Source paths remapped: a release build never carries this machine's paths.
+	cd apps/mac && $(SWIFT) build -c release --scratch-path "$(APP_BUILD)" \
+		-Xswiftc -file-prefix-map -Xswiftc "$(CURDIR)/=" -Xcc -ffile-prefix-map="$(CURDIR)/=" \
+		-Xswiftc -file-prefix-map -Xswiftc "$(APP_BUILD)/=build/" -Xcc -ffile-prefix-map="$(APP_BUILD)/=build/"
 	rm -rf $(BIN)/Portenv.app && mkdir -p $(BIN)/Portenv.app/Contents/MacOS
 	cp "$(APP_BUILD)/release/Portenv" $(BIN)/Portenv.app/Contents/MacOS/Portenv
+	# No debug map in a release app: it lists source and object paths.
+	strip -S $(BIN)/Portenv.app/Contents/MacOS/Portenv
 	# The app must be able to prompt: it never links the process-wide no-prompt switch (core/keys).
 	if nm -u $(BIN)/Portenv.app/Contents/MacOS/Portenv | grep -q SecKeychainSetUserInteractionAllowed; then echo "Portenv imports SecKeychainSetUserInteractionAllowed: prompts would stop working in the app" >&2; exit 1; fi
 	# Helpers, not MacOS/: on a case-insensitive disk portenv would replace Portenv.
@@ -139,6 +149,7 @@ app: build $(TOOLS_STAMP)
 	for f in portenv portenvd restic; do codesign --force --sign - $(BIN)/Portenv.app/Contents/Helpers/$$f; done
 	cp apps/mac/Info.plist $(BIN)/Portenv.app/Contents/Info.plist
 	mkdir -p $(BIN)/Portenv.app/Contents/Resources && for b in "$(APP_BUILD)"/release/*.bundle; do [ -e "$$b" ] && cp -R "$$b" $(BIN)/Portenv.app/Contents/Resources/; done; true
+	scripts/check-build-paths.sh $(BIN)/Portenv.app/Contents/MacOS/Portenv $(addprefix $(BIN)/Portenv.app/Contents/Helpers/,portenv portenvd restic)
 	codesign --force --sign - $(BIN)/Portenv.app
 
 ## swift-test: build and test the Swift packages (macOS only)

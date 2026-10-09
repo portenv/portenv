@@ -22,12 +22,21 @@ import (
 // client on its socket.
 func serving(t *testing.T) (*Server, daemonv1.DaemonServiceClient) {
 	t.Helper()
+	return servingWith(t, nil)
+}
+
+// servingWith lets the test adjust the server before it serves.
+func servingWith(t *testing.T, adjust func(*Server)) (*Server, daemonv1.DaemonServiceClient) {
+	t.Helper()
 	dir, err := os.MkdirTemp("", "pw") // short: a Unix socket path has 103 bytes
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 	s := New(&local.Env{Dir: dir, Machine: "mac-1"}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if adjust != nil {
+		adjust(s)
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	go func() { _ = s.Serve(ctx) }()

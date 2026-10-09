@@ -56,6 +56,10 @@ type Server struct {
 	relaunching atomic.Bool
 	stop        context.CancelFunc
 
+	// peerUID reads a connection's peer uid (nil: the system's; tests set
+	// another before Serve).
+	peerUID func(fd int) (int, error)
+
 	mu     sync.Mutex
 	open   map[string]*openBox   // by box name
 	remote map[string]*remoteBox // boxes this Mac opened on a server
@@ -120,6 +124,9 @@ func (s *Server) Serve(ctx context.Context) error {
 	s.mu.Lock()
 	s.stop = cancel
 	s.mu.Unlock()
+	if err := privateDir(s.env.Dir); err != nil {
+		return err
+	}
 	// One daemon per directory, before touching the socket: a second one
 	// must not take the socket or any box from the first.
 	lock, err := lockDir(s.env.Dir)
@@ -149,7 +156,11 @@ func (s *Server) Serve(ctx context.Context) error {
 		srv.Stop()
 	}()
 	s.log.Info("serving", "socket", sock)
-	err = srv.Serve(lis)
+	peer := s.peerUID
+	if peer == nil {
+		peer = socketPeerUID
+	}
+	err = srv.Serve(ownerOnly{Listener: lis, peerUID: peer})
 	if errors.Is(err, grpc.ErrServerStopped) {
 		return nil
 	}

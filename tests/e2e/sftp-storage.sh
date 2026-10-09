@@ -46,7 +46,7 @@ echo "== stand-in server: sshd, with uid and gid 990 already taken"
 # host.portenv.internal, the host itself (listing, lease tags) through the
 # loopback address.
 bind=127.0.0.1; [[ $(uname) == Linux ]] && bind=0.0.0.0
-docker run -d --name "$srv" -p "$bind:2222:22" ubuntu:24.04 sleep infinity >/dev/null
+docker run -d --name "$srv" -p "$bind:2222:22" mirror.gcr.io/library/ubuntu:24.04@sha256:534baea6a22c03a63003dbc8dbe78fe34bc0d7e595d9a9dc9834884ff530eb55 sleep infinity >/dev/null
 docker exec "$srv" bash -c 'apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq openssh-server curl ca-certificates iproute2 >/dev/null && groupadd -g 990 taken && useradd -u 990 -g 990 -M taken && mkdir -p /run/sshd && /usr/sbin/sshd'
 docker cp "$repo/server/setup.sh" "$srv:/tmp/setup.sh" >/dev/null
 host_key=$(docker exec "$srv" cut -d' ' -f1,2 /etc/ssh/ssh_host_ed25519_key.pub)

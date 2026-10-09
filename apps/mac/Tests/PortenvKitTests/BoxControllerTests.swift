@@ -76,6 +76,21 @@ struct BoxControllerTests {
         #expect(c.servers == ["portenv@server-a"])
     }
 
+    /// The window never says "is closed" between a successful open and the
+    /// terminal (it once did while asking portenvd where the box runs).
+    @Test func neverClosedWhileOpening() async {
+        let cli = FakeCLI()
+        let c = BoxController(box: "demo", cli: cli)
+        let seen = Seen()
+        cli.onRun = { args in
+            guard args.count > 1, args[1] == "state" else { return }
+            await MainActor.run { seen.add(c.busy || c.location != .closed ? "ok" : "says closed") }
+        }
+        await c.open()
+        #expect(!seen.all.contains("says closed"), "\(seen.all)")
+        #expect(c.location == .thisMac)
+    }
+
     @Test func theStateLineFollowsRecordedState() async {
         let cli = FakeCLI()
         let c = BoxController(box: "demo", cli: cli)

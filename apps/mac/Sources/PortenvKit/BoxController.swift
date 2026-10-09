@@ -194,10 +194,13 @@ public final class BoxController {
                 _ = try await self.cli.run(["app", "open", self.box])
             }
             self.terminalGeneration += 1
+            // Learn where it runs before the busy state ends, so the window
+            // never shows "is closed" between the open and the terminal.
+            await self.refresh()
         }
         progress = nil
         progressDetail = nil
-        await refresh()
+        if location == .closed { await refresh() }
     }
 
     /// Cancel while macOS asks to approve the Keychain read: the open stops
@@ -288,9 +291,10 @@ public final class BoxController {
             _ = try await self.cli.run(["app", "move", self.box, target])
             self.terminalGeneration += 1
             self.show(StateLine.moved(to: target))
+            await self.refresh()
         }
         progress = nil
-        await refresh()
+        if error != nil { await refresh() } // a failed move: where is it now
     }
 
     /// Closing the window saves and releases a box open on this Mac.

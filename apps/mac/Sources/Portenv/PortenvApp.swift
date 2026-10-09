@@ -18,6 +18,14 @@ struct PortenvApp: App {
         ensureDaemon: LoginItem.ensureRegistered
     )
 
+    init() {
+        // Dev builds and tests: unregister the login item and exit, with no
+        // window (make unregister-service, portenv app unregister-service).
+        if CommandLine.arguments.contains("--unregister-service") {
+            exit(LoginItem.unregister())
+        }
+    }
+
     var body: some Scene {
         WindowGroup {
             MainWindow(controller: controller)

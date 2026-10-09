@@ -21,6 +21,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/portenv/portenv/core/daemon"
+	"github.com/portenv/portenv/core/internal/bounded"
 	"github.com/portenv/portenv/core/local"
 	daemonv1 "github.com/portenv/portenv/proto/gen/go/portenv/daemon/v1"
 )
@@ -45,6 +46,7 @@ func dialDaemon(e *local.Env) (daemonv1.DaemonServiceClient, func(), error) {
 //	portenv app history BOX         (every save, oldest first)
 //	portenv app housekeep BOX [--prune]
 //	portenv app leave-unsaved BOX   (Quit Anyway: the quit marker, the box let go of unsaved)
+//	portenv app unregister-service  (dev builds: remove portenvd's login item; this portenv's app)
 //	portenv app move BOX this-mac|USER@HOST
 //	portenv app servers BOX         (the Move To targets, one per line)
 //	portenv app ping                (exit 0 when portenvd answers)
@@ -108,6 +110,9 @@ func cmdApp(ctx context.Context, e *local.Env, op string, args []string) error {
 			return plain(err)
 		}
 		return nil
+	}
+	if op == "unregister-service" {
+		return unregisterService(ctx)
 	}
 	if op == "ping" {
 		c, done, err := dialDaemon(e)
@@ -408,4 +413,24 @@ func cmdAttach(ctx context.Context, e *local.Env, name string, args []string) er
 			return nil
 		}
 	}
+}
+
+// unregisterService removes portenvd's login item (dev builds and tests).
+// Only the app can (SMAppService), so this runs the app this portenv came
+// with: Portenv.app/Contents/Helpers/portenv → Contents/MacOS/Portenv.
+func unregisterService(ctx context.Context) error {
+	self, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	app := filepath.Join(filepath.Dir(filepath.Dir(self)), "MacOS", "Portenv")
+	if _, err := os.Stat(app); err != nil {
+		return errors.New("this portenv isn't inside Portenv.app; run make unregister-service, or Portenv.app/Contents/MacOS/Portenv --unregister-service")
+	}
+	cmd, err := bounded.Command(ctx, 30*time.Second, app, "--unregister-service")
+	if err != nil {
+		return err
+	}
+	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+	return cmd.Run()
 }

@@ -30,4 +30,21 @@ enum LoginItem {
             return service.status == .requiresApproval ? needsApproval : nil
         }
     }
+
+    /// Unregisters the launch agent (dev builds and tests): launchd stops
+    /// portenvd and won't start it at login. Returns an exit status.
+    static func unregister() -> Int32 {
+        let done = DispatchSemaphore(value: 0)
+        var status: Int32 = 0
+        service.unregister { error in
+            if let error {
+                FileHandle.standardError.write(Data("unregister: \(error.localizedDescription)\n".utf8))
+                status = 1
+            }
+            done.signal()
+        }
+        done.wait()
+        if status == 0 { print("Portenv's background service is unregistered") }
+        return status
+    }
 }

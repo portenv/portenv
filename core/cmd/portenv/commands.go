@@ -117,12 +117,12 @@ func cmdInit(_ context.Context, e *local.Env, name string, args []string) error 
 		// Only the bcrypt hash leaves this machine.
 		fmt.Printf("add this REST user on the server (setup.sh --rest-user):\nrest-user %s\n", restUser)
 	}
-	fmt.Printf("next: portenv resume %s\n", name)
+	fmt.Printf("next: open it in Portenv (PORTENV_BOX=%s), or portenv app open %s\n", name, name)
 	return nil
 }
 
 // cmdJoin enrols an existing box on this machine: the repository key comes
-// on stdin (from portenv move, over SSH) and goes only into the key store.
+// on stdin (from Move To, over SSH) and goes only into the key store.
 func cmdJoin(ctx context.Context, e *local.Env, name string, args []string) error {
 	fs := flags("join")
 	id := fs.String("id", "", "the box's ID")
@@ -150,7 +150,7 @@ func cmdJoin(ctx context.Context, e *local.Env, name string, args []string) erro
 	if _, _, _, err := e.Storage(c); err != nil {
 		return err
 	}
-	// The keys arrive on stdin as JSON (portenv move sends them over SSH);
+	// The keys arrive on stdin as JSON (Move To sends them over SSH);
 	// they go only into this machine's key store.
 	var in local.JoinKeys
 	if err := json.NewDecoder(io.LimitReader(os.Stdin, 16<<10)).Decode(&in); err != nil {

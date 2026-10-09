@@ -45,7 +45,7 @@ SWIFT_PROTOBUF := 1.38.1
 GRPC_SWIFT_PROTOBUF := 2.4.1
 SWIFT_PLUGINS := $(BIN)/protoc-gen-swift $(BIN)/protoc-gen-grpc-swift-2
 
-.PHONY: all build app test lint fmt proto proto-go proto-swift proto-check proto-check-go agent-linux swift-test swift-env-check \
+.PHONY: all build app unregister-service test lint fmt proto proto-go proto-swift proto-check proto-check-go agent-linux swift-test swift-env-check \
 	secrets spdx-check check tools clean image image-test driver-test e2e
 
 all: build test lint proto-check
@@ -112,6 +112,10 @@ $(SWIFT_PLUGINS): tools/swift-protoc/Package.swift tools/swift-protoc/Package.re
 	grep -q 'grpc-swift-protobuf.git", exact: "$(GRPC_SWIFT_PROTOBUF)"' tools/swift-protoc/Package.swift
 	cd tools/swift-protoc && $(SWIFT) build -c release --product protoc-gen-swift && $(SWIFT) build -c release --product protoc-gen-grpc-swift-2
 	cp tools/swift-protoc/.build/release/protoc-gen-swift tools/swift-protoc/.build/release/protoc-gen-grpc-swift-2 $(BIN)/
+
+## unregister-service: remove bin/Portenv.app's login item (portenvd under launchd); end any test that registered it with this
+unregister-service:
+	$(BIN)/Portenv.app/Contents/MacOS/Portenv --unregister-service
 
 ## proto-check: fail if generated Go or Swift is out of date (macOS: both)
 proto-check: proto

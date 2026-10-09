@@ -428,6 +428,61 @@ First target agents:
 
 Agents driving Claude Code headlessly use `claude -p` with `--resume`, `--output-format json` and `--allowedTools`. Boxes are logged in with the owner's account; heavy or multi-user automation should use a Console API key instead. Check Anthropic's terms for automated use before shipping this feature.
 
+## Agent readiness
+
+**The goal:** any agent can discover Portenv, learn its tools, and know where it is once inside a box. All of it comes from one source of truth, and real agents test it.
+
+**Principles**
+1. **One source.** Every command is defined once in `portenvd`: the proto, plus a command registry with each command's name, summary, arguments, an example, and whether it's read-only or destructive. Everything else is generated from the registry, and a CI check fails if any generated file drifts:
+   - the CLI's help;
+   - `portenv guide`;
+   - the skill's reference section;
+   - MCP tool descriptions;
+   - `llms.txt`;
+   - the docs.
+2. **Machine-readable by default.** Every CLI command supports `--json`, uses stable exit codes (documented in one table), and never asks an interactive question without a TTY.
+3. **Errors say what to do next:** what happened plus the next step, as one plain line, in the style of "Keychain needs your approval. Open Portenv on this Mac to allow it." (GUIDELINES.md §10).
+4. **Agents read, they don't obey.** Everything Portenv shows an agent is written by Portenv. User files in a box can never change the guide. Docs never tell an agent to skip approvals or the vault rules (ADR 0005).
+
+**Where each piece lands**
+- **Now (Phase 1): rules only.** Principles 2 and 3 apply to every command added or changed from 2026-10-09. No other work.
+- **2.7 (stand-in agents, CLI and skill):**
+  - `portenv guide`, plus `portenv guide --json`: a compact guide written for agents, generated from the registry.
+  - The skill (`skills/portenv/SKILL.md`): a short trigger description, common workflows, and reference files generated from the registry.
+  - **The box introduces itself:**
+    - the environment variables `PORTENV_BOX=<name>` and `PORTENV_GUIDE=<path>`;
+    - a one-line SSH login banner for agent sessions, pointing to `portenv guide`;
+    - an `AGENTS.md` written by Portenv, which agents pick up automatically. It must never overwrite or edit the user's own `AGENTS.md` or `CLAUDE.md`. It uses a location Portenv owns, or a clearly marked block added only with the user's consent, and the user can turn it off. The mechanism is proposed in an ADR at 2.7.
+- **2.8 (webhooks):** payloads describe themselves: the event type, the box, a link to the event's docs, and the `portenv` command to act on it.
+- **2.9 (stdio MCP):**
+  - tool descriptions and schemas generated from the registry;
+  - `readOnlyHint` and `destructiveHint` set per tool;
+  - the guide exposed as an MCP resource;
+  - the server listed in the official MCP Registry.
+- **3.9 (remote MCP):** the ChatGPT app (Apps SDK) for Dots, submitted to the ChatGPT apps directory.
+- **3.10 (web terminal):** the way in for browser-only agents (Meta Muse).
+- **The website:**
+  - `llms.txt` and `llms-full.txt`;
+  - every docs page also served as `.md`;
+  - stable short URLs `/cli`, `/skill` and `/mcp`.
+
+  From 2.7, the docs pages are generated from this repository's generated files.
+- **Registries:**
+  - **Held as placeholders, 2026-10-09:** npm `portenv` and `@portenv/cli`, and PyPI `portenv-cli`.
+  - **PyPI `portenv`** was refused as too similar to `port-env`; a request to PyPI support is drafted.
+  - See Open questions for publishing the real CLI through them.
+
+**Agent evals (from 2.7)**
+- **`tests/agent-evals/`:** about 10 real tasks, for example:
+  - open acme-api and run its tests;
+  - make a save point before a risky change;
+  - move acme-api to the test server and back;
+  - answer a waiting Claude Code question through Portenv;
+  - find out why a box isn't saving, and say so;
+  - refuse a request that breaks the vault rules.
+- **When they run:** before each release, against at least three agents (Claude Code, Codex, and one more, Grok Bot when possible). Each agent's success rate per task goes in the release notes. Not on every PR (cost), but nightly or by hand, with a spending cap.
+- **A failure means fixing the docs, the guide or the error messages,** not prompting around it.
+
 ## Developer-owned servers
 
 A developer adds their own server from the app in a few minutes; an open-source runner then gives it every Portenv feature while the developer keeps full control of the machine.
@@ -880,6 +935,7 @@ Developer ID signing, notarisation and Sparkle, with the key backups. Signed pub
   - Last Save Point time in the menu (1.4);
   - Restart Box with ⌥ in the menu bar's Box menu (1.1, once the menu bar is AppKit-backed or SwiftUI can see ⌥);
   - **a live VoiceOver check and a title-menu screenshot with the owner at the Mac** (the next session at the Mac; the screen was locked overnight).
+- **Agent readiness rules apply from now** (2026-10-09): every command added or changed supports `--json`, uses a stable exit code, never asks without a TTY, and its errors say what happened and what to do next (Agent readiness, principles 2 and 3).
 - **Every milestone keeps the test-path rule:** app-relied behaviour is tested through `portenvd` or the runner and the channel, each check mutation-checked, and every e2e call has a time limit.
 
 **Decided in review (2026-10-09)**
@@ -956,6 +1012,12 @@ Milestones: 2.1 runner (server build of the core) installed over SSH, grown from
 - Doors 1 and 2 for a box on the user's own server, in Continue my work mode. Grok Bot, or any terminal agent, reaches the box, runs Claude Code there and relays its questions back.
 - Credentials (ADR 0007): enrolment is closed by default; Connect an agent opens it for 10 minutes or until one code is approved. The agent runs `portenv login`; the user approves the device code in the app, after seeing the agent's name, the box and the key fingerprint; the runner, as certificate authority for its boxes, issues a 30-minute SSH certificate scoped to that box and mode, renewed by proof of possession of the agent's key until the grant ends (default 8 hours, at most 24 hours until Phase 3). No new inbound port: everything goes through the server's existing SSH. The app lists every certificate with revoke.
 - The core in the box agent: events (waiting for input, command finished, new output), `portenv events --follow`, `portenv screen <tab>`, `portenv send <tab>`, and `docs/skill/SKILL.md`.
+- Agent readiness (see that section):
+  - the command registry, and everything generated from it, with the CI drift check;
+  - `portenv guide` and `--json`;
+  - the skill, with its generated reference;
+  - the box introducing itself (`PORTENV_BOX`, `PORTENV_GUIDE`, the login banner, and Portenv's own `AGENTS.md`, never touching the user's files; ADR at 2.7);
+  - `tests/agent-evals/`.
 - Attribution and session recording per agent, the save point on connect, Watch, Take Over and Revoke in the app.
 - Not in 2.7: lanes (4.1), approvals (4.2), the gateway and its CA (Phase 3), phone notifications (4.6).
 - **Open question:** a per-box "Keep running when Portenv quits" option, off by default, so a stand-in agent's work can go on after the app quits, with a menu bar item listing the boxes still running. Only worth building with Phase 3's lease hand-off, so a sleeping Mac never blocks resuming the box elsewhere. No ADR until then.
@@ -968,9 +1030,12 @@ Milestones: 2.1 runner (server build of the core) installed over SSH, grown from
 - **Connect an agent** in the app shows one message to copy and paste to the agent, for example: "Install the Portenv CLI from portenv.com/cli, run `portenv skill install`, then connect to my box acme-api with code K7F2-9QX4." Opening the sheet opens the enrolment window (ADR 0007: 10 minutes or one approved code); when the agent requests the code, the approval sheet follows.
 - **Later, not in 2.7:** a plugin marketplace repository carrying the skill. The MCP door needs no skill: its tools describe themselves.
 
-**2.8 Webhooks**: signed event pushes from the box agent or runner (never a Portenv server) to a URL the user registers for their agent. Settings and the signing key live in `~/.portenv` in the box, so they are encrypted and move with it. Before building it, confirm the target agents can be woken by an incoming webhook (Open questions).
+**2.8 Webhooks**: signed event pushes from the box agent or runner (never a Portenv server) to a URL the user registers for their agent. Payloads describe themselves: the event type, the box, a link to the event's docs, and the `portenv` command to act on it. Settings and the signing key live in `~/.portenv` in the box, so they are encrypted and move with it. Before building it, confirm the target agents can be woken by an incoming webhook (Open questions).
 
 **2.9 stdio MCP**: `portenv mcp` on the agent's computer exposes events, screen and send over the CLI's connection.
+- Tool descriptions and schemas are generated from the registry, with `readOnlyHint` and `destructiveHint` per tool.
+- The guide is an MCP resource.
+- The server is listed in the official MCP Registry.
 
 - [ ] Move To works Mac → server → Mac from the title menu with no data loss
 - [ ] Every lease sheet path behaves as specified, including a stale lease
@@ -987,10 +1052,19 @@ Milestones: 2.1 runner (server build of the core) installed over SSH, grown from
 - [ ] The stdio MCP server answers events, screen and send for a connected agent (2.9)
 - [ ] On a clean Linux machine standing in for an agent's computer, the message pasted from Connect an agent alone gets an agent from nothing to connected and relaying a Claude Code question, with no other help
 - [ ] The install script refuses a binary whose checksum or signature does not verify (ADR 0009), and CI fails if the skill uses a command the CLI does not have
+- [ ] 2.7 agent readiness:
+  - every command has `--json`, a stable exit code and an example in its help;
+  - `portenv guide` exists;
+  - the skill installs to `~/.agents/skills/portenv`;
+  - inside a box, `PORTENV_BOX` is set, and the agent-facing intro reaches Claude Code and Codex without touching the user's own files;
+  - the CI drift check passes.
+- [ ] 2.7: the agent evals pass at least 8 of 10 tasks on Claude Code and on Codex
+- [ ] 2.9: the MCP tools are generated from the registry, with annotations, and the server is listed in the MCP Registry
+- [ ] Website: `llms.txt`, `llms-full.txt` and the `.md` pages are live and match the generated docs
 
 ### Phase 3: Control plane and gateway
 
-Milestones: 3.1 accounts (Apple, GitHub, email) · 3.2 device enrollment and wrapped keys · 3.3 authoritative leases · 3.4 box agent tunnels and gateway routing by box name · 3.5 Portenv storage (Cloudflare R2, one prefix per box, short-lived prefix-scoped credentials minted per device, quotas by refusing credentials, retention and pruning on the user's devices; ADR 0008) · 3.6 push notifications · 3.7 full first run (sign-in, Portenv storage, recoverable mode) and the one-time account prompt for existing users · 3.8 SSH door through the gateway (Portenv CA certificates, ports 22 and 443, `portenv ssh` over HTTPS; needs 3.1, 3.2, 3.4) · 3.9 remote MCP door with OAuth and the ChatGPT plugin listing (needs 3.1, 3.4 and the 2.7 core; not lanes, approvals or the vault) · 3.10 web terminal on portenv.com with passkeys (needs 3.1, 3.4).
+Milestones: 3.1 accounts (Apple, GitHub, email) · 3.2 device enrollment and wrapped keys · 3.3 authoritative leases · 3.4 box agent tunnels and gateway routing by box name · 3.5 Portenv storage (Cloudflare R2, one prefix per box, short-lived prefix-scoped credentials minted per device, quotas by refusing credentials, retention and pruning on the user's devices; ADR 0008) · 3.6 push notifications · 3.7 full first run (sign-in, Portenv storage, recoverable mode) and the one-time account prompt for existing users · 3.8 SSH door through the gateway (Portenv CA certificates, ports 22 and 443, `portenv ssh` over HTTPS; needs 3.1, 3.2, 3.4) · 3.9 remote MCP door with OAuth and the ChatGPT app (Apps SDK) for Dots, submitted to the ChatGPT apps directory (needs 3.1, 3.4 and the 2.7 core; not lanes, approvals or the vault) · 3.10 web terminal on portenv.com with passkeys, the way in for browser-only agents such as Meta Muse (needs 3.1, 3.4).
 
 - [ ] A box is reachable by name wherever it runs, with no inbound ports anywhere
 - [ ] Revoking a device ends its sessions within 5 seconds
@@ -1063,4 +1137,5 @@ These need an owner decision; Claude Code should add new ones here instead of gu
 - [ ] Scope of the iPhone companion: approvals only, or also status and a read-only terminal?
 - [ ] Name of the CLI binary: `portenv` assumed.
 - [ ] Linux desktop window, after the terminal edition ships on Linux: Tauri with xterm.js (shared with 3.10's web terminal), or native GTK?
+- [ ] For 2.7–2.9: publish the real CLI binary through npm (platform packages, esbuild-style) and PyPI, so `npx portenv` and `uvx portenv` work in agent sandboxes that only reach package registries, and so MCP clients can start it the way they usually start servers?
 - [ ] A per-box "Keep running when Portenv quits" option (off by default) with a menu bar item listing boxes still running? Only with Phase 3's lease hand-off (see 2.7).

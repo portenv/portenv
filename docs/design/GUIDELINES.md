@@ -208,6 +208,7 @@ From the own-route rule (ADR 0008):
 - Sentence case for buttons and headings. Ellipsis on commands that open a sheet or ask more ("Move To…", "Connect an Agent…").
 - No exclamation marks, no blame ("You entered…"), no internal terms (section 2).
 - Numbers: "8.2 of 12 MB", "about 6 seconds left", "3 min".
+- **Errors say what to do next,** everywhere: the app, the CLI, `portenvd`'s messages, the guide. Give what happened, then the next step, as one plain line: "Keychain needs your approval. Open Portenv on this Mac to allow it." Agents read these too (PLAN.md, Agent readiness).
 
 ---
 

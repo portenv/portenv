@@ -41,7 +41,10 @@ struct TabBar: View {
             .accessibilityLabel(A11y.newTab)
         }
         .frame(height: 30)
-        .background(Color(nsColor: .underPageBackgroundColor))
+        // The bar is the window colour, tinted; the selected tab is the
+        // plain window colour, as in the mockup (semantic colours, §11).
+        .background(Color.primary.opacity(0.06))
+        .background(Color(nsColor: .windowBackgroundColor))
         .overlay(alignment: .bottom) { Divider() }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(A11y.tabBar)

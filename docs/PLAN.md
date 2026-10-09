@@ -928,6 +928,23 @@ In this order:
 2. **The tab bar (early, §3 and §4.1), built before the spike** on a tab interface in the box agent: list, new, close and rename, plus events. Whether the agent uses tmux control mode or plain tmux commands stays inside the agent, so the tab bar doesn't change after the spike.
    - One tab per tmux window; `+` for a new tab; the app owns names and order.
    - Until it exists, nothing (`portenv send`, agents) can create a tmux window the user can't see. The agent refuses `new-window` from anything but the app, or maps it to the single visible window.
+   - **Built (2026-10-10, awaiting review):**
+     - **In the box agent:** ListTabs, NewTab, CloseTab, RenameTab, SelectTab and WatchTabs, on plain tmux commands, polled for the watch.
+       - Tab IDs are tmux window IDs, confined to the box's session.
+       - The app owns the names: tmux's automatic rename and rename by escape sequence stay off even when the user's tmux config turns them on.
+       - A new session starts with one tab named "shell", and the last tab can't be closed.
+       - Every window in the session is a tab, whoever created it, so a window a program opens itself appears in the tab bar (the "maps it" option above).
+     - **portenvd** relays every call and the watch to the agent, on this Mac or on a server.
+     - **The app's tab bar:**
+       - 30 pt, tabs sharing the width;
+       - `+` names tabs "shell", "shell 2" and so on;
+       - close on hover, and never on the last tab;
+       - rename by double-click or the tab's menu;
+       - semantic colours, and VoiceOver labels and actions for every control.
+     - **Not yet:**
+       - reordering;
+       - keyboard shortcuts (Open questions);
+       - a screenshot of the running app and a VoiceOver check by someone at the Mac. The PR's light and dark images are offscreen renders of the tab bar view.
 3. **The inspector (§6):**
    - **Where it is**, including the move's four-step progress (the demo note), the packages line from #28, and Retry;
    - **Saves** (the latest five);
@@ -1256,3 +1273,6 @@ These need an owner decision; Claude Code should add new ones here instead of gu
 - [x] Before Phase 2, telemetry: what opt-in, anonymous usage counts may Portenv collect, if any, and how is that stated on the website? **Answered for counting (2026-10-09):** download counts, repository traffic archived daily, and usage counts through the update check, from a fixed, published list of coarse fields with no identifier, on by default with one click off (see 1.8). Anything beyond these counts stays opt-in and undecided.
 - [ ] For 2.4–2.6: publish the real CLI binary through npm (platform packages, esbuild-style) and PyPI, so `npx portenv` and `uvx portenv` work in agent sandboxes that only reach package registries, and so MCP clients can start it the way they usually start servers?
 - [ ] A per-box "Keep running when Portenv quits" option (off by default) with a menu bar item listing boxes still running? Only with Phase 3's lease hand-off (see 2.4).
+- [ ] Tab keyboard shortcuts (1.2): ⌘T for a new tab, ⌘1–⌘9 to choose one, and what closes a tab. ⌘W closes the window today, and closing the last window quits and closes the box, so a tab shortcut must not be mistaken for it. GUIDELINES.md doesn't list them yet; none are built.
+- [ ] Choosing a tab switches the tmux window for every client attached to the box's session. That's fine with only the app attached; when stand-in agents attach (2.4), should each viewer keep its own current tab (a grouped tmux session per viewer)?
+- [ ] Reordering tabs (the app owns the order): by drag in the tab bar, kept as tmux's window order? Not built in 1.2's first tab bar.

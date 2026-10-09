@@ -635,6 +635,71 @@ func (x *BuildInfo) GetCommit() string {
 	return ""
 }
 
+// A tab in the box's terminal: one tmux window in the box's session
+// (GUIDELINES.md §3, §4.1). The app owns names and order; order is the
+// order of the list.
+type Tab struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Stable for the window's life (tmux's window ID, for example "@3").
+	Id   string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Name string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	// The tab the terminal shows.
+	Active        bool `protobuf:"varint,3,opt,name=active,proto3" json:"active,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Tab) Reset() {
+	*x = Tab{}
+	mi := &file_portenv_types_v1_types_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Tab) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Tab) ProtoMessage() {}
+
+func (x *Tab) ProtoReflect() protoreflect.Message {
+	mi := &file_portenv_types_v1_types_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Tab.ProtoReflect.Descriptor instead.
+func (*Tab) Descriptor() ([]byte, []int) {
+	return file_portenv_types_v1_types_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *Tab) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *Tab) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *Tab) GetActive() bool {
+	if x != nil {
+		return x.Active
+	}
+	return false
+}
+
 var File_portenv_types_v1_types_proto protoreflect.FileDescriptor
 
 const file_portenv_types_v1_types_proto_rawDesc = "" +
@@ -669,7 +734,11 @@ const file_portenv_types_v1_types_proto_rawDesc = "" +
 	"\x06source\x18\x05 \x01(\x0e2\x1d.portenv.types.v1.LeaseSourceR\x06source\"=\n" +
 	"\tBuildInfo\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12\x16\n" +
-	"\x06commit\x18\x02 \x01(\tR\x06commit*\xb0\x01\n" +
+	"\x06commit\x18\x02 \x01(\tR\x06commit\"A\n" +
+	"\x03Tab\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x16\n" +
+	"\x06active\x18\x03 \x01(\bR\x06active*\xb0\x01\n" +
 	"\bBoxState\x12\x19\n" +
 	"\x15BOX_STATE_UNSPECIFIED\x10\x00\x12\x15\n" +
 	"\x11BOX_STATE_CREATED\x10\x01\x12\x16\n" +
@@ -708,7 +777,7 @@ func file_portenv_types_v1_types_proto_rawDescGZIP() []byte {
 }
 
 var file_portenv_types_v1_types_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_portenv_types_v1_types_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_portenv_types_v1_types_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_portenv_types_v1_types_proto_goTypes = []any{
 	(BoxState)(0),                 // 0: portenv.types.v1.BoxState
 	(Architecture)(0),             // 1: portenv.types.v1.Architecture
@@ -719,20 +788,21 @@ var file_portenv_types_v1_types_proto_goTypes = []any{
 	(*SnapshotRef)(nil),           // 6: portenv.types.v1.SnapshotRef
 	(*Lease)(nil),                 // 7: portenv.types.v1.Lease
 	(*BuildInfo)(nil),             // 8: portenv.types.v1.BuildInfo
-	(*timestamppb.Timestamp)(nil), // 9: google.protobuf.Timestamp
+	(*Tab)(nil),                   // 9: portenv.types.v1.Tab
+	(*timestamppb.Timestamp)(nil), // 10: google.protobuf.Timestamp
 }
 var file_portenv_types_v1_types_proto_depIdxs = []int32{
-	5, // 0: portenv.types.v1.Box.resources:type_name -> portenv.types.v1.Resources
-	9, // 1: portenv.types.v1.SnapshotRef.time:type_name -> google.protobuf.Timestamp
-	2, // 2: portenv.types.v1.SnapshotRef.kind:type_name -> portenv.types.v1.SnapshotKind
-	9, // 3: portenv.types.v1.Lease.since:type_name -> google.protobuf.Timestamp
-	9, // 4: portenv.types.v1.Lease.last_heartbeat:type_name -> google.protobuf.Timestamp
-	3, // 5: portenv.types.v1.Lease.source:type_name -> portenv.types.v1.LeaseSource
-	6, // [6:6] is the sub-list for method output_type
-	6, // [6:6] is the sub-list for method input_type
-	6, // [6:6] is the sub-list for extension type_name
-	6, // [6:6] is the sub-list for extension extendee
-	0, // [0:6] is the sub-list for field type_name
+	5,  // 0: portenv.types.v1.Box.resources:type_name -> portenv.types.v1.Resources
+	10, // 1: portenv.types.v1.SnapshotRef.time:type_name -> google.protobuf.Timestamp
+	2,  // 2: portenv.types.v1.SnapshotRef.kind:type_name -> portenv.types.v1.SnapshotKind
+	10, // 3: portenv.types.v1.Lease.since:type_name -> google.protobuf.Timestamp
+	10, // 4: portenv.types.v1.Lease.last_heartbeat:type_name -> google.protobuf.Timestamp
+	3,  // 5: portenv.types.v1.Lease.source:type_name -> portenv.types.v1.LeaseSource
+	6,  // [6:6] is the sub-list for method output_type
+	6,  // [6:6] is the sub-list for method input_type
+	6,  // [6:6] is the sub-list for extension type_name
+	6,  // [6:6] is the sub-list for extension extendee
+	0,  // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_portenv_types_v1_types_proto_init() }
@@ -746,7 +816,7 @@ func file_portenv_types_v1_types_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_portenv_types_v1_types_proto_rawDesc), len(file_portenv_types_v1_types_proto_rawDesc)),
 			NumEnums:      4,
-			NumMessages:   5,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

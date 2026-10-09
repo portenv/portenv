@@ -851,6 +851,550 @@ func (*RetryPackagesResponse) Descriptor() ([]byte, []int) {
 	return file_portenv_agent_v1_agent_proto_rawDescGZIP(), []int{13}
 }
 
+type ListTabsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Session       string                 `protobuf:"bytes,1,opt,name=session,proto3" json:"session,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListTabsRequest) Reset() {
+	*x = ListTabsRequest{}
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListTabsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListTabsRequest) ProtoMessage() {}
+
+func (x *ListTabsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListTabsRequest.ProtoReflect.Descriptor instead.
+func (*ListTabsRequest) Descriptor() ([]byte, []int) {
+	return file_portenv_agent_v1_agent_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *ListTabsRequest) GetSession() string {
+	if x != nil {
+		return x.Session
+	}
+	return ""
+}
+
+type ListTabsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Tabs          []*v1.Tab              `protobuf:"bytes,1,rep,name=tabs,proto3" json:"tabs,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListTabsResponse) Reset() {
+	*x = ListTabsResponse{}
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListTabsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListTabsResponse) ProtoMessage() {}
+
+func (x *ListTabsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListTabsResponse.ProtoReflect.Descriptor instead.
+func (*ListTabsResponse) Descriptor() ([]byte, []int) {
+	return file_portenv_agent_v1_agent_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *ListTabsResponse) GetTabs() []*v1.Tab {
+	if x != nil {
+		return x.Tabs
+	}
+	return nil
+}
+
+type NewTabRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Session       string                 `protobuf:"bytes,1,opt,name=session,proto3" json:"session,omitempty"`
+	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *NewTabRequest) Reset() {
+	*x = NewTabRequest{}
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *NewTabRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*NewTabRequest) ProtoMessage() {}
+
+func (x *NewTabRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use NewTabRequest.ProtoReflect.Descriptor instead.
+func (*NewTabRequest) Descriptor() ([]byte, []int) {
+	return file_portenv_agent_v1_agent_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *NewTabRequest) GetSession() string {
+	if x != nil {
+		return x.Session
+	}
+	return ""
+}
+
+func (x *NewTabRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+type NewTabResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Tab           *v1.Tab                `protobuf:"bytes,1,opt,name=tab,proto3" json:"tab,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *NewTabResponse) Reset() {
+	*x = NewTabResponse{}
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *NewTabResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*NewTabResponse) ProtoMessage() {}
+
+func (x *NewTabResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use NewTabResponse.ProtoReflect.Descriptor instead.
+func (*NewTabResponse) Descriptor() ([]byte, []int) {
+	return file_portenv_agent_v1_agent_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *NewTabResponse) GetTab() *v1.Tab {
+	if x != nil {
+		return x.Tab
+	}
+	return nil
+}
+
+type CloseTabRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Session       string                 `protobuf:"bytes,1,opt,name=session,proto3" json:"session,omitempty"`
+	Id            string                 `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CloseTabRequest) Reset() {
+	*x = CloseTabRequest{}
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CloseTabRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CloseTabRequest) ProtoMessage() {}
+
+func (x *CloseTabRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CloseTabRequest.ProtoReflect.Descriptor instead.
+func (*CloseTabRequest) Descriptor() ([]byte, []int) {
+	return file_portenv_agent_v1_agent_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *CloseTabRequest) GetSession() string {
+	if x != nil {
+		return x.Session
+	}
+	return ""
+}
+
+func (x *CloseTabRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+type CloseTabResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CloseTabResponse) Reset() {
+	*x = CloseTabResponse{}
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CloseTabResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CloseTabResponse) ProtoMessage() {}
+
+func (x *CloseTabResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CloseTabResponse.ProtoReflect.Descriptor instead.
+func (*CloseTabResponse) Descriptor() ([]byte, []int) {
+	return file_portenv_agent_v1_agent_proto_rawDescGZIP(), []int{19}
+}
+
+type RenameTabRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Session       string                 `protobuf:"bytes,1,opt,name=session,proto3" json:"session,omitempty"`
+	Id            string                 `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
+	Name          string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RenameTabRequest) Reset() {
+	*x = RenameTabRequest{}
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RenameTabRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RenameTabRequest) ProtoMessage() {}
+
+func (x *RenameTabRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RenameTabRequest.ProtoReflect.Descriptor instead.
+func (*RenameTabRequest) Descriptor() ([]byte, []int) {
+	return file_portenv_agent_v1_agent_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *RenameTabRequest) GetSession() string {
+	if x != nil {
+		return x.Session
+	}
+	return ""
+}
+
+func (x *RenameTabRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *RenameTabRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+type RenameTabResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RenameTabResponse) Reset() {
+	*x = RenameTabResponse{}
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RenameTabResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RenameTabResponse) ProtoMessage() {}
+
+func (x *RenameTabResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RenameTabResponse.ProtoReflect.Descriptor instead.
+func (*RenameTabResponse) Descriptor() ([]byte, []int) {
+	return file_portenv_agent_v1_agent_proto_rawDescGZIP(), []int{21}
+}
+
+type SelectTabRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Session       string                 `protobuf:"bytes,1,opt,name=session,proto3" json:"session,omitempty"`
+	Id            string                 `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SelectTabRequest) Reset() {
+	*x = SelectTabRequest{}
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SelectTabRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SelectTabRequest) ProtoMessage() {}
+
+func (x *SelectTabRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SelectTabRequest.ProtoReflect.Descriptor instead.
+func (*SelectTabRequest) Descriptor() ([]byte, []int) {
+	return file_portenv_agent_v1_agent_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *SelectTabRequest) GetSession() string {
+	if x != nil {
+		return x.Session
+	}
+	return ""
+}
+
+func (x *SelectTabRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+type SelectTabResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SelectTabResponse) Reset() {
+	*x = SelectTabResponse{}
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SelectTabResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SelectTabResponse) ProtoMessage() {}
+
+func (x *SelectTabResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SelectTabResponse.ProtoReflect.Descriptor instead.
+func (*SelectTabResponse) Descriptor() ([]byte, []int) {
+	return file_portenv_agent_v1_agent_proto_rawDescGZIP(), []int{23}
+}
+
+type WatchTabsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Session       string                 `protobuf:"bytes,1,opt,name=session,proto3" json:"session,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WatchTabsRequest) Reset() {
+	*x = WatchTabsRequest{}
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WatchTabsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WatchTabsRequest) ProtoMessage() {}
+
+func (x *WatchTabsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WatchTabsRequest.ProtoReflect.Descriptor instead.
+func (*WatchTabsRequest) Descriptor() ([]byte, []int) {
+	return file_portenv_agent_v1_agent_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *WatchTabsRequest) GetSession() string {
+	if x != nil {
+		return x.Session
+	}
+	return ""
+}
+
+type WatchTabsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Tabs          []*v1.Tab              `protobuf:"bytes,1,rep,name=tabs,proto3" json:"tabs,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WatchTabsResponse) Reset() {
+	*x = WatchTabsResponse{}
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WatchTabsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WatchTabsResponse) ProtoMessage() {}
+
+func (x *WatchTabsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WatchTabsResponse.ProtoReflect.Descriptor instead.
+func (*WatchTabsResponse) Descriptor() ([]byte, []int) {
+	return file_portenv_agent_v1_agent_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *WatchTabsResponse) GetTabs() []*v1.Tab {
+	if x != nil {
+		return x.Tabs
+	}
+	return nil
+}
+
 var File_portenv_agent_v1_agent_proto protoreflect.FileDescriptor
 
 const file_portenv_agent_v1_agent_proto_rawDesc = "" +
@@ -894,12 +1438,38 @@ const file_portenv_agent_v1_agent_proto_rawDesc = "" +
 	"\x0ffailed_packages\x18\x03 \x03(\tR\x0efailedPackages\x12%\n" +
 	"\x0epackages_error\x18\x04 \x01(\tR\rpackagesError\"\x16\n" +
 	"\x14RetryPackagesRequest\"\x17\n" +
-	"\x15RetryPackagesResponse*\x86\x01\n" +
+	"\x15RetryPackagesResponse\"+\n" +
+	"\x0fListTabsRequest\x12\x18\n" +
+	"\asession\x18\x01 \x01(\tR\asession\"=\n" +
+	"\x10ListTabsResponse\x12)\n" +
+	"\x04tabs\x18\x01 \x03(\v2\x15.portenv.types.v1.TabR\x04tabs\"=\n" +
+	"\rNewTabRequest\x12\x18\n" +
+	"\asession\x18\x01 \x01(\tR\asession\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\"9\n" +
+	"\x0eNewTabResponse\x12'\n" +
+	"\x03tab\x18\x01 \x01(\v2\x15.portenv.types.v1.TabR\x03tab\";\n" +
+	"\x0fCloseTabRequest\x12\x18\n" +
+	"\asession\x18\x01 \x01(\tR\asession\x12\x0e\n" +
+	"\x02id\x18\x02 \x01(\tR\x02id\"\x12\n" +
+	"\x10CloseTabResponse\"P\n" +
+	"\x10RenameTabRequest\x12\x18\n" +
+	"\asession\x18\x01 \x01(\tR\asession\x12\x0e\n" +
+	"\x02id\x18\x02 \x01(\tR\x02id\x12\x12\n" +
+	"\x04name\x18\x03 \x01(\tR\x04name\"\x13\n" +
+	"\x11RenameTabResponse\"<\n" +
+	"\x10SelectTabRequest\x12\x18\n" +
+	"\asession\x18\x01 \x01(\tR\asession\x12\x0e\n" +
+	"\x02id\x18\x02 \x01(\tR\x02id\"\x13\n" +
+	"\x11SelectTabResponse\",\n" +
+	"\x10WatchTabsRequest\x12\x18\n" +
+	"\asession\x18\x01 \x01(\tR\asession\">\n" +
+	"\x11WatchTabsResponse\x12)\n" +
+	"\x04tabs\x18\x01 \x03(\v2\x15.portenv.types.v1.TabR\x04tabs*\x86\x01\n" +
 	"\x0eReadinessState\x12\x1f\n" +
 	"\x1bREADINESS_STATE_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18READINESS_STATE_STARTING\x10\x01\x12\x19\n" +
 	"\x15READINESS_STATE_READY\x10\x02\x12\x1a\n" +
-	"\x16READINESS_STATE_FAILED\x10\x032\xb1\x04\n" +
+	"\x16READINESS_STATE_FAILED\x10\x032\xa8\b\n" +
 	"\fAgentService\x12W\n" +
 	"\n" +
 	"GetVersion\x12#.portenv.agent.v1.GetVersionRequest\x1a$.portenv.agent.v1.GetVersionResponse\x12]\n" +
@@ -907,7 +1477,13 @@ const file_portenv_agent_v1_agent_proto_rawDesc = "" +
 	"\rRetryPackages\x12&.portenv.agent.v1.RetryPackagesRequest\x1a'.portenv.agent.v1.RetryPackagesResponse\x12T\n" +
 	"\tRunRestic\x12\".portenv.agent.v1.RunResticRequest\x1a#.portenv.agent.v1.RunResticResponse\x12Z\n" +
 	"\vGetPathInfo\x12$.portenv.agent.v1.GetPathInfoRequest\x1a%.portenv.agent.v1.GetPathInfoResponse\x12U\n" +
-	"\bTerminal\x12!.portenv.agent.v1.TerminalRequest\x1a\".portenv.agent.v1.TerminalResponse(\x010\x01B\xc6\x01\n" +
+	"\bTerminal\x12!.portenv.agent.v1.TerminalRequest\x1a\".portenv.agent.v1.TerminalResponse(\x010\x01\x12Q\n" +
+	"\bListTabs\x12!.portenv.agent.v1.ListTabsRequest\x1a\".portenv.agent.v1.ListTabsResponse\x12K\n" +
+	"\x06NewTab\x12\x1f.portenv.agent.v1.NewTabRequest\x1a .portenv.agent.v1.NewTabResponse\x12Q\n" +
+	"\bCloseTab\x12!.portenv.agent.v1.CloseTabRequest\x1a\".portenv.agent.v1.CloseTabResponse\x12T\n" +
+	"\tRenameTab\x12\".portenv.agent.v1.RenameTabRequest\x1a#.portenv.agent.v1.RenameTabResponse\x12T\n" +
+	"\tSelectTab\x12\".portenv.agent.v1.SelectTabRequest\x1a#.portenv.agent.v1.SelectTabResponse\x12V\n" +
+	"\tWatchTabs\x12\".portenv.agent.v1.WatchTabsRequest\x1a#.portenv.agent.v1.WatchTabsResponse0\x01B\xc6\x01\n" +
 	"\x14com.portenv.agent.v1B\n" +
 	"AgentProtoP\x01Z@github.com/portenv/portenv/proto/gen/go/portenv/agent/v1;agentv1\xa2\x02\x03PAX\xaa\x02\x10Portenv.Agent.V1\xca\x02\x10Portenv\\Agent\\V1\xe2\x02\x1cPortenv\\Agent\\V1\\GPBMetadata\xea\x02\x12Portenv::Agent::V1b\x06proto3"
 
@@ -924,7 +1500,7 @@ func file_portenv_agent_v1_agent_proto_rawDescGZIP() []byte {
 }
 
 var file_portenv_agent_v1_agent_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_portenv_agent_v1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
+var file_portenv_agent_v1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 26)
 var file_portenv_agent_v1_agent_proto_goTypes = []any{
 	(ReadinessState)(0),           // 0: portenv.agent.v1.ReadinessState
 	(*RunResticRequest)(nil),      // 1: portenv.agent.v1.RunResticRequest
@@ -941,31 +1517,59 @@ var file_portenv_agent_v1_agent_proto_goTypes = []any{
 	(*GetReadinessResponse)(nil),  // 12: portenv.agent.v1.GetReadinessResponse
 	(*RetryPackagesRequest)(nil),  // 13: portenv.agent.v1.RetryPackagesRequest
 	(*RetryPackagesResponse)(nil), // 14: portenv.agent.v1.RetryPackagesResponse
-	(*v1.BuildInfo)(nil),          // 15: portenv.types.v1.BuildInfo
+	(*ListTabsRequest)(nil),       // 15: portenv.agent.v1.ListTabsRequest
+	(*ListTabsResponse)(nil),      // 16: portenv.agent.v1.ListTabsResponse
+	(*NewTabRequest)(nil),         // 17: portenv.agent.v1.NewTabRequest
+	(*NewTabResponse)(nil),        // 18: portenv.agent.v1.NewTabResponse
+	(*CloseTabRequest)(nil),       // 19: portenv.agent.v1.CloseTabRequest
+	(*CloseTabResponse)(nil),      // 20: portenv.agent.v1.CloseTabResponse
+	(*RenameTabRequest)(nil),      // 21: portenv.agent.v1.RenameTabRequest
+	(*RenameTabResponse)(nil),     // 22: portenv.agent.v1.RenameTabResponse
+	(*SelectTabRequest)(nil),      // 23: portenv.agent.v1.SelectTabRequest
+	(*SelectTabResponse)(nil),     // 24: portenv.agent.v1.SelectTabResponse
+	(*WatchTabsRequest)(nil),      // 25: portenv.agent.v1.WatchTabsRequest
+	(*WatchTabsResponse)(nil),     // 26: portenv.agent.v1.WatchTabsResponse
+	(*v1.BuildInfo)(nil),          // 27: portenv.types.v1.BuildInfo
+	(*v1.Tab)(nil),                // 28: portenv.types.v1.Tab
 }
 var file_portenv_agent_v1_agent_proto_depIdxs = []int32{
 	6,  // 0: portenv.agent.v1.TerminalRequest.open:type_name -> portenv.agent.v1.TerminalOpen
 	7,  // 1: portenv.agent.v1.TerminalRequest.resize:type_name -> portenv.agent.v1.TerminalSize
 	7,  // 2: portenv.agent.v1.TerminalOpen.size:type_name -> portenv.agent.v1.TerminalSize
-	15, // 3: portenv.agent.v1.GetVersionResponse.build:type_name -> portenv.types.v1.BuildInfo
+	27, // 3: portenv.agent.v1.GetVersionResponse.build:type_name -> portenv.types.v1.BuildInfo
 	0,  // 4: portenv.agent.v1.GetReadinessResponse.state:type_name -> portenv.agent.v1.ReadinessState
-	9,  // 5: portenv.agent.v1.AgentService.GetVersion:input_type -> portenv.agent.v1.GetVersionRequest
-	11, // 6: portenv.agent.v1.AgentService.GetReadiness:input_type -> portenv.agent.v1.GetReadinessRequest
-	13, // 7: portenv.agent.v1.AgentService.RetryPackages:input_type -> portenv.agent.v1.RetryPackagesRequest
-	1,  // 8: portenv.agent.v1.AgentService.RunRestic:input_type -> portenv.agent.v1.RunResticRequest
-	3,  // 9: portenv.agent.v1.AgentService.GetPathInfo:input_type -> portenv.agent.v1.GetPathInfoRequest
-	5,  // 10: portenv.agent.v1.AgentService.Terminal:input_type -> portenv.agent.v1.TerminalRequest
-	10, // 11: portenv.agent.v1.AgentService.GetVersion:output_type -> portenv.agent.v1.GetVersionResponse
-	12, // 12: portenv.agent.v1.AgentService.GetReadiness:output_type -> portenv.agent.v1.GetReadinessResponse
-	14, // 13: portenv.agent.v1.AgentService.RetryPackages:output_type -> portenv.agent.v1.RetryPackagesResponse
-	2,  // 14: portenv.agent.v1.AgentService.RunRestic:output_type -> portenv.agent.v1.RunResticResponse
-	4,  // 15: portenv.agent.v1.AgentService.GetPathInfo:output_type -> portenv.agent.v1.GetPathInfoResponse
-	8,  // 16: portenv.agent.v1.AgentService.Terminal:output_type -> portenv.agent.v1.TerminalResponse
-	11, // [11:17] is the sub-list for method output_type
-	5,  // [5:11] is the sub-list for method input_type
-	5,  // [5:5] is the sub-list for extension type_name
-	5,  // [5:5] is the sub-list for extension extendee
-	0,  // [0:5] is the sub-list for field type_name
+	28, // 5: portenv.agent.v1.ListTabsResponse.tabs:type_name -> portenv.types.v1.Tab
+	28, // 6: portenv.agent.v1.NewTabResponse.tab:type_name -> portenv.types.v1.Tab
+	28, // 7: portenv.agent.v1.WatchTabsResponse.tabs:type_name -> portenv.types.v1.Tab
+	9,  // 8: portenv.agent.v1.AgentService.GetVersion:input_type -> portenv.agent.v1.GetVersionRequest
+	11, // 9: portenv.agent.v1.AgentService.GetReadiness:input_type -> portenv.agent.v1.GetReadinessRequest
+	13, // 10: portenv.agent.v1.AgentService.RetryPackages:input_type -> portenv.agent.v1.RetryPackagesRequest
+	1,  // 11: portenv.agent.v1.AgentService.RunRestic:input_type -> portenv.agent.v1.RunResticRequest
+	3,  // 12: portenv.agent.v1.AgentService.GetPathInfo:input_type -> portenv.agent.v1.GetPathInfoRequest
+	5,  // 13: portenv.agent.v1.AgentService.Terminal:input_type -> portenv.agent.v1.TerminalRequest
+	15, // 14: portenv.agent.v1.AgentService.ListTabs:input_type -> portenv.agent.v1.ListTabsRequest
+	17, // 15: portenv.agent.v1.AgentService.NewTab:input_type -> portenv.agent.v1.NewTabRequest
+	19, // 16: portenv.agent.v1.AgentService.CloseTab:input_type -> portenv.agent.v1.CloseTabRequest
+	21, // 17: portenv.agent.v1.AgentService.RenameTab:input_type -> portenv.agent.v1.RenameTabRequest
+	23, // 18: portenv.agent.v1.AgentService.SelectTab:input_type -> portenv.agent.v1.SelectTabRequest
+	25, // 19: portenv.agent.v1.AgentService.WatchTabs:input_type -> portenv.agent.v1.WatchTabsRequest
+	10, // 20: portenv.agent.v1.AgentService.GetVersion:output_type -> portenv.agent.v1.GetVersionResponse
+	12, // 21: portenv.agent.v1.AgentService.GetReadiness:output_type -> portenv.agent.v1.GetReadinessResponse
+	14, // 22: portenv.agent.v1.AgentService.RetryPackages:output_type -> portenv.agent.v1.RetryPackagesResponse
+	2,  // 23: portenv.agent.v1.AgentService.RunRestic:output_type -> portenv.agent.v1.RunResticResponse
+	4,  // 24: portenv.agent.v1.AgentService.GetPathInfo:output_type -> portenv.agent.v1.GetPathInfoResponse
+	8,  // 25: portenv.agent.v1.AgentService.Terminal:output_type -> portenv.agent.v1.TerminalResponse
+	16, // 26: portenv.agent.v1.AgentService.ListTabs:output_type -> portenv.agent.v1.ListTabsResponse
+	18, // 27: portenv.agent.v1.AgentService.NewTab:output_type -> portenv.agent.v1.NewTabResponse
+	20, // 28: portenv.agent.v1.AgentService.CloseTab:output_type -> portenv.agent.v1.CloseTabResponse
+	22, // 29: portenv.agent.v1.AgentService.RenameTab:output_type -> portenv.agent.v1.RenameTabResponse
+	24, // 30: portenv.agent.v1.AgentService.SelectTab:output_type -> portenv.agent.v1.SelectTabResponse
+	26, // 31: portenv.agent.v1.AgentService.WatchTabs:output_type -> portenv.agent.v1.WatchTabsResponse
+	20, // [20:32] is the sub-list for method output_type
+	8,  // [8:20] is the sub-list for method input_type
+	8,  // [8:8] is the sub-list for extension type_name
+	8,  // [8:8] is the sub-list for extension extendee
+	0,  // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_portenv_agent_v1_agent_proto_init() }
@@ -988,7 +1592,7 @@ func file_portenv_agent_v1_agent_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_portenv_agent_v1_agent_proto_rawDesc), len(file_portenv_agent_v1_agent_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   14,
+			NumMessages:   26,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

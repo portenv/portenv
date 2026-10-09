@@ -86,6 +86,16 @@ service DaemonService {
   // Boxes saved in the background after Quit Anyway since the app last
   // asked: the app shows one notification for each. Given out once.
   rpc TakeSavedAfterQuit(TakeSavedAfterQuitRequest) returns (TakeSavedAfterQuitResponse);
+  // The box's tabs (its terminal's tmux windows), through the box agent.
+  // The session is "main" when empty.
+  rpc ListTabs(ListTabsRequest) returns (ListTabsResponse);
+  rpc NewTab(NewTabRequest) returns (NewTabResponse);
+  rpc CloseTab(CloseTabRequest) returns (CloseTabResponse);
+  rpc RenameTab(RenameTabRequest) returns (RenameTabResponse);
+  rpc SelectTab(SelectTabRequest) returns (SelectTabResponse);
+  // The tabs at once, then whenever they change. The stream ends when the
+  // box closes or its agent goes away; the app watches again.
+  rpc WatchTabs(WatchTabsRequest) returns (stream WatchTabsResponse);
 }
 
 message CheckBoxRequest {
@@ -387,4 +397,57 @@ message TakeSavedAfterQuitResponse {
 message SavedAfterQuit {
   string name = 1;
   google.protobuf.Timestamp saved_at = 2;
+}
+
+message ListTabsRequest {
+  string box = 1;
+  string session = 2;
+}
+
+message ListTabsResponse {
+  repeated portenv.types.v1.Tab tabs = 1;
+}
+
+message NewTabRequest {
+  string box = 1;
+  string session = 2;
+  string name = 3;
+}
+
+message NewTabResponse {
+  portenv.types.v1.Tab tab = 1;
+}
+
+message CloseTabRequest {
+  string box = 1;
+  string session = 2;
+  string id = 3;
+}
+
+message CloseTabResponse {}
+
+message RenameTabRequest {
+  string box = 1;
+  string session = 2;
+  string id = 3;
+  string name = 4;
+}
+
+message RenameTabResponse {}
+
+message SelectTabRequest {
+  string box = 1;
+  string session = 2;
+  string id = 3;
+}
+
+message SelectTabResponse {}
+
+message WatchTabsRequest {
+  string box = 1;
+  string session = 2;
+}
+
+message WatchTabsResponse {
+  repeated portenv.types.v1.Tab tabs = 1;
 }

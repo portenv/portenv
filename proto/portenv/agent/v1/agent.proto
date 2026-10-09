@@ -26,6 +26,20 @@ service AgentService {
   // Attaches a terminal to one of work's tmux sessions (created if needed).
   // The first message from the client must be open.
   rpc Terminal(stream TerminalRequest) returns (stream TerminalResponse);
+  // The tabs of one of work's tmux sessions (created if needed), in order.
+  // Every window in the session is a tab, whoever created it, so no window
+  // is ever out of the user's sight.
+  rpc ListTabs(ListTabsRequest) returns (ListTabsResponse);
+  // Opens a tab at the end and shows it.
+  rpc NewTab(NewTabRequest) returns (NewTabResponse);
+  // Closes a tab and ends what runs in it. The last tab can't be closed.
+  rpc CloseTab(CloseTabRequest) returns (CloseTabResponse);
+  // Renames a tab. Programs in the box can't rename tabs.
+  rpc RenameTab(RenameTabRequest) returns (RenameTabResponse);
+  // Shows a tab in the session's terminal.
+  rpc SelectTab(SelectTabRequest) returns (SelectTabResponse);
+  // The tabs at once, then again whenever they change.
+  rpc WatchTabs(WatchTabsRequest) returns (stream WatchTabsResponse);
 }
 
 message RunResticRequest {
@@ -114,3 +128,50 @@ message GetReadinessResponse {
 message RetryPackagesRequest {}
 
 message RetryPackagesResponse {}
+
+message ListTabsRequest {
+  string session = 1;
+}
+
+message ListTabsResponse {
+  repeated portenv.types.v1.Tab tabs = 1;
+}
+
+message NewTabRequest {
+  string session = 1;
+  string name = 2;
+}
+
+message NewTabResponse {
+  portenv.types.v1.Tab tab = 1;
+}
+
+message CloseTabRequest {
+  string session = 1;
+  string id = 2;
+}
+
+message CloseTabResponse {}
+
+message RenameTabRequest {
+  string session = 1;
+  string id = 2;
+  string name = 3;
+}
+
+message RenameTabResponse {}
+
+message SelectTabRequest {
+  string session = 1;
+  string id = 2;
+}
+
+message SelectTabResponse {}
+
+message WatchTabsRequest {
+  string session = 1;
+}
+
+message WatchTabsResponse {
+  repeated portenv.types.v1.Tab tabs = 1;
+}

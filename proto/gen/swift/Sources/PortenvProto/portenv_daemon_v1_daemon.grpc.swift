@@ -347,6 +347,84 @@ public enum Portenv_Daemon_V1_DaemonService: Sendable {
                 type: .unary
             )
         }
+        /// Namespace for "ListTabs" metadata.
+        public enum ListTabs: Sendable {
+            /// Request type for "ListTabs".
+            public typealias Input = Portenv_Daemon_V1_ListTabsRequest
+            /// Response type for "ListTabs".
+            public typealias Output = Portenv_Daemon_V1_ListTabsResponse
+            /// Descriptor for "ListTabs".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "ListTabs",
+                type: .unary
+            )
+        }
+        /// Namespace for "NewTab" metadata.
+        public enum NewTab: Sendable {
+            /// Request type for "NewTab".
+            public typealias Input = Portenv_Daemon_V1_NewTabRequest
+            /// Response type for "NewTab".
+            public typealias Output = Portenv_Daemon_V1_NewTabResponse
+            /// Descriptor for "NewTab".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "NewTab",
+                type: .unary
+            )
+        }
+        /// Namespace for "CloseTab" metadata.
+        public enum CloseTab: Sendable {
+            /// Request type for "CloseTab".
+            public typealias Input = Portenv_Daemon_V1_CloseTabRequest
+            /// Response type for "CloseTab".
+            public typealias Output = Portenv_Daemon_V1_CloseTabResponse
+            /// Descriptor for "CloseTab".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "CloseTab",
+                type: .unary
+            )
+        }
+        /// Namespace for "RenameTab" metadata.
+        public enum RenameTab: Sendable {
+            /// Request type for "RenameTab".
+            public typealias Input = Portenv_Daemon_V1_RenameTabRequest
+            /// Response type for "RenameTab".
+            public typealias Output = Portenv_Daemon_V1_RenameTabResponse
+            /// Descriptor for "RenameTab".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "RenameTab",
+                type: .unary
+            )
+        }
+        /// Namespace for "SelectTab" metadata.
+        public enum SelectTab: Sendable {
+            /// Request type for "SelectTab".
+            public typealias Input = Portenv_Daemon_V1_SelectTabRequest
+            /// Response type for "SelectTab".
+            public typealias Output = Portenv_Daemon_V1_SelectTabResponse
+            /// Descriptor for "SelectTab".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "SelectTab",
+                type: .unary
+            )
+        }
+        /// Namespace for "WatchTabs" metadata.
+        public enum WatchTabs: Sendable {
+            /// Request type for "WatchTabs".
+            public typealias Input = Portenv_Daemon_V1_WatchTabsRequest
+            /// Response type for "WatchTabs".
+            public typealias Output = Portenv_Daemon_V1_WatchTabsResponse
+            /// Descriptor for "WatchTabs".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "WatchTabs",
+                type: .serverStreaming
+            )
+        }
         /// Descriptors for all methods in the "portenv.daemon.v1.DaemonService" service.
         public static let descriptors: [GRPCCore.MethodDescriptor] = [
             GetVersion.descriptor,
@@ -373,7 +451,13 @@ public enum Portenv_Daemon_V1_DaemonService: Sendable {
             ListSaves.descriptor,
             Housekeep.descriptor,
             LeaveUnsaved.descriptor,
-            TakeSavedAfterQuit.descriptor
+            TakeSavedAfterQuit.descriptor,
+            ListTabs.descriptor,
+            NewTab.descriptor,
+            CloseTab.descriptor,
+            RenameTab.descriptor,
+            SelectTab.descriptor,
+            WatchTabs.descriptor
         ]
     }
 }
@@ -988,6 +1072,130 @@ extension Portenv_Daemon_V1_DaemonService {
             deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_TakeSavedAfterQuitResponse>,
             options: GRPCCore.CallOptions,
             onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_TakeSavedAfterQuitResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "ListTabs" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > The box's tabs (its terminal's tmux windows), through the box agent.
+        /// > The session is "main" when empty.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_ListTabsRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_ListTabsRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_ListTabsResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func listTabs<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_ListTabsRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_ListTabsRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_ListTabsResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ListTabsResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "NewTab" method.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_NewTabRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_NewTabRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_NewTabResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func newTab<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_NewTabRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_NewTabRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_NewTabResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_NewTabResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "CloseTab" method.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_CloseTabRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_CloseTabRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_CloseTabResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func closeTab<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_CloseTabRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_CloseTabRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_CloseTabResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_CloseTabResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "RenameTab" method.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_RenameTabRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_RenameTabRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_RenameTabResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func renameTab<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_RenameTabRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_RenameTabRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_RenameTabResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_RenameTabResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "SelectTab" method.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_SelectTabRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_SelectTabRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_SelectTabResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func selectTab<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_SelectTabRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_SelectTabRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_SelectTabResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_SelectTabResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "WatchTabs" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > The tabs at once, then whenever they change. The stream ends when the
+        /// > box closes or its agent goes away; the app watches again.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_WatchTabsRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_WatchTabsRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_WatchTabsResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func watchTabs<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_WatchTabsRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_WatchTabsRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_WatchTabsResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.StreamingClientResponse<Portenv_Daemon_V1_WatchTabsResponse>) async throws -> Result
         ) async throws -> Result where Result: Sendable
     }
 
@@ -1874,6 +2082,194 @@ extension Portenv_Daemon_V1_DaemonService {
                 onResponse: handleResponse
             )
         }
+
+        /// Call the "ListTabs" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > The box's tabs (its terminal's tmux windows), through the box agent.
+        /// > The session is "main" when empty.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_ListTabsRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_ListTabsRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_ListTabsResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func listTabs<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_ListTabsRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_ListTabsRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_ListTabsResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ListTabsResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.ListTabs.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
+
+        /// Call the "NewTab" method.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_NewTabRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_NewTabRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_NewTabResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func newTab<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_NewTabRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_NewTabRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_NewTabResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_NewTabResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.NewTab.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
+
+        /// Call the "CloseTab" method.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_CloseTabRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_CloseTabRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_CloseTabResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func closeTab<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_CloseTabRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_CloseTabRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_CloseTabResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_CloseTabResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.CloseTab.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
+
+        /// Call the "RenameTab" method.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_RenameTabRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_RenameTabRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_RenameTabResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func renameTab<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_RenameTabRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_RenameTabRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_RenameTabResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_RenameTabResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.RenameTab.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
+
+        /// Call the "SelectTab" method.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_SelectTabRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_SelectTabRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_SelectTabResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func selectTab<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_SelectTabRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_SelectTabRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_SelectTabResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_SelectTabResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.SelectTab.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
+
+        /// Call the "WatchTabs" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > The tabs at once, then whenever they change. The stream ends when the
+        /// > box closes or its agent goes away; the app watches again.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_WatchTabsRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_WatchTabsRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_WatchTabsResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func watchTabs<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_WatchTabsRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_WatchTabsRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_WatchTabsResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.StreamingClientResponse<Portenv_Daemon_V1_WatchTabsResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.serverStreaming(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.WatchTabs.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
     }
 }
 
@@ -2614,6 +3010,164 @@ extension Portenv_Daemon_V1_DaemonService.ClientProtocol {
             request: request,
             serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_TakeSavedAfterQuitRequest>(),
             deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_TakeSavedAfterQuitResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "ListTabs" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > The box's tabs (its terminal's tmux windows), through the box agent.
+    /// > The session is "main" when empty.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_ListTabsRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func listTabs<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_ListTabsRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ListTabsResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.listTabs(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_ListTabsRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_ListTabsResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "NewTab" method.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_NewTabRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func newTab<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_NewTabRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_NewTabResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.newTab(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_NewTabRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_NewTabResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "CloseTab" method.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_CloseTabRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func closeTab<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_CloseTabRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_CloseTabResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.closeTab(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_CloseTabRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_CloseTabResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "RenameTab" method.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_RenameTabRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func renameTab<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_RenameTabRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_RenameTabResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.renameTab(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_RenameTabRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_RenameTabResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "SelectTab" method.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_SelectTabRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func selectTab<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_SelectTabRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_SelectTabResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.selectTab(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_SelectTabRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_SelectTabResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "WatchTabs" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > The tabs at once, then whenever they change. The stream ends when the
+    /// > box closes or its agent goes away; the app watches again.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_WatchTabsRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func watchTabs<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_WatchTabsRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.StreamingClientResponse<Portenv_Daemon_V1_WatchTabsResponse>) async throws -> Result
+    ) async throws -> Result where Result: Sendable {
+        try await self.watchTabs(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_WatchTabsRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_WatchTabsResponse>(),
             options: options,
             onResponse: handleResponse
         )
@@ -3457,6 +4011,188 @@ extension Portenv_Daemon_V1_DaemonService.ClientProtocol {
             metadata: metadata
         )
         return try await self.takeSavedAfterQuit(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "ListTabs" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > The box's tabs (its terminal's tmux windows), through the box agent.
+    /// > The session is "main" when empty.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func listTabs<Result>(
+        _ message: Portenv_Daemon_V1_ListTabsRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ListTabsResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_ListTabsRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.listTabs(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "NewTab" method.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func newTab<Result>(
+        _ message: Portenv_Daemon_V1_NewTabRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_NewTabResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_NewTabRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.newTab(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "CloseTab" method.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func closeTab<Result>(
+        _ message: Portenv_Daemon_V1_CloseTabRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_CloseTabResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_CloseTabRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.closeTab(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "RenameTab" method.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func renameTab<Result>(
+        _ message: Portenv_Daemon_V1_RenameTabRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_RenameTabResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_RenameTabRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.renameTab(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "SelectTab" method.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func selectTab<Result>(
+        _ message: Portenv_Daemon_V1_SelectTabRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_SelectTabResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_SelectTabRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.selectTab(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "WatchTabs" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > The tabs at once, then whenever they change. The stream ends when the
+    /// > box closes or its agent goes away; the app watches again.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func watchTabs<Result>(
+        _ message: Portenv_Daemon_V1_WatchTabsRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.StreamingClientResponse<Portenv_Daemon_V1_WatchTabsResponse>) async throws -> Result
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_WatchTabsRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.watchTabs(
             request: request,
             options: options,
             onResponse: handleResponse

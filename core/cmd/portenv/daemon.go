@@ -211,7 +211,8 @@ func cmdApp(ctx context.Context, e *local.Env, op string, args []string) error {
 			Location       string    `json:"location,omitempty"`
 			FailedPackages []string  `json:"failed_packages,omitempty"`
 			PackagesError  string    `json:"packages_error,omitempty"`
-		}{r.GetState().String(), at, r.GetLocation(), r.GetFailedPackages(), r.GetPackagesError()})
+			Interrupted    bool      `json:"interrupted,omitempty"`
+		}{r.GetState().String(), at, r.GetLocation(), r.GetFailedPackages(), r.GetPackagesError(), r.GetInterrupted()})
 		if err != nil {
 			return err
 		}

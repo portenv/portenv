@@ -220,6 +220,11 @@ message GetBoxStateResponse {
   // inspector's Where it is section with Retry; never in the state line).
   repeated string failed_packages = 4;
   string packages_error = 5;
+  // The box was open when the previous portenvd ended without closing it
+  // (crash, update, relaunch): it isn't closed, but this portenvd hasn't
+  // opened it and holds none of its keys. The app opens it again, handing
+  // the keys over; state and saved_at say when it was last saved.
+  bool interrupted = 6;
 }
 
 enum NetworkPath {

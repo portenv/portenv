@@ -25,6 +25,9 @@ public struct BoxState: Equatable, Sendable {
     /// Packages from apt-packages.txt that couldn't be installed (the
     /// inspector's Where it is section; never the state line).
     public var failedPackages: [String] = []
+    /// portenvd restarted while the box was open: it isn't closed, but the
+    /// new portenvd hasn't opened it and has none of its keys.
+    public var interrupted = false
 
     public init(save: Save, savedAt: Date? = nil, location: String? = nil) {
         self.save = save
@@ -39,6 +42,7 @@ public struct BoxState: Equatable, Sendable {
             let saved_at: Date?
             let location: String?
             let failed_packages: [String]?
+            let interrupted: Bool?
         }
         let d = JSONDecoder()
         d.dateDecodingStrategy = .custom { dec in
@@ -53,6 +57,7 @@ public struct BoxState: Equatable, Sendable {
         guard let w = try? d.decode(Wire.self, from: Data(json.utf8)), let save = Save(rawValue: w.state) else { return nil }
         var s = BoxState(save: save, savedAt: w.saved_at, location: (w.location?.isEmpty ?? true) ? nil : w.location)
         s.failedPackages = w.failed_packages ?? []
+        s.interrupted = w.interrupted ?? false
         return s
     }
 
@@ -87,6 +92,14 @@ public final class BoxController {
     private let keychain: KeychainReading
     private let notifier: KeychainWaitNotifying?
     private let keychainThreshold: Duration
+    /// Starts portenvd again when it has ended (the app's Daemon).
+    private let restartDaemon: (@Sendable () async -> Void)?
+    /// Reopening after portenvd restarted: the state line keeps the real
+    /// state instead of "Opening…".
+    private var resuming = false
+    /// One reopen per restart, so a failing one doesn't read the Keychain
+    /// every few seconds.
+    private var resumeTried = false
 
     /// macOS is (or may be) asking the person to approve a Keychain read:
     /// the window says so and offers Cancel.
@@ -96,12 +109,14 @@ public final class BoxController {
     private var cancelKeychain: (@MainActor () -> Void)?
 
     public init(box: String, cli: CLIRunning, keychain: KeychainReading = SystemKeychain(),
-                notifier: KeychainWaitNotifying? = nil, keychainThreshold: Duration = KeychainWait.threshold) {
+                notifier: KeychainWaitNotifying? = nil, keychainThreshold: Duration = KeychainWait.threshold,
+                restartDaemon: (@Sendable () async -> Void)? = nil) {
         self.box = box
         self.cli = cli
         self.keychain = keychain
         self.notifier = notifier
         self.keychainThreshold = keychainThreshold
+        self.restartDaemon = restartDaemon
     }
 
     /// A message shown for StateLine.transientSeconds (a revert, a move
@@ -178,7 +193,7 @@ public final class BoxController {
 
     /// Opens the box (on this Mac, or shows it where it runs).
     public func open() async {
-        progress = "Opening…"
+        progress = resuming ? nil : "Opening…"
         await perform {
             self.servers = (try? await self.cli.run(["app", "servers", self.box]))?
                 .split(separator: "\n").map(String.init) ?? []
@@ -201,6 +216,22 @@ public final class BoxController {
         progress = nil
         progressDetail = nil
         if location == .closed { await refresh() }
+    }
+
+    /// portenvd isn't answering while the box is open (it crashed, is being
+    /// updated or relaunched): the line shows the box's real state, "Not
+    /// saved since" its last save, and portenvd is started again. The next
+    /// refresh finds the box interrupted and reopens it.
+    private func daemonEnded() async {
+        guard location != .closed, (try? await cli.run(["app", "ping"])) == nil else { return }
+        state = BoxState(save: .notSaved, savedAt: state?.savedAt, location: state?.location)
+        await restartDaemon?()
+    }
+
+    private func resume() async {
+        resuming = true
+        defer { resuming = false }
+        await open()
     }
 
     /// Cancel while macOS asks to approve the Keychain read: the open stops
@@ -240,7 +271,7 @@ public final class BoxController {
             }
         }
         waitingForKeychain = false
-        progress = "Opening…"
+        progress = resuming ? nil : "Opening…"
         progressDetail = nil
         cancelKeychain = nil
         guard let result else { return false }
@@ -252,8 +283,22 @@ public final class BoxController {
 
     /// Reads the recorded state from portenvd.
     public func refresh() async {
-        guard let out = try? await cli.run(["app", "state", box]), let st = BoxState.parse(out) else { return }
+        guard let out = try? await cli.run(["app", "state", box]) else {
+            await daemonEnded()
+            return
+        }
+        guard let st = BoxState.parse(out) else { return }
         state = st
+        if st.interrupted {
+            // portenvd restarted while this window had the box open: open it
+            // again, handing the keys over (the window stays on the box).
+            if location != .closed && !busy && !resumeTried {
+                resumeTried = true
+                await resume()
+            }
+            return
+        }
+        resumeTried = false
         switch st.save {
         case .closed: location = .closed
         default: location = st.location.map { .server($0) } ?? .thisMac

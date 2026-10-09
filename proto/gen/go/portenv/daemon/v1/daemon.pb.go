@@ -1492,8 +1492,13 @@ type GetBoxStateResponse struct {
 	// inspector's Where it is section with Retry; never in the state line).
 	FailedPackages []string `protobuf:"bytes,4,rep,name=failed_packages,json=failedPackages,proto3" json:"failed_packages,omitempty"`
 	PackagesError  string   `protobuf:"bytes,5,opt,name=packages_error,json=packagesError,proto3" json:"packages_error,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// The box was open when the previous portenvd ended without closing it
+	// (crash, update, relaunch): it isn't closed, but this portenvd hasn't
+	// opened it and holds none of its keys. The app opens it again, handing
+	// the keys over; state and saved_at say when it was last saved.
+	Interrupted   bool `protobuf:"varint,6,opt,name=interrupted,proto3" json:"interrupted,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetBoxStateResponse) Reset() {
@@ -1559,6 +1564,13 @@ func (x *GetBoxStateResponse) GetPackagesError() string {
 		return x.PackagesError
 	}
 	return ""
+}
+
+func (x *GetBoxStateResponse) GetInterrupted() bool {
+	if x != nil {
+		return x.Interrupted
+	}
+	return false
 }
 
 type SetNetworkPathRequest struct {
@@ -2042,13 +2054,14 @@ const file_portenv_daemon_v1_daemon_proto_rawDesc = "" +
 	"\bcert_pem\x18\x02 \x01(\fR\acertPem\x12\x14\n" +
 	"\x05token\x18\x03 \x01(\tR\x05token\"(\n" +
 	"\x12GetBoxStateRequest\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\"\xec\x01\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\"\x8e\x02\n" +
 	"\x13GetBoxStateResponse\x122\n" +
 	"\x05state\x18\x01 \x01(\x0e2\x1c.portenv.daemon.v1.SaveStateR\x05state\x125\n" +
 	"\bsaved_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\asavedAt\x12\x1a\n" +
 	"\blocation\x18\x03 \x01(\tR\blocation\x12'\n" +
 	"\x0ffailed_packages\x18\x04 \x03(\tR\x0efailedPackages\x12%\n" +
-	"\x0epackages_error\x18\x05 \x01(\tR\rpackagesError\"n\n" +
+	"\x0epackages_error\x18\x05 \x01(\tR\rpackagesError\x12 \n" +
+	"\vinterrupted\x18\x06 \x01(\bR\vinterrupted\"n\n" +
 	"\x15SetNetworkPathRequest\x122\n" +
 	"\x04path\x18\x01 \x01(\x0e2\x1e.portenv.daemon.v1.NetworkPathR\x04path\x12!\n" +
 	"\freporter_pid\x18\x02 \x01(\x05R\vreporterPid\"\x18\n" +

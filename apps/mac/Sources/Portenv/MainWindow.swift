@@ -39,6 +39,18 @@ struct MainWindow: View {
 
     @ViewBuilder private var content: some View {
         switch controller.location {
+        // Also while reopening after portenvd restarted, so Cancel is
+        // always in reach while macOS asks.
+        case _ where controller.waitingForKeychain:
+            VStack(spacing: 10) {
+                Text(KeychainWait.line).font(.title3)
+                Text(KeychainWait.detail).foregroundStyle(.secondary)
+                Button("Cancel") { controller.cancelKeychainWait() }
+                    .keyboardShortcut(.cancelAction)
+                    .accessibilityLabel("Cancel opening \(controller.box)")
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(.background)
         case _ where controller.agentUnavailable && controller.isOpen:
             VStack(spacing: 10) {
                 Text("The box agent is unavailable").font(.title3)
@@ -60,16 +72,6 @@ struct MainWindow: View {
                 Task { await controller.terminalEnded() }
             }
             .accessibilityLabel(A11y.terminal(box: controller.box))
-        case .closed where controller.waitingForKeychain:
-            VStack(spacing: 10) {
-                Text(KeychainWait.line).font(.title3)
-                Text(KeychainWait.detail).foregroundStyle(.secondary)
-                Button("Cancel") { controller.cancelKeychainWait() }
-                    .keyboardShortcut(.cancelAction)
-                    .accessibilityLabel("Cancel opening \(controller.box)")
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(.background)
         case .closed:
             placeholder(controller.busy ? controller.subtitle : "\(controller.box) is closed", "")
         }

@@ -686,9 +686,154 @@ Budgets changed on 2026-10-08: they now measure what the user waits for (a ready
 - [x] Killing the process mid-save leaves the repository consistent and the next save succeeds
 - [x] The toolbox image builds for arm64 and amd64 from one Dockerfile
 
+**Phase 0 closed (2026-10-09).** Every item above passed. Known gap, carried forward: online resume is under 5 s only up to a 50 ms round trip (3.1 s measured at 40 ms), because before Phase 3 the lease check is a snapshot listing, a few round trips; over slower links it takes longer. Phase 3's authoritative leases replace the listing with one control-plane call, which closes it.
+
 ### Phase 1: Native Mac app, local boxes
 
 Milestones: 1.0 walking skeleton · 1.1 `portenvd` with the local gRPC API · 1.2 main window with a terminal view (evaluate SwiftTerm, MIT-licensed) and tmux-backed tabs · 1.3 `apple` driver shim, `docker` as fallback (the box agent drops the forbidden capabilities from every process it starts, since a VM's root holds them by default) · 1.4 autosave, sync symbol, Changes, Browse Saves · 1.5 first run (reduced, no sign-in; see Desktop app UX), Keychain keys, recovery key · 1.6 port relay · 1.7 shared folder, then the File Provider · 1.8 signing, notarization, Sparkle updates.
+
+**Phase 1 plan** (approved 2026-10-09; the order of work below is what's built next, item by item)
+
+**Where Phase 1 stands**
+
+**Done in 1.0 and 1.0b, and in the PRs since (#25 to #28 still waiting to merge):**
+- **Through the real path:** a minimal `portenvd` and runner, the agent channel (ADR 0010), and the app's terminal in the box's tmux session.
+- **Box actions:** save point, Revert To, and Move To a server and back, the same on a server box as on the Mac.
+- **Save state:** an honest state line with the full table of states (#26, §3.1), retrying and not-saved states (#23), and "quit before saving" (#25).
+- **Quitting:** never fails silently (the alert and the marker, #25); the channel is checked after wake (#25); boxes still opening are waited for (#25).
+- **Deadlines:** on every restic run and every process on the daemon side, enforced in CI (#23).
+- **Offline open:** near 2 s (ADR 0011).
+- **The guideline basics (#26):** title and Box menus in the guideline order, servers by name, tmux hidden, VoiceOver labels.
+- **Packages:** a package that can't be installed never stops a box (#28; the inspector line waits for the inspector).
+- **The CLI built in CI, fetched by commit (#27);** the test-path rule and mutation checks (#20).
+
+**From the demo notes:**
+- servers shown by name: done (#26, by host name until servers can be named);
+- the subtitle after a revert: done (#26);
+- a checkmark on the current location: done (1.0b, kept in #26);
+- **visible progress during a move: not done** (the inspector's four steps, 1.2 and 1.4).
+
+**Still on Phase 1's gate (from `PLAN.md`):** first run, a signed and notarized download with updates, offline work, the throttled-uplink Move, no docker exec anywhere, VoiceOver and both appearances, the port relay, and the restic probe in an `apple` box.
+
+**Order of work**
+
+**1. Keychain calls never wait silently (first, before 1.1)**
+
+Found closing `retest`: a new dev build's first Keychain read waited 14½ minutes behind a prompt while the window said only "Opening…".
+
+- **a. The state line says so.**
+  - If a Keychain call hasn't returned after 2 s, the state line reads "Waiting for Keychain access", with a secondary line: "Check for a password prompt. It may be behind other windows."
+  - A new row goes in the state-line table in `GUIDELINES.md` §3.1.
+  - A notification goes out too, for when the window isn't in front.
+- **b. Never on the main thread.** Every Keychain call runs off the main thread, so the window stays responsive and Cancel works while the prompt is up. Cancel stops the open cleanly: no half-open box, no held lease.
+- **c. No timeout while a person might be answering.** In the app, the call doesn't fail while the prompt could still be answered. The state line shows, and the person can cancel.
+- **d. Non-interactive paths fail fast.** The CLI without a TTY, tests, and anything an agent or overnight run triggers use `kSecUseAuthenticationUI = Fail` (or the equivalent), so the call returns `errSecInteractionNotAllowed` at once instead of prompting. The error is one plain line: "Keychain needs your approval. Open Portenv on this Mac to allow it." A test proves the no-prompt path returns it.
+- **e. Root cause, confirmed first:**
+  - check whether the prompt comes from the dev build's ad-hoc signature changing on every rebuild, so "Always Allow" no longer matches;
+  - if so, an ADR (or a PLAN note) says the fix is a stable signing identity once Apple Developer enrolment lands;
+  - until then, test boxes on this Mac are expected to prompt after a rebuild, and a–d make that visible.
+- **f. Overnight runs:** Keychain calls follow the same rule as restic runs. Every call has an owner who answers it or gets a clear error, never a silent wait.
+- **g. Only the app reads the Keychain; no background process ever causes a prompt.**
+  - Once a login item starts `portenvd` (1.1), it has no window, so a prompt it raised would have nothing to point at.
+  - `portenvd`, the runner and the CLI without a TTY always use the fail-fast path (d). When the daemon needs a key, it asks the app over its API ("key needed for acme-api"). The app reads the Keychain in the foreground, with a–c, and hands over only the key, which stays in memory.
+  - With no app running, the daemon reports "Keychain needs your approval. Open Portenv on this Mac to allow it." and the box waits.
+  - Test: the daemon's key store refuses interactive calls (the fail-fast flag is set on every daemon-side call). A daemon that needs a key with no app connected returns that error and raises no prompt (checked with a fake key store that records the flags it was called with).
+
+Tests:
+- the daemon side never calls the Keychain interactively (g);
+- the 2 s state row, on a fake key store that blocks;
+- Cancel during a blocked call leaves no box or lease (an e2e with a blocking fake);
+- the no-prompt error (d);
+- the call runs off the main thread (a main-thread assertion in the key store).
+
+**2. A small visible PR: terminal margin and hostname (before 1.1)**
+
+Small and visible, so they go before 1.1, which is big:
+- **Terminal margin:** the text touches the window's left edge. Add about 8 pt and write the value into `GUIDELINES.md` §4.5.
+- **The box's hostname is its name.** The prompt reads `work@acme-api`, not `work@portenv`, so people and agents can tell which box they're in. The name is sanitised to a valid hostname (lowercase letters, digits and hyphens, at most 63 characters, no leading or trailing hyphen), falling back to `box-<first 8 of the box id>`. The original name shows everywhere else: the title, the inspector, Move To and notifications.
+- Light and dark screenshots next to the main-window mockup, and a test of the sanitising.
+
+**3. 1.1: `portenvd`'s API in the app, and a login item**
+
+- The app talks to `portenvd` over gRPC on its socket instead of running the `portenv` helper for each action.
+  - That removes the "main-actor work doesn't run during the quit wait" workaround.
+  - It also gives push updates for the state line instead of the 3 s poll.
+- A login item (`SMAppService`) starts `portenvd`. It never reads the Keychain itself (item 1g).
+- **The wait before the terminal is usable on open** (about 1.6 s of polling for the agent today) goes: push updates replace the poll, and the terminal attaches the moment the agent reports ready.
+- **The Phase 0 CLI's `docker exec` path is removed** (ADR 0010 condition 4, and the gate). `portenv init`, and the server-side `join` and `status` used by Move To enrolment, move into the daemon API or stay as plain commands that never touch a box. The audit lists them.
+
+**4. 1.2: the main window**
+
+Every UI PR in 1.2 comes with light and dark screenshots next to the matching mockup board, a VoiceOver label for each new control, and each check mutation-checked.
+
+In this order:
+
+1. **Rename… for boxes** (§3.2). It updates the title, the inspector and the hostname. If the hostname can only change on the box's next start, the rename sheet says so ("The box's hostname changes the next time it starts.").
+2. **The tab bar (early, §3 and §4.1), built before the spike** on a tab interface in the box agent: list, new, close and rename, plus events. Whether the agent uses tmux control mode or plain tmux commands stays inside the agent, so the tab bar doesn't change after the spike.
+   - One tab per tmux window; `+` for a new tab; the app owns names and order.
+   - Until it exists, nothing (`portenv send`, agents) can create a tmux window the user can't see. The agent refuses `new-window` from anything but the app, or maps it to the single visible window.
+3. **The inspector (§6):**
+   - **Where it is**, including the move's four-step progress (the demo note), the packages line from #28, and Retry;
+   - **Saves** (the latest five);
+   - **Who's here** (you; stand-in agents arrive in 2.7);
+   - **Running now** (tabs, ports).
+4. **Notifications (§5)** for a finished long command, a move over 10 s, and the Keychain wait from item 1. Answer buttons come with the inline answer card.
+   - The app asks for permission the first time something is worth notifying, never at launch. If permission is denied, the state line and the inspector still show everything, and nothing nags.
+5. **The spike: tmux control mode (`-CC`) and OSC 133 (§13), time-boxed to 3 days.** The outcome goes in an ADR either way.
+   - It answers: can the agent map app tabs to tmux windows through control mode? Can shell integration in the skeleton home emit OSC 133 marks that the agent tracks per tab, with exit codes, for bash and zsh, including inside Claude Code? Do SwiftTerm overlays stay aligned to rows when scrolling?
+   - It's also tested over the SSH forward to a box on a server, not only on the Mac (a test, not another milestone).
+   - **If it succeeds,** Phase 1 also gets blocks with attribution, the sticky header, the inline answer card for Claude Code, tab badges, the command palette and saved commands, in that order.
+   - **If it doesn't,** they move to Phase 2 and the plan says so.
+
+**5. 1.3: the `apple` driver**
+
+The Containerization shim, with `docker` as the fallback. The agent drops the forbidden capabilities itself (a VM's root holds them). Gate item: the restic probe passes inside an `apple` box.
+
+**6. 1.4: autosave, Changes, Browse Saves**
+
+- **Autosave, tied to the targets, with one test per target:**
+  - every 30 s while the home is dirty;
+  - no change older than 60 s left unsaved while online;
+  - close under 15 s;
+  - reopen under 5 s, online at a round-trip time of 50 ms or less and offline.
+
+  It runs through the bounded runner. A failed autosave retries on its own schedule (ADR 0012), so the "Not saved since · retrying" row becomes routine.
+- **Browse Saves**, which provides the time for **Revert To ▸ Last Save Point (#26 follow-up)**: `portenvd` keeps the save list from its last listing, so the menu shows the time without a new listing.
+- **Move progress:** the bytes still to send and the measured bandwidth give the time estimate (the throttled-uplink gate item).
+- **`node_modules` after a move:** a post-resume hook runs the lockfile's install when the CPU architecture changed since the last install, or the lockfile differs from the one last installed. The install is recorded in the box, so it moves with it.
+- **Test gaps from the audit, now on the real path:** lease refusal, take-over and rule 4 with kept work, and autosave freshness through `portenvd`. The server gate's timing limits and LUKS checks move onto the runner path.
+
+**7. 1.5: first run**
+
+Reduced: no sign-in, Only you, Keychain keys, the recovery key; the Welcome screen has "Continue without an account" (#16).
+
+**8. 1.6: the port relay**
+
+A dev server on the box's localhost opens in Safari. Port pills in the toolbar.
+
+**9. 1.7: shared folder, then the File Provider**
+
+Show in Finder (⌥⌘R) stops being disabled here.
+
+**10. 1.8: releases**
+
+Developer ID signing, notarisation and Sparkle, with the key backups. Signed public CLI releases and their signing key are already on the first-release checklist (#27).
+- Needs Apple Developer enrolment (open question), which is also the stable-signing fix for item 1e.
+
+**Standing items**
+
+- **The next server session starts with `scripts/fetch-cli.sh` against the server** (#27). The three server scripts install CI's binaries by commit; fix whatever fails there and then. It doesn't block anything before.
+- **#26 follow-ups:**
+  - Last Save Point time in the menu (1.4);
+  - Restart Box with ⌥ in the menu bar's Box menu (1.1, once the menu bar is AppKit-backed or SwiftUI can see ⌥);
+  - **a live VoiceOver check and a title-menu screenshot with the owner at the Mac** (the next session at the Mac; the screen was locked overnight).
+- **Every milestone keeps the test-path rule:** app-relied behaviour is tested through `portenvd` or the runner and the channel, each check mutation-checked, and every e2e call has a time limit.
+
+**Decided in review (2026-10-09)**
+
+- **The tab bar comes before the spike,** on the agent's tab interface (above).
+- **Hostname:** sanitised as proposed, falling back to `box-<first 8 of the box id>`. The original name shows everywhere else; nothing extra is needed.
+- **Item 1e's ADR** waits for the root-cause check.
 
 **1.0 Walking skeleton** (docker driver only, no first run, unsigned, run from Xcode; demo: docs/demo/1.0.md)
 

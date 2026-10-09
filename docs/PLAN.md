@@ -773,6 +773,11 @@ Small and visible, so they go before 1.1, which is big:
 - A login item (`SMAppService`) starts `portenvd`. It never reads the Keychain itself (item 1g).
 - **The wait before the terminal is usable on open** (about 1.6 s of polling for the agent today) goes: push updates replace the poll, and the terminal attaches the moment the agent reports ready.
 - **The Phase 0 CLI's `docker exec` path is removed** (ADR 0010 condition 4, and the gate). `portenv init`, and the server-side `join` and `status` used by Move To enrolment, move into the daemon API or stay as plain commands that never touch a box. The audit lists them.
+- **A new `portenvd` takes over running boxes; it doesn't restart them** (required in 1.1, before Sparkle updates in 1.8).
+  - **Why:** today a `portenvd` restart (crash, update, login item relaunch) restarts each open box, because the new daemon doesn't have the box agent's channel secrets. Programs in the box's terminal end. That's acceptable for a rare crash, but from 1.8 Sparkle restarts `portenvd` at every update, and every update would kill running dev servers and agents' long tasks.
+  - **The fix:** the new daemon gets the running box's channel without restarting the box. Either the app (on servers, the runner) hands the channel secrets to the new daemon, or the channel is re-keyed in place. The box keeps running, and its tmux sessions survive.
+  - **Test:** `kill -9 portenvd` while a long command runs in the terminal. Afterwards the command is still running, and the state line recovers.
+  - **Until then,** the current behaviour stays (item 1g): the line shows "Not saved since …", and the app restarts `portenvd` and reopens the box once.
 
 **4. 1.2: the main window**
 

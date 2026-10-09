@@ -22,6 +22,9 @@ public struct BoxState: Equatable, Sendable {
     public var savedAt: Date?
     /// The server the box runs on; nil for this Mac.
     public var location: String?
+    /// Packages from apt-packages.txt that couldn't be installed (the
+    /// inspector's Where it is section; never the state line).
+    public var failedPackages: [String] = []
 
     public init(save: Save, savedAt: Date? = nil, location: String? = nil) {
         self.save = save
@@ -35,6 +38,7 @@ public struct BoxState: Equatable, Sendable {
             let state: String
             let saved_at: Date?
             let location: String?
+            let failed_packages: [String]?
         }
         let d = JSONDecoder()
         d.dateDecodingStrategy = .custom { dec in
@@ -47,7 +51,9 @@ public struct BoxState: Equatable, Sendable {
             throw DecodingError.dataCorruptedError(in: try dec.singleValueContainer(), debugDescription: "date")
         }
         guard let w = try? d.decode(Wire.self, from: Data(json.utf8)), let save = Save(rawValue: w.state) else { return nil }
-        return BoxState(save: save, savedAt: w.saved_at, location: (w.location?.isEmpty ?? true) ? nil : w.location)
+        var s = BoxState(save: save, savedAt: w.saved_at, location: (w.location?.isEmpty ?? true) ? nil : w.location)
+        s.failedPackages = w.failed_packages ?? []
+        return s
     }
 
 }

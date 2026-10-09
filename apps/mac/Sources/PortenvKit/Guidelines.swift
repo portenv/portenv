@@ -160,3 +160,14 @@ public enum A11y {
 
     public static func terminal(box: String) -> String { "Terminal in \(box)" }
 }
+
+/// §6: lines of the inspector's sections (the inspector itself comes later).
+public enum InspectorText {
+    /// Where it is: packages that couldn't be installed, with Retry. Nil when
+    /// every package is installed.
+    public static func packages(_ failed: [String]) -> String? {
+        guard !failed.isEmpty else { return nil }
+        let count = failed.count == 1 ? "1 package couldn't" : "\(failed.count) packages couldn't"
+        return "\(count) be installed: \(failed.joined(separator: ", ")) · Retry"
+    }
+}

@@ -87,6 +87,9 @@ type openBox struct {
 	// quitUnsaved: Portenv quit before this box could be saved; it is
 	// being saved first thing (the quit marker).
 	quitUnsaved atomic.Bool
+	// agentMu guards conn and agent for readers outside mu (the state
+	// poll), so they never wait behind a save.
+	agentMu sync.RWMutex
 }
 
 // New returns a daemon for this machine's Portenv directory.
@@ -311,7 +314,9 @@ func (ob *openBox) connect(ctx context.Context, allowFailed bool) (agentv1.Readi
 	if err != nil {
 		return 0, err
 	}
+	ob.agentMu.Lock()
 	ob.conn, ob.agent = conn, agentv1.NewAgentServiceClient(conn)
+	ob.agentMu.Unlock()
 	deadline := time.Now().Add(15 * time.Minute)
 	wait := 50 * time.Millisecond
 	for time.Now().Before(deadline) {
@@ -340,7 +345,16 @@ func (ob *openBox) connect(ctx context.Context, allowFailed bool) (agentv1.Readi
 	return 0, errors.New("the box did not finish starting within 15 minutes")
 }
 
+// client is the box's current agent client, or nil (safe outside mu).
+func (ob *openBox) client() agentv1.AgentServiceClient {
+	ob.agentMu.RLock()
+	defer ob.agentMu.RUnlock()
+	return ob.agent
+}
+
 func (ob *openBox) closeConn() {
+	ob.agentMu.Lock()
+	defer ob.agentMu.Unlock()
 	if ob.conn != nil {
 		_ = ob.conn.Close()
 		ob.conn, ob.agent = nil, nil

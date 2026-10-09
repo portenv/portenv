@@ -139,11 +139,20 @@ func (s *apiServer) GetVersion(context.Context, *agentv1.GetVersionRequest) (*ag
 
 // GetReadiness asks the init process, which owns the start sequence.
 func (s *apiServer) GetReadiness(ctx context.Context, _ *agentv1.GetReadinessRequest) (*agentv1.GetReadinessResponse, error) {
-	state, detail, err := CheckReadiness(ctx, DefaultSocket)
+	resp, err := AskReadiness(ctx, DefaultSocket)
 	if err != nil {
 		return &agentv1.GetReadinessResponse{State: agentv1.ReadinessState_READINESS_STATE_STARTING, Detail: "starting"}, nil
 	}
-	return &agentv1.GetReadinessResponse{State: state, Detail: detail}, nil
+	return resp, nil
+}
+
+// RetryPackages asks the init process (root, which runs apt-get) to retry
+// the packages that couldn't be installed.
+func (s *apiServer) RetryPackages(ctx context.Context, _ *agentv1.RetryPackagesRequest) (*agentv1.RetryPackagesResponse, error) {
+	if err := AskRetryPackages(ctx, DefaultSocket); err != nil {
+		return nil, status.Errorf(codes.Unavailable, "retry packages: %v", err)
+	}
+	return &agentv1.RetryPackagesResponse{}, nil
 }
 
 // RunRestic runs one restic command exactly as portenv-agent restic does.

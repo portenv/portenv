@@ -47,6 +47,7 @@ func dialDaemon(e *local.Env) (daemonv1.DaemonServiceClient, func(), error) {
 //	portenv app channel BOX         (a runner's box channel for a Mac, JSON on stdout)
 //	portenv app network up|down     (the system's network status, from the app)
 //	portenv app woke                (after sleep: check every open box's channel)
+//	portenv app retry-packages BOX  (try apt-packages.txt's failed packages again)
 func cmdApp(ctx context.Context, e *local.Env, op string, args []string) error {
 	if op == "woke" {
 		c, done, err := dialDaemon(e)
@@ -138,6 +139,11 @@ func cmdApp(ctx context.Context, e *local.Env, op string, args []string) error {
 			return plain(err)
 		}
 		summary = "save point " + short(r.GetSnapshot().GetId())
+	case "retry-packages":
+		if _, err := c.RetryPackages(ctx, &daemonv1.RetryPackagesRequest{Name: name}); err != nil {
+			return plain(err)
+		}
+		summary = "retrying the packages that couldn't be installed"
 	case "revert":
 		r, err := c.RevertToLastSavePoint(ctx, &daemonv1.RevertToLastSavePointRequest{Name: name})
 		if err != nil {
@@ -176,10 +182,12 @@ func cmdApp(ctx context.Context, e *local.Env, op string, args []string) error {
 			at = r.GetSavedAt().AsTime()
 		}
 		b, err := json.Marshal(struct {
-			State    string    `json:"state"`
-			SavedAt  time.Time `json:"saved_at,omitzero"`
-			Location string    `json:"location,omitempty"`
-		}{r.GetState().String(), at, r.GetLocation()})
+			State          string    `json:"state"`
+			SavedAt        time.Time `json:"saved_at,omitzero"`
+			Location       string    `json:"location,omitempty"`
+			FailedPackages []string  `json:"failed_packages,omitempty"`
+			PackagesError  string    `json:"packages_error,omitempty"`
+		}{r.GetState().String(), at, r.GetLocation(), r.GetFailedPackages(), r.GetPackagesError()})
 		if err != nil {
 			return err
 		}

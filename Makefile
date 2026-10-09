@@ -45,7 +45,7 @@ SWIFT_PROTOBUF := 1.38.1
 GRPC_SWIFT_PROTOBUF := 2.4.1
 SWIFT_PLUGINS := $(BIN)/protoc-gen-swift $(BIN)/protoc-gen-grpc-swift-2
 
-.PHONY: all build app unregister-service test lint fmt proto proto-go proto-swift proto-check proto-check-go agent-linux swift-test swift-env-check \
+.PHONY: all build app unregister-service test lint fmt proto proto-go proto-swift proto-check proto-check-go agent-linux cli-linux cli-darwin swift-test swift-env-check \
 	secrets spdx-check check tools clean image image-test driver-test e2e
 
 all: build test lint proto-check
@@ -64,6 +64,21 @@ build:
 		go build -trimpath -ldflags "$(LDFLAGS)" -o $(BIN)/$$c ./core/cmd/$$c; \
 	done
 	scripts/check-build-paths.sh $(addprefix $(BIN)/,$(CMDS))
+
+## cli-linux: portenv and portenv-runner for linux/arm64 and amd64 (static) into bin/dist
+DIST := $(BIN)/dist
+cli-linux:
+	mkdir -p $(DIST)
+	for a in arm64 amd64; do \
+		for c in portenv portenv-runner; do \
+			CGO_ENABLED=0 GOOS=linux GOARCH=$$a go build -trimpath -ldflags "$(LDFLAGS)" -o $(DIST)/$$c-linux-$$a ./core/cmd/$$c; \
+		done; \
+	done
+
+## cli-darwin: portenv for macOS arm64 (with cgo, for the Keychain) into bin/dist; on a Mac
+cli-darwin:
+	mkdir -p $(DIST)
+	CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags "$(LDFLAGS)" -o $(DIST)/portenv-darwin-arm64 ./core/cmd/portenv
 
 ## agent-linux: build static portenv-agent binaries and check they are static
 agent-linux:

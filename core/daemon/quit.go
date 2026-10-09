@@ -163,3 +163,28 @@ func (s *Server) Relaunch(context.Context, *daemonv1.RelaunchRequest) (*daemonv1
 	}
 	return &daemonv1.RelaunchResponse{}, nil
 }
+
+// LeaveUnsaved implements daemonv1.DaemonServiceServer: Quit Anyway, with
+// portenvd run by launchd so it outlives the app. Like a shutdown that
+// couldn't save: the quit marker is written and portenvd lets go of the box
+// without saving it; the box keeps running as it is. The next open takes it
+// over (ADR 0014) and saves it first thing.
+func (s *Server) LeaveUnsaved(_ context.Context, req *daemonv1.LeaveUnsavedRequest) (*daemonv1.LeaveUnsavedResponse, error) {
+	name := req.GetName()
+	s.mu.Lock()
+	ob, open := s.open[name]
+	if open {
+		delete(s.open, name)
+	}
+	s.mu.Unlock()
+	if !open {
+		return &daemonv1.LeaveUnsavedResponse{}, nil
+	}
+	s.leaving(name)
+	if err := s.writeQuitMarker(ob.sess.Cfg.ID); err != nil {
+		return nil, err
+	}
+	ob.closeConn()
+	s.log.Info("left unsaved (Quit Anyway): to save first thing on the next open", "box", name)
+	return &daemonv1.LeaveUnsavedResponse{}, nil
+}

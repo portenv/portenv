@@ -44,6 +44,7 @@ func dialDaemon(e *local.Env) (daemonv1.DaemonServiceClient, func(), error) {
 //	portenv app close|point|save|revert|check|restart BOX
 //	portenv app history BOX         (every save, oldest first)
 //	portenv app housekeep BOX [--prune]
+//	portenv app leave-unsaved BOX   (Quit Anyway: the quit marker, the box let go of unsaved)
 //	portenv app move BOX this-mac|USER@HOST
 //	portenv app servers BOX         (the Move To targets, one per line)
 //	portenv app ping                (exit 0 when portenvd answers)
@@ -178,6 +179,11 @@ func cmdApp(ctx context.Context, e *local.Env, op string, args []string) error {
 			fmt.Printf("%s  %s  %-8s  %s%s\n", short(h.GetId()), h.GetTime().AsTime().Local().Format(time.DateTime), h.GetKind(), h.GetMachine(), note)
 		}
 		return nil
+	case "leave-unsaved":
+		if _, err := c.LeaveUnsaved(ctx, &daemonv1.LeaveUnsavedRequest{Name: name}); err != nil {
+			return plain(err)
+		}
+		summary = "left unsaved; saved first thing when it opens again"
 	case "housekeep":
 		prune := len(args) > 1 && args[1] == "--prune"
 		if _, err := c.Housekeep(ctx, &daemonv1.HousekeepRequest{Name: name, Prune: prune}); err != nil {

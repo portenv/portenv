@@ -52,7 +52,12 @@ public struct QuitFlow: Sendable {
             } catch {
                 switch await ask(Self.message(box: box)) {
                 case .tryAgain: continue
-                case .quitAnyway: return true
+                case .quitAnyway:
+                    // portenvd (run by launchd) outlives the app: it records
+                    // the quit marker and lets go of the box unsaved, so the
+                    // next open saves it first thing.
+                    try? await daemon.leaveUnsaved(box)
+                    return true
                 case .cancel: return false
                 }
             }

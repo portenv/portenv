@@ -129,6 +129,18 @@ expect "the next portenvd takes it over" test "$(grep -c "took over the running 
 expect "  still the same start" test "$(docker inspect -f '{{.State.StartedAt}}' "portenv-daemon-$(box_id)")" = "$started"
 out=$(type_in 'echo again=$((40+3))')
 expect "  and the terminal reconnects" grep -q "again=43" <<<"$out"
+# Quit Anyway with portenvd run by launchd (1.1): portenvd outlives the app,
+# so it records the quit marker and lets go of the box unsaved; the next
+# open takes the running box over and saves it first thing.
+type_in 'echo qa2=left-unsaved > ~/qa2.txt' 1 >/dev/null
+out=$("$portenv" app leave-unsaved d 2>&1) || true; echo "  $out"
+out=$("$portenv" app state d 2>&1) || true
+expect "Quit Anyway: portenvd lets go of the box (interrupted, not closed)" grep -q '"interrupted":true' <<<"$out"
+out=$("$portenv" app open d 2>&1) || true; echo "  $out"
+expect "  the next open says Portenv quit before saving, and saves first thing" grep -q "Portenv quit before saving" <<<"$out"
+expect "  taken over, never restarted" test "$(docker inspect -f '{{.State.StartedAt}}' "portenv-daemon-$(box_id)")" = "$started"
+for _ in $(seq 60); do "$portenv" app state d 2>/dev/null | grep -q SAVE_STATE_SAVED && break; sleep 1; done
+expect "  and the save completes" bash -c "$portenv app state d | grep -q SAVE_STATE_SAVED"
 type_in 'pkill -x sleep' 1 >/dev/null
 "$portenv" app close d >/dev/null 2>&1 || true
 

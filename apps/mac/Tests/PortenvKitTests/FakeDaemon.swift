@@ -92,4 +92,5 @@ final class FakeDaemon: DaemonAPI, @unchecked Sendable {
     func setNetwork(usable: Bool) async throws { try await record(["app", "network", usable ? "up" : "down"]) }
     func woke() async throws -> Bool { try await record(["app", "woke"]); return wokeRestarted }
     func relaunch() async throws { try await record(["app", "relaunch"]) }
+    func leaveUnsaved(_ box: String) async throws { try await record(["app", "leave-unsaved", box]) }
 }

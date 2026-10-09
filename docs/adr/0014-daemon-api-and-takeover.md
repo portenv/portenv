@@ -95,11 +95,25 @@ If the attach or the dial fails, or the box isn't running, the current behaviour
 
 ## The login item
 
-- **How it starts:** `SMAppService.agent` registers a LaunchAgent plist in the app bundle (`Contents/Library/LaunchAgents`). launchd starts `portenvd` at login and restarts it if it exits.
-  - The app stops starting `portenvd` itself, and `PORTENVD_EXIT_WITH_PARENT` goes.
+- **launchd runs `portenvd`, never the app.**
+  - `SMAppService.agent` registers `Contents/Library/LaunchAgents/com.portenv.portenvd.plist` (`BundleProgram` `Contents/Helpers/portenvd`, KeepAlive, RunAtLoad).
+  - launchd starts `portenvd` at login and again whenever it exits, whether from a crash, `kill -9` or an update relaunch.
+  - The app's own start and stop path is removed, and so is `PORTENVD_EXIT_WITH_PARENT`, so `portenvd` is never the app's child.
   - It never reads the Keychain (item 1g).
-- **Quitting the app** still closes and saves its open boxes (the quit alert flow), then leaves `portenvd` running with nothing open.
-- **Dev builds run from `bin/`:** the app registers the agent from wherever the bundle is. The README says how to unregister it.
+- **While `portenvd` is away,** the line shows "Not saved since …".
+  - After a deadline (30 s), the window says plainly that Portenv's background service isn't running.
+  - When Login Items needs the person's approval, it says so at once.
+  - Both messages go when `portenvd` answers again.
+- **⌘Q is unchanged** (the owner's decision, 2026-10-09). It closes, saves and releases the open box through the API, and leaves `portenvd` with launchd, with nothing open.
+  - **Quit Anyway** calls `LeaveUnsaved`, because `portenvd` now outlives the app. It writes the quit marker and lets go of the box unsaved, as `portenvd`'s own shutdown used to. The next open takes the running box over and saves it first thing.
+  - Only an update relaunch leaves boxes running.
+- **The log:** run by launchd (`PORTENVD_LOG=file`), `portenvd` writes `~/Library/Logs/Portenv/portenvd.log`, 0600 in a 0700 folder, since a plist inside the bundle can't name the user's home.
+- **Dev and test runs** with their own `PORTENV_HOME` start `portenvd` themselves, as the e2e scripts do. The app only connects.
+- **Tests:**
+  - with the app closed, `kill -9 portenvd`, and launchd restarts it;
+  - `portenv app relaunch`, and launchd starts the next `portenvd`;
+  - `LeaveUnsaved`, unit-tested and in `daemon.sh`;
+  - the deadline and the approval message, in the Swift tests.
 
 ## The Phase 0 CLI's `docker exec` path
 

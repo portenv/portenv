@@ -35,6 +35,9 @@ public protocol DaemonAPI: Sendable {
     func woke() async throws -> Bool
     /// An update relaunch: portenvd stops, leaving boxes running.
     func relaunch() async throws
+    /// Quit Anyway: portenvd records the quit marker and lets go of the
+    /// box unsaved; the next open saves it first thing.
+    func leaveUnsaved(_ box: String) async throws
 }
 
 /// A failed call to portenvd, with its plain message.

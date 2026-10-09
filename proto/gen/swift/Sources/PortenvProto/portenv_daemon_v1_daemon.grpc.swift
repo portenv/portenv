@@ -321,6 +321,19 @@ public enum Portenv_Daemon_V1_DaemonService: Sendable {
                 type: .unary
             )
         }
+        /// Namespace for "LeaveUnsaved" metadata.
+        public enum LeaveUnsaved: Sendable {
+            /// Request type for "LeaveUnsaved".
+            public typealias Input = Portenv_Daemon_V1_LeaveUnsavedRequest
+            /// Response type for "LeaveUnsaved".
+            public typealias Output = Portenv_Daemon_V1_LeaveUnsavedResponse
+            /// Descriptor for "LeaveUnsaved".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "LeaveUnsaved",
+                type: .unary
+            )
+        }
         /// Descriptors for all methods in the "portenv.daemon.v1.DaemonService" service.
         public static let descriptors: [GRPCCore.MethodDescriptor] = [
             GetVersion.descriptor,
@@ -345,7 +358,8 @@ public enum Portenv_Daemon_V1_DaemonService: Sendable {
             GetKeyIDs.descriptor,
             SaveNow.descriptor,
             ListSaves.descriptor,
-            Housekeep.descriptor
+            Housekeep.descriptor,
+            LeaveUnsaved.descriptor
         ]
     }
 }
@@ -908,6 +922,32 @@ extension Portenv_Daemon_V1_DaemonService {
             deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_HousekeepResponse>,
             options: GRPCCore.CallOptions,
             onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_HousekeepResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "LeaveUnsaved" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Quit Anyway: the box couldn't be saved before Portenv quits. portenvd
+        /// > records the quit marker and lets go of the box without saving it (it
+        /// > keeps running as it is); the next open takes it over and saves it
+        /// > first thing ("Portenv quit before saving").
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_LeaveUnsavedRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_LeaveUnsavedRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_LeaveUnsavedResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func leaveUnsaved<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_LeaveUnsavedRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_LeaveUnsavedRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_LeaveUnsavedResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_LeaveUnsavedResponse>) async throws -> Result
         ) async throws -> Result where Result: Sendable
     }
 
@@ -1720,6 +1760,43 @@ extension Portenv_Daemon_V1_DaemonService {
                 onResponse: handleResponse
             )
         }
+
+        /// Call the "LeaveUnsaved" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Quit Anyway: the box couldn't be saved before Portenv quits. portenvd
+        /// > records the quit marker and lets go of the box without saving it (it
+        /// > keeps running as it is); the next open takes it over and saves it
+        /// > first thing ("Portenv quit before saving").
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_LeaveUnsavedRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_LeaveUnsavedRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_LeaveUnsavedResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func leaveUnsaved<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_LeaveUnsavedRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_LeaveUnsavedRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_LeaveUnsavedResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_LeaveUnsavedResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.LeaveUnsaved.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
     }
 }
 
@@ -2396,6 +2473,38 @@ extension Portenv_Daemon_V1_DaemonService.ClientProtocol {
             request: request,
             serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_HousekeepRequest>(),
             deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_HousekeepResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "LeaveUnsaved" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Quit Anyway: the box couldn't be saved before Portenv quits. portenvd
+    /// > records the quit marker and lets go of the box without saving it (it
+    /// > keeps running as it is); the next open takes it over and saves it
+    /// > first thing ("Portenv quit before saving").
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_LeaveUnsavedRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func leaveUnsaved<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_LeaveUnsavedRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_LeaveUnsavedResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.leaveUnsaved(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_LeaveUnsavedRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_LeaveUnsavedResponse>(),
             options: options,
             onResponse: handleResponse
         )
@@ -3167,6 +3276,42 @@ extension Portenv_Daemon_V1_DaemonService.ClientProtocol {
             metadata: metadata
         )
         return try await self.housekeep(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "LeaveUnsaved" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Quit Anyway: the box couldn't be saved before Portenv quits. portenvd
+    /// > records the quit marker and lets go of the box without saving it (it
+    /// > keeps running as it is); the next open takes it over and saves it
+    /// > first thing ("Portenv quit before saving").
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func leaveUnsaved<Result>(
+        _ message: Portenv_Daemon_V1_LeaveUnsavedRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_LeaveUnsavedResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_LeaveUnsavedRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.leaveUnsaved(
             request: request,
             options: options,
             onResponse: handleResponse

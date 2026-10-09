@@ -33,4 +33,5 @@ private struct Unreachable: DaemonAPI {
     func setNetwork(usable _: Bool) async throws { throw gone }
     func woke() async throws -> Bool { throw gone }
     func relaunch() async throws { throw gone }
+    func leaveUnsaved(_: String) async throws { throw gone }
 }

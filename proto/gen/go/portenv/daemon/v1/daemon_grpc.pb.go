@@ -48,6 +48,7 @@ const (
 	DaemonService_SaveNow_FullMethodName               = "/portenv.daemon.v1.DaemonService/SaveNow"
 	DaemonService_ListSaves_FullMethodName             = "/portenv.daemon.v1.DaemonService/ListSaves"
 	DaemonService_Housekeep_FullMethodName             = "/portenv.daemon.v1.DaemonService/Housekeep"
+	DaemonService_LeaveUnsaved_FullMethodName          = "/portenv.daemon.v1.DaemonService/LeaveUnsaved"
 )
 
 // DaemonServiceClient is the client API for DaemonService service.
@@ -120,6 +121,11 @@ type DaemonServiceClient interface {
 	// Clear old lease tags and apply retention; with prune, also delete data
 	// no save uses. For an idle box.
 	Housekeep(ctx context.Context, in *HousekeepRequest, opts ...grpc.CallOption) (*HousekeepResponse, error)
+	// Quit Anyway: the box couldn't be saved before Portenv quits. portenvd
+	// records the quit marker and lets go of the box without saving it (it
+	// keeps running as it is); the next open takes it over and saves it
+	// first thing ("Portenv quit before saving").
+	LeaveUnsaved(ctx context.Context, in *LeaveUnsavedRequest, opts ...grpc.CallOption) (*LeaveUnsavedResponse, error)
 }
 
 type daemonServiceClient struct {
@@ -372,6 +378,16 @@ func (c *daemonServiceClient) Housekeep(ctx context.Context, in *HousekeepReques
 	return out, nil
 }
 
+func (c *daemonServiceClient) LeaveUnsaved(ctx context.Context, in *LeaveUnsavedRequest, opts ...grpc.CallOption) (*LeaveUnsavedResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(LeaveUnsavedResponse)
+	err := c.cc.Invoke(ctx, DaemonService_LeaveUnsaved_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DaemonServiceServer is the server API for DaemonService service.
 // All implementations must embed UnimplementedDaemonServiceServer
 // for forward compatibility.
@@ -442,6 +458,11 @@ type DaemonServiceServer interface {
 	// Clear old lease tags and apply retention; with prune, also delete data
 	// no save uses. For an idle box.
 	Housekeep(context.Context, *HousekeepRequest) (*HousekeepResponse, error)
+	// Quit Anyway: the box couldn't be saved before Portenv quits. portenvd
+	// records the quit marker and lets go of the box without saving it (it
+	// keeps running as it is); the next open takes it over and saves it
+	// first thing ("Portenv quit before saving").
+	LeaveUnsaved(context.Context, *LeaveUnsavedRequest) (*LeaveUnsavedResponse, error)
 	mustEmbedUnimplementedDaemonServiceServer()
 }
 
@@ -520,6 +541,9 @@ func (UnimplementedDaemonServiceServer) ListSaves(context.Context, *ListSavesReq
 }
 func (UnimplementedDaemonServiceServer) Housekeep(context.Context, *HousekeepRequest) (*HousekeepResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Housekeep not implemented")
+}
+func (UnimplementedDaemonServiceServer) LeaveUnsaved(context.Context, *LeaveUnsavedRequest) (*LeaveUnsavedResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method LeaveUnsaved not implemented")
 }
 func (UnimplementedDaemonServiceServer) mustEmbedUnimplementedDaemonServiceServer() {}
 func (UnimplementedDaemonServiceServer) testEmbeddedByValue()                       {}
@@ -938,6 +962,24 @@ func _DaemonService_Housekeep_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _DaemonService_LeaveUnsaved_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(LeaveUnsavedRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).LeaveUnsaved(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_LeaveUnsaved_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).LeaveUnsaved(ctx, req.(*LeaveUnsavedRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // DaemonService_ServiceDesc is the grpc.ServiceDesc for DaemonService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1028,6 +1070,10 @@ var DaemonService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Housekeep",
 			Handler:    _DaemonService_Housekeep_Handler,
+		},
+		{
+			MethodName: "LeaveUnsaved",
+			Handler:    _DaemonService_LeaveUnsaved_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

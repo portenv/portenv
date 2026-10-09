@@ -33,6 +33,20 @@ struct QuitFlowTests {
         #expect(await QuitFlow(daemon: cli, box: "acme-api", openHere: true).relaunch(), "an update never waits on portenvd")
     }
 
+    /// Quit Anyway (1.1: portenvd, run by launchd, outlives the app): the
+    /// box is left unsaved with the quit marker, so the next open saves it
+    /// first thing; the app quits even if portenvd doesn't answer.
+    @Test func quitAnywayLeavesTheBoxUnsavedWithTheMarker() async {
+        let cli = FakeDaemon()
+        cli.failing["close"] = "the box agent is unavailable"
+        let answers = ScriptedAnswers([.quitAnyway])
+        #expect(await QuitFlow(daemon: cli, box: "acme-api", openHere: true).run { answers.ask($0) })
+        #expect(cli.calls.last == ["app", "leave-unsaved", "acme-api"], "\(cli.calls)")
+        cli.failing["leave-unsaved"] = "portenvd is not running"
+        let again = ScriptedAnswers([.quitAnyway])
+        #expect(await QuitFlow(daemon: cli, box: "acme-api", openHere: true).run { again.ask($0) })
+    }
+
     func closes(_ cli: FakeDaemon) -> Int { cli.calls.filter { $0.count > 1 && $0[1] == "close" }.count }
 
     @Test func aSavedBoxQuitsWithoutAsking() async {

@@ -131,3 +131,24 @@ func TestRelaunchLeavesBoxesRunning(t *testing.T) {
 		t.Fatal("relaunching closed the boxes (closeAll ran)")
 	}
 }
+
+// TestLeaveUnsaved: Quit Anyway, with portenvd run by launchd (1.1). The
+// box couldn't be saved; portenvd writes the quit marker and lets go of
+// the box without saving it, as its own shutdown did. The next open takes
+// the running box over and saves it first thing.
+func TestLeaveUnsaved(t *testing.T) {
+	s := quietServer(t)
+	s.open["acme-api"] = &openBox{sess: &local.Session{Cfg: local.BoxConfig{ID: "box-1", Name: "acme-api"}}}
+	if _, err := s.LeaveUnsaved(context.Background(), &daemonv1.LeaveUnsavedRequest{Name: "acme-api"}); err != nil {
+		t.Fatal(err)
+	}
+	if !s.hasQuitMarker("box-1") {
+		t.Fatal("no quit marker: the next open wouldn't save first thing")
+	}
+	if _, err := s.get("acme-api"); err == nil {
+		t.Fatal("portenvd still holds the box open")
+	}
+	if _, err := s.LeaveUnsaved(context.Background(), &daemonv1.LeaveUnsavedRequest{Name: "acme-api"}); err != nil {
+		t.Fatalf("a box that isn't open: %v, want nothing to do", err)
+	}
+}

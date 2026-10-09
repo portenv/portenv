@@ -108,7 +108,7 @@ func needsApproval(interactive bool, err error) bool {
 }
 
 // Default is the Keychain, without prompts unless AllowPrompts was called.
-func Default(string) Store { return Keychain{Interactive: prompts} }
+func Default(string) Store { return Keychain{Interactive: promptsAllowed()} }
 
 // The Security framework's names for the no-prompt option.
 var (
@@ -116,10 +116,19 @@ var (
 	useAuthUIFail = cfString(C.kSecUseAuthenticationUIFail)
 )
 
-// noPrompts turns Keychain user interaction off for this process (it never
-// turns back on: only a process that called AllowPrompts reads
-// interactively, and it never calls this).
-func noPrompts() { C.portenv_no_prompts() }
+// noPrompts turns Keychain user interaction off for this process, unless
+// the process may prompt (AllowPrompts): see keys.go. Deprecated API: it goes
+// once the app is signed with a stable identity and keys move to the
+// data-protection keychain, where kSecUseAuthenticationUI alone is enough
+// (ADR 0013).
+func noPrompts() {
+	if mayTurnOffInteraction() {
+		turnOffInteraction()
+	}
+}
+
+// turnOffInteraction is the process-wide switch (a variable for tests).
+var turnOffInteraction = func() { C.portenv_no_prompts() }
 
 func cfString(s C.CFStringRef) string {
 	buf := make([]byte, 256)

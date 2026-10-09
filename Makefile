@@ -107,6 +107,8 @@ app: build $(TOOLS_STAMP)
 	cd apps/mac && $(SWIFT) build -c release --scratch-path "$(APP_BUILD)"
 	rm -rf $(BIN)/Portenv.app && mkdir -p $(BIN)/Portenv.app/Contents/MacOS
 	cp "$(APP_BUILD)/release/Portenv" $(BIN)/Portenv.app/Contents/MacOS/Portenv
+	# The app must be able to prompt: it never links the process-wide no-prompt switch (core/keys).
+	if nm -u $(BIN)/Portenv.app/Contents/MacOS/Portenv | grep -q SecKeychainSetUserInteractionAllowed; then echo "Portenv imports SecKeychainSetUserInteractionAllowed: prompts would stop working in the app" >&2; exit 1; fi
 	# Helpers, not MacOS/: on a case-insensitive disk portenv would replace Portenv.
 	mkdir -p $(BIN)/Portenv.app/Contents/Helpers && cp $(BIN)/portenv $(BIN)/portenvd $(BIN)/restic $(BIN)/Portenv.app/Contents/Helpers/
 	for f in portenv portenvd restic; do codesign --force --sign - $(BIN)/Portenv.app/Contents/Helpers/$$f; done

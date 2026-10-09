@@ -66,3 +66,59 @@ func TestNoPromptReturnsNeedsApproval(t *testing.T) {
 		t.Fatal("the read waited: a prompt is probably on screen (dismiss it)")
 	}
 }
+
+// resetPrompts restores the per-process prompt decision and the switch
+// after a test that changed them.
+func resetPrompts(t *testing.T) *int {
+	t.Helper()
+	flips := 0
+	saved := turnOffInteraction
+	turnOffInteraction = func() { flips++ }
+	t.Cleanup(func() {
+		turnOffInteraction = saved
+		promptsMu.Lock()
+		prompts, switchedOff = false, false
+		promptsMu.Unlock()
+	})
+	promptsMu.Lock()
+	prompts, switchedOff = false, false
+	promptsMu.Unlock()
+	return &flips
+}
+
+// TestAProcessThatMayPromptNeverTurnsInteractionOff: the switch is
+// process-wide, so in a process that may prompt (the CLI at a terminal) no
+// key-store call turns it off, not even one made without Interactive.
+func TestAProcessThatMayPromptNeverTurnsInteractionOff(t *testing.T) {
+	flips := resetPrompts(t)
+	AllowPrompts()
+	missing := "portenv-test-missing-" + time.Now().Format("150405.000000")
+	_, _ = Keychain{}.Get(missing)
+	_, _ = Keychain{Interactive: true}.Get(missing)
+	if *flips != 0 {
+		t.Fatalf("interaction turned off %d times in a process that may prompt", *flips)
+	}
+}
+
+// TestNoPromptsTurnsInteractionOff: in every other process, the first
+// non-interactive call turns it off.
+func TestNoPromptsTurnsInteractionOff(t *testing.T) {
+	flips := resetPrompts(t)
+	_, _ = Keychain{}.Get("portenv-test-missing-" + time.Now().Format("150405.000000"))
+	if *flips != 1 {
+		t.Fatalf("interaction turned off %d times, want 1", *flips)
+	}
+}
+
+// TestPromptsCantStartOnceInteractionIsOff: allowing prompts after the
+// switch is a bug, and stops the process instead of half-working.
+func TestPromptsCantStartOnceInteractionIsOff(t *testing.T) {
+	resetPrompts(t)
+	_, _ = Keychain{}.Get("portenv-test-missing-" + time.Now().Format("150405.000000"))
+	defer func() {
+		if recover() == nil {
+			t.Fatal("AllowPrompts after the switch did not panic")
+		}
+	}()
+	AllowPrompts()
+}

@@ -54,6 +54,7 @@ struct PortenvApp: App {
             CommandMenu("Box") {
                 BoxMenu(controller: controller)
             }
+            TabCommands(tabs: tabs)
         }
     }
 }

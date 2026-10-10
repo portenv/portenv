@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
+import AppKit
 import PortenvKit
 import SwiftUI
 
@@ -18,7 +19,7 @@ struct TabBar: View {
             ForEach(tabs.tabs) { tab in
                 TabItem(tab: tab, canClose: tabs.canClose, renaming: renaming == tab.id, draft: $draft,
                         select: { Task { await tabs.select(tab.id) } },
-                        close: { Task { await tabs.close(tab.id) } },
+                        close: { Task { _ = await tabs.requestClose(id: tab.id) } },
                         startRename: { draft = tab.name; renaming = tab.id },
                         finishRename: { commit in
                             let id = tab.id, name = draft
@@ -52,6 +53,46 @@ struct TabBar: View {
             Button("OK") { tabs.dismissError() }
         } message: {
             Text(tabs.error ?? "")
+        }
+        // A tab that still runs a program asks before it closes (§4.1).
+        .alert(tabs.pendingClose.map(TabText.closeQuestion) ?? "",
+               isPresented: Binding(get: { tabs.pendingClose != nil }, set: { if !$0 { tabs.cancelClose() } })) {
+            Button(TabText.closeButton, role: .destructive) { Task { await tabs.confirmClose() } }
+            Button("Cancel", role: .cancel) { tabs.cancelClose() }
+        }
+    }
+}
+
+/// The tab shortcuts (§4.1), in the menu bar: File › New Tab ⌘T and Close
+/// Tab ⌘W (the last tab closes the window, which saves and releases the
+/// box), Window › Show Previous Tab ⌘⇧[, Show Next Tab ⌘⇧] and Show Tab
+/// ▸ 1–9 (⌘1–⌘9).
+struct TabCommands: Commands {
+    let tabs: TabsController
+
+    var body: some Commands {
+        CommandGroup(after: .newItem) {
+            Button("New Tab") { Task { await tabs.newTab() } }
+                .keyboardShortcut("t", modifiers: .command)
+            Button(TabText.closeButton) {
+                Task {
+                    if await tabs.requestClose() == .closeWindow { NSApp.keyWindow?.performClose(nil) }
+                }
+            }
+            .keyboardShortcut("w", modifiers: .command)
+        }
+        CommandGroup(before: .windowArrangement) {
+            Button("Show Previous Tab") { Task { await tabs.selectPrevious() } }
+                .keyboardShortcut("[", modifiers: [.command, .shift])
+            Button("Show Next Tab") { Task { await tabs.selectNext() } }
+                .keyboardShortcut("]", modifiers: [.command, .shift])
+            Menu("Show Tab") {
+                ForEach(1...9, id: \.self) { n in
+                    Button("\(n)") { Task { await tabs.select(number: n) } }
+                        .keyboardShortcut(KeyEquivalent(Character("\(n)")), modifiers: .command)
+                }
+            }
+            Divider()
         }
     }
 }

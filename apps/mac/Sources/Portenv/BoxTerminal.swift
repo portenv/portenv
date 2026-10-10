@@ -45,7 +45,7 @@ struct BoxTerminal: NSViewRepresentable {
             env["TERM"] = "xterm-256color"
             view.startProcess(
                 executable: Binaries.portenv.path,
-                args: ["attach", box, "--from-app"],
+                args: ["attach", box, "--from-app", "--viewer", TabViewer.app],
                 environment: env.map { "\($0.key)=\($0.value)" },
                 execName: "portenv"
             )

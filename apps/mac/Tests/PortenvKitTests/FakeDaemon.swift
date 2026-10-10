@@ -138,6 +138,9 @@ final class FakeDaemon: DaemonAPI, @unchecked Sendable {
         lock.withLock { _tabs = ts }
         lock.withLock { tabWatchers }.forEach { $0.yield(ts) }
     }
+    /// Changes the tabs without telling watchers (something changed between
+    /// two updates).
+    func setTabs(_ ts: [TabInfo]) { lock.withLock { _tabs = ts } }
     /// Ends every tab watch, as when the box restarts.
     func endTabWatches() {
         let all = lock.withLock { let w = tabWatchers; tabWatchers = []; return w }

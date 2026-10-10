@@ -8,14 +8,47 @@ import Observation
 public struct TabInfo: Equatable, Sendable, Identifiable {
     public let id: String
     public var name: String
-    /// The tab the terminal shows.
+    /// The tab this app's terminal shows (each viewer has its own).
     public var active: Bool
+    /// The program running in the tab's foreground, as the box agent sees
+    /// it; empty when it's just the shell.
+    public var program: String
 
-    public init(id: String, name: String, active: Bool) {
+    public init(id: String, name: String, active: Bool, program: String = "") {
         self.id = id
         self.name = name
         self.active = active
+        self.program = program
     }
+}
+
+/// The app's viewer name: the box agent gives this app its own grouped tmux
+/// session, so an agent choosing a tab never moves the app's (1.2).
+public enum TabViewer {
+    public static let app = "app"
+}
+
+/// A close waiting for the person's answer: the tab still runs a program.
+public struct PendingClose: Equatable, Sendable {
+    public let id: String
+    public let program: String
+}
+
+/// What closing the current tab did (⌘W).
+public enum CloseResult: Equatable, Sendable {
+    case closed
+    /// A program still runs: `pendingClose` holds the question.
+    case asking
+    /// The last tab: close the window instead (it saves and releases).
+    case closeWindow
+    case nothing
+}
+
+/// Texts of the tab bar (GUIDELINES.md §4.1).
+public enum TabText {
+    /// The question before closing a tab that still runs a program.
+    public static func closeQuestion(_ p: PendingClose) -> String { "Close this tab? \(p.program) is still running." }
+    public static let closeButton = "Close Tab"
 }
 
 /// Tab names: the app owns them (§4.1).
@@ -62,6 +95,12 @@ public final class TabsController {
 
     /// A box keeps at least one tab.
     public var canClose: Bool { tabs.count > 1 }
+
+    /// A close waiting for the person (the tab runs a program).
+    public private(set) var pendingClose: PendingClose?
+
+    /// The tab the terminal shows.
+    public var current: TabInfo? { tabs.first { $0.active } }
 
     /// Reads the tabs once.
     public func load() async {
@@ -121,6 +160,52 @@ public final class TabsController {
         }
         return ok
     }
+
+    /// ⌘1–⌘9: the tab at that position (from 1); past the last tab,
+    /// nothing.
+    public func select(number n: Int) async {
+        guard n >= 1, n <= tabs.count else { return }
+        await select(tabs[n - 1].id)
+    }
+
+    /// ⌘⇧]: the next tab, wrapping around.
+    public func selectNext() async { await step(1) }
+
+    /// ⌘⇧[: the previous tab, wrapping around.
+    public func selectPrevious() async { await step(-1) }
+
+    private func step(_ by: Int) async {
+        guard !tabs.isEmpty else { return }
+        let i = tabs.firstIndex { $0.active } ?? 0
+        await select(tabs[(i + by + tabs.count) % tabs.count].id)
+    }
+
+    /// ⌘W, the close button and Close Tab: closes a tab (the current one by
+    /// default). The last tab closes the window instead. A tab that still
+    /// runs a program asks first; which program comes from the box agent
+    /// now, not from the last update.
+    public func requestClose(id: String? = nil) async -> CloseResult {
+        guard let id = id ?? current?.id else { return .nothing }
+        guard canClose else { return .closeWindow }
+        let fresh = (try? await daemon.tabs(box)) ?? tabs
+        let program = fresh.first { $0.id == id }?.program ?? ""
+        if !program.isEmpty {
+            pendingClose = PendingClose(id: id, program: program)
+            return .asking
+        }
+        await close(id)
+        return .closed
+    }
+
+    /// The person chose Close Tab in the question.
+    public func confirmClose() async {
+        guard let p = pendingClose else { return }
+        pendingClose = nil
+        await close(p.id)
+    }
+
+    /// The person chose Cancel.
+    public func cancelClose() { pendingClose = nil }
 
     /// Shows a tab in the terminal.
     public func select(_ id: String) async {

@@ -103,6 +103,92 @@ struct TabsTests {
         #expect(names(c) == "shell*,shell 2")
     }
 
+    func threeTabs(_ d: FakeDaemon) {
+        d.pushTabs([TabInfo(id: "@0", name: "claude", active: false),
+                    TabInfo(id: "@1", name: "shell", active: true),
+                    TabInfo(id: "@2", name: "build", active: false)])
+    }
+
+    /// ⌘1–⌘9 choose a tab by position; a number past the last tab does
+    /// nothing.
+    @Test func commandNumberChoosesATab() async {
+        let d = FakeDaemon()
+        threeTabs(d)
+        let c = TabsController(box: "acme-api", daemon: d)
+        await c.load()
+        await c.select(number: 1)
+        #expect(names(c) == "claude*,shell,build")
+        await c.select(number: 3)
+        #expect(names(c) == "claude,shell,build*")
+        await c.select(number: 1)
+        await c.select(number: 9)
+        #expect(names(c) == "claude*,shell,build", "⌘9 with three tabs does nothing")
+        #expect(!tabCalls(d).contains(["app", "select-tab", "acme-api", ""]))
+    }
+
+    /// ⌘⇧[ and ⌘⇧] go to the previous and next tab, wrapping around.
+    @Test func previousAndNextWrapAround() async {
+        let d = FakeDaemon()
+        threeTabs(d)
+        let c = TabsController(box: "acme-api", daemon: d)
+        await c.load()
+        await c.selectNext()
+        #expect(names(c) == "claude,shell,build*")
+        await c.selectNext()
+        #expect(names(c) == "claude*,shell,build")
+        await c.selectPrevious()
+        #expect(names(c) == "claude,shell,build*")
+        await c.selectPrevious()
+        #expect(names(c) == "claude,shell*,build")
+    }
+
+    /// ⌘W on a tab with nothing running closes it at once.
+    @Test func closingAnIdleTabDoesntAsk() async {
+        let d = FakeDaemon()
+        threeTabs(d)
+        let c = TabsController(box: "acme-api", daemon: d)
+        await c.load()
+        #expect(await c.requestClose() == .closed)
+        #expect(tabCalls(d).contains(["app", "close-tab", "acme-api", "@1"]))
+        #expect(c.pendingClose == nil)
+    }
+
+    /// Closing a tab with a running program asks first, in the owner's
+    /// words, and the program comes from the box agent at that moment (not
+    /// from a stale list): nothing closes until the person confirms.
+    @Test func closingABusyTabAsksFirst() async {
+        let d = FakeDaemon()
+        threeTabs(d)
+        let c = TabsController(box: "acme-api", daemon: d)
+        await c.load()
+        // The program started after the last update the app saw.
+        d.setTabs([TabInfo(id: "@0", name: "claude", active: false),
+                   TabInfo(id: "@1", name: "shell", active: true, program: "npm"),
+                   TabInfo(id: "@2", name: "build", active: false)])
+        #expect(await c.requestClose() == .asking)
+        #expect(c.pendingClose?.program == "npm")
+        #expect(c.pendingClose.map(TabText.closeQuestion) == "Close this tab? npm is still running.")
+        #expect(!tabCalls(d).contains { $0[1] == "close-tab" })
+        c.cancelClose()
+        #expect(c.pendingClose == nil)
+        try? await Task.sleep(for: .milliseconds(200)) // nothing closes later either
+        #expect(!tabCalls(d).contains { $0[1] == "close-tab" })
+        #expect(await c.requestClose(id: "@1") == .asking)
+        await c.confirmClose()
+        #expect(tabCalls(d).contains(["app", "close-tab", "acme-api", "@1"]))
+        #expect(c.pendingClose == nil)
+    }
+
+    /// ⌘W on the last tab closes the window (which saves and releases the
+    /// box), like Terminal and Safari; the tab itself is never closed.
+    @Test func closingTheLastTabClosesTheWindow() async {
+        let d = FakeDaemon()
+        let c = TabsController(box: "acme-api", daemon: d)
+        await c.load()
+        #expect(await c.requestClose() == .closeWindow)
+        #expect(!tabCalls(d).contains { $0[1] == "close-tab" })
+    }
+
     @Test func aFailureIsSaidPlainly() async {
         let d = FakeDaemon()
         d.failing["new-tab"] = "the box agent is unavailable (its channel is down or failed verification); restart the box"

@@ -43,8 +43,7 @@ func TestMain(m *testing.M) {
 				}
 				got += n
 			}
-			time.Sleep(300 * time.Millisecond)
-			os.Exit(0)
+			os.Exit(0) // at once, before the client finishes sending
 		}
 		time.Sleep(time.Hour)
 		os.Exit(0)
@@ -58,22 +57,34 @@ type helperAgent struct {
 }
 
 func (h helperAgent) Terminal(stream agentv1.AgentService_TerminalServer) error {
-	if _, err := stream.Recv(); err != nil {
+	first, err := stream.Recv()
+	if err != nil {
 		return err
 	}
 	cmd := exec.Command(os.Args[0], "-test.run=^$") // #nosec G204 -- this test binary
 	cmd.Env = append(os.Environ(), "PORTENV_TERMINAL_HELPER="+h.mode)
-	return ServeTerminal(stream, cmd, 80, 24)
+	return ServeTerminal(stream, cmd, 80, 24, first.GetOpen().GetInputPiped())
 }
 
-// sendAndFinish runs the helper in a terminal, sends input once it is
-// ready, half-closes as when stdin ends, and returns how the terminal
-// ended. It fails the test if the terminal ended as if all arrived.
-func sendAndFinish(t *testing.T, mode string, input []byte) error {
+// session is how a test drives a terminal: piped says whose input it is
+// (TerminalOpen.input_piped); input goes once the helper is ready; the
+// client half-closes after closeAfter (never when negative), sending
+// later after that wait instead.
+type session struct {
+	mode       string
+	piped      bool
+	input      []byte
+	closeAfter time.Duration
+	later      []byte
+}
+
+// run returns how the terminal ended: with its exit code (exited) or with
+// an error.
+func (sn session) run(t *testing.T) (exited bool, err error) {
 	t.Helper()
 	lis := bufconn.Listen(1 << 20)
 	srv := grpc.NewServer()
-	agentv1.RegisterAgentServiceServer(srv, helperAgent{mode: mode})
+	agentv1.RegisterAgentServiceServer(srv, helperAgent{mode: sn.mode})
 	go func() { _ = srv.Serve(lis) }()
 	defer srv.Stop()
 	conn, err := grpc.NewClient("passthrough:///agent",
@@ -89,7 +100,7 @@ func sendAndFinish(t *testing.T, mode string, input []byte) error {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := tc.Send(&agentv1.TerminalRequest{Msg: &agentv1.TerminalRequest_Open{Open: &agentv1.TerminalOpen{Session: "main"}}}); err != nil {
+	if err := tc.Send(&agentv1.TerminalRequest{Msg: &agentv1.TerminalRequest_Open{Open: &agentv1.TerminalOpen{Session: "main", InputPiped: sn.piped}}}); err != nil {
 		t.Fatal(err)
 	}
 	var out strings.Builder
@@ -100,18 +111,38 @@ func sendAndFinish(t *testing.T, mode string, input []byte) error {
 		}
 		out.Write(r.GetOutput())
 	}
-	if err := tc.Send(&agentv1.TerminalRequest{Msg: &agentv1.TerminalRequest_Input{Input: input}}); err != nil {
+	if err := tc.Send(&agentv1.TerminalRequest{Msg: &agentv1.TerminalRequest_Input{Input: sn.input}}); err != nil {
 		t.Fatal(err)
 	}
-	_ = tc.CloseSend()
+	go func() {
+		if sn.closeAfter < 0 {
+			return
+		}
+		time.Sleep(sn.closeAfter)
+		if sn.later != nil {
+			_ = tc.Send(&agentv1.TerminalRequest{Msg: &agentv1.TerminalRequest_Input{Input: sn.later}})
+		}
+		_ = tc.CloseSend()
+	}()
 	for {
 		r, err := tc.Recv()
 		if err != nil {
-			return err
+			return false, err
 		}
 		if _, ok := r.GetMsg().(*agentv1.TerminalResponse_ExitCode); ok {
-			t.Fatal("the terminal ended as if all its input arrived")
+			return true, nil
 		}
+	}
+}
+
+// wantDataLoss fails unless the terminal ended with DataLoss naming want.
+func wantDataLoss(t *testing.T, exited bool, err error, want string) {
+	t.Helper()
+	if exited {
+		t.Fatal("the terminal ended with its exit code, as if all its input arrived")
+	}
+	if status.Code(err) != codes.DataLoss || !strings.Contains(err.Error(), want) {
+		t.Fatalf("got %v, want DataLoss: %s", err, want)
 	}
 }
 
@@ -121,22 +152,33 @@ func sendAndFinish(t *testing.T, mode string, input []byte) error {
 func TestTerminalSaysWhatInputDidntArrive(t *testing.T) {
 	defer func(d time.Duration) { inputGiveUp = d }(inputGiveUp)
 	inputGiveUp = 500 * time.Millisecond
-	err := sendAndFinish(t, "stuck", []byte(strings.Repeat("x", 100)))
-	if status.Code(err) != codes.DataLoss || !strings.Contains(err.Error(), "100 bytes of input didn't reach") {
-		t.Fatalf("got %v, want DataLoss for 100 bytes", err)
-	}
+	exited, err := session{mode: "stuck", piped: true, input: []byte(strings.Repeat("x", 100))}.run(t)
+	wantDataLoss(t, exited, err, "100 bytes of input didn't reach")
 }
 
-// TestTerminalSaysWhenTheProgramExitsFirst (R-0051): the program reads
-// 10 bytes of 500 and exits, like head -c 10 with more piped in. The
-// other 490 never reached a program: the terminal ends with DataLoss
-// saying so, not with an exit code (attach would exit 0).
+// TestTerminalSaysWhenTheProgramExitsFirst (R-0051, R-0053): piped input,
+// 500 bytes into a program that reads 10 and exits at once, like head -c
+// 10. The other 490 never reached a program: DataLoss saying so, whether
+// the client's half-close comes before the exit, after it, or not at all.
 func TestTerminalSaysWhenTheProgramExitsFirst(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("macOS discards a terminal's unread input when its program exits; the agent runs on Linux")
 	}
-	err := sendAndFinish(t, "head10", []byte(strings.Repeat("x", 500)))
-	if status.Code(err) != codes.DataLoss || !strings.Contains(err.Error(), "490 bytes of input didn't reach") {
-		t.Fatalf("got %v, want DataLoss for 490 bytes", err)
+	for name, after := range map[string]time.Duration{"half-close at once": 0, "half-close after the exit": 300 * time.Millisecond, "no half-close": -1} {
+		t.Run(name, func(t *testing.T) {
+			exited, err := session{mode: "head10", piped: true, input: []byte(strings.Repeat("x", 500)), closeAfter: after}.run(t)
+			wantDataLoss(t, exited, err, "490 bytes of input didn't reach")
+		})
+	}
+}
+
+// TestTerminalTypingAfterTheEndIsNotDataLoss (R-0053): a person typing
+// (input_piped false). Keys still unread when the program exits, and keys
+// typed after it, are normal at a terminal: it ends with its exit code,
+// never a data-loss line.
+func TestTerminalTypingAfterTheEndIsNotDataLoss(t *testing.T) {
+	exited, err := session{mode: "head10", input: []byte(strings.Repeat("x", 500)), closeAfter: 300 * time.Millisecond, later: []byte("more keys")}.run(t)
+	if !exited || err != nil {
+		t.Fatalf("got exited=%v %v, want the exit code", exited, err)
 	}
 }

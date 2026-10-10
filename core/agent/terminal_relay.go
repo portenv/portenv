@@ -29,6 +29,11 @@ import (
 // often, or the client is told what didn't arrive.
 var inputGiveUp = 15 * time.Second
 
+// When a program with piped input ends before the client finished
+// sending, a half-close or a last message already on its way gets this
+// long to arrive before the terminal ends.
+var exitGrace = time.Second
+
 // After the program has read all its input, output it prints in reply
 // still reaches the client: the terminal closes once the output has been
 // quiet this long (at most outputLingerMax).
@@ -43,10 +48,12 @@ var (
 //
 // Nothing the client sent is dropped: when the client half-closes (its
 // stdin ended), the PTY stays open until the program has read every byte
-// written to it and its output has gone quiet. Input that can't be
-// delivered (the program stops reading, or exits first) ends the call
-// with DataLoss, saying how much, never a quiet exit.
-func ServeTerminal(stream agentv1.AgentService_TerminalServer, cmd *exec.Cmd, cols, rows uint16) error {
+// written to it and its output has gone quiet. With piped input
+// (TerminalOpen.input_piped), input that can't be delivered (the program
+// stops reading, or exits first, before or after the half-close) ends the
+// call with DataLoss, saying how much, never a quiet exit. A person typing
+// never gets DataLoss: keys left when the program ends are normal.
+func ServeTerminal(stream agentv1.AgentService_TerminalServer, cmd *exec.Cmd, cols, rows uint16, piped bool) error {
 	f, tty, err := pty.Open()
 	if err != nil {
 		return err
@@ -83,15 +90,18 @@ func ServeTerminal(stream agentv1.AgentService_TerminalServer, cmd *exec.Cmd, co
 
 	var lastOutput atomic.Int64 // UnixNano of the last output read
 	lastOutput.Store(time.Now().UnixNano())
-	var lost atomic.Pointer[error] // input that didn't reach the program
-	// Once the client half-closed, the result waits for the drain, which
-	// also learns when the program exits (and what it left unread).
-	exited, drained := make(chan struct{}), make(chan struct{})
+	// What didn't reach the program counts only for piped input: at a
+	// terminal, keys left unread when the program ends are normal.
+	var unsent atomic.Int64         // bytes a write couldn't hand to the PTY
+	var stuck atomic.Pointer[error] // the program stopped reading
+	var lastLeft atomic.Int64       // the PTY's unread input when last asked
+	exited, inputDone := make(chan struct{}), make(chan struct{})
 	var mu sync.Mutex
 	halfClosed := false
 
 	// Keystrokes and resizes from the client.
 	go func() {
+		defer close(inputDone)
 		for {
 			req, err := stream.Recv()
 			if err != nil {
@@ -105,9 +115,8 @@ func ServeTerminal(stream agentv1.AgentService_TerminalServer, cmd *exec.Cmd, co
 				mu.Lock()
 				halfClosed = true
 				mu.Unlock()
-				defer close(drained)
-				if e := drainInput(ttyName, exited, &lastOutput); e != nil {
-					lost.Store(&e)
+				if e := drainInput(ttyName, exited, &lastOutput, &lastLeft); e != nil {
+					stuck.Store(&e)
 				}
 				closePTY()
 				return
@@ -115,8 +124,7 @@ func ServeTerminal(stream agentv1.AgentService_TerminalServer, cmd *exec.Cmd, co
 			switch m := req.GetMsg().(type) {
 			case *agentv1.TerminalRequest_Input:
 				if n, err := f.Write(m.Input); err != nil {
-					e := status.Errorf(codes.DataLoss, "%d bytes of input didn't reach the box's terminal: it ended first", len(m.Input)-n)
-					lost.Store(&e)
+					unsent.Add(int64(len(m.Input) - n))
 					return
 				}
 			case *agentv1.TerminalRequest_Resize:
@@ -147,14 +155,27 @@ func ServeTerminal(stream agentv1.AgentService_TerminalServer, cmd *exec.Cmd, co
 		code = exit.ExitCode()
 	}
 	mu.Lock()
-	waitDrain := halfClosed
+	drainingNow := halfClosed
 	mu.Unlock()
 	close(exited)
-	if waitDrain {
-		<-drained
+	switch {
+	case drainingNow:
+		<-inputDone
+	case piped:
+		// The program ended before the client finished sending: a
+		// half-close or a last message already on its way gets a moment.
+		select {
+		case <-inputDone:
+		case <-time.After(exitGrace):
+		}
 	}
-	if e := lost.Load(); e != nil {
-		return *e
+	if piped {
+		if e := stuck.Load(); e != nil {
+			return *e
+		}
+		if n := unreadAtExit(ttyName, &lastLeft) + unsent.Load(); n > 0 {
+			return status.Errorf(codes.DataLoss, "%d bytes of input didn't reach the box's terminal: the program there ended first", n)
+		}
 	}
 	return stream.Send(&agentv1.TerminalResponse{Msg: &agentv1.TerminalResponse_ExitCode{ExitCode: int32(code)}}) // #nosec G115 -- exit codes fit
 }
@@ -162,12 +183,18 @@ func ServeTerminal(stream agentv1.AgentService_TerminalServer, cmd *exec.Cmd, co
 // drainInput waits until the program on the PTY has read all the input
 // written to it, then until its output has been quiet for outputQuiet. It
 // fails, saying how much is left, when the unread input stops shrinking
-// for inputGiveUp.
-func drainInput(ttyName string, exited <-chan struct{}, lastOutput *atomic.Int64) error {
-	if err := waitInputRead(ttyName, exited); err != nil {
+// for inputGiveUp. If the program exits first it returns at once:
+// ServeTerminal counts what it left.
+func drainInput(ttyName string, exited <-chan struct{}, lastOutput, lastLeft *atomic.Int64) error {
+	if err := waitInputRead(ttyName, exited, lastLeft); err != nil {
 		return err
 	}
 	for start := time.Now(); time.Since(start) < outputLingerMax; time.Sleep(25 * time.Millisecond) {
+		select {
+		case <-exited:
+			return nil
+		default:
+		}
 		if time.Since(time.Unix(0, lastOutput.Load())) >= outputQuiet {
 			break
 		}
@@ -176,21 +203,23 @@ func drainInput(ttyName string, exited <-chan struct{}, lastOutput *atomic.Int64
 }
 
 // waitInputRead waits until the PTY has no unread input: seen empty twice
-// in a row, since the kernel may still be moving a write along. If the
-// program exits first (or the PTY can't be asked), what it left unread
-// never reaches it: DataLoss, with the count.
-func waitInputRead(ttyName string, exited <-chan struct{}) error {
+// in a row, since the kernel may still be moving a write along. Each count
+// goes to lastLeft. It returns when the program exits or the PTY can't be
+// asked, which both mean the program reads nothing more.
+func waitInputRead(ttyName string, exited <-chan struct{}, lastLeft *atomic.Int64) error {
 	left, progress := -1, time.Now()
 	for zeros := 0; zeros < 2; time.Sleep(25 * time.Millisecond) {
 		select {
 		case <-exited:
-			return inputLeftAtExit(ttyName, left)
+			return nil
 		default:
 		}
 		n, err := unreadInput(ttyName)
+		if err != nil {
+			return nil
+		}
+		lastLeft.Store(int64(n))
 		switch {
-		case err != nil:
-			return inputLeftAtExit(ttyName, left)
 		case n == 0:
 			zeros++
 			continue
@@ -204,17 +233,14 @@ func waitInputRead(ttyName string, exited <-chan struct{}) error {
 	return nil
 }
 
-// inputLeftAtExit reports the input a program that ended never read: the
-// PTY's count if it can still be asked (Linux keeps it after the exit),
-// else the last count seen.
-func inputLeftAtExit(ttyName string, left int) error {
+// unreadAtExit is the input a program that ended never read: the PTY's
+// count if it can still be asked (Linux keeps it after the exit), else
+// the last count seen.
+func unreadAtExit(ttyName string, lastLeft *atomic.Int64) int64 {
 	if n, err := unreadInput(ttyName); err == nil {
-		left = n
+		return int64(n)
 	}
-	if left > 0 {
-		return status.Errorf(codes.DataLoss, "%d bytes of input didn't reach the box's terminal: the program there ended first", left)
-	}
-	return nil
+	return lastLeft.Load()
 }
 
 // unreadInput is how many bytes written to the PTY its program hasn't read

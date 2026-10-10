@@ -53,7 +53,7 @@ func runTerminal(stream agentv1.AgentService_TerminalServer, cfg Config, open *a
 	cmd.Env = envFor(cfg)
 	uid := uint32(cfg.UID) // #nosec G115 -- 1000
 	cmd.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: uid, Gid: uid, Groups: groups}}
-	return ServeTerminal(stream, cmd, uint16(open.GetSize().GetCols()), uint16(open.GetSize().GetRows())) // #nosec G115 -- terminal sizes
+	return ServeTerminal(stream, cmd, uint16(open.GetSize().GetCols()), uint16(open.GetSize().GetRows()), open.GetInputPiped()) // #nosec G115 -- terminal sizes
 }
 
 // groupsOf lists a user's supplementary groups (id -G).

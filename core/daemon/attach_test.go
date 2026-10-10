@@ -74,8 +74,7 @@ func terminalHelper(mode string) {
 		if _, err := io.ReadFull(os.Stdin, make([]byte, want)); err != nil {
 			os.Exit(2)
 		}
-		time.Sleep(300 * time.Millisecond)
-		os.Exit(0)
+		os.Exit(0) // at once: before attach's stdin closes
 	}
 	h, buf, got := sha256.New(), make([]byte, 4096), 0
 	for got < want {
@@ -102,10 +101,11 @@ func (p *ptyAgent) Terminal(stream agentv1.AgentService_TerminalServer) error {
 	if err != nil {
 		return err
 	}
-	size := first.GetOpen().GetSize()
+	open := first.GetOpen()
+	size := open.GetSize()
 	cmd := exec.Command(os.Args[0], "-test.run=^$") // #nosec G204 -- this test binary
 	cmd.Env = append(os.Environ(), "PORTENV_TERMINAL_HELPER="+p.mode)
-	return agent.ServeTerminal(stream, cmd, uint16(size.GetCols()), uint16(size.GetRows())) // #nosec G115 -- terminal sizes
+	return agent.ServeTerminal(stream, cmd, uint16(size.GetCols()), uint16(size.GetRows()), open.GetInputPiped()) // #nosec G115 -- terminal sizes
 }
 
 // slowLink is a TCP proxy that holds each direction to slowRate and delays
@@ -338,6 +338,27 @@ func TestAttachSaysWhenTheProgramExitsFirst(t *testing.T) {
 	err := AttachTerminal(ctx, c, openMain(), Attach{In: in, Out: out.w})
 	if err == nil || status.Convert(err).Message() != "490 bytes of input didn't reach the box's terminal: the program there ended first" {
 		t.Fatalf("attach: %v, want 490 bytes reported", err)
+	}
+}
+
+// TestAttachTypingAfterTheEndIsNotDataLoss (R-0053): at a terminal, keys
+// still unread when the program exits, and keys typed after, are normal:
+// attach ends with no error and no data-loss line.
+func TestAttachTypingAfterTheEndIsNotDataLoss(t *testing.T) {
+	c, _ := slowBox(t, "head:10")
+	out := newPipeOut(t)
+	in, feed := io.Pipe()
+	defer func() { _ = feed.Close() }()
+	go func() {
+		out.waitLine("ready", 30*time.Second)
+		_, _ = feed.Write(make([]byte, 500))
+		time.Sleep(time.Second)
+		_, _ = feed.Write([]byte("more keys"))
+	}()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	if err := AttachTerminal(ctx, c, openMain(), Attach{In: in, Out: out.w, TTY: true}); err != nil {
+		t.Fatalf("attach at a terminal: %v, want nil", err)
 	}
 }
 

@@ -30,7 +30,8 @@ type Attach struct {
 
 // AttachTerminal runs a terminal through portenvd until the session ends.
 //
-// Nothing read from In is dropped silently. When In ends, the attach
+// Nothing read from In is dropped silently when it is piped (not a TTY;
+// TerminalOpen.input_piped tells the box agent). When In ends, the attach
 // half-closes and waits: the box agent ends the session only after its
 // program has read every byte, so a nil return means all of it arrived.
 // Input that didn't (the session ended first, the link failed, a second
@@ -42,6 +43,7 @@ func AttachTerminal(ctx context.Context, c daemonv1.DaemonServiceClient, open *d
 	if err != nil {
 		return err
 	}
+	open.InputPiped = !a.TTY
 	if err := stream.Send(&daemonv1.TerminalRequest{Msg: &daemonv1.TerminalRequest_Open{Open: open}}); err != nil {
 		return err
 	}
@@ -114,7 +116,7 @@ func AttachTerminal(ctx context.Context, c daemonv1.DaemonServiceClient, open *d
 			return fmt.Errorf("interrupted; %d bytes read before Ctrl-C didn't reach the box", lost)
 		case interrupted.Load():
 			return errors.New("interrupted; everything read before Ctrl-C reached the box")
-		case lost > 0:
+		case lost > 0 && !a.TTY: // at a terminal, keys typed as it ends are normal
 			return fmt.Errorf("%d bytes of input didn't reach the box: the session ended first", lost)
 		}
 		return nil

@@ -1164,7 +1164,7 @@ Developer ID signing, notarisation and Sparkle, with the key backups. Signed pub
        - no Analytics Engine fields carry an IP or headers beyond the published list;
        - Cloudflare acts as processor under its DPA, with its EU-US Data Privacy Framework certification as the data-transfer basis;
        - /privacy says so in a line.
-    5. **Who is responsible:** /privacy names the controller, EverydayMoney (EverydayMoney SAS, as on portenv.com/legal), and a contact address for questions and objections: _[contact address: to be set up by the owner]_. Today /privacy covers only the website; this line is added when counting ships (1.8).
+    5. **Who is responsible:** /privacy names the controller and a contact for questions and objections, exactly: "EverydayMoney SAS, 60 Rue François 1er, 75008 Paris, France (RCS Paris 944 681 634). Contact: contact@everydaymoney.eu". It matches the publisher block on portenv.com/legal. Today /privacy covers only the website; this line is added when counting ships (1.8).
     6. **The opt-out is visible before the first count:**
        - first run (1.5) shows "Count me in usage numbers", with the link to the field list, already on, before the first update check is sent;
        - the runner's installer prints its opt-out flag before its first check.

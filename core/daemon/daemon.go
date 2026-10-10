@@ -739,10 +739,14 @@ func agentError(err error) error {
 	}
 	msg := err.Error()
 	if status.Code(err) == codes.Unavailable || strings.Contains(msg, "the certificate is not this box's") {
-		return status.Error(codes.Unavailable, "the box agent is unavailable (its channel is down or failed verification); restart the box")
+		return status.Error(codes.Unavailable, AgentUnavailable)
 	}
 	return err
 }
+
+// AgentUnavailable is what portenvd says when the box agent's channel is
+// down (Unavailable): portenvd itself is fine.
+const AgentUnavailable = "the box agent is unavailable (its channel is down or failed verification); restart the box"
 
 // CheckBox reports whether the box agent answers on its channel.
 func (s *Server) CheckBox(ctx context.Context, req *daemonv1.CheckBoxRequest) (*daemonv1.CheckBoxResponse, error) {

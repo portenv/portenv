@@ -38,6 +38,8 @@ jobs:
           path: bin
           key: tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Makefile') }}
       - run: make build
+      - name: tmux, for the agent's tab tests
+        run: command -v tmux || { sudo apt-get update -q && sudo apt-get install -y -q tmux; }
       - run: make test
       - name: Lint
         if: matrix.arch == 'amd64'

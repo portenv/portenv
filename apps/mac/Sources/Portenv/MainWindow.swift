@@ -8,6 +8,7 @@ import SwiftUI
 /// (Apple's document-menu pattern); in 1.0 only Move To and Revert To work.
 struct MainWindow: View {
     @Bindable var controller: BoxController
+    @Bindable var tabs: TabsController
 
     var body: some View {
         content
@@ -67,11 +68,19 @@ struct MainWindow: View {
             .background(.background)
         case .thisMac, .server:
             // The same terminal wherever the box runs: portenvd reaches a
-            // server box's agent through an SSH forward (ADR 0010).
-            BoxTerminal(box: controller.box, generation: controller.terminalGeneration) {
-                Task { await controller.terminalEnded() }
+            // server box's agent through an SSH forward (ADR 0010). The tab
+            // bar sits above it (§3); choosing a tab shows that tmux window
+            // in this same terminal.
+            VStack(spacing: 0) {
+                TabBar(tabs: tabs)
+                    // Follows the tabs while the box is open here or on a
+                    // server; watches again after a restart or a move.
+                    .task { await tabs.follow() }
+                BoxTerminal(box: controller.box, generation: controller.terminalGeneration) {
+                    Task { await controller.terminalEnded() }
+                }
+                .accessibilityLabel(A11y.terminal(box: controller.box))
             }
-            .accessibilityLabel(A11y.terminal(box: controller.box))
         case .closed:
             placeholder(controller.busy ? controller.subtitle : "\(controller.box) is closed", "")
         }

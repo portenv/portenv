@@ -647,7 +647,7 @@ func (s *Server) Terminal(stream daemonv1.DaemonService_TerminalServer) error {
 		return agentError(err)
 	}
 	size := &agentv1.TerminalSize{Cols: open.GetSize().GetCols(), Rows: open.GetSize().GetRows()}
-	if err := at.Send(&agentv1.TerminalRequest{Msg: &agentv1.TerminalRequest_Open{Open: &agentv1.TerminalOpen{Session: open.GetSession(), Size: size}}}); err != nil {
+	if err := at.Send(&agentv1.TerminalRequest{Msg: &agentv1.TerminalRequest_Open{Open: &agentv1.TerminalOpen{Session: open.GetSession(), Size: size, Viewer: open.GetViewer()}}}); err != nil {
 		return err
 	}
 	go func() {

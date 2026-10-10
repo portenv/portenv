@@ -3,8 +3,7 @@
 import Foundation
 
 /// What the app asks portenvd (its gRPC API on the socket, 1.1). Every box
-/// action goes through here; the terminal is still `portenv attach` until
-/// 1.2.
+/// action goes through here; the terminal is still `portenv attach`.
 public protocol DaemonAPI: Sendable {
     /// Whether portenvd answers.
     func ping() async -> Bool
@@ -41,6 +40,16 @@ public protocol DaemonAPI: Sendable {
     /// Boxes saved in the background after Quit Anyway since last asked
     /// (each given out once).
     func takeSavedAfterQuit() async throws -> [SavedAfterQuit]
+    /// The box's tabs (its terminal's tmux windows), in order (1.2).
+    func tabs(_ box: String) async throws -> [TabInfo]
+    /// A new tab at the end, shown in the terminal.
+    func newTab(_ box: String, name: String) async throws -> TabInfo
+    func closeTab(_ box: String, id: String) async throws
+    func renameTab(_ box: String, id: String, name: String) async throws
+    func selectTab(_ box: String, id: String) async throws
+    /// The tabs at once, then on every change. Ends (or throws) when the box
+    /// closes, its agent goes away, or portenvd does.
+    func watchTabs(_ box: String) -> AsyncThrowingStream<[TabInfo], Error>
 }
 
 /// A box saved in the background after Quit Anyway.
@@ -63,4 +72,15 @@ public struct DaemonError: Error, LocalizedError, Equatable {
         self.unavailable = unavailable
     }
     public var errorDescription: String? { message }
+
+    /// portenvd is older than the app: it doesn't know a call the app makes.
+    public static let outOfDate =
+        "Portenv's background service is out of date. Quit Portenv and open it again; if this keeps happening, reinstall Portenv."
+
+    /// A gRPC failure as the app shows it: portenvd's own plain message,
+    /// except a call portenvd doesn't have (an older portenvd), which says
+    /// what to do instead of gRPC's "unknown method" (§10).
+    public static func fromRPC(message: String, unimplemented: Bool, unavailable: Bool) -> DaemonError {
+        unimplemented ? DaemonError(outOfDate) : DaemonError(message, unavailable: unavailable)
+    }
 }

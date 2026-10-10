@@ -983,6 +983,29 @@ In this order:
 2. **The tab bar (early, §3 and §4.1), built before the spike** on a tab interface in the box agent: list, new, close and rename, plus events. Whether the agent uses tmux control mode or plain tmux commands stays inside the agent, so the tab bar doesn't change after the spike.
    - One tab per tmux window; `+` for a new tab; the app owns names and order.
    - Until it exists, nothing (`portenv box send`, agents) can create a tmux window the user can't see. The agent refuses `new-window` from anything but the app, or maps it to the single visible window.
+   - **Built (2026-10-10, awaiting review):**
+     - **In the box agent:** ListTabs, NewTab, CloseTab, RenameTab, SelectTab and WatchTabs, on plain tmux commands, polled for the watch.
+       - Tab IDs are tmux window IDs, confined to the box's session.
+       - The app owns the names: tmux's automatic rename and rename by escape sequence stay off even when the user's tmux config turns them on.
+       - A new session starts with one tab named "shell", and the last tab can't be closed.
+       - Every window in the session is a tab, whoever created it, so a window a program opens itself appears in the tab bar (the "maps it" option above).
+       - **Each viewer keeps its own current tab** (owner, 2026-10-10). Each viewer (the app, later each agent) gets one grouped tmux session over the box's windows (`tmux new-session -t <base>`). Its terminal attaches there, and the agent ends that session once no client is left on it.
+       - **Each tab reports its foreground program,** or nothing when only its shell runs.
+     - **portenvd** relays every call, the watch and the viewer, on this Mac or on a server; `portenv attach` takes `--viewer`.
+     - **The app's tab bar:**
+       - 30 pt, tabs sharing the width;
+       - `+` names tabs "shell", "shell 2" and so on;
+       - close on hover, and never on the last tab;
+       - rename by double-click or the tab's menu;
+       - semantic colours, and VoiceOver labels and actions for every control.
+       - **The app is the "app" viewer.**
+     - **Shortcuts** (owner, 2026-10-10; GUIDELINES.md §4.1):
+       - ⌘T for a new tab, ⌘1–⌘9 to choose one, ⌘⇧[ / ⌘⇧] for the previous / next tab;
+       - ⌘W closes the current tab, and on the last tab closes the window (save and release);
+       - closing a tab that still runs a program asks "Close this tab? <program> is still running.", with the program from the box agent at that moment.
+     - **Not yet:**
+       - reordering (later, by drag; Open questions);
+       - before merge, with the owner at the Mac: a screenshot of the running app and a VoiceOver check. The PR's light and dark images are offscreen renders of the tab bar view.
 3. **The inspector (§6):**
    - **Where it is**, including the move's four-step progress (the demo note), the packages line from #28, and Retry;
    - **Saves** (the latest five);
@@ -1018,6 +1041,9 @@ The Containerization shim, with `docker` as the fallback. The agent drops the fo
 **7. 1.5: first run**
 
 Reduced: no sign-in, Only you, Keychain keys, the recovery key; the Welcome screen has "Continue without an account" (#16). First run lists, in plain words, the exact fields the update check counts (no ID, nothing about the user's work), and how to turn counting off (1.8).
+- **Move to Applications first** (the owner, 2026-10-10; found while testing #41):
+  - Before registering the login item, if the app runs from anywhere but `/Applications`, it offers "Move Portenv to Applications?". That includes App Translocation, when the app is opened from Downloads or the DMG. launchd may refuse to start `portenvd` from other places.
+  - If launchd still fails to start `portenvd` (for example exit 78, `EX_CONFIG`), the app says so in a plain line. It doesn't wait out the 30-second "background service isn't running" message.
 
 **8. 1.6: the port relay**
 
@@ -1032,6 +1058,10 @@ Show in Finder (⌥⌘R) stops being disabled here.
 Developer ID signing, notarisation and Sparkle, with the key backups. Signed public CLI releases and their signing key are already on the first-release checklist (#27).
 - Needs Apple Developer enrolment (open question), which is also the stable-signing fix for item 1e.
 - **Look at again once signing is stable:** run `portenvd` inside a small helper app bundle (`Contents/Helpers/Portenv Helper.app`), so it can post a notification the moment a background save succeeds after Quit Anyway. Until then the next launch of the app shows it (1.1).
+- **An app newer than its running `portenvd`** (found while testing #41, 2026-10-10):
+  - after an update, or when the login item still points at another copy of the app, the app compares versions and relaunches `portenvd` from itself (the `Relaunch` RPC, ADR 0014);
+  - it re-registers the login item when that item runs a different copy;
+  - until then, a call `portenvd` doesn't know shows "Portenv's background service is out of date. Quit Portenv and open it again; if this keeps happening, reinstall Portenv." (#41).
 - **Release checklist:** test `portenvd`'s socket with a real second macOS account. A process running as another user is refused; 1.1's test simulated the other uid.
 - **Investor-grade metrics without identifying anyone** (decided 2026-10-09). No email collection.
   - **Downloads:** GitHub release asset counts (the DMG and the CLI builds), and Cloudflare's counts for portenv.com/download. No scripts on the site.
@@ -1181,6 +1211,7 @@ The old numbers, for ADRs and PRs written before 2026-10-09: 2.2 wizard → 2.9 
   - **The relay rule:** when one agent's command is refused (by its own safety checks or its permissions), the refusal goes to the user with the reason. Nothing automatically hands the command to another agent. A re-run happens only on the user's explicit instruction, and it's attributed as "you, through <agent>", next to the original refusal.
   - **SSH command rules are never described as a security boundary,** anywhere: the app, the docs, the website. A shell can rephrase any command. What holds is the recording, Revert, and the vault rules enforced by the operating system.
   - Each door appears as it lands: stand-in here (2.4), MCP in 2.6 and 2.7, the web terminal in 2.8, lanes in 4.1.
+- **Before 2.4 (requirement, owner 2026-10-10):** each viewer keeps its own current tab. Every agent session attaches as its own viewer (a grouped tmux session over the box's windows), so an agent switching tabs never changes the owner's current tab. Built in 1.2 with the tab bar; 2.4 gives each agent its own viewer name.
 - Not in 2.4: lanes (4.1), approvals (4.2), the gateway and its CA (Phase 3), phone notifications (4.6).
 - **Open question:** a per-box "Keep running when Portenv quits" option, off by default, so a stand-in agent's work can go on after the app quits, with a menu bar item listing the boxes still running. Only worth building with Phase 3's lease hand-off, so a sleeping Mac never blocks resuming the box elsewhere. No ADR until then.
 
@@ -1326,3 +1357,10 @@ These need an owner decision; Claude Code should add new ones here instead of gu
 - [x] Remote MCP (2.7): how does the owner's pairing approval fit ChatGPT's OAuth sign-in? **Answered (2026-10-10):** the sign-in is the pairing. The runner's authorization page shows the code and "Approve this in your Portenv app", and the owner's approval in the app is the OAuth consent, creating the identity, grant and credential as `portenv connect` does. One pairing flow for every door.
 - [ ] Which group holds the commands outside the everyday list that the plan names today (`portenv skill`, `portenv mcp`, `portenv event`, and the Phase 0 `portenv init`): `portenv box …`, `portenv agent …`, or a new group?
 - [ ] A per-box "Keep running when Portenv quits" option (off by default) with a menu bar item listing boxes still running? Only with Phase 3's lease hand-off (see 2.4).
+- [x] Tab keyboard shortcuts (1.2)? **Answered (2026-10-10):**
+  - ⌘T opens a new tab, ⌘1–⌘9 choose a tab, ⌘⇧[ / ⌘⇧] go to the previous / next tab.
+  - ⌘W closes the current tab when there's more than one; on the last tab it closes the window (save and release), like Terminal and Safari.
+  - Closing a tab with a running program asks first: "Close this tab? <program> is still running."
+  - In GUIDELINES.md §4.1; built in 1.2.
+- [x] Should each viewer keep its own current tab? **Answered (2026-10-10):** yes. One grouped tmux session per viewer (the app, each agent), all on the box's windows (`tmux new-session -t <base>`). An agent switching tabs must never change the owner's current tab. Built in 1.2, and a requirement before 2.4.
+- [x] Reordering tabs? **Answered (2026-10-10):** later, by drag in the tab bar, kept as tmux's window order. Not built in 1.2.

@@ -374,6 +374,31 @@ public nonisolated struct Portenv_Types_V1_BuildInfo: Sendable {
   public init() {}
 }
 
+/// A tab in the box's terminal: one tmux window in the box's session
+/// (GUIDELINES.md §3, §4.1). The app owns names and order; order is the
+/// order of the list.
+public nonisolated struct Portenv_Types_V1_Tab: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// Stable for the window's life (tmux's window ID, for example "@3").
+  public var id: String = String()
+
+  public var name: String = String()
+
+  /// The tab this viewer's terminal shows.
+  public var active: Bool = false
+
+  /// The program running in the tab's foreground, or empty when it's just
+  /// the shell (closing the tab asks first when it isn't empty).
+  public var program: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
 // MARK: - Code below here is support for the SwiftProtobuf runtime.
 
 fileprivate nonisolated let _protobuf_package = "portenv.types.v1"
@@ -636,6 +661,51 @@ nonisolated extension Portenv_Types_V1_BuildInfo: SwiftProtobuf.Message, SwiftPr
   public static func ==(lhs: Portenv_Types_V1_BuildInfo, rhs: Portenv_Types_V1_BuildInfo) -> Bool {
     if lhs.version != rhs.version {return false}
     if lhs.commit != rhs.commit {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Portenv_Types_V1_Tab: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".Tab"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}name\0\u{1}active\0\u{1}program\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.id) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.name) }()
+      case 3: try { try decoder.decodeSingularBoolField(value: &self.active) }()
+      case 4: try { try decoder.decodeSingularStringField(value: &self.program) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.id.isEmpty {
+      try visitor.visitSingularStringField(value: self.id, fieldNumber: 1)
+    }
+    if !self.name.isEmpty {
+      try visitor.visitSingularStringField(value: self.name, fieldNumber: 2)
+    }
+    if self.active != false {
+      try visitor.visitSingularBoolField(value: self.active, fieldNumber: 3)
+    }
+    if !self.program.isEmpty {
+      try visitor.visitSingularStringField(value: self.program, fieldNumber: 4)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Portenv_Types_V1_Tab, rhs: Portenv_Types_V1_Tab) -> Bool {
+    if lhs.id != rhs.id {return false}
+    if lhs.name != rhs.name {return false}
+    if lhs.active != rhs.active {return false}
+    if lhs.program != rhs.program {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

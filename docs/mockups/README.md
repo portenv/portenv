@@ -19,9 +19,9 @@ The first-run screens show the full version, from Phase 3. Phases 1 and 2 ship a
 | `box-list` | Your boxes: Box, Where it is (filled dot = running), Last saved, Agents; the "There’s no box called “demo”…" note; Find a box; New Box… and Open (default, ↩). Opening a box on a server connects to it there; nothing moves unless Move To. |
 | `box-list-empty` | No boxes yet: one line on what a box is, and New Box… as the default. |
 | `new-box` | New box from the list: ‹ Your boxes (Back), Name with hint, Start from (GitHub repository / Folder on this Mac / Empty), Link GitHub… when not linked (or paste a public URL), Toolbox (now with git and gh), Show this box in Finder, Cancel and Create Box. |
-| `new-box-linked-invalid` | Linked to GitHub (repository picker, "Linked as …, N repositories allowed, Change…") and an invalid name: red field, "Start with a letter or a number.", Create Box disabled. |
-| `link-github` | Link GitHub device flow: the code, Copy, Open github.com/login/device, waiting with expiry. Not a Portenv account. |
-| `link-github-linked` | Linked: what the box can do, the warning that agents in the box can use the login (inspector Who’s here, Sign Out of GitHub). |
+| `new-box-linked-invalid` | Linked to GitHub (repository picker, "Linked as …, same access as on your Mac · Switch Account…") and an invalid name: red field, "Start with a letter or a number.", Create Box disabled. |
+| `link-github` | Link GitHub device flow, the same sign-in as `gh auth login` on the Mac: the code, Copy, Open github.com/login/device, waiting with expiry. Not a Portenv account. |
+| `link-github-linked` | Linked: the box can reach every repository the GitHub account can, as on the Mac, and more can be cloned in later; the warning that agents in the box can use the login (inspector Who’s here, Sign Out of GitHub). |
 | `notification` | The macOS notification when Claude Code is waiting and the window isn't in front, with Yes, push / Not yet / Show. |
 | `first-run-1-welcome` | Continue with Apple, Continue with GitHub, Continue without an account (no sign-in is ever required for your own machines and storage; ADR 0008), or email. |
 | `first-run-2-protection` | Only you (default) or You, with Portenv's help. |

@@ -831,7 +831,7 @@ The public launch ships Phases 1 and 2 together (decided 2026-10-09). Day one mu
 - [ ] An outside security review of the public doors (remote MCP, the web terminal, SSH with certificates), with every finding fixed or accepted in writing
 - [ ] The public endpoints are fuzzed in CI before launch
 - [ ] The app is signed and notarized (1.8), and the website's download link is turned on only then
-- [ ] Link GitHub works from New box (device flow inside the box, narrowest scope, Sign Out of GitHub in the inspector)
+- [ ] Link GitHub works from New box (device flow inside the box, gh's normal login, Sign Out of GitHub in the inspector)
 
 ### Phase 0: Foundations (owner only)
 
@@ -1110,7 +1110,8 @@ Reduced: no sign-in, Only you, Keychain keys, the recovery key; the Welcome scre
   - **The name field** has a hint ("Letters, numbers and hyphens, like the project's name."), and an inline error for an invalid name ("Start with a letter or a number.").
   - **Opening a box that's on a server** connects to it there; nothing moves unless the person chooses Move To.
 - **Link GitHub** (boards `link-github` and `link-github-linked`; before launch; not a Portenv account):
-  - GitHub's device flow, through `gh auth login` inside the box, with the narrowest scope, for the repositories the person picks;
+  - GitHub's device flow, through `gh auth login` inside the box, with the same access as the person's own gh; any number of repositories can be cloned into the box afterwards (the owner, 2026-10-10: GitHub access works as on their Mac; no Portenv GitHub App and no repository picker);
+  - gh's default scopes, then `gh auth setup-git`, so plain `git clone` and `git push` work for any repository the account can reach; the token lives in the box home's gh config (`hosts.yml`), never in the image;
   - the login is kept in the box's encrypted home and moves with it; Portenv never sees or keeps it;
   - agents working in the box can use that login too, and the dialog says so;
   - the inspector's Who's here shows "This box can push to GitHub as you", with Sign Out of GitHub.

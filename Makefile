@@ -109,6 +109,7 @@ lint: $(TOOLS_STAMP) $(SHELLCHECK) spdx-check
 		(cd $$m && $(BIN)/golangci-lint run --config $(CURDIR)/.golangci.yml ./...); \
 	done
 	cd proto && $(BIN)/buf lint && $(BIN)/buf format --diff --exit-code
+	scripts/install-shellcheck.sh --check
 	$(BIN)/actionlint -shellcheck=$(SHELLCHECK)
 	scripts/check-no-binaries.sh
 

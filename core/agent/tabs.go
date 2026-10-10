@@ -4,7 +4,6 @@ package agent
 
 import (
 	"context"
-	"errors"
 	"regexp"
 	"slices"
 	"strings"
@@ -218,6 +217,3 @@ func (t tabs) watch(ctx context.Context, every time.Duration, send func([]*types
 func sameTabs(a, b []*typesv1.Tab) bool {
 	return slices.EqualFunc(a, b, func(x, y *typesv1.Tab) bool { return proto.Equal(x, y) })
 }
-
-// errNoTabs: tabs exist only inside a box.
-var errNoTabs = errors.New("tabs exist only inside a box (Linux)")

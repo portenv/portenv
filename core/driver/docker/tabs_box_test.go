@@ -129,6 +129,60 @@ func TestTabsInABox(t *testing.T) {
 	if got := sh("", "ps -eo user=,comm= | awk '$2 ~ /^tmux/ {print $1}' | sort -u"); !onlyWork(got) {
 		t.Errorf("tmux runs as %q, want only work", got)
 	}
+
+	// Each viewer keeps its own tab: an agent choosing a tab doesn't move
+	// the app's.
+	first := m.GetTabs()[0].GetId()
+	if _, err := c.SelectTab(ctx, &agentv1.SelectTabRequest{Session: "main", Viewer: "app", Id: nt.GetTab().GetId()}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.SelectTab(ctx, &agentv1.SelectTabRequest{Session: "main", Viewer: "grok", Id: first}); err != nil {
+		t.Fatal(err)
+	}
+	app, err := c.ListTabs(ctx, &agentv1.ListTabsRequest{Session: "main", Viewer: "app"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := names(app.GetTabs()); got != "shell,tests*,sneaky" {
+		t.Fatalf("the app's tabs after the agent chose one: %q, want shell,tests*,sneaky", got)
+	}
+
+	// The app's terminal attaches to its own session, which goes once the
+	// terminal ends; the box's tabs stay.
+	term, err := c.Terminal(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = term.Send(&agentv1.TerminalRequest{Msg: &agentv1.TerminalRequest_Open{Open: &agentv1.TerminalOpen{Session: "main", Viewer: "app", Size: &agentv1.TerminalSize{Cols: 80, Rows: 24}}}})
+	_ = term.Send(&agentv1.TerminalRequest{Msg: &agentv1.TerminalRequest_Input{Input: []byte("echo viewer-$((40+2))\r")}})
+	var out strings.Builder
+	for !strings.Contains(out.String(), "viewer-42") {
+		r, err := term.Recv()
+		if err != nil {
+			t.Fatalf("terminal: %v; output %q", err, out.String())
+		}
+		out.Write(r.GetOutput())
+	}
+	if got := sh("work", "tmux list-clients -F '#{session_name}'"); got != "main-viewer-app" {
+		t.Fatalf("the app's terminal is attached to %q, want main-viewer-app", got)
+	}
+	_ = term.CloseSend()
+	for range 50 {
+		if sh("work", "tmux has-session -t =main-viewer-app 2>/dev/null && echo there || echo gone") == "gone" {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if got := sh("work", "tmux has-session -t =main-viewer-app 2>/dev/null && echo there || echo gone"); got != "gone" {
+		t.Errorf("the app's session is %s after its terminal ended, want gone", got)
+	}
+	l, err = c.ListTabs(ctx, &agentv1.ListTabsRequest{Session: "main"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := len(l.GetTabs()); got != 3 {
+		t.Errorf("the box has %d tabs after the app's terminal ended, want 3", got)
+	}
 }
 
 // onlyWork: every non-empty line is "work".

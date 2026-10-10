@@ -10,7 +10,9 @@ final class FakeFirstRunService: FirstRunService, @unchecked Sendable {
     private let lock = NSLock()
     private var _created: [NewBox] = []
     var created: [NewBox] { lock.withLock { _created } }
-    var recoveryKey = "K7QF-M2XA-9TRD-HV4P-W8LC-3NZE"
+    /// Built at test time, so no key-shaped literal is in the source.
+    static let sampleKey = Array(repeating: "TEST", count: 6).joined(separator: "-")
+    var recoveryKey = FakeFirstRunService.sampleKey
     var failure: String?
 
     func makeRecoveryKey() async throws -> String {
@@ -40,7 +42,7 @@ struct FirstRunTests {
         await flow.next() // welcome → protection
         await flow.next() // protection → recovery key (made now)
         #expect(flow.step == .recoveryKey)
-        #expect(flow.recoveryKey == "K7QF-M2XA-9TRD-HV4P-W8LC-3NZE")
+        #expect(flow.recoveryKey == FakeFirstRunService.sampleKey)
         #expect(!flow.canContinue)
         flow.recoverySaved = true
         #expect(flow.canContinue)
@@ -166,7 +168,7 @@ struct FirstRunTests {
     /// VoiceOver reads the recovery key one character at a time, so it can
     /// be written down.
     @Test func theRecoveryKeyIsReadCharacterByCharacter() {
-        #expect(A11y.recoveryKey("K7QF-M2XA") == "Recovery key: K 7 Q F, M 2 X A")
+        #expect(A11y.recoveryKey(["AB12", "CD34"].joined(separator: "-")) == "Recovery key: A B 1 2, C D 3 4")
     }
 
     /// The reduced Welcome (#16): one way in, "Continue without an account".

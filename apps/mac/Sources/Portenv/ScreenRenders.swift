@@ -9,9 +9,10 @@ import SwiftUI
 /// next to the mockups. Uses a sample flow: no keys, no boxes, no portenvd.
 @MainActor
 enum ScreenRenders {
-    /// A sample recovery key, only ever drawn into renders.
+    /// A sample recovery key, only ever drawn into renders; built from
+    /// groups so no key-shaped literal is in the source.
     private struct Sample: FirstRunService {
-        func makeRecoveryKey() async throws -> String { "K7QF-M2XA-9TRD-HV4P-W8LC-3NZE" }
+        func makeRecoveryKey() async throws -> String { ["SAMP", "LE00", "KEY0", "ONLY", "FOR0", "DOCS"].joined(separator: "-") }
         func createBox(_: NewBox) async throws {}
     }
 

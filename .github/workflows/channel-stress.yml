@@ -1,0 +1,71 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Channel conditions under load: proves TestChannelConditions' targeted
+# checks are stable by running the test 20 times while stress-ng loads the
+# CPU, memory and disk. Runs on PRs that touch the driver, the agent, the
+# toolbox image or this workflow. Every run's result is reported; any
+# failure fails the job.
+name: Channel stress
+
+on:
+  pull_request:
+    paths:
+      - core/driver/**
+      - core/agent/**
+      - images/**
+      - .github/workflows/channel-stress.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: channel-stress-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  stress:
+    name: TestChannelConditions x20 under load
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Build the toolbox image
+        run: |
+          docker build --platform linux/amd64 \
+            --build-arg VERSION="$(git describe --tags --always)" \
+            --build-arg COMMIT="$(git rev-parse --short HEAD)" \
+            -f images/toolbox-node/Dockerfile -t toolbox-node:stress .
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: core/go.mod
+          cache-dependency-path: '**/go.sum'
+      - name: Install stress-ng
+        run: command -v stress-ng || { sudo apt-get update -q && sudo apt-get install -y -q stress-ng; }
+      - name: 20 runs under load
+        run: |
+          set -euo pipefail
+          (cd core && go test -c -o "$RUNNER_TEMP/docker.test" ./driver/docker/)
+          # CPU on every core, memory pressure and disk writes, for longer
+          # than the runs take; stopped when they're done.
+          stress-ng --cpu 0 --vm 1 --vm-bytes 25% --hdd 1 --hdd-bytes 512M --timeout 40m --quiet &
+          load=$!
+          trap 'kill "$load" 2>/dev/null || true' EXIT
+          sleep 5
+          pass=0 fail=0
+          for i in $(seq 20); do
+            start=$(date +%s)
+            rc=0
+            (cd core/driver/docker && PORTENV_TEST_IMAGE=toolbox-node:stress \
+              "$RUNNER_TEMP/docker.test" -test.count=1 -test.timeout 10m -test.run 'TestChannelConditions$' \
+              > "$RUNNER_TEMP/run-$i.log" 2>&1) || rc=$?
+            secs=$(( $(date +%s) - start ))
+            if [[ $rc == 0 ]]; then
+              pass=$((pass + 1)); echo "run $i: pass (${secs}s)"
+            else
+              fail=$((fail + 1)); echo "run $i: FAIL, exit $rc (${secs}s)"
+              grep -E -- '--- FAIL|_test\.go:[0-9]+:' "$RUNNER_TEMP/run-$i.log" | sed -E 's/[0-9A-Fa-f]{64,}/[redacted]/g' || true
+            fi
+          done
+          echo "TestChannelConditions under load: $pass passed, $fail failed, of 20"
+          [[ $fail == 0 ]]

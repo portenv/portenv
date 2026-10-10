@@ -1340,6 +1340,7 @@ The save engine is tested hardest, because a bug there loses someone's work; eve
 | Two-machine scenarios | e2e harness with two simulated machines against real restic repositories (local folder, MinIO for S3, SFTP container) | Every merge |
 | Crash safety | Kill `portenvd` or restic at random points during save and restore; cut the network mid-upload | Nightly |
 | Drivers | One conformance suite run against `docker`, `apple` and `microvm` | Every merge touching a driver |
+| Agent channel secrets (ADR 0010) | `TestChannelConditions`: targeted checks of every place the channel token could land, each proved by a planted decoy; 20 runs under CPU, memory and disk load (`channel-stress`). `TestChannelTokenNotOnDisk`: the box's whole root file system; a timeout is a failure, and a failure opens the issue "Nightly channel scan failed" with a redacted excerpt, closed by the next passing run | Targeted: every PR touching the driver, the agent or the image. Full scan: nightly |
 | Keys | Device add, revoke, recovery, re-encrypt, Delete Box (keys go only with the saves: no box is left with saves but no key); verify no key material on disk outside approved stores | Every merge touching keys |
 | Agent isolation | Adversarial suite: an agent lane tries to read other homes and secrets, escalate privilege, reach blocked hosts, persist after revoke | Every merge from Phase 4 |
 | Mac app | XCUITest for first run, title menu, lease sheet; accessibility audit; light and dark snapshots | Every merge touching the app |

@@ -89,9 +89,10 @@ agent-linux:
 		scripts/check-build-paths.sh $(BIN)/linux-$$a/portenv-agent; \
 	done
 
-## test: run Go tests with the race detector (sync tests use the pinned restic)
+## test: run Go tests with the race detector (sync tests use the pinned restic), and the script tests
 test: $(TOOLS_STAMP)
 	for m in $(GO_MODULES); do RESTIC=$(BIN)/restic go test -race ./$$m/...; done
+	scripts/test-scan-excerpt.sh
 
 ## lint: formatting, vet, golangci-lint, buf lint, workflow lint, SPDX headers
 lint: $(TOOLS_STAMP) spdx-check

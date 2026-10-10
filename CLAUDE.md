@@ -50,6 +50,7 @@ Phase 1: Native Mac app, local boxes. Phase 0 is closed (`docs/PLAN.md`). Work t
 - `make fmt`: format Go and proto sources.
 - `make proto`: regenerate `proto/gen/go` after editing `proto/`; commit the result. `make proto-check` fails if it is stale.
 - `make agent-linux`: static `portenv-agent` for linux/arm64 and amd64.
+- `make app`: build `Portenv.app` into `bin/` (the release identity, `com.portenv.Portenv`). `make app LANE=X` builds a dev lane's app with its own identity (bundle ID `com.portenv.Portenv.dev-X`, its own launch agent, Keychain service and support folder), so parallel lanes never share a login item, keys or state.
 - `make swift-test`: build and test the Swift packages (macOS), with a clean environment.
 - `make swift-env-check`: build with a fake secret in the environment and confirm it reaches no build folder.
 - `make image` / `make image-test`: build the toolbox image for this Mac's architecture only (never emulate amd64) and run `images/toolbox-node/test.sh`.

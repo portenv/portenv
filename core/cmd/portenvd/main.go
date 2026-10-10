@@ -23,6 +23,7 @@ import (
 	"syscall"
 
 	"github.com/portenv/portenv/core/daemon"
+	"github.com/portenv/portenv/core/internal/instance"
 	"github.com/portenv/portenv/core/internal/version"
 	"github.com/portenv/portenv/core/local"
 )
@@ -60,7 +61,11 @@ func main() {
 
 // openLog opens portenvd's log for appending: 0600 in a 0700 folder.
 func openLog(home string) (*os.File, error) {
-	dir := filepath.Join(home, "Library", "Logs", "Portenv")
+	n, err := instance.Current()
+	if err != nil {
+		return nil, err
+	}
+	dir := filepath.Join(home, "Library", "Logs", n.Folder())
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
 	}

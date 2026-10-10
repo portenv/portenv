@@ -22,7 +22,7 @@ image=${4:-portenv/toolbox-node:dev}
 repo=$(cd "$(dirname "$0")/.." && pwd)
 portenv=$repo/bin/portenv
 read -r -a ssh_cmd <<<"${PORTENV_SSH:-ssh}"
-home=${PORTENV_HOME:-$HOME/Library/Application Support/Portenv}
+home=${PORTENV_HOME:-$HOME/Library/Application Support/Portenv${PORTENV_INSTANCE:+-$PORTENV_INSTANCE}}
 key=""
 for ((i = 0; i < ${#ssh_cmd[@]}; i++)); do [[ ${ssh_cmd[i]} == -i ]] && key=${ssh_cmd[i + 1]}; done
 mac_key=$(cut -d' ' -f1,2 "${MAC_KEY_FILE:-$key.pub}")

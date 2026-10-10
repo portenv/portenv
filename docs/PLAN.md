@@ -1035,7 +1035,7 @@ In this order:
    - **If it succeeds,** Phase 1 also gets blocks with attribution, the sticky header, the inline answer card for Claude Code, tab badges, the command palette and saved commands, in that order.
    - **If it doesn't,** they move to Phase 2 and the plan says so.
 
-**4b. 1.2b: split view** (the owner, 2026-10-10; reference: the "Split view" board in the owner's design mockup)
+**4b. 1.2b: split view** (the owner, 2026-10-10; reference: docs/mockups/split-view.png)
 
 It comes after 1.2's blocks, wherever they land (Phase 1 if the spike succeeds, otherwise Phase 2), and before the launch demo. The panes themselves don't depend on blocks; the Warp-style features below apply per pane once they exist.
 

@@ -38,6 +38,9 @@ TOOLS := \
 	github.com/zricethezav/gitleaks/v8@v8.30.1 \
 	github.com/restic/restic/cmd/restic@v0.19.1
 TOOLS_STAMP := $(BIN)/.tools-stamp
+# shellcheck, which actionlint runs on workflow scripts: the version on CI's
+# runner image, pinned so the Mac and CI agree (scripts/install-shellcheck.sh).
+SHELLCHECK := $(BIN)/shellcheck
 
 # The Swift protoc plugins (macOS), built from tools/swift-protoc, whose
 # Package.swift and committed Package.resolved pin the same versions.
@@ -57,6 +60,10 @@ $(TOOLS_STAMP): Makefile
 	# the paths of the machine that built it.
 	for t in $(TOOLS); do GOWORK=off GOBIN=$(BIN) go install -trimpath $$t; done
 	touch $@
+
+$(SHELLCHECK): scripts/install-shellcheck.sh
+	mkdir -p $(BIN)
+	scripts/install-shellcheck.sh $(BIN)
 
 ## build: build all commands for this machine into bin/
 build:
@@ -95,14 +102,15 @@ test: $(TOOLS_STAMP)
 	scripts/test-scan-excerpt.sh
 
 ## lint: formatting, vet, golangci-lint, buf lint, workflow lint, SPDX headers
-lint: $(TOOLS_STAMP) spdx-check
+lint: $(TOOLS_STAMP) $(SHELLCHECK) spdx-check
 	test -z "$$(gofmt -l core proto/gen/go | tee /dev/stderr)"
 	for m in $(GO_MODULES); do go vet ./$$m/...; done
 	for m in $(GO_MODULES); do \
 		(cd $$m && $(BIN)/golangci-lint run --config $(CURDIR)/.golangci.yml ./...); \
 	done
 	cd proto && $(BIN)/buf lint && $(BIN)/buf format --diff --exit-code
-	$(BIN)/actionlint
+	scripts/install-shellcheck.sh --check
+	$(BIN)/actionlint -shellcheck=$(SHELLCHECK)
 	scripts/check-no-binaries.sh
 
 ## fmt: format Go and proto sources

@@ -21,6 +21,16 @@ struct PortenvApp: App {
     )
 
     init() {
+        // A dev lane's build refuses an environment naming another lane, before
+        // it touches a login item, keys or a folder (Instance, gmake app LANE=X).
+        if let problem = Instance.current.mismatch(environment: ProcessInfo.processInfo.environment) {
+            FileHandle.standardError.write(Data((problem + "\n").utf8))
+            let alert = NSAlert()
+            alert.messageText = "Portenv can’t start"
+            alert.informativeText = problem
+            alert.runModal()
+            exit(1)
+        }
         // Dev builds and tests: unregister the login item and exit, with no
         // window (make unregister-service, portenv app unregister-service).
         if CommandLine.arguments.contains("--unregister-service") {

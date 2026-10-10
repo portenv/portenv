@@ -157,6 +157,21 @@ proto-check-go: proto-go
 # for access to Documents at launch. (A proper Xcode project, 1.8, embeds
 # resources the usual way.)
 APP_BUILD := $(HOME)/Library/Caches/Portenv/app-build
+# LANE=X builds a dev lane's app with its own identity (bundle ID, launch
+# agent, Keychain service, support folder: scripts/stamp-instance.sh,
+# core/internal/instance) and its own build folder, so parallel lanes never
+# share a login item, keys, state or build output. Release builds: no LANE.
+LANE ?=
+ifneq ($(LANE),)
+ifeq ($(filter A B C D E F G H I J K L M N O P Q R S T U V W X Y Z,$(LANE)),)
+$(error LANE=$(LANE): a dev lane is one capital letter, for example LANE=B)
+endif
+INSTANCE := dev-$(LANE)
+APP_BUILD := $(HOME)/Library/Caches/Portenv/app-build-$(INSTANCE)
+# Go binaries carry their lane (core/internal/instance): a release binary
+# never reads PORTENV_INSTANCE, a dev one refuses any other value.
+LDFLAGS += -X github.com/portenv/portenv/core/internal/instance.stamp=$(INSTANCE)
+endif
 # Swift builds run with a clean environment: SwiftPM's plugin caches record
 # the environment they ran in, so a session token or other secret in the
 # shell would end up on disk under .build (scripts/check-swift-env.sh).
@@ -180,6 +195,8 @@ app: build $(TOOLS_STAMP)
 	mkdir -p $(BIN)/Portenv.app/Contents/Library/LaunchAgents
 	cp apps/mac/LaunchAgents/com.portenv.portenvd.plist $(BIN)/Portenv.app/Contents/Library/LaunchAgents/
 	mkdir -p $(BIN)/Portenv.app/Contents/Resources && for b in "$(APP_BUILD)"/release/*.bundle; do [ -e "$$b" ] && cp -R "$$b" $(BIN)/Portenv.app/Contents/Resources/; done; true
+	$(if $(INSTANCE),scripts/stamp-instance.sh $(BIN)/Portenv.app $(INSTANCE))
+	scripts/check-app-identity.sh $(BIN)/Portenv.app $(INSTANCE)
 	scripts/check-build-paths.sh $(BIN)/Portenv.app/Contents/MacOS/Portenv $(addprefix $(BIN)/Portenv.app/Contents/Helpers/,portenv portenvd restic)
 	codesign --force --sign - $(BIN)/Portenv.app
 

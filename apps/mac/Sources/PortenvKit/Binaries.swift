@@ -33,13 +33,13 @@ public enum Binaries {
     public static var portenvd: URL { directory.appendingPathComponent("portenvd") }
 
     /// The Portenv directory portenvd serves from (PORTENV_HOME, or
-    /// Application Support).
+    /// Application Support/Portenv, or a dev lane's own folder).
     public static var home: URL {
         if let dir = ProcessInfo.processInfo.environment["PORTENV_HOME"], !dir.isEmpty {
             return URL(fileURLWithPath: dir)
         }
         return FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Portenv")
+            .appendingPathComponent(Instance.current.folder)
     }
     public static var socket: URL { home.appendingPathComponent("portenvd.sock") }
 }

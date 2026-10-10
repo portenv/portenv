@@ -99,6 +99,9 @@ public final class BoxController {
     /// The box's saves, for the inspector (§6); empty for a box on a server
     /// (listed there) or before the first read.
     public private(set) var saves: [SaveInfo] = []
+    /// Set once portenvd has answered for the saves, so an empty list isn't
+    /// shown as "No saves yet." while it's still loading (R-0054).
+    public private(set) var savesLoaded = false
     /// Where a move in progress is going (the inspector shows the move).
     public private(set) var movingTo: String?
 
@@ -451,8 +454,11 @@ public final class BoxController {
     /// Reads the box's saves for the inspector. A box on a server lists its
     /// saves there, so they aren't read through this Mac's portenvd.
     public func refreshSaves() async {
-        guard location == .thisMac else { saves = []; return }
-        if let s = try? await daemon.saves(box) { saves = s }
+        guard location == .thisMac else { saves = []; savesLoaded = true; return }
+        if let s = try? await daemon.saves(box) {
+            saves = s
+            savesLoaded = true
+        }
     }
 
     /// Closing the window saves and releases a box open on this Mac.

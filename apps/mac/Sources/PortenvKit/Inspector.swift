@@ -118,6 +118,18 @@ public enum InspectorText {
         "Saves are listed on \(server) while the box runs there."
     }
     public static let noSaves = "No saves yet."
+    public static let loadingSaves = "Loading saves\u{2026}"
+
+    /// What the Saves section shows (R-0054).
+    public enum SavesShown: Equatable, Sendable {
+        case elsewhere(String), loading, empty, listed
+    }
+
+    public static func savesShown(loaded: Bool, rows: [SaveRow], elsewhere: String?) -> SavesShown {
+        if let elsewhere { return .elsewhere(elsewhere) }
+        if !rows.isEmpty { return .listed }
+        return loaded ? .empty : .loading
+    }
 
     public static let you = "You"
     /// Agents arrive in 2.4; until then the section is you, and this line.
@@ -228,13 +240,15 @@ public struct InspectorContent: Sendable {
     public var failedPackages: [String]
     public var savedAt: Date?
     public var saves: [InspectorText.SaveRow]
+    /// Whether portenvd has answered for the saves yet.
+    public var savesLoaded: Bool
     /// Set when the saves are listed elsewhere (a box on a server).
     public var savesElsewhere: String?
     public var tabs: [InspectorText.TabRow]
 
     public init(place: String? = nil, movingTo: String? = nil, storagePlace: String? = nil, openedAt: Date? = nil,
                 failedPackages: [String] = [], savedAt: Date? = nil, saves: [InspectorText.SaveRow] = [],
-                savesElsewhere: String? = nil, tabs: [InspectorText.TabRow] = []) {
+                savesLoaded: Bool = true, savesElsewhere: String? = nil, tabs: [InspectorText.TabRow] = []) {
         self.place = place
         self.movingTo = movingTo
         self.storagePlace = storagePlace
@@ -242,6 +256,7 @@ public struct InspectorContent: Sendable {
         self.failedPackages = failedPackages
         self.savedAt = savedAt
         self.saves = saves
+        self.savesLoaded = savesLoaded
         self.savesElsewhere = savesElsewhere
         self.tabs = tabs
     }
@@ -256,6 +271,7 @@ public struct InspectorContent: Sendable {
                   failedPackages: box.state?.failedPackages ?? [],
                   savedAt: box.state?.savedAt,
                   saves: InspectorText.saveRows(box.saves),
+                  savesLoaded: box.savesLoaded,
                   savesElsewhere: server.map(InspectorText.savesElsewhere),
                   tabs: InspectorText.tabRows(tabs.tabs))
     }

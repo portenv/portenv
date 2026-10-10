@@ -90,11 +90,14 @@ struct InspectorView: View {
 
     @ViewBuilder private var saves: some View {
         Section(InspectorText.savesHeading) {
-            if let elsewhere = content.savesElsewhere {
-                Note(elsewhere)
-            } else if content.saves.isEmpty {
+            switch InspectorText.savesShown(loaded: content.savesLoaded, rows: content.saves, elsewhere: content.savesElsewhere) {
+            case let .elsewhere(line):
+                Note(line)
+            case .loading:
+                Note(InspectorText.loadingSaves)
+            case .empty:
                 Note(InspectorText.noSaves)
-            } else {
+            case .listed:
                 if let last = content.savedAt {
                     Text("Last saved \(InspectorText.clock(last))")
                         .font(.system(size: 12)).foregroundStyle(.secondary)

@@ -82,6 +82,18 @@ struct InspectorTests {
         #expect(InspectorText.noSaves == "No saves yet.")
     }
 
+    /// "No saves yet." only for an answer that really is empty: while the
+    /// first answer is on its way the list says it's loading, so someone
+    /// who just made saves never thinks they're gone (R-0054).
+    @Test func savesLoadingEmptyAndListed() {
+        let row = InspectorText.saveRows([SaveInfo(id: "p", time: noon, kind: "point", machine: "mac")])
+        #expect(InspectorText.savesShown(loaded: false, rows: [], elsewhere: nil) == .loading)
+        #expect(InspectorText.savesShown(loaded: true, rows: [], elsewhere: nil) == .empty)
+        #expect(InspectorText.savesShown(loaded: true, rows: row, elsewhere: nil) == .listed)
+        #expect(InspectorText.savesShown(loaded: false, rows: [], elsewhere: "Saves are listed on s.") == .elsewhere("Saves are listed on s."))
+        #expect(InspectorText.loadingSaves == "Loading saves\u{2026}")
+    }
+
     // MARK: Who's here and Running now
 
     @Test func whosHereIsYouUntilAgentsArrive() {

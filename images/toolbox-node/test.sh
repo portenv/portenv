@@ -68,6 +68,8 @@ check "ripgrep" as_work 'rg --version'
 check "jq" as_work 'jq --version'
 check "build-essential" as_work 'gcc --version && make --version'
 check "python 3" as_work 'python3 --version'
+check "shell integration (OSC 133) in login shells" as_work 'bash -lic "declare -F __portenv_osc133_precmd"'
+check "skeleton .zshrc sources the zsh integration" in_box grep -q osc133.zsh /home/work/.zshrc
 check "claude code" as_work 'claude --version'
 
 # An orphan that exits must be reaped by PID 1, not left as a zombie.

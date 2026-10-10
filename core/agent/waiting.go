@@ -65,10 +65,20 @@ var (
 	// last few non-empty lines, since agent CLIs print their choices under
 	// the question.
 	promptLine = regexp.MustCompile(`(?i)(\?\s*$|\[y/n\]|\(y/n\)|\[yes/no\]|\(yes/no\)|:\s*$|^\s*>>>\s*$|^\s*\.\.\.\s*$)`)
-	// secretWords: wording that asks for a secret. Checked on every one of
-	// the last lines, erring on the side of secret: Node CLIs ask for tokens
-	// in raw mode with masking, so the terminal's modes don't show it.
-	secretWords = regexp.MustCompile(`(?i)(pass(word|phrase)|\bpin\b|verification code|one-time code|\b2fa\b|otp\b|token|api[ _-]?key|secret|private key|credential|access key)`)
+	// passwordWords: password-style wording, a secret wherever it appears
+	// in the last lines.
+	passwordWords = regexp.MustCompile(`(?i)(pass(word|phrase)|\bpin\b|verification code|one-time code|\b2fa\b|\botp\b)`)
+	// keyWord: the other things a prompt may ask for (Node CLIs ask for
+	// tokens in raw mode with masking, so the terminal's modes don't show
+	// it). They count only in an asking form (secretAsked), because Claude
+	// Code shows a token count under its prompt and code on screen names
+	// tokens and secrets (R-0021). Whole words only: "tokens" and
+	// GITHUB_TOKEN don't match.
+	keyWord = `\b(token|api[ _-]?key|secret|private key|credentials?|access key)\b`
+	// secretAsked: the word then a colon or question mark ending the line
+	// ("Token:", "Private key (PEM):"), or an asking verb shortly before it
+	// ("Enter your API token", "Paste your access key").
+	secretAsked = regexp.MustCompile(`(?i)(` + keyWord + `[^:?]{0,20}[:?]\s*$|\b(enter|paste|type|provide|input)\b.{0,40}` + keyWord + `)`)
 )
 
 // boxBorder are the characters TUIs draw boxes with; a question inside a
@@ -87,7 +97,8 @@ func screenAsks(lines []string) bool {
 
 // Secret is a prompt for a password or similar: the terminal has echo off
 // with line input (what getpass, sudo and ssh set), or any of the last
-// lines' wording asks for one (a token, a key). Raw-mode programs (Claude
+// lines' wording asks for one (password-style words anywhere; a token or a
+// key only when asked for). Raw-mode programs (Claude
 // Code, vim) turn echo off too, but without line input, so their modes alone
 // don't make them secret; their wording can.
 func (s waitSignals) Secret() bool {
@@ -95,7 +106,7 @@ func (s waitSignals) Secret() bool {
 		return true
 	}
 	for _, l := range s.LastLines {
-		if secretWords.MatchString(l) {
+		if l = strings.Trim(l, boxBorder); passwordWords.MatchString(l) || secretAsked.MatchString(l) {
 			return true
 		}
 	}

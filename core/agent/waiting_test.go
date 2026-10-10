@@ -167,8 +167,12 @@ func TestSecretWordingAnywhereInTheLastLines(t *testing.T) {
 		{"│ Paste your access key:      │", "│ > ▌                         │"},
 		{"Private key (PEM):", ">"},
 		{"Client secret:"},
-		{"Credentials for registry.example.com", "Username:"},
+		{"Enter credentials for registry.example.com:"},
 		{"Enter your api_key:"},
+		{"Token:"},
+		{"GitHub personal access token?"},
+		{"Please provide the secret for the webhook (it won't be shown)", "Value:"},
+		{"│ Access key:                  │", "│ > ▌                          │"},
 	} {
 		s := asking(lines...)
 		if !s.Secret() {
@@ -178,9 +182,18 @@ func TestSecretWordingAnywhereInTheLastLines(t *testing.T) {
 			t.Errorf("%q: relayed %q", lines, got)
 		}
 	}
+	// R-0021: the newer words count only when asked for. Claude Code shows a
+	// token count under its prompt, and code on screen names tokens and
+	// secrets; neither may make an ordinary question secret, or it would
+	// never be relayed.
 	for _, lines := range [][]string{
 		{"Do you want to proceed?", "❯ 1. Yes", "  2. No"},
 		{"Delete 3 files? [y/N]"},
+		{"Do you want to proceed?", "❯ 1. Yes", "  2. No", "esc to interrupt · ↑ 1.2k tokens"},
+		{"export GITHUB_TOKEN=${GITHUB_TOKEN}", "cat .env.secret", "Run deploy.sh with these settings? [y/N]"},
+		{"Total tokens: 1,204 (input 900, output 304)", "Continue? [y/N]"},
+		{"const apiKey = process.env.API_KEY", "Apply this change? (y/n)"},
+		{"Use the GITHUB_TOKEN from your shell?", "❯ Yes", "  No"},
 	} {
 		if asking(lines...).Secret() {
 			t.Errorf("%q: counted as secret", lines)

@@ -86,6 +86,20 @@ select.select([fd], [], [])
 termios.tcsetattr(fd, termios.TCSADRAIN, old)
 `
 
+// claudeTokensStandIn is Claude Code's permission prompt with the status
+// line it shows under it (a token count): waiting, and not secret (R-0021).
+const claudeTokensStandIn = `import select, sys, termios, tty
+fd = sys.stdin.fileno()
+old = termios.tcgetattr(fd)
+tty.setraw(fd)
+sys.stdout.write("╭──────────────────────────────╮\r\n│ Bash command                 │\r\n│   npm test                   │\r\n│ Do you want to proceed?      │\r\n│ ❯ 1. Yes                     │\r\n│   2. No                      │\r\n╰──────────────────────────────╯\r\n  esc to interrupt · ↑ 1.2k tokens\r\n")
+sys.stdout.flush()
+ep = select.epoll()
+ep.register(fd, select.EPOLLIN)
+ep.poll()
+termios.tcsetattr(fd, termios.TCSADRAIN, old)
+`
+
 // getpassStandIn reproduces sudo's prompt where sudo can't prompt (CI's
 // runner has passwordless sudo): getpass sets the same terminal modes.
 const getpassStandIn = `import getpass; getpass.getpass("[sudo] password for work: ")`
@@ -105,6 +119,7 @@ func TestWaitingCases(t *testing.T) {
 	getpass := write("getpass-standin.py", getpassStandIn)
 	token := write("token-standin.py", tokenStandIn)
 	boxedKey := write("boxed-key-standin.py", boxedKeyStandIn)
+	claudeTokens := write("claude-tokens-standin.py", claudeTokensStandIn)
 	// A throwaway key with a throwaway passphrase, for the real ssh prompt.
 	key := filepath.Join(dir, "spike-key")
 	if out, err := exec.Command("ssh-keygen", "-q", "-t", "ed25519", "-N", "throwaway-spike-passphrase", "-f", key).CombinedOutput(); err != nil { // #nosec G204 -- test
@@ -129,6 +144,9 @@ func TestWaitingCases(t *testing.T) {
 		{name: "an idle shell prompt", kind: "real", cmd: "", waiting: false},
 		{name: "a Node CLI asks for an API token (inquirer style, masked)", kind: "stand-in", cmd: "python3 " + token, waiting: true, secret: true, needs: "python3"},
 		{name: "a boxed TUI asks for an access key (question above the input)", kind: "stand-in", cmd: "python3 " + boxedKey, waiting: true, secret: true, needs: "python3"},
+		{name: "Claude Code asks, with a token count under the prompt", kind: "stand-in", cmd: "python3 " + claudeTokens, waiting: true, needs: "python3"},
+		{name: "a y/n question under code naming GITHUB_TOKEN", kind: "real",
+			cmd: `printf 'export GITHUB_TOKEN=${GITHUB_TOKEN}\ncat .env.secret\n'; read -r -p "Run deploy.sh with these settings? [y/N] " answer`, waiting: true},
 	}
 
 	probe := tabProbe{

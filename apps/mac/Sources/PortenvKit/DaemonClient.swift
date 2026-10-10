@@ -31,7 +31,7 @@ public final class DaemonClient: DaemonAPI, Sendable {
         do {
             return try await body()
         } catch let e as RPCError {
-            throw DaemonError(e.message, unavailable: e.code == .unavailable)
+            throw DaemonError.fromRPC(message: e.message, unimplemented: e.code == .unimplemented, unavailable: e.code == .unavailable)
         }
     }
 
@@ -103,7 +103,7 @@ public final class DaemonClient: DaemonAPI, Sendable {
                     }
                     continuation.finish()
                 } catch let e as RPCError {
-                    continuation.finish(throwing: DaemonError(e.message, unavailable: e.code == .unavailable))
+                    continuation.finish(throwing: DaemonError.fromRPC(message: e.message, unimplemented: e.code == .unimplemented, unavailable: e.code == .unavailable))
                 } catch {
                     continuation.finish(throwing: error)
                 }
@@ -204,7 +204,7 @@ public final class DaemonClient: DaemonAPI, Sendable {
                     }
                     continuation.finish()
                 } catch let e as RPCError {
-                    continuation.finish(throwing: DaemonError(e.message, unavailable: e.code == .unavailable))
+                    continuation.finish(throwing: DaemonError.fromRPC(message: e.message, unimplemented: e.code == .unimplemented, unavailable: e.code == .unavailable))
                 } catch {
                     continuation.finish(throwing: error)
                 }

@@ -72,4 +72,15 @@ public struct DaemonError: Error, LocalizedError, Equatable {
         self.unavailable = unavailable
     }
     public var errorDescription: String? { message }
+
+    /// portenvd is older than the app: it doesn't know a call the app makes.
+    public static let outOfDate =
+        "Portenv's background service is out of date. Quit Portenv and open it again; if this keeps happening, reinstall Portenv."
+
+    /// A gRPC failure as the app shows it: portenvd's own plain message,
+    /// except a call portenvd doesn't have (an older portenvd), which says
+    /// what to do instead of gRPC's "unknown method" (§10).
+    public static func fromRPC(message: String, unimplemented: Bool, unavailable: Bool) -> DaemonError {
+        unimplemented ? DaemonError(outOfDate) : DaemonError(message, unavailable: unavailable)
+    }
 }

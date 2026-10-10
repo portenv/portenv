@@ -84,13 +84,17 @@ struct TabBar: View {
 /// box), Window › Show Previous Tab ⌘⇧[, Show Next Tab ⌘⇧] and Show Tab
 /// ▸ 1–9 (⌘1–⌘9). ⌃Tab and ⌃⇧Tab are handled by the tab bar's key monitor.
 struct TabCommands: Commands {
-    let tabs: TabsController
+    /// The open box's tabs; none during first run or the box list, when the
+    /// tab commands are off and ⌘W closes the window.
+    let tabs: TabsController?
 
     var body: some Commands {
         CommandGroup(after: .newItem) {
-            Button("New Tab") { Task { await tabs.newTab() } }
+            Button("New Tab") { Task { await tabs?.newTab() } }
                 .keyboardShortcut("t", modifiers: .command)
+                .disabled(tabs == nil)
             Button(TabText.closeButton) {
+                guard let tabs else { NSApp.keyWindow?.performClose(nil); return }
                 Task {
                     if await tabs.requestClose() == .closeWindow { NSApp.keyWindow?.performClose(nil) }
                 }
@@ -98,16 +102,19 @@ struct TabCommands: Commands {
             .keyboardShortcut("w", modifiers: .command)
         }
         CommandGroup(before: .windowArrangement) {
-            Button("Show Previous Tab") { Task { await tabs.selectPrevious() } }
+            Button("Show Previous Tab") { Task { await tabs?.selectPrevious() } }
                 .keyboardShortcut("[", modifiers: [.command, .shift])
-            Button("Show Next Tab") { Task { await tabs.selectNext() } }
+                .disabled(tabs == nil)
+            Button("Show Next Tab") { Task { await tabs?.selectNext() } }
                 .keyboardShortcut("]", modifiers: [.command, .shift])
+                .disabled(tabs == nil)
             Menu("Show Tab") {
                 ForEach(1...9, id: \.self) { n in
-                    Button("\(n)") { Task { await tabs.select(number: n) } }
+                    Button("\(n)") { Task { await tabs?.select(number: n) } }
                         .keyboardShortcut(KeyEquivalent(Character("\(n)")), modifiers: .command)
                 }
             }
+            .disabled(tabs == nil)
             Divider()
         }
     }

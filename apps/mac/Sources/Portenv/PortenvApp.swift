@@ -4,21 +4,13 @@ import AppKit
 import PortenvKit
 import SwiftUI
 
-/// Milestone 1.0: one window for one box (PORTENV_BOX, default "demo"; make
-/// it first with `portenv init`). No first run yet (1.5).
+/// One window: first run when there's no box, the box list when the box
+/// asked for (PORTENV_BOX) isn't here, and the box otherwise (PLAN.md 1.5).
+/// Never a window for a box that doesn't exist.
 @main
 struct PortenvApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
-    private static let box = ProcessInfo.processInfo.environment["PORTENV_BOX"] ?? "demo"
-    @State private var tabs = TabsController(box: box, daemon: SharedDaemon.client)
-    @State private var controller = BoxController(
-        box: box,
-        daemon: SharedDaemon.client,
-        notifier: Notifier.shared,
-        // launchd runs portenvd (the login item): the app only makes sure
-        // it's registered, and says plainly when it needs approval.
-        ensureDaemon: LoginItem.ensureRegistered
-    )
+    @State private var model = AppModel()
 
     init() {
         // Dev builds and tests: unregister the login item and exit, with no
@@ -26,35 +18,34 @@ struct PortenvApp: App {
         if CommandLine.arguments.contains("--unregister-service") {
             exit(LoginItem.unregister())
         }
+        // Dev builds: write light and dark renders of the first-run screens
+        // and the box list to a folder, then exit (for PRs, next to the
+        // mockups).
+        if let i = CommandLine.arguments.firstIndex(of: "--render-screens"), i + 1 < CommandLine.arguments.count {
+            exit(MainActor.assumeIsolated { ScreenRenders.write(to: CommandLine.arguments[i + 1]) })
+        }
     }
 
     var body: some Scene {
         WindowGroup {
-            MainWindow(controller: controller, tabs: tabs)
+            AppRoot(model: model)
                 .task {
-                    delegate.controller = controller
-                    _ = await LoginItem.ensureRegistered()
-                    await controller.waitForDaemon()
-                    // Boxes saved in the background after Quit Anyway: say so once.
-                    await controller.announceBackgroundSaves()
-                    // Before opening: with no network at all the box opens
-                    // offline at once instead of probing storage.
-                    await NetworkWatch.shared.start()
-                    await controller.open()
-                    // The state line follows the state portenvd pushes
-                    // (WatchBoxState), not a poll.
-                    await controller.follow()
+                    model.onOpen = { [delegate] controller in delegate.controller = controller }
+                    await model.start()
                 }
         }
         .windowToolbarStyle(.unified(showsTitle: true))
         .commands {
             // Make a Save Point (⌘S) is in the Box menu (§3.2), not File.
             CommandGroup(replacing: .saveItem) {}
-            // The title menu's box actions, also in the menu bar.
+            // The title menu's box actions, also in the menu bar, once a box
+            // is open.
             CommandMenu("Box") {
-                BoxMenu(controller: controller)
+                if let controller = model.controller {
+                    BoxMenu(controller: controller)
+                }
             }
-            TabCommands(tabs: tabs)
+            TabCommands(tabs: model.tabs)
         }
     }
 }

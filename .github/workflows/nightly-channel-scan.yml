@@ -84,7 +84,7 @@ jobs:
           else
             excerpt="(no log: the scan step didn't run)"
           fi
-          body=$(printf 'The nightly full-disk channel scan failed (go test exit %s): %s\n\nA timeout counts as a failure.\n\n```\n%s\n```\n' \
+          body=$(printf 'The nightly full-disk channel scan failed (go test exit %s): %s\n\nA timeout counts as a failure.\n\n~~~\n%s\n~~~\n' \
             "${SCAN_EXIT:-unknown}" "$RUN_URL" "$excerpt")
           if [[ -n $open ]]; then
             gh issue comment "$open" --body "$body"

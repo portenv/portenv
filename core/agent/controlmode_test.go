@@ -49,6 +49,8 @@ type ctlHarness struct {
 	mu     sync.Mutex
 	shells *tabShells
 	events []ctlEvent
+	// lastOut is when each pane last printed (for the "quiet" signal).
+	lastOut map[string]time.Time
 }
 
 // newShellCommand returns a command line starting an interactive shell with
@@ -108,7 +110,7 @@ func newCtlHarness(t *testing.T, shell string) (*ctlHarness, tabs) {
 		t.Fatal(err)
 	}
 	raw("kill-session", "-t", "=boot")
-	h := &ctlHarness{t: t, raw: raw, shells: newTabShells()}
+	h := &ctlHarness{t: t, raw: raw, shells: newTabShells(), lastOut: map[string]time.Time{}}
 	// The control client: tmux -C on pipes, attached to the same session.
 	sock := strings.TrimSpace(raw("display-message", "-p", "#{socket_path}"))
 	ctx, cancel := context.WithCancel(context.Background())
@@ -136,6 +138,9 @@ func newCtlHarness(t *testing.T, shell string) (*ctlHarness, tabs) {
 				continue
 			}
 			h.mu.Lock()
+			if e.kind == ctlOutput {
+				h.lastOut[e.pane] = time.Now()
+			}
 			h.events = append(h.events, e)
 			unknown := h.shells.apply(e)
 			h.mu.Unlock()
@@ -261,6 +266,14 @@ func TestOSC133PerTabThroughControlMode(t *testing.T) {
 			h.waitFor("exit 3", func() bool { s, c, ok := state(first); return s == shellPrompt && ok && c == 3 })
 			send(first, "true")
 			h.waitFor("exit 0", func() bool { s, c, ok := state(first); return s == shellPrompt && ok && c == 0 })
+			// The integration prints nothing the person can see: a command's
+			// output appears exactly as it would without it.
+			send(first, "echo portenv-marker")
+			h.waitFor("echo done", func() bool { return h.shells.shell(first).Commands() >= 4 })
+			screen := h.raw("capture-pane", "-p", "-t", first)
+			if !strings.Contains("\n"+screen+"\n", "\nportenv-marker\n") {
+				t.Fatalf("the integration changed a command's output:\n%s", screen)
+			}
 
 			// A running command shows as running in its own tab only.
 			send(w2, "sleep 2")

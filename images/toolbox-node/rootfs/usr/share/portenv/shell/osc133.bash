@@ -18,6 +18,7 @@ if [ -n "${BASH_VERSION-}" ] && [[ $- == *i* ]] && [ -z "${__portenv_osc133-}" ]
 		return "$ec"
 	}
 	PROMPT_COMMAND="__portenv_osc133_precmd${PROMPT_COMMAND:+; $PROMPT_COMMAND}"
-	# PS0 is shown before a command runs; the assignment marks that one ran.
-	PS0='${__portenv_ran:=1}'"$PS0"'\[\033]133;C\007\]'
+	# PS0 is shown before a command runs. The empty substring's length is an
+	# arithmetic assignment: it marks that a command ran and prints nothing.
+	PS0='${__portenv_ran:0:$((__portenv_ran=1, 0))}'"$PS0"'\[\033]133;C\007\]'
 fi

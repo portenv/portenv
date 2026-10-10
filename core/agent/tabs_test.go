@@ -310,9 +310,11 @@ func TestTabsSayWhatIsRunning(t *testing.T) {
 		t.Fatalf("an idle shell reports program %q, want none", p)
 	}
 	raw("send-keys", "-t", ts[0].GetId(), "sleep 30", "Enter")
+	// Wait for sleep itself: the person's shell config may briefly run
+	// other programs (a grep) as the shell starts.
 	var p string
 	for range 50 {
-		if p = mustList(t, tb)[0].GetProgram(); p != "" {
+		if p = mustList(t, tb)[0].GetProgram(); p == "sleep" {
 			break
 		}
 		time.Sleep(50 * time.Millisecond)

@@ -174,7 +174,57 @@ struct TabsTests {
         try? await Task.sleep(for: .milliseconds(200)) // nothing closes later either
         #expect(!tabCalls(d).contains { $0[1] == "close-tab" })
         #expect(await c.requestClose(id: "@1") == .asking)
-        await c.confirmClose()
+        await c.confirmClose(c.pendingClose!)
+        #expect(tabCalls(d).contains(["app", "close-tab", "acme-api", "@1"]))
+        #expect(c.pendingClose == nil)
+    }
+
+    /// A portenvd older than the app (it lacks a call, gRPC's
+    /// "unimplemented") gets a plain line saying what to do (§10), never the
+    /// raw "unknown method NewTab for service …". (Found at the Mac,
+    /// 2026-10-10, with the login item still on an older build.)
+    @Test func anOlderPortenvdSaysWhatToDo() {
+        let e = DaemonError.fromRPC(message: "unknown method NewTab for service portenv.daemon.v1.DaemonService",
+                                    unimplemented: true, unavailable: false)
+        #expect(e.message == DaemonError.outOfDate)
+        #expect(!e.message.contains("unknown method"))
+        #expect(!e.unavailable)
+        // Other failures keep portenvd's own plain message.
+        #expect(DaemonError.fromRPC(message: "no box named demo here", unimplemented: false, unavailable: false).message
+                == "no box named demo here")
+        #expect(DaemonError.fromRPC(message: "connection refused", unimplemented: false, unavailable: true).unavailable)
+    }
+
+    /// ⌃Tab and ⌃⇧Tab move to the next and previous tab on any keyboard
+    /// layout (⌘⇧[ / ⌘⇧] need a bracket key, which AZERTY lacks), and
+    /// nothing else does: plain Tab, ⌥Tab and ⌘Tab stay with the terminal
+    /// and the system. (Found at the Mac, 2026-10-10.)
+    @Test func controlTabStepsThroughTabsOnAnyLayout() {
+        #expect(TabKeys.step(keyCode: 48, control: true, shift: false, option: false, command: false) == 1)
+        #expect(TabKeys.step(keyCode: 48, control: true, shift: true, option: false, command: false) == -1)
+        #expect(TabKeys.step(keyCode: 48, control: false, shift: false, option: false, command: false) == nil)
+        #expect(TabKeys.step(keyCode: 48, control: false, shift: true, option: false, command: false) == nil)
+        #expect(TabKeys.step(keyCode: 48, control: true, shift: false, option: true, command: false) == nil)
+        #expect(TabKeys.step(keyCode: 48, control: true, shift: false, option: false, command: true) == nil)
+        #expect(TabKeys.step(keyCode: 0, control: true, shift: false, option: false, command: false) == nil)
+    }
+
+    /// Close Tab closes the tab even though SwiftUI dismisses the alert
+    /// (clearing the pending close) before the button's task runs: the
+    /// question's own close is passed to the button, never read back
+    /// afterwards. (Found at the Mac, 2026-10-10: Close Tab did nothing.)
+    @Test func closeTabStillClosesAfterTheAlertIsDismissed() async {
+        let d = FakeDaemon()
+        threeTabs(d)
+        let c = TabsController(box: "acme-api", daemon: d)
+        await c.load()
+        d.setTabs([TabInfo(id: "@0", name: "claude", active: false),
+                   TabInfo(id: "@1", name: "shell", active: true, program: "sleep"),
+                   TabInfo(id: "@2", name: "build", active: false)])
+        #expect(await c.requestClose() == .asking)
+        let asked = c.pendingClose!
+        c.cancelClose() // what the alert's dismissal does, first
+        await c.confirmClose(asked) // then the Close Tab button's task
         #expect(tabCalls(d).contains(["app", "close-tab", "acme-api", "@1"]))
         #expect(c.pendingClose == nil)
     }

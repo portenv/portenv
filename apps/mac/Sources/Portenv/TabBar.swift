@@ -13,6 +13,8 @@ struct TabBar: View {
     /// The tab being renamed, and the name being typed.
     @State private var renaming: String?
     @State private var draft = ""
+    /// The ⌃Tab / ⌃⇧Tab monitor, seen before the terminal gets the key.
+    @State private var keyMonitor: Any?
 
     var body: some View {
         HStack(spacing: 0) {
@@ -54,10 +56,24 @@ struct TabBar: View {
         } message: {
             Text(tabs.error ?? "")
         }
+        .onAppear {
+            keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+                let m = event.modifierFlags
+                guard let step = TabKeys.step(keyCode: event.keyCode, control: m.contains(.control), shift: m.contains(.shift),
+                                              option: m.contains(.option), command: m.contains(.command)) else { return event }
+                Task { step > 0 ? await tabs.selectNext() : await tabs.selectPrevious() }
+                return nil
+            }
+        }
+        .onDisappear {
+            if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
+            keyMonitor = nil
+        }
         // A tab that still runs a program asks before it closes (§4.1).
         .alert(tabs.pendingClose.map(TabText.closeQuestion) ?? "",
-               isPresented: Binding(get: { tabs.pendingClose != nil }, set: { if !$0 { tabs.cancelClose() } })) {
-            Button(TabText.closeButton, role: .destructive) { Task { await tabs.confirmClose() } }
+               isPresented: Binding(get: { tabs.pendingClose != nil }, set: { if !$0 { tabs.cancelClose() } }),
+               presenting: tabs.pendingClose) { asked in
+            Button(TabText.closeButton, role: .destructive) { Task { await tabs.confirmClose(asked) } }
             Button("Cancel", role: .cancel) { tabs.cancelClose() }
         }
     }
@@ -66,7 +82,7 @@ struct TabBar: View {
 /// The tab shortcuts (§4.1), in the menu bar: File › New Tab ⌘T and Close
 /// Tab ⌘W (the last tab closes the window, which saves and releases the
 /// box), Window › Show Previous Tab ⌘⇧[, Show Next Tab ⌘⇧] and Show Tab
-/// ▸ 1–9 (⌘1–⌘9).
+/// ▸ 1–9 (⌘1–⌘9). ⌃Tab and ⌃⇧Tab are handled by the tab bar's key monitor.
 struct TabCommands: Commands {
     let tabs: TabsController
 
@@ -126,7 +142,7 @@ private struct TabItem: View {
                     .accessibilityLabel(A11y.renameTab(tab.name))
             } else {
                 Text(tab.name)
-                    .font(.system(size: 12))
+                    .font(.system(size: 12, weight: tab.active ? .semibold : .regular))
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .foregroundStyle(tab.active ? .primary : .secondary)
@@ -151,6 +167,11 @@ private struct TabItem: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(tab.active ? Color(nsColor: .windowBackgroundColor) : .clear)
+        // The current tab is marked by more than a shade (§4.1, §12): its
+        // name in semibold and an accent line along its bottom edge.
+        .overlay(alignment: .bottom) {
+            if tab.active { Rectangle().fill(Color.accentColor).frame(height: 2).accessibilityHidden(true) }
+        }
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
         .onTapGesture(count: 2) { startRename() }

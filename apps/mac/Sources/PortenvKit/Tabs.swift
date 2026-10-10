@@ -28,6 +28,18 @@ public enum TabViewer {
     public static let app = "app"
 }
 
+/// ⌃Tab and ⌃⇧Tab (§4.1): the next and previous tab on any keyboard
+/// layout, as in Safari and Terminal. Next is 1, previous is -1; any other
+/// key, or Tab with ⌥ or ⌘, is not a tab key and returns nil.
+public enum TabKeys {
+    public static let tabKeyCode: UInt16 = 48
+
+    public static func step(keyCode: UInt16, control: Bool, shift: Bool, option: Bool, command: Bool) -> Int? {
+        guard keyCode == tabKeyCode, control, !option, !command else { return nil }
+        return shift ? -1 : 1
+    }
+}
+
 /// A close waiting for the person's answer: the tab still runs a program.
 public struct PendingClose: Equatable, Sendable {
     public let id: String
@@ -197,9 +209,10 @@ public final class TabsController {
         return .closed
     }
 
-    /// The person chose Close Tab in the question.
-    public func confirmClose() async {
-        guard let p = pendingClose else { return }
+    /// The person chose Close Tab in the question. The question's own close
+    /// is passed in: SwiftUI dismisses the alert (clearing `pendingClose`)
+    /// before the button's task runs, so it can't be read back here.
+    public func confirmClose(_ p: PendingClose) async {
         pendingClose = nil
         await close(p.id)
     }

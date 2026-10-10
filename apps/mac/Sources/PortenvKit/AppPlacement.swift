@@ -27,8 +27,6 @@ public enum MoveText {
     public static let move = "Move to Applications"
     public static let notNow = "Not Now"
     public static let notPortenv = "There’s already an app called Portenv.app in Applications that isn’t Portenv. Rename or remove it, then try again."
-    public static let launchdRefused = "macOS didn’t start Portenv’s background service. Quit Portenv and open it again; if this keeps happening, reinstall Portenv."
-    public static let launchdRefusedElsewhere = "macOS didn’t start Portenv’s background service from where Portenv is now, so nothing is being saved. Move Portenv to the Applications folder and open it again."
 }
 
 public struct MoveError: Error, LocalizedError, Equatable {
@@ -83,11 +81,9 @@ public enum LaunchdJob {
         return nil
     }
 
-    /// The plain line when launchd refused to start portenvd (exit 78,
-    /// EX_CONFIG), or nil.
-    public static func problem(in printed: String, placement: AppPlacement) -> String? {
-        guard lastExitCode(in: printed) == 78 else { return nil }
-        return placement == .applications ? MoveText.launchdRefused : MoveText.launchdRefusedElsewhere
+    /// Whether launchd refused to start portenvd (exit 78, EX_CONFIG).
+    public static func refused(in printed: String) -> Bool {
+        lastExitCode(in: printed) == 78
     }
 }
 
@@ -99,26 +95,41 @@ public enum ServiceStatus: Equatable, Sendable {
 public enum ServiceText {
     public static let needsApproval = "Portenv needs permission to run in the background. Turn it on in System Settings \u{203A} General \u{203A} Login Items."
     public static let openLoginItems = "Open Login Items"
+    /// launchd refused portenvd after a register (R-0032). SMAppService can
+    /// say "enabled" before Portenv is switched on in Login Items, so both
+    /// remedies are given, Login Items first.
+    public static let notStarted = "Portenv\u{2019}s background service didn\u{2019}t start. Turn Portenv on in System Settings \u{203A} General \u{203A} Login Items, and if it\u{2019}s not in the Applications folder, move it there."
 }
 
-/// Why portenvd isn't running, as the app says it (R-0028). The login
-/// item's status comes first: waiting for approval is said as such, with
-/// Open Login Items, wherever the app is. Only an enabled item that launchd
-/// still refuses (exit 78) talks about the location, and only outside
-/// /Applications.
+/// Why portenvd isn't running, as the app says it (R-0028, R-0032).
+/// - launchd refused it (exit 78): both remedies in one line, Login Items
+///   first, with Open Login Items and Try Again; the wait ends. SMAppService
+///   can't be trusted to tell an approved item apart (it said "enabled"
+///   before Portenv was switched on), so the location never stands alone.
+/// - Not refused, but the login item isn't enabled: waiting for approval,
+///   with Open Login Items; the wait goes on.
+/// - Otherwise: no problem yet.
 public struct BackgroundServiceProblem: Equatable, Sendable {
     public let message: String
     public let opensLoginItems: Bool
-    public init(message: String, opensLoginItems: Bool) {
+    public let offersTryAgain: Bool
+    public init(message: String, opensLoginItems: Bool, offersTryAgain: Bool) {
         self.message = message
         self.opensLoginItems = opensLoginItems
+        self.offersTryAgain = offersTryAgain
     }
 
-    public static func of(status: ServiceStatus, launchdJob: String, placement: AppPlacement) -> BackgroundServiceProblem? {
-        guard status == .enabled else {
-            return BackgroundServiceProblem(message: ServiceText.needsApproval, opensLoginItems: true)
+    /// Whether the wait for portenvd should end (a refusal); approval keeps
+    /// waiting.
+    public var endsWait: Bool { offersTryAgain }
+
+    public static func of(status: ServiceStatus, launchdJob: String, placement _: AppPlacement) -> BackgroundServiceProblem? {
+        if LaunchdJob.refused(in: launchdJob) {
+            return BackgroundServiceProblem(message: ServiceText.notStarted, opensLoginItems: true, offersTryAgain: true)
         }
-        guard let refused = LaunchdJob.problem(in: launchdJob, placement: placement) else { return nil }
-        return BackgroundServiceProblem(message: refused, opensLoginItems: false)
+        if status != .enabled {
+            return BackgroundServiceProblem(message: ServiceText.needsApproval, opensLoginItems: true, offersTryAgain: false)
+        }
+        return nil
     }
 }

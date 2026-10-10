@@ -31,7 +31,13 @@ public struct NewBox: Equatable, Sendable {
 /// A failed first-run step, with its plain message (GUIDELINES §10).
 public struct FirstRunError: Error, LocalizedError, Equatable {
     public let message: String
-    public init(_ message: String) { self.message = message }
+    /// A step that isn't built yet: shown as a notice (secondary text), not
+    /// an error.
+    public let notBuilt: Bool
+    public init(_ message: String, notBuilt: Bool = false) {
+        self.message = message
+        self.notBuilt = notBuilt
+    }
     public var errorDescription: String? { message }
 }
 
@@ -62,18 +68,22 @@ public final class FirstRunFlow {
     /// Usage counting is on, and shown, before any update check (1.8).
     public var countUsage = true
     public private(set) var error: String?
+    /// A plain notice (secondary text), like a step not built yet.
+    public private(set) var notice: String?
+    /// New Box… from the box list (titled "New box", with Create Box and
+    /// Cancel), rather than first run.
+    public let fromBoxList: Bool
     public private(set) var busy = false
     /// The box made at the end, once it exists.
     public private(set) var made: String?
 
     private let service: FirstRunService
     private let existing: Set<String>
-    /// The CLI's rule for box names (core/local's NameRE).
-    private static let nameRule = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,62}$/
 
-    public init(service: FirstRunService, at start: FirstRunStep = .welcome, existing: [String] = []) {
+    public init(service: FirstRunService, at start: FirstRunStep = .welcome, existing: [String] = [], fromBoxList: Bool = false) {
         self.service = service
         self.existing = Set(existing)
+        self.fromBoxList = fromBoxList
         step = start
         steps = start == .firstBox ? [.firstBox, .gettingReady] : FirstRunStep.allCases
         if start == .firstBox { storage = .thisMac }
@@ -99,16 +109,24 @@ public final class FirstRunFlow {
             case nil: return false
             }
         case .firstBox:
-            return boxName.wholeMatch(of: Self.nameRule) != nil && !existing.contains(boxName)
+            return !boxName.isEmpty && nameProblem == nil
         case .gettingReady:
             return false
         }
     }
 
+    /// What's wrong with the name, in one line, or nil (also while empty).
+    public var nameProblem: String? { FirstRunText.nameProblem(boxName, existing: Array(existing)) }
+
+    public var firstBoxTitle: String { fromBoxList ? FirstRunText.newBoxTitle : FirstRunText.firstBoxTitle }
+    public var primaryButton: String { fromBoxList && step == .firstBox ? FirstRunText.createBox : "Continue" }
+    public var showsStepDots: Bool { !fromBoxList }
+
     public func back() {
         guard canGoBack, let i = steps.firstIndex(of: step) else { return }
         if step == .recoveryKey { recoverySaved = false }
         error = nil
+        notice = nil
         step = steps[i - 1]
     }
 
@@ -134,8 +152,13 @@ public final class FirstRunFlow {
                 break
             }
             error = nil
+            notice = nil
             step = steps[i + 1]
+        } catch let failure as FirstRunError where failure.notBuilt {
+            notice = failure.message
+            error = nil
         } catch {
+            notice = nil
             self.error = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
     }
@@ -165,6 +188,27 @@ public enum FirstRunText {
 
     public static let firstBoxTitle = "Make your first box"
     public static let firstBoxLine = "A box is an encrypted workspace for one project. Give it a short name, like the project’s."
+
+    /// New Box… from the box list (the new-box board).
+    public static let newBoxTitle = "New box"
+    public static let createBox = "Create Box"
+    public static let nameHint = "Letters, numbers and hyphens, like the project\u{2019}s name."
+
+    /// What's wrong with a box name, in one line (R-0032), or nil when it's
+    /// empty or valid. The rule is the CLI's (core/local's NameRE).
+    public static func nameProblem(_ name: String, existing: [String]) -> String? {
+        guard !name.isEmpty else { return nil }
+        if let first = name.first, !(first.isASCII && (first.isLetter || first.isNumber)) {
+            return "Start with a letter or a number."
+        }
+        if name.wholeMatch(of: /^[A-Za-z0-9][A-Za-z0-9_.-]{0,62}$/) == nil {
+            return "Use letters, numbers and hyphens, starting with a letter or number."
+        }
+        if existing.contains(name) {
+            return "There\u{2019}s already a box called \u{201C}\(name)\u{201D}."
+        }
+        return nil
+    }
 
     public static let gettingReadyTitle = "Getting ready"
 

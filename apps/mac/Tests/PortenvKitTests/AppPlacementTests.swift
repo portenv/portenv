@@ -99,31 +99,28 @@ struct LaunchdJobTests {
         #expect(LaunchdJob.lastExitCode(in: "") == nil)
     }
 
-    /// R-0028: the login item's status comes first. Waiting for approval in
-    /// Login Items is said as such, with Open Login Items, wherever the app
-    /// is; only an enabled item that launchd still refuses (exit 78) talks
-    /// about the location, and only outside /Applications.
-    @Test func approvalIsSaidBeforeAnythingElse() {
-        for status in [ServiceStatus.requiresApproval, .notRegistered, .notFound] {
+    /// R-0032: SMAppService said "enabled" while launchd still refused,
+    /// before Portenv was switched on in Login Items. So a refusal after a
+    /// register always gets both remedies in one line, Login Items first,
+    /// with Open Login Items and Try Again; it ends the wait.
+    @Test func registeredButNotApprovedGetsBothRemedies() {
+        for status in [ServiceStatus.enabled, .requiresApproval, .notRegistered, .notFound] {
             for placement in [AppPlacement.applications, .elsewhere, .translocated] {
                 let p = BackgroundServiceProblem.of(status: status, launchdJob: refused, placement: placement)
-                #expect(p == BackgroundServiceProblem(message: ServiceText.needsApproval, opensLoginItems: true), "\(status) \(placement)")
+                #expect(p == BackgroundServiceProblem(message: ServiceText.notStarted, opensLoginItems: true, offersTryAgain: true), "\(status) \(placement)")
             }
         }
+        #expect(ServiceText.notStarted == "Portenv\u{2019}s background service didn\u{2019}t start. Turn Portenv on in System Settings \u{203A} General \u{203A} Login Items, and if it\u{2019}s not in the Applications folder, move it there.")
+    }
+
+    /// Not refused yet, but waiting for approval: said as such, with Open
+    /// Login Items; the wait goes on, so the app carries on once it's on.
+    @Test func waitingForApprovalSaysSo() {
+        for status in [ServiceStatus.requiresApproval, .notRegistered, .notFound] {
+            let p = BackgroundServiceProblem.of(status: status, launchdJob: running, placement: .elsewhere)
+            #expect(p == BackgroundServiceProblem(message: ServiceText.needsApproval, opensLoginItems: true, offersTryAgain: false), "\(status)")
+        }
         #expect(ServiceText.needsApproval == "Portenv needs permission to run in the background. Turn it on in System Settings \u{203A} General \u{203A} Login Items.")
-    }
-
-    @Test func enabledButRefusedOutsideApplicationsSaysMove() {
-        #expect(BackgroundServiceProblem.of(status: .enabled, launchdJob: refused, placement: .elsewhere)
-            == BackgroundServiceProblem(message: MoveText.launchdRefusedElsewhere, opensLoginItems: false))
-        #expect(BackgroundServiceProblem.of(status: .enabled, launchdJob: refused, placement: .translocated)
-            == BackgroundServiceProblem(message: MoveText.launchdRefusedElsewhere, opensLoginItems: false))
-    }
-
-    @Test func enabledButRefusedInApplicationsIsNeutral() {
-        #expect(BackgroundServiceProblem.of(status: .enabled, launchdJob: refused, placement: .applications)
-            == BackgroundServiceProblem(message: MoveText.launchdRefused, opensLoginItems: false))
-        #expect(MoveText.launchdRefused == "macOS didn\u{2019}t start Portenv\u{2019}s background service. Quit Portenv and open it again; if this keeps happening, reinstall Portenv.")
     }
 
     /// Enabled and not refused: no problem yet (the usual wait goes on).
@@ -132,12 +129,12 @@ struct LaunchdJobTests {
         #expect(BackgroundServiceProblem.of(status: .enabled, launchdJob: "", placement: .applications) == nil)
     }
 
-    @Test func exit78IsSaidPlainly() {
-        #expect(LaunchdJob.problem(in: refused, placement: .elsewhere) == MoveText.launchdRefusedElsewhere)
-        #expect(LaunchdJob.problem(in: refused, placement: .applications) == MoveText.launchdRefused)
-        #expect(LaunchdJob.problem(in: running, placement: .elsewhere) == nil)
+    @Test func exit78IsRefused() {
+        #expect(LaunchdJob.refused(in: refused))
+        #expect(!LaunchdJob.refused(in: running))
+        #expect(!LaunchdJob.refused(in: ""))
         // Never a straight apostrophe (GUIDELINES).
-        for line in [MoveText.question, MoveText.detail, MoveText.launchdRefused, MoveText.launchdRefusedElsewhere, MoveText.notPortenv, ServiceText.needsApproval, ServiceText.openLoginItems] {
+        for line in [MoveText.question, MoveText.detail, MoveText.notPortenv, ServiceText.needsApproval, ServiceText.notStarted, ServiceText.openLoginItems] {
             #expect(!line.contains("'"), "straight apostrophe in: \(line)")
         }
     }

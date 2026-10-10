@@ -11,9 +11,20 @@ struct FirstRunView: View {
     @Bindable var flow: FirstRunFlow
     /// The box made at the end, to open.
     let opened: (String) -> Void
+    /// New Box… from the box list: Cancel, ⎋ and "Your boxes" go back to it.
+    var cancel: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            if let cancel {
+                Button(action: cancel) {
+                    Label("Your boxes", systemImage: "chevron.left")
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .padding(.bottom, 20)
+                .accessibilityLabel("Back to your boxes")
+            }
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             if let error = flow.error {
@@ -22,6 +33,13 @@ struct FirstRunView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.bottom, 12)
                     .accessibilityLabel("Problem: \(error)")
+            }
+            // A step not built yet is a notice, not an error (R-0032).
+            if let notice = flow.notice {
+                Text(notice)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.bottom, 12)
             }
             if flow.step != .welcome {
                 footer
@@ -57,6 +75,7 @@ struct FirstRunView: View {
                 .background(RoundedRectangle(cornerRadius: 20).fill(.quaternary))
                 .accessibilityHidden(true)
             Text(FirstRunText.welcomeTitle).font(.system(size: 30, weight: .bold))
+                .accessibilityAddTraits(.isHeader)
             Text(FirstRunText.welcomeLine)
                 .font(.title3)
                 .foregroundStyle(.secondary)
@@ -135,12 +154,22 @@ struct FirstRunView: View {
     }
 
     private var firstBox: some View {
-        heading(FirstRunText.firstBoxTitle, FirstRunText.firstBoxLine) {
-            TextField("Name", text: $flow.boxName)
-                .textFieldStyle(.roundedBorder)
-                .frame(maxWidth: 360)
-                .accessibilityLabel("Box name")
-                .onSubmit { Task { await flow.next() } }
+        heading(flow.firstBoxTitle, flow.fromBoxList ? "" : FirstRunText.firstBoxLine) {
+            VStack(alignment: .leading, spacing: 6) {
+                let problem = flow.nameProblem
+                TextField("Name", text: $flow.boxName)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(maxWidth: 360)
+                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(.red, lineWidth: problem == nil ? 0 : 1.5))
+                    .accessibilityLabel("Box name")
+                    .onSubmit { Task { await flow.next() } }
+                // One line under the field: the rule, or what's wrong (the
+                // new-box boards; R-0032).
+                Text(problem ?? FirstRunText.nameHint)
+                    .font(.callout)
+                    .foregroundStyle(problem == nil ? Color.secondary : Color.red)
+                    .accessibilityLabel(problem.map { "Problem: \($0)" } ?? FirstRunText.nameHint)
+            }
         }
     }
 
@@ -159,6 +188,7 @@ struct FirstRunView: View {
     private func heading<Content: View>(_ title: String, _ line: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(title).font(.system(size: 26, weight: .bold))
+                .accessibilityAddTraits(.isHeader)
             if !line.isEmpty {
                 Text(line)
                     .font(.title3)
@@ -173,15 +203,21 @@ struct FirstRunView: View {
 
     private var footer: some View {
         HStack {
-            StepDots(steps: flow.steps, current: flow.step)
+            if flow.showsStepDots {
+                StepDots(steps: flow.steps, current: flow.step)
+            }
             Spacer()
             if flow.step != .gettingReady {
-                if flow.canGoBack {
+                if let cancel {
+                    Button("Cancel", action: cancel)
+                        .controlSize(.large)
+                        .keyboardShortcut(.cancelAction)
+                } else if flow.canGoBack {
                     Button("Back") { flow.back() }
                         .controlSize(.large)
                         .keyboardShortcut(.cancelAction)
                 }
-                Button("Continue") { Task { await flow.next() } }
+                Button(flow.primaryButton) { Task { await flow.next() } }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
                     .keyboardShortcut(.defaultAction)

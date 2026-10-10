@@ -33,8 +33,15 @@ enum ScreenRenders {
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             for step in FirstRunStep.allCases {
                 let flow = await sampleFlow(at: step)
-                try snapshot(FirstRunView(flow: flow) { _ in }, name: "first-run-\(step.rawValue + 1)-\(name(step))", in: dir)
+                try snapshot(FirstRunView(flow: flow, opened: { _ in }), name: "first-run-\(step.rawValue + 1)-\(name(step))", in: dir)
             }
+            // New Box… from the box list (the new-box boards).
+            let newBox = FirstRunFlow(service: Sample(), at: .firstBox, existing: ["acme-api"], fromBoxList: true)
+            newBox.boxName = "site"
+            try snapshot(FirstRunView(flow: newBox, opened: { _ in }, cancel: {}), name: "new-box", in: dir)
+            let invalid = FirstRunFlow(service: Sample(), at: .firstBox, existing: ["acme-api"], fromBoxList: true)
+            invalid.boxName = "-api"
+            try snapshot(FirstRunView(flow: invalid, opened: { _ in }, cancel: {}), name: "new-box-invalid", in: dir)
             try snapshot(
                 BoxListView(boxes: ["acme-api", "site", "notes"], notice: LaunchDecision.missing("demo"), open: { _ in }, newBox: {}),
                 name: "box-list", in: dir

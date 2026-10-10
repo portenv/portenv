@@ -49,10 +49,10 @@ final class AppModel {
                     launchdJob: MoveToApplications.launchdJob(),
                     placement: MoveToApplications.placement
                 )
-                if let problem, !problem.opensLoginItems { return }
+                if let problem, problem.endsWait { return }
             }
             if problem == nil, ContinuousClock.now >= deadline {
-                problem = BackgroundServiceProblem(message: BoxController.daemonGone, opensLoginItems: false)
+                problem = BackgroundServiceProblem(message: BoxController.daemonGone, opensLoginItems: false, offersTryAgain: true)
                 return
             }
             try? await Task.sleep(for: .milliseconds(200))
@@ -63,7 +63,8 @@ final class AppModel {
         } catch {
             problem = BackgroundServiceProblem(
                 message: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription,
-                opensLoginItems: false
+                opensLoginItems: false,
+                offersTryAgain: true
             )
             return
         }
@@ -116,21 +117,33 @@ final class AppModel {
         await controller.follow()
     }
 
-    /// The box list's New Box…: first run's first-box step.
+    /// The box list's New Box…: first run's first-box step, titled "New
+    /// box", with Cancel back to the list.
     func newBox() {
-        firstRun = FirstRunFlow(service: AppFirstRunService(), at: .firstBox, existing: boxes)
+        firstRun = FirstRunFlow(service: AppFirstRunService(), at: .firstBox, existing: boxes, fromBoxList: true)
         launch = .firstRun(.firstBox)
+    }
+
+    /// Cancel, ⎋ or "Your boxes" from New Box…: back to the list.
+    func cancelNewBox() {
+        firstRun = nil
+        launch = .boxList(notice: nil)
     }
 }
 
 /// Keys, the recovery key and creating a box from the app aren't built yet:
 /// they're data-loss paths and wait for their ADR and tests (PLAN.md 1.5,
-/// Open questions). Until then first run says so plainly instead of
-/// pretending.
+/// Open questions). Until then first run says so plainly, as a notice:
+/// dev builds name the CLI workaround; a release build never sends anyone
+/// to Terminal (GUIDELINES §10).
 struct AppFirstRunService: FirstRunService {
-    static let notYet = "Portenv can’t make keys or boxes from the app yet. For now, make a box in Terminal with portenv init, then open Portenv again."
-    func makeRecoveryKey() async throws -> String { throw FirstRunError(Self.notYet) }
-    func createBox(_: NewBox) async throws { throw FirstRunError(Self.notYet) }
+    /// Lane and other dev builds have their own bundle identifier.
+    static var isDevBuild: Bool { Bundle.main.bundleIdentifier != AppMover.bundleID }
+    static let notYetDev = "Dev build: making keys and boxes from the app isn’t built yet. Make a box with portenv init, then open Portenv again."
+    static let notYet = "Making keys and boxes from the app isn’t ready yet."
+    private var message: String { Self.isDevBuild ? Self.notYetDev : Self.notYet }
+    func makeRecoveryKey() async throws -> String { throw FirstRunError(message, notBuilt: true) }
+    func createBox(_: NewBox) async throws { throw FirstRunError(message, notBuilt: true) }
 }
 
 /// The window's content, from the model's decision.
@@ -142,16 +155,22 @@ struct AppRoot: View {
             if let problem = model.problem {
                 VStack(spacing: 12) {
                     Text(problem.message).font(.title3).multilineTextAlignment(.center).frame(maxWidth: 460)
-                    if problem.opensLoginItems {
-                        // The wait goes on: once it's turned on, Portenv
-                        // carries on by itself.
-                        Button(ServiceText.openLoginItems) { SMAppService.openSystemSettingsLoginItems() }
-                            .buttonStyle(.borderedProminent)
-                            .keyboardShortcut(.defaultAction)
-                    } else {
-                        Button("Try Again") { Task { await model.start() } }
-                            .buttonStyle(.borderedProminent)
-                            .keyboardShortcut(.defaultAction)
+                    HStack(spacing: 12) {
+                        // Login Items first (R-0032). While it only waits for
+                        // approval, Portenv carries on by itself once it's on.
+                        if problem.opensLoginItems {
+                            Button(ServiceText.openLoginItems) { SMAppService.openSystemSettingsLoginItems() }
+                                .buttonStyle(.borderedProminent)
+                                .keyboardShortcut(.defaultAction)
+                        }
+                        if problem.offersTryAgain {
+                            let tryAgain = Button("Try Again") { Task { await model.start() } }
+                            if problem.opensLoginItems {
+                                tryAgain
+                            } else {
+                                tryAgain.buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
+                            }
+                        }
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -163,7 +182,8 @@ struct AppRoot: View {
                         .accessibilityLabel("Starting Portenv")
                 case .firstRun:
                     if let flow = model.firstRun {
-                        FirstRunView(flow: flow) { box in Task { await model.open(box) } }
+                        FirstRunView(flow: flow, opened: { box in Task { await model.open(box) } },
+                                     cancel: flow.fromBoxList ? { model.cancelNewBox() } : nil)
                     }
                 case let .boxList(notice):
                     BoxListView(boxes: model.boxes, notice: notice) { box in

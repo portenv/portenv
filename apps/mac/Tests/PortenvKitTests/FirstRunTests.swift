@@ -14,8 +14,11 @@ final class FakeFirstRunService: FirstRunService, @unchecked Sendable {
     static let sampleKey = Array(repeating: "TEST", count: 6).joined(separator: "-")
     var recoveryKey = FakeFirstRunService.sampleKey
     var failure: String?
+    /// Fails as "not built yet" (a notice, not an error).
+    var notBuilt: String?
 
     func makeRecoveryKey() async throws -> String {
+        if let notBuilt { throw FirstRunError(notBuilt, notBuilt: true) }
         if let failure { throw FirstRunError(failure) }
         return recoveryKey
     }
@@ -188,6 +191,57 @@ struct FirstRunTests {
         }
         #expect(FirstRunText.recoveryLine.hasPrefix("It\u{2019}s"))
         #expect(FirstRunText.recoverySavedCheck.hasPrefix("I\u{2019}ve"))
+    }
+
+    /// R-0032: the name field says what's wrong in one line: the board's
+    /// reason when it doesn't start right, the general rule otherwise, and a
+    /// name already taken; nothing while it's empty or valid.
+    @Test func nameProblemsAreSaidInOneLine() {
+        #expect(FirstRunText.nameProblem("", existing: []) == nil)
+        #expect(FirstRunText.nameProblem("acme-api", existing: []) == nil)
+        #expect(FirstRunText.nameProblem("-api", existing: []) == "Start with a letter or a number.")
+        #expect(FirstRunText.nameProblem(".api", existing: []) == "Start with a letter or a number.")
+        #expect(FirstRunText.nameProblem("my project", existing: []) == "Use letters, numbers and hyphens, starting with a letter or number.")
+        #expect(FirstRunText.nameProblem(String(repeating: "a", count: 64), existing: []) == "Use letters, numbers and hyphens, starting with a letter or number.")
+        #expect(FirstRunText.nameProblem("acme-api", existing: ["acme-api"]) == "There\u{2019}s already a box called \u{201C}acme-api\u{201D}.")
+        #expect(FirstRunText.nameHint == "Letters, numbers and hyphens, like the project\u{2019}s name.")
+        // Continue agrees with the hint.
+        let flow = FirstRunFlow(service: FakeFirstRunService(), at: .firstBox, existing: ["acme-api"])
+        for name in ["-api", "my project", "acme-api"] {
+            flow.boxName = name
+            #expect(!flow.canContinue && flow.nameProblem != nil, "\(name)")
+        }
+        flow.boxName = "site"
+        #expect(flow.canContinue && flow.nameProblem == nil)
+    }
+
+    /// From the box list it's "New box" with Create Box (the board); in
+    /// first run it's "Make your first box" with Continue and the dots.
+    @Test func newBoxFromTheListIsTitledNewBox() {
+        let fromList = FirstRunFlow(service: FakeFirstRunService(), at: .firstBox, fromBoxList: true)
+        #expect(fromList.firstBoxTitle == "New box")
+        #expect(fromList.primaryButton == "Create Box")
+        #expect(!fromList.showsStepDots)
+        let firstRun = FirstRunFlow(service: FakeFirstRunService(), at: .firstBox)
+        #expect(firstRun.firstBoxTitle == "Make your first box")
+        #expect(firstRun.primaryButton == "Continue")
+        #expect(firstRun.showsStepDots)
+    }
+
+    /// "Not built yet" is a notice (secondary text), never an error in red,
+    /// and it clears on the next try.
+    @Test func notBuiltIsANoticeNotAnError() async {
+        let service = FakeFirstRunService()
+        service.notBuilt = "Not built yet."
+        let flow = FirstRunFlow(service: service, at: .protection)
+        await flow.next()
+        #expect(flow.notice == "Not built yet.")
+        #expect(flow.error == nil)
+        #expect(flow.step == .protection)
+        service.notBuilt = nil
+        await flow.next()
+        #expect(flow.notice == nil)
+        #expect(flow.step == .recoveryKey)
     }
 
     /// The reduced Welcome (#16): one way in, "Continue without an account".

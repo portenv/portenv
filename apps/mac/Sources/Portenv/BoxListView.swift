@@ -16,6 +16,7 @@ struct BoxListView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Your boxes").font(.system(size: 26, weight: .bold))
+                .accessibilityAddTraits(.isHeader)
             if let notice {
                 Text(notice)
                     .font(.title3)

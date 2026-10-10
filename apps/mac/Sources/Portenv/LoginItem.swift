@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import Foundation
+import PortenvKit
 import ServiceManagement
 
 /// portenvd as the app's login item (1.1): launchd runs it from the app
@@ -9,7 +10,9 @@ import ServiceManagement
 /// update relaunch. The app never starts portenvd itself, so portenvd is
 /// never the app's child.
 enum LoginItem {
-    static var service: SMAppService { SMAppService.agent(plistName: "com.portenv.portenvd.plist") }
+    /// The launch agent: com.portenv.portenvd, or a dev lane's own (gmake
+    /// app LANE=X), so lanes never share a login item.
+    static var service: SMAppService { SMAppService.agent(plistName: Instance.current.daemonPlistName) }
 
     static let needsApproval = "Portenv needs to run in the background to keep your boxes saved. Open System Settings › General › Login Items and allow Portenv."
 

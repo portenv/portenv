@@ -37,7 +37,11 @@ func testTabs(t *testing.T) (tabs, func(args ...string) string) {
 		t.Fatal(err)
 	}
 	run := func(ctx context.Context, args ...string) (string, error) {
-		out, err := exec.CommandContext(ctx, "tmux", append([]string{"-L", sock, "-f", conf}, args...)...).CombinedOutput() // #nosec G204 -- test
+		cmd := exec.CommandContext(ctx, "tmux", append([]string{"-L", sock, "-f", conf}, args...)...) // #nosec G204 -- test
+		// The agent runs tmux with LANG=C.UTF-8 (envFor); without a UTF-8
+		// locale tmux prints the tab separator in formats as "_".
+		cmd.Env = append(os.Environ(), "LANG=C.UTF-8")
+		out, err := cmd.CombinedOutput()
 		if err != nil {
 			return string(out), fmt.Errorf("tmux %s: %w: %s", args[0], err, strings.TrimSpace(string(out)))
 		}

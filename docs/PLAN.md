@@ -989,17 +989,23 @@ In this order:
        - The app owns the names: tmux's automatic rename and rename by escape sequence stay off even when the user's tmux config turns them on.
        - A new session starts with one tab named "shell", and the last tab can't be closed.
        - Every window in the session is a tab, whoever created it, so a window a program opens itself appears in the tab bar (the "maps it" option above).
-     - **portenvd** relays every call and the watch to the agent, on this Mac or on a server.
+       - **Each viewer keeps its own current tab** (owner, 2026-10-10). Each viewer (the app, later each agent) gets one grouped tmux session over the box's windows (`tmux new-session -t <base>`). Its terminal attaches there, and the agent ends that session once no client is left on it.
+       - **Each tab reports its foreground program,** or nothing when only its shell runs.
+     - **portenvd** relays every call, the watch and the viewer, on this Mac or on a server; `portenv attach` takes `--viewer`.
      - **The app's tab bar:**
        - 30 pt, tabs sharing the width;
        - `+` names tabs "shell", "shell 2" and so on;
        - close on hover, and never on the last tab;
        - rename by double-click or the tab's menu;
        - semantic colours, and VoiceOver labels and actions for every control.
+       - **The app is the "app" viewer.**
+     - **Shortcuts** (owner, 2026-10-10; GUIDELINES.md §4.1):
+       - ⌘T for a new tab, ⌘1–⌘9 to choose one, ⌘⇧[ / ⌘⇧] for the previous / next tab;
+       - ⌘W closes the current tab, and on the last tab closes the window (save and release);
+       - closing a tab that still runs a program asks "Close this tab? <program> is still running.", with the program from the box agent at that moment.
      - **Not yet:**
-       - reordering;
-       - keyboard shortcuts (Open questions);
-       - a screenshot of the running app and a VoiceOver check by someone at the Mac. The PR's light and dark images are offscreen renders of the tab bar view.
+       - reordering (later, by drag; Open questions);
+       - before merge, with the owner at the Mac: a screenshot of the running app and a VoiceOver check. The PR's light and dark images are offscreen renders of the tab bar view.
 3. **The inspector (§6):**
    - **Where it is**, including the move's four-step progress (the demo note), the packages line from #28, and Retry;
    - **Saves** (the latest five);
@@ -1198,6 +1204,7 @@ The old numbers, for ADRs and PRs written before 2026-10-09: 2.2 wizard → 2.9 
   - **The relay rule:** when one agent's command is refused (by its own safety checks or its permissions), the refusal goes to the user with the reason. Nothing automatically hands the command to another agent. A re-run happens only on the user's explicit instruction, and it's attributed as "you, through <agent>", next to the original refusal.
   - **SSH command rules are never described as a security boundary,** anywhere: the app, the docs, the website. A shell can rephrase any command. What holds is the recording, Revert, and the vault rules enforced by the operating system.
   - Each door appears as it lands: stand-in here (2.4), MCP in 2.6 and 2.7, the web terminal in 2.8, lanes in 4.1.
+- **Before 2.4 (requirement, owner 2026-10-10):** each viewer keeps its own current tab. Every agent session attaches as its own viewer (a grouped tmux session over the box's windows), so an agent switching tabs never changes the owner's current tab. Built in 1.2 with the tab bar; 2.4 gives each agent its own viewer name.
 - Not in 2.4: lanes (4.1), approvals (4.2), the gateway and its CA (Phase 3), phone notifications (4.6).
 - **Open question:** a per-box "Keep running when Portenv quits" option, off by default, so a stand-in agent's work can go on after the app quits, with a menu bar item listing the boxes still running. Only worth building with Phase 3's lease hand-off, so a sleeping Mac never blocks resuming the box elsewhere. No ADR until then.
 
@@ -1343,6 +1350,10 @@ These need an owner decision; Claude Code should add new ones here instead of gu
 - [x] Remote MCP (2.7): how does the owner's pairing approval fit ChatGPT's OAuth sign-in? **Answered (2026-10-10):** the sign-in is the pairing. The runner's authorization page shows the code and "Approve this in your Portenv app", and the owner's approval in the app is the OAuth consent, creating the identity, grant and credential as `portenv connect` does. One pairing flow for every door.
 - [ ] Which group holds the commands outside the everyday list that the plan names today (`portenv skill`, `portenv mcp`, `portenv event`, and the Phase 0 `portenv init`): `portenv box …`, `portenv agent …`, or a new group?
 - [ ] A per-box "Keep running when Portenv quits" option (off by default) with a menu bar item listing boxes still running? Only with Phase 3's lease hand-off (see 2.4).
-- [ ] Tab keyboard shortcuts (1.2): ⌘T for a new tab, ⌘1–⌘9 to choose one, and what closes a tab. ⌘W closes the window today, and closing the last window quits and closes the box, so a tab shortcut must not be mistaken for it. GUIDELINES.md doesn't list them yet; none are built.
-- [ ] Choosing a tab switches the tmux window for every client attached to the box's session. That's fine with only the app attached; when stand-in agents attach (2.4), should each viewer keep its own current tab (a grouped tmux session per viewer)?
-- [ ] Reordering tabs (the app owns the order): by drag in the tab bar, kept as tmux's window order? Not built in 1.2's first tab bar.
+- [x] Tab keyboard shortcuts (1.2)? **Answered (2026-10-10):**
+  - ⌘T opens a new tab, ⌘1–⌘9 choose a tab, ⌘⇧[ / ⌘⇧] go to the previous / next tab.
+  - ⌘W closes the current tab when there's more than one; on the last tab it closes the window (save and release), like Terminal and Safari.
+  - Closing a tab with a running program asks first: "Close this tab? <program> is still running."
+  - In GUIDELINES.md §4.1; built in 1.2.
+- [x] Should each viewer keep its own current tab? **Answered (2026-10-10):** yes. One grouped tmux session per viewer (the app, each agent), all on the box's windows (`tmux new-session -t <base>`). An agent switching tabs must never change the owner's current tab. Built in 1.2, and a requirement before 2.4.
+- [x] Reordering tabs? **Answered (2026-10-10):** later, by drag in the tab bar, kept as tmux's window order. Not built in 1.2.

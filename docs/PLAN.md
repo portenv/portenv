@@ -1106,7 +1106,7 @@ Show in Finder (⌥⌘R) stops being disabled here.
 **10. 1.8: releases**
 
 Developer ID signing, notarisation and Sparkle, with the key backups. Signed public CLI releases and their signing key are already on the first-release checklist (#27).
-- Needs Apple Developer enrolment (open question), which is also the stable-signing fix for item 1e.
+- Signing uses the owner's existing Apple Developer organization team (decided 2026-10-10), so 1.8 needs no new enrolment. It's also the stable-signing fix for item 1e. The team's ID and name aren't written here; at 1.8 they come from the owner's signing setup, kept in local config or CI secrets. Creating the Developer ID Application certificate and the notarization credential (an App Store Connect API key) are account changes the owner makes at 1.8.
 - **Look at again once signing is stable:** run `portenvd` inside a small helper app bundle (`Contents/Helpers/Portenv Helper.app`), so it can post a notification the moment a background save succeeds after Quit Anyway. Until then the next launch of the app shows it (1.1).
 - **`portenvd` still starts after an in-place update** (found at the Mac, 2026-10-10). With ad-hoc-signed dev builds, launchd refused a rebuilt `portenvd` (exit 78, `EX_CONFIG`) until the login item was registered again; the job carries launch constraints. A Developer ID signature stays the same across updates, so releases should be fine. 1.8's Sparkle update test checks it, and the dev workflow re-registers after `gmake app` (`--unregister-service`, then open the app).
 - **An app newer than its running `portenvd`** (found while testing #41, 2026-10-10):
@@ -1401,7 +1401,7 @@ These need an owner decision; Claude Code should add new ones here instead of gu
 - [ ] Before each door is built: confirm the target agents can actually reach it (for example outbound SSH from their computers for door 1).
 - [ ] Does Grok Bot read `~/.agents/skills` and can it run the install script? (The owner is testing it.)
 - [ ] Before 2.5: can the target agents be woken by an incoming webhook? If not, an agent keeping `portenv events --follow` running does the job and 2.5 drops in priority (ADR 0008).
-- [ ] Apple Developer Program enrolment (the owner is handling it): needed for Developer ID signing and notarization in 1.8.
+- [x] Apple Developer Program enrolment, needed for Developer ID signing and notarization in 1.8. **Answered (2026-10-10):** Portenv is signed with the owner's existing organization team; no new enrolment is needed (see 1.8).
 - [ ] Approval timeout default (30 minutes assumed) and what happens when it expires.
 - [ ] Anthropic's terms for agents driving Claude Code with a subscription login versus a Console API key.
 - [ ] Open-source boundary in detail: this repository is Apache-2.0 and `portenv/cloud` is private (decided), but confirm before going public whether the Mac app, the File Provider and the iPhone companion stay in the public repository or move to a private one.

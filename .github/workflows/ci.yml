@@ -165,8 +165,10 @@ jobs:
         with:
           path: bin
           key: tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Makefile') }}
-      # On pull requests, only the PR's own commits: another branch's commit
-      # never blocks this PR. Pushes to main and the nightly run scan everything.
+      # Pull requests scan only their own commits; pushes to main scan main's
+      # whole history (HEAD), never other branches. The nightly job scans
+      # every branch (nightly-secret-scan.yml). An unmerged branch's commit
+      # never turns a PR or main red.
       - run: make secrets
         env:
-          SECRETS_RANGE: ${{ github.event_name == 'pull_request' && format('origin/{0}..HEAD', github.base_ref) || '' }}
+          SECRETS_RANGE: ${{ github.event_name == 'pull_request' && format('origin/{0}..HEAD', github.base_ref) || 'HEAD' }}

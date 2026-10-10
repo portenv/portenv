@@ -890,6 +890,7 @@ Milestones: 1.0 walking skeleton · 1.1 `portenvd` with the local gRPC API · 1.
 **For the launch** (Phases 1 and 2 ship together, decided 2026-10-09):
 - 1.2's spike moves to right after the tab bar, with a fallback waiting-for-input detector (output stops and a known prompt pattern appears) if the spike fails.
 - 1.2b (split view) lands after 1.2's blocks and before the launch demo, which uses it.
+- **1.5 (first run) comes before 1.3 and 1.4** (the owner's decision, 2026-10-10). It's built alongside the rest of 1.2, in parallel lanes, so a new user can get from the download to a box without Terminal before the engine and autosave work.
 - 1.4 designs attribution into saves (who was active: the user, or which agent), so history can show who did what.
 - The command registry (Agent readiness) starts in 1.x, because `portenv answer` and the MCP tools build on it.
 - 1.6 (port relay) stays before launch.
@@ -1052,6 +1053,13 @@ In this order:
    - It's also tested over the SSH forward to a box on a server, not only on the Mac (a test, not another milestone).
    - **If it succeeds,** Phase 1 also gets blocks with attribution, the sticky header, the inline answer card for Claude Code, tab badges, the command palette and saved commands, in that order.
    - **If it doesn't,** they move to Phase 2 and the plan says so.
+   - **Result (ADR 0017, 2026-10-10; proposed):**
+     - **Question 1, control mode:** yes. Tabs follow tmux through control mode, with #41's window IDs.
+     - **Question 2, OSC 133 per tab:** yes for bash and zsh, with exit codes. Inside Claude Code it only sees one long command, never its questions.
+     - **Waiting for input:** the combined four-signal detector, used everywhere, is right on all 12 labelled cases. Each signal alone is wrong on 1 to 5 of them. Secret prompts never reach a relay, and answers to them through a relay are refused.
+     - **Question 3, SwiftTerm overlay alignment:** still open. It needs a prototype overlay, then the reviewer's UI test.
+     - **Blocks and the rest stay in Phase 1 provisionally.** If question 3 fails, they move to Phase 2.
+     - **Still to do:** the same cases over the SSH forward to a server box (needs the owner's go-ahead for the AWS test server), and real agent CLIs in place of the stand-ins (needs accounts).
 
 **4b. 1.2b: split view** (the owner, 2026-10-10; reference: docs/mockups/split-view.png)
 
@@ -1109,6 +1117,17 @@ The Containerization shim, with `docker` as the fallback. The agent drops the fo
 
 Reduced: no sign-in, Only you, Keychain keys, the recovery key; the Welcome screen has "Continue without an account" (#16). First run lists, in plain words, the exact fields the update check counts (no ID, nothing about the user's work), and how to turn counting off (1.8).
 - **No window for a box that doesn't exist** (found at the Mac, 2026-10-10). Opened without `PORTENV_BOX`, the app shows a window for a default box "demo" that doesn't exist, with "no box named demo here; create it with portenv init demo". That message starts in lower case and sends the user to a terminal command (GUIDELINES §10). First run replaces it: with no box, the app shows first run or the box list, never a window for a missing box.
+- **Built so far** (lane C's first milestone, 2026-10-10):
+  - **The launch decision:** with no box, first run; with a box that isn't on this Mac, the box list, saying so; never a window for a missing box (`LaunchDecision`, tested). The app no longer defaults to "demo".
+  - **The first-run screens and their flow,** reduced as above: Continue is enabled only when the step is complete; the recovery key needs the "I've saved" checkbox; box names follow the CLI's rule. "Count me in usage numbers" is already on, with the exact fields one click away, on Welcome (before any update check).
+  - **The box list:** open a box, or New Box… (first run's first-box step).
+  - **Move to Applications** (lane C's second milestone): before the login item is registered, an app outside /Applications, App Translocation included, asks "Move Portenv to Applications?". Move copies it there (an older Portenv is replaced, anything else named Portenv.app never is), opens the copy and quits; Not Now isn't asked again for the same location. Dev builds can redirect the copy with `PORTENV_MOVE_TO` so UI tests never replace the real app.
+  - **portenvd not starting** (R-0028, R-0032): while waiting for portenvd, the app reads the login item's status and `launchctl print` for its job.
+    - **launchd refused it (exit 78):** one line with both remedies, Login Items first ("Portenv’s background service didn’t start. Turn Portenv on in System Settings › General › Login Items, and if it’s not in the Applications folder, move it there."), with Open Login Items and Try Again. SMAppService said "enabled" before Portenv was switched on, so the location is never given alone.
+    - **Not refused, but the login item isn't enabled:** "Portenv needs permission to run in the background…", with Open Login Items; the wait goes on.
+  - **New Box… from the box list** (the new-box boards): titled "New box", with Cancel, ⎋ and "‹ Your boxes" back to the list, and Create Box. The name field says the rule under it, or what's wrong, in red, in one line.
+  - **"Not built yet" is a notice,** not an error. Dev builds (their own bundle ID) name the `portenv init` workaround; a release build never sends anyone to Terminal.
+  - **Not yet:** making keys, the recovery key and the first box from the app. These are data-loss paths and wait for the decisions in Open questions; until then, first run says so plainly at Protection. Start from (GitHub, folder) and the detected toolbox on the first-box step also come later.
 - **Move to Applications first** (the owner, 2026-10-10; found while testing #41):
   - Before registering the login item, if the app runs from anywhere but `/Applications`, it offers "Move Portenv to Applications?". That includes App Translocation, when the app is opened from Downloads or the DMG. launchd may refuse to start `portenvd` from other places.
   - If launchd still fails to start `portenvd` (for example exit 78, `EX_CONFIG`), the app says so in a plain line. It doesn't wait out the 30-second "background service isn't running" message.
@@ -1127,6 +1146,7 @@ Developer ID signing, notarisation and Sparkle, with the key backups. Signed pub
 - Signing uses the owner's existing Apple Developer organization team (decided 2026-10-10), so 1.8 needs no new enrolment. It's also the stable-signing fix for item 1e. The team's ID and name aren't written here; at 1.8 they come from the owner's signing setup, kept in local config or CI secrets. Creating the Developer ID Application certificate and the notarization credential (an App Store Connect API key) are account changes the owner makes at 1.8.
 - **Look at again once signing is stable:** run `portenvd` inside a small helper app bundle (`Contents/Helpers/Portenv Helper.app`), so it can post a notification the moment a background save succeeds after Quit Anyway. Until then the next launch of the app shows it (1.1).
 - **`portenvd` still starts after an in-place update** (found at the Mac, 2026-10-10). With ad-hoc-signed dev builds, launchd refused a rebuilt `portenvd` (exit 78, `EX_CONFIG`) until the login item was registered again; the job carries launch constraints. A Developer ID signature stays the same across updates, so releases should be fine. 1.8's Sparkle update test checks it, and the dev workflow re-registers after `gmake app` (`--unregister-service`, then open the app).
+- **Several copies with one bundle ID** (found in the lanes' UI tests, 2026-10-10). With `bin/Portenv.app`, `Portenv-B.app` and `Portenv-C.app` all `com.portenv.Portenv`, launchd resolved portenvd through the wrong copy and refused it (exit 78). Dev lanes now build with their own identity: `gmake app LANE=X` stamps the bundle ID `com.portenv.Portenv.dev-X`, the launch agent `com.portenv.portenvd.dev-X`, and stamps the lane into the binaries at build time (Go with `-ldflags -X`, the app with Info.plist's `PortenvInstance`): a release binary ignores `PORTENV_INSTANCE` entirely, and a dev binary refuses to run if it names another lane. The lane gives the Keychain service `dev.portenv.repository.dev-X` and the folders `Application Support/Portenv-dev-X` and `Logs/Portenv-dev-X` (`core/internal/instance`, `scripts/stamp-instance.sh`, checked by `scripts/check-app-identity.sh`). Release builds keep `com.portenv.Portenv` and today's names. Each lane's build needs its own Login Items switch once, and its own boxes (a dev lane never reads another build's keys).
 - **An app newer than its running `portenvd`** (found while testing #41, 2026-10-10):
   - after an update, or when the login item still points at another copy of the app, the app compares versions and relaunches `portenvd` from itself (the `Relaunch` RPC, ADR 0014);
   - it re-registers the login item when that item runs a different copy;
@@ -1449,6 +1469,9 @@ These need an owner decision; Claude Code should add new ones here instead of gu
 - [x] CLI names (ADR 0016): keep short top-level forms as aliases of `portenv box …`? **Answered (2026-10-10):** yes, as the primary way in, for the everyday verbs only (open, status, save, ask, answer, wait, screen, events, connect, guide). Each is defined once in the command registry as an alias of its grouped form, so help and the generated docs show both. Everything else lives only under its group.
 - [x] Remote MCP (2.7): how does the owner's pairing approval fit ChatGPT's OAuth sign-in? **Answered (2026-10-10):** the sign-in is the pairing. The runner's authorization page shows the code and "Approve this in your Portenv app", and the owner's approval in the app is the OAuth consent, creating the identity, grant and credential as `portenv connect` does. One pairing flow for every door.
 - [ ] Which group holds the commands outside the everyday list that the plan names today (`portenv skill`, `portenv mcp`, `portenv event`, and the Phase 0 `portenv init`): `portenv box …`, `portenv agent …`, or a new group?
+- [ ] First run's recovery key (1.5): its format (the mockup shows 24 characters in six groups of four, from a 32-letter alphabet without look-alikes), and how it becomes each box's extra restic key (for example, a key derived per box from the recovery key with a slow KDF and the box's ID). A data-loss path: an ADR and tests before code.
+- [ ] Making boxes from the app (1.5): only the app may raise Keychain prompts (ADR 0013), but portenvd owns box configs and storage. Proposed: the app makes the keys and puts them in the Keychain, then hands them to portenvd (as ProvideKeys does) with a new CreateBox call that writes the config and sets up storage. Needs an ADR.
+- [ ] "Save to Passwords" on the recovery key step: macOS has no public API for an app to add an item to the Passwords app. Keep Print and Copy only, or find another way?
 - [ ] A per-box "Keep running when Portenv quits" option (off by default) with a menu bar item listing boxes still running? Only with Phase 3's lease hand-off (see 2.4).
 - [x] Tab keyboard shortcuts (1.2)? **Answered (2026-10-10):**
   - ⌘T opens a new tab, ⌘1–⌘9 choose a tab, ⌘⇧[ / ⌘⇧] go to the previous / next tab.

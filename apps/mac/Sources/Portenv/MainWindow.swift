@@ -134,14 +134,21 @@ struct MainWindow: View {
     }
 }
 
-/// View › Show Inspector (⌥⌘I), sharing the window's remembered state.
+/// View › Show Inspector (⌥⌘I), sharing the window's remembered state. Off
+/// during first run and the box list, when no box is open.
 struct InspectorToggle: Commands {
-    let box: String
+    let box: String?
     static func key(_ box: String) -> String { "inspectorOpen.\(box)" }
 
     var body: some Commands {
         CommandGroup(after: .sidebar) {
-            InspectorMenuItem(key: Self.key(box))
+            if let box {
+                InspectorMenuItem(key: Self.key(box)).id(box)
+            } else {
+                Button("Show Inspector") {}
+                    .keyboardShortcut("i", modifiers: [.command, .option])
+                    .disabled(true)
+            }
         }
     }
 }

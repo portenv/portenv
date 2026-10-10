@@ -43,6 +43,7 @@ struct BoxTerminal: NSViewRepresentable {
             if view.process?.running == true { view.process?.terminate() }
             var env = ProcessInfo.processInfo.environment
             env["TERM"] = "xterm-256color"
+            env.merge(Instance.current.environment) { _, new in new }
             view.startProcess(
                 executable: Binaries.portenv.path,
                 args: ["attach", box, "--from-app", "--viewer", TabViewer.app],

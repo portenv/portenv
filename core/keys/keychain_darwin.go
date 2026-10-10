@@ -32,9 +32,19 @@ import (
 	"unsafe"
 
 	"github.com/keybase/go-keychain"
+
+	"github.com/portenv/portenv/core/internal/instance"
 )
 
-const keychainService = "dev.portenv.repository"
+// keychainService holds the boxes' repository keys: dev.portenv.repository,
+// or a dev lane's own (PORTENV_INSTANCE), so lanes never share keys.
+func keychainService() (string, error) {
+	n, err := instance.Current()
+	if err != nil {
+		return "", err
+	}
+	return n.KeychainService(), nil
+}
 
 // Keychain is the macOS Keychain. Only a person at a terminal (or the app,
 // in Swift) may be asked to approve a read: Interactive is false for
@@ -47,10 +57,10 @@ type Keychain struct {
 
 // query is the read for one key. Without Interactive it carries
 // kSecUseAuthenticationUI = Fail: no prompt, errSecInteractionNotAllowed.
-func (k Keychain) query(boxID string) keychain.Item {
+func (k Keychain) query(service, boxID string) keychain.Item {
 	q := keychain.NewItem()
 	q.SetSecClass(keychain.SecClassGenericPassword)
-	q.SetService(keychainService)
+	q.SetService(service)
 	q.SetAccount(boxID)
 	q.SetMatchLimit(keychain.MatchLimitOne)
 	q.SetReturnData(true)
@@ -64,7 +74,11 @@ func (k Keychain) Get(boxID string) ([]byte, error) {
 	if !k.Interactive {
 		noPrompts()
 	}
-	res, err := keychain.QueryItem(k.query(boxID))
+	service, err := keychainService()
+	if err != nil {
+		return nil, err
+	}
+	res, err := keychain.QueryItem(k.query(service, boxID))
 	if needsApproval(k.Interactive, err) {
 		return nil, ErrNeedsApproval
 	}
@@ -81,13 +95,17 @@ func (k Keychain) Put(boxID string, key []byte) error {
 	if !k.Interactive {
 		noPrompts()
 	}
-	item := keychain.NewGenericPassword(keychainService, boxID, "Portenv repository key ("+boxID+")", key, "")
+	service, err := keychainService()
+	if err != nil {
+		return err
+	}
+	item := keychain.NewGenericPassword(service, boxID, "Portenv repository key ("+boxID+")", key, "")
 	item.SetSynchronizable(keychain.SynchronizableNo)
 	item.SetAccessible(keychain.AccessibleWhenUnlockedThisDeviceOnly)
 	if !k.Interactive {
 		item.SetString(useAuthUIKey, useAuthUIFail)
 	}
-	err := keychain.AddItem(item)
+	err = keychain.AddItem(item)
 	if errors.Is(err, keychain.ErrorDuplicateItem) {
 		return errors.New("a key for box " + boxID + " already exists in the Keychain")
 	}

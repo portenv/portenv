@@ -58,6 +58,9 @@ final class FakeDaemon: DaemonAPI, @unchecked Sendable {
     }
 
     func ping() async -> Bool { (try? await record(["app", "ping"])) != nil }
+    /// The boxes ListBoxes reports.
+    var boxNames: [String] = ["acme-api"]
+    func boxes() async throws -> [String] { try await record(["app", "boxes"]); return boxNames }
     func servers() async throws -> [String] { try await record(["app", "servers"]); return ["portenv@server-a"] }
     func open(_ box: String) async throws { try await record(["app", "open", box]) }
     func close(_ box: String) async throws { try await record(["app", "close", box]) }

@@ -4,21 +4,15 @@ package docker
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
-	"os"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/moby/moby/client"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	"github.com/portenv/portenv/core/agent"
-	"github.com/portenv/portenv/core/driver"
-	"github.com/portenv/portenv/core/driver/drivertest"
 	agentv1 "github.com/portenv/portenv/proto/gen/go/portenv/agent/v1"
 )
 
@@ -27,63 +21,18 @@ import (
 // has loaded them; root in the box cannot read the key or token; and an
 // impostor on the agent's port never receives the token or a password.
 func TestChannelConditions(t *testing.T) {
-	image := os.Getenv("PORTENV_TEST_IMAGE")
-	if image == "" {
-		t.Skip("PORTENV_TEST_IMAGE not set; run make driver-test")
-	}
-	d, err := New(Config{StateDir: t.TempDir()})
-	if err != nil {
-		t.Fatal(err)
-	}
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
 	defer cancel()
-	b := make([]byte, 4)
-	_, _ = rand.Read(b)
-	id := driver.BoxID("conditions-" + hex.EncodeToString(b))
-	home := "portenv-test-home-" + string(id)
-	t.Cleanup(func() {
-		ctx := context.Background()
-		_, _ = d.Stop(ctx, id, time.Second)
-		_ = d.Destroy(ctx, id)
-		_, _ = d.cli.VolumeRemove(ctx, home, client.VolumeRemoveOptions{Force: true})
-		_, _ = d.cli.VolumeRemove(ctx, d.cacheVolume(id), client.VolumeRemoveOptions{Force: true})
-	})
-	if _, err := d.Create(ctx, driver.Box{ID: id, Name: string(id), ToolboxImage: image}); err != nil {
-		t.Fatal(err)
-	}
-	if err := d.MountHome(ctx, id, driver.HomeStorage{Ref: home, Fresh: true}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := d.Start(ctx, id); err != nil {
-		t.Fatal(err)
-	}
-	// Exec here is the test inspecting the box as root would, never an
-	// access path.
-	sh := func(user, script string) string {
-		t.Helper()
-		res, err := d.probe(ctx, id, drivertest.ProbeRequest{Argv: []string{"sh", "-c", script}, User: user, Timeout: time.Minute})
-		if err != nil {
-			t.Fatal(err)
-		}
-		return strings.TrimSpace(string(res.Stdout))
-	}
-	for range 100 {
-		if strings.HasPrefix(sh("", "portenv-agent ready"), "READINESS_STATE_READY") {
-			break
-		}
-		time.Sleep(300 * time.Millisecond)
-	}
-	ch, err := d.AgentChannel(ctx, id)
-	if err != nil {
-		t.Fatal(err)
-	}
+	d, id, ch, sh := startChannelBox(t, ctx, "conditions")
 	// Condition 2: the secrets came on stdin and were never written: the
-	// token is in no file in the box (the root file system is on the
-	// machine's disk), init holds no stdin any more, and the API process
-	// runs as portenv-agent.
-	if got := sh("", "grep -rlsF "+ch.Token+" / --exclude-dir=proc --exclude-dir=sys --exclude-dir=dev 2>/dev/null | head -3"); got != "" {
-		t.Errorf("the token is in a file in the box: %s", got)
-	}
+	// token is in none of the places it could land (files where anything
+	// writes, channel files, processes' environments and command lines, the
+	// box's log), init holds no stdin any more, and the API process runs
+	// as portenv-agent. The whole root file system is scanned nightly
+	// (TestChannelTokenNotOnDisk); the control proves each targeted search
+	// finds what it looks for.
+	checkTokenNotWritten(ctx, t, d, id, ch.Token)
+	checkTheSearchFindsIt(ctx, t, d, id, sh)
 	// Root in the box gets nothing from init's stdin: it is /dev/null, or
 	// not even readable (the container's init is not dumpable), and reading
 	// it never yields the token.
@@ -220,7 +169,7 @@ func TestChannelConditions(t *testing.T) {
 	}
 	defer func() { _ = conn.Close() }()
 	c := agentv1.NewAgentServiceClient(conn)
-	password := "portenv-conditions-" + hex.EncodeToString(b)
+	password := "portenv-" + string(id)
 	input, _ := json.Marshal(map[string]string{"password": password})
 	sh("", "install -d -o 990 -g 990 -m 0700 /var/tmp/repo; id -u lane >/dev/null 2>&1 || useradd --uid 2000 --no-create-home lane")
 	for _, args := range [][]string{{"init"}, {"backup", "/home"}} {

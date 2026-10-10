@@ -218,8 +218,12 @@ e2e: build $(TOOLS_STAMP)
 	tests/e2e/daemon.sh $(IMAGE)
 
 ## secrets: scan the full git history and the working tree for secrets
+# SECRETS_RANGE limits the history scan to a commit range (CI sets it to the
+# PR's own commits, origin/<base>..HEAD, on pull requests). Unset, it scans the
+# whole history, as on pushes to main and nightly. The working tree is always
+# scanned in full.
 secrets: $(TOOLS_STAMP)
-	$(BIN)/gitleaks git --redact --no-banner .
+	$(BIN)/gitleaks git --redact --no-banner $(if $(SECRETS_RANGE),--log-opts="$(SECRETS_RANGE)") .
 	$(BIN)/gitleaks dir --redact --no-banner .
 
 ## spdx-check: every source file carries an SPDX header

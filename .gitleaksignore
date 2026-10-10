@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Findings gitleaks may skip, each one exact commit, file, rule and line.
+# Add an entry only for a verified false positive, with the owner's say-so,
+# and say why next to it.
+#
+# A made-up recovery key in a test stand-in (FakeFirstRunService), in #48's
+# commit dbb28dc; later commits build sample keys at run time. Not a secret.
+# The owner chose this over a history rewrite, 2026-10-10.
+dbb28dc2013a46fd0fb08bf624c9392a0ce841d5:apps/mac/Tests/PortenvKitTests/FirstRunTests.swift:generic-api-key:13
+dbb28dc2013a46fd0fb08bf624c9392a0ce841d5:apps/mac/Tests/PortenvKitTests/FirstRunTests.swift:generic-api-key:43

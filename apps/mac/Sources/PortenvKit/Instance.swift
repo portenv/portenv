@@ -30,6 +30,14 @@ public struct Instance: Equatable, Sendable {
     /// Keychain service and folder.
     public var environment: [String: String] { name.map { ["PORTENV_INSTANCE": $0] } ?? [:] }
 
+    /// A plain problem when the environment names another instance than
+    /// this build's; nil when it agrees or is unset. A release build never
+    /// reads the variable (core/internal/instance does the same).
+    public func mismatch(environment: [String: String]) -> String? {
+        guard let name, let v = environment["PORTENV_INSTANCE"], !v.isEmpty, v != name else { return nil }
+        return "This is the \(name) build of Portenv, but PORTENV_INSTANCE is \(v). Unset it, or open the \(v) build."
+    }
+
     private func suffixed(_ base: String, _ sep: String) -> String {
         name.map { base + sep + $0 } ?? base
     }

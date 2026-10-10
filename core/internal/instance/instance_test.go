@@ -4,52 +4,70 @@ package instance
 
 import "testing"
 
-// A release build (no PORTENV_INSTANCE) keeps today's names exactly; a dev
-// lane's build gets its own Keychain service, support folder and log folder.
+// The names a build uses: a release build keeps today's names; a dev lane's
+// build gets its own Keychain service, support folder and log folder.
 func TestNames(t *testing.T) {
 	for _, c := range []struct {
-		inst, service, folder string
+		stamp, service, folder string
 	}{
 		{"", "dev.portenv.repository", "Portenv"},
 		{"dev-A", "dev.portenv.repository.dev-A", "Portenv-dev-A"},
 		{"dev-C", "dev.portenv.repository.dev-C", "Portenv-dev-C"},
 	} {
-		n, err := parse(c.inst)
+		restore := SetStampForTesting(c.stamp)
+		t.Setenv(Env, "")
+		n, err := Current()
+		restore()
 		if err != nil {
-			t.Fatalf("%q: %v", c.inst, err)
+			t.Fatalf("%q: %v", c.stamp, err)
 		}
 		if got := n.KeychainService(); got != c.service {
-			t.Errorf("%q: KeychainService = %q, want %q", c.inst, got, c.service)
+			t.Errorf("%q: KeychainService = %q, want %q", c.stamp, got, c.service)
 		}
 		if got := n.Folder(); got != c.folder {
-			t.Errorf("%q: Folder = %q, want %q", c.inst, got, c.folder)
+			t.Errorf("%q: Folder = %q, want %q", c.stamp, got, c.folder)
 		}
 	}
 }
 
-// Anything but dev-<one capital letter> is refused: an instance name ends up
-// in paths and a Keychain service, so it never takes slashes, dots or spaces.
-func TestInvalidRefused(t *testing.T) {
-	for _, bad := range []string{"dev", "dev-", "dev-b", "dev-AB", "prod", "dev-A/..", "../x", " dev-A", "dev-A ", "DEV-A"} {
-		if _, err := parse(bad); err == nil {
-			t.Errorf("%q accepted", bad)
+// A release binary ignores PORTENV_INSTANCE entirely: setting it can never
+// move a release build onto a dev Keychain service or folder.
+func TestReleaseIgnoresTheEnvironment(t *testing.T) {
+	defer SetStampForTesting("")()
+	for _, v := range []string{"dev-B", "dev-C", "nonsense"} {
+		t.Setenv(Env, v)
+		n, err := Current()
+		if err != nil || n.String() != "" || n.Folder() != "Portenv" {
+			t.Errorf("PORTENV_INSTANCE=%q: release build got %+v, %v", v, n, err)
 		}
 	}
 }
 
-func TestFromEnvironment(t *testing.T) {
-	t.Setenv(Env, "dev-B")
-	n, err := Current()
-	if err != nil || n.Folder() != "Portenv-dev-B" {
-		t.Fatalf("Current() = %+v, %v", n, err)
+// A dev binary carries its lane; the environment may only agree with it.
+func TestDevRefusesAMismatch(t *testing.T) {
+	defer SetStampForTesting("dev-C")()
+	for _, ok := range []string{"", "dev-C"} {
+		t.Setenv(Env, ok)
+		if n, err := Current(); err != nil || n.String() != "dev-C" {
+			t.Errorf("PORTENV_INSTANCE=%q: got %+v, %v", ok, n, err)
+		}
 	}
-	t.Setenv(Env, "")
-	n, err = Current()
-	if err != nil || n.Folder() != "Portenv" {
-		t.Fatalf("empty: Current() = %+v, %v", n, err)
+	for _, bad := range []string{"dev-B", "nonsense"} {
+		t.Setenv(Env, bad)
+		if _, err := Current(); err == nil {
+			t.Errorf("PORTENV_INSTANCE=%q accepted by a dev-C build", bad)
+		}
 	}
-	t.Setenv(Env, "nope")
-	if _, err := Current(); err == nil {
-		t.Fatal("an invalid PORTENV_INSTANCE was accepted")
+}
+
+// A malformed stamp (a bad -ldflags) is refused, never treated as release.
+func TestInvalidStampRefused(t *testing.T) {
+	for _, bad := range []string{"dev", "dev-b", "dev-AB", "prod", "../x", "dev-A "} {
+		restore := SetStampForTesting(bad)
+		t.Setenv(Env, "")
+		if _, err := Current(); err == nil {
+			t.Errorf("stamp %q accepted", bad)
+		}
+		restore()
 	}
 }

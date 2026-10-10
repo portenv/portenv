@@ -168,6 +168,9 @@ $(error LANE=$(LANE): a dev lane is one capital letter, for example LANE=B)
 endif
 INSTANCE := dev-$(LANE)
 APP_BUILD := $(HOME)/Library/Caches/Portenv/app-build-$(INSTANCE)
+# Go binaries carry their lane (core/internal/instance): a release binary
+# never reads PORTENV_INSTANCE, a dev one refuses any other value.
+LDFLAGS += -X github.com/portenv/portenv/core/internal/instance.stamp=$(INSTANCE)
 endif
 # Swift builds run with a clean environment: SwiftPM's plugin caches record
 # the environment they ran in, so a session token or other secret in the

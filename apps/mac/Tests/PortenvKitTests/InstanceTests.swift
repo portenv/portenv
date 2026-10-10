@@ -27,6 +27,25 @@ struct InstanceTests {
         #expect(i.environment == ["PORTENV_INSTANCE": "dev-C"])
     }
 
+    /// A release build never reads PORTENV_INSTANCE, so setting it can't
+    /// move the app onto a dev Keychain service or folder.
+    @Test func releaseIgnoresTheEnvironment() throws {
+        let i = try Instance(info: [:])
+        for v in ["dev-B", "nonsense", ""] {
+            #expect(i.mismatch(environment: ["PORTENV_INSTANCE": v]) == nil)
+        }
+    }
+
+    /// A dev build carries its lane in Info.plist; the environment may only
+    /// agree with it.
+    @Test func aDevBuildRefusesAMismatch() throws {
+        let i = try Instance(info: ["PortenvInstance": "dev-C"])
+        #expect(i.mismatch(environment: [:]) == nil)
+        #expect(i.mismatch(environment: ["PORTENV_INSTANCE": "dev-C"]) == nil)
+        #expect(i.mismatch(environment: ["PORTENV_INSTANCE": "dev-B"])
+            == "This is the dev-C build of Portenv, but PORTENV_INSTANCE is dev-B. Unset it, or open the dev-B build.")
+    }
+
     @Test func anythingElseIsRefused() {
         for bad in ["dev", "dev-c", "dev-AB", "prod", "../x", "dev-A ", ""] {
             #expect(throws: Instance.Invalid.self) { try Instance(info: ["PortenvInstance": bad]) }

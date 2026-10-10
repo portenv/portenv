@@ -4,7 +4,8 @@
 # check-app-identity.sh APP [INSTANCE]: fails unless Portenv.app carries
 # exactly the release identity (no INSTANCE) or a dev lane's (INSTANCE=dev-X):
 # bundle ID, PortenvInstance, and one launch agent with the matching file
-# name, label, associated bundle ID and PORTENV_INSTANCE.
+# name, label, associated bundle ID and PORTENV_INSTANCE, and Go helpers
+# stamped with the same instance (or none).
 set -euo pipefail
 app=$1 inst=${2:-}
 pb=/usr/libexec/PlistBuddy
@@ -22,4 +23,13 @@ plist=$agents/$label.plist
 [[ $($pb -c "Print :AssociatedBundleIdentifiers:0" "$plist") == "$id" ]] || fail "associated bundle ID isn't $id"
 env=$($pb -c "Print :EnvironmentVariables:PORTENV_INSTANCE" "$plist" 2>/dev/null || true)
 [[ $env == "$inst" ]] || fail "portenvd's PORTENV_INSTANCE is '$env', want '$inst'"
+# The Go helpers carry the same stamp (-ldflags), shown by their version.
+for h in portenv portenvd; do
+	v=$("$app/Contents/Helpers/$h" version)
+	if [[ -n $inst ]]; then
+		[[ $v == *" [$inst]" ]] || fail "$h's version '$v' doesn't carry [$inst]"
+	else
+		[[ $v != *"["* ]] || fail "$h's version '$v' carries a stamp in a release build"
+	fi
+done
 echo "identity ok: $id, $label${inst:+ ($inst)}"

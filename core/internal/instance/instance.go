@@ -2,9 +2,12 @@
 
 // Package instance names what a Portenv build keeps apart from other builds
 // on the same Mac: its Keychain service and its support and log folders.
-// Release builds have no instance and keep today's names. A dev lane's build
-// (gmake app LANE=X) runs with PORTENV_INSTANCE=dev-X, so parallel lanes never
-// share keys, state or a login item.
+//
+// The instance is stamped into the binary at build time, never read from the
+// environment alone. Release binaries (no stamp) always use the release
+// names and ignore PORTENV_INSTANCE entirely. A dev lane's binaries (gmake …
+// LANE=X, -ldflags -X …stamp=dev-X) use their lane's names, and refuse to
+// run when PORTENV_INSTANCE is set to anything else.
 package instance
 
 import (
@@ -13,28 +16,43 @@ import (
 	"regexp"
 )
 
-// Env is the variable a dev lane's build sets (the launch agent for
-// portenvd, the app for what it starts).
+// Env may only agree with a dev build's stamp (the app and the launch agent
+// set it); a release build ignores it.
 const Env = "PORTENV_INSTANCE"
+
+// stamp is set at build time with -ldflags "-X …/instance.stamp=dev-X".
+var stamp string
 
 var nameRE = regexp.MustCompile(`^dev-[A-Z]$`)
 
 // Name is one build's instance; the zero value is a release build.
 type Name struct{ name string }
 
-// Current reads PORTENV_INSTANCE: empty is a release build, dev-<A–Z> a dev
-// lane's build, and anything else an error.
-func Current() (Name, error) { return parse(os.Getenv(Env)) }
-
-func parse(s string) (Name, error) {
-	if s == "" {
+// Current is this binary's instance: release (no stamp), or its dev lane.
+func Current() (Name, error) {
+	if stamp == "" {
 		return Name{}, nil
 	}
-	if !nameRE.MatchString(s) {
-		return Name{}, fmt.Errorf("%s=%q: a dev build's instance is dev- and one capital letter (gmake app LANE=X)", Env, s)
+	if !nameRE.MatchString(stamp) {
+		return Name{}, fmt.Errorf("this build's instance %q is malformed (gmake … LANE=X builds dev-X)", stamp)
 	}
-	return Name{name: s}, nil
+	if v := os.Getenv(Env); v != "" && v != stamp {
+		return Name{}, fmt.Errorf("this is the %s build, but %s=%s; unset it or run the %s build", stamp, Env, v, v)
+	}
+	return Name{name: stamp}, nil
 }
+
+// SetStampForTesting stamps the instance for a test and returns the restore.
+// Tests only: real binaries are stamped by the build.
+func SetStampForTesting(s string) (restore func()) {
+	old := stamp
+	stamp = s
+	return func() { stamp = old }
+}
+
+// Stamp is this binary's build-time stamp ("" for a release build), for
+// version output; it reads nothing from the environment.
+func Stamp() string { return stamp }
 
 // String is the instance ("" for a release build).
 func (n Name) String() string { return n.name }

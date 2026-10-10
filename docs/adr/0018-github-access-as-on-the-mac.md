@@ -22,5 +22,6 @@ These stay as before:
 
 - **The words are the truth.** The boards say "the same access as on your Mac" and drop the picker and its count.
 - **Agents in the box get that access too.** The Linked dialog's warning says so ("with the same access as you"). The inspector's Who's here shows the login, with Sign Out of GitHub.
+- **On a server, the login is there too.** When the box runs on a server, the GitHub login is on that server while the box runs, decrypted with the box's home. Sign Out of GitHub before moving a box to a server you don't fully trust.
 - **No GitHub App to register, and no token refresh.** Nothing on GitHub is owned by Portenv.
 - **For narrower access, the person can still choose.** In the box they can sign in with a fine-grained personal access token (`gh auth login --with-token`). That's gh's own option, not a Portenv feature. If people ask for narrower access, option 1 can be added later without changing where the login lives.

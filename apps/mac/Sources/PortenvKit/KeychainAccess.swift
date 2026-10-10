@@ -27,7 +27,7 @@ public struct SystemKeychain: KeychainReading {
         precondition(!Thread.isMainThread, "Keychain reads never run on the main thread")
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: "dev.portenv.repository",
+            kSecAttrService as String: Instance.current.keychainService,
             kSecAttrAccount as String: account,
             kSecMatchLimit as String: kSecMatchLimitOne,
             kSecReturnData as String: true,

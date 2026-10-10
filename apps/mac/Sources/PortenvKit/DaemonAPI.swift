@@ -7,6 +7,8 @@ import Foundation
 public protocol DaemonAPI: Sendable {
     /// Whether portenvd answers.
     func ping() async -> Bool
+    /// The boxes on this Mac, by name (ListBoxes).
+    func boxes() async throws -> [String]
     /// The servers a box can move to (user@host).
     func servers() async throws -> [String]
     func open(_ box: String) async throws

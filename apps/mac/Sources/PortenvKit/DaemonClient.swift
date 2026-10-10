@@ -47,6 +47,10 @@ public final class DaemonClient: DaemonAPI, Sendable {
         return (try? await api.getVersion(.init(), options: options)) != nil
     }
 
+    public func boxes() async throws -> [String] {
+        try await call { try await api.listBoxes(.init()).boxes.map(\.box.name) }
+    }
+
     public func servers() async throws -> [String] {
         try await call { try await api.listServers(.init()).servers }
     }

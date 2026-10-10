@@ -42,6 +42,10 @@ func TestNoPromptReturnsNeedsApproval(t *testing.T) {
 		t.Skip("set PORTENV_TEST_KEYCHAIN=1 to read a real Keychain item that needs approval")
 	}
 	account := "portenv-test-needs-approval"
+	keychainService, err := keychainService()
+	if err != nil {
+		t.Fatal(err)
+	}
 	// #nosec G204 -- fixed arguments
 	_ = exec.Command("security", "delete-generic-password", "-s", keychainService, "-a", account).Run()
 	// #nosec G204 -- fixed arguments

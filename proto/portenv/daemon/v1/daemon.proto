@@ -274,6 +274,12 @@ message GetBoxStateResponse {
   // opened it and holds none of its keys. The app opens it again, handing
   // the keys over; state and saved_at say when it was last saved.
   bool interrupted = 6;
+  // Where the box's saves go, as a place name only ("this Mac", a drive, or
+  // the storage server's host): the inspector's "Saves go to <place>". Never
+  // a path, a user or a credential. Empty when not known here.
+  string storage_place = 7;
+  // When this portenvd opened the box (the inspector's "Since <time>").
+  google.protobuf.Timestamp opened_at = 8;
 }
 
 enum NetworkPath {

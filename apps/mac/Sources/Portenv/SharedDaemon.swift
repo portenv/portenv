@@ -30,6 +30,7 @@ private struct Unreachable: DaemonAPI {
     func keyIDs(_: String) async throws -> [String] { throw gone }
     func provideKeys(_: String, _: [String: Data]) async throws { throw gone }
     func retryPackages(_: String) async throws { throw gone }
+    func saves(_: String) async throws -> [SaveInfo] { throw gone }
     func setNetwork(usable _: Bool) async throws { throw gone }
     func woke() async throws -> Bool { throw gone }
     func relaunch() async throws { throw gone }

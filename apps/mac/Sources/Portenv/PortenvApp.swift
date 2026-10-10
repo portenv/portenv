@@ -33,6 +33,12 @@ struct PortenvApp: App {
             MainWindow(controller: controller, tabs: tabs)
                 .task {
                     delegate.controller = controller
+                    // A long command finishing in a tab, when the window
+                    // isn't in front (§5).
+                    tabs.commandFinished = { f in
+                        let place = controller.state?.location.map(ServerName.display)
+                        Task { await Notifier.shared.commandFinished(box: Self.box, finished: f, location: place) }
+                    }
                     _ = await LoginItem.ensureRegistered()
                     await controller.waitForDaemon()
                     // Boxes saved in the background after Quit Anyway: say so once.
@@ -55,6 +61,7 @@ struct PortenvApp: App {
                 BoxMenu(controller: controller)
             }
             TabCommands(tabs: tabs)
+            InspectorToggle(box: Self.box)
         }
     }
 }

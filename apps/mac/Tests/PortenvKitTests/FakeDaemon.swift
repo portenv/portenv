@@ -89,6 +89,16 @@ final class FakeDaemon: DaemonAPI, @unchecked Sendable {
         lock.withLock { _provided.append(keys) }
     }
     func retryPackages(_ box: String) async throws { try await record(["app", "retry-packages", box]) }
+    /// What saves answers.
+    var saves: [SaveInfo] {
+        get { lock.withLock { _saves } }
+        set { lock.withLock { _saves = newValue } }
+    }
+    private var _saves: [SaveInfo] = []
+    func saves(_ box: String) async throws -> [SaveInfo] {
+        try await record(["app", "saves", box])
+        return lock.withLock { _saves }
+    }
     func setNetwork(usable: Bool) async throws { try await record(["app", "network", usable ? "up" : "down"]) }
     func woke() async throws -> Bool { try await record(["app", "woke"]); return wokeRestarted }
     func relaunch() async throws { try await record(["app", "relaunch"]) }

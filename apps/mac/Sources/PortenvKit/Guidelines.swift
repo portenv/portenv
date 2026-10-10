@@ -174,15 +174,15 @@ public enum A11y {
     public static let newTab = "New tab"
     public static func closeTab(_ name: String) -> String { "Close \(name) tab" }
     public static func renameTab(_ name: String) -> String { "Name of the \(name) tab" }
-}
 
-/// §6: lines of the inspector's sections (the inspector itself comes later).
-public enum InspectorText {
-    /// Where it is: packages that couldn't be installed, with Retry. Nil when
-    /// every package is installed.
-    public static func packages(_ failed: [String]) -> String? {
-        guard !failed.isEmpty else { return nil }
-        let count = failed.count == 1 ? "1 package couldn't" : "\(failed.count) packages couldn't"
-        return "\(count) be installed: \(failed.joined(separator: ", ")) · Retry"
+    /// The inspector (§6) and its controls.
+    public static let inspector = "Inspector"
+    public static let showInspector = "Show inspector"
+    public static let hideInspector = "Hide inspector"
+    public static let retryPackages = "Retry installing packages"
+    public static func revertTo(_ kind: String) -> String { "Revert to this \(kind)" }
+    /// A tab in Running now, and what runs in it.
+    public static func runningTab(_ name: String, _ detail: String) -> String {
+        detail == "Idle" ? "\(name) tab, idle" : "\(name) tab, running \(detail)"
     }
 }

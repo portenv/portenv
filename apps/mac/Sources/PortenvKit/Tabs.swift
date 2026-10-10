@@ -98,11 +98,19 @@ public final class TabsController {
     public private(set) var error: String?
     private let daemon: DaemonAPI
     private let retry: Duration
+    private let now: @Sendable () -> Date
+    private var commands = CommandWatch()
+    /// Called for each command that finished in a tab (its foreground
+    /// program ended), with how long it ran: the app decides whether it's
+    /// worth a notification (§5).
+    public var commandFinished: (@MainActor (CommandWatch.Finished) -> Void)?
 
-    public init(box: String, daemon: DaemonAPI, retry: Duration = .seconds(1)) {
+    public init(box: String, daemon: DaemonAPI, retry: Duration = .seconds(1),
+                now: @escaping @Sendable () -> Date = { Date() }) {
         self.box = box
         self.daemon = daemon
         self.retry = retry
+        self.now = now
     }
 
     /// A box keeps at least one tab.
@@ -125,7 +133,10 @@ public final class TabsController {
     public func follow() async {
         while !Task.isCancelled {
             do {
-                for try await ts in daemon.watchTabs(box) { tabs = ts }
+                for try await ts in daemon.watchTabs(box) {
+                    tabs = ts
+                    for f in commands.update(ts, at: now()) { commandFinished?(f) }
+                }
             } catch {}
             if Task.isCancelled { return }
             try? await Task.sleep(for: retry)

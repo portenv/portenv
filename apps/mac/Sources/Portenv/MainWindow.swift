@@ -9,10 +9,31 @@ import SwiftUI
 struct MainWindow: View {
     @Bindable var controller: BoxController
     @Bindable var tabs: TabsController
+    /// The inspector's open state, remembered for this box's window (§6).
+    @AppStorage private var inspectorOpen: Bool
+
+    init(controller: BoxController, tabs: TabsController) {
+        self.controller = controller
+        self.tabs = tabs
+        _inspectorOpen = AppStorage(wrappedValue: false, InspectorToggle.key(controller.box))
+    }
 
     var body: some View {
         content
             .frame(minWidth: 640, minHeight: 400)
+            .inspector(isPresented: $inspectorOpen) {
+                InspectorView(
+                    content: InspectorContent(box: controller, tabs: tabs),
+                    yourInitial: String(NSFullUserName().prefix(1)).uppercased(),
+                    moveTargets: moveTargets,
+                    move: { target in Task { await controller.move(to: target) } },
+                    retryPackages: { Task { await controller.retryPackages() } },
+                    revert: { Task { await controller.revertToLastSavePoint() } }
+                )
+                .inspectorColumnWidth(min: 260, ideal: 300, max: 400)
+                // The saves change with each save: read them while open.
+                .task(id: controller.state?.savedAt) { await controller.refreshSaves() }
+            }
             .navigationTitle(controller.box)
             // The title is the box's menu (Apple's document-menu pattern):
             // the system title is replaced by BoxTitle, the box's name over
@@ -25,6 +46,12 @@ struct MainWindow: View {
                 ToolbarItem(placement: .navigation) {
                     BoxTitle(controller: controller)
                 }
+                ToolbarItem(placement: .primaryAction) {
+                    // ⌥⌘I is on View › Show Inspector (InspectorToggle).
+                    Button { inspectorOpen.toggle() } label: { Image(systemName: "sidebar.right") }
+                        .help(inspectorOpen ? A11y.hideInspector : A11y.showInspector)
+                        .accessibilityLabel(inspectorOpen ? A11y.hideInspector : A11y.showInspector)
+                }
             }
             // Busy disables the window, except Cancel while the Keychain asks.
             .disabled(controller.busy && !controller.waitingForKeychain)
@@ -36,6 +63,13 @@ struct MainWindow: View {
             } message: {
                 Text(controller.error ?? "")
             }
+    }
+
+    /// Move To… in the inspector: every place but where the box is.
+    private var moveTargets: [(String, String)] {
+        (["this-mac"] + controller.servers)
+            .filter { !controller.isCurrent($0) }
+            .map { (ServerName.display($0), $0) }
     }
 
     @ViewBuilder private var content: some View {
@@ -93,6 +127,27 @@ struct MainWindow: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(.background)
+    }
+}
+
+/// View › Show Inspector (⌥⌘I), sharing the window's remembered state.
+struct InspectorToggle: Commands {
+    let box: String
+    static func key(_ box: String) -> String { "inspectorOpen.\(box)" }
+
+    var body: some Commands {
+        CommandGroup(after: .sidebar) {
+            InspectorMenuItem(key: Self.key(box))
+        }
+    }
+}
+
+private struct InspectorMenuItem: View {
+    @AppStorage private var open: Bool
+    init(key: String) { _open = AppStorage(wrappedValue: false, key) }
+    var body: some View {
+        Button(open ? "Hide Inspector" : "Show Inspector") { open.toggle() }
+            .keyboardShortcut("i", modifiers: [.command, .option])
     }
 }
 

@@ -100,6 +100,19 @@ Menu items that can't work right now are disabled with no explanation in the men
 - Each tab is a persistent session in the box, so work survives the window closing, the Mac sleeping and the box moving.
 - tmux is plumbing. Its status bar is always off, its prefix key never surfaces, and nothing in the UI mentions it.
 - The app, not tmux, owns tab names, order, badges and the new-tab button.
+- **The current tab is marked by more than a shade** (§12): its name in semibold, and an accent line along its bottom edge, on top of the mockup's background. (A shade alone was too faint at the Mac, 2026-10-10.)
+- **Each viewer keeps its own current tab.** The app and each agent see the same tabs, but choosing a tab moves only that viewer's terminal: an agent switching tabs never changes the owner's.
+- **Tab shortcuts:**
+
+  | Shortcut | Action | Menu |
+  | --- | --- | --- |
+  | ⌘T | New tab | File › New Tab |
+  | ⌘W | Close the current tab; on the last tab, close the window (which saves and releases the box), like Terminal and Safari | File › Close Tab |
+  | ⌘1–⌘9 | Show the tab at that position; past the last tab, nothing | Window › Show Tab ▸ |
+  | ⌘⇧[ / ⌘⇧] | Show the previous / next tab, wrapping around | Window › Show Previous Tab, Show Next Tab |
+  | ⌃⇧Tab / ⌃Tab | The same, on any keyboard layout (⌘⇧[ needs a bracket key, which AZERTY and other layouts lack), as in Safari and Terminal | — |
+
+- **Closing a tab that still runs a program asks first:** "Close this tab? <program> is still running.", with Close Tab and Cancel. The program is the tab's foreground process as the box agent reports it at that moment. A tab with only its shell closes without asking. The last tab has no close button; ⌘W closes the window instead.
 
 ### 4.2 Blocks
 

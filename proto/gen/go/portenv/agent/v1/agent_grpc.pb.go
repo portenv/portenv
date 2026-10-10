@@ -31,6 +31,12 @@ const (
 	AgentService_RunRestic_FullMethodName     = "/portenv.agent.v1.AgentService/RunRestic"
 	AgentService_GetPathInfo_FullMethodName   = "/portenv.agent.v1.AgentService/GetPathInfo"
 	AgentService_Terminal_FullMethodName      = "/portenv.agent.v1.AgentService/Terminal"
+	AgentService_ListTabs_FullMethodName      = "/portenv.agent.v1.AgentService/ListTabs"
+	AgentService_NewTab_FullMethodName        = "/portenv.agent.v1.AgentService/NewTab"
+	AgentService_CloseTab_FullMethodName      = "/portenv.agent.v1.AgentService/CloseTab"
+	AgentService_RenameTab_FullMethodName     = "/portenv.agent.v1.AgentService/RenameTab"
+	AgentService_SelectTab_FullMethodName     = "/portenv.agent.v1.AgentService/SelectTab"
+	AgentService_WatchTabs_FullMethodName     = "/portenv.agent.v1.AgentService/WatchTabs"
 )
 
 // AgentServiceClient is the client API for AgentService service.
@@ -54,6 +60,20 @@ type AgentServiceClient interface {
 	// Attaches a terminal to one of work's tmux sessions (created if needed).
 	// The first message from the client must be open.
 	Terminal(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[TerminalRequest, TerminalResponse], error)
+	// The tabs of one of work's tmux sessions (created if needed), in order.
+	// Every window in the session is a tab, whoever created it, so no window
+	// is ever out of the user's sight.
+	ListTabs(ctx context.Context, in *ListTabsRequest, opts ...grpc.CallOption) (*ListTabsResponse, error)
+	// Opens a tab at the end and shows it.
+	NewTab(ctx context.Context, in *NewTabRequest, opts ...grpc.CallOption) (*NewTabResponse, error)
+	// Closes a tab and ends what runs in it. The last tab can't be closed.
+	CloseTab(ctx context.Context, in *CloseTabRequest, opts ...grpc.CallOption) (*CloseTabResponse, error)
+	// Renames a tab. Programs in the box can't rename tabs.
+	RenameTab(ctx context.Context, in *RenameTabRequest, opts ...grpc.CallOption) (*RenameTabResponse, error)
+	// Shows a tab in the session's terminal.
+	SelectTab(ctx context.Context, in *SelectTabRequest, opts ...grpc.CallOption) (*SelectTabResponse, error)
+	// The tabs at once, then again whenever they change.
+	WatchTabs(ctx context.Context, in *WatchTabsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[WatchTabsResponse], error)
 }
 
 type agentServiceClient struct {
@@ -127,6 +147,75 @@ func (c *agentServiceClient) Terminal(ctx context.Context, opts ...grpc.CallOpti
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type AgentService_TerminalClient = grpc.BidiStreamingClient[TerminalRequest, TerminalResponse]
 
+func (c *agentServiceClient) ListTabs(ctx context.Context, in *ListTabsRequest, opts ...grpc.CallOption) (*ListTabsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListTabsResponse)
+	err := c.cc.Invoke(ctx, AgentService_ListTabs_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *agentServiceClient) NewTab(ctx context.Context, in *NewTabRequest, opts ...grpc.CallOption) (*NewTabResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(NewTabResponse)
+	err := c.cc.Invoke(ctx, AgentService_NewTab_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *agentServiceClient) CloseTab(ctx context.Context, in *CloseTabRequest, opts ...grpc.CallOption) (*CloseTabResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CloseTabResponse)
+	err := c.cc.Invoke(ctx, AgentService_CloseTab_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *agentServiceClient) RenameTab(ctx context.Context, in *RenameTabRequest, opts ...grpc.CallOption) (*RenameTabResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RenameTabResponse)
+	err := c.cc.Invoke(ctx, AgentService_RenameTab_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *agentServiceClient) SelectTab(ctx context.Context, in *SelectTabRequest, opts ...grpc.CallOption) (*SelectTabResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SelectTabResponse)
+	err := c.cc.Invoke(ctx, AgentService_SelectTab_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *agentServiceClient) WatchTabs(ctx context.Context, in *WatchTabsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[WatchTabsResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &AgentService_ServiceDesc.Streams[1], AgentService_WatchTabs_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[WatchTabsRequest, WatchTabsResponse]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type AgentService_WatchTabsClient = grpc.ServerStreamingClient[WatchTabsResponse]
+
 // AgentServiceServer is the server API for AgentService service.
 // All implementations must embed UnimplementedAgentServiceServer
 // for forward compatibility.
@@ -148,6 +237,20 @@ type AgentServiceServer interface {
 	// Attaches a terminal to one of work's tmux sessions (created if needed).
 	// The first message from the client must be open.
 	Terminal(grpc.BidiStreamingServer[TerminalRequest, TerminalResponse]) error
+	// The tabs of one of work's tmux sessions (created if needed), in order.
+	// Every window in the session is a tab, whoever created it, so no window
+	// is ever out of the user's sight.
+	ListTabs(context.Context, *ListTabsRequest) (*ListTabsResponse, error)
+	// Opens a tab at the end and shows it.
+	NewTab(context.Context, *NewTabRequest) (*NewTabResponse, error)
+	// Closes a tab and ends what runs in it. The last tab can't be closed.
+	CloseTab(context.Context, *CloseTabRequest) (*CloseTabResponse, error)
+	// Renames a tab. Programs in the box can't rename tabs.
+	RenameTab(context.Context, *RenameTabRequest) (*RenameTabResponse, error)
+	// Shows a tab in the session's terminal.
+	SelectTab(context.Context, *SelectTabRequest) (*SelectTabResponse, error)
+	// The tabs at once, then again whenever they change.
+	WatchTabs(*WatchTabsRequest, grpc.ServerStreamingServer[WatchTabsResponse]) error
 	mustEmbedUnimplementedAgentServiceServer()
 }
 
@@ -175,6 +278,24 @@ func (UnimplementedAgentServiceServer) GetPathInfo(context.Context, *GetPathInfo
 }
 func (UnimplementedAgentServiceServer) Terminal(grpc.BidiStreamingServer[TerminalRequest, TerminalResponse]) error {
 	return status.Error(codes.Unimplemented, "method Terminal not implemented")
+}
+func (UnimplementedAgentServiceServer) ListTabs(context.Context, *ListTabsRequest) (*ListTabsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListTabs not implemented")
+}
+func (UnimplementedAgentServiceServer) NewTab(context.Context, *NewTabRequest) (*NewTabResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method NewTab not implemented")
+}
+func (UnimplementedAgentServiceServer) CloseTab(context.Context, *CloseTabRequest) (*CloseTabResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CloseTab not implemented")
+}
+func (UnimplementedAgentServiceServer) RenameTab(context.Context, *RenameTabRequest) (*RenameTabResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RenameTab not implemented")
+}
+func (UnimplementedAgentServiceServer) SelectTab(context.Context, *SelectTabRequest) (*SelectTabResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SelectTab not implemented")
+}
+func (UnimplementedAgentServiceServer) WatchTabs(*WatchTabsRequest, grpc.ServerStreamingServer[WatchTabsResponse]) error {
+	return status.Error(codes.Unimplemented, "method WatchTabs not implemented")
 }
 func (UnimplementedAgentServiceServer) mustEmbedUnimplementedAgentServiceServer() {}
 func (UnimplementedAgentServiceServer) testEmbeddedByValue()                      {}
@@ -294,6 +415,107 @@ func _AgentService_Terminal_Handler(srv interface{}, stream grpc.ServerStream) e
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type AgentService_TerminalServer = grpc.BidiStreamingServer[TerminalRequest, TerminalResponse]
 
+func _AgentService_ListTabs_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListTabsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentServiceServer).ListTabs(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentService_ListTabs_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentServiceServer).ListTabs(ctx, req.(*ListTabsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AgentService_NewTab_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(NewTabRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentServiceServer).NewTab(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentService_NewTab_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentServiceServer).NewTab(ctx, req.(*NewTabRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AgentService_CloseTab_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CloseTabRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentServiceServer).CloseTab(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentService_CloseTab_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentServiceServer).CloseTab(ctx, req.(*CloseTabRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AgentService_RenameTab_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RenameTabRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentServiceServer).RenameTab(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentService_RenameTab_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentServiceServer).RenameTab(ctx, req.(*RenameTabRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AgentService_SelectTab_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SelectTabRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentServiceServer).SelectTab(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentService_SelectTab_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentServiceServer).SelectTab(ctx, req.(*SelectTabRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AgentService_WatchTabs_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(WatchTabsRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(AgentServiceServer).WatchTabs(m, &grpc.GenericServerStream[WatchTabsRequest, WatchTabsResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type AgentService_WatchTabsServer = grpc.ServerStreamingServer[WatchTabsResponse]
+
 // AgentService_ServiceDesc is the grpc.ServiceDesc for AgentService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -321,6 +543,26 @@ var AgentService_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "GetPathInfo",
 			Handler:    _AgentService_GetPathInfo_Handler,
 		},
+		{
+			MethodName: "ListTabs",
+			Handler:    _AgentService_ListTabs_Handler,
+		},
+		{
+			MethodName: "NewTab",
+			Handler:    _AgentService_NewTab_Handler,
+		},
+		{
+			MethodName: "CloseTab",
+			Handler:    _AgentService_CloseTab_Handler,
+		},
+		{
+			MethodName: "RenameTab",
+			Handler:    _AgentService_RenameTab_Handler,
+		},
+		{
+			MethodName: "SelectTab",
+			Handler:    _AgentService_SelectTab_Handler,
+		},
 	},
 	Streams: []grpc.StreamDesc{
 		{
@@ -328,6 +570,11 @@ var AgentService_ServiceDesc = grpc.ServiceDesc{
 			Handler:       _AgentService_Terminal_Handler,
 			ServerStreams: true,
 			ClientStreams: true,
+		},
+		{
+			StreamName:    "WatchTabs",
+			Handler:       _AgentService_WatchTabs_Handler,
+			ServerStreams: true,
 		},
 	},
 	Metadata: "portenv/agent/v1/agent.proto",

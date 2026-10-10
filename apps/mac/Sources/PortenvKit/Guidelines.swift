@@ -166,6 +166,14 @@ public enum A11y {
     }
 
     public static func terminal(box: String) -> String { "Terminal in \(box)" }
+
+    /// The tab bar (§3, §4.1): each tab says its name and that it's a tab;
+    /// the one the terminal shows is marked selected by the view.
+    public static func tab(_ name: String) -> String { "\(name) tab" }
+    public static let tabBar = "Tabs"
+    public static let newTab = "New tab"
+    public static func closeTab(_ name: String) -> String { "Close \(name) tab" }
+    public static func renameTab(_ name: String) -> String { "Name of the \(name) tab" }
 }
 
 /// §6: lines of the inspector's sections (the inspector itself comes later).

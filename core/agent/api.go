@@ -49,11 +49,13 @@ type apiServer struct {
 	agentv1.UnimplementedAgentServiceServer
 	cfg  Config
 	keys *channelKeys
+	// tmux runs tmux as the main user (tmuxAs; a fake in tests).
+	tmux func(Config) (tmuxFunc, error)
 }
 
 // newChannelServer serves the API with the channel's current secrets.
 func newChannelServer(cfg Config, keys *channelKeys) *grpc.Server {
-	s := &apiServer{cfg: cfg, keys: keys}
+	s := &apiServer{cfg: cfg, keys: keys, tmux: tmuxAs}
 	srv := grpc.NewServer(
 		grpc.Creds(credentials.NewTLS(keys.tlsConfig())),
 		grpc.UnaryInterceptor(func(ctx context.Context, req any, _ *grpc.UnaryServerInfo, h grpc.UnaryHandler) (any, error) {
@@ -142,6 +144,9 @@ func (s *apiServer) Terminal(stream agentv1.AgentService_TerminalServer) error {
 	}
 	if !sessionRE.MatchString(open.GetSession()) {
 		return status.Error(codes.InvalidArgument, "session names are 1 to 32 letters, digits, - or _")
+	}
+	if v := open.GetViewer(); v != "" && !viewerRE.MatchString(v) {
+		return status.Error(codes.InvalidArgument, "viewer names are 1 to 16 lower-case letters, digits or -")
 	}
 	return runTerminal(stream, s.cfg, open)
 }

@@ -93,6 +93,60 @@ final class FakeDaemon: DaemonAPI, @unchecked Sendable {
     func woke() async throws -> Bool { try await record(["app", "woke"]); return wokeRestarted }
     func relaunch() async throws { try await record(["app", "relaunch"]) }
     func leaveUnsaved(_ box: String) async throws { try await record(["app", "leave-unsaved", box]) }
+    // Tabs: in memory, like the box agent: new tabs go at the end and are
+    // shown; watchers get the list at once and on pushTabs.
+    private var _tabs = [TabInfo(id: "@0", name: "shell", active: true)]
+    private var nextTab = 1
+    private var tabWatchers: [AsyncThrowingStream<[TabInfo], Error>.Continuation] = []
+
+    func tabs(_ box: String) async throws -> [TabInfo] {
+        try await record(["app", "list-tab", box])
+        return lock.withLock { _tabs }
+    }
+    func newTab(_ box: String, name: String) async throws -> TabInfo {
+        try await record(["app", "new-tab", box, name])
+        return lock.withLock {
+            let t = TabInfo(id: "@\(nextTab)", name: name, active: true)
+            nextTab += 1
+            for i in _tabs.indices { _tabs[i].active = false }
+            _tabs.append(t)
+            return t
+        }
+    }
+    func closeTab(_ box: String, id: String) async throws {
+        try await record(["app", "close-tab", box, id])
+        lock.withLock { _tabs = _tabs.filter { $0.id != id } }
+    }
+    func renameTab(_ box: String, id: String, name: String) async throws {
+        try await record(["app", "rename-tab", box, id, name])
+        lock.withLock { if let i = _tabs.firstIndex(where: { $0.id == id }) { _tabs[i].name = name } }
+    }
+    func selectTab(_ box: String, id: String) async throws {
+        try await record(["app", "select-tab", box, id])
+        lock.withLock { for i in _tabs.indices { _tabs[i].active = _tabs[i].id == id } }
+    }
+    func watchTabs(_ box: String) -> AsyncThrowingStream<[TabInfo], Error> {
+        lock.withLock { _calls.append(["app", "watch-tabs", box]) }
+        let first = lock.withLock { _tabs }
+        return AsyncThrowingStream { continuation in
+            continuation.yield(first)
+            lock.withLock { tabWatchers.append(continuation) }
+        }
+    }
+    /// Pushes tabs to every tab watcher, as the box agent reports a change.
+    func pushTabs(_ ts: [TabInfo]) {
+        lock.withLock { _tabs = ts }
+        lock.withLock { tabWatchers }.forEach { $0.yield(ts) }
+    }
+    /// Changes the tabs without telling watchers (something changed between
+    /// two updates).
+    func setTabs(_ ts: [TabInfo]) { lock.withLock { _tabs = ts } }
+    /// Ends every tab watch, as when the box restarts.
+    func endTabWatches() {
+        let all = lock.withLock { let w = tabWatchers; tabWatchers = []; return w }
+        all.forEach { $0.finish() }
+    }
+
     /// What takeSavedAfterQuit gives out (once).
     var savedAfterQuit: [SavedAfterQuit] = []
     func takeSavedAfterQuit() async throws -> [SavedAfterQuit] {

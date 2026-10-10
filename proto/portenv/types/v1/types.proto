@@ -112,3 +112,17 @@ message BuildInfo {
   // Git commit the binary was built from.
   string commit = 2;
 }
+
+// A tab in the box's terminal: one tmux window in the box's session
+// (GUIDELINES.md §3, §4.1). The app owns names and order; order is the
+// order of the list.
+message Tab {
+  // Stable for the window's life (tmux's window ID, for example "@3").
+  string id = 1;
+  string name = 2;
+  // The tab this viewer's terminal shows.
+  bool active = 3;
+  // The program running in the tab's foreground, or empty when it's just
+  // the shell (closing the tab asks first when it isn't empty).
+  string program = 4;
+}

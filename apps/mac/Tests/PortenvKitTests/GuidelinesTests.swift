@@ -158,6 +158,15 @@ struct AccessibilityLabelTests {
         #expect(A11y.symbolLabel(BoxState(save: .agentUnavailable)) == "Not saved")
         #expect(A11y.terminal(box: "acme-api") == "Terminal in acme-api")
     }
+
+    /// Every control of the tab bar has a label (§12), icon-only ones too.
+    @Test func theTabBar() {
+        #expect(A11y.tabBar == "Tabs")
+        #expect(A11y.tab("claude") == "claude tab")
+        #expect(A11y.newTab == "New tab")
+        #expect(A11y.closeTab("claude") == "Close claude tab")
+        #expect(A11y.renameTab("claude") == "Name of the claude tab")
+    }
 }
 
 /// The symbol and the text always come from the same state: the symbol

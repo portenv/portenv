@@ -50,6 +50,12 @@ const (
 	DaemonService_Housekeep_FullMethodName             = "/portenv.daemon.v1.DaemonService/Housekeep"
 	DaemonService_LeaveUnsaved_FullMethodName          = "/portenv.daemon.v1.DaemonService/LeaveUnsaved"
 	DaemonService_TakeSavedAfterQuit_FullMethodName    = "/portenv.daemon.v1.DaemonService/TakeSavedAfterQuit"
+	DaemonService_ListTabs_FullMethodName              = "/portenv.daemon.v1.DaemonService/ListTabs"
+	DaemonService_NewTab_FullMethodName                = "/portenv.daemon.v1.DaemonService/NewTab"
+	DaemonService_CloseTab_FullMethodName              = "/portenv.daemon.v1.DaemonService/CloseTab"
+	DaemonService_RenameTab_FullMethodName             = "/portenv.daemon.v1.DaemonService/RenameTab"
+	DaemonService_SelectTab_FullMethodName             = "/portenv.daemon.v1.DaemonService/SelectTab"
+	DaemonService_WatchTabs_FullMethodName             = "/portenv.daemon.v1.DaemonService/WatchTabs"
 )
 
 // DaemonServiceClient is the client API for DaemonService service.
@@ -132,6 +138,16 @@ type DaemonServiceClient interface {
 	// Boxes saved in the background after Quit Anyway since the app last
 	// asked: the app shows one notification for each. Given out once.
 	TakeSavedAfterQuit(ctx context.Context, in *TakeSavedAfterQuitRequest, opts ...grpc.CallOption) (*TakeSavedAfterQuitResponse, error)
+	// The box's tabs (its terminal's tmux windows), through the box agent.
+	// The session is "main" when empty.
+	ListTabs(ctx context.Context, in *ListTabsRequest, opts ...grpc.CallOption) (*ListTabsResponse, error)
+	NewTab(ctx context.Context, in *NewTabRequest, opts ...grpc.CallOption) (*NewTabResponse, error)
+	CloseTab(ctx context.Context, in *CloseTabRequest, opts ...grpc.CallOption) (*CloseTabResponse, error)
+	RenameTab(ctx context.Context, in *RenameTabRequest, opts ...grpc.CallOption) (*RenameTabResponse, error)
+	SelectTab(ctx context.Context, in *SelectTabRequest, opts ...grpc.CallOption) (*SelectTabResponse, error)
+	// The tabs at once, then whenever they change. The stream ends when the
+	// box closes or its agent goes away; the app watches again.
+	WatchTabs(ctx context.Context, in *WatchTabsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[WatchTabsResponse], error)
 }
 
 type daemonServiceClient struct {
@@ -404,6 +420,75 @@ func (c *daemonServiceClient) TakeSavedAfterQuit(ctx context.Context, in *TakeSa
 	return out, nil
 }
 
+func (c *daemonServiceClient) ListTabs(ctx context.Context, in *ListTabsRequest, opts ...grpc.CallOption) (*ListTabsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListTabsResponse)
+	err := c.cc.Invoke(ctx, DaemonService_ListTabs_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) NewTab(ctx context.Context, in *NewTabRequest, opts ...grpc.CallOption) (*NewTabResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(NewTabResponse)
+	err := c.cc.Invoke(ctx, DaemonService_NewTab_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) CloseTab(ctx context.Context, in *CloseTabRequest, opts ...grpc.CallOption) (*CloseTabResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CloseTabResponse)
+	err := c.cc.Invoke(ctx, DaemonService_CloseTab_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) RenameTab(ctx context.Context, in *RenameTabRequest, opts ...grpc.CallOption) (*RenameTabResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RenameTabResponse)
+	err := c.cc.Invoke(ctx, DaemonService_RenameTab_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) SelectTab(ctx context.Context, in *SelectTabRequest, opts ...grpc.CallOption) (*SelectTabResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SelectTabResponse)
+	err := c.cc.Invoke(ctx, DaemonService_SelectTab_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) WatchTabs(ctx context.Context, in *WatchTabsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[WatchTabsResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &DaemonService_ServiceDesc.Streams[2], DaemonService_WatchTabs_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[WatchTabsRequest, WatchTabsResponse]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type DaemonService_WatchTabsClient = grpc.ServerStreamingClient[WatchTabsResponse]
+
 // DaemonServiceServer is the server API for DaemonService service.
 // All implementations must embed UnimplementedDaemonServiceServer
 // for forward compatibility.
@@ -484,6 +569,16 @@ type DaemonServiceServer interface {
 	// Boxes saved in the background after Quit Anyway since the app last
 	// asked: the app shows one notification for each. Given out once.
 	TakeSavedAfterQuit(context.Context, *TakeSavedAfterQuitRequest) (*TakeSavedAfterQuitResponse, error)
+	// The box's tabs (its terminal's tmux windows), through the box agent.
+	// The session is "main" when empty.
+	ListTabs(context.Context, *ListTabsRequest) (*ListTabsResponse, error)
+	NewTab(context.Context, *NewTabRequest) (*NewTabResponse, error)
+	CloseTab(context.Context, *CloseTabRequest) (*CloseTabResponse, error)
+	RenameTab(context.Context, *RenameTabRequest) (*RenameTabResponse, error)
+	SelectTab(context.Context, *SelectTabRequest) (*SelectTabResponse, error)
+	// The tabs at once, then whenever they change. The stream ends when the
+	// box closes or its agent goes away; the app watches again.
+	WatchTabs(*WatchTabsRequest, grpc.ServerStreamingServer[WatchTabsResponse]) error
 	mustEmbedUnimplementedDaemonServiceServer()
 }
 
@@ -568,6 +663,24 @@ func (UnimplementedDaemonServiceServer) LeaveUnsaved(context.Context, *LeaveUnsa
 }
 func (UnimplementedDaemonServiceServer) TakeSavedAfterQuit(context.Context, *TakeSavedAfterQuitRequest) (*TakeSavedAfterQuitResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method TakeSavedAfterQuit not implemented")
+}
+func (UnimplementedDaemonServiceServer) ListTabs(context.Context, *ListTabsRequest) (*ListTabsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListTabs not implemented")
+}
+func (UnimplementedDaemonServiceServer) NewTab(context.Context, *NewTabRequest) (*NewTabResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method NewTab not implemented")
+}
+func (UnimplementedDaemonServiceServer) CloseTab(context.Context, *CloseTabRequest) (*CloseTabResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CloseTab not implemented")
+}
+func (UnimplementedDaemonServiceServer) RenameTab(context.Context, *RenameTabRequest) (*RenameTabResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RenameTab not implemented")
+}
+func (UnimplementedDaemonServiceServer) SelectTab(context.Context, *SelectTabRequest) (*SelectTabResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SelectTab not implemented")
+}
+func (UnimplementedDaemonServiceServer) WatchTabs(*WatchTabsRequest, grpc.ServerStreamingServer[WatchTabsResponse]) error {
+	return status.Error(codes.Unimplemented, "method WatchTabs not implemented")
 }
 func (UnimplementedDaemonServiceServer) mustEmbedUnimplementedDaemonServiceServer() {}
 func (UnimplementedDaemonServiceServer) testEmbeddedByValue()                       {}
@@ -1022,6 +1135,107 @@ func _DaemonService_TakeSavedAfterQuit_Handler(srv interface{}, ctx context.Cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _DaemonService_ListTabs_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListTabsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).ListTabs(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_ListTabs_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).ListTabs(ctx, req.(*ListTabsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_NewTab_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(NewTabRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).NewTab(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_NewTab_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).NewTab(ctx, req.(*NewTabRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_CloseTab_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CloseTabRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).CloseTab(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_CloseTab_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).CloseTab(ctx, req.(*CloseTabRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_RenameTab_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RenameTabRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).RenameTab(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_RenameTab_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).RenameTab(ctx, req.(*RenameTabRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_SelectTab_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SelectTabRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).SelectTab(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_SelectTab_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).SelectTab(ctx, req.(*SelectTabRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_WatchTabs_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(WatchTabsRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(DaemonServiceServer).WatchTabs(m, &grpc.GenericServerStream[WatchTabsRequest, WatchTabsResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type DaemonService_WatchTabsServer = grpc.ServerStreamingServer[WatchTabsResponse]
+
 // DaemonService_ServiceDesc is the grpc.ServiceDesc for DaemonService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1121,6 +1335,26 @@ var DaemonService_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "TakeSavedAfterQuit",
 			Handler:    _DaemonService_TakeSavedAfterQuit_Handler,
 		},
+		{
+			MethodName: "ListTabs",
+			Handler:    _DaemonService_ListTabs_Handler,
+		},
+		{
+			MethodName: "NewTab",
+			Handler:    _DaemonService_NewTab_Handler,
+		},
+		{
+			MethodName: "CloseTab",
+			Handler:    _DaemonService_CloseTab_Handler,
+		},
+		{
+			MethodName: "RenameTab",
+			Handler:    _DaemonService_RenameTab_Handler,
+		},
+		{
+			MethodName: "SelectTab",
+			Handler:    _DaemonService_SelectTab_Handler,
+		},
 	},
 	Streams: []grpc.StreamDesc{
 		{
@@ -1132,6 +1366,11 @@ var DaemonService_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "WatchBoxState",
 			Handler:       _DaemonService_WatchBoxState_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "WatchTabs",
+			Handler:       _DaemonService_WatchTabs_Handler,
 			ServerStreams: true,
 		},
 	},

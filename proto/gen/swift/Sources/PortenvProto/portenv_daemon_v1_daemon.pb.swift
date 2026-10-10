@@ -441,6 +441,12 @@ public nonisolated struct Portenv_Daemon_V1_TerminalOpen: Sendable {
   /// viewer choosing a tab never moves another's. Empty: the session itself.
   public var viewer: String = String()
 
+  /// Input comes from a pipe or a file, not a person typing (portenv
+  /// attach with stdin not a terminal). Input the program in the box never
+  /// read then ends the terminal with DataLoss; false (a person, or an
+  /// older client): never.
+  public var inputPiped: Bool = false
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -1779,7 +1785,7 @@ nonisolated extension Portenv_Daemon_V1_TerminalRequest: SwiftProtobuf.Message, 
 
 nonisolated extension Portenv_Daemon_V1_TerminalOpen: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".TerminalOpen"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}box\0\u{1}session\0\u{1}size\0\u{1}viewer\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}box\0\u{1}session\0\u{1}size\0\u{1}viewer\0\u{3}input_piped\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1791,6 +1797,7 @@ nonisolated extension Portenv_Daemon_V1_TerminalOpen: SwiftProtobuf.Message, Swi
       case 2: try { try decoder.decodeSingularStringField(value: &self.session) }()
       case 3: try { try decoder.decodeSingularMessageField(value: &self._size) }()
       case 4: try { try decoder.decodeSingularStringField(value: &self.viewer) }()
+      case 5: try { try decoder.decodeSingularBoolField(value: &self.inputPiped) }()
       default: break
       }
     }
@@ -1813,6 +1820,9 @@ nonisolated extension Portenv_Daemon_V1_TerminalOpen: SwiftProtobuf.Message, Swi
     if !self.viewer.isEmpty {
       try visitor.visitSingularStringField(value: self.viewer, fieldNumber: 4)
     }
+    if self.inputPiped != false {
+      try visitor.visitSingularBoolField(value: self.inputPiped, fieldNumber: 5)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -1821,6 +1831,7 @@ nonisolated extension Portenv_Daemon_V1_TerminalOpen: SwiftProtobuf.Message, Swi
     if lhs.session != rhs.session {return false}
     if lhs._size != rhs._size {return false}
     if lhs.viewer != rhs.viewer {return false}
+    if lhs.inputPiped != rhs.inputPiped {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

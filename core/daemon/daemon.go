@@ -647,7 +647,7 @@ func (s *Server) Terminal(stream daemonv1.DaemonService_TerminalServer) error {
 		return agentError(err)
 	}
 	size := &agentv1.TerminalSize{Cols: open.GetSize().GetCols(), Rows: open.GetSize().GetRows()}
-	if err := at.Send(&agentv1.TerminalRequest{Msg: &agentv1.TerminalRequest_Open{Open: &agentv1.TerminalOpen{Session: open.GetSession(), Size: size, Viewer: open.GetViewer()}}}); err != nil {
+	if err := at.Send(&agentv1.TerminalRequest{Msg: &agentv1.TerminalRequest_Open{Open: &agentv1.TerminalOpen{Session: open.GetSession(), Size: size, Viewer: open.GetViewer(), InputPiped: open.GetInputPiped()}}}); err != nil {
 		return err
 	}
 	go func() {
@@ -739,10 +739,14 @@ func agentError(err error) error {
 	}
 	msg := err.Error()
 	if status.Code(err) == codes.Unavailable || strings.Contains(msg, "the certificate is not this box's") {
-		return status.Error(codes.Unavailable, "the box agent is unavailable (its channel is down or failed verification); restart the box")
+		return status.Error(codes.Unavailable, AgentUnavailable)
 	}
 	return err
 }
+
+// AgentUnavailable is what portenvd says when the box agent's channel is
+// down (Unavailable): portenvd itself is fine.
+const AgentUnavailable = "the box agent is unavailable (its channel is down or failed verification); restart the box"
 
 // CheckBox reports whether the box agent answers on its channel.
 func (s *Server) CheckBox(ctx context.Context, req *daemonv1.CheckBoxRequest) (*daemonv1.CheckBoxResponse, error) {

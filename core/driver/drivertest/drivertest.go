@@ -7,8 +7,11 @@ package drivertest
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
+	"io"
 	"net"
 	"strings"
 	"testing"
@@ -287,6 +290,61 @@ func agentChannel(t *testing.T, env Env) {
 	}
 	if !strings.Contains(out.String(), "user=work") || !strings.Contains(out.String(), "in=/tmp/tmux-1000") {
 		t.Fatalf("terminal is not work's tmux session: %q", out.String())
+	}
+
+	// #53: a megabyte typed in, then the client finishes sending. The
+	// terminal ends only once tmux has taken every byte: the file in the
+	// box matches, and nothing typed later lands in the middle of it.
+	data := make([]byte, 1<<20)
+	if _, err := rand.Read(data); err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(data)
+	send(&agentv1.TerminalRequest{Msg: &agentv1.TerminalRequest_Input{Input: []byte("stty -echo; echo go=$((1+1)); base64 -d > /tmp/in53\r")}})
+	for !strings.Contains(out.String(), "go=2") {
+		r, err := term.Recv()
+		if err != nil {
+			t.Fatalf("terminal: %v; output so far %q", err, out.String())
+		}
+		out.Write(r.GetOutput())
+	}
+	enc := base64.StdEncoding.EncodeToString(data)
+	for len(enc) > 0 {
+		line := enc[:min(76, len(enc))]
+		enc = enc[len(line):]
+		send(&agentv1.TerminalRequest{Msg: &agentv1.TerminalRequest_Input{Input: []byte(line + "\n")}})
+	}
+	send(&agentv1.TerminalRequest{Msg: &agentv1.TerminalRequest_Input{Input: []byte{4}}}) // Ctrl-D: the end of base64's input
+	_ = term.CloseSend()
+	for {
+		r, err := term.Recv()
+		if errors.Is(err, io.EOF) {
+			t.Fatal("the terminal ended without its exit code")
+		}
+		if err != nil {
+			t.Fatalf("the terminal ended with %v after the client finished sending", err)
+		}
+		if _, ok := r.GetMsg().(*agentv1.TerminalResponse_ExitCode); ok {
+			break
+		}
+	}
+	term, err = c.Terminal(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	send(&agentv1.TerminalRequest{Msg: &agentv1.TerminalRequest_Open{Open: &agentv1.TerminalOpen{Session: "main", Size: &agentv1.TerminalSize{Cols: 200, Rows: 30}}}})
+	send(&agentv1.TerminalRequest{Msg: &agentv1.TerminalRequest_Input{Input: []byte("stty echo; echo got=$(sha256sum < /tmp/in53 | cut -c1-64)\r")}})
+	want := "got=" + hex.EncodeToString(sum[:])
+	out.Reset()
+	for !strings.Contains(out.String(), want) {
+		r, err := term.Recv()
+		if err != nil {
+			t.Fatalf("the box didn't get every byte: %v; output %q", err, out.String())
+		}
+		out.Write(r.GetOutput())
+		if strings.Contains(out.String(), "got=") && strings.Count(out.String(), "got=") > 1 && !strings.Contains(out.String(), want) {
+			t.Fatalf("the box didn't get every byte: output %q, want %s", out.String(), want)
+		}
 	}
 	_ = term.CloseSend()
 

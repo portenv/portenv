@@ -9,6 +9,8 @@ import (
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+
+	"github.com/portenv/portenv/core/daemon"
 )
 
 // TestALostDaemonIsSaidPlainly: when portenvd goes away (crash, update,
@@ -22,6 +24,13 @@ func TestALostDaemonIsSaidPlainly(t *testing.T) {
 	}
 	if err := attachEnd(lost, false); err == nil || err.Error() != "lost the connection to portenvd" {
 		t.Fatalf("at a terminal: %v", err)
+	}
+	cut := status.Error(codes.Unavailable, daemon.AgentUnavailable) // portenvd is fine; the box's link went
+	if err := attachEnd(cut, false); err == nil || err.Error() != "lost the connection to the box agent; input still on its way may not have reached the box" {
+		t.Fatalf("box link cut: %v", err)
+	}
+	if err := attachEnd(nil, false); err != nil {
+		t.Fatalf("everything arrived: %v, want nil", err)
 	}
 	if err := attachEnd(io.EOF, true); err != nil {
 		t.Fatalf("the session ended: %v, want nil", err)

@@ -92,7 +92,10 @@ func newShellCommand(t *testing.T, shell string) string {
 		if err := os.WriteFile(rc, []byte("PS1='%% '\nsource "+filepath.Join(root, "osc133.zsh")+"\n"), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		return fmt.Sprintf("env -i HOME=%s ZDOTDIR=%s TERM=xterm-256color PATH=/usr/bin:/bin %s -i", home, home, path)
+		// -d: no global rc files. Ubuntu's /etc/zsh/zshrc runs compinit,
+		// which can stop to ask about "insecure directories" on a CI
+		// runner; the test exercises only Portenv's integration.
+		return fmt.Sprintf("env -i HOME=%s ZDOTDIR=%s TERM=xterm-256color PATH=/usr/bin:/bin %s -d -i", home, home, path)
 	}
 	t.Fatalf("no shell %s", shell)
 	return ""

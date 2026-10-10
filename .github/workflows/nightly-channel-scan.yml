@@ -1,0 +1,99 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Nightly channel scan: the full-disk backstop for ADR 0010's condition 2.
+# It builds the toolbox image and searches a fresh box's whole root file
+# system for the agent channel's token (TestChannelTokenNotOnDisk), next to
+# the targeted checks that run on every PR (TestChannelConditions). Not
+# finishing within the deadline is a failure.
+#
+# On failure it opens the issue "Nightly channel scan failed" with a
+# redacted log excerpt (scripts/scan-excerpt.sh), or comments on it if it is
+# already open; the next passing run closes it. It uses only this
+# workflow's GITHUB_TOKEN.
+name: Nightly channel scan
+
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-channel-scan
+  cancel-in-progress: false
+
+env:
+  ISSUE_TITLE: Nightly channel scan failed
+
+jobs:
+  scan:
+    name: Full-disk channel scan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      issues: write # open, comment on and close the "Nightly channel scan failed" issue
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Build the toolbox image
+        run: |
+          docker build --platform linux/amd64 \
+            --build-arg VERSION="$(git describe --tags --always)" \
+            --build-arg COMMIT="$(git rev-parse --short HEAD)" \
+            -f images/toolbox-node/Dockerfile -t toolbox-node:nightly .
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: core/go.mod
+          cache-dependency-path: '**/go.sum'
+      - name: Scan
+        id: scan
+        # Never stops the job here: the result is reported below, then the
+        # job fails loudly if the scan did.
+        run: |
+          set -o pipefail
+          rc=0
+          (cd core && PORTENV_TEST_FULL_SCAN=1 PORTENV_TEST_IMAGE=toolbox-node:nightly \
+            go test -count=1 -timeout 35m -v \
+            -run 'TestChannelTokenNotOnDisk$|TestChannelConditions$' ./driver/docker/) \
+            > scan.log 2>&1 || rc=$?
+          echo "exit=$rc" >> "$GITHUB_OUTPUT"
+          grep -E -- '^(=== RUN|--- |ok|FAIL)|full scan' scan.log || true
+          echo "go test exit: $rc"
+      - name: Report
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SCAN_EXIT: ${{ steps.scan.outputs.exit }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          open=$(gh issue list --state open --search "in:title \"$ISSUE_TITLE\"" --json number,title \
+            --jq "[.[] | select(.title == \"$ISSUE_TITLE\")][0].number // empty")
+          if [[ ${SCAN_EXIT:-1} == 0 ]]; then
+            if [[ -n $open ]]; then
+              gh issue comment "$open" --body "Passed: $RUN_URL. Closing."
+              gh issue close "$open"
+              echo "closed #$open"
+            fi
+            exit 0
+          fi
+          if [[ -f scan.log ]]; then
+            excerpt=$(scripts/scan-excerpt.sh scan.log)
+          else
+            excerpt="(no log: the scan step didn't run)"
+          fi
+          body=$(printf 'The nightly full-disk channel scan failed (go test exit %s): %s\n\nA timeout counts as a failure.\n\n```\n%s\n```\n' \
+            "${SCAN_EXIT:-unknown}" "$RUN_URL" "$excerpt")
+          if [[ -n $open ]]; then
+            gh issue comment "$open" --body "$body"
+            echo "commented on #$open"
+          else
+            gh issue create --title "$ISSUE_TITLE" --body "$body"
+          fi
+      - name: Fail loudly
+        if: steps.scan.outputs.exit != '0'
+        run: |
+          echo "::error title=Nightly channel scan failed::go test exit ${{ steps.scan.outputs.exit }}; see the issue \"$ISSUE_TITLE\""
+          exit 1

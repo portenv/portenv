@@ -35,11 +35,21 @@ let package = Package(
                 .product(name: "SwiftProtobuf", package: "swift-protobuf"),
             ]
         ),
+        // The terminal's SwiftTerm glue (per-row overlays, ADR 0017), kept
+        // out of the app target so it can be tested on a headless terminal.
+        .target(
+            name: "PortenvTerm",
+            dependencies: ["PortenvKit", .product(name: "SwiftTerm", package: "SwiftTerm")]
+        ),
         .executableTarget(
             name: "Portenv",
-            dependencies: ["PortenvKit", .product(name: "SwiftTerm", package: "SwiftTerm")]
+            dependencies: ["PortenvKit", "PortenvTerm", .product(name: "SwiftTerm", package: "SwiftTerm")]
         ),
         // SwiftTerm: the layout tests put a real terminal in the window.
         .testTarget(name: "PortenvKitTests", dependencies: ["PortenvKit", .product(name: "SwiftTerm", package: "SwiftTerm")]),
+        .testTarget(
+            name: "PortenvTermTests",
+            dependencies: ["PortenvTerm", "PortenvKit", .product(name: "SwiftTerm", package: "SwiftTerm")]
+        ),
     ]
 )

@@ -796,13 +796,14 @@ A phase starts only when the gate above it passes; the checklists below are the 
 The public launch ships Phases 1 and 2 together (decided 2026-10-09). Day one must demonstrate the full promise, so this demo is the launch gate. It's run end to end and recorded.
 
 **The launch demo**
-1. acme-api is open on the Mac, with Claude Code running in it. Split view (1.2b) shows Claude Code, Grok Bot and the tests side by side.
+1. acme-api is open on the Mac, with Claude Code running in it.
 2. Move To the server; close the laptop.
 3. Grok Bot connects by SSH (a 2.4 certificate) and continues the work: it runs the tests and fixes a failure.
 4. Dots (ChatGPT) connects through remote MCP served by the runner on the user's server (2.7), and makes a change.
 5. Meta Muse opens the box through the web terminal served by the runner (2.8), and makes a change.
-6. Claude Code asks a question in the box. The agent the user is talking to relays it in its chat; the user answers by talking; the answer goes back as keystrokes, attributed to the user ("you, through Grok Bot").
-7. Move back to the Mac. History shows who did what, and Revert works.
+6. Open the laptop. The window reconnects to the box, still on the server, and split view (1.2b) shows Claude Code, Grok Bot and the tests side by side, all still working.
+7. Claude Code asks a question in the box. The agent the user is talking to relays it in its chat; the user answers by talking; the answer goes back as keystrokes, attributed to the user ("you, through Grok Bot").
+8. Move back to the Mac. History shows who did what, and Revert works.
 
 **What the demo needs**
 - **Remote MCP over HTTPS with OAuth (needed by ChatGPT) and the web terminal,** served by the runner on the user's own server, free (2.7, 2.8). The user opts in per server: an inbound 443 under ADR 0015's conditions, or no open port at all through the user's own Cloudflare Tunnel or Tailscale Funnel. Phase 3 keeps the Portenv-hosted versions (3.9, 3.10) for users without a public server, and stays the paid line.
@@ -1065,7 +1066,7 @@ It comes after 1.2's blocks, wherever they land (Phase 1 if the spike succeeds, 
 - **The terminal edition:** `portenv open <box> --tab <name>` attaches straight to one tab.
   - The panes of a tiling terminal (Ghostty, kitty, tmux, Hyprland) can each show a different tab, with the same per-viewer independence.
   - The in-shell features come from shell integration, so they work in every pane there too.
-- **The launch demo** uses split view to show Claude Code, Grok Bot and the tests side by side.
+- **The launch demo** uses split view at the moment the laptop reopens: Claude Code, Grok Bot and the tests side by side, all still working on the server.
 
 **5. 1.3: the `apple` driver**
 

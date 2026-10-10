@@ -1034,6 +1034,13 @@ In this order:
    - It's also tested over the SSH forward to a box on a server, not only on the Mac (a test, not another milestone).
    - **If it succeeds,** Phase 1 also gets blocks with attribution, the sticky header, the inline answer card for Claude Code, tab badges, the command palette and saved commands, in that order.
    - **If it doesn't,** they move to Phase 2 and the plan says so.
+   - **Result (ADR 0017, 2026-10-10; proposed):**
+     - **Question 1, control mode:** yes. Tabs follow tmux through control mode, with #41's window IDs.
+     - **Question 2, OSC 133 per tab:** yes for bash and zsh, with exit codes. Inside Claude Code it only sees one long command, never its questions.
+     - **Waiting for input:** the combined four-signal detector, used everywhere, is right on all 12 labelled cases. Each signal alone is wrong on 1 to 5 of them. Secret prompts never reach a relay, and answers to them through a relay are refused.
+     - **Question 3, SwiftTerm overlay alignment:** still open. It needs a prototype overlay, then the reviewer's UI test.
+     - **Blocks and the rest stay in Phase 1 provisionally.** If question 3 fails, they move to Phase 2.
+     - **Still to do:** the same cases over the SSH forward to a server box (needs the owner's go-ahead for the AWS test server), and real agent CLIs in place of the stand-ins (needs accounts).
 
 **4b. 1.2b: split view** (the owner, 2026-10-10; reference: docs/mockups/split-view.png)
 

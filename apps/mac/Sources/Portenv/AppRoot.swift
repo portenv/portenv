@@ -22,8 +22,14 @@ final class AppModel {
 
     private let daemon = SharedDaemon.client
     private let defaults = UserDefaults.standard
-    /// Set once the box's window exists, so quitting closes the box.
-    var onOpen: ((BoxController) -> Void)?
+    /// Set once the box's window exists, so quitting closes the box; nil
+    /// once the window has gone back to the box list.
+    var onOpen: ((BoxController?) -> Void)?
+    /// Opening the box (up to following its state), and following it.
+    private var openTask: Task<Void, Never>?
+    private var followTask: Task<Void, Never>?
+    /// Closing the box to go back to the list: one close at a time.
+    private(set) var closing = false
 
     static let lastBoxKey = "lastBox"
     static let firstRunDoneKey = "firstRunDone"
@@ -106,15 +112,61 @@ final class AppModel {
         launch = .open(box)
         defaults.set(box, forKey: Self.lastBoxKey)
         onOpen?(controller)
-        await controller.waitForDaemon()
-        // Boxes saved in the background after Quit Anyway: say so once.
-        await controller.announceBackgroundSaves()
-        // Before opening: with no network at all the box opens offline at
-        // once instead of probing storage.
-        await NetworkWatch.shared.start()
-        await controller.open()
+        let opening = Task {
+            await controller.waitForDaemon()
+            // Boxes saved in the background after Quit Anyway: say so once.
+            await controller.announceBackgroundSaves()
+            // Before opening: with no network at all the box opens offline
+            // at once instead of probing storage.
+            await NetworkWatch.shared.start()
+            await controller.open()
+        }
+        openTask = opening
+        await opening.value
+        guard self.controller === controller else { return } // closed meanwhile
         // The state line follows the state portenvd pushes (WatchBoxState).
-        await controller.follow()
+        followTask = Task { await controller.follow() }
+    }
+
+    /// The window is closing. Closing the last box window goes back to
+    /// "Your boxes" instead of quitting (the owner, 2026-10-11): the box is
+    /// closed, saved and released first, exactly as quitting does, and the
+    /// window stays, showing the list. Any other window just closes.
+    func windowShouldClose(_ window: NSWindow) -> Bool {
+        guard case .open = launch, let controller else { return true }
+        let others = WindowCloseGuard.guardedWindows.filter { $0 !== window }.count
+        switch WindowClose.action(showingBox: true, otherBoxWindows: others) {
+        case .closeWindow:
+            return true
+        case .closeBoxThenShowList:
+            if !closing {
+                closing = true
+                Task { await closeToList(controller) }
+            }
+            return false
+        }
+    }
+
+    /// Closes the box (waiting for it to finish opening first, so a box
+    /// still opening is never left open with no window), then the list.
+    private func closeToList(_ controller: BoxController) async {
+        defer { closing = false }
+        await openTask?.value
+        _ = await WindowClose.run(controller.quitFlow, ask: AppDelegate.askOnClose) { [weak self] in
+            await self?.showList()
+        }
+    }
+
+    /// Back to "Your boxes", with the box closed.
+    private func showList() async {
+        followTask?.cancel()
+        followTask = nil
+        openTask = nil
+        controller = nil
+        tabs = nil
+        onOpen?(nil)
+        if let listed = try? await daemon.boxes() { boxes = listed }
+        launch = .boxList(notice: nil)
     }
 
     /// The box list's New Box…: first run's first-box step, titled "New
@@ -199,5 +251,6 @@ struct AppRoot: View {
             }
         }
         .frame(minWidth: 640, minHeight: 440)
+        .background(WindowCloseGuard { window in model.windowShouldClose(window) })
     }
 }

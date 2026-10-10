@@ -228,6 +228,29 @@ struct FirstRunTests {
         #expect(firstRun.showsStepDots)
     }
 
+    /// R-0049, the new-box-linked-invalid board: while the name is invalid
+    /// the field has a red border (no blue focus ring) and VoiceOver reads
+    /// the problem as its description; Create Box is dimmed and disabled,
+    /// not only inert. Empty is not an error, but Create Box waits.
+    @Test func anInvalidNameShowsRedAndDimsCreateBox() {
+        let flow = FirstRunFlow(service: FakeFirstRunService(), at: .firstBox, existing: ["acme-api"], fromBoxList: true)
+        flow.boxName = "-api"
+        #expect(flow.nameField == NameFieldLook(showsError: true, line: "Start with a letter or a number.",
+                                                accessibilityDescription: "Box name. Start with a letter or a number.", accessibilityHelp: nil))
+        #expect(!flow.canContinue && !flow.primaryProminent)
+        flow.boxName = "acme-api"
+        #expect(flow.nameField.showsError)
+        #expect(flow.nameField.accessibilityDescription == "Box name. There\u{2019}s already a box called \u{201C}acme-api\u{201D}.")
+        #expect(!flow.primaryProminent)
+        flow.boxName = ""
+        #expect(flow.nameField == NameFieldLook(showsError: false, line: FirstRunText.nameHint,
+                                                accessibilityDescription: "Box name", accessibilityHelp: FirstRunText.nameHint))
+        #expect(!flow.primaryProminent)
+        flow.boxName = "site"
+        #expect(!flow.nameField.showsError)
+        #expect(flow.canContinue && flow.primaryProminent)
+    }
+
     /// "Not built yet" is a notice (secondary text), never an error in red,
     /// and it clears on the next try.
     @Test func notBuiltIsANoticeNotAnError() async {

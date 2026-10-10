@@ -890,6 +890,7 @@ Milestones: 1.0 walking skeleton · 1.1 `portenvd` with the local gRPC API · 1.
 **For the launch** (Phases 1 and 2 ship together, decided 2026-10-09):
 - 1.2's spike moves to right after the tab bar, with a fallback waiting-for-input detector (output stops and a known prompt pattern appears) if the spike fails.
 - 1.2b (split view) lands after 1.2's blocks and before the launch demo, which uses it.
+- **1.5 (first run) comes before 1.3 and 1.4** (the owner's decision, 2026-10-10). It's built alongside the rest of 1.2, in parallel lanes, so a new user can get from the download to a box without Terminal before the engine and autosave work.
 - 1.4 designs attribution into saves (who was active: the user, or which agent), so history can show who did what.
 - The command registry (Agent readiness) starts in 1.x, because `portenv answer` and the MCP tools build on it.
 - 1.6 (port relay) stays before launch.
@@ -1091,6 +1092,13 @@ The Containerization shim, with `docker` as the fallback. The agent drops the fo
 
 Reduced: no sign-in, Only you, Keychain keys, the recovery key; the Welcome screen has "Continue without an account" (#16). First run lists, in plain words, the exact fields the update check counts (no ID, nothing about the user's work), and how to turn counting off (1.8).
 - **No window for a box that doesn't exist** (found at the Mac, 2026-10-10). Opened without `PORTENV_BOX`, the app shows a window for a default box "demo" that doesn't exist, with "no box named demo here; create it with portenv init demo". That message starts in lower case and sends the user to a terminal command (GUIDELINES §10). First run replaces it: with no box, the app shows first run or the box list, never a window for a missing box.
+- **Built so far** (lane C's first milestone, 2026-10-10):
+  - **The launch decision:** with no box, first run; with a box that isn't on this Mac, the box list, saying so; never a window for a missing box (`LaunchDecision`, tested). The app no longer defaults to "demo".
+  - **The first-run screens and their flow,** reduced as above: Continue is enabled only when the step is complete; the recovery key needs the "I've saved" checkbox; box names follow the CLI's rule. "Count me in usage numbers" is already on, with the exact fields one click away, on Welcome (before any update check).
+  - **The box list:** open a box, or New Box… (first run's first-box step).
+  - **Move to Applications** (lane C's second milestone): before the login item is registered, an app outside /Applications, App Translocation included, asks "Move Portenv to Applications?". Move copies it there (an older Portenv is replaced, anything else named Portenv.app never is), opens the copy and quits; Not Now isn't asked again for the same location. Dev builds can redirect the copy with `PORTENV_MOVE_TO` so UI tests never replace the real app.
+  - **launchd refusing portenvd:** while waiting for portenvd, the app reads `launchctl print` for its job, and an exit 78 (`EX_CONFIG`) shows a plain line at once (with "Move Portenv to the Applications folder" when it runs from elsewhere), not the 30-second "isn't running" message.
+  - **Not yet:** making keys, the recovery key and the first box from the app. These are data-loss paths and wait for the decisions in Open questions; until then, first run says so plainly at Protection. Start from (GitHub, folder) and the detected toolbox on the first-box step also come later.
 - **Move to Applications first** (the owner, 2026-10-10; found while testing #41):
   - Before registering the login item, if the app runs from anywhere but `/Applications`, it offers "Move Portenv to Applications?". That includes App Translocation, when the app is opened from Downloads or the DMG. launchd may refuse to start `portenvd` from other places.
   - If launchd still fails to start `portenvd` (for example exit 78, `EX_CONFIG`), the app says so in a plain line. It doesn't wait out the 30-second "background service isn't running" message.
@@ -1431,6 +1439,9 @@ These need an owner decision; Claude Code should add new ones here instead of gu
 - [x] CLI names (ADR 0016): keep short top-level forms as aliases of `portenv box …`? **Answered (2026-10-10):** yes, as the primary way in, for the everyday verbs only (open, status, save, ask, answer, wait, screen, events, connect, guide). Each is defined once in the command registry as an alias of its grouped form, so help and the generated docs show both. Everything else lives only under its group.
 - [x] Remote MCP (2.7): how does the owner's pairing approval fit ChatGPT's OAuth sign-in? **Answered (2026-10-10):** the sign-in is the pairing. The runner's authorization page shows the code and "Approve this in your Portenv app", and the owner's approval in the app is the OAuth consent, creating the identity, grant and credential as `portenv connect` does. One pairing flow for every door.
 - [ ] Which group holds the commands outside the everyday list that the plan names today (`portenv skill`, `portenv mcp`, `portenv event`, and the Phase 0 `portenv init`): `portenv box …`, `portenv agent …`, or a new group?
+- [ ] First run's recovery key (1.5): its format (the mockup shows 24 characters in six groups of four, from a 32-letter alphabet without look-alikes), and how it becomes each box's extra restic key (for example, a key derived per box from the recovery key with a slow KDF and the box's ID). A data-loss path: an ADR and tests before code.
+- [ ] Making boxes from the app (1.5): only the app may raise Keychain prompts (ADR 0013), but portenvd owns box configs and storage. Proposed: the app makes the keys and puts them in the Keychain, then hands them to portenvd (as ProvideKeys does) with a new CreateBox call that writes the config and sets up storage. Needs an ADR.
+- [ ] "Save to Passwords" on the recovery key step: macOS has no public API for an app to add an item to the Passwords app. Keep Print and Copy only, or find another way?
 - [ ] A per-box "Keep running when Portenv quits" option (off by default) with a menu bar item listing boxes still running? Only with Phase 3's lease hand-off (see 2.4).
 - [x] Tab keyboard shortcuts (1.2)? **Answered (2026-10-10):**
   - ⌘T opens a new tab, ⌘1–⌘9 choose a tab, ⌘⇧[ / ⌘⇧] go to the previous / next tab.

@@ -14,6 +14,7 @@ enum SharedDaemon {
 private struct Unreachable: DaemonAPI {
     private var gone: DaemonError { DaemonError("portenvd can't be reached", unavailable: true) }
     func ping() async -> Bool { false }
+    func boxes() async throws -> [String] { throw gone }
     func servers() async throws -> [String] { throw gone }
     func open(_: String) async throws { throw gone }
     func close(_: String) async throws { throw gone }

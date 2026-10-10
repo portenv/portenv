@@ -2,6 +2,7 @@
 
 import AppKit
 import PortenvKit
+import ServiceManagement
 import SwiftUI
 
 /// What the window shows (PLAN.md 1.5): first run with no box, the box list
@@ -15,8 +16,9 @@ final class AppModel {
     private(set) var controller: BoxController?
     private(set) var tabs: TabsController?
     private(set) var firstRun: FirstRunFlow?
-    /// portenvd didn't answer in time: said plainly, with Try Again.
-    private(set) var problem: String?
+    /// Why portenvd isn't there, said plainly: with Open Login Items when it
+    /// waits for approval, with Try Again otherwise.
+    private(set) var problem: BackgroundServiceProblem?
 
     private let daemon = SharedDaemon.client
     private let defaults = UserDefaults.standard
@@ -35,19 +37,22 @@ final class AppModel {
         let deadline = ContinuousClock.now + .seconds(30)
         var lastJobCheck = ContinuousClock.now - .seconds(10)
         while !(await daemon.ping()) {
-            if let issue = await LoginItem.ensureRegistered() {
-                problem = issue
-            } else if ContinuousClock.now - lastJobCheck >= .seconds(2) {
-                // launchd refusing to start portenvd (exit 78) is said at
-                // once, not after the 30-second wait.
+            _ = await LoginItem.ensureRegistered()
+            if ContinuousClock.now - lastJobCheck >= .seconds(2) {
+                // The login item's status first (R-0028): waiting for
+                // approval is said as such and the wait goes on, so the app
+                // carries on once it's approved. launchd refusing an enabled
+                // item (exit 78) is said at once and ends the wait.
                 lastJobCheck = .now
-                if let refused = LaunchdJob.problem(in: MoveToApplications.launchdJob(), placement: MoveToApplications.placement) {
-                    problem = refused
-                    return
-                }
+                problem = BackgroundServiceProblem.of(
+                    status: MoveToApplications.serviceStatus,
+                    launchdJob: MoveToApplications.launchdJob(),
+                    placement: MoveToApplications.placement
+                )
+                if let problem, !problem.opensLoginItems { return }
             }
             if problem == nil, ContinuousClock.now >= deadline {
-                problem = BoxController.daemonGone
+                problem = BackgroundServiceProblem(message: BoxController.daemonGone, opensLoginItems: false)
                 return
             }
             try? await Task.sleep(for: .milliseconds(200))
@@ -56,7 +61,10 @@ final class AppModel {
         do {
             boxes = try await daemon.boxes()
         } catch {
-            problem = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            problem = BackgroundServiceProblem(
+                message: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription,
+                opensLoginItems: false
+            )
             return
         }
         let requested = ProcessInfo.processInfo.environment["PORTENV_BOX"]
@@ -133,9 +141,18 @@ struct AppRoot: View {
         Group {
             if let problem = model.problem {
                 VStack(spacing: 12) {
-                    Text(problem).font(.title3).multilineTextAlignment(.center).frame(maxWidth: 460)
-                    Button("Try Again") { Task { await model.start() } }
-                        .keyboardShortcut(.defaultAction)
+                    Text(problem.message).font(.title3).multilineTextAlignment(.center).frame(maxWidth: 460)
+                    if problem.opensLoginItems {
+                        // The wait goes on: once it's turned on, Portenv
+                        // carries on by itself.
+                        Button(ServiceText.openLoginItems) { SMAppService.openSystemSettingsLoginItems() }
+                            .buttonStyle(.borderedProminent)
+                            .keyboardShortcut(.defaultAction)
+                    } else {
+                        Button("Try Again") { Task { await model.start() } }
+                            .buttonStyle(.borderedProminent)
+                            .keyboardShortcut(.defaultAction)
+                    }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {

@@ -27,7 +27,7 @@ public enum MoveText {
     public static let move = "Move to Applications"
     public static let notNow = "Not Now"
     public static let notPortenv = "There’s already an app called Portenv.app in Applications that isn’t Portenv. Rename or remove it, then try again."
-    public static let launchdRefused = "macOS didn’t start Portenv’s background service, so nothing is being saved. Quit Portenv and open it again; if this lasts, reinstall Portenv."
+    public static let launchdRefused = "macOS didn’t start Portenv’s background service. Quit Portenv and open it again; if this keeps happening, reinstall Portenv."
     public static let launchdRefusedElsewhere = "macOS didn’t start Portenv’s background service from where Portenv is now, so nothing is being saved. Move Portenv to the Applications folder and open it again."
 }
 
@@ -88,5 +88,37 @@ public enum LaunchdJob {
     public static func problem(in printed: String, placement: AppPlacement) -> String? {
         guard lastExitCode(in: printed) == 78 else { return nil }
         return placement == .applications ? MoveText.launchdRefused : MoveText.launchdRefusedElsewhere
+    }
+}
+
+/// The login item's status (SMAppService.Status), without ServiceManagement.
+public enum ServiceStatus: Equatable, Sendable {
+    case enabled, requiresApproval, notRegistered, notFound
+}
+
+public enum ServiceText {
+    public static let needsApproval = "Portenv needs permission to run in the background. Turn it on in System Settings \u{203A} General \u{203A} Login Items."
+    public static let openLoginItems = "Open Login Items"
+}
+
+/// Why portenvd isn't running, as the app says it (R-0028). The login
+/// item's status comes first: waiting for approval is said as such, with
+/// Open Login Items, wherever the app is. Only an enabled item that launchd
+/// still refuses (exit 78) talks about the location, and only outside
+/// /Applications.
+public struct BackgroundServiceProblem: Equatable, Sendable {
+    public let message: String
+    public let opensLoginItems: Bool
+    public init(message: String, opensLoginItems: Bool) {
+        self.message = message
+        self.opensLoginItems = opensLoginItems
+    }
+
+    public static func of(status: ServiceStatus, launchdJob: String, placement: AppPlacement) -> BackgroundServiceProblem? {
+        guard status == .enabled else {
+            return BackgroundServiceProblem(message: ServiceText.needsApproval, opensLoginItems: true)
+        }
+        guard let refused = LaunchdJob.problem(in: launchdJob, placement: placement) else { return nil }
+        return BackgroundServiceProblem(message: refused, opensLoginItems: false)
     }
 }

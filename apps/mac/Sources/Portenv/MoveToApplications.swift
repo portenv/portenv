@@ -2,6 +2,7 @@
 
 import AppKit
 import PortenvKit
+import ServiceManagement
 
 /// Move to Applications first (PLAN.md 1.5): before the login item is
 /// registered, an app outside /Applications (App Translocation included)
@@ -50,6 +51,16 @@ enum MoveToApplications {
             failed.messageText = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
             failed.runModal()
             return false
+        }
+    }
+
+    /// The login item's status, read from ServiceManagement.
+    static var serviceStatus: ServiceStatus {
+        switch LoginItem.service.status {
+        case .enabled: .enabled
+        case .requiresApproval: .requiresApproval
+        case .notRegistered: .notRegistered
+        default: .notFound
         }
     }
 

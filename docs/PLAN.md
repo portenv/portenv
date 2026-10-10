@@ -1113,7 +1113,7 @@ Show in Finder (⌥⌘R) stops being disabled here.
 **10. 1.8: releases**
 
 Developer ID signing, notarisation and Sparkle, with the key backups. Signed public CLI releases and their signing key are already on the first-release checklist (#27).
-- Needs Apple Developer enrolment (open question), which is also the stable-signing fix for item 1e.
+- Signing uses the owner's existing Apple Developer organization team (decided 2026-10-10), so 1.8 needs no new enrolment. It's also the stable-signing fix for item 1e. The team's ID and name aren't written here; at 1.8 they come from the owner's signing setup, kept in local config or CI secrets. Creating the Developer ID Application certificate and the notarization credential (an App Store Connect API key) are account changes the owner makes at 1.8.
 - **Look at again once signing is stable:** run `portenvd` inside a small helper app bundle (`Contents/Helpers/Portenv Helper.app`), so it can post a notification the moment a background save succeeds after Quit Anyway. Until then the next launch of the app shows it (1.1).
 - **`portenvd` still starts after an in-place update** (found at the Mac, 2026-10-10). With ad-hoc-signed dev builds, launchd refused a rebuilt `portenvd` (exit 78, `EX_CONFIG`) until the login item was registered again; the job carries launch constraints. A Developer ID signature stays the same across updates, so releases should be fine. 1.8's Sparkle update test checks it, and the dev workflow re-registers after `gmake app` (`--unregister-service`, then open the app).
 - **An app newer than its running `portenvd`** (found while testing #41, 2026-10-10):
@@ -1159,7 +1159,23 @@ Developer ID signing, notarisation and Sparkle, with the key backups. Signed pub
     - active servers (daily, weekly, monthly) and server cohort retention;
     - public-door adoption;
     - stars.
-  - **Release checklist:** check the CNIL's guidance on audience measurement before launch.
+  - **The CNIL's audience-measurement criteria** (checked by the reviewer on 2026-10-10 against the CNIL's guidance, updated 4 July 2025; a design review, not legal advice). The design fits the consent exemption: one publisher, anonymous statistics only, no identifier, no cross-app tracking, no third-party sharing, an opt-out, published fields. To keep it that way:
+    1. **Store counters, not request tuples.** Per day, keep a count per field value, plus only the cross-tabs the snapshot needs (install month × week active). Never store a row per check combining the version, OS, architecture, install month and buckets: that combination could single out a user in a small cohort.
+    2. **Small numbers:** anything shown outside the owner (the snapshot, a deck, the website) rounds or hides cells below 10.
+    3. **Retention:**
+       - aggregated counts are anonymous and can be kept;
+       - nothing request-level is kept at all;
+       - if a Worker ever buffers raw checks, the target is under 24 hours (the CNIL's maximum is 25 months).
+    4. **Cloudflare sees IP addresses in transit:**
+       - Worker logs and Logpush are off for the counting route;
+       - no Analytics Engine fields carry an IP or headers beyond the published list;
+       - Cloudflare acts as processor under its DPA, with its EU-US Data Privacy Framework certification as the data-transfer basis;
+       - /privacy says so in a line.
+    5. **Who is responsible:** /privacy names the controller and a contact for questions and objections, exactly: "EverydayMoney SAS, 60 Rue François 1er, 75008 Paris, France (RCS Paris 944 681 634). Contact: contact@everydaymoney.eu". It matches the publisher block on portenv.com/legal. Today /privacy covers only the website; this line is added when counting ships (1.8).
+    6. **The opt-out is visible before the first count:**
+       - first run (1.5) shows "Count me in usage numbers", with the link to the field list, already on, before the first update check is sent;
+       - the runner's installer prints its opt-out flag before its first check.
+  - **Release checklist:** run the CNIL's self-assessment tool for audience measurement against the final implementation, and keep the filled copy in `docs/` (not on the website). Never describe the counting as "CNIL certified" or "validated": the CNIL forbids that wording.
 
 **Standing items**
 
@@ -1408,7 +1424,7 @@ These need an owner decision; Claude Code should add new ones here instead of gu
 - [ ] Before each door is built: confirm the target agents can actually reach it (for example outbound SSH from their computers for door 1).
 - [ ] Does Grok Bot read `~/.agents/skills` and can it run the install script? (The owner is testing it.)
 - [ ] Before 2.5: can the target agents be woken by an incoming webhook? If not, an agent keeping `portenv events --follow` running does the job and 2.5 drops in priority (ADR 0008).
-- [ ] Apple Developer Program enrolment (the owner is handling it): needed for Developer ID signing and notarization in 1.8.
+- [x] Apple Developer Program enrolment, needed for Developer ID signing and notarization in 1.8. **Answered (2026-10-10):** Portenv is signed with the owner's existing organization team; no new enrolment is needed (see 1.8).
 - [ ] Approval timeout default (30 minutes assumed) and what happens when it expires.
 - [ ] Anthropic's terms for agents driving Claude Code with a subscription login versus a Console API key.
 - [ ] Open-source boundary in detail: this repository is Apache-2.0 and `portenv/cloud` is private (decided), but confirm before going public whether the Mac app, the File Provider and the iPhone companion stay in the public repository or move to a private one.

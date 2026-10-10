@@ -220,7 +220,7 @@ struct CountingChoice: View {
         VStack(alignment: .leading, spacing: 8) {
             Toggle(FirstRunText.countMeIn, isOn: $countUsage)
                 .toggleStyle(.checkbox)
-            DisclosureGroup("What's counted", isExpanded: $showFields) {
+            DisclosureGroup(FirstRunText.whatsCounted, isExpanded: $showFields) {
                 VStack(alignment: .leading, spacing: 4) {
                     ForEach(FirstRunText.countedFields, id: \.self) { field in
                         Text("• " + field).fixedSize(horizontal: false, vertical: true)
@@ -237,20 +237,18 @@ struct CountingChoice: View {
 }
 
 /// Copy and Print for the recovery key. Copy marks the pasteboard as
-/// concealed, so clipboard managers that honour it don't keep the key.
+/// concealed and transient, so clipboard managers that honour it don’t keep
+/// the key, and clears it after 60 s if it’s still there (ConcealedCopy).
 enum RecoveryKeyActions {
+    @MainActor
     static func copy(_ key: String) {
-        let board = NSPasteboard.general
-        board.clearContents()
-        board.declareTypes([.string, NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType")], owner: nil)
-        board.setString(key, forType: .string)
-        board.setString("", forType: NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType"))
+        ConcealedCopy.copyThenClear(key)
     }
 
     @MainActor
     static func print(_ key: String) {
         let text = NSTextView(frame: NSRect(x: 0, y: 0, width: 468, height: 200))
-        text.string = "Portenv recovery key\n\n\(key)\n\nIt's the only way back into your boxes if you lose access to all your devices. Keep it somewhere safe and separate from your Mac."
+        text.string = "Portenv recovery key\n\n\(key)\n\n\(FirstRunText.recoveryLine)"
         text.font = .monospacedSystemFont(ofSize: 14, weight: .regular)
         NSPrintOperation(view: text).run()
     }

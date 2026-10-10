@@ -35,6 +35,6 @@ public enum LaunchDecision {
 
     /// GUIDELINES §10: what happened, then what to do next.
     public static func missing(_ box: String) -> String {
-        "There's no box called “\(box)” on this Mac. Choose one of your boxes, or make a new one."
+        "There’s no box called “\(box)” on this Mac. Choose one of your boxes, or make a new one."
     }
 }

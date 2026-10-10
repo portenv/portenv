@@ -108,7 +108,7 @@ final class AppModel {
 /// Open questions). Until then first run says so plainly instead of
 /// pretending.
 struct AppFirstRunService: FirstRunService {
-    static let notYet = "Portenv can't make keys or boxes from the app yet. For now, make a box in Terminal with portenv init, then open Portenv again."
+    static let notYet = "Portenv can’t make keys or boxes from the app yet. For now, make a box in Terminal with portenv init, then open Portenv again."
     func makeRecoveryKey() async throws -> String { throw FirstRunError(Self.notYet) }
     func createBox(_: NewBox) async throws { throw FirstRunError(Self.notYet) }
 }

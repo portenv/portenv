@@ -29,7 +29,7 @@ struct LaunchTests {
     /// sentence that says what to do next (GUIDELINES §10).
     @Test func aRequestedBoxThatIsMissingShowsTheList() {
         let launch = LaunchDecision.decide(requested: "demo", boxes: ["acme-api"], lastBox: nil, firstRunDone: true)
-        #expect(launch == .boxList(notice: "There's no box called “demo” on this Mac. Choose one of your boxes, or make a new one."))
+        #expect(launch == .boxList(notice: "There\u{2019}s no box called “demo” on this Mac. Choose one of your boxes, or make a new one."))
         if case .open = launch { Issue.record("a missing box must never open a window") }
     }
 

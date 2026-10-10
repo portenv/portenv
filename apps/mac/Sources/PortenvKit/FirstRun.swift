@@ -151,11 +151,11 @@ public enum FirstRunText {
     public static let welcomeButton = "Continue without an account"
 
     public static let protectionTitle = "Only you can open your boxes"
-    public static let protectionLine = "Your keys stay on your devices, and Portenv never holds them. If you lose every device and your recovery key, your saves can't be opened by anyone, including Portenv."
+    public static let protectionLine = "Your keys stay on your devices, and Portenv never holds them. If you lose every device and your recovery key, your saves can’t be opened by anyone, including Portenv."
 
     public static let recoveryTitle = "Save your recovery key"
-    public static let recoveryLine = "It's the only way back into your boxes if you lose access to all your devices. Keep it somewhere safe and separate from this Mac."
-    public static let recoverySavedCheck = "I've saved my recovery key somewhere safe"
+    public static let recoveryLine = "It’s the only way back into your boxes if you lose access to all your devices. Keep it somewhere safe and separate from this Mac."
+    public static let recoverySavedCheck = "I’ve saved my recovery key somewhere safe"
 
     public static let storageTitle = "Where should your saves go?"
     public static let storageServer = "My own server"
@@ -164,7 +164,7 @@ public enum FirstRunText {
     public static let thisMacOnly = "Your saves will only exist on this Mac, so a lost or broken Mac loses them. You can add a server or bucket later in Settings › Storage."
 
     public static let firstBoxTitle = "Make your first box"
-    public static let firstBoxLine = "A box is an encrypted workspace for one project. Give it a short name, like the project's."
+    public static let firstBoxLine = "A box is an encrypted workspace for one project. Give it a short name, like the project’s."
 
     public static let gettingReadyTitle = "Getting ready"
 
@@ -172,11 +172,12 @@ public enum FirstRunText {
     public static let countMeIn = "Count me in usage numbers (no ID, nothing about your work)"
     /// The exact fields, in plain words (PLAN.md 1.8).
     public static let countedFields = [
-        "Portenv's version, the macOS version and the Mac's architecture",
+        "Portenv’s version, the macOS version and the Mac’s architecture",
         "the month you installed Portenv",
-        "whether it's the first check each week, and the first check each month",
+        "whether it’s the first check each week, and the first check each month",
         "once a week: whether a box moved, whether an agent worked in a box, and rough counts of your boxes and servers (like 2–5)",
     ]
-    public static let neverCounted = "Never sent: any ID, your name or email, your IP address, box names, file names or anything in your boxes."
+    public static let neverCounted = "Never sent: any ID, your name or email, box names, file names or anything in your boxes. Your IP address is seen in transit but never kept."
+    public static let whatsCounted = "What’s counted"
     public static let turnOff = "You can turn this off at any time in Settings › Privacy. The update check itself stays, for security updates."
 }

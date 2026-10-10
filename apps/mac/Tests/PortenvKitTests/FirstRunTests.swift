@@ -159,9 +159,9 @@ struct FirstRunTests {
         for field in ["version", "macOS version", "architecture", "month you installed", "first check each week", "first check each month"] {
             #expect(fields.contains(field), "missing: \(field)")
         }
-        for never in ["ID", "name", "email", "IP address", "file"] where !FirstRunText.neverCounted.contains(never) {
-            Issue.record("the list must say \(never) is never sent")
-        }
+        // The IP address is seen in transit, so the line never claims it
+        // isn't sent (PLAN.md 1.8, CNIL point 4).
+        #expect(FirstRunText.neverCounted == "Never sent: any ID, your name or email, box names, file names or anything in your boxes. Your IP address is seen in transit but never kept.")
         #expect(FirstRunText.turnOff.contains("Settings"))
     }
 
@@ -169,6 +169,25 @@ struct FirstRunTests {
     /// be written down.
     @Test func theRecoveryKeyIsReadCharacterByCharacter() {
         #expect(A11y.recoveryKey(["AB12", "CD34"].joined(separator: "-")) == "Recovery key: A B 1 2, C D 3 4")
+    }
+
+    /// First run's words use curly apostrophes and quotes (GUIDELINES),
+    /// never straight ones.
+    @Test func copyUsesCurlyApostrophesAndQuotes() {
+        let all = [FirstRunText.welcomeTitle, FirstRunText.welcomeLine, FirstRunText.welcomeButton,
+                   FirstRunText.protectionTitle, FirstRunText.protectionLine,
+                   FirstRunText.recoveryTitle, FirstRunText.recoveryLine, FirstRunText.recoverySavedCheck,
+                   FirstRunText.storageTitle, FirstRunText.storageServer, FirstRunText.storageBucket,
+                   FirstRunText.storageThisMac, FirstRunText.thisMacOnly, FirstRunText.firstBoxTitle,
+                   FirstRunText.firstBoxLine, FirstRunText.gettingReadyTitle, FirstRunText.countMeIn,
+                   FirstRunText.neverCounted, FirstRunText.turnOff, FirstRunText.whatsCounted,
+                   LaunchDecision.missing("demo")] + FirstRunText.countedFields
+        for line in all {
+            #expect(!line.contains("'"), "straight apostrophe in: \(line)")
+            #expect(!line.contains("\""), "straight quote in: \(line)")
+        }
+        #expect(FirstRunText.recoveryLine.hasPrefix("It\u{2019}s"))
+        #expect(FirstRunText.recoverySavedCheck.hasPrefix("I\u{2019}ve"))
     }
 
     /// The reduced Welcome (#16): one way in, "Continue without an account".

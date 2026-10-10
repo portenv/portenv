@@ -680,6 +680,7 @@ Each box appears as Documents › Portenv › \<box> and under Locations in the 
 A first-class way to use Portenv on every platform, not a stopgap. It talks to the same `portenvd` API as the Mac app, so both always agree.
 
 - **`portenv open <box>`** puts your terminal inside the box, like ssh. Detach and the session keeps running; open again and you're back where you were.
+- **`portenv open <box> --tab <name>`** attaches straight to one tab, as its own viewer, so each pane of a tiling terminal can show a different tab (1.2b).
 - **Every menu action is a command:** status, save, revert, move, rename, restart.
 - **The state line shows in the terminal title** (OSC 0/2), optionally with a one-line status bar.
 - **Approvals and notifications** go through the platform's own notifications.
@@ -800,8 +801,9 @@ The public launch ships Phases 1 and 2 together (decided 2026-10-09). Day one mu
 3. Grok Bot connects by SSH (a 2.4 certificate) and continues the work: it runs the tests and fixes a failure.
 4. Dots (ChatGPT) connects through remote MCP served by the runner on the user's server (2.7), and makes a change.
 5. Meta Muse opens the box through the web terminal served by the runner (2.8), and makes a change.
-6. Claude Code asks a question in the box. The agent the user is talking to relays it in its chat; the user answers by talking; the answer goes back as keystrokes, attributed to the user ("you, through Grok Bot").
-7. Move back to the Mac. History shows who did what, and Revert works.
+6. Open the laptop. The window reconnects to the box, still on the server, and split view (1.2b) shows Claude Code, Grok Bot and the tests side by side, all still working.
+7. Claude Code asks a question in the box. The agent the user is talking to relays it in its chat; the user answers by talking; the answer goes back as keystrokes, attributed to the user ("you, through Grok Bot").
+8. Move back to the Mac. History shows who did what, and Revert works.
 
 **What the demo needs**
 - **Remote MCP over HTTPS with OAuth (needed by ChatGPT) and the web terminal,** served by the runner on the user's own server, free (2.7, 2.8). The user opts in per server: an inbound 443 under ADR 0015's conditions, or no open port at all through the user's own Cloudflare Tunnel or Tailscale Funnel. Phase 3 keeps the Portenv-hosted versions (3.9, 3.10) for users without a public server, and stays the paid line.
@@ -883,10 +885,11 @@ Budgets changed on 2026-10-08: they now measure what the user waits for (a ready
 
 ### Phase 1: Native Mac app, local boxes
 
-Milestones: 1.0 walking skeleton · 1.1 `portenvd` with the local gRPC API · 1.2 main window with a terminal view (evaluate SwiftTerm, MIT-licensed) and tmux-backed tabs · 1.3 `apple` driver shim, `docker` as fallback (the box agent drops the forbidden capabilities from every process it starts, since a VM's root holds them by default) · 1.4 autosave, sync symbol, Changes, Browse Saves · 1.5 first run (reduced, no sign-in; see Desktop app UX), Keychain keys, recovery key · 1.6 port relay · 1.7 shared folder (only if cheap; the File Provider moves to just after launch) · 1.8 signing, notarization, Sparkle updates.
+Milestones: 1.0 walking skeleton · 1.1 `portenvd` with the local gRPC API · 1.2 main window with a terminal view (evaluate SwiftTerm, MIT-licensed) and tmux-backed tabs · 1.2b split view (after 1.2's blocks, before the launch demo) · 1.3 `apple` driver shim, `docker` as fallback (the box agent drops the forbidden capabilities from every process it starts, since a VM's root holds them by default) · 1.4 autosave, sync symbol, Changes, Browse Saves · 1.5 first run (reduced, no sign-in; see Desktop app UX), Keychain keys, recovery key · 1.6 port relay · 1.7 shared folder (only if cheap; the File Provider moves to just after launch) · 1.8 signing, notarization, Sparkle updates.
 
 **For the launch** (Phases 1 and 2 ship together, decided 2026-10-09):
 - 1.2's spike moves to right after the tab bar, with a fallback waiting-for-input detector (output stops and a known prompt pattern appears) if the spike fails.
+- 1.2b (split view) lands after 1.2's blocks and before the launch demo, which uses it.
 - 1.4 designs attribution into saves (who was active: the user, or which agent), so history can show who did what.
 - The command registry (Agent readiness) starts in 1.x, because `portenv answer` and the MCP tools build on it.
 - 1.6 (port relay) stays before launch.
@@ -1031,6 +1034,39 @@ In this order:
    - It's also tested over the SSH forward to a box on a server, not only on the Mac (a test, not another milestone).
    - **If it succeeds,** Phase 1 also gets blocks with attribution, the sticky header, the inline answer card for Claude Code, tab badges, the command palette and saved commands, in that order.
    - **If it doesn't,** they move to Phase 2 and the plan says so.
+
+**4b. 1.2b: split view** (the owner, 2026-10-10; reference: docs/mockups/split-view.png)
+
+It comes after 1.2's blocks, wherever they land (Phase 1 if the spike succeeds, otherwise Phase 2), and before the launch demo. The panes themselves don't depend on blocks; the Warp-style features below apply per pane once they exist.
+
+- **Panes:** up to 4 in one window.
+  - Each pane is its own viewer, on #41's per-viewer grouped sessions, and shows one of the box's tabs.
+  - So two panes can't fight over the current tab, and an agent typing in one tab never moves your view.
+- **Controls:**
+  - "Split right" (⌘D) and "Split down" (⇧⌘D), as buttons in the title bar;
+  - ⌘⌥ and the arrow keys move between panes;
+  - ⌘W closes the focused pane first, and closes tabs only when one pane is left;
+  - closing a pane never stops its tab.
+- **The pane header** is slim:
+  - a tab picker (the tab's name with a chevron);
+  - the tab's status ("asking you", "watching", "quiet since 15:41");
+  - who is active ("Grok Bot is typing");
+  - a close button.
+- **Focus and accessibility:**
+  - the focused pane has a 1 px accent outline;
+  - VoiceOver reads each pane as "Pane: grok tab, Grok Bot is typing".
+- **The tab bar:** a small icon shows which pane each tab is in. Tabs not in any pane show plainly.
+- **Warp-style features work per pane:** blocks, the sticky command header, inline answers, ⌘K, jumping to the start of a command, and saved commands.
+  - Pane-level actions apply to the focused pane.
+  - In a narrow pane, block headers shorten instead of wrapping: the command is truncated first, and the exit status and author avatar always stay.
+- **Inline answers:**
+  - an answer card shows in whichever pane shows that tab;
+  - if no pane shows it, the tab gets a badge and the usual notification;
+  - answering anywhere (any pane, the terminal, or chat) clears it everywhere.
+- **The terminal edition:** `portenv open <box> --tab <name>` attaches straight to one tab.
+  - The panes of a tiling terminal (Ghostty, kitty, tmux, Hyprland) can each show a different tab, with the same per-viewer independence.
+  - The in-shell features come from shell integration, so they work in every pane there too.
+- **The launch demo** uses split view at the moment the laptop reopens: Claude Code, Grok Bot and the tests side by side, all still working on the server.
 
 **5. 1.3: the `apple` driver**
 

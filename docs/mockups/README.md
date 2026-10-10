@@ -15,6 +15,7 @@ The first-run screens show the full version, from Phase 3. Phases 1 and 2 ship a
 | `agent-presence` | Clicking an agent avatar: Meta Muse in its own lane, live terminal glimpse, a pending sudo request (opt-in approvals), Watch / Take Over, Revoke Access, and the matching notification. |
 | `main-window-moving` | The same window during Move To ▸ Test server: the inspector's Where it is section becomes the move's four-step progress, the terminal dims, the state line says "Moving to Test server…". |
 | `command-palette` | ⌘K: Waiting for you, Box, Tabs, Saved commands, Agents. |
+| `split-view` | Split view (1.2b): three panes, each its own viewer of one tab. claude (focused, accent outline) with Claude Code's inline answer card; grok with Grok Bot typing; tests watching. Slim pane headers (tab picker, status, who's active, close), pane icons in the tab bar (dev is running but in no pane), Split right / Split down in the toolbar. |
 | `notification` | The macOS notification when Claude Code is waiting and the window isn't in front, with Yes, push / Not yet / Show. |
 | `first-run-1-welcome` | Continue with Apple, Continue with GitHub, Continue without an account (no sign-in is ever required for your own machines and storage; ADR 0008), or email. |
 | `first-run-2-protection` | Only you (default) or You, with Portenv's help. |

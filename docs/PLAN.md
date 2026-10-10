@@ -686,6 +686,11 @@ A first-class way to use Portenv on every platform, not a stopgap. It talks to t
 
 - **`portenv open <box>`** puts your terminal inside the box, like ssh. Detach and the session keeps running; open again and you're back where you were.
 - **`portenv open <box> --tab <name>`** attaches straight to one tab, as its own viewer, so each pane of a tiling terminal can show a different tab (1.2b).
+- **`portenv attach` never drops input silently** (#53, owner 2026-10-10), on this Mac or over a slow link to a server:
+  - **Input:** everything written to it reaches the box, or attach exits non-zero with one plain line saying what didn't. When stdin closes, it sends the rest, then exits 0 only once the box agent has handed every byte to the session: the agent keeps the terminal open until its program has read all its input and its output has gone quiet. A cut link, a session that ends first, a program that exits before reading all its input (`head -c 10` with more piped in), or one that stops reading for 15 s each end with a non-zero exit that says how much didn't arrive. A person typing at a terminal never sees this: attach tells the box agent whether its input is piped (`input_piped`), and only piped input is counted, whether the program ends before or after stdin does.
+  - **Output** goes to stdout as it arrives, to a pipe or a file as well as a terminal.
+  - **Ctrl-C:** at a terminal it is a keystroke for the box, like any other (raw mode), and a SIGINT sent to attach goes to the box too. With stdin piped, the first Ctrl-C stops reading stdin and ends attach once the box has everything read so far; a second ends it at once. Both exit non-zero, saying whether anything was left behind.
+  - **Tested** over a throttled proxy at 400 kbit/s and 150 ms (`core/daemon/attach_test.go`) and against a real box (the driver suite).
 - **Every menu action is a command:** status, save, revert, move, rename, restart.
 - **The state line shows in the terminal title** (OSC 0/2), optionally with a one-line status bar.
 - **Approvals and notifications** go through the platform's own notifications.

@@ -411,7 +411,12 @@ type TerminalOpen struct {
 	// Who is looking (for example "app"): each viewer has its own current
 	// tab, in its own grouped tmux session over the same windows, so one
 	// viewer choosing a tab never moves another's. Empty: the session itself.
-	Viewer        string `protobuf:"bytes,3,opt,name=viewer,proto3" json:"viewer,omitempty"`
+	Viewer string `protobuf:"bytes,3,opt,name=viewer,proto3" json:"viewer,omitempty"`
+	// Input comes from a pipe or a file, not a person typing (portenv
+	// attach with stdin not a terminal). Input the program in the box never
+	// read then ends the terminal with DataLoss; false (a person, or an
+	// older client): never.
+	InputPiped    bool `protobuf:"varint,4,opt,name=input_piped,json=inputPiped,proto3" json:"input_piped,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -465,6 +470,13 @@ func (x *TerminalOpen) GetViewer() string {
 		return x.Viewer
 	}
 	return ""
+}
+
+func (x *TerminalOpen) GetInputPiped() bool {
+	if x != nil {
+		return x.InputPiped
+	}
+	return false
 }
 
 type TerminalSize struct {
@@ -1479,11 +1491,13 @@ const file_portenv_agent_v1_agent_proto_rawDesc = "" +
 	"\x04open\x18\x01 \x01(\v2\x1e.portenv.agent.v1.TerminalOpenH\x00R\x04open\x12\x16\n" +
 	"\x05input\x18\x02 \x01(\fH\x00R\x05input\x128\n" +
 	"\x06resize\x18\x03 \x01(\v2\x1e.portenv.agent.v1.TerminalSizeH\x00R\x06resizeB\x05\n" +
-	"\x03msg\"t\n" +
+	"\x03msg\"\x95\x01\n" +
 	"\fTerminalOpen\x12\x18\n" +
 	"\asession\x18\x01 \x01(\tR\asession\x122\n" +
 	"\x04size\x18\x02 \x01(\v2\x1e.portenv.agent.v1.TerminalSizeR\x04size\x12\x16\n" +
-	"\x06viewer\x18\x03 \x01(\tR\x06viewer\"6\n" +
+	"\x06viewer\x18\x03 \x01(\tR\x06viewer\x12\x1f\n" +
+	"\vinput_piped\x18\x04 \x01(\bR\n" +
+	"inputPiped\"6\n" +
 	"\fTerminalSize\x12\x12\n" +
 	"\x04cols\x18\x01 \x01(\rR\x04cols\x12\x12\n" +
 	"\x04rows\x18\x02 \x01(\rR\x04rows\"R\n" +

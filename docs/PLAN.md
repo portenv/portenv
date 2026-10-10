@@ -1110,7 +1110,7 @@ Reduced: no sign-in, Only you, Keychain keys, the recovery key; the Welcome scre
   - **The name field** has a hint ("Letters, numbers and hyphens, like the project's name."), and an inline error for an invalid name ("Start with a letter or a number.").
   - **Opening a box that's on a server** connects to it there; nothing moves unless the person chooses Move To.
 - **Link GitHub** (boards `link-github` and `link-github-linked`; before launch; not a Portenv account):
-  - GitHub's device flow, through `gh auth login` inside the box, with the same access as the person's own gh; any number of repositories can be cloned into the box afterwards (the owner, 2026-10-10: GitHub access works as on their Mac; no Portenv GitHub App and no repository picker);
+  - GitHub's device flow, through `gh auth login` inside the box, with the same access as the person's own gh; any number of repositories can be cloned into the box afterwards (the owner, 2026-10-10, ADR 0018: GitHub access works as on their Mac; no Portenv GitHub App and no repository picker);
   - gh's default scopes, then `gh auth setup-git`, so plain `git clone` and `git push` work for any repository the account can reach; the token lives in the box home's gh config (`hosts.yml`), never in the image;
   - the login is kept in the box's encrypted home and moves with it; Portenv never sees or keeps it;
   - agents working in the box can use that login too, and the dialog says so;

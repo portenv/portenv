@@ -26,15 +26,27 @@ final class AppModel {
     static let lastBoxKey = "lastBox"
     static let firstRunDoneKey = "firstRunDone"
 
-    /// At launch: make sure portenvd runs, list the boxes, and decide.
+    /// At launch: offer to move to Applications, make sure portenvd runs,
+    /// list the boxes, and decide.
     func start() async {
         problem = nil
+        if MoveToApplications.offerIfNeeded() { return } // quitting: the copy opens
         _ = await LoginItem.ensureRegistered()
         let deadline = ContinuousClock.now + .seconds(30)
+        var lastJobCheck = ContinuousClock.now - .seconds(10)
         while !(await daemon.ping()) {
             if let issue = await LoginItem.ensureRegistered() {
                 problem = issue
-            } else if ContinuousClock.now >= deadline {
+            } else if ContinuousClock.now - lastJobCheck >= .seconds(2) {
+                // launchd refusing to start portenvd (exit 78) is said at
+                // once, not after the 30-second wait.
+                lastJobCheck = .now
+                if let refused = LaunchdJob.problem(in: MoveToApplications.launchdJob(), placement: MoveToApplications.placement) {
+                    problem = refused
+                    return
+                }
+            }
+            if problem == nil, ContinuousClock.now >= deadline {
                 problem = BoxController.daemonGone
                 return
             }

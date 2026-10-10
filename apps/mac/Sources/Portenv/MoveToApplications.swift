@@ -10,7 +10,9 @@ import ServiceManagement
 /// asked again for the same location.
 @MainActor
 enum MoveToApplications {
-    static var placement: AppPlacement { AppPlacement.of(bundlePath: Bundle.main.bundlePath) }
+    static var placement: AppPlacement {
+        AppPlacement.of(bundlePath: Bundle.main.bundlePath, applications: destination.path)
+    }
     private static let declinedKey = "moveDeclinedForPath"
 
     /// Where the copy goes: /Applications, or a test folder in dev builds
@@ -29,6 +31,9 @@ enum MoveToApplications {
         guard placement.shouldOfferMove,
               UserDefaults.standard.string(forKey: declinedKey) != here
         else { return false }
+        // The question is the first thing anyone sees: never on a window
+        // that's off screen.
+        OnScreen.fixAll()
         let alert = NSAlert()
         alert.messageText = MoveText.question
         alert.informativeText = MoveText.detail

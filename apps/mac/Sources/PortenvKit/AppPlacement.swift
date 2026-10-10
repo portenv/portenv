@@ -11,9 +11,13 @@ public enum AppPlacement: Equatable, Sendable {
     case translocated
     case elsewhere
 
-    public static func of(bundlePath: String) -> AppPlacement {
+    /// `applications` is where a move puts the app: /Applications, or a
+    /// dev build's test folder (PORTENV_MOVE_TO), so the copy a move opens
+    /// never asks again (R-0044).
+    public static func of(bundlePath: String, applications: String = "/Applications") -> AppPlacement {
         if bundlePath.contains("/AppTranslocation/") { return .translocated }
-        return bundlePath.hasPrefix("/Applications/") ? .applications : .elsewhere
+        let folder = applications.hasSuffix("/") ? applications : applications + "/"
+        return bundlePath.hasPrefix(folder) ? .applications : .elsewhere
     }
 
     /// Asked before the login item is registered.
@@ -41,12 +45,17 @@ public struct MoveError: Error, LocalizedError, Equatable {
 public enum AppMover {
     public static let bundleID = "com.portenv.Portenv"
 
+    /// Moving from inside the destination copies nothing and returns the
+    /// app where it is (R-0044). The Portenv that may be replaced is one with
+    /// the source's bundle ID, so a dev build (com.portenv.Portenv.dev-X)
+    /// replaces an older copy of itself.
     @discardableResult
     public static func copy(_ source: URL, into applications: URL) throws -> URL {
         let fm = FileManager.default
         let target = applications.appendingPathComponent("Portenv.app")
+        if same(source, target) { return target }
         if fm.fileExists(atPath: target.path) {
-            guard identifier(of: target) == bundleID else { throw MoveError(MoveText.notPortenv) }
+            guard identifier(of: target) == (identifier(of: source) ?? bundleID) else { throw MoveError(MoveText.notPortenv) }
             // Copy beside it first, so a failed copy never leaves no app.
             let staged = applications.appendingPathComponent(".Portenv-\(UUID().uuidString).app")
             try fm.copyItem(at: source, to: staged)
@@ -55,6 +64,10 @@ public enum AppMover {
         }
         try fm.copyItem(at: source, to: target)
         return target
+    }
+
+    static func same(_ a: URL, _ b: URL) -> Bool {
+        a.standardizedFileURL.resolvingSymlinksInPath().path == b.standardizedFileURL.resolvingSymlinksInPath().path
     }
 
     static func identifier(of bundle: URL) -> String? {

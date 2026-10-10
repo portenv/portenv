@@ -65,6 +65,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // it a regular app with a Dock icon and a menu bar.
         NSApp.setActivationPolicy(.regular)
         NSApp.activate()
+        // Windows restored from a display that's gone come back on screen.
+        OnScreen.watch()
+        OnScreen.fixAll()
         // SIGTERM (Xcode's Stop, logout, kill) and SIGINT (Ctrl-C in the
         // Terminal that started it) quit like ⌘Q, so open boxes are saved
         // and released.

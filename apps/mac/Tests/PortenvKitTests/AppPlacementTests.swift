@@ -61,6 +61,43 @@ struct AppPlacementTests {
         #expect(try String(contentsOf: other.appendingPathComponent("Contents/marker"), encoding: .utf8) == "other")
     }
 
+    /// The app it has just moved itself to never asks again (R-0044): the
+    /// placement is judged against the move's destination, which in dev
+    /// builds is a test folder (PORTENV_MOVE_TO), not /Applications.
+    @Test func theDestinationCountsAsApplications() {
+        #expect(AppPlacement.of(bundlePath: "/Users/me/portenv-move-test/Portenv.app", applications: "/Users/me/portenv-move-test") == .applications)
+        #expect(AppPlacement.of(bundlePath: "/Users/me/portenv-move-test/Portenv.app", applications: "/Users/me/portenv-move-test/") == .applications)
+        #expect(AppPlacement.of(bundlePath: "/Users/me/bin/Portenv.app", applications: "/Users/me/portenv-move-test") == .elsewhere)
+        #expect(AppPlacement.of(bundlePath: "/Users/me/portenv-move-testing/Portenv.app", applications: "/Users/me/portenv-move-test") == .elsewhere)
+        #expect(AppPlacement.of(bundlePath: "/Applications/Portenv.app", applications: "/Users/me/portenv-move-test") == .elsewhere)
+    }
+
+    /// Moving from inside the destination never copies the app onto itself:
+    /// it carries on (R-0044). A dev build (its own bundle ID, PR #54)
+    /// replaces an older copy of itself, not only com.portenv.Portenv.
+    @Test func movingOntoItselfCarriesOn() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("portenv-move-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let apps = root.appendingPathComponent("Applications")
+        let inPlace = apps.appendingPathComponent("Portenv.app")
+        try makeBundle(at: inPlace, id: "com.portenv.Portenv.dev-C", marker: "running")
+        let before = try FileManager.default.attributesOfItem(atPath: inPlace.path)[.systemFileNumber] as? Int
+
+        let moved = try AppMover.copy(inPlace, into: apps)
+        #expect(moved.standardizedFileURL.path == inPlace.standardizedFileURL.path)
+        // Same folder, not a replacement.
+        #expect(try FileManager.default.attributesOfItem(atPath: inPlace.path)[.systemFileNumber] as? Int == before)
+        #expect(try String(contentsOf: inPlace.appendingPathComponent("Contents/marker"), encoding: .utf8) == "running")
+        // A path spelled differently is still the same place.
+        #expect(try AppMover.copy(URL(fileURLWithPath: apps.path + "/./Portenv.app"), into: URL(fileURLWithPath: apps.path + "/"))
+            .standardizedFileURL.path == inPlace.standardizedFileURL.path)
+
+        let source = root.appendingPathComponent("bin/Portenv.app")
+        try makeBundle(at: source, id: "com.portenv.Portenv.dev-C", marker: "newer")
+        let replaced = try AppMover.copy(source, into: apps)
+        #expect(try String(contentsOf: replaced.appendingPathComponent("Contents/marker"), encoding: .utf8) == "newer")
+    }
+
     private func makeBundle(at url: URL, id: String, marker: String) throws {
         let contents = url.appendingPathComponent("Contents")
         try? FileManager.default.removeItem(at: url)

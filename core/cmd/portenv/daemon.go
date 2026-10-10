@@ -331,10 +331,12 @@ func plain(err error) error {
 // plain line.
 func attachEnd(err error, fromApp bool) error {
 	switch {
-	case errors.Is(err, io.EOF):
+	case err == nil, errors.Is(err, io.EOF):
 		return nil
 	case status.Code(err) == codes.Unavailable && fromApp:
 		return quietError{err}
+	case status.Code(err) == codes.Unavailable && status.Convert(err).Message() == daemon.AgentUnavailable:
+		return errors.New("lost the connection to the box agent; input still on its way may not have reached the box")
 	case status.Code(err) == codes.Unavailable:
 		return errors.New("lost the connection to portenvd")
 	}
@@ -356,21 +358,13 @@ func cmdAttach(ctx context.Context, e *local.Env, name string, args []string) er
 		return err
 	}
 	defer done()
-	stream, err := c.Terminal(ctx)
-	if err != nil {
-		return plain(err)
-	}
 	in, out := int(os.Stdin.Fd()), int(os.Stdout.Fd()) // #nosec G115 -- file descriptors
 	cols, rows := 80, 24
 	if w, h, err := term.GetSize(out); err == nil {
 		cols, rows = w, h
 	}
-	if err := stream.Send(&daemonv1.TerminalRequest{Msg: &daemonv1.TerminalRequest_Open{Open: &daemonv1.TerminalOpen{
-		Box: name, Session: *session, Viewer: *viewer, Size: &daemonv1.TerminalSize{Cols: uint32(cols), Rows: uint32(rows)}, // #nosec G115 -- terminal sizes
-	}}}); err != nil {
-		return plain(err)
-	}
-	if term.IsTerminal(in) {
+	tty := term.IsTerminal(in)
+	if tty {
 		old, err := term.MakeRaw(in)
 		if err != nil {
 			return err
@@ -380,40 +374,31 @@ func cmdAttach(ctx context.Context, e *local.Env, name string, args []string) er
 	winch := make(chan os.Signal, 1)
 	signal.Notify(winch, syscall.SIGWINCH)
 	defer signal.Stop(winch)
+	resize := make(chan *daemonv1.TerminalSize)
 	go func() {
 		for range winch {
 			if w, h, err := term.GetSize(out); err == nil {
-				_ = stream.Send(&daemonv1.TerminalRequest{Msg: &daemonv1.TerminalRequest_Resize{Resize: &daemonv1.TerminalSize{Cols: uint32(w), Rows: uint32(h)}}}) // #nosec G115 -- terminal sizes
+				resize <- &daemonv1.TerminalSize{Cols: uint32(w), Rows: uint32(h)} // #nosec G115 -- terminal sizes
 			}
 		}
 	}()
+	// Ctrl-C (docs/PLAN.md, the terminal edition): at a terminal it is a
+	// keystroke for the box, and a SIGINT sent to attach goes there too.
+	// With stdin piped, the first stops reading and ends once the box has
+	// everything read so far; the second ends at once. Both exit non-zero.
+	sigint := make(chan os.Signal, 2)
+	signal.Notify(sigint, os.Interrupt)
+	defer signal.Stop(sigint)
+	interrupt := make(chan struct{}, 2)
 	go func() {
-		buf := make([]byte, 32<<10)
-		for {
-			n, err := os.Stdin.Read(buf)
-			if n > 0 {
-				if stream.Send(&daemonv1.TerminalRequest{Msg: &daemonv1.TerminalRequest_Input{Input: append([]byte(nil), buf[:n]...)}}) != nil {
-					return
-				}
-			}
-			if err != nil {
-				_ = stream.CloseSend()
-				return
-			}
+		for range sigint {
+			interrupt <- struct{}{}
 		}
 	}()
-	for {
-		r, err := stream.Recv()
-		if err != nil {
-			return attachEnd(err, *fromApp)
-		}
-		switch m := r.GetMsg().(type) {
-		case *daemonv1.TerminalResponse_Output:
-			_, _ = os.Stdout.Write(m.Output)
-		case *daemonv1.TerminalResponse_ExitCode:
-			return nil
-		}
-	}
+	err = daemon.AttachTerminal(ctx, c, &daemonv1.TerminalOpen{
+		Box: name, Session: *session, Viewer: *viewer, Size: &daemonv1.TerminalSize{Cols: uint32(cols), Rows: uint32(rows)}, // #nosec G115 -- terminal sizes
+	}, daemon.Attach{In: os.Stdin, Out: os.Stdout, TTY: tty, Resize: resize, Interrupt: interrupt})
+	return attachEnd(err, *fromApp)
 }
 
 // unregisterService removes portenvd's login item (dev builds and tests).

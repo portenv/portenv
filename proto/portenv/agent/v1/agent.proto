@@ -83,6 +83,11 @@ message TerminalOpen {
   // tab, in its own grouped tmux session over the same windows, so one
   // viewer choosing a tab never moves another's. Empty: the session itself.
   string viewer = 3;
+  // Input comes from a pipe or a file, not a person typing (portenv
+  // attach with stdin not a terminal). Input the program in the box never
+  // read then ends the terminal with DataLoss; false (a person, or an
+  // older client): never.
+  bool input_piped = 4;
 }
 
 message TerminalSize {

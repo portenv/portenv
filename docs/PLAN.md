@@ -145,7 +145,7 @@ A box is a toolbox image plus a home. The image is rebuilt or pulled on each mac
 **Toolbox image (default: `portenv/toolbox-node`)**
 
 - Base: Ubuntu 24.04, multi-arch (arm64 and amd64).
-- Toolchain: Node 22, PostgreSQL client, git, tmux, ripgrep, jq, build-essential, Python 3.
+- Toolchain: Node 22, PostgreSQL client, git, tmux, ripgrep, jq, build-essential, Python 3. `gh` joins it for Link GitHub, in its own PR: from GitHub's signed apt repository, with the key's fingerprint checked.
 - Claude Code from Anthropic's signed apt repository (stable channel); updated by rebuilding the image, never into home.
 - `portenv-agent` as the container's init process (it reaps children and supervises the agent's services).
 - Images are versioned (`toolbox-node:v12`) and published to a registry by CI. A machine without network access to the registry builds from the Dockerfile.
@@ -559,6 +559,11 @@ Agents driving Claude Code headlessly use `claude -p` with `--resume`, `--output
   - There's a spending cap, and dedicated agent accounts are used within each vendor's terms.
   - Each agent's pass rate per task goes in the release notes.
 - **A failure is fixed in Portenv** (the guide, the error messages, the defaults), never by tuning the eval prompts.
+- **The harness** (the owner, 2026-10-10):
+  - **Start with a one-day trial of Inspect AI,** the open-source eval framework from the UK AI Security Institute. Run one task, "open acme-api and run its tests", with Claude Code as the agent under test. Its scorer reads the box's state and Portenv's event log, and the run is repeated, with its transcript kept.
+  - **The fallback:** if running in a Portenv box, or running the real Claude Code CLI, is clumsy, use a thin harness that runs headless `claude -p` / `codex exec` and checks the event log.
+  - **The tasks and scoring rules stay the same** either way.
+  - **The outcome goes in an ADR.**
 
 ## Developer-owned servers
 
@@ -681,6 +686,11 @@ A first-class way to use Portenv on every platform, not a stopgap. It talks to t
 
 - **`portenv open <box>`** puts your terminal inside the box, like ssh. Detach and the session keeps running; open again and you're back where you were.
 - **`portenv open <box> --tab <name>`** attaches straight to one tab, as its own viewer, so each pane of a tiling terminal can show a different tab (1.2b).
+- **`portenv attach` never drops input silently** (#53, owner 2026-10-10), on this Mac or over a slow link to a server:
+  - **Input:** everything written to it reaches the box, or attach exits non-zero with one plain line saying what didn't. When stdin closes, it sends the rest, then exits 0 only once the box agent has handed every byte to the session: the agent keeps the terminal open until its program has read all its input and its output has gone quiet. A cut link, a session that ends first, a program that exits before reading all its input (`head -c 10` with more piped in), or one that stops reading for 15 s each end with a non-zero exit that says how much didn't arrive. A person typing at a terminal never sees this: attach tells the box agent whether its input is piped (`input_piped`), and only piped input is counted, whether the program ends before or after stdin does.
+  - **Output** goes to stdout as it arrives, to a pipe or a file as well as a terminal.
+  - **Ctrl-C:** at a terminal it is a keystroke for the box, like any other (raw mode), and a SIGINT sent to attach goes to the box too. With stdin piped, the first Ctrl-C stops reading stdin and ends attach once the box has everything read so far; a second ends it at once. Both exit non-zero, saying whether anything was left behind.
+  - **Tested** over a throttled proxy at 400 kbit/s and 150 ms (`core/daemon/attach_test.go`) and against a real box (the driver suite).
 - **Every menu action is a command:** status, save, revert, move, rename, restart.
 - **The state line shows in the terminal title** (OSC 0/2), optionally with a one-line status bar.
 - **Approvals and notifications** go through the platform's own notifications.
@@ -826,6 +836,7 @@ The public launch ships Phases 1 and 2 together (decided 2026-10-09). Day one mu
 - [ ] An outside security review of the public doors (remote MCP, the web terminal, SSH with certificates), with every finding fixed or accepted in writing
 - [ ] The public endpoints are fuzzed in CI before launch
 - [ ] The app is signed and notarized (1.8), and the website's download link is turned on only then
+- [ ] Link GitHub works from New box (device flow inside the box, gh's normal login, Sign Out of GitHub in the inspector)
 
 ### Phase 0: Foundations (owner only)
 
@@ -1117,6 +1128,17 @@ The Containerization shim, with `docker` as the fallback. The agent drops the fo
 
 Reduced: no sign-in, Only you, Keychain keys, the recovery key; the Welcome screen has "Continue without an account" (#16). First run lists, in plain words, the exact fields the update check counts (no ID, nothing about the user's work), and how to turn counting off (1.8).
 - **No window for a box that doesn't exist** (found at the Mac, 2026-10-10). Opened without `PORTENV_BOX`, the app shows a window for a default box "demo" that doesn't exist, with "no box named demo here; create it with portenv init demo". That message starts in lower case and sends the user to a terminal command (GUIDELINES §10). First run replaces it: with no box, the app shows first run or the box list, never a window for a missing box.
+- **The box list and New box: build to the boards** `box-list`, `box-list-empty`, `new-box` and `new-box-linked-invalid` in `docs/mockups/` (the owner, 2026-10-10).
+  - **First run** keeps "Make your first box", with step dots.
+  - **The box list's New Box…** opens "New box", with Back (‹ Your boxes) and Cancel, and no step dots.
+  - **The name field** has a hint ("Letters, numbers and hyphens, like the project's name."), and an inline error for an invalid name ("Start with a letter or a number.").
+  - **Opening a box that's on a server** connects to it there; nothing moves unless the person chooses Move To.
+- **Link GitHub** (boards `link-github` and `link-github-linked`; before launch; not a Portenv account):
+  - GitHub's device flow, through `gh auth login` inside the box, with the same access as the person's own gh; any number of repositories can be cloned into the box afterwards (the owner, 2026-10-10, ADR 0018: GitHub access works as on their Mac; no Portenv GitHub App and no repository picker);
+  - gh's default scopes, then `gh auth setup-git`, so plain `git clone` and `git push` work for any repository the account can reach; the token lives in the box home's gh config (`hosts.yml`), never in the image;
+  - the login is kept in the box's encrypted home and moves with it; Portenv never sees or keeps it;
+  - agents working in the box can use that login too, and the dialog says so;
+  - the inspector's Who's here shows "This box can push to GitHub as you", with Sign Out of GitHub.
 - **Built so far** (lane C's first milestone, 2026-10-10):
   - **The launch decision:** with no box, first run; with a box that isn't on this Mac, the box list, saying so; never a window for a missing box (`LaunchDecision`, tested). The app no longer defaults to "demo".
   - **The first-run screens and their flow,** reduced as above: Continue is enabled only when the step is complete; the recovery key needs the "I've saved" checkbox; box names follow the CLI's rule. "Count me in usage numbers" is already on, with the exact fields one click away, on Welcome (before any update check).

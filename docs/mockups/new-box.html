@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>New box</title>
+</head>
+<body>
+
+<style>
+body{margin:0;background:#0E0E10}
+a{color:#409CFF}a:hover{color:#6CB6FF}
+</style>
+
+<div style="width: 720px; height: 520px; box-sizing: border-box; display: flex; flex-direction: column; background: #1E1E20; color: #F5F5F7; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif; font-size: 13px; border: 1px solid #3A3A3D; border-radius: 12px; overflow: hidden">
+<div style="display: flex; align-items: center; gap: 8px; padding: 14px 16px">
+<span aria-hidden="true" style="width: 12px; height: 12px; border-radius: 50%; background: #FF5F57"></span>
+<span aria-hidden="true" style="width: 12px; height: 12px; border-radius: 50%; background: #FEBC2E"></span>
+<span aria-hidden="true" style="width: 12px; height: 12px; border-radius: 50%; background: #28C840"></span>
+<button type="button" aria-label="Back to your boxes" style="display: flex; align-items: center; gap: 4px; margin-left: 14px; min-height: 26px; padding: 0 8px; background: transparent; color: #A1A1A6; border: none; border-radius: 6px; font: inherit; cursor: pointer">
+<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"></path></svg>Your boxes</button>
+</div>
+<div style="flex-grow: 1; display: flex; flex-direction: column; gap: 16px; padding: 4px 64px 0">
+<h1 style="margin: 0; font-size: 24px; font-weight: 700">New box</h1>
+
+<div style="display: grid; grid-template-columns: 110px minmax(0, 1fr); align-items: start; gap: 14px 16px">
+<label for="nb-name" style="color: #A1A1A6; text-align: right; line-height: 30px">Name</label>
+<span style="display: flex; flex-direction: column; gap: 5px">
+<input id="nb-name" type="text" value="acme-api" aria-describedby="nb-hint" aria-invalid="false" style="height: 30px; padding: 0 10px; box-sizing: border-box; background: #2A2A2D; color: #F5F5F7; border: 1px solid #48484B; border-radius: 7px; font: inherit">
+<span id="nb-hint" style="font-size: 12px; color: #8E8E93">Letters, numbers and hyphens, like the project’s name.</span>
+</span>
+
+<span id="nb-start" style="color: #A1A1A6; text-align: right; line-height: 30px">Start from</span>
+<div role="radiogroup" aria-labelledby="nb-start" style="display: flex; padding: 2px; background: #2A2A2D; border: 1px solid #48484B; border-radius: 8px">
+<button type="button" role="radio" aria-checked="true" style="flex: 1 1 0; min-height: 28px; background: #48484B; color: #F5F5F7; border: none; border-radius: 6px; font: inherit; cursor: pointer">GitHub repository</button>
+<button type="button" role="radio" aria-checked="false" style="flex: 1 1 0; min-height: 28px; background: transparent; color: #F5F5F7; border: none; border-radius: 6px; font: inherit; cursor: pointer">Folder on this Mac</button>
+<button type="button" role="radio" aria-checked="false" style="flex: 1 1 0; min-height: 28px; background: transparent; color: #F5F5F7; border: none; border-radius: 6px; font: inherit; cursor: pointer">Empty</button>
+</div>
+
+<span style="color: #A1A1A6; text-align: right; line-height: 30px">Repository</span>
+<span style="display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 9px; background: #262628; border: 1px solid #3A3A3D">
+<span style="display: flex; align-items: center; gap: 10px">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="#F5F5F7" aria-hidden="true"><path d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.89 1.53 2.34 1.09 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.56-1.11-4.56-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.02a9.6 9.6 0 0 1 5 0c1.91-1.29 2.75-1.02 2.75-1.02.55 1.38.2 2.4.1 2.65.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.69-4.57 4.93.36.31.68.92.68 1.85v2.74c0 .27.18.58.69.48A10 10 0 0 0 12 2z"></path></svg>
+<span style="flex-grow: 1; font-weight: 600">Link GitHub to choose a repository</span>
+<button type="button" style="min-height: 28px; padding: 0 12px; background: #3A3A3D; color: #F5F5F7; border: none; border-radius: 7px; font: inherit; cursor: pointer">Link GitHub…</button>
+</span>
+<span style="font-size: 12px; line-height: 1.45; color: #8E8E93">You sign in on github.com, the same sign-in as <code style="font-family: 'SF Mono', ui-monospace, Menlo, monospace; font-size: 11px">gh auth login</code> on your Mac, with the same access. The login is kept inside this box, never by Portenv, and agents working in the box can use it. Or paste a public repository URL.</span>
+</span>
+
+<span style="color: #A1A1A6; text-align: right">Toolbox</span>
+<span style="display: flex; flex-direction: column; gap: 3px">
+<span style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap"><span>Node 22 · PostgreSQL client · Claude Code · git · gh</span><a href="#">Change…</a></span>
+<span style="font-size: 12px; color: #8E8E93">The default toolbox; detected from the project once you pick one</span>
+</span>
+</div>
+
+<label style="display: flex; align-items: flex-start; gap: 10px; margin-left: 126px; cursor: pointer">
+<input type="checkbox" checked="checked" style="width: 16px; height: 16px; margin: 1px 0 0; accent-color: #0A84FF">
+<span>Show this box in Finder</span>
+</label>
+</div>
+<div style="display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding: 0 64px 28px">
+<button type="button" style="min-height: 34px; padding: 0 16px; background: #3A3A3D; color: #F5F5F7; border: none; border-radius: 8px; font: inherit; cursor: pointer">Cancel</button>
+<button type="button" aria-disabled="false" style="min-height: 34px; padding: 0 18px; background: #0A6EDB; color: #FFFFFF; border: none; border-radius: 8px; font: inherit; font-weight: 600; cursor: pointer">Create Box</button>
+</div>
+</div>
+</body>
+</html>

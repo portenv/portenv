@@ -21,6 +21,7 @@ import (
 
 	"github.com/portenv/portenv/core/driver"
 	"github.com/portenv/portenv/core/driver/docker"
+	"github.com/portenv/portenv/core/internal/instance"
 	"github.com/portenv/portenv/core/keys"
 	boxsync "github.com/portenv/portenv/core/sync"
 )
@@ -52,7 +53,12 @@ func NewEnv() (*Env, error) {
 		if err != nil {
 			return nil, err
 		}
-		dir = filepath.Join(cfg, "Portenv")
+		// Application Support/Portenv, or a dev lane's own folder.
+		n, err := instance.Current()
+		if err != nil {
+			return nil, err
+		}
+		dir = filepath.Join(cfg, n.Folder())
 	}
 	if err := os.MkdirAll(dir, 0o700); err != nil { // #nosec G703 -- the user's own Portenv directory
 		return nil, err

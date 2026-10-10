@@ -1041,6 +1041,9 @@ The Containerization shim, with `docker` as the fallback. The agent drops the fo
 **7. 1.5: first run**
 
 Reduced: no sign-in, Only you, Keychain keys, the recovery key; the Welcome screen has "Continue without an account" (#16). First run lists, in plain words, the exact fields the update check counts (no ID, nothing about the user's work), and how to turn counting off (1.8).
+- **Move to Applications first** (the owner, 2026-10-10; found while testing #41):
+  - Before registering the login item, if the app runs from anywhere but `/Applications`, it offers "Move Portenv to Applications?". That includes App Translocation, when the app is opened from Downloads or the DMG. launchd may refuse to start `portenvd` from other places.
+  - If launchd still fails to start `portenvd` (for example exit 78, `EX_CONFIG`), the app says so in a plain line. It doesn't wait out the 30-second "background service isn't running" message.
 
 **8. 1.6: the port relay**
 
@@ -1055,6 +1058,10 @@ Show in Finder (⌥⌘R) stops being disabled here.
 Developer ID signing, notarisation and Sparkle, with the key backups. Signed public CLI releases and their signing key are already on the first-release checklist (#27).
 - Needs Apple Developer enrolment (open question), which is also the stable-signing fix for item 1e.
 - **Look at again once signing is stable:** run `portenvd` inside a small helper app bundle (`Contents/Helpers/Portenv Helper.app`), so it can post a notification the moment a background save succeeds after Quit Anyway. Until then the next launch of the app shows it (1.1).
+- **An app newer than its running `portenvd`** (found while testing #41, 2026-10-10):
+  - after an update, or when the login item still points at another copy of the app, the app compares versions and relaunches `portenvd` from itself (the `Relaunch` RPC, ADR 0014);
+  - it re-registers the login item when that item runs a different copy;
+  - until then, a call `portenvd` doesn't know shows "Portenv's background service is out of date. Quit Portenv and open it again; if this keeps happening, reinstall Portenv." (#41).
 - **Release checklist:** test `portenvd`'s socket with a real second macOS account. A process running as another user is refused; 1.1's test simulated the other uid.
 - **Investor-grade metrics without identifying anyone** (decided 2026-10-09). No email collection.
   - **Downloads:** GitHub release asset counts (the DMG and the CLI builds), and Cloudflare's counts for portenv.com/download. No scripts on the site.

@@ -2,6 +2,7 @@
 
 import AppKit
 import Foundation
+import os
 import PortenvKit
 import UserNotifications
 
@@ -45,8 +46,21 @@ final class Notifier: KeychainWaitNotifying, @unchecked Sendable {
         content.title = c.title
         content.subtitle = c.subtitle
         content.body = c.body
-        try? await center.add(UNNotificationRequest(identifier: id, content: content, trigger: nil))
+        // The kind only ("command", "move"): box and tab names stay out of
+        // the system log.
+        let kind = id.split(separator: "-").first.map(String.init) ?? "a"
+        do {
+            try await center.add(UNNotificationRequest(identifier: id, content: content, trigger: nil))
+            // A line the next live test can find (log show --predicate
+            // 'subsystem == "com.portenv.Portenv"'). No box content beyond the
+            // notification's kind (see kind above).
+            Self.log.notice("posted a \(kind, privacy: .public) notification")
+        } catch {
+            Self.log.error("a \(kind, privacy: .public) notification wasn't posted: \(error.localizedDescription, privacy: .public)")
+        }
     }
+
+    private static let log = Logger(subsystem: "com.portenv.Portenv", category: "notifications")
 
     @MainActor private static func windowInFront() -> Bool {
         NSApplication.shared.isActive && NSApplication.shared.keyWindow != nil

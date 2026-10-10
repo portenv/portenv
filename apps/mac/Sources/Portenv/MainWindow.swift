@@ -48,9 +48,13 @@ struct MainWindow: View {
                 }
                 ToolbarItem(placement: .primaryAction) {
                     // ⌥⌘I is on View › Show Inspector (InspectorToggle).
-                    Button { inspectorOpen.toggle() } label: { Image(systemName: "sidebar.right") }
-                        .help(inspectorOpen ? A11y.hideInspector : A11y.showInspector)
-                        .accessibilityLabel(inspectorOpen ? A11y.hideInspector : A11y.showInspector)
+                    // One label, from the Label: the toolbar item and its
+                    // button no longer both read "Hide inspector" (R-0027).
+                    Button { inspectorOpen.toggle() } label: {
+                        Label(inspectorOpen ? A11y.hideInspector : A11y.showInspector, systemImage: "sidebar.right")
+                            .labelStyle(.iconOnly)
+                    }
+                    .help(inspectorOpen ? A11y.hideInspector : A11y.showInspector)
                 }
             }
             // Busy disables the window, except Cancel while the Keychain asks.

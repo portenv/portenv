@@ -204,6 +204,28 @@ struct InspectorTests {
         #expect(c.tabs.map(\.name) == ["claude"])
     }
 
+    @Test func theNewestSavePointOffersRevertToVoiceOverAndTheKeyboard() {
+        // Revert shows on hover (§6), and is also an accessibility action on
+        // the row, so VoiceOver and keyboard users can revert (R-0027).
+        let rows = InspectorText.saveRows([
+            SaveInfo(id: "p", time: noon, kind: "point", machine: "mac"),
+            SaveInfo(id: "a", time: noon.addingTimeInterval(60), kind: "autosave", machine: "mac"),
+        ])
+        #expect(A11y.saveRowActions(rows.first { $0.id == "p" }!) == ["Revert to this Save point"])
+        #expect(A11y.saveRowActions(rows.first { $0.id == "a" }!).isEmpty)
+    }
+
+    @Test func aCommandNotificationPostsOnlyWhenNotInFrontAndOnlyPast30Seconds() {
+        // Not in front, past 30 s: posts.
+        #expect(NotifyRules.commandFinished(seconds: 31, windowInFront: false))
+        // In front, however long: never.
+        #expect(!NotifyRules.commandFinished(seconds: 31, windowInFront: true))
+        #expect(!NotifyRules.commandFinished(seconds: 3600, windowInFront: true))
+        // Not in front, up to 30 s: never.
+        #expect(!NotifyRules.commandFinished(seconds: 30, windowInFront: false))
+        #expect(!NotifyRules.commandFinished(seconds: 0, windowInFront: false))
+    }
+
     @Test func everyInspectorControlHasAVoiceOverLabel() {
         #expect(A11y.inspector == "Inspector")
         #expect(A11y.showInspector == "Show inspector")

@@ -21,11 +21,12 @@ struct InspectorView: View {
     var scrolls = true
 
     var body: some View {
-        if scrolls {
-            ScrollView { sections }.accessibilityLabel(A11y.inspector)
-        } else {
-            sections.accessibilityLabel(A11y.inspector)
+        // One container VoiceOver names "Inspector" (R-0027).
+        Group {
+            if scrolls { ScrollView { sections } } else { sections }
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(A11y.inspector)
     }
 
     private var sections: some View {
@@ -197,6 +198,8 @@ private struct SaveRowView: View {
     /// Renders show Revert without a hover (§6 shows it on hover).
     var revealRevert = false
     @State private var hovering = false
+    /// Tab reaches Revert: it shows while it has keyboard focus too.
+    @FocusState private var revertFocused: Bool
 
     var body: some View {
         HStack(spacing: 8) {
@@ -216,13 +219,20 @@ private struct SaveRowView: View {
                     .buttonStyle(.plain)
                     .foregroundStyle(.tint)
                     .font(.system(size: 12))
-                    .opacity(hovering || revealRevert ? 1 : 0)
-                    .accessibilityLabel(A11y.revertTo(row.kind))
+                    .opacity(hovering || revertFocused || revealRevert ? 1 : 0)
+                    .focused($revertFocused)
+                    .accessibilityHidden(true) // the row's action below says it once
             }
         }
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
         .accessibilityElement(children: .combine)
+        // VoiceOver and the keyboard reach Revert without hovering (R-0027).
+        .accessibilityActions {
+            ForEach(A11y.saveRowActions(row), id: \.self) { name in
+                Button(name, action: revert)
+            }
+        }
     }
 }
 

@@ -14,6 +14,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -51,6 +52,7 @@ func TestMain(m *testing.M) {
 // terminalHelper is a program in a box's terminal:
 //
 //	sink:N  reads N bytes in raw mode, slowly, then prints "sha <hex> <n>"
+//	head:N  reads N bytes in raw mode and exits, like head -c N
 //	ticker  prints "tick <unix nanoseconds>" every 200 ms, forever
 func terminalHelper(mode string) {
 	if mode == "ticker" {
@@ -59,7 +61,8 @@ func terminalHelper(mode string) {
 			time.Sleep(200 * time.Millisecond)
 		}
 	}
-	want, err := strconv.Atoi(strings.TrimPrefix(mode, "sink:"))
+	kind, count, _ := strings.Cut(mode, ":")
+	want, err := strconv.Atoi(count)
 	if err != nil {
 		os.Exit(2)
 	}
@@ -67,6 +70,13 @@ func terminalHelper(mode string) {
 		os.Exit(2)
 	}
 	fmt.Print("ready\n")
+	if kind == "head" {
+		if _, err := io.ReadFull(os.Stdin, make([]byte, want)); err != nil {
+			os.Exit(2)
+		}
+		time.Sleep(300 * time.Millisecond)
+		os.Exit(0)
+	}
 	h, buf, got := sha256.New(), make([]byte, 4096), 0
 	for got < want {
 		time.Sleep(20 * time.Millisecond) // a slow reader: the PTY holds input when the client finishes
@@ -305,6 +315,29 @@ func TestAttachOverASlowLinkDeliversEverything(t *testing.T) {
 	want := fmt.Sprintf("sha %s %d", hex.EncodeToString(sum[:]), size)
 	if got := out.text(); !strings.Contains(got, want) {
 		t.Fatalf("the box didn't get every byte before attach ended: output %q, want %q", tail(got), want)
+	}
+}
+
+// TestAttachSaysWhenTheProgramExitsFirst (R-0051): 500 bytes piped into
+// a program that reads 10 and exits (head -c 10). attach ends with an
+// error saying 490 didn't arrive (a non-zero exit), not with 0.
+func TestAttachSaysWhenTheProgramExitsFirst(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("macOS discards a terminal's unread input when its program exits; the agent runs on Linux")
+	}
+	c, _ := slowBox(t, "head:10")
+	out := newPipeOut(t)
+	in, feed := io.Pipe()
+	go func() {
+		out.waitLine("ready", 30*time.Second)
+		_, _ = feed.Write(make([]byte, 500))
+		_ = feed.Close()
+	}()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	err := AttachTerminal(ctx, c, openMain(), Attach{In: in, Out: out.w})
+	if err == nil || status.Convert(err).Message() != "490 bytes of input didn't reach the box's terminal: the program there ended first" {
+		t.Fatalf("attach: %v, want 490 bytes reported", err)
 	}
 }
 

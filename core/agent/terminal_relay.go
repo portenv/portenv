@@ -84,6 +84,11 @@ func ServeTerminal(stream agentv1.AgentService_TerminalServer, cmd *exec.Cmd, co
 	var lastOutput atomic.Int64 // UnixNano of the last output read
 	lastOutput.Store(time.Now().UnixNano())
 	var lost atomic.Pointer[error] // input that didn't reach the program
+	// Once the client half-closed, the result waits for the drain, which
+	// also learns when the program exits (and what it left unread).
+	exited, drained := make(chan struct{}), make(chan struct{})
+	var mu sync.Mutex
+	halfClosed := false
 
 	// Keystrokes and resizes from the client.
 	go func() {
@@ -97,7 +102,11 @@ func ServeTerminal(stream agentv1.AgentService_TerminalServer, cmd *exec.Cmd, co
 				// The client finished sending (or its link failed after
 				// the last message that arrived): hand the program
 				// everything already written before closing.
-				if e := drainInput(ttyName, &lastOutput); e != nil {
+				mu.Lock()
+				halfClosed = true
+				mu.Unlock()
+				defer close(drained)
+				if e := drainInput(ttyName, exited, &lastOutput); e != nil {
 					lost.Store(&e)
 				}
 				closePTY()
@@ -137,6 +146,13 @@ func ServeTerminal(stream agentv1.AgentService_TerminalServer, cmd *exec.Cmd, co
 	if err := cmd.Wait(); errors.As(err, &exit) {
 		code = exit.ExitCode()
 	}
+	mu.Lock()
+	waitDrain := halfClosed
+	mu.Unlock()
+	close(exited)
+	if waitDrain {
+		<-drained
+	}
 	if e := lost.Load(); e != nil {
 		return *e
 	}
@@ -147,8 +163,8 @@ func ServeTerminal(stream agentv1.AgentService_TerminalServer, cmd *exec.Cmd, co
 // written to it, then until its output has been quiet for outputQuiet. It
 // fails, saying how much is left, when the unread input stops shrinking
 // for inputGiveUp.
-func drainInput(ttyName string, lastOutput *atomic.Int64) error {
-	if err := waitInputRead(ttyName); err != nil {
+func drainInput(ttyName string, exited <-chan struct{}, lastOutput *atomic.Int64) error {
+	if err := waitInputRead(ttyName, exited); err != nil {
 		return err
 	}
 	for start := time.Now(); time.Since(start) < outputLingerMax; time.Sleep(25 * time.Millisecond) {
@@ -160,15 +176,21 @@ func drainInput(ttyName string, lastOutput *atomic.Int64) error {
 }
 
 // waitInputRead waits until the PTY has no unread input: seen empty twice
-// in a row, since the kernel may still be moving a write along. A PTY that
-// can't be asked has lost its program, which then reads nothing more.
-func waitInputRead(ttyName string) error {
+// in a row, since the kernel may still be moving a write along. If the
+// program exits first (or the PTY can't be asked), what it left unread
+// never reaches it: DataLoss, with the count.
+func waitInputRead(ttyName string, exited <-chan struct{}) error {
 	left, progress := -1, time.Now()
 	for zeros := 0; zeros < 2; time.Sleep(25 * time.Millisecond) {
+		select {
+		case <-exited:
+			return inputLeftAtExit(ttyName, left)
+		default:
+		}
 		n, err := unreadInput(ttyName)
 		switch {
 		case err != nil:
-			return nil
+			return inputLeftAtExit(ttyName, left)
 		case n == 0:
 			zeros++
 			continue
@@ -178,6 +200,19 @@ func waitInputRead(ttyName string) error {
 			return status.Errorf(codes.DataLoss, "%d bytes of input didn't reach the box's terminal: the program there stopped reading", n)
 		}
 		zeros, left = 0, n
+	}
+	return nil
+}
+
+// inputLeftAtExit reports the input a program that ended never read: the
+// PTY's count if it can still be asked (Linux keeps it after the exit),
+// else the last count seen.
+func inputLeftAtExit(ttyName string, left int) error {
+	if n, err := unreadInput(ttyName); err == nil {
+		left = n
+	}
+	if left > 0 {
+		return status.Errorf(codes.DataLoss, "%d bytes of input didn't reach the box's terminal: the program there ended first", left)
 	}
 	return nil
 }

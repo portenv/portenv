@@ -11,12 +11,16 @@ public struct SaveInfo: Equatable, Sendable, Identifiable {
     public let kind: String
     /// The machine that made it.
     public let machine: String
+    /// A save point's name, if it was given one (portenvd doesn't record
+    /// names yet; the row shows it on a second line when it does).
+    public let name: String?
 
-    public init(id: String, time: Date, kind: String, machine: String) {
+    public init(id: String, time: Date, kind: String, machine: String, name: String? = nil) {
         self.id = id
         self.time = time
         self.kind = kind
         self.machine = machine
+        self.name = name
     }
 }
 
@@ -91,6 +95,8 @@ public enum InspectorText {
         public let id: String
         public let time: Date
         public let kind: String
+        /// The save point's name, on a second line.
+        public let name: String?
         /// Hovering shows Revert (only the newest save point: Revert To ▸
         /// Last Save Point; other saves come with Browse Saves, 1.4).
         public let revertable: Bool
@@ -101,7 +107,9 @@ public enum InspectorText {
         let newest = saves.sorted { $0.time > $1.time }
         let lastPoint = newest.first { $0.kind == "point" }?.id
         return newest.prefix(5).map {
-            SaveRow(id: $0.id, time: $0.time, kind: kind($0.kind, machine: $0.machine), revertable: $0.id == lastPoint)
+            let name = $0.name?.trimmingCharacters(in: .whitespaces)
+            return SaveRow(id: $0.id, time: $0.time, kind: kind($0.kind, machine: $0.machine),
+                           name: (name?.isEmpty ?? true) ? nil : name, revertable: $0.id == lastPoint)
         }
     }
 
@@ -115,15 +123,19 @@ public enum InspectorText {
     /// Agents arrive in 2.4; until then the section is you, and this line.
     public static let noAgents = "No agents connected."
 
-    /// One row of Running now: a tab and what runs in it.
+    /// One row of Running now: a tab, and the program running in it (nil
+    /// when it's just the shell: "idle").
     public struct TabRow: Equatable, Sendable, Identifiable {
         public let id: String
         public let name: String
-        public let detail: String
+        public let program: String?
     }
 
+    /// A tab with just its shell, in plain secondary text.
+    public static let idle = "idle"
+
     public static func tabRows(_ tabs: [TabInfo]) -> [TabRow] {
-        tabs.map { TabRow(id: $0.id, name: $0.name, detail: $0.program.isEmpty ? "Idle" : $0.program) }
+        tabs.map { TabRow(id: $0.id, name: $0.name, program: $0.program.isEmpty ? nil : $0.program) }
     }
 }
 

@@ -1030,7 +1030,7 @@ In this order:
    - **Status (lane B's PR, 2026-10-10):**
      - **Built:**
        - ⌥⌘I, the toolbar button and View › Show Inspector, open state remembered per box;
-       - Where it is: "Running on", "Since", and "Saves go to <place>" from portenvd's new `storage_place` and `opened_at`; the packages line with Retry; Move To…;
+       - Where it is: "Running on", "Since", and "Saves go to <place>" from portenvd's new `storage_place` (never a host name or IP: "your server" or "your bucket" until servers have names in 2.3) and `opened_at`; the packages line with Retry; Move To…;
        - Saves: the latest five, with Revert on the newest save point;
        - Who's here: you, and "No agents connected.";
        - Running now: each tab and what runs in it.
@@ -1039,6 +1039,7 @@ In this order:
        - "moved here from <place>";
        - ports (1.6's port relay) and saved commands;
        - Revert on saves other than the newest save point, and Browse All Saves… (1.4);
+       - save point names: the row shows a name on a second line, but portenvd doesn't record names yet;
        - a server box's saves, which portenvd lists on the server.
 4. **Notifications (§5)** for a finished long command, a move over 10 s, and the Keychain wait from item 1. Answer buttons come with the inline answer card.
    - The app asks for permission the first time something is worth notifying, never at launch. If permission is denied, the state line and the inspector still show everything, and nothing nags.

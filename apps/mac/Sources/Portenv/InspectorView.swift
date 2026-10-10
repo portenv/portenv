@@ -99,7 +99,7 @@ struct InspectorView: View {
                         .font(.system(size: 12)).foregroundStyle(.secondary)
                 }
                 VStack(alignment: .leading, spacing: 6) {
-                    ForEach(content.saves) { row in SaveRowView(row: row, revert: revert) }
+                    ForEach(content.saves) { row in SaveRowView(row: row, revert: revert, revealRevert: !scrolls) }
                 }
             }
         }
@@ -128,10 +128,15 @@ struct InspectorView: View {
                     HStack(spacing: 6) {
                         Text(tab.name).font(.system(size: 12))
                         Spacer(minLength: 8)
-                        Text(tab.detail).font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary)
+                        if let program = tab.program {
+                            // Only a real program name is in the program style.
+                            Text(program).font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary)
+                        } else {
+                            Text(InspectorText.idle).font(.system(size: 11)).foregroundStyle(.secondary)
+                        }
                     }
                     .accessibilityElement(children: .combine)
-                    .accessibilityLabel(A11y.runningTab(tab.name, tab.detail))
+                    .accessibilityLabel(A11y.runningTab(tab.name, program: tab.program))
                 }
             }
         }
@@ -189,6 +194,8 @@ private struct Note: View {
 private struct SaveRowView: View {
     let row: InspectorText.SaveRow
     let revert: () -> Void
+    /// Renders show Revert without a hover (§6 shows it on hover).
+    var revealRevert = false
     @State private var hovering = false
 
     var body: some View {
@@ -197,14 +204,19 @@ private struct SaveRowView: View {
                 .font(.system(size: 11).monospacedDigit())
                 .foregroundStyle(.secondary)
                 .frame(width: 44, alignment: .leading)
-            Text(row.kind).font(.system(size: 12))
+            VStack(alignment: .leading, spacing: 1) {
+                Text(row.kind).font(.system(size: 12))
+                if let name = row.name {
+                    Text("“\(name)”").font(.system(size: 11)).foregroundStyle(.secondary)
+                }
+            }
             Spacer(minLength: 4)
             if row.revertable {
                 Button("Revert", action: revert)
                     .buttonStyle(.plain)
                     .foregroundStyle(.tint)
                     .font(.system(size: 12))
-                    .opacity(hovering ? 1 : 0)
+                    .opacity(hovering || revealRevert ? 1 : 0)
                     .accessibilityLabel(A11y.revertTo(row.kind))
             }
         }

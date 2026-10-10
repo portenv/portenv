@@ -55,6 +55,16 @@ struct InspectorTests {
         #expect(InspectorText.kind("future-kind", machine: "mac") == "Save")
     }
 
+    @Test func aSavePointsNameIsKeptForItsSecondLine() {
+        let saves = [SaveInfo(id: "p", time: noon, kind: "point", machine: "mac", name: "before retry change"),
+                     SaveInfo(id: "a", time: noon.addingTimeInterval(60), kind: "autosave", machine: "mac")]
+        let rows = InspectorText.saveRows(saves)
+        #expect(rows.first { $0.id == "p" }?.name == "before retry change")
+        #expect(rows.first { $0.id == "a" }?.name == nil)
+        // A name given as only spaces isn't shown.
+        #expect(InspectorText.saveRows([SaveInfo(id: "x", time: noon, kind: "point", machine: "mac", name: "  ")]).first?.name == nil)
+    }
+
     @Test func onlyTheNewestSavePointOffersRevert() {
         // Revert To ▸ Last Save Point is the revert that exists (1.0); other
         // saves come with Browse Saves (1.4).
@@ -84,10 +94,13 @@ struct InspectorTests {
             TabInfo(id: "@0", name: "claude", active: true, program: "claude"),
             TabInfo(id: "@1", name: "shell", active: false),
         ]
+        // Only a real program name is a program; a shell is "idle", in
+        // plain secondary text (R-0019).
         #expect(InspectorText.tabRows(tabs) == [
-            InspectorText.TabRow(id: "@0", name: "claude", detail: "claude"),
-            InspectorText.TabRow(id: "@1", name: "shell", detail: "Idle"),
+            InspectorText.TabRow(id: "@0", name: "claude", program: "claude"),
+            InspectorText.TabRow(id: "@1", name: "shell", program: nil),
         ])
+        #expect(InspectorText.idle == "idle")
     }
 
     // MARK: Notifications (§5)
@@ -163,7 +176,7 @@ struct InspectorTests {
 
     @Test func theStateCarriesWhereSavesGoAndWhenTheBoxOpened() {
         let s = BoxState.parse(#"{"state":"SAVE_STATE_SAVED","storage_place":"test-server.example","opened_at":"2026-10-10T09:12:00Z"}"#)
-        #expect(s?.storagePlace == "test-server.example")
+        #expect(s?.storagePlace == "test-server.example") // as portenvd sends it
         #expect(s?.openedAt == ISO8601DateFormatter().date(from: "2026-10-10T09:12:00Z"))
         #expect(BoxState.parse(#"{"state":"SAVE_STATE_SAVED","storage_place":""}"#)?.storagePlace == nil)
         #expect(InspectorText.savesGoTo("test-server.example") == "Saves go to test-server.example")
@@ -197,8 +210,8 @@ struct InspectorTests {
         #expect(A11y.hideInspector == "Hide inspector")
         #expect(A11y.retryPackages == "Retry installing packages")
         #expect(A11y.revertTo("Save point") == "Revert to this Save point")
-        #expect(A11y.runningTab("claude", "claude") == "claude tab, running claude")
-        #expect(A11y.runningTab("shell", "Idle") == "shell tab, idle")
+        #expect(A11y.runningTab("claude", program: "claude") == "claude tab, running claude")
+        #expect(A11y.runningTab("shell", program: nil) == "shell tab, idle")
     }
 
     // MARK: BoxController

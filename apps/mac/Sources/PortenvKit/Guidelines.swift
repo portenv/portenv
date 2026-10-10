@@ -182,7 +182,7 @@ public enum A11y {
     public static let retryPackages = "Retry installing packages"
     public static func revertTo(_ kind: String) -> String { "Revert to this \(kind)" }
     /// A tab in Running now, and what runs in it.
-    public static func runningTab(_ name: String, _ detail: String) -> String {
-        detail == "Idle" ? "\(name) tab, idle" : "\(name) tab, running \(detail)"
+    public static func runningTab(_ name: String, program: String?) -> String {
+        program.map { "\(name) tab, running \($0)" } ?? "\(name) tab, idle"
     }
 }

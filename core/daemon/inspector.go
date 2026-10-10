@@ -3,14 +3,14 @@
 package daemon
 
 import (
-	"net/url"
 	"path/filepath"
 	"strings"
 )
 
 // storagePlace is where a box's saves go, as the inspector says it ("Saves
 // go to <place>", GUIDELINES.md §6): a place name only, never a path, a
-// user or a credential.
+// user, a host name or an IP address (R-0019). A server or a bucket is
+// "your server" or "your bucket" until servers have names (2.3).
 func storagePlace(storage string) string {
 	switch {
 	case storage == "":
@@ -24,21 +24,9 @@ func storagePlace(storage string) string {
 		}
 		return "this Mac"
 	case strings.HasPrefix(storage, "sftp:"):
-		host, _, _ := strings.Cut(strings.TrimPrefix(storage, "sftp:"), ":")
-		if _, h, ok := strings.Cut(host, "@"); ok {
-			host = h
-		}
-		if host != "" {
-			return host
-		}
+		return "your server"
 	case strings.HasPrefix(storage, "s3:"):
-		raw := strings.TrimPrefix(storage, "s3:")
-		if !strings.Contains(raw, "://") {
-			raw = "https://" + raw
-		}
-		if u, err := url.Parse(raw); err == nil && u.Hostname() != "" {
-			return u.Hostname()
-		}
+		return "your bucket"
 	}
 	return "your storage"
 }

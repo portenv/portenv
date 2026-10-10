@@ -37,7 +37,11 @@ func testTabs(t *testing.T) (tabs, func(args ...string) string) {
 		t.Fatal(err)
 	}
 	run := func(ctx context.Context, args ...string) (string, error) {
-		out, err := exec.CommandContext(ctx, "tmux", append([]string{"-L", sock, "-f", conf}, args...)...).CombinedOutput() // #nosec G204 -- test
+		cmd := exec.CommandContext(ctx, "tmux", append([]string{"-L", sock, "-f", conf}, args...)...) // #nosec G204 -- test
+		// The agent runs tmux with LANG=C.UTF-8 (envFor); without a UTF-8
+		// locale tmux prints the tab separator in formats as "_".
+		cmd.Env = append(os.Environ(), "LANG=C.UTF-8")
+		out, err := cmd.CombinedOutput()
 		if err != nil {
 			return string(out), fmt.Errorf("tmux %s: %w: %s", args[0], err, strings.TrimSpace(string(out)))
 		}
@@ -306,9 +310,11 @@ func TestTabsSayWhatIsRunning(t *testing.T) {
 		t.Fatalf("an idle shell reports program %q, want none", p)
 	}
 	raw("send-keys", "-t", ts[0].GetId(), "sleep 30", "Enter")
+	// Wait for sleep itself: the person's shell config may briefly run
+	// other programs (a grep) as the shell starts.
 	var p string
 	for range 50 {
-		if p = mustList(t, tb)[0].GetProgram(); p != "" {
+		if p = mustList(t, tb)[0].GetProgram(); p == "sleep" {
 			break
 		}
 		time.Sleep(50 * time.Millisecond)

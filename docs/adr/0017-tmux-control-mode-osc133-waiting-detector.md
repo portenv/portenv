@@ -80,18 +80,22 @@ Checking every line, not only the last, catches a question printed above its inp
 | 12 | an idle shell prompt | real | — | — | waiting | waiting | — | — | — |
 | 13 | a Node CLI asks for an API token (inquirer style, masked) | stand-in | waiting (secret) | waiting | waiting | waiting | waiting | waiting | secret |
 | 14 | a boxed TUI asks for an access key (question above the input) | stand-in | waiting (secret) | waiting | waiting | waiting | waiting | waiting | secret |
+| 15 | Claude Code asks, with a token count under the prompt | stand-in | waiting | waiting | waiting | waiting | waiting | waiting | — |
+| 16 | a y/n question under code naming GITHUB_TOKEN | real | waiting | waiting | waiting | waiting | waiting | waiting | — |
 
 Cases 13 and 14 are stand-ins for agent CLIs that ask for a credential: an inquirer-style "? Enter your API token:" with a masked line under it (raw mode, waiting in epoll), and a boxed TUI with "Paste your access key:" above its input line. Both are caught as secret by the wording on the lines above the input.
+
+Cases 15 and 16 check that ordinary questions stay relayable (R-0021): Claude Code's permission prompt with its token count ("↑ 1.2k tokens") under it, and a script's y/n question under code that names `GITHUB_TOKEN` and `.env.secret`. Both are waiting and not secret.
 
 **Each signal alone:**
 
 | Signal alone | False "waiting" | Missed "waiting" |
 | --- | --- | --- |
-| OSC 133 | 5 of 14 | 0 of 14 |
-| Blocked on tty | 3 of 14 | 1 of 14 (sudo: unreadable) |
-| Quiet | 5 of 14 | 0 of 14 |
-| Screen asks | 1 of 14 (less) | 0 of 14 |
-| **Combined** | **0 of 14** | **0 of 14** |
+| OSC 133 | 5 of 16 | 0 of 16 |
+| Blocked on tty | 3 of 16 | 1 of 16 (sudo: unreadable) |
+| Quiet | 5 of 16 | 0 of 16 |
+| Screen asks | 1 of 16 (less) | 0 of 16 |
+| **Combined** | **0 of 16** | **0 of 16** |
 
 **Why each signal is needed:**
 - **OSC 133 alone** calls every running command "waiting".

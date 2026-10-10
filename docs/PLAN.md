@@ -1054,6 +1054,7 @@ The Containerization shim, with `docker` as the fallback. The agent drops the fo
 **7. 1.5: first run**
 
 Reduced: no sign-in, Only you, Keychain keys, the recovery key; the Welcome screen has "Continue without an account" (#16). First run lists, in plain words, the exact fields the update check counts (no ID, nothing about the user's work), and how to turn counting off (1.8).
+- **No window for a box that doesn't exist** (found at the Mac, 2026-10-10). Opened without `PORTENV_BOX`, the app shows a window for a default box "demo" that doesn't exist, with "no box named demo here; create it with portenv init demo". That message starts in lower case and sends the user to a terminal command (GUIDELINES §10). First run replaces it: with no box, the app shows first run or the box list, never a window for a missing box.
 - **Move to Applications first** (the owner, 2026-10-10; found while testing #41):
   - Before registering the login item, if the app runs from anywhere but `/Applications`, it offers "Move Portenv to Applications?". That includes App Translocation, when the app is opened from Downloads or the DMG. launchd may refuse to start `portenvd` from other places.
   - If launchd still fails to start `portenvd` (for example exit 78, `EX_CONFIG`), the app says so in a plain line. It doesn't wait out the 30-second "background service isn't running" message.
@@ -1071,6 +1072,7 @@ Show in Finder (⌥⌘R) stops being disabled here.
 Developer ID signing, notarisation and Sparkle, with the key backups. Signed public CLI releases and their signing key are already on the first-release checklist (#27).
 - Needs Apple Developer enrolment (open question), which is also the stable-signing fix for item 1e.
 - **Look at again once signing is stable:** run `portenvd` inside a small helper app bundle (`Contents/Helpers/Portenv Helper.app`), so it can post a notification the moment a background save succeeds after Quit Anyway. Until then the next launch of the app shows it (1.1).
+- **`portenvd` still starts after an in-place update** (found at the Mac, 2026-10-10). With ad-hoc-signed dev builds, launchd refused a rebuilt `portenvd` (exit 78, `EX_CONFIG`) until the login item was registered again; the job carries launch constraints. A Developer ID signature stays the same across updates, so releases should be fine. 1.8's Sparkle update test checks it, and the dev workflow re-registers after `gmake app` (`--unregister-service`, then open the app).
 - **An app newer than its running `portenvd`** (found while testing #41, 2026-10-10):
   - after an update, or when the login item still points at another copy of the app, the app compares versions and relaunches `portenvd` from itself (the `Relaunch` RPC, ADR 0014);
   - it re-registers the login item when that item runs a different copy;
@@ -1201,6 +1203,13 @@ The old numbers, for ADRs and PRs written before 2026-10-09: 2.2 wizard → 2.9 
 - The storage credential that enters a box becomes append-only: it can add files to the repository but never delete or overwrite one. A box, even as root, cannot destroy a save.
 - Forget, prune and the removal of stale locks use a separate credential that never enters a box and lives only on the host (`portenvd` or the runner).
 - For SFTP storage this means restic's REST server in append-only mode (`rest-server --append-only`) on the server, bound to the loopback address and reached through the existing SSH connection, with an append-only user for boxes and a full user for the host. No new inbound port. For S3-compatible storage: a put-only credential for boxes, a full one for the host.
+
+**2.3 Move To and the lease sheet**
+
+The title menu's Move To, as found at the Mac on 2026-10-10:
+- **Servers are shown by name** (GUIDELINES §2), never by address. A server added before names existed (the Phase 0 setup) shows "52.47.207.191" today. It gets a name, defaulting to its host name, and the user can rename it.
+- **Move To is disabled when the window has no box,** like Revert To and Make a Save Point.
+- **The current location has a checkmark** ("This Mac", or the server's name).
 
 **2.4 Stand-in agents over SSH and the CLI** (no control plane, no lanes)
 

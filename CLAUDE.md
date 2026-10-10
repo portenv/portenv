@@ -38,7 +38,7 @@ Phase 1: Native Mac app, local boxes. Phase 0 is closed (`docs/PLAN.md`). Work t
 
 - Swift / SwiftUI: `apps/mac`, `apps/ios`, `shims/containerization`.
 - Go 1.26: `core/` (daemons, agent, CLI, drivers, sync). The control plane and gateway live in the private `portenv/cloud` repository, not here.
-- Developer tools (buf, protoc plugins, golangci-lint, actionlint, gitleaks) are pinned in the `Makefile` and installed into `bin/` with `go install pkg@version` on first use.
+- Developer tools (buf, protoc plugins, golangci-lint, actionlint, gitleaks) are pinned in the `Makefile` and installed into `bin/` with `go install pkg@version` on first use. shellcheck, which actionlint runs, is pinned to the version on CI's runner image and downloaded with a checked SHA-256 (`scripts/install-shellcheck.sh`), so local lint matches CI.
 - Toolbox images: `images/`. Shared gRPC definitions: `proto/` (generated Go in `proto/gen/go`, its own module, imported by `core` and `portenv/cloud`).
 - Requirements for the native engine: Apple silicon, macOS 26, Xcode 26.
 
@@ -46,7 +46,7 @@ Phase 1: Native Mac app, local boxes. Phase 0 is closed (`docs/PLAN.md`). Work t
 
 - `make build`: build `portenvd`, `portenv-runner`, `portenv-agent` and `portenv` into `bin/`.
 - `make test`: Go tests with the race detector (`go test -race ./core/...` for one module).
-- `make lint`: gofmt, go vet, golangci-lint, buf lint and format, actionlint, SPDX headers.
+- `make lint`: gofmt, go vet, golangci-lint, buf lint and format, actionlint (with the pinned shellcheck), SPDX headers.
 - `make fmt`: format Go and proto sources.
 - `make proto`: regenerate `proto/gen/go` after editing `proto/`; commit the result. `make proto-check` fails if it is stale.
 - `make agent-linux`: static `portenv-agent` for linux/arm64 and amd64.

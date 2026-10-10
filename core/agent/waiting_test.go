@@ -79,8 +79,8 @@ func TestSecretPromptsAreNeverRelayed(t *testing.T) {
 	if got := sudo.RelayQuestion(); got != SecretNotice || strings.Contains(got, "sudo") {
 		t.Fatalf("relayed %q", got)
 	}
-	if err := sudo.CheckRelayAnswer(); err == nil || err.Error() != SecretNotice {
-		t.Fatalf("a relayed answer to a password prompt: %v", err)
+	if q, _ := sudo.Question(); q.ScreenHash != "" {
+		t.Fatal("a secret prompt produced a relayable question")
 	}
 	// Echo off with line input is secret even with neutral wording.
 	quiet := asking("Code: ")
@@ -101,13 +101,89 @@ func TestSecretPromptsAreNeverRelayed(t *testing.T) {
 	if got := tui.RelayQuestion(); !strings.Contains(got, "Do you want to proceed?") {
 		t.Errorf("a normal question wasn't relayed: %q", got)
 	}
-	if err := tui.CheckRelayAnswer(); err != nil {
-		t.Errorf("an answer to a normal question was refused: %v", err)
+	q, ok := tui.Question()
+	if !ok {
+		t.Fatal("no question for a waiting tab")
+	}
+	if err := CheckRelayAnswer(q, tui); err != nil {
+		t.Errorf("an answer to an unchanged question was refused: %v", err)
 	}
 	// Nothing is relayed for a tab that isn't waiting.
 	idle := asking("Continue? [y/N]")
 	idle.Shell = shellPrompt
 	if idle.RelayQuestion() != "" {
 		t.Error("relayed a question for a tab that isn't waiting")
+	}
+}
+
+// R-0017: an answer is bound to the question it answers. Between relaying
+// "Push?" and the answer arriving, the program can move on (here: the push
+// starts and ssh asks for the key's passphrase); the relayed keystrokes must
+// not land in the new prompt.
+func TestARelayedAnswerIsBoundToItsQuestion(t *testing.T) {
+	push := asking("Push fix/retries to origin? [y/N]")
+	q, ok := push.Question()
+	if !ok || q.ID == "" || q.ScreenHash == "" {
+		t.Fatalf("no question: %+v %v", q, ok)
+	}
+	other, _ := push.Question()
+	if other.ID == q.ID {
+		t.Fatal("two questions share an ID")
+	}
+	// The tab moved on to a passphrase prompt before the answer arrived.
+	pass := asking("Push fix/retries to origin? [y/N] y", "Enter passphrase for key '/home/work/.ssh/id_ed25519':")
+	pass.EchoOff, pass.Canonical = true, true
+	if err := CheckRelayAnswer(q, pass); err == nil || err.Error() != QuestionChanged {
+		t.Fatalf("an answer reached a new password prompt: %v", err)
+	}
+	// Any other change refuses too: a different question, or no longer
+	// waiting.
+	if err := CheckRelayAnswer(q, asking("Force-push instead? [y/N]")); err == nil || err.Error() != QuestionChanged {
+		t.Errorf("an answer reached a different question: %v", err)
+	}
+	done := push
+	done.Shell = shellDone
+	if err := CheckRelayAnswer(q, done); err == nil || err.Error() != QuestionChanged {
+		t.Errorf("an answer reached a tab that stopped waiting: %v", err)
+	}
+	// The same screen: the answer goes through.
+	if err := CheckRelayAnswer(q, push); err != nil {
+		t.Errorf("an answer to the unchanged question was refused: %v", err)
+	}
+	// Same screen but now secret (echo turned off with line input): refused.
+	sameButSecret := push
+	sameButSecret.EchoOff, sameButSecret.Canonical = true, true
+	if err := CheckRelayAnswer(q, sameButSecret); err == nil {
+		t.Error("an answer reached a prompt that turned secret")
+	}
+}
+
+// R-0017: secret wording anywhere in the last lines, with more words, and
+// erring on the side of secret (Node CLIs ask for tokens in raw mode with
+// masking, so the terminal modes don't show it).
+func TestSecretWordingAnywhereInTheLastLines(t *testing.T) {
+	for _, lines := range [][]string{
+		{"? Enter your API token:", "> ********"},
+		{"│ Paste your access key:      │", "│ > ▌                         │"},
+		{"Private key (PEM):", ">"},
+		{"Client secret:"},
+		{"Credentials for registry.example.com", "Username:"},
+		{"Enter your api_key:"},
+	} {
+		s := asking(lines...)
+		if !s.Secret() {
+			t.Errorf("%q: not secret", lines)
+		}
+		if got := s.RelayQuestion(); got != SecretNotice {
+			t.Errorf("%q: relayed %q", lines, got)
+		}
+	}
+	for _, lines := range [][]string{
+		{"Do you want to proceed?", "❯ 1. Yes", "  2. No"},
+		{"Delete 3 files? [y/N]"},
+	} {
+		if asking(lines...).Secret() {
+			t.Errorf("%q: counted as secret", lines)
+		}
 	}
 }

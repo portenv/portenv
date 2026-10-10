@@ -3,6 +3,9 @@
 package agent
 
 import (
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"regexp"
 	"strings"
 	"time"
@@ -62,8 +65,10 @@ var (
 	// last few non-empty lines, since agent CLIs print their choices under
 	// the question.
 	promptLine = regexp.MustCompile(`(?i)(\?\s*$|\[y/n\]|\(y/n\)|\[yes/no\]|\(yes/no\)|:\s*$|^\s*>>>\s*$|^\s*\.\.\.\s*$)`)
-	// secretWords: wording that asks for a secret.
-	secretWords = regexp.MustCompile(`(?i)(pass(word|phrase)|\bpin\b|verification code|one-time code|\b2fa\b|otp\b)`)
+	// secretWords: wording that asks for a secret. Checked on every one of
+	// the last lines, erring on the side of secret: Node CLIs ask for tokens
+	// in raw mode with masking, so the terminal's modes don't show it.
+	secretWords = regexp.MustCompile(`(?i)(pass(word|phrase)|\bpin\b|verification code|one-time code|\b2fa\b|otp\b|token|api[ _-]?key|secret|private key|credential|access key)`)
 )
 
 // boxBorder are the characters TUIs draw boxes with; a question inside a
@@ -81,15 +86,18 @@ func screenAsks(lines []string) bool {
 }
 
 // Secret is a prompt for a password or similar: the terminal has echo off
-// with line input (what getpass, sudo and ssh set), or the last line's
-// wording asks for one. Raw-mode programs (Claude Code, vim) turn echo off
-// too, but without line input, so they are not secret prompts.
+// with line input (what getpass, sudo and ssh set), or any of the last
+// lines' wording asks for one (a token, a key). Raw-mode programs (Claude
+// Code, vim) turn echo off too, but without line input, so their modes alone
+// don't make them secret; their wording can.
 func (s waitSignals) Secret() bool {
 	if s.EchoOff && s.Canonical {
 		return true
 	}
-	if n := len(s.LastLines); n > 0 && secretWords.MatchString(s.LastLines[n-1]) {
-		return true
+	for _, l := range s.LastLines {
+		if secretWords.MatchString(l) {
+			return true
+		}
 	}
 	return false
 }
@@ -117,10 +125,48 @@ func (s waitSignals) RelayQuestion() string {
 	return strings.Join(s.LastLines, "\n")
 }
 
-// CheckRelayAnswer refuses an answer sent through a relay to a secret
-// prompt: a secret is only ever typed in the terminal.
-func (s waitSignals) CheckRelayAnswer() error {
-	if s.Secret() {
+// QuestionChanged refuses an answer whose question is no longer on screen.
+const QuestionChanged = "That question has changed; answer it in the terminal."
+
+type questionChangedError struct{}
+
+func (questionChangedError) Error() string { return QuestionChanged }
+
+// relayedQuestion is a question as relayed: an ID, and a hash of the screen
+// lines it was read from. An answer comes back with the question it answers.
+type relayedQuestion struct {
+	ID         string
+	ScreenHash string
+	Text       string
+}
+
+func screenHash(lines []string) string {
+	h := sha256.Sum256([]byte(strings.Join(lines, "\n")))
+	return hex.EncodeToString(h[:])
+}
+
+// Question is the relayable question for a waiting tab: a fresh ID, the
+// screen's hash and its text. A secret prompt has none: only SecretNotice
+// is said about it, and no answer is taken.
+func (s waitSignals) Question() (relayedQuestion, bool) {
+	if !s.Waiting() || s.Secret() {
+		return relayedQuestion{}, false
+	}
+	id := make([]byte, 16)
+	_, _ = rand.Read(id)
+	return relayedQuestion{ID: hex.EncodeToString(id), ScreenHash: screenHash(s.LastLines), Text: strings.Join(s.LastLines, "\n")}, true
+}
+
+// CheckRelayAnswer decides whether an answer to q may be typed into the tab,
+// given the tab probed again right before writing (R-0017): only if it's
+// still waiting on the very same screen, and that screen isn't a secret
+// prompt. Otherwise the program moved on, perhaps to a password prompt, and
+// the answer would land in the wrong place.
+func CheckRelayAnswer(q relayedQuestion, now waitSignals) error {
+	if q.ScreenHash == "" || !now.Waiting() || screenHash(now.LastLines) != q.ScreenHash {
+		return questionChangedError{}
+	}
+	if now.Secret() {
 		return secretPromptError{}
 	}
 	return nil

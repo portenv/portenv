@@ -5,6 +5,7 @@
 package agent
 
 import (
+	"context"
 	"errors"
 	"os"
 	"os/exec"
@@ -34,6 +35,22 @@ func runTerminal(stream agentv1.AgentService_TerminalServer, cfg Config, open *a
 	// The app owns tab names (tmuxOwned); a new session starts with one tab.
 	args := append([]string{"new-session", "-A", "-s", open.GetSession(), "-n", firstTabName}, tmuxHidden...)
 	args = append(args, tmuxOwned...)
+	if v := open.GetViewer(); v != "" {
+		// A viewer (the app, an agent) attaches to its own grouped session
+		// over the box's windows, so its current tab is its own; the
+		// session goes when no client is left on it.
+		run, err := tmuxAs(cfg)
+		if err != nil {
+			return err
+		}
+		tb := tabs{tmux: run, session: open.GetSession(), viewer: v}
+		if err := tb.ensure(stream.Context()); err != nil {
+			return err
+		}
+		defer tb.cleanup(context.Background())
+		args = append([]string{"attach-session", "-t", "=" + tb.view()}, tmuxHidden...)
+		args = append(args, tmuxOwned...)
+	}
 	cmd := exec.CommandContext(stream.Context(), "tmux", args...) // #nosec G204 -- session name validated; fixed options
 	cmd.Dir = cfg.Home()
 	cmd.Env = envFor(cfg)

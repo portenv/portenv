@@ -120,6 +120,9 @@ message Tab {
   // Stable for the window's life (tmux's window ID, for example "@3").
   string id = 1;
   string name = 2;
-  // The tab the terminal shows.
+  // The tab this viewer's terminal shows.
   bool active = 3;
+  // The program running in the tab's foreground, or empty when it's just
+  // the shell (closing the tab asks first when it isn't empty).
+  string program = 4;
 }

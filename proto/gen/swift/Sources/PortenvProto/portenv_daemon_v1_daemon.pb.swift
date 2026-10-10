@@ -436,6 +436,11 @@ public nonisolated struct Portenv_Daemon_V1_TerminalOpen: Sendable {
   /// Clears the value of `size`. Subsequent reads from it will return its default value.
   public mutating func clearSize() {self._size = nil}
 
+  /// Who is looking (for example "app"): each viewer has its own current
+  /// tab, in its own grouped tmux session over the same windows, so one
+  /// viewer choosing a tab never moves another's. Empty: the session itself.
+  public var viewer: String = String()
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -1054,6 +1059,11 @@ public nonisolated struct Portenv_Daemon_V1_ListTabsRequest: Sendable {
 
   public var session: String = String()
 
+  /// Who is looking (for example "app"): each viewer has its own current
+  /// tab, in its own grouped tmux session over the same windows, so one
+  /// viewer choosing a tab never moves another's. Empty: the session itself.
+  public var viewer: String = String()
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -1081,6 +1091,8 @@ public nonisolated struct Portenv_Daemon_V1_NewTabRequest: Sendable {
   public var session: String = String()
 
   public var name: String = String()
+
+  public var viewer: String = String()
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -1119,6 +1131,8 @@ public nonisolated struct Portenv_Daemon_V1_CloseTabRequest: Sendable {
 
   public var id: String = String()
 
+  public var viewer: String = String()
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -1147,6 +1161,8 @@ public nonisolated struct Portenv_Daemon_V1_RenameTabRequest: Sendable {
 
   public var name: String = String()
 
+  public var viewer: String = String()
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -1173,6 +1189,8 @@ public nonisolated struct Portenv_Daemon_V1_SelectTabRequest: Sendable {
 
   public var id: String = String()
 
+  public var viewer: String = String()
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -1196,6 +1214,8 @@ public nonisolated struct Portenv_Daemon_V1_WatchTabsRequest: Sendable {
   public var box: String = String()
 
   public var session: String = String()
+
+  public var viewer: String = String()
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -1759,7 +1779,7 @@ nonisolated extension Portenv_Daemon_V1_TerminalRequest: SwiftProtobuf.Message, 
 
 nonisolated extension Portenv_Daemon_V1_TerminalOpen: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".TerminalOpen"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}box\0\u{1}session\0\u{1}size\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}box\0\u{1}session\0\u{1}size\0\u{1}viewer\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1770,6 +1790,7 @@ nonisolated extension Portenv_Daemon_V1_TerminalOpen: SwiftProtobuf.Message, Swi
       case 1: try { try decoder.decodeSingularStringField(value: &self.box) }()
       case 2: try { try decoder.decodeSingularStringField(value: &self.session) }()
       case 3: try { try decoder.decodeSingularMessageField(value: &self._size) }()
+      case 4: try { try decoder.decodeSingularStringField(value: &self.viewer) }()
       default: break
       }
     }
@@ -1789,6 +1810,9 @@ nonisolated extension Portenv_Daemon_V1_TerminalOpen: SwiftProtobuf.Message, Swi
     try { if let v = self._size {
       try visitor.visitSingularMessageField(value: v, fieldNumber: 3)
     } }()
+    if !self.viewer.isEmpty {
+      try visitor.visitSingularStringField(value: self.viewer, fieldNumber: 4)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -1796,6 +1820,7 @@ nonisolated extension Portenv_Daemon_V1_TerminalOpen: SwiftProtobuf.Message, Swi
     if lhs.box != rhs.box {return false}
     if lhs.session != rhs.session {return false}
     if lhs._size != rhs._size {return false}
+    if lhs.viewer != rhs.viewer {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -3026,7 +3051,7 @@ nonisolated extension Portenv_Daemon_V1_SavedAfterQuit: SwiftProtobuf.Message, S
 
 nonisolated extension Portenv_Daemon_V1_ListTabsRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ListTabsRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}box\0\u{1}session\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}box\0\u{1}session\0\u{1}viewer\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -3036,6 +3061,7 @@ nonisolated extension Portenv_Daemon_V1_ListTabsRequest: SwiftProtobuf.Message, 
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularStringField(value: &self.box) }()
       case 2: try { try decoder.decodeSingularStringField(value: &self.session) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.viewer) }()
       default: break
       }
     }
@@ -3048,12 +3074,16 @@ nonisolated extension Portenv_Daemon_V1_ListTabsRequest: SwiftProtobuf.Message, 
     if !self.session.isEmpty {
       try visitor.visitSingularStringField(value: self.session, fieldNumber: 2)
     }
+    if !self.viewer.isEmpty {
+      try visitor.visitSingularStringField(value: self.viewer, fieldNumber: 3)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Portenv_Daemon_V1_ListTabsRequest, rhs: Portenv_Daemon_V1_ListTabsRequest) -> Bool {
     if lhs.box != rhs.box {return false}
     if lhs.session != rhs.session {return false}
+    if lhs.viewer != rhs.viewer {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -3091,7 +3121,7 @@ nonisolated extension Portenv_Daemon_V1_ListTabsResponse: SwiftProtobuf.Message,
 
 nonisolated extension Portenv_Daemon_V1_NewTabRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".NewTabRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}box\0\u{1}session\0\u{1}name\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}box\0\u{1}session\0\u{1}name\0\u{1}viewer\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -3102,6 +3132,7 @@ nonisolated extension Portenv_Daemon_V1_NewTabRequest: SwiftProtobuf.Message, Sw
       case 1: try { try decoder.decodeSingularStringField(value: &self.box) }()
       case 2: try { try decoder.decodeSingularStringField(value: &self.session) }()
       case 3: try { try decoder.decodeSingularStringField(value: &self.name) }()
+      case 4: try { try decoder.decodeSingularStringField(value: &self.viewer) }()
       default: break
       }
     }
@@ -3117,6 +3148,9 @@ nonisolated extension Portenv_Daemon_V1_NewTabRequest: SwiftProtobuf.Message, Sw
     if !self.name.isEmpty {
       try visitor.visitSingularStringField(value: self.name, fieldNumber: 3)
     }
+    if !self.viewer.isEmpty {
+      try visitor.visitSingularStringField(value: self.viewer, fieldNumber: 4)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -3124,6 +3158,7 @@ nonisolated extension Portenv_Daemon_V1_NewTabRequest: SwiftProtobuf.Message, Sw
     if lhs.box != rhs.box {return false}
     if lhs.session != rhs.session {return false}
     if lhs.name != rhs.name {return false}
+    if lhs.viewer != rhs.viewer {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -3165,7 +3200,7 @@ nonisolated extension Portenv_Daemon_V1_NewTabResponse: SwiftProtobuf.Message, S
 
 nonisolated extension Portenv_Daemon_V1_CloseTabRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".CloseTabRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}box\0\u{1}session\0\u{1}id\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}box\0\u{1}session\0\u{1}id\0\u{1}viewer\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -3176,6 +3211,7 @@ nonisolated extension Portenv_Daemon_V1_CloseTabRequest: SwiftProtobuf.Message, 
       case 1: try { try decoder.decodeSingularStringField(value: &self.box) }()
       case 2: try { try decoder.decodeSingularStringField(value: &self.session) }()
       case 3: try { try decoder.decodeSingularStringField(value: &self.id) }()
+      case 4: try { try decoder.decodeSingularStringField(value: &self.viewer) }()
       default: break
       }
     }
@@ -3191,6 +3227,9 @@ nonisolated extension Portenv_Daemon_V1_CloseTabRequest: SwiftProtobuf.Message, 
     if !self.id.isEmpty {
       try visitor.visitSingularStringField(value: self.id, fieldNumber: 3)
     }
+    if !self.viewer.isEmpty {
+      try visitor.visitSingularStringField(value: self.viewer, fieldNumber: 4)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -3198,6 +3237,7 @@ nonisolated extension Portenv_Daemon_V1_CloseTabRequest: SwiftProtobuf.Message, 
     if lhs.box != rhs.box {return false}
     if lhs.session != rhs.session {return false}
     if lhs.id != rhs.id {return false}
+    if lhs.viewer != rhs.viewer {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -3224,7 +3264,7 @@ nonisolated extension Portenv_Daemon_V1_CloseTabResponse: SwiftProtobuf.Message,
 
 nonisolated extension Portenv_Daemon_V1_RenameTabRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".RenameTabRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}box\0\u{1}session\0\u{1}id\0\u{1}name\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}box\0\u{1}session\0\u{1}id\0\u{1}name\0\u{1}viewer\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -3236,6 +3276,7 @@ nonisolated extension Portenv_Daemon_V1_RenameTabRequest: SwiftProtobuf.Message,
       case 2: try { try decoder.decodeSingularStringField(value: &self.session) }()
       case 3: try { try decoder.decodeSingularStringField(value: &self.id) }()
       case 4: try { try decoder.decodeSingularStringField(value: &self.name) }()
+      case 5: try { try decoder.decodeSingularStringField(value: &self.viewer) }()
       default: break
       }
     }
@@ -3254,6 +3295,9 @@ nonisolated extension Portenv_Daemon_V1_RenameTabRequest: SwiftProtobuf.Message,
     if !self.name.isEmpty {
       try visitor.visitSingularStringField(value: self.name, fieldNumber: 4)
     }
+    if !self.viewer.isEmpty {
+      try visitor.visitSingularStringField(value: self.viewer, fieldNumber: 5)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -3262,6 +3306,7 @@ nonisolated extension Portenv_Daemon_V1_RenameTabRequest: SwiftProtobuf.Message,
     if lhs.session != rhs.session {return false}
     if lhs.id != rhs.id {return false}
     if lhs.name != rhs.name {return false}
+    if lhs.viewer != rhs.viewer {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -3288,7 +3333,7 @@ nonisolated extension Portenv_Daemon_V1_RenameTabResponse: SwiftProtobuf.Message
 
 nonisolated extension Portenv_Daemon_V1_SelectTabRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".SelectTabRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}box\0\u{1}session\0\u{1}id\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}box\0\u{1}session\0\u{1}id\0\u{1}viewer\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -3299,6 +3344,7 @@ nonisolated extension Portenv_Daemon_V1_SelectTabRequest: SwiftProtobuf.Message,
       case 1: try { try decoder.decodeSingularStringField(value: &self.box) }()
       case 2: try { try decoder.decodeSingularStringField(value: &self.session) }()
       case 3: try { try decoder.decodeSingularStringField(value: &self.id) }()
+      case 4: try { try decoder.decodeSingularStringField(value: &self.viewer) }()
       default: break
       }
     }
@@ -3314,6 +3360,9 @@ nonisolated extension Portenv_Daemon_V1_SelectTabRequest: SwiftProtobuf.Message,
     if !self.id.isEmpty {
       try visitor.visitSingularStringField(value: self.id, fieldNumber: 3)
     }
+    if !self.viewer.isEmpty {
+      try visitor.visitSingularStringField(value: self.viewer, fieldNumber: 4)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -3321,6 +3370,7 @@ nonisolated extension Portenv_Daemon_V1_SelectTabRequest: SwiftProtobuf.Message,
     if lhs.box != rhs.box {return false}
     if lhs.session != rhs.session {return false}
     if lhs.id != rhs.id {return false}
+    if lhs.viewer != rhs.viewer {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -3347,7 +3397,7 @@ nonisolated extension Portenv_Daemon_V1_SelectTabResponse: SwiftProtobuf.Message
 
 nonisolated extension Portenv_Daemon_V1_WatchTabsRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".WatchTabsRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}box\0\u{1}session\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}box\0\u{1}session\0\u{1}viewer\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -3357,6 +3407,7 @@ nonisolated extension Portenv_Daemon_V1_WatchTabsRequest: SwiftProtobuf.Message,
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularStringField(value: &self.box) }()
       case 2: try { try decoder.decodeSingularStringField(value: &self.session) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.viewer) }()
       default: break
       }
     }
@@ -3369,12 +3420,16 @@ nonisolated extension Portenv_Daemon_V1_WatchTabsRequest: SwiftProtobuf.Message,
     if !self.session.isEmpty {
       try visitor.visitSingularStringField(value: self.session, fieldNumber: 2)
     }
+    if !self.viewer.isEmpty {
+      try visitor.visitSingularStringField(value: self.viewer, fieldNumber: 3)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Portenv_Daemon_V1_WatchTabsRequest, rhs: Portenv_Daemon_V1_WatchTabsRequest) -> Bool {
     if lhs.box != rhs.box {return false}
     if lhs.session != rhs.session {return false}
+    if lhs.viewer != rhs.viewer {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

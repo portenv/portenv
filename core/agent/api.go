@@ -145,6 +145,9 @@ func (s *apiServer) Terminal(stream agentv1.AgentService_TerminalServer) error {
 	if !sessionRE.MatchString(open.GetSession()) {
 		return status.Error(codes.InvalidArgument, "session names are 1 to 32 letters, digits, - or _")
 	}
+	if v := open.GetViewer(); v != "" && !viewerRE.MatchString(v) {
+		return status.Error(codes.InvalidArgument, "viewer names are 1 to 16 lower-case letters, digits or -")
+	}
 	return runTerminal(stream, s.cfg, open)
 }
 

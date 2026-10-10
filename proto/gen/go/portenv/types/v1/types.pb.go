@@ -643,8 +643,11 @@ type Tab struct {
 	// Stable for the window's life (tmux's window ID, for example "@3").
 	Id   string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	Name string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	// The tab the terminal shows.
-	Active        bool `protobuf:"varint,3,opt,name=active,proto3" json:"active,omitempty"`
+	// The tab this viewer's terminal shows.
+	Active bool `protobuf:"varint,3,opt,name=active,proto3" json:"active,omitempty"`
+	// The program running in the tab's foreground, or empty when it's just
+	// the shell (closing the tab asks first when it isn't empty).
+	Program       string `protobuf:"bytes,4,opt,name=program,proto3" json:"program,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -700,6 +703,13 @@ func (x *Tab) GetActive() bool {
 	return false
 }
 
+func (x *Tab) GetProgram() string {
+	if x != nil {
+		return x.Program
+	}
+	return ""
+}
+
 var File_portenv_types_v1_types_proto protoreflect.FileDescriptor
 
 const file_portenv_types_v1_types_proto_rawDesc = "" +
@@ -734,11 +744,12 @@ const file_portenv_types_v1_types_proto_rawDesc = "" +
 	"\x06source\x18\x05 \x01(\x0e2\x1d.portenv.types.v1.LeaseSourceR\x06source\"=\n" +
 	"\tBuildInfo\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12\x16\n" +
-	"\x06commit\x18\x02 \x01(\tR\x06commit\"A\n" +
+	"\x06commit\x18\x02 \x01(\tR\x06commit\"[\n" +
 	"\x03Tab\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x16\n" +
-	"\x06active\x18\x03 \x01(\bR\x06active*\xb0\x01\n" +
+	"\x06active\x18\x03 \x01(\bR\x06active\x12\x18\n" +
+	"\aprogram\x18\x04 \x01(\tR\aprogram*\xb0\x01\n" +
 	"\bBoxState\x12\x19\n" +
 	"\x15BOX_STATE_UNSPECIFIED\x10\x00\x12\x15\n" +
 	"\x11BOX_STATE_CREATED\x10\x01\x12\x16\n" +

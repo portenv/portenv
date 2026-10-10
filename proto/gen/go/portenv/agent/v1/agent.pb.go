@@ -406,8 +406,12 @@ func (*TerminalRequest_Resize) isTerminalRequest_Msg() {}
 type TerminalOpen struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The tmux session, for example "main".
-	Session       string        `protobuf:"bytes,1,opt,name=session,proto3" json:"session,omitempty"`
-	Size          *TerminalSize `protobuf:"bytes,2,opt,name=size,proto3" json:"size,omitempty"`
+	Session string        `protobuf:"bytes,1,opt,name=session,proto3" json:"session,omitempty"`
+	Size    *TerminalSize `protobuf:"bytes,2,opt,name=size,proto3" json:"size,omitempty"`
+	// Who is looking (for example "app"): each viewer has its own current
+	// tab, in its own grouped tmux session over the same windows, so one
+	// viewer choosing a tab never moves another's. Empty: the session itself.
+	Viewer        string `protobuf:"bytes,3,opt,name=viewer,proto3" json:"viewer,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -454,6 +458,13 @@ func (x *TerminalOpen) GetSize() *TerminalSize {
 		return x.Size
 	}
 	return nil
+}
+
+func (x *TerminalOpen) GetViewer() string {
+	if x != nil {
+		return x.Viewer
+	}
+	return ""
 }
 
 type TerminalSize struct {
@@ -852,8 +863,12 @@ func (*RetryPackagesResponse) Descriptor() ([]byte, []int) {
 }
 
 type ListTabsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Session       string                 `protobuf:"bytes,1,opt,name=session,proto3" json:"session,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Session string                 `protobuf:"bytes,1,opt,name=session,proto3" json:"session,omitempty"`
+	// Who is looking (for example "app"): each viewer has its own current
+	// tab, in its own grouped tmux session over the same windows, so one
+	// viewer choosing a tab never moves another's. Empty: the session itself.
+	Viewer        string `protobuf:"bytes,2,opt,name=viewer,proto3" json:"viewer,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -891,6 +906,13 @@ func (*ListTabsRequest) Descriptor() ([]byte, []int) {
 func (x *ListTabsRequest) GetSession() string {
 	if x != nil {
 		return x.Session
+	}
+	return ""
+}
+
+func (x *ListTabsRequest) GetViewer() string {
+	if x != nil {
+		return x.Viewer
 	}
 	return ""
 }
@@ -943,6 +965,7 @@ type NewTabRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Session       string                 `protobuf:"bytes,1,opt,name=session,proto3" json:"session,omitempty"`
 	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Viewer        string                 `protobuf:"bytes,3,opt,name=viewer,proto3" json:"viewer,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -987,6 +1010,13 @@ func (x *NewTabRequest) GetSession() string {
 func (x *NewTabRequest) GetName() string {
 	if x != nil {
 		return x.Name
+	}
+	return ""
+}
+
+func (x *NewTabRequest) GetViewer() string {
+	if x != nil {
+		return x.Viewer
 	}
 	return ""
 }
@@ -1039,6 +1069,7 @@ type CloseTabRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Session       string                 `protobuf:"bytes,1,opt,name=session,proto3" json:"session,omitempty"`
 	Id            string                 `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
+	Viewer        string                 `protobuf:"bytes,3,opt,name=viewer,proto3" json:"viewer,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1087,6 +1118,13 @@ func (x *CloseTabRequest) GetId() string {
 	return ""
 }
 
+func (x *CloseTabRequest) GetViewer() string {
+	if x != nil {
+		return x.Viewer
+	}
+	return ""
+}
+
 type CloseTabResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -1128,6 +1166,7 @@ type RenameTabRequest struct {
 	Session       string                 `protobuf:"bytes,1,opt,name=session,proto3" json:"session,omitempty"`
 	Id            string                 `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
 	Name          string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	Viewer        string                 `protobuf:"bytes,4,opt,name=viewer,proto3" json:"viewer,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1183,6 +1222,13 @@ func (x *RenameTabRequest) GetName() string {
 	return ""
 }
 
+func (x *RenameTabRequest) GetViewer() string {
+	if x != nil {
+		return x.Viewer
+	}
+	return ""
+}
+
 type RenameTabResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -1223,6 +1269,7 @@ type SelectTabRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Session       string                 `protobuf:"bytes,1,opt,name=session,proto3" json:"session,omitempty"`
 	Id            string                 `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
+	Viewer        string                 `protobuf:"bytes,3,opt,name=viewer,proto3" json:"viewer,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1271,6 +1318,13 @@ func (x *SelectTabRequest) GetId() string {
 	return ""
 }
 
+func (x *SelectTabRequest) GetViewer() string {
+	if x != nil {
+		return x.Viewer
+	}
+	return ""
+}
+
 type SelectTabResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -1310,6 +1364,7 @@ func (*SelectTabResponse) Descriptor() ([]byte, []int) {
 type WatchTabsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Session       string                 `protobuf:"bytes,1,opt,name=session,proto3" json:"session,omitempty"`
+	Viewer        string                 `protobuf:"bytes,2,opt,name=viewer,proto3" json:"viewer,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1347,6 +1402,13 @@ func (*WatchTabsRequest) Descriptor() ([]byte, []int) {
 func (x *WatchTabsRequest) GetSession() string {
 	if x != nil {
 		return x.Session
+	}
+	return ""
+}
+
+func (x *WatchTabsRequest) GetViewer() string {
+	if x != nil {
+		return x.Viewer
 	}
 	return ""
 }
@@ -1417,10 +1479,11 @@ const file_portenv_agent_v1_agent_proto_rawDesc = "" +
 	"\x04open\x18\x01 \x01(\v2\x1e.portenv.agent.v1.TerminalOpenH\x00R\x04open\x12\x16\n" +
 	"\x05input\x18\x02 \x01(\fH\x00R\x05input\x128\n" +
 	"\x06resize\x18\x03 \x01(\v2\x1e.portenv.agent.v1.TerminalSizeH\x00R\x06resizeB\x05\n" +
-	"\x03msg\"\\\n" +
+	"\x03msg\"t\n" +
 	"\fTerminalOpen\x12\x18\n" +
 	"\asession\x18\x01 \x01(\tR\asession\x122\n" +
-	"\x04size\x18\x02 \x01(\v2\x1e.portenv.agent.v1.TerminalSizeR\x04size\"6\n" +
+	"\x04size\x18\x02 \x01(\v2\x1e.portenv.agent.v1.TerminalSizeR\x04size\x12\x16\n" +
+	"\x06viewer\x18\x03 \x01(\tR\x06viewer\"6\n" +
 	"\fTerminalSize\x12\x12\n" +
 	"\x04cols\x18\x01 \x01(\rR\x04cols\x12\x12\n" +
 	"\x04rows\x18\x02 \x01(\rR\x04rows\"R\n" +
@@ -1438,31 +1501,37 @@ const file_portenv_agent_v1_agent_proto_rawDesc = "" +
 	"\x0ffailed_packages\x18\x03 \x03(\tR\x0efailedPackages\x12%\n" +
 	"\x0epackages_error\x18\x04 \x01(\tR\rpackagesError\"\x16\n" +
 	"\x14RetryPackagesRequest\"\x17\n" +
-	"\x15RetryPackagesResponse\"+\n" +
+	"\x15RetryPackagesResponse\"C\n" +
 	"\x0fListTabsRequest\x12\x18\n" +
-	"\asession\x18\x01 \x01(\tR\asession\"=\n" +
+	"\asession\x18\x01 \x01(\tR\asession\x12\x16\n" +
+	"\x06viewer\x18\x02 \x01(\tR\x06viewer\"=\n" +
 	"\x10ListTabsResponse\x12)\n" +
-	"\x04tabs\x18\x01 \x03(\v2\x15.portenv.types.v1.TabR\x04tabs\"=\n" +
+	"\x04tabs\x18\x01 \x03(\v2\x15.portenv.types.v1.TabR\x04tabs\"U\n" +
 	"\rNewTabRequest\x12\x18\n" +
 	"\asession\x18\x01 \x01(\tR\asession\x12\x12\n" +
-	"\x04name\x18\x02 \x01(\tR\x04name\"9\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x16\n" +
+	"\x06viewer\x18\x03 \x01(\tR\x06viewer\"9\n" +
 	"\x0eNewTabResponse\x12'\n" +
-	"\x03tab\x18\x01 \x01(\v2\x15.portenv.types.v1.TabR\x03tab\";\n" +
+	"\x03tab\x18\x01 \x01(\v2\x15.portenv.types.v1.TabR\x03tab\"S\n" +
 	"\x0fCloseTabRequest\x12\x18\n" +
 	"\asession\x18\x01 \x01(\tR\asession\x12\x0e\n" +
-	"\x02id\x18\x02 \x01(\tR\x02id\"\x12\n" +
-	"\x10CloseTabResponse\"P\n" +
+	"\x02id\x18\x02 \x01(\tR\x02id\x12\x16\n" +
+	"\x06viewer\x18\x03 \x01(\tR\x06viewer\"\x12\n" +
+	"\x10CloseTabResponse\"h\n" +
 	"\x10RenameTabRequest\x12\x18\n" +
 	"\asession\x18\x01 \x01(\tR\asession\x12\x0e\n" +
 	"\x02id\x18\x02 \x01(\tR\x02id\x12\x12\n" +
-	"\x04name\x18\x03 \x01(\tR\x04name\"\x13\n" +
-	"\x11RenameTabResponse\"<\n" +
+	"\x04name\x18\x03 \x01(\tR\x04name\x12\x16\n" +
+	"\x06viewer\x18\x04 \x01(\tR\x06viewer\"\x13\n" +
+	"\x11RenameTabResponse\"T\n" +
 	"\x10SelectTabRequest\x12\x18\n" +
 	"\asession\x18\x01 \x01(\tR\asession\x12\x0e\n" +
-	"\x02id\x18\x02 \x01(\tR\x02id\"\x13\n" +
-	"\x11SelectTabResponse\",\n" +
+	"\x02id\x18\x02 \x01(\tR\x02id\x12\x16\n" +
+	"\x06viewer\x18\x03 \x01(\tR\x06viewer\"\x13\n" +
+	"\x11SelectTabResponse\"D\n" +
 	"\x10WatchTabsRequest\x12\x18\n" +
-	"\asession\x18\x01 \x01(\tR\asession\">\n" +
+	"\asession\x18\x01 \x01(\tR\asession\x12\x16\n" +
+	"\x06viewer\x18\x02 \x01(\tR\x06viewer\">\n" +
 	"\x11WatchTabsResponse\x12)\n" +
 	"\x04tabs\x18\x01 \x03(\v2\x15.portenv.types.v1.TabR\x04tabs*\x86\x01\n" +
 	"\x0eReadinessState\x12\x1f\n" +

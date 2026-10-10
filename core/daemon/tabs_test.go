@@ -34,21 +34,24 @@ type fakeTabsAgent struct {
 	watchErr error               // ends a watch after the updates
 }
 
-func (f *fakeTabsAgent) saw(session string) {
+func (f *fakeTabsAgent) saw(session string, viewer ...string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if len(viewer) > 0 && viewer[0] != "" {
+		session += "/" + viewer[0]
+	}
 	f.sessions = append(f.sessions, session)
 }
 
 func (f *fakeTabsAgent) ListTabs(_ context.Context, r *agentv1.ListTabsRequest) (*agentv1.ListTabsResponse, error) {
-	f.saw(r.GetSession())
+	f.saw(r.GetSession(), r.GetViewer())
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return &agentv1.ListTabsResponse{Tabs: f.tabs}, nil
 }
 
 func (f *fakeTabsAgent) NewTab(_ context.Context, r *agentv1.NewTabRequest) (*agentv1.NewTabResponse, error) {
-	f.saw(r.GetSession())
+	f.saw(r.GetSession(), r.GetViewer())
 	if r.GetName() == "" {
 		return nil, status.Error(codes.InvalidArgument, "tab names are 1 to 32 characters")
 	}
@@ -61,7 +64,7 @@ func (f *fakeTabsAgent) NewTab(_ context.Context, r *agentv1.NewTabRequest) (*ag
 }
 
 func (f *fakeTabsAgent) CloseTab(_ context.Context, r *agentv1.CloseTabRequest) (*agentv1.CloseTabResponse, error) {
-	f.saw(r.GetSession())
+	f.saw(r.GetSession(), r.GetViewer())
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	for i, t := range f.tabs {
@@ -74,7 +77,7 @@ func (f *fakeTabsAgent) CloseTab(_ context.Context, r *agentv1.CloseTabRequest) 
 }
 
 func (f *fakeTabsAgent) RenameTab(_ context.Context, r *agentv1.RenameTabRequest) (*agentv1.RenameTabResponse, error) {
-	f.saw(r.GetSession())
+	f.saw(r.GetSession(), r.GetViewer())
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	for _, t := range f.tabs {
@@ -87,7 +90,7 @@ func (f *fakeTabsAgent) RenameTab(_ context.Context, r *agentv1.RenameTabRequest
 }
 
 func (f *fakeTabsAgent) SelectTab(_ context.Context, r *agentv1.SelectTabRequest) (*agentv1.SelectTabResponse, error) {
-	f.saw(r.GetSession())
+	f.saw(r.GetSession(), r.GetViewer())
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	for _, t := range f.tabs {
@@ -97,7 +100,7 @@ func (f *fakeTabsAgent) SelectTab(_ context.Context, r *agentv1.SelectTabRequest
 }
 
 func (f *fakeTabsAgent) WatchTabs(r *agentv1.WatchTabsRequest, stream agentv1.AgentService_WatchTabsServer) error {
-	f.saw(r.GetSession())
+	f.saw(r.GetSession(), r.GetViewer())
 	for {
 		select {
 		case ts, ok := <-f.updates:
@@ -171,7 +174,7 @@ func TestTabsPassThrough(t *testing.T) {
 	if _, err := c.RenameTab(ctx, &daemonv1.RenameTabRequest{Box: "acme-api", Id: nt.GetTab().GetId(), Name: "tests"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := c.SelectTab(ctx, &daemonv1.SelectTabRequest{Box: "acme-api", Id: "@0"}); err != nil {
+	if _, err := c.SelectTab(ctx, &daemonv1.SelectTabRequest{Box: "acme-api", Id: "@0", Viewer: "app"}); err != nil {
 		t.Fatal(err)
 	}
 	l, err := c.ListTabs(ctx, &daemonv1.ListTabsRequest{Box: "acme-api"})
@@ -186,7 +189,7 @@ func TestTabsPassThrough(t *testing.T) {
 	}
 	fake.mu.Lock()
 	defer fake.mu.Unlock()
-	if got := fmt.Sprint(fake.sessions); got != "[main main main main other]" {
+	if got := fmt.Sprint(fake.sessions); got != "[main main main/app main other]" {
 		t.Fatalf("sessions %s", got)
 	}
 }

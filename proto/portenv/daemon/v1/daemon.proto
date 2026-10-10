@@ -181,6 +181,10 @@ message TerminalOpen {
   string box = 1;
   string session = 2;
   TerminalSize size = 3;
+  // Who is looking (for example "app"): each viewer has its own current
+  // tab, in its own grouped tmux session over the same windows, so one
+  // viewer choosing a tab never moves another's. Empty: the session itself.
+  string viewer = 4;
 }
 
 message TerminalSize {
@@ -402,6 +406,10 @@ message SavedAfterQuit {
 message ListTabsRequest {
   string box = 1;
   string session = 2;
+  // Who is looking (for example "app"): each viewer has its own current
+  // tab, in its own grouped tmux session over the same windows, so one
+  // viewer choosing a tab never moves another's. Empty: the session itself.
+  string viewer = 3;
 }
 
 message ListTabsResponse {
@@ -412,6 +420,7 @@ message NewTabRequest {
   string box = 1;
   string session = 2;
   string name = 3;
+  string viewer = 4;
 }
 
 message NewTabResponse {
@@ -422,6 +431,7 @@ message CloseTabRequest {
   string box = 1;
   string session = 2;
   string id = 3;
+  string viewer = 4;
 }
 
 message CloseTabResponse {}
@@ -431,6 +441,7 @@ message RenameTabRequest {
   string session = 2;
   string id = 3;
   string name = 4;
+  string viewer = 5;
 }
 
 message RenameTabResponse {}
@@ -439,6 +450,7 @@ message SelectTabRequest {
   string box = 1;
   string session = 2;
   string id = 3;
+  string viewer = 4;
 }
 
 message SelectTabResponse {}
@@ -446,6 +458,7 @@ message SelectTabResponse {}
 message WatchTabsRequest {
   string box = 1;
   string session = 2;
+  string viewer = 3;
 }
 
 message WatchTabsResponse {

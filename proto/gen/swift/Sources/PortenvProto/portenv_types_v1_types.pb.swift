@@ -387,8 +387,12 @@ public nonisolated struct Portenv_Types_V1_Tab: Sendable {
 
   public var name: String = String()
 
-  /// The tab the terminal shows.
+  /// The tab this viewer's terminal shows.
   public var active: Bool = false
+
+  /// The program running in the tab's foreground, or empty when it's just
+  /// the shell (closing the tab asks first when it isn't empty).
+  public var program: String = String()
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -664,7 +668,7 @@ nonisolated extension Portenv_Types_V1_BuildInfo: SwiftProtobuf.Message, SwiftPr
 
 nonisolated extension Portenv_Types_V1_Tab: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Tab"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}name\0\u{1}active\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}name\0\u{1}active\0\u{1}program\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -675,6 +679,7 @@ nonisolated extension Portenv_Types_V1_Tab: SwiftProtobuf.Message, SwiftProtobuf
       case 1: try { try decoder.decodeSingularStringField(value: &self.id) }()
       case 2: try { try decoder.decodeSingularStringField(value: &self.name) }()
       case 3: try { try decoder.decodeSingularBoolField(value: &self.active) }()
+      case 4: try { try decoder.decodeSingularStringField(value: &self.program) }()
       default: break
       }
     }
@@ -690,6 +695,9 @@ nonisolated extension Portenv_Types_V1_Tab: SwiftProtobuf.Message, SwiftProtobuf
     if self.active != false {
       try visitor.visitSingularBoolField(value: self.active, fieldNumber: 3)
     }
+    if !self.program.isEmpty {
+      try visitor.visitSingularStringField(value: self.program, fieldNumber: 4)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -697,6 +705,7 @@ nonisolated extension Portenv_Types_V1_Tab: SwiftProtobuf.Message, SwiftProtobuf
     if lhs.id != rhs.id {return false}
     if lhs.name != rhs.name {return false}
     if lhs.active != rhs.active {return false}
+    if lhs.program != rhs.program {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

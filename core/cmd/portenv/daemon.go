@@ -347,6 +347,7 @@ func cmdAttach(ctx context.Context, e *local.Env, name string, args []string) er
 	fs := flags("attach")
 	session := fs.String("session", "main", "tmux session")
 	fromApp := fs.Bool("from-app", false, "the app's terminal: end without a message when portenvd goes away")
+	viewer := fs.String("viewer", "", "attach as this viewer (for example app), with its own current tab")
 	if err := parse(fs, args); err != nil {
 		return err
 	}
@@ -365,7 +366,7 @@ func cmdAttach(ctx context.Context, e *local.Env, name string, args []string) er
 		cols, rows = w, h
 	}
 	if err := stream.Send(&daemonv1.TerminalRequest{Msg: &daemonv1.TerminalRequest_Open{Open: &daemonv1.TerminalOpen{
-		Box: name, Session: *session, Size: &daemonv1.TerminalSize{Cols: uint32(cols), Rows: uint32(rows)}, // #nosec G115 -- terminal sizes
+		Box: name, Session: *session, Viewer: *viewer, Size: &daemonv1.TerminalSize{Cols: uint32(cols), Rows: uint32(rows)}, // #nosec G115 -- terminal sizes
 	}}}); err != nil {
 		return plain(err)
 	}

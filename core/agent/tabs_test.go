@@ -210,7 +210,124 @@ func TestTabIDsStayInTheirSession(t *testing.T) {
 	}
 }
 
-// TestWatchTabsSeesEveryWindow: the watch sends the tabs at once and again
+// TestEachViewerKeepsItsOwnTab: two viewers of the same box (the app and an
+// agent) see the same tabs, but choosing one moves only that viewer's
+// terminal: an agent switching tabs never changes the owner's.
+func TestEachViewerKeepsItsOwnTab(t *testing.T) {
+	base, raw := testTabs(t)
+	app := tabs{tmux: base.tmux, session: "main", viewer: "app"}
+	agt := tabs{tmux: base.tmux, session: "main", viewer: "grok"}
+	ctx := context.Background()
+	ts := mustList(t, app)
+	b, err := app.open(ctx, "build")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := names(mustList(t, app)); got != "shell,build*" {
+		t.Fatalf("app %q, want shell,build*", got)
+	}
+	if err := agt.selectTab(ctx, ts[0].GetId()); err != nil {
+		t.Fatal(err)
+	}
+	if got := names(mustList(t, agt)); got != "shell*,build" {
+		t.Fatalf("agent %q, want shell*,build", got)
+	}
+	if got := names(mustList(t, app)); got != "shell,build*" {
+		t.Fatalf("the agent's switch moved the app: %q, want shell,build*", got)
+	}
+	// A tab the agent opens shows for the app too, without moving the app.
+	if _, err := agt.open(ctx, "agent-work"); err != nil {
+		t.Fatal(err)
+	}
+	if got := names(mustList(t, app)); got != "shell,build*,agent-work" {
+		t.Fatalf("app after the agent's new tab %q, want shell,build*,agent-work", got)
+	}
+	if err := app.selectTab(ctx, ts[0].GetId()); err != nil {
+		t.Fatal(err)
+	}
+	if got := names(mustList(t, agt)); got != "shell,build,agent-work*" {
+		t.Fatalf("the app's switch moved the agent: %q", got)
+	}
+	_ = b
+	// Each viewer is its own grouped session over the box's session.
+	if got := raw("display-message", "-p", "-t", "=main-viewer-app:", "#{session_group}"); got != "main" {
+		t.Fatalf("the app's session group %q, want main", got)
+	}
+}
+
+// TestAViewersSessionIsCleanedUp: when no client is attached any more, the
+// viewer's grouped session goes; the box's session and its tabs stay. While
+// a client is attached, it stays.
+func TestAViewersSessionIsCleanedUp(t *testing.T) {
+	base, raw := testTabs(t)
+	app := tabs{tmux: base.tmux, session: "main", viewer: "app"}
+	ctx := context.Background()
+	mustList(t, app)
+	if _, err := app.open(ctx, "build"); err != nil {
+		t.Fatal(err)
+	}
+	// A client on the app's session: tmux in control mode, kept open.
+	sock := strings.TrimPrefix(raw("display-message", "-p", "#{socket_path}"), "")
+	client := exec.Command("tmux", "-S", sock, "-C", "attach-session", "-t", "=main-viewer-app") // #nosec G204 -- test
+	stdin, err := client.StdinPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := client.Start(); err != nil {
+		t.Fatal(err)
+	}
+	for range 50 {
+		if raw("list-clients", "-t", "=main-viewer-app", "-F", "x") != "" {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	app.cleanup(ctx)
+	if _, err := base.tmux(ctx, "has-session", "-t", "=main-viewer-app"); err != nil {
+		t.Fatal("cleaned up a viewer's session while a client was attached")
+	}
+	_ = stdin.Close()
+	_ = client.Wait()
+	app.cleanup(ctx)
+	if _, err := base.tmux(ctx, "has-session", "-t", "=main-viewer-app"); err == nil {
+		t.Fatal("the viewer's session is still there with no client")
+	}
+	if got := names(mustList(t, base)); got != "shell,build*" && got != "shell*,build" {
+		t.Fatalf("the box's tabs after cleanup %q, want shell and build", got)
+	}
+}
+
+// TestTabsSayWhatIsRunning: a tab reports its foreground program, and
+// nothing when only the shell is there (closing asks first otherwise).
+func TestTabsSayWhatIsRunning(t *testing.T) {
+	tb, raw := testTabs(t)
+	ts := mustList(t, tb)
+	if p := ts[0].GetProgram(); p != "" {
+		t.Fatalf("an idle shell reports program %q, want none", p)
+	}
+	raw("send-keys", "-t", ts[0].GetId(), "sleep 30", "Enter")
+	var p string
+	for range 50 {
+		if p = mustList(t, tb)[0].GetProgram(); p != "" {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if p != "sleep" {
+		t.Fatalf("program %q, want sleep", p)
+	}
+}
+
+// TestViewerNamesAreChecked: plain short names only.
+func TestViewerNamesAreChecked(t *testing.T) {
+	base, _ := testTabs(t)
+	for _, bad := range []string{"App", "a b", "a:b", "a.b", "-a", strings.Repeat("a", 17)} {
+		_, err := tabs{tmux: base.tmux, session: "main", viewer: bad}.list(context.Background())
+		wantCode(t, err, codes.InvalidArgument)
+	}
+}
+
+// TestWatchTabsSeesEveryWindow:the watch sends the tabs at once and again
 // on each change, including a window a program in the box created itself,
 // so no window is ever out of the user's sight.
 func TestWatchTabsSeesEveryWindow(t *testing.T) {

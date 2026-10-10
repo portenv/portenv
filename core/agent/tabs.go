@@ -28,11 +28,21 @@ import (
 // returns its output.
 type tmuxFunc func(ctx context.Context, args ...string) (string, error)
 
-// tabs works on one session's tabs.
+// tabs works on one session's tabs, as seen by one viewer.
 type tabs struct {
 	tmux    tmuxFunc
 	session string
+	// viewer, when set, has its own grouped tmux session over the
+	// session's windows (view), so its current tab is its own: one viewer
+	// choosing a tab never moves another's.
+	viewer string
 }
+
+// viewerRE is a viewer's name: short, lower case, plain.
+var viewerRE = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,15}$`)
+
+// shells are what runs in a tab with nothing else in the foreground.
+var shells = map[string]bool{"bash": true, "zsh": true, "sh": true, "dash": true, "fish": true, "ksh": true, "tcsh": true, "csh": true}
 
 // firstTabName names the tab a new session starts with.
 const firstTabName = "shell"
@@ -73,19 +83,42 @@ func checkTabName(name string) error {
 	return nil
 }
 
-// target is the session as an exact tmux target.
-func (t tabs) target() string { return "=" + t.session + ":" }
+// view is the tmux session this viewer looks through: its own grouped
+// session, or the box's session when there's no viewer.
+func (t tabs) view() string {
+	if t.viewer == "" {
+		return t.session
+	}
+	return t.session + "-viewer-" + t.viewer
+}
 
-// ensure creates the session, detached, if it doesn't exist yet. A session
-// created at the same moment by the terminal (new-session -A) is fine.
+// target is the viewer's session as an exact tmux target.
+func (t tabs) target() string { return "=" + t.view() + ":" }
+
+// ensure creates the box's session, detached, if it doesn't exist yet, and
+// the viewer's grouped session over it. A session created at the same moment
+// by a terminal is fine.
 func (t tabs) ensure(ctx context.Context) error {
-	if _, err := t.tmux(ctx, "has-session", "-t", "="+t.session); err == nil {
+	if t.viewer != "" && !viewerRE.MatchString(t.viewer) {
+		return status.Error(codes.InvalidArgument, "viewer names are 1 to 16 lower-case letters, digits or -")
+	}
+	base := append([]string{"new-session", "-d", "-s", t.session, "-n", firstTabName}, tmuxHidden...)
+	if err := t.create(ctx, t.session, append(base, tmuxOwned...)); err != nil {
+		return err
+	}
+	if t.viewer == "" {
 		return nil
 	}
-	args := append([]string{"new-session", "-d", "-s", t.session, "-n", firstTabName}, tmuxHidden...)
-	args = append(args, tmuxOwned...)
+	return t.create(ctx, t.view(), []string{"new-session", "-d", "-s", t.view(), "-t", "=" + t.session})
+}
+
+// create runs args (a new-session) unless the session exists.
+func (t tabs) create(ctx context.Context, session string, args []string) error {
+	if _, err := t.tmux(ctx, "has-session", "-t", "="+session); err == nil {
+		return nil
+	}
 	if _, err := t.tmux(ctx, args...); err != nil {
-		if _, again := t.tmux(ctx, "has-session", "-t", "="+t.session); again == nil {
+		if _, again := t.tmux(ctx, "has-session", "-t", "="+session); again == nil {
 			return nil
 		}
 		return status.Errorf(codes.Unavailable, "the terminal session couldn't start: %v", err)
@@ -93,23 +126,39 @@ func (t tabs) ensure(ctx context.Context) error {
 	return nil
 }
 
+// cleanup ends the viewer's grouped session once no client is attached to
+// it (its terminal ended). The box's session and its tabs stay.
+func (t tabs) cleanup(ctx context.Context) {
+	if t.viewer == "" || !viewerRE.MatchString(t.viewer) {
+		return
+	}
+	out, err := t.tmux(ctx, "list-clients", "-t", "="+t.view(), "-F", "#{client_name}")
+	if err != nil || strings.TrimSpace(out) != "" {
+		return
+	}
+	_, _ = t.tmux(ctx, "kill-session", "-t", "="+t.view())
+}
+
 // list returns the tabs in order.
 func (t tabs) list(ctx context.Context) ([]*typesv1.Tab, error) {
 	if err := t.ensure(ctx); err != nil {
 		return nil, err
 	}
-	out, err := t.tmux(ctx, "list-windows", "-t", t.target(), "-F", "#{window_id} #{window_active} #{window_name}")
+	out, err := t.tmux(ctx, "list-windows", "-t", t.target(), "-F", "#{window_id}\t#{window_active}\t#{pane_current_command}\t#{window_name}")
 	if err != nil {
 		return nil, status.Errorf(codes.Unavailable, "list tabs: %v", err)
 	}
 	var ts []*typesv1.Tab
 	for _, line := range strings.Split(strings.TrimRight(out, "\n"), "\n") {
-		id, rest, ok := strings.Cut(line, " ")
-		if !ok || !windowIDRE.MatchString(id) {
+		f := strings.SplitN(line, "\t", 4)
+		if len(f) != 4 || !windowIDRE.MatchString(f[0]) {
 			continue
 		}
-		active, name, _ := strings.Cut(rest, " ")
-		ts = append(ts, &typesv1.Tab{Id: id, Name: name, Active: active == "1"})
+		program := f[2]
+		if shells[program] {
+			program = ""
+		}
+		ts = append(ts, &typesv1.Tab{Id: f[0], Name: f[3], Active: f[1] == "1", Program: program})
 	}
 	return ts, nil
 }
@@ -182,7 +231,7 @@ func (t tabs) selectTab(ctx context.Context, id string) error {
 	if _, err := t.find(ctx, id); err != nil {
 		return err
 	}
-	if _, err := t.tmux(ctx, "select-window", "-t", id); err != nil {
+	if _, err := t.tmux(ctx, "select-window", "-t", t.target()+id); err != nil {
 		return status.Errorf(codes.Unavailable, "select tab: %v", err)
 	}
 	return nil

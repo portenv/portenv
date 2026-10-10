@@ -56,7 +56,7 @@ func (s *Server) ListTabs(ctx context.Context, req *daemonv1.ListTabsRequest) (*
 	if err != nil {
 		return nil, err
 	}
-	r, err := a.ListTabs(ctx, &agentv1.ListTabsRequest{Session: sessionOr(req.GetSession())})
+	r, err := a.ListTabs(ctx, &agentv1.ListTabsRequest{Session: sessionOr(req.GetSession()), Viewer: req.GetViewer()})
 	if err != nil {
 		return nil, s.tabError(req.GetBox(), err)
 	}
@@ -68,7 +68,7 @@ func (s *Server) NewTab(ctx context.Context, req *daemonv1.NewTabRequest) (*daem
 	if err != nil {
 		return nil, err
 	}
-	r, err := a.NewTab(ctx, &agentv1.NewTabRequest{Session: sessionOr(req.GetSession()), Name: req.GetName()})
+	r, err := a.NewTab(ctx, &agentv1.NewTabRequest{Session: sessionOr(req.GetSession()), Name: req.GetName(), Viewer: req.GetViewer()})
 	if err != nil {
 		return nil, s.tabError(req.GetBox(), err)
 	}
@@ -80,7 +80,7 @@ func (s *Server) CloseTab(ctx context.Context, req *daemonv1.CloseTabRequest) (*
 	if err != nil {
 		return nil, err
 	}
-	if _, err := a.CloseTab(ctx, &agentv1.CloseTabRequest{Session: sessionOr(req.GetSession()), Id: req.GetId()}); err != nil {
+	if _, err := a.CloseTab(ctx, &agentv1.CloseTabRequest{Session: sessionOr(req.GetSession()), Id: req.GetId(), Viewer: req.GetViewer()}); err != nil {
 		return nil, s.tabError(req.GetBox(), err)
 	}
 	return &daemonv1.CloseTabResponse{}, nil
@@ -91,7 +91,7 @@ func (s *Server) RenameTab(ctx context.Context, req *daemonv1.RenameTabRequest) 
 	if err != nil {
 		return nil, err
 	}
-	if _, err := a.RenameTab(ctx, &agentv1.RenameTabRequest{Session: sessionOr(req.GetSession()), Id: req.GetId(), Name: req.GetName()}); err != nil {
+	if _, err := a.RenameTab(ctx, &agentv1.RenameTabRequest{Session: sessionOr(req.GetSession()), Id: req.GetId(), Name: req.GetName(), Viewer: req.GetViewer()}); err != nil {
 		return nil, s.tabError(req.GetBox(), err)
 	}
 	return &daemonv1.RenameTabResponse{}, nil
@@ -102,7 +102,7 @@ func (s *Server) SelectTab(ctx context.Context, req *daemonv1.SelectTabRequest) 
 	if err != nil {
 		return nil, err
 	}
-	if _, err := a.SelectTab(ctx, &agentv1.SelectTabRequest{Session: sessionOr(req.GetSession()), Id: req.GetId()}); err != nil {
+	if _, err := a.SelectTab(ctx, &agentv1.SelectTabRequest{Session: sessionOr(req.GetSession()), Id: req.GetId(), Viewer: req.GetViewer()}); err != nil {
 		return nil, s.tabError(req.GetBox(), err)
 	}
 	return &daemonv1.SelectTabResponse{}, nil
@@ -114,7 +114,7 @@ func (s *Server) WatchTabs(req *daemonv1.WatchTabsRequest, stream daemonv1.Daemo
 	if err != nil {
 		return err
 	}
-	w, err := a.WatchTabs(stream.Context(), &agentv1.WatchTabsRequest{Session: sessionOr(req.GetSession())})
+	w, err := a.WatchTabs(stream.Context(), &agentv1.WatchTabsRequest{Session: sessionOr(req.GetSession()), Viewer: req.GetViewer()})
 	if err != nil {
 		return s.tabError(req.GetBox(), err)
 	}

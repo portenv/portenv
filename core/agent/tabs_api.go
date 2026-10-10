@@ -12,21 +12,24 @@ import (
 	typesv1 "github.com/portenv/portenv/proto/gen/go/portenv/types/v1"
 )
 
-// tabsFor checks the session name and returns its tabs, run as the main
-// user.
-func (s *apiServer) tabsFor(session string) (tabs, error) {
+// tabsFor checks the session and viewer names and returns the tabs as that
+// viewer sees them, run as the main user.
+func (s *apiServer) tabsFor(session, viewer string) (tabs, error) {
 	if !sessionRE.MatchString(session) {
 		return tabs{}, status.Error(codes.InvalidArgument, "session names are 1 to 32 letters, digits, - or _")
+	}
+	if viewer != "" && !viewerRE.MatchString(viewer) {
+		return tabs{}, status.Error(codes.InvalidArgument, "viewer names are 1 to 16 lower-case letters, digits or -")
 	}
 	run, err := s.tmux(s.cfg)
 	if err != nil {
 		return tabs{}, status.Error(codes.FailedPrecondition, err.Error())
 	}
-	return tabs{tmux: run, session: session}, nil
+	return tabs{tmux: run, session: session, viewer: viewer}, nil
 }
 
 func (s *apiServer) ListTabs(ctx context.Context, req *agentv1.ListTabsRequest) (*agentv1.ListTabsResponse, error) {
-	tb, err := s.tabsFor(req.GetSession())
+	tb, err := s.tabsFor(req.GetSession(), req.GetViewer())
 	if err != nil {
 		return nil, err
 	}
@@ -38,7 +41,7 @@ func (s *apiServer) ListTabs(ctx context.Context, req *agentv1.ListTabsRequest) 
 }
 
 func (s *apiServer) NewTab(ctx context.Context, req *agentv1.NewTabRequest) (*agentv1.NewTabResponse, error) {
-	tb, err := s.tabsFor(req.GetSession())
+	tb, err := s.tabsFor(req.GetSession(), req.GetViewer())
 	if err != nil {
 		return nil, err
 	}
@@ -50,7 +53,7 @@ func (s *apiServer) NewTab(ctx context.Context, req *agentv1.NewTabRequest) (*ag
 }
 
 func (s *apiServer) CloseTab(ctx context.Context, req *agentv1.CloseTabRequest) (*agentv1.CloseTabResponse, error) {
-	tb, err := s.tabsFor(req.GetSession())
+	tb, err := s.tabsFor(req.GetSession(), req.GetViewer())
 	if err != nil {
 		return nil, err
 	}
@@ -58,7 +61,7 @@ func (s *apiServer) CloseTab(ctx context.Context, req *agentv1.CloseTabRequest) 
 }
 
 func (s *apiServer) RenameTab(ctx context.Context, req *agentv1.RenameTabRequest) (*agentv1.RenameTabResponse, error) {
-	tb, err := s.tabsFor(req.GetSession())
+	tb, err := s.tabsFor(req.GetSession(), req.GetViewer())
 	if err != nil {
 		return nil, err
 	}
@@ -66,7 +69,7 @@ func (s *apiServer) RenameTab(ctx context.Context, req *agentv1.RenameTabRequest
 }
 
 func (s *apiServer) SelectTab(ctx context.Context, req *agentv1.SelectTabRequest) (*agentv1.SelectTabResponse, error) {
-	tb, err := s.tabsFor(req.GetSession())
+	tb, err := s.tabsFor(req.GetSession(), req.GetViewer())
 	if err != nil {
 		return nil, err
 	}
@@ -74,7 +77,7 @@ func (s *apiServer) SelectTab(ctx context.Context, req *agentv1.SelectTabRequest
 }
 
 func (s *apiServer) WatchTabs(req *agentv1.WatchTabsRequest, stream agentv1.AgentService_WatchTabsServer) error {
-	tb, err := s.tabsFor(req.GetSession())
+	tb, err := s.tabsFor(req.GetSession(), req.GetViewer())
 	if err != nil {
 		return err
 	}

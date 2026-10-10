@@ -28,6 +28,11 @@ public struct BoxState: Equatable, Sendable {
     /// portenvd restarted while the box was open: it isn't closed, but the
     /// new portenvd hasn't opened it and has none of its keys.
     public var interrupted = false
+    /// Where the box's saves go, as a place name ("this Mac", a drive, a
+    /// storage server's host): the inspector's "Saves go to". Nil if unknown.
+    public var storagePlace: String?
+    /// When portenvd opened the box (the inspector's "Since").
+    public var openedAt: Date?
 
     public init(save: Save, savedAt: Date? = nil, location: String? = nil) {
         self.save = save
@@ -43,6 +48,8 @@ public struct BoxState: Equatable, Sendable {
             let location: String?
             let failed_packages: [String]?
             let interrupted: Bool?
+            let storage_place: String?
+            let opened_at: Date?
         }
         let d = JSONDecoder()
         d.dateDecodingStrategy = .custom { dec in
@@ -58,6 +65,8 @@ public struct BoxState: Equatable, Sendable {
         var s = BoxState(save: save, savedAt: w.saved_at, location: (w.location?.isEmpty ?? true) ? nil : w.location)
         s.failedPackages = w.failed_packages ?? []
         s.interrupted = w.interrupted ?? false
+        s.storagePlace = (w.storage_place?.isEmpty ?? true) ? nil : w.storage_place
+        s.openedAt = w.opened_at
         return s
     }
 
@@ -87,6 +96,11 @@ public final class BoxController {
     /// Changes whenever the box starts again (here or on a server), so the
     /// terminal reattaches to the new start.
     public private(set) var terminalGeneration = 0
+    /// The box's saves, for the inspector (§6); empty for a box on a server
+    /// (listed there) or before the first read.
+    public private(set) var saves: [SaveInfo] = []
+    /// Where a move in progress is going (the inspector shows the move).
+    public private(set) var movingTo: String?
 
     private let daemon: DaemonAPI
     private let keychain: KeychainReading
@@ -113,6 +127,8 @@ public final class BoxController {
     private var leaving = false
     /// How long follow waits before watching again after portenvd went.
     private let followRetry: Duration
+    /// The time, for how long a move took (tests replace it).
+    private let now: @Sendable () -> Date
 
     /// macOS is (or may be) asking the person to approve a Keychain read:
     /// the window says so and offers Cancel.
@@ -124,8 +140,9 @@ public final class BoxController {
     public init(box: String, daemon: DaemonAPI, keychain: KeychainReading = SystemKeychain(),
                 notifier: KeychainWaitNotifying? = nil, keychainThreshold: Duration = KeychainWait.threshold,
                 ensureDaemon: (@Sendable () async -> String?)? = nil, followRetry: Duration = .seconds(1),
-                daemonDeadline: Duration = .seconds(30)) {
+                daemonDeadline: Duration = .seconds(30), now: @escaping @Sendable () -> Date = { Date() }) {
         self.box = box
+        self.now = now
         self.daemon = daemon
         self.keychain = keychain
         self.notifier = notifier
@@ -409,14 +426,33 @@ public final class BoxController {
     public func move(to target: String) async {
         guard !isCurrent(target) else { return }
         progress = StateLine.moving(to: target)
+        movingTo = target
+        defer { movingTo = nil }
+        let started = now()
         await perform {
             try await self.daemon.move(self.box, to: target)
             self.terminalGeneration += 1
             self.show(StateLine.moved(to: target))
             await self.refresh()
+            let seconds = Int(self.now().timeIntervalSince(started).rounded())
+            await self.notifier?.moveFinished(box: self.box, to: ServerName.display(target), seconds: seconds)
         }
         progress = nil
         if error != nil { await refresh() } // a failed move: where is it now
+    }
+
+    /// Retry in the inspector: the box agent tries the packages that
+    /// couldn't be installed again now; the state shows the outcome.
+    public func retryPackages() async {
+        await perform { try await self.daemon.retryPackages(self.box) }
+        await refresh()
+    }
+
+    /// Reads the box's saves for the inspector. A box on a server lists its
+    /// saves there, so they aren't read through this Mac's portenvd.
+    public func refreshSaves() async {
+        guard location == .thisMac else { saves = []; return }
+        if let s = try? await daemon.saves(box) { saves = s }
     }
 
     /// Closing the window saves and releases a box open on this Mac.

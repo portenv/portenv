@@ -1027,8 +1027,26 @@ In this order:
    - **Saves** (the latest five);
    - **Who's here** (you; stand-in agents arrive in 2.4);
    - **Running now** (tabs, ports).
+   - **Status (lane B's PR, 2026-10-10):**
+     - **Built:**
+       - ⌥⌘I, the toolbar button and View › Show Inspector, open state remembered per box;
+       - Where it is: "Running on", "Since", and "Saves go to <place>" from portenvd's new `storage_place` (never a host name or IP: "your server" or "your bucket" until servers have names in 2.3) and `opened_at`; the packages line with Retry; Move To…;
+       - Saves: the latest five, with Revert on the newest save point;
+       - Who's here: you, and "No agents connected.";
+       - Running now: each tab and what runs in it.
+     - **Not yet, waiting on data the daemon doesn't have:**
+       - the move's four-step progress: a progress stream from MoveBox (1.4); during a move the section says where it's going and what still works;
+       - "moved here from <place>";
+       - ports (1.6's port relay) and saved commands;
+       - Revert on saves other than the newest save point, and Browse All Saves… (1.4);
+       - save point names: the row shows a name on a second line, but portenvd doesn't record names yet;
+       - a server box's saves, which portenvd lists on the server.
 4. **Notifications (§5)** for a finished long command, a move over 10 s, and the Keychain wait from item 1. Answer buttons come with the inline answer card.
    - The app asks for permission the first time something is worth notifying, never at launch. If permission is denied, the state line and the inspector still show everything, and nothing nags.
+   - **Status (lane B's PR, 2026-10-10):** built, only when the window isn't in front.
+     - A command finished: a tab's foreground program ending after more than 30 s, read from the tab updates. Once the spike's OSC 133 marks land, they replace this signal, with the exit code.
+     - A move over 10 s.
+     - The Keychain wait, which already existed.
 5. **The spike: tmux control mode (`-CC`) and OSC 133 (§13), time-boxed to 3 days.** The outcome goes in an ADR either way. **For the launch, it runs right after the tab bar (item 2), before the inspector and notifications.** Waiting-for-input detection is launch-critical: if the spike fails, a fallback detector in the box agent (output stops and a known prompt pattern appears) still lands in Phase 1.
    - It answers: can the agent map app tabs to tmux windows through control mode? Can shell integration in the skeleton home emit OSC 133 marks that the agent tracks per tab, with exit codes, for bash and zsh, including inside Claude Code? Do SwiftTerm overlays stay aligned to rows when scrolling?
    - It's also tested over the SSH forward to a box on a server, not only on the Mac (a test, not another milestone).

@@ -127,6 +127,14 @@ public final class DaemonClient: DaemonAPI, Sendable {
         _ = try await call { try await api.retryPackages(Self.named(box, Portenv_Daemon_V1_RetryPackagesRequest.self)) }
     }
 
+    public func saves(_ box: String) async throws -> [SaveInfo] {
+        try await call {
+            try await api.listSaves(Self.named(box, Portenv_Daemon_V1_ListSavesRequest.self)).saves.map {
+                SaveInfo(id: $0.id, time: $0.time.date, kind: $0.kind, machine: $0.machine)
+            }
+        }
+    }
+
     public func setNetwork(usable: Bool) async throws {
         var req = Portenv_Daemon_V1_SetNetworkPathRequest()
         req.path = usable ? .satisfied : .unsatisfied
@@ -223,6 +231,7 @@ extension TabInfo {
 /// Requests that carry only the box's name.
 protocol NamedRequest { var name: String { get set } }
 extension Portenv_Daemon_V1_OpenBoxRequest: NamedRequest {}
+extension Portenv_Daemon_V1_ListSavesRequest: NamedRequest {}
 extension Portenv_Daemon_V1_CloseBoxRequest: NamedRequest {}
 extension Portenv_Daemon_V1_MakeSavePointRequest: NamedRequest {}
 extension Portenv_Daemon_V1_RevertToLastSavePointRequest: NamedRequest {}
@@ -253,5 +262,7 @@ extension BoxState {
         self.init(save: save, savedAt: r.hasSavedAt ? r.savedAt.date : nil, location: r.location.isEmpty ? nil : r.location)
         failedPackages = r.failedPackages
         interrupted = r.interrupted
+        storagePlace = r.storagePlace.isEmpty ? nil : r.storagePlace
+        openedAt = r.hasOpenedAt ? r.openedAt.date : nil
     }
 }

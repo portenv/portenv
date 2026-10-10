@@ -27,6 +27,9 @@ public protocol DaemonAPI: Sendable {
     /// Keys the app read from the Keychain, held in portenvd's memory only.
     func provideKeys(_ box: String, _ keys: [String: Data]) async throws
     func retryPackages(_ box: String) async throws
+    /// The box's saves (its history), for the inspector. A box open on a
+    /// server lists its saves there, not through this portenvd.
+    func saves(_ box: String) async throws -> [SaveInfo]
     /// The system's network status; `reporter` is this app's process.
     func setNetwork(usable: Bool) async throws
     /// After sleep: check every open box's agent channel. Returns whether a

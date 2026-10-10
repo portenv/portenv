@@ -645,11 +645,27 @@ public nonisolated struct Portenv_Daemon_V1_GetBoxStateResponse: Sendable {
   /// the keys over; state and saved_at say when it was last saved.
   public var interrupted: Bool = false
 
+  /// Where the box's saves go, as a place name only ("this Mac", a drive, or
+  /// the storage server's host): the inspector's "Saves go to <place>". Never
+  /// a path, a user or a credential. Empty when not known here.
+  public var storagePlace: String = String()
+
+  /// When this portenvd opened the box (the inspector's "Since <time>").
+  public var openedAt: SwiftProtobuf.Google_Protobuf_Timestamp {
+    get {_openedAt ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
+    set {_openedAt = newValue}
+  }
+  /// Returns true if `openedAt` has been explicitly set.
+  public var hasOpenedAt: Bool {self._openedAt != nil}
+  /// Clears the value of `openedAt`. Subsequent reads from it will return its default value.
+  public mutating func clearOpenedAt() {self._openedAt = nil}
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
 
   fileprivate var _savedAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
+  fileprivate var _openedAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
 }
 
 public nonisolated struct Portenv_Daemon_V1_SetNetworkPathRequest: Sendable {
@@ -2161,7 +2177,7 @@ nonisolated extension Portenv_Daemon_V1_GetBoxStateRequest: SwiftProtobuf.Messag
 
 nonisolated extension Portenv_Daemon_V1_GetBoxStateResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".GetBoxStateResponse"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}state\0\u{3}saved_at\0\u{1}location\0\u{3}failed_packages\0\u{3}packages_error\0\u{1}interrupted\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}state\0\u{3}saved_at\0\u{1}location\0\u{3}failed_packages\0\u{3}packages_error\0\u{1}interrupted\0\u{3}storage_place\0\u{3}opened_at\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -2175,6 +2191,8 @@ nonisolated extension Portenv_Daemon_V1_GetBoxStateResponse: SwiftProtobuf.Messa
       case 4: try { try decoder.decodeRepeatedStringField(value: &self.failedPackages) }()
       case 5: try { try decoder.decodeSingularStringField(value: &self.packagesError) }()
       case 6: try { try decoder.decodeSingularBoolField(value: &self.interrupted) }()
+      case 7: try { try decoder.decodeSingularStringField(value: &self.storagePlace) }()
+      case 8: try { try decoder.decodeSingularMessageField(value: &self._openedAt) }()
       default: break
       }
     }
@@ -2203,6 +2221,12 @@ nonisolated extension Portenv_Daemon_V1_GetBoxStateResponse: SwiftProtobuf.Messa
     if self.interrupted != false {
       try visitor.visitSingularBoolField(value: self.interrupted, fieldNumber: 6)
     }
+    if !self.storagePlace.isEmpty {
+      try visitor.visitSingularStringField(value: self.storagePlace, fieldNumber: 7)
+    }
+    try { if let v = self._openedAt {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 8)
+    } }()
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -2213,6 +2237,8 @@ nonisolated extension Portenv_Daemon_V1_GetBoxStateResponse: SwiftProtobuf.Messa
     if lhs.failedPackages != rhs.failedPackages {return false}
     if lhs.packagesError != rhs.packagesError {return false}
     if lhs.interrupted != rhs.interrupted {return false}
+    if lhs.storagePlace != rhs.storagePlace {return false}
+    if lhs._openedAt != rhs._openedAt {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

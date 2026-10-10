@@ -155,6 +155,13 @@ public enum TerminalLayout {
 public enum A11y {
     public static func titleLabel(box: String) -> String { "\(box), box menu" }
 
+    /// The recovery key read one character at a time, group by group, so it
+    /// can be written down: "Recovery key: K 7 Q F, M 2 X A, …".
+    public static func recoveryKey(_ key: String) -> String {
+        let groups = key.split(separator: "-").map { $0.map(String.init).joined(separator: " ") }
+        return "Recovery key: " + groups.joined(separator: ", ")
+    }
+
     public static func symbolLabel(_ state: BoxState?) -> String {
         switch state?.save {
         case .saving, .retrying: return "Saving"

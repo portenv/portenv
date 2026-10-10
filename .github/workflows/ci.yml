@@ -165,4 +165,8 @@ jobs:
         with:
           path: bin
           key: tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Makefile') }}
+      # On pull requests, only the PR's own commits: another branch's commit
+      # never blocks this PR. Pushes to main and the nightly run scan everything.
       - run: make secrets
+        env:
+          SECRETS_RANGE: ${{ github.event_name == 'pull_request' && format('origin/{0}..HEAD', github.base_ref) || '' }}

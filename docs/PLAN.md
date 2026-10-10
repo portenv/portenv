@@ -1152,7 +1152,23 @@ Developer ID signing, notarisation and Sparkle, with the key backups. Signed pub
     - active servers (daily, weekly, monthly) and server cohort retention;
     - public-door adoption;
     - stars.
-  - **Release checklist:** check the CNIL's guidance on audience measurement before launch.
+  - **The CNIL's audience-measurement criteria** (checked by the reviewer on 2026-10-10 against the CNIL's guidance, updated 4 July 2025; a design review, not legal advice). The design fits the consent exemption: one publisher, anonymous statistics only, no identifier, no cross-app tracking, no third-party sharing, an opt-out, published fields. To keep it that way:
+    1. **Store counters, not request tuples.** Per day, keep a count per field value, plus only the cross-tabs the snapshot needs (install month × week active). Never store a row per check combining the version, OS, architecture, install month and buckets: that combination could single out a user in a small cohort.
+    2. **Small numbers:** anything shown outside the owner (the snapshot, a deck, the website) rounds or hides cells below 10.
+    3. **Retention:**
+       - aggregated counts are anonymous and can be kept;
+       - nothing request-level is kept at all;
+       - if a Worker ever buffers raw checks, the target is under 24 hours (the CNIL's maximum is 25 months).
+    4. **Cloudflare sees IP addresses in transit:**
+       - Worker logs and Logpush are off for the counting route;
+       - no Analytics Engine fields carry an IP or headers beyond the published list;
+       - Cloudflare acts as processor under its DPA, with its EU-US Data Privacy Framework certification as the data-transfer basis;
+       - /privacy says so in a line.
+    5. **Who is responsible:** /privacy names the controller, EverydayMoney (EverydayMoney SAS, as on portenv.com/legal), and a contact address for questions and objections: _[contact address: to be set up by the owner]_. Today /privacy covers only the website; this line is added when counting ships (1.8).
+    6. **The opt-out is visible before the first count:**
+       - first run (1.5) shows "Count me in usage numbers", with the link to the field list, already on, before the first update check is sent;
+       - the runner's installer prints its opt-out flag before its first check.
+  - **Release checklist:** run the CNIL's self-assessment tool for audience measurement against the final implementation, and keep the filled copy in `docs/` (not on the website). Never describe the counting as "CNIL certified" or "validated": the CNIL forbids that wording.
 
 **Standing items**
 

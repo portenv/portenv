@@ -242,9 +242,12 @@ func (s *Server) boxState(ctx context.Context, name string, withPackages bool) (
 		return nil, err
 	}
 	state, at := saveState(st, ob.saving.Load(), ob.offline.Load(), ob.agentDown.Load(), ob.retrying.Load(), ob.failed.Load(), ob.quitUnsaved.Load())
-	r := &daemonv1.GetBoxStateResponse{State: state}
+	r := &daemonv1.GetBoxStateResponse{State: state, StoragePlace: storagePlace(ob.sess.Cfg.Storage)}
 	if !at.IsZero() {
 		r.SavedAt = timestamppb.New(at)
+	}
+	if !ob.openedAt.IsZero() {
+		r.OpenedAt = timestamppb.New(ob.openedAt)
 	}
 	// Packages that couldn't be installed, for the inspector (never the
 	// state line). A quick question to the agent; no answer, nothing shown.

@@ -37,6 +37,18 @@ struct BoxControllerTests {
         #expect(c.servers == ["portenv@server-a"])
     }
 
+    /// The saves count as loaded only once portenvd has answered, even when
+    /// the answer is empty (R-0054).
+    @Test func savesAreLoadedOnlyAfterTheAnswer() async {
+        let cli = FakeDaemon()
+        let c = BoxController(box: "demo", daemon: cli)
+        await c.open()
+        #expect(!c.savesLoaded)
+        await c.refreshSaves()
+        #expect(c.savesLoaded)
+        #expect(c.saves.isEmpty)
+    }
+
     /// The window never says "is closed" between a successful open and the
     /// terminal (it once did while asking portenvd where the box runs).
     @Test func neverClosedWhileOpening() async {

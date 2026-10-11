@@ -111,6 +111,8 @@ type openBox struct {
 	// agentMu guards conn and agent for readers outside mu (the state
 	// poll), so they never wait behind a save.
 	agentMu sync.RWMutex
+	// openedAt: when this portenvd opened the box (the inspector's "Since").
+	openedAt time.Time
 }
 
 // New returns a daemon for this machine's Portenv directory.
@@ -322,7 +324,7 @@ func (s *Server) openBox(ctx context.Context, name string, takeOver bool) (*open
 		return nil, none, err
 	}
 	step("box started")
-	ob := &openBox{sess: sess}
+	ob := &openBox{sess: sess, openedAt: time.Now()}
 	// An empty home makes the agent report FAILED; restic still runs.
 	if _, err := ob.connect(ctx, true); err != nil {
 		return nil, none, agentError(err)

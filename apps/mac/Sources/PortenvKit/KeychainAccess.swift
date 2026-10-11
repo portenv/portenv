@@ -48,6 +48,13 @@ public protocol KeychainWaitNotifying: Sendable {
     func keychainWaiting(box: String) async
     /// A box left unsaved by Quit Anyway was saved in the background.
     func savedAfterQuit(box: String, at: Date) async
+    /// A move finished; the notifier decides whether it's worth a
+    /// notification (longer than 10 s, window not in front: §5).
+    func moveFinished(box: String, to: String, seconds: Int) async
+}
+
+public extension KeychainWaitNotifying {
+    func moveFinished(box: String, to: String, seconds: Int) async {}
 }
 
 extension KeychainWaitNotifying {

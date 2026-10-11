@@ -8,6 +8,8 @@ import AppKit
 /// content at the old screen's size on a second display (R-0077–R-0080).
 /// Instead, the close button's action comes here, and File › Close Tab ⌘W
 /// (TabCommands) calls `requestClose`; the File menu has no other Close.
+/// macOS's own window tabs are off: Portenv has its own tab bar, and a
+/// native tab's close would go around the hook (R-0081).
 @MainActor
 public final class WindowCloseHook: NSObject {
     private static let hooks = NSMapTable<NSWindow, WindowCloseHook>.weakToStrongObjects()
@@ -25,6 +27,7 @@ public final class WindowCloseHook: NSObject {
     /// the new answer and points the close button back here.
     @discardableResult
     public static func install(on window: NSWindow, shouldClose: @escaping @MainActor (NSWindow) -> Bool) -> WindowCloseHook {
+        window.tabbingMode = .disallowed
         if let hook = hooks.object(forKey: window) {
             hook.shouldClose = shouldClose
             hook.attach()
@@ -40,6 +43,13 @@ public final class WindowCloseHook: NSObject {
             NotificationCenter.default.addObserver(hook, selector: #selector(windowChanged(_:)), name: name, object: window)
         }
         return hook
+    }
+
+    /// Turns off macOS's window tabs for the whole app, so the Window menu
+    /// has no Show Tab Bar, Merge All Windows or Move Tab to New Window.
+    /// Call before the first window is made (applicationWillFinishLaunching).
+    public static func turnOffNativeTabs() {
+        NSWindow.allowsAutomaticWindowTabbing = false
     }
 
     /// The windows with a hook, still open (to count box windows).

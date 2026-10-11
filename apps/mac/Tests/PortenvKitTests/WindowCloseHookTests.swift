@@ -82,4 +82,19 @@ struct WindowCloseHookTests {
         #expect(!hooked.contains { $0 === b })
         #expect(!hooked.contains { $0 === plain })
     }
+
+    /// macOS's own window tabs are off: a hooked window never joins a
+    /// native tab group, and the app turns automatic tabbing off (R-0081).
+    @Test func nativeWindowTabsAreOff() {
+        let w = window()
+        w.tabbingMode = .preferred
+        WindowCloseHook.install(on: w) { _ in true }
+        #expect(w.tabbingMode == .disallowed)
+
+        let before = NSWindow.allowsAutomaticWindowTabbing
+        defer { NSWindow.allowsAutomaticWindowTabbing = before }
+        NSWindow.allowsAutomaticWindowTabbing = true
+        WindowCloseHook.turnOffNativeTabs()
+        #expect(!NSWindow.allowsAutomaticWindowTabbing)
+    }
 }

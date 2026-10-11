@@ -71,6 +71,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// next portenvd takes it over (ADR 0014). Cmd-Q still closes and saves.
     var relaunchingForUpdate = false
 
+    func applicationWillFinishLaunching(_: Notification) {
+        // Portenv's tab bar is the only tabs: no native window tabs.
+        WindowCloseHook.turnOffNativeTabs()
+    }
+
     func applicationDidFinishLaunching(_: Notification) {
         // A Swift package executable starts as a background process; make
         // it a regular app with a Dock icon and a menu bar.

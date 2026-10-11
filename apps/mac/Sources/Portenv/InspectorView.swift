@@ -16,6 +16,8 @@ struct InspectorView: View {
     let move: (String) -> Void
     let retryPackages: () -> Void
     let revert: () -> Void
+    /// Try Again when the saves couldn't be loaded.
+    var retrySaves: () -> Void = {}
     /// Off only for offscreen renders (ImageRenderer draws nothing inside a
     /// ScrollView).
     var scrolls = true
@@ -57,7 +59,7 @@ struct InspectorView: View {
                 Line(InspectorText.runningOn(content.place),
                      detail: content.openedAt.map { InspectorText.since($0) })
                 if let storage = content.storagePlace {
-                    Line(InspectorText.savesGoTo(storage), detail: InspectorText.encryption(content.place))
+                    Line(InspectorText.savesGoTo(storage), detail: InspectorText.encryption(content.place, savesTo: storage))
                 }
                 if let packages = InspectorText.packagesLine(content.failedPackages) {
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
@@ -76,6 +78,7 @@ struct InspectorView: View {
                             .accessibilityLabel(A11y.retryPackages)
                     }
                 }
+                let unavailable = InspectorText.moveUnavailable(targets: moveTargets.map(\.0))
                 Menu("Move To…") {
                     ForEach(moveTargets, id: \.1) { title, target in
                         Button(title) { move(target) }
@@ -83,24 +86,41 @@ struct InspectorView: View {
                 }
                 .menuStyle(.borderlessButton)
                 .fixedSize()
-                .disabled(moveTargets.isEmpty)
+                .disabled(unavailable != nil)
+                // Disabled, with the reason (§3.2: explained in the inspector).
+                .help(unavailable ?? "Move this box to another place")
+                if let unavailable { Note(unavailable) }
             }
         }
     }
 
     @ViewBuilder private var saves: some View {
         Section(InspectorText.savesHeading) {
-            switch InspectorText.savesShown(loaded: content.savesLoaded, rows: content.saves, elsewhere: content.savesElsewhere) {
+            switch InspectorText.savesShown(loaded: content.savesLoaded, failed: content.savesFailed,
+                                            rows: content.saves, elsewhere: content.savesElsewhere) {
             case let .elsewhere(line):
                 Note(line)
             case .loading:
                 Note(InspectorText.loadingSaves)
+            case .failed:
+                // Portenv keeps trying quietly; Try Again asks now.
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Note(InspectorText.savesFailed)
+                    Button(InspectorText.tryAgain, action: retrySaves)
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.tint)
+                        .font(.system(size: 12))
+                }
             case .empty:
                 Note(InspectorText.noSaves)
             case .listed:
                 if let last = content.savedAt {
-                    Text("Last saved \(InspectorText.clock(last))")
-                        .font(.system(size: 12)).foregroundStyle(.secondary)
+                    // The title's rule, from the same saved-at time (§3.1),
+                    // redrawn when "just now" becomes the time.
+                    TimelineView(.explicit([SavedTime.nextChange(last, now: Date())].compactMap { $0 })) { _ in
+                        Text(SavedTime.inspector(last, now: Date()))
+                            .font(.system(size: 12)).foregroundStyle(.secondary)
+                    }
                 }
                 VStack(alignment: .leading, spacing: 6) {
                     ForEach(content.saves) { row in SaveRowView(row: row, revert: revert, revealRevert: !scrolls) }

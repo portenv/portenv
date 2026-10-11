@@ -28,11 +28,15 @@ struct MainWindow: View {
                     moveTargets: moveTargets,
                     move: { target in Task { await controller.move(to: target) } },
                     retryPackages: { Task { await controller.retryPackages() } },
-                    revert: { Task { await controller.revertToLastSavePoint() } }
+                    revert: { Task { await controller.revertToLastSavePoint() } },
+                    retrySaves: { Task { await controller.refreshSaves() } }
                 )
                 .inspectorColumnWidth(min: 260, ideal: 300, max: 400)
-                // The saves change with each save: read them while open.
-                .task(id: controller.state?.savedAt) { await controller.refreshSaves() }
+                // The saves change with each save, and where the box runs:
+                // read them while open, quietly trying again if that fails.
+                .task(id: SavesKey(savedAt: controller.state?.savedAt, location: controller.location)) {
+                    await controller.keepSavesLoaded()
+                }
             }
             .navigationTitle(controller.box)
             // The title is the box's menu (Apple's document-menu pattern):
@@ -132,6 +136,12 @@ struct MainWindow: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(.background)
     }
+}
+
+/// What the inspector's saves are read again for.
+private struct SavesKey: Equatable {
+    let savedAt: Date?
+    let location: BoxController.Location
 }
 
 /// View › Show Inspector (⌥⌘I), sharing the window's remembered state. Off

@@ -54,9 +54,18 @@ public enum InspectorText {
         return date.formatted(f)
     }
 
-    /// Saves are encrypted where the box runs, before they leave it.
-    public static func encryption(_ server: String?) -> String {
-        "Encrypted on \(server ?? "this Mac") before they leave it"
+    /// Saves are encrypted where the box runs: "before they leave it" when
+    /// they go somewhere else (a server, a bucket, a drive); saves kept on
+    /// this Mac never leave it.
+    public static func encryption(_ server: String?, savesTo storage: String? = nil) -> String {
+        if server == nil, storage?.lowercased() == "this mac" { return "Encrypted on this Mac" }
+        return "Encrypted on \(server ?? "this Mac") before they leave it"
+    }
+
+    /// Why Move To… can't be used (GUIDELINES §10: what to do), shown under
+    /// it and as its help tag; nil when there is somewhere to move.
+    public static func moveUnavailable(targets: [String]) -> String? {
+        targets.isEmpty ? "Add a server to move this box." : nil
     }
 
     /// Packages from apt-packages.txt that couldn't be installed, as the
@@ -119,15 +128,19 @@ public enum InspectorText {
     }
     public static let noSaves = "No saves yet."
     public static let loadingSaves = "Loading saves\u{2026}"
+    /// portenvd didn't answer for the saves; Portenv keeps trying quietly.
+    public static let savesFailed = "Couldn't load saves."
+    public static let tryAgain = "Try Again"
 
     /// What the Saves section shows (R-0054).
     public enum SavesShown: Equatable, Sendable {
-        case elsewhere(String), loading, empty, listed
+        case elsewhere(String), loading, failed, empty, listed
     }
 
-    public static func savesShown(loaded: Bool, rows: [SaveRow], elsewhere: String?) -> SavesShown {
+    public static func savesShown(loaded: Bool, failed: Bool = false, rows: [SaveRow], elsewhere: String?) -> SavesShown {
         if let elsewhere { return .elsewhere(elsewhere) }
         if !rows.isEmpty { return .listed }
+        if failed { return .failed }
         return loaded ? .empty : .loading
     }
 
@@ -242,13 +255,16 @@ public struct InspectorContent: Sendable {
     public var saves: [InspectorText.SaveRow]
     /// Whether portenvd has answered for the saves yet.
     public var savesLoaded: Bool
+    /// The last read of the saves failed.
+    public var savesFailed: Bool
     /// Set when the saves are listed elsewhere (a box on a server).
     public var savesElsewhere: String?
     public var tabs: [InspectorText.TabRow]
 
     public init(place: String? = nil, movingTo: String? = nil, storagePlace: String? = nil, openedAt: Date? = nil,
                 failedPackages: [String] = [], savedAt: Date? = nil, saves: [InspectorText.SaveRow] = [],
-                savesLoaded: Bool = true, savesElsewhere: String? = nil, tabs: [InspectorText.TabRow] = []) {
+                savesLoaded: Bool = true, savesFailed: Bool = false, savesElsewhere: String? = nil,
+                tabs: [InspectorText.TabRow] = []) {
         self.place = place
         self.movingTo = movingTo
         self.storagePlace = storagePlace
@@ -257,6 +273,7 @@ public struct InspectorContent: Sendable {
         self.savedAt = savedAt
         self.saves = saves
         self.savesLoaded = savesLoaded
+        self.savesFailed = savesFailed
         self.savesElsewhere = savesElsewhere
         self.tabs = tabs
     }
@@ -272,6 +289,7 @@ public struct InspectorContent: Sendable {
                   savedAt: box.state?.savedAt,
                   saves: InspectorText.saveRows(box.saves),
                   savesLoaded: box.savesLoaded,
+                  savesFailed: box.savesFailed,
                   savesElsewhere: server.map(InspectorText.savesElsewhere),
                   tabs: InspectorText.tabRows(tabs.tabs))
     }

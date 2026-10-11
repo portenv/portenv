@@ -12,6 +12,10 @@ public enum Feedback {
     public static let address = "contact@everydaymoney.eu"
     public static let subject = "Portenv feedback"
     public static let menuItem = "Send Feedback…"
+    public static let menuItemHelp = "Opens a new message in your mail app."
+    /// Always beside Send Feedback…, for webmail or a mail app that isn't
+    /// set up (R-0097).
+    public static let copyMenuItem = "Copy Feedback Address"
 
     /// The alert when no mail app opens mailto: links (GUIDELINES §10).
     public static let noMailApp = "No mail app could open a new message."

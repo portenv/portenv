@@ -631,7 +631,7 @@ Rename… · Move To ▸ (this Mac, each server, Portenv Cloud once it exists, A
 
 - File › Make Save Point ⌘S.
 - Box › Box Settings… (also reachable from Settings).
-- Help › Send Feedback…: a new message in the person's mail app to the feedback address, with only the app's version, build and commit, the macOS version and the chip (R-0088); with no mail app, an alert gives the address with a Copy Address button.
+- Help › Send Feedback…: a new message in the person's mail app to the feedback address, with only the app's version, build and commit, the macOS version and the chip (R-0088); with no mail app, an alert gives the address with a Copy Address button. Copy Feedback Address sits beside it for webmail, and the two replace the standard Help item until there is a help book (R-0097).
 - Changes are not a menu item: clicking the sync symbol next to the title shows what changed since the last save.
 
 **Other views**

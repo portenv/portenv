@@ -73,7 +73,7 @@ enum MoveToApplications {
     static func launchdJob() -> String {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/bin/launchctl")
-        p.arguments = ["print", "gui/\(getuid())/\(LaunchdJob.label)"]
+        p.arguments = ["print", LaunchdJob.target(uid: getuid(), instance: Instance.current)]
         let out = Pipe()
         p.standardOutput = out
         p.standardError = Pipe()

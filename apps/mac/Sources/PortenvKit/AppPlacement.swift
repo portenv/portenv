@@ -78,10 +78,13 @@ public enum AppMover {
     }
 }
 
-/// portenvd's launchd job, as `launchctl print gui/<uid>/com.portenv.portenvd`
-/// shows it.
+/// portenvd's launchd job, as `launchctl print gui/<uid>/<label>` shows it.
 public enum LaunchdJob {
-    public static let label = "com.portenv.portenvd"
+    /// This build's own job: com.portenv.portenvd, or .dev-X for a dev lane's
+    /// build (Instance), never another build's.
+    public static func target(uid: uid_t, instance: Instance) -> String {
+        "gui/\(uid)/\(instance.daemonLabel)"
+    }
 
     /// The job's last exit code, or nil while it runs or never exited.
     public static func lastExitCode(in printed: String) -> Int? {

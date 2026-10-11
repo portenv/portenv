@@ -141,7 +141,7 @@ final class AppModel {
     /// window stays, showing the list. Any other window just closes.
     func windowShouldClose(_ window: NSWindow) -> Bool {
         guard case .open = launch, let controller else { return true }
-        let others = WindowCloseGuard.guardedWindows.filter { $0 !== window }.count
+        let others = WindowCloseHook.hookedWindows.filter { $0 !== window }.count
         switch WindowClose.action(showingBox: true, otherBoxWindows: others) {
         case .closeWindow:
             return true

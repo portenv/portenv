@@ -95,15 +95,20 @@ struct TabCommands: Commands {
                            frontToBack: NSApp.orderedWindows.filter { $0.isVisible && $0.canBecomeMain })
     }
 
+    /// Closes the command's window, asking its close hook first.
+    @MainActor static func closeCommandWindow() {
+        if let window = commandWindow { WindowCloseHook.requestClose(window) }
+    }
+
     var body: some Commands {
         CommandGroup(after: .newItem) {
             Button("New Tab") { Task { await tabs?.newTab() } }
                 .keyboardShortcut("t", modifiers: .command)
                 .disabled(tabs == nil)
             Button(TabText.closeButton) {
-                guard let tabs else { Self.commandWindow?.performClose(nil); return }
+                guard let tabs else { Self.closeCommandWindow(); return }
                 Task {
-                    if await tabs.requestClose() == .closeWindow { Self.commandWindow?.performClose(nil) }
+                    if await tabs.requestClose() == .closeWindow { Self.closeCommandWindow() }
                 }
             }
             .keyboardShortcut("w", modifiers: .command)

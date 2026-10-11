@@ -97,4 +97,35 @@ struct WindowCloseHookTests {
         WindowCloseHook.turnOffNativeTabs()
         #expect(!NSWindow.allowsAutomaticWindowTabbing)
     }
+
+    /// A closed window's hook goes with it, the close button works again
+    /// without one, and installing on the reused window makes a new hook
+    /// that asks again (R-0084).
+    @Test func closingTheWindowDropsItsHook() throws {
+        let w = window()
+        let close = try #require(w.standardWindowButton(.closeButton))
+        let nativeTarget = close.target, nativeAction = close.action
+        var asked = 0
+        let first = WindowCloseHook.install(on: w) { _ in asked += 1; return true }
+        #expect(WindowCloseHook.hook(for: w) === first)
+        w.makeKeyAndOrderFront(nil)
+
+        WindowCloseHook.requestClose(w)
+        #expect(asked == 1)
+        #expect(!w.isVisible)
+        #expect(WindowCloseHook.hook(for: w) == nil)
+        #expect(!WindowCloseHook.hookedWindows.contains { $0 === w })
+        #expect(close.target === nativeTarget)
+        #expect(close.action == nativeAction)
+
+        let second = WindowCloseHook.install(on: w) { _ in asked += 1; return false }
+        #expect(second !== first)
+        #expect(WindowCloseHook.hook(for: w) === second)
+        w.makeKeyAndOrderFront(nil)
+        defer { w.orderOut(nil) }
+        #expect(WindowCloseHook.hookedWindows.contains { $0 === w })
+        NSApp.sendAction(try #require(close.action), to: close.target, from: close)
+        #expect(asked == 2)
+        #expect(w.isVisible)
+    }
 }

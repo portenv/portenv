@@ -17,6 +17,10 @@ public final class WindowCloseHook: NSObject {
     /// Whether the window may close now; false keeps it open.
     public var shouldClose: @MainActor (NSWindow) -> Bool
     private weak var window: NSWindow?
+    /// What the close button did before the hook, put back when the
+    /// window closes.
+    private weak var originalTarget: AnyObject?
+    private var originalAction: Selector?
 
     private init(window: NSWindow, shouldClose: @escaping @MainActor (NSWindow) -> Bool) {
         self.window = window
@@ -42,6 +46,10 @@ public final class WindowCloseHook: NSObject {
                      NSWindow.didExitFullScreenNotification] {
             NotificationCenter.default.addObserver(hook, selector: #selector(windowChanged(_:)), name: name, object: window)
         }
+        // The map's weak keys don't reliably drop their values: a closed
+        // window's hook goes when it closes (R-0084).
+        NotificationCenter.default.addObserver(hook, selector: #selector(windowWillClose(_:)),
+                                               name: NSWindow.willCloseNotification, object: window)
         return hook
     }
 
@@ -50,6 +58,11 @@ public final class WindowCloseHook: NSObject {
     /// Call before the first window is made (applicationWillFinishLaunching).
     public static func turnOffNativeTabs() {
         NSWindow.allowsAutomaticWindowTabbing = false
+    }
+
+    /// The window's hook, if it has one.
+    static func hook(for window: NSWindow) -> WindowCloseHook? {
+        hooks.object(forKey: window)
     }
 
     /// The windows with a hook, still open (to count box windows).
@@ -69,6 +82,8 @@ public final class WindowCloseHook: NSObject {
     private func attach() {
         guard let button = window?.standardWindowButton(.closeButton) else { return }
         if button.target === self, button.action == #selector(closeButtonPressed(_:)) { return }
+        originalTarget = button.target
+        originalAction = button.action
         button.target = self
         button.action = #selector(closeButtonPressed(_:))
     }
@@ -80,5 +95,20 @@ public final class WindowCloseHook: NSObject {
 
     @objc private func windowChanged(_: Notification) {
         attach()
+    }
+
+    /// Drops this hook and gives the close button back, so a window that
+    /// is shown again without a new install still closes; installing
+    /// again makes a new hook.
+    @objc private func windowWillClose(_: Notification) {
+        withExtendedLifetime(self) {
+            NotificationCenter.default.removeObserver(self)
+            guard let window else { return }
+            if let button = window.standardWindowButton(.closeButton), button.target === self {
+                button.target = originalTarget
+                button.action = originalAction
+            }
+            if Self.hooks.object(forKey: window) === self { Self.hooks.removeObject(forKey: window) }
+        }
     }
 }

@@ -56,6 +56,7 @@ struct PortenvApp: App {
                 }
             }
             TabCommands(tabs: model.tabs)
+            InspectorToggle(box: model.controller?.box)
         }
     }
 }

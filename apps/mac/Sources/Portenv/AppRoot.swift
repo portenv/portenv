@@ -108,7 +108,14 @@ final class AppModel {
             ensureDaemon: LoginItem.ensureRegistered
         )
         self.controller = controller
-        tabs = TabsController(box: box, daemon: daemon)
+        let tabs = TabsController(box: box, daemon: daemon)
+        // A long command finishing in a tab, when the window isn't in
+        // front (§5).
+        tabs.commandFinished = { [weak controller] f in
+            let place = controller?.state?.location.map(ServerName.display)
+            Task { await Notifier.shared.commandFinished(box: box, finished: f, location: place) }
+        }
+        self.tabs = tabs
         launch = .open(box)
         defaults.set(box, forKey: Self.lastBoxKey)
         onOpen?(controller)

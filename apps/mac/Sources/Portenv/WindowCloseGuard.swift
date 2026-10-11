@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import AppKit
+import PortenvKit
 import SwiftUI
 
 /// Asks before the window it sits in closes (the close button, ⌘W, File ›
@@ -25,7 +26,7 @@ struct WindowCloseGuard: NSViewRepresentable {
 
     final class GuardView: NSView {
         var shouldClose: (@MainActor (NSWindow) -> Bool)?
-        private var proxy: DelegateProxy?
+        private var proxy: WindowDelegateProxy?
 
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
@@ -37,7 +38,7 @@ struct WindowCloseGuard: NSViewRepresentable {
         func install() {
             guard let window else { return }
             if let proxy, window.delegate === proxy { return }
-            let proxy = DelegateProxy(original: window.delegate) { [weak self] window in
+            let proxy = WindowDelegateProxy(original: window.delegate) { [weak self] window in
                 self?.shouldClose?(window) ?? true
             }
             self.proxy = proxy
@@ -47,30 +48,6 @@ struct WindowCloseGuard: NSViewRepresentable {
 
     /// The windows a guard sits in, still open (to count box windows).
     @MainActor static var guardedWindows: [NSWindow] {
-        NSApp.windows.filter { $0.isVisible && $0.delegate is DelegateProxy }
-    }
-
-    @MainActor
-    final class DelegateProxy: NSObject, NSWindowDelegate {
-        nonisolated(unsafe) weak var original: NSWindowDelegate?
-        let shouldClose: @MainActor (NSWindow) -> Bool
-
-        init(original: NSWindowDelegate?, shouldClose: @escaping @MainActor (NSWindow) -> Bool) {
-            self.original = original
-            self.shouldClose = shouldClose
-        }
-
-        override nonisolated func responds(to selector: Selector!) -> Bool {
-            super.responds(to: selector) || (original?.responds(to: selector) ?? false)
-        }
-
-        override nonisolated func forwardingTarget(for selector: Selector!) -> Any? {
-            original?.responds(to: selector) == true ? original : nil
-        }
-
-        func windowShouldClose(_ sender: NSWindow) -> Bool {
-            guard shouldClose(sender) else { return false }
-            return original?.windowShouldClose?(sender) ?? true
-        }
+        NSApp.windows.filter { $0.isVisible && $0.delegate is WindowDelegateProxy }
     }
 }

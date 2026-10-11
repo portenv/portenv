@@ -88,15 +88,22 @@ struct TabCommands: Commands {
     /// tab commands are off and ⌘W closes the window.
     let tabs: TabsController?
 
+    /// The window the command closes, also with Portenv behind (no key
+    /// window) or the menu driven through accessibility (WindowClose.target).
+    @MainActor static var commandWindow: NSWindow? {
+        WindowClose.target(key: NSApp.keyWindow, main: NSApp.mainWindow,
+                           frontToBack: NSApp.orderedWindows.filter { $0.isVisible && $0.canBecomeMain })
+    }
+
     var body: some Commands {
         CommandGroup(after: .newItem) {
             Button("New Tab") { Task { await tabs?.newTab() } }
                 .keyboardShortcut("t", modifiers: .command)
                 .disabled(tabs == nil)
             Button(TabText.closeButton) {
-                guard let tabs else { NSApp.keyWindow?.performClose(nil); return }
+                guard let tabs else { Self.commandWindow?.performClose(nil); return }
                 Task {
-                    if await tabs.requestClose() == .closeWindow { NSApp.keyWindow?.performClose(nil) }
+                    if await tabs.requestClose() == .closeWindow { Self.commandWindow?.performClose(nil) }
                 }
             }
             .keyboardShortcut("w", modifiers: .command)

@@ -64,6 +64,7 @@ The title shows the box name, a sync symbol and a chevron; the line under it is 
 | Saved | `checkmark.circle` | `This Mac · Saved at 14:58` (`Saved just now` for the first minute) |
 | Offline | `icloud.slash`-style "not synced" symbol | `This Mac · Offline · will save later` |
 | Moving | `arrow.triangle.2.circlepath` | `Moving to Test server…` |
+| Closing the last box window (saving before the list shows) | `arrow.triangle.2.circlepath` | `Saving before closing…`, with the Box menu disabled, until the list shows; the normal line again if the person stays |
 | Open on a server | `checkmark.circle` | `Test server · Saved at 15:42` |
 | Box agent unavailable | `exclamationmark.triangle` | `This Mac · Not saved since 14:58` (and Restart Box offered) |
 | Just reverted | `checkmark.circle` | `Reverted to 14:31 · your changes were kept` for 5 s, then the normal line |

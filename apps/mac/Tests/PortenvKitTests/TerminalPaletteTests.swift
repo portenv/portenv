@@ -42,6 +42,16 @@ struct TerminalPaletteTests {
         #expect(Contrast.ratio(system.foreground, system.background) >= 4.5)
     }
 
+    @Test(arguments: [TerminalPalette.light, TerminalPalette.dark])
+    func brightBlackReadsAsDim(_ p: TerminalPalette) {
+        // Bright black is dim text (zsh autosuggestions, git's dimmed lines,
+        // comments): readable, but weaker than "white", so it sits between
+        // white and the background.
+        let dim = Contrast.ratio(p.ansi[8], p.background)
+        #expect(dim >= 4.5)
+        #expect(dim < Contrast.ratio(p.ansi[7], p.background))
+    }
+
     @Test func theLightPaletteUsesDarkerColours() {
         // Green, yellow and cyan are the colours that wash out on white.
         for i in [2, 3, 6] {

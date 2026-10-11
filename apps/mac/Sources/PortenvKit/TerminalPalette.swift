@@ -49,7 +49,9 @@ public enum Contrast {
 /// background and text colours, and one ANSI palette for light and one for
 /// dark. The light palette uses darker greens, yellows and cyans, so each
 /// normal colour is readable (4.5:1) on its background. "Black" on dark and
-/// "white" on light are greys for the same reason.
+/// "white" on light are greys for the same reason. Bright black is the
+/// colour shells and tools use for dim text (autosuggestions, comments), so
+/// it sits between black and the background, as Terminal.app's grey does.
 public struct TerminalPalette: Sendable {
     public let name: String
     /// A sample of the system's text background, for the contrast tests
@@ -63,7 +65,7 @@ public struct TerminalPalette: Sendable {
     public static let light = TerminalPalette(
         name: "light", background: RGB(0xFFFFFF), foreground: RGB(0x000000),
         ansi: ([0x000000, 0xC4251C, 0x1A7F37, 0x8A6100, 0x0A56C2, 0xA42AA2, 0x0B7A85, 0x636B74,
-               0x4B5259, 0xD1242F, 0x197A35, 0x7D5800, 0x0969DA, 0xB12FAE, 0x087380, 0x57606A] as [UInt32]).map { RGB($0) }
+               0x6E7781, 0xD1242F, 0x197A35, 0x7D5800, 0x0969DA, 0xB12FAE, 0x087380, 0x57606A] as [UInt32]).map { RGB($0) }
     )
 
     public static let dark = TerminalPalette(

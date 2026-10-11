@@ -38,6 +38,8 @@ struct MainWindow: View {
                 .task(id: controller.location) {
                     await controller.keepSavesLoaded()
                 }
+                // The toggle at the toolbar's trailing edge, open or closed.
+                .inspectorToggle(isOpen: $inspectorOpen)
             }
             .navigationTitle(controller.box)
             // The title is the box's menu (Apple's document-menu pattern):
@@ -50,16 +52,6 @@ struct MainWindow: View {
                 }
                 ToolbarItem(placement: .navigation) {
                     BoxTitle(controller: controller)
-                }
-                ToolbarItem(placement: .primaryAction) {
-                    // ⌥⌘I is on View › Show Inspector (InspectorToggle).
-                    // One label, from the Label: the toolbar item and its
-                    // button no longer both read "Hide inspector" (R-0027).
-                    Button { inspectorOpen.toggle() } label: {
-                        Label(inspectorOpen ? A11y.hideInspector : A11y.showInspector, systemImage: "sidebar.right")
-                            .labelStyle(.iconOnly)
-                    }
-                    .help(inspectorOpen ? A11y.hideInspector : A11y.showInspector)
                 }
             }
             // Busy disables the window, except Cancel while the Keychain asks.

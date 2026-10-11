@@ -13,10 +13,9 @@ struct BoxTitle: View {
 
     var body: some View {
         // Drawn at the time it's drawn, and again when "Saved just now"
-        // becomes "Saved at <time>" (§3.1), with no new state to prompt it.
-        TimelineView(.explicit([controller.savedAtChangesAt(Date())].compactMap { $0 })) { _ in
-            title(controller.subtitle(at: Date()))
-        }
+        // becomes "Saved at <time>" (§3.1): savedTimeNow moves then, with no
+        // new state to prompt it.
+        title(controller.subtitle(at: controller.savedTimeNow))
     }
 
     private func title(_ subtitle: String) -> some View {

@@ -116,11 +116,10 @@ struct InspectorView: View {
             case .listed:
                 if let last = content.savedAt {
                     // The title's rule, from the same saved-at time (§3.1),
-                    // redrawn when "just now" becomes the time.
-                    TimelineView(.explicit([SavedTime.nextChange(last, now: Date())].compactMap { $0 })) { _ in
-                        Text(SavedTime.inspector(last, now: Date()))
-                            .font(.system(size: 12)).foregroundStyle(.secondary)
-                    }
+                    // worded at content.now, which moves when "just now"
+                    // becomes the time.
+                    Text(SavedTime.inspector(last, now: content.now))
+                        .font(.system(size: 12)).foregroundStyle(.secondary)
                 }
                 VStack(alignment: .leading, spacing: 6) {
                     ForEach(content.saves) { row in SaveRowView(row: row, revert: revert, revealRevert: !scrolls) }

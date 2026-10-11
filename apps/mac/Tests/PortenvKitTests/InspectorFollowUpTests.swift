@@ -54,6 +54,48 @@ struct InspectorFollowUpTests {
         #expect(c.savedAtChangesAt(saved.addingTimeInterval(30)) == saved.addingTimeInterval(60))
     }
 
+    /// R-0066: "just now" rolls over a minute after the save with no new
+    /// state, in the title and the inspector, driven by the controller's
+    /// clock rather than a view's schedule.
+    @Test func justNowRollsOverWithNoNewState() async {
+        let saved = ISO8601DateFormatter().date(from: "2026-10-06T12:00:00Z")!
+        let clock = FakeClock(saved.addingTimeInterval(10))
+        let d = FakeDaemon()
+        let c = BoxController(box: "acme-api", daemon: d, now: { clock.now }, sleep: { clock.advance($0) })
+        await c.open()
+        d.state = #"{"state":"SAVE_STATE_SAVED","saved_at":"2026-10-06T12:00:00Z"}"#
+        await c.refresh()
+        #expect(c.subtitle(at: c.savedTimeNow) == "This Mac · Saved just now")
+        await until { c.savedTimeNow >= saved.addingTimeInterval(60) }
+        #expect(c.subtitle(at: c.savedTimeNow).hasPrefix("This Mac · Saved at "))
+        let content = InspectorContent(box: c, tabs: TabsController(box: "acme-api", daemon: d))
+        #expect(SavedTime.inspector(saved, now: content.now) == "Last saved " + StateLine.clock(saved, timeZone: .current, locale: .current))
+    }
+
+    /// R-0066: a new save reads the saves again at once, so the list keeps
+    /// up with the state line.
+    @Test func aNewSaveReadsTheSavesAgain() async {
+        let d = FakeDaemon()
+        let c = BoxController(box: "acme-api", daemon: d)
+        await c.open()
+        await c.refreshSaves()
+        let reads = { d.calls.filter { $0 == ["app", "saves", "acme-api"] }.count }
+        let before = reads()
+        d.state = #"{"state":"SAVE_STATE_SAVED","saved_at":"2026-10-06T12:00:00Z"}"#
+        await c.refresh()
+        await until { reads() > before }
+        #expect(reads() > before)
+        // The same state again is not a new save: no further read.
+        let after = reads()
+        await c.refresh()
+        for _ in 0..<50 { await Task.yield() }
+        #expect(reads() == after)
+    }
+
+    private func until(_ done: @MainActor () -> Bool) async {
+        for _ in 0..<500 where !done() { await Task.yield() }
+    }
+
     // MARK: Move To… says why it can't
 
     @Test func moveToSaysWhyWhenThereIsNowhereToMove() {
@@ -116,5 +158,16 @@ struct InspectorFollowUpTests {
         #expect(!c.savesLoaded, "not \"No saves yet.\" before portenvd answers")
         #expect(InspectorText.savesShown(loaded: c.savesLoaded, failed: c.savesFailed,
                                          rows: InspectorText.saveRows(c.saves), elsewhere: nil) == .loading)
+    }
+}
+
+/// A clock tests move by hand: sleeping moves it on at once.
+final class FakeClock: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _now: Date
+    init(_ now: Date) { _now = now }
+    var now: Date { lock.withLock { _now } }
+    func advance(_ d: Duration) {
+        lock.withLock { _now = _now.addingTimeInterval(Double(d.components.seconds) + Double(d.components.attoseconds) / 1e18) }
     }
 }

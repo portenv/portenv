@@ -32,9 +32,10 @@ struct MainWindow: View {
                     retrySaves: { Task { await controller.refreshSaves() } }
                 )
                 .inspectorColumnWidth(min: 260, ideal: 300, max: 400)
-                // The saves change with each save, and where the box runs:
-                // read them while open, quietly trying again if that fails.
-                .task(id: SavesKey(savedAt: controller.state?.savedAt, location: controller.location)) {
+                // Read the saves while open and wherever the box runs,
+                // quietly trying again if that fails. A new save reads them
+                // again from the controller (savedAtChanged).
+                .task(id: controller.location) {
                     await controller.keepSavesLoaded()
                 }
             }
@@ -136,12 +137,6 @@ struct MainWindow: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(.background)
     }
-}
-
-/// What the inspector's saves are read again for.
-private struct SavesKey: Equatable {
-    let savedAt: Date?
-    let location: BoxController.Location
 }
 
 /// View › Show Inspector (⌥⌘I), sharing the window's remembered state. Off

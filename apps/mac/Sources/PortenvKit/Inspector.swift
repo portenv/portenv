@@ -260,11 +260,14 @@ public struct InspectorContent: Sendable {
     /// Set when the saves are listed elsewhere (a box on a server).
     public var savesElsewhere: String?
     public var tabs: [InspectorText.TabRow]
+    /// The time "Last saved" is worded at (BoxController.savedTimeNow).
+    public var now: Date
 
     public init(place: String? = nil, movingTo: String? = nil, storagePlace: String? = nil, openedAt: Date? = nil,
                 failedPackages: [String] = [], savedAt: Date? = nil, saves: [InspectorText.SaveRow] = [],
                 savesLoaded: Bool = true, savesFailed: Bool = false, savesElsewhere: String? = nil,
-                tabs: [InspectorText.TabRow] = []) {
+                tabs: [InspectorText.TabRow] = [], now: Date = Date()) {
+        self.now = now
         self.place = place
         self.movingTo = movingTo
         self.storagePlace = storagePlace
@@ -291,6 +294,7 @@ public struct InspectorContent: Sendable {
                   savesLoaded: box.savesLoaded,
                   savesFailed: box.savesFailed,
                   savesElsewhere: server.map(InspectorText.savesElsewhere),
-                  tabs: InspectorText.tabRows(tabs.tabs))
+                  tabs: InspectorText.tabRows(tabs.tabs),
+                  now: box.savedTimeNow)
     }
 }

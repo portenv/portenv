@@ -44,13 +44,19 @@ public struct QuitFlow: Sendable {
 
     /// Closes the box, asking on failure. Returns true to quit, false to stay.
     public func run(ask: @Sendable (String) async -> QuitChoice) async -> Bool {
+        await run(message: Self.message(box: box), ask: ask)
+    }
+
+    /// The same close, with the alert's words for what's happening
+    /// (quitting, or closing the window: WindowClose).
+    func run(message: String, ask: @Sendable (String) async -> QuitChoice) async -> Bool {
         guard openHere else { return true }
         while true {
             do {
                 try await daemon.close(box)
                 return true
             } catch {
-                switch await ask(Self.message(box: box)) {
+                switch await ask(message) {
                 case .tryAgain: continue
                 case .quitAnyway:
                     // portenvd (run by launchd) outlives the app: it records

@@ -156,19 +156,27 @@ struct FirstRunView: View {
     private var firstBox: some View {
         heading(flow.firstBoxTitle, flow.fromBoxList ? "" : FirstRunText.firstBoxLine) {
             VStack(alignment: .leading, spacing: 6) {
-                let problem = flow.nameProblem
+                let look = flow.nameField
                 TextField("Name", text: $flow.boxName)
                     .textFieldStyle(.roundedBorder)
                     .frame(maxWidth: 360)
-                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(.red, lineWidth: problem == nil ? 0 : 1.5))
-                    .accessibilityLabel("Box name")
+                    // While the name is invalid, a red border in place of
+                    // the blue focus ring (R-0049, new-box-linked-invalid).
+                    .focusEffectDisabled(look.showsError)
+                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(.red, lineWidth: look.showsError ? 1.5 : 0))
+                    // VoiceOver reads the problem as part of the field's
+                    // description, and the rule as its help.
+                    .accessibilityLabel(look.accessibilityDescription)
+                    .accessibilityHint(look.accessibilityHelp ?? "")
+                    .accessibilityIdentifier(NameFieldLook.identifier)
                     .onSubmit { Task { await flow.next() } }
                 // One line under the field: the rule, or what's wrong (the
-                // new-box boards; R-0032).
-                Text(problem ?? FirstRunText.nameHint)
+                // new-box boards; R-0032). The field already says it to
+                // VoiceOver.
+                Text(look.line)
                     .font(.callout)
-                    .foregroundStyle(problem == nil ? Color.secondary : Color.red)
-                    .accessibilityLabel(problem.map { "Problem: \($0)" } ?? FirstRunText.nameHint)
+                    .foregroundStyle(look.showsError ? Color.red : Color.secondary)
+                    .accessibilityHidden(true)
             }
         }
     }
@@ -217,8 +225,11 @@ struct FirstRunView: View {
                         .controlSize(.large)
                         .keyboardShortcut(.cancelAction)
                 }
+                // Filled only when it can be pressed; otherwise dimmed and
+                // disabled, not only inert (R-0049).
                 Button(flow.primaryButton) { Task { await flow.next() } }
                     .buttonStyle(.borderedProminent)
+                    .tint(flow.primaryProminent ? Color.accentColor : Color.secondary.opacity(0.35))
                     .controlSize(.large)
                     .keyboardShortcut(.defaultAction)
                     .disabled(!flow.canContinue)

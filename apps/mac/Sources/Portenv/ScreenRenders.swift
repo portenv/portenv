@@ -47,6 +47,12 @@ enum ScreenRenders {
                 BoxListView(boxes: ["acme-api", "site", "notes"], notice: LaunchDecision.missing("demo"), open: { _ in }, newBox: {}),
                 name: "box-list", in: dir
             )
+            // Closing the last box window goes back here, with no notice
+            // (the owner, 2026-10-11).
+            try snapshot(
+                BoxListView(boxes: ["acme-api", "site", "notes"], notice: nil, open: { _ in }, newBox: {}),
+                name: "box-list-after-closing", in: dir
+            )
             try renderInspector(to: dir)
             // The terminal paints its background on its layer, which a
             // cached display leaves out: drawn under it here.

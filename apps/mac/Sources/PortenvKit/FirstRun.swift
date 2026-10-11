@@ -50,6 +50,27 @@ public protocol FirstRunService: Sendable {
     func createBox(_ box: NewBox) async throws
 }
 
+/// The box name field's look: a red border in place of the focus ring
+/// while the name is invalid, the one line under it, and what VoiceOver
+/// reads: the field's description (AXDescription) names the problem, and
+/// its help (AXHelp) gives the rule while the name is fine.
+public struct NameFieldLook: Equatable, Sendable {
+    public let showsError: Bool
+    public let line: String
+    public let accessibilityDescription: String
+    public let accessibilityHelp: String?
+    public init(showsError: Bool, line: String, accessibilityDescription: String, accessibilityHelp: String?) {
+        self.showsError = showsError
+        self.line = line
+        self.accessibilityDescription = accessibilityDescription
+        self.accessibilityHelp = accessibilityHelp
+    }
+
+    /// The field's name for VoiceOver; UI tests find it by its identifier.
+    public static let fieldName = "Box name"
+    public static let identifier = "box-name"
+}
+
 /// First run's state: which step, what's been chosen, and whether Continue
 /// is enabled.
 @MainActor
@@ -117,6 +138,22 @@ public final class FirstRunFlow {
 
     /// What's wrong with the name, in one line, or nil (also while empty).
     public var nameProblem: String? { FirstRunText.nameProblem(boxName, existing: Array(existing)) }
+
+    /// How the name field looks (R-0049, the new-box-linked-invalid board):
+    /// a red border while the name is invalid, and the line under it (the
+    /// rule, or what's wrong) as its VoiceOver description.
+    public var nameField: NameFieldLook {
+        if let problem = nameProblem {
+            return NameFieldLook(showsError: true, line: problem,
+                                 accessibilityDescription: "\(NameFieldLook.fieldName). \(problem)", accessibilityHelp: nil)
+        }
+        return NameFieldLook(showsError: false, line: FirstRunText.nameHint,
+                             accessibilityDescription: NameFieldLook.fieldName, accessibilityHelp: FirstRunText.nameHint)
+    }
+
+    /// Continue or Create Box is prominent (filled) only when it can be
+    /// pressed; otherwise it's dimmed as well as disabled (R-0049).
+    public var primaryProminent: Bool { canContinue }
 
     public var firstBoxTitle: String { fromBoxList ? FirstRunText.newBoxTitle : FirstRunText.firstBoxTitle }
     public var primaryButton: String { fromBoxList && step == .firstBox ? FirstRunText.createBox : "Continue" }

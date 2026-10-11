@@ -51,6 +51,9 @@ public final class OverlayTracker {
 
     /// Brings the marks up to date with the buffer (trimming, reflow).
     public func refresh() {
+        // The marks are the main screen's: resolving them against a
+        // full-screen program's own buffer would drop them all.
+        guard !terminal.isCurrentBufferAlternate else { return }
         let first = firstValid, last = lastValid
         guard last >= first else { rows.removeAll(); return }
         rows.resolve(valid: first ... last) { r in
@@ -61,8 +64,8 @@ public final class OverlayTracker {
     /// The marks on screen now, with their screen rows. None while a
     /// full-screen program shows its own screen.
     public func placed() -> [OverlayRows.Placed] {
-        refresh()
         if terminal.isCurrentBufferAlternate { return [] }
+        refresh()
         return rows.visible(top: firstValid + terminal.buffer.yDisp, rows: terminal.rows)
     }
 }

@@ -12,13 +12,20 @@ struct BoxTitle: View {
     @Bindable var controller: BoxController
 
     var body: some View {
+        // Drawn at the time it's drawn, and again when "Saved just now"
+        // becomes "Saved at <time>" (§3.1): savedTimeNow moves then, with no
+        // new state to prompt it.
+        title(controller.subtitle(at: controller.savedTimeNow))
+    }
+
+    private func title(_ subtitle: String) -> some View {
         Button {
             BoxMenuPopup.show(controller)
         } label: {
             HStack(spacing: 5) {
                 VStack(alignment: .leading, spacing: 0) {
                     Text(controller.box).font(.headline)
-                    Text(controller.subtitle).font(.caption).foregroundStyle(.secondary)
+                    Text(subtitle).font(.caption).foregroundStyle(.secondary)
                 }
                 Image(systemName: "chevron.down").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
             }
@@ -28,7 +35,7 @@ struct BoxTitle: View {
         .buttonStyle(.plain)
         .fixedSize()
         .accessibilityLabel(A11y.titleLabel(box: controller.box))
-        .accessibilityValue(controller.subtitle)
+        .accessibilityValue(subtitle)
         .help("Box actions")
     }
 }

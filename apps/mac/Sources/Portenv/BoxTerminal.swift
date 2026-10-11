@@ -65,12 +65,18 @@ struct BoxTerminal: NSViewRepresentable {
 /// terminal's own background, so the text never touches the window's edge
 /// and the margin reads as part of the terminal. A click in the margin
 /// focuses the terminal.
+///
+/// Its colours match the system (the owner, 2026-10-11), like Terminal.app's
+/// Basic profile: the system's text background and text colours, the light
+/// or dark ANSI palette, and the accent for the caret and selection. They
+/// change with the appearance (View › Terminal Appearance comes later).
 final class PaddedTerminal: NSView {
     let terminal = LocalProcessTerminalView(frame: .zero)
 
     init(margin: CGFloat) {
         super.init(frame: .zero)
         wantsLayer = true
+        matchSystemAppearance()
         terminal.translatesAutoresizingMaskIntoConstraints = false
         addSubview(terminal)
         NSLayoutConstraint.activate([
@@ -90,7 +96,39 @@ final class PaddedTerminal: NSView {
         layer?.backgroundColor = terminal.nativeBackgroundColor.cgColor
     }
 
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        matchSystemAppearance()
+    }
+
+    /// Sets the terminal's colours for the current appearance, resolved (a
+    /// dynamic colour would follow whatever appearance draws next), then
+    /// redraws the text and the margin.
+    private func matchSystemAppearance() {
+        let system = TerminalPalette.systemColours(effectiveAppearance)
+        terminal.nativeBackgroundColor = NSColor(system.background)
+        terminal.nativeForegroundColor = NSColor(system.foreground)
+        terminal.caretColor = NSColor(system.caret)
+        terminal.selectedTextBackgroundColor = NSColor(system.selection)
+        // installColors also drops the terminal's cached colours and redraws.
+        terminal.installColors(TerminalPalette.matching(effectiveAppearance).ansi.map { SwiftTerm.Color($0) })
+        terminal.needsDisplay = true
+        needsDisplay = true
+    }
+
     override func mouseDown(with _: NSEvent) {
         window?.makeFirstResponder(terminal)
+    }
+}
+
+extension NSColor {
+    convenience init(_ c: RGB) {
+        self.init(srgbRed: CGFloat(c.red) / 255, green: CGFloat(c.green) / 255, blue: CGFloat(c.blue) / 255, alpha: 1)
+    }
+}
+
+extension SwiftTerm.Color {
+    convenience init(_ c: RGB) {
+        self.init(red8: UInt16(c.red), green8: UInt16(c.green), blue8: UInt16(c.blue))
     }
 }

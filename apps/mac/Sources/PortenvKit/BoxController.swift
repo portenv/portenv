@@ -85,7 +85,18 @@ public final class BoxController {
     }
 
     public let box: String
-    public private(set) var location: Location = .closed
+    public private(set) var location: Location = .closed {
+        didSet {
+            // Back on this Mac (from a server, or opened): its saves are read
+            // here again, so the inspector says "Loading saves…" until
+            // portenvd answers, never "No saves yet." from before.
+            if location == .thisMac && oldValue != .thisMac {
+                saves = []
+                savesLoaded = false
+                savesFailed = false
+            }
+        }
+    }
     public private(set) var state: BoxState?
     /// Opening or moving, which are not save states; nil otherwise.
     public private(set) var progress: String? = "Opening…"
@@ -102,6 +113,21 @@ public final class BoxController {
     /// Set once portenvd has answered for the saves, so an empty list isn't
     /// shown as "No saves yet." while it's still loading (R-0054).
     public private(set) var savesLoaded = false
+    /// The last read of the saves failed: the inspector says so, with Try
+    /// Again, instead of "Loading saves…" forever.
+    public private(set) var savesFailed = false
+    /// How long keepSavesLoaded waits between quiet retries.
+    private let savesRetry: Duration
+    /// When the saved-time words were last brought up to date. "Saved just
+    /// now" becomes "Saved at <time>" a minute after the save with no new
+    /// state (§3.1); views read this so they redraw then (R-0066: a
+    /// TimelineView kept its first schedule and never rolled over).
+    public private(set) var savedTimeNow: Date
+    private var savedTimeTicker: Task<Void, Never>?
+    /// Re-reads the saves when a new save is recorded (R-0066: the list
+    /// once lagged the state line by a minute).
+    private var savesReload: Task<Void, Never>?
+    private let sleep: @Sendable (Duration) async -> Void
     /// Where a move in progress is going (the inspector shows the move).
     public private(set) var movingTo: String?
 
@@ -143,9 +169,15 @@ public final class BoxController {
     public init(box: String, daemon: DaemonAPI, keychain: KeychainReading = SystemKeychain(),
                 notifier: KeychainWaitNotifying? = nil, keychainThreshold: Duration = KeychainWait.threshold,
                 ensureDaemon: (@Sendable () async -> String?)? = nil, followRetry: Duration = .seconds(1),
-                daemonDeadline: Duration = .seconds(30), now: @escaping @Sendable () -> Date = { Date() }) {
+                daemonDeadline: Duration = .seconds(30), savesRetry: Duration = .seconds(5),
+                now: @escaping @Sendable () -> Date = { Date() },
+                sleep: @escaping @Sendable (Duration) async -> Void = { try? await Task.sleep(for: $0) }) {
         self.box = box
+        self.savesRetry = savesRetry
         self.now = now
+        self.sleep = sleep
+        // Set from the clock when a save is first recorded (savedAtChanged).
+        self.savedTimeNow = .distantPast
         self.daemon = daemon
         self.keychain = keychain
         self.notifier = notifier
@@ -162,7 +194,39 @@ public final class BoxController {
 
     /// The title's state line: progress while opening or moving, a transient
     /// message, otherwise the recorded save state only.
-    public var subtitle: String { progress ?? transient ?? state?.line() ?? "" }
+    public var subtitle: String { subtitle(at: now()) }
+
+    /// The state line as it reads at a time: the title draws it at the time
+    /// it's drawn (and again when savedAtChangesAt comes).
+    public func subtitle(at time: Date) -> String { progress ?? transient ?? state?.line(now: time) ?? "" }
+
+    /// A new save was recorded: the words roll over a minute later, and the
+    /// saves list (once read) is read again now, not on a later state.
+    private func savedAtChanged() {
+        savedTimeNow = now()
+        savedTimeTicker?.cancel()
+        savedTimeTicker = Task { [weak self] in await self?.keepSavedTimeCurrent() }
+        if savesLoaded && location == .thisMac {
+            savesReload?.cancel()
+            savesReload = Task { [weak self] in await self?.keepSavesLoaded() }
+        }
+    }
+
+    /// Brings savedTimeNow up to date when "just now" runs out for the save
+    /// shown; returns once the words no longer change or when cancelled.
+    func keepSavedTimeCurrent() async {
+        while let next = savedAtChangesAt(now()) {
+            await sleep(.seconds(max(0, next.timeIntervalSince(now()))))
+            if Task.isCancelled { return }
+            savedTimeNow = now()
+        }
+    }
+
+    /// When the state line's "Saved just now" becomes "Saved at <time>", or
+    /// nil (GUIDELINES §3.1).
+    public func savedAtChangesAt(_ time: Date) -> Date? {
+        state?.save == .saved ? SavedTime.nextChange(state?.savedAt, now: time) : nil
+    }
 
     /// The title's look from one snapshot: the state line, the symbol and
     /// whether it spins always agree (§3.1).
@@ -386,7 +450,9 @@ public final class BoxController {
     /// only updates the line: the action itself sets where the box is
     /// (refreshing before its busy state ends).
     private func apply(_ st: BoxState, pushed: Bool) async {
+        let newSave = st.savedAt != state?.savedAt
         state = st
+        if newSave { savedAtChanged() }
         // portenvd answers again: whatever said it was away no longer holds.
         daemonGoneSince = nil
         if error == Self.daemonGone { error = nil }
@@ -454,10 +520,24 @@ public final class BoxController {
     /// Reads the box's saves for the inspector. A box on a server lists its
     /// saves there, so they aren't read through this Mac's portenvd.
     public func refreshSaves() async {
-        guard location == .thisMac else { saves = []; savesLoaded = true; return }
-        if let s = try? await daemon.saves(box) {
-            saves = s
+        guard location == .thisMac else { saves = []; savesLoaded = true; savesFailed = false; return }
+        do {
+            saves = try await daemon.saves(box)
             savesLoaded = true
+            savesFailed = false
+        } catch {
+            savesFailed = true
+        }
+    }
+
+    /// Reads the saves, and while that fails keeps trying quietly (the
+    /// inspector says "Couldn't load saves." meanwhile), until it works or
+    /// the task is cancelled.
+    public func keepSavesLoaded() async {
+        while !Task.isCancelled {
+            await refreshSaves()
+            if !savesFailed { return }
+            try? await Task.sleep(for: savesRetry)
         }
     }
 

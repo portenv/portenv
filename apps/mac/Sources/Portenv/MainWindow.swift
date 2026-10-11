@@ -20,8 +20,9 @@ struct MainWindow: View {
 
     var body: some View {
         content
-            .frame(minWidth: 640, minHeight: 400)
-            .inspector(isPresented: $inspectorOpen) {
+            // The terminal side and the inspector share the window's width;
+            // only the window has a minimum width (R-0073, R-0075).
+            .boxWindowColumns(inspectorOpen: $inspectorOpen) {
                 InspectorView(
                     content: InspectorContent(box: controller, tabs: tabs),
                     yourInitial: String(NSFullUserName().prefix(1)).uppercased(),
@@ -31,7 +32,6 @@ struct MainWindow: View {
                     revert: { Task { await controller.revertToLastSavePoint() } },
                     retrySaves: { Task { await controller.refreshSaves() } }
                 )
-                .inspectorColumnWidth(min: 260, ideal: 300, max: 400)
                 // Read the saves while open and wherever the box runs,
                 // quietly trying again if that fails. A new save reads them
                 // again from the controller (savedAtChanged).

@@ -101,6 +101,7 @@ Menu items that can't work right now are disabled with no explanation in the men
 - Each tab is a persistent session in the box, so work survives the window closing, the Mac sleeping and the box moving.
 - tmux is plumbing. Its status bar is always off, its prefix key never surfaces, and nothing in the UI mentions it.
 - The app, not tmux, owns tab names, order, badges and the new-tab button.
+- **macOS's own window tabs are off** (no Show Tab Bar, Merge All Windows or Move Tab to New Window in the Window menu): the app's tab bar is the only tabs.
 - **The current tab is marked by more than a shade** (§12): its name in semibold, and an accent line along its bottom edge, on top of the mockup's background. (A shade alone was too faint at the Mac, 2026-10-10.)
 - **Each viewer keeps its own current tab.** The app and each agent see the same tabs, but choosing a tab moves only that viewer's terminal: an agent switching tabs never changes the owner's.
 - **Tab shortcuts:**

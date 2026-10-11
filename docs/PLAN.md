@@ -274,7 +274,7 @@ Data is encrypted everywhere it rests, keys are per device and revocable, and in
 
 - Device key: generated at first run, stored in the macOS Keychain (Secure Enclave-backed where possible), never exported.
 - Per-box repository keys: restic supports several keys per repository. Each authorized device or runner gets its own key, stored in that device's protected store (Keychain; a root-only file or TPM-sealed secret on servers).
-- Recovery key: one more repository key per box, derived from a recovery phrase shown once at setup. Offered as Save to Passwords, Print or Copy.
+- Recovery key: 24 characters in six groups of four, the last a check character, shown once at setup and offered as Print or Copy; it's never stored on disk or logged. Each box gets one more repository key, derived from the recovery key and the box's ID (HKDF-SHA256). The app keeps a pool of passwords derived ahead for the next boxes it makes, never the recovery key itself (ADR 0019).
 - The control plane stores only wrapped keys (encrypted to a device's public key) and relays enrollment requests.
 
 **Modes (chosen at setup, changeable in Settings; before Phase 3 only Only you exists)**
@@ -288,7 +288,7 @@ Data is encrypted everywhere it rests, keys are per device and revocable, and in
 2. Revoke a device: remove its repository keys and end its sessions. Data is not re-encrypted.
 3. Suspected compromise: Re-encrypt box creates a new repository, copies all snapshots (`restic copy`), then deletes the old one. Needed because restic cannot rotate a repository's master key.
 4. Start a box on Portenv Cloud in end-to-end mode while the user is away: the request goes to the user's devices; approving releases a key for that session only.
-5. Recovery: the recovery phrase unlocks every box and enrolls a new device.
+5. Recovery: the recovery key unlocks every box and enrolls a new device.
 6. Delete a box: Delete Box asks whether to delete its saves too. A box's keys (every device's repository key, its REST password, its storage SSH key) are removed only together with its saves. If the saves stay (for example in the user's own bucket), the keys stay as well, and the box remains restorable from Browse Saves or with the recovery key. Invariant, tested when Delete Box is built: no box ends up with saves but no key on any device or in the recovery key.
 
 **Phase 0 minimum**
@@ -653,7 +653,7 @@ This is the first run once the control plane exists (Phase 3). The mockups show 
 
 1. Welcome: Continue with Apple, Continue with GitHub, Continue without an account (a button like the others: the own route needs no account; the remaining steps then skip sign-in and Portenv storage), and Use email instead.
 2. Protection: Only you (default) or You, with Portenv's help.
-3. Recovery key: Save to Passwords, Print, Copy; Continue enabled only after "I've saved my recovery key".
+3. Recovery key: Print, Copy; Continue enabled only after "I've saved my recovery key". (Save to Passwords was dropped: macOS has no public API for it; ADR 0019.)
 4. Storage: Portenv storage can be preselected, but "Use my own server or bucket" and "Keep on this Mac for now" are visible on the same screen, each one click, with no account needed.
 5. First box: name, Start from (GitHub repository, folder on this Mac, empty), detected toolbox with Change…, Show this box in Finder (on).
 6. Getting ready: Setting up Portenv (first run only), toolbox, encrypted home, clone, start. The window opens as soon as the box is usable.
@@ -665,7 +665,7 @@ Phases 0 to 2 have no Portenv backend, so the first run is reduced. Same six ste
 1. Welcome: a single Get started button. No sign-in; the device key is generated locally.
 2. Protection: fixed to Only you, shown as an explanation (your keys stay on your devices; losing them and the recovery key loses the data). No choice is offered.
 3. Recovery key: unchanged.
-4. Storage: My own server, An S3-compatible bucket, or This Mac only. No Portenv storage. This Mac only keeps the box's repository at `~/Library/Application Support/Portenv/Repositories/<box-id>`, outside the box and the engine VM, and the screen says plainly that saves then have no copy off this Mac. Time Machine may back the folder up; it is already encrypted by restic. After a week of use, one dismissible notice says "Your saves only exist on this Mac. Add a server or bucket to keep a copy elsewhere.", and Settings › Storage shows the same fact as a permanent status line.
+4. Storage: My own server, An S3-compatible bucket, or This Mac only. No Portenv storage. This Mac only keeps the box's repository at `~/Library/Application Support/Portenv/Repositories/<box-id>`, outside the box and the engine VM, and the screen says plainly that saves then have no copy off this Mac. Time Machine may back the folder up; it is already encrypted by restic. After a week of use, one dismissible notice says "Your saves only exist on this Mac. Add a server or bucket to keep a copy elsewhere.", and Settings › Storage shows the same fact as a permanent status line. **In 1.5 (the design testers' build), only "Keep on this Mac for now" is offered**, with "Saves stay on this Mac only. If this Mac is lost, they're lost too. You can add a server or bucket later." My own server and An S3-compatible bucket are shown dimmed and marked LATER (board `first-run-4-storage-this-mac`; the reviewer, on the owner's delegation, R-0092, R-0093).
 5. First box and 6. Getting ready: unchanged.
 
 In Phase 3, sign-in, Portenv storage and the recoverable mode are switched on. Existing users get a one-time prompt to create an account and link their devices; their boxes, keys and storage stay as they are.
@@ -1167,7 +1167,7 @@ Reduced: no sign-in, Only you, Keychain keys, the recovery key; the Welcome scre
   - **New Box… from the box list** (the new-box boards): titled "New box", with Cancel, ⎋ and "‹ Your boxes" back to the list, and Create Box. The name field says the rule under it, or what's wrong, in red, in one line.
   - **"Not built yet" is a notice,** not an error. Dev builds (their own bundle ID) name the `portenv init` workaround; a release build never sends anyone to Terminal.
   - **Closing to the list and the invalid name's look** (lane C's third milestone): `WindowClose` (the close runs before the list is shown; tested with the order of calls) and `NameFieldLook` (tested), with renders in `docs/screenshots/first-run/`.
-  - **Not yet:** making keys, the recovery key and the first box from the app. These are data-loss paths and wait for the decisions in Open questions; until then, first run says so plainly at Protection. Start from (GitHub, folder) and the detected toolbox on the first-box step also come later.
+  - **Not yet:** making keys, the recovery key and the first box from the app. These are data-loss paths. The decisions are taken and ADR 0019 works out the details (the recovery key's format and check character, the per-box key derivation, the pool of pre-derived passwords, and `CreateBox`'s order of steps); code follows its review, tests first. Until then, first run says so plainly at Protection. Start from (GitHub, folder) and the detected toolbox on the first-box step also come later.
 - **Move to Applications first** (the owner, 2026-10-10; found while testing #41):
   - Before registering the login item, if the app runs from anywhere but `/Applications`, it offers "Move Portenv to Applications?". That includes App Translocation, when the app is opened from Downloads or the DMG. launchd may refuse to start `portenvd` from other places.
   - If launchd still fails to start `portenvd` (for example exit 78, `EX_CONFIG`), the app says so in a plain line. It doesn't wait out the 30-second "background service isn't running" message.
@@ -1475,7 +1475,7 @@ The save engine is tested hardest, because a bug there loses someone's work; eve
 | Agent isolation | Adversarial suite: an agent lane tries to read other homes and secrets, escalate privilege, reach blocked hosts, persist after revoke | Every merge from Phase 4 |
 | Mac app | XCUITest for first run, title menu, lease sheet; accessibility audit; light and dark snapshots | Every merge touching the app |
 | Performance | Budgets: resume under 5 s to a ready box (median of 5, worst reported), online at a round-trip time of 50 ms or less and offline; close or move with a 5 MB change under 15 s at 20 Mbit/s up and 50 ms; newest save at most 60 s behind with continuous editing; port relay adds under 5 ms locally. Bandwidth and round-trip time are measured and reported with every result | Nightly |
-| Recovery drill | Restore a box from the recovery phrase on a clean Mac | Before each release |
+| Recovery drill | Restore a box from the recovery key alone on a clean Mac (ADR 0019) | Before each release |
 | Own route | `own-route` job: the own-route journey with every Portenv-hosted endpoint blocked at DNS and the firewall, from locally built artifacts; from Phase 1 it also drives the app with the hosted options visible and untouched, and from Phase 3 completes first run through Continue without an account (ADR 0008, G3) | Every pull request and merge to main; blocks releases |
 
 CI runs the Go suites on Linux arm64 and amd64 and the app suites on macOS arm64 runners. A release is blocked by any failing gate.
@@ -1486,7 +1486,7 @@ Behaviour the app relies on is tested through the path the app uses: `portenvd` 
 
 These need an owner decision; Claude Code should add new ones here instead of guessing.
 
-- [ ] Default protection mode for new users: Only you (current default) or recoverable?
+- [x] Default protection mode for new users: Only you (current default) or recoverable? **Answered (the reviewer, on the owner's delegation, R-0087, 2026-10-11):** Only you, with the recovery key required at first run (ADR 0019).
 - [ ] Phase 2: install the runner as a service from the start, or plain SSH first? The plan assumes the runner.
 - [ ] Before the public release: lower the app's deployment target from macOS 26 to macOS 15 (gRPC Swift 2's floor, ADR 0014), so older Macs can use the Docker fallback? Today the app targets macOS 26 and doesn't launch on them. Intel Macs would also need a universal build.
 - [ ] Trademark and domain check for Portenv in the EU and US; confirm portenv.com is registrable.
@@ -1509,9 +1509,11 @@ These need an owner decision; Claude Code should add new ones here instead of gu
 - [x] CLI names (ADR 0016): keep short top-level forms as aliases of `portenv box …`? **Answered (2026-10-10):** yes, as the primary way in, for the everyday verbs only (open, status, save, ask, answer, wait, screen, events, connect, guide). Each is defined once in the command registry as an alias of its grouped form, so help and the generated docs show both. Everything else lives only under its group.
 - [x] Remote MCP (2.7): how does the owner's pairing approval fit ChatGPT's OAuth sign-in? **Answered (2026-10-10):** the sign-in is the pairing. The runner's authorization page shows the code and "Approve this in your Portenv app", and the owner's approval in the app is the OAuth consent, creating the identity, grant and credential as `portenv connect` does. One pairing flow for every door.
 - [ ] Which group holds the commands outside the everyday list that the plan names today (`portenv skill`, `portenv mcp`, `portenv event`, and the Phase 0 `portenv init`): `portenv box …`, `portenv agent …`, or a new group?
-- [ ] First run's recovery key (1.5): its format (the mockup shows 24 characters in six groups of four, from a 32-letter alphabet without look-alikes), and how it becomes each box's extra restic key (for example, a key derived per box from the recovery key with a slow KDF and the box's ID). A data-loss path: an ADR and tests before code.
-- [ ] Making boxes from the app (1.5): only the app may raise Keychain prompts (ADR 0013), but portenvd owns box configs and storage. Proposed: the app makes the keys and puts them in the Keychain, then hands them to portenvd (as ProvideKeys does) with a new CreateBox call that writes the config and sets up storage. Needs an ADR.
-- [ ] "Save to Passwords" on the recovery key step: macOS has no public API for an app to add an item to the Passwords app. Keep Print and Copy only, or find another way?
+- [x] First run's recovery key (1.5): its format (the mockup shows 24 characters in six groups of four, from a 32-letter alphabet without look-alikes), and how it becomes each box's extra restic key (for example, a key derived per box from the recovery key with a slow KDF and the box's ID). A data-loss path: an ADR and tests before code. **Answered (the reviewer, on the owner's delegation, R-0087, 2026-10-11):** the mockup's format, from `SecRandomCopyBytes`, with a key derived per box ID. ADR 0019 (proposed) works out the rest: the alphabet without 0, 1, I and O; the last character a check (115 random bits); HKDF-SHA256, since restic's own scrypt already slows guesses; and a pool of 32 pre-derived passwords, so the app never keeps the recovery key.
+- [x] Making boxes from the app (1.5): only the app may raise Keychain prompts (ADR 0013), but portenvd owns box configs and storage. Proposed: the app makes the keys and puts them in the Keychain, then hands them to portenvd (as ProvideKeys does) with a new CreateBox call that writes the config and sets up storage. Needs an ADR. **Answered (the reviewer, on the owner's delegation, R-0087, 2026-10-11):** as proposed. ADR 0019 (proposed) gives the call and its order: the Keychain first, then the repository, the recovery key added and checked, and the config last. So a box can never save without both keys, and a retry with the same box ID resumes.
+- [x] "Save to Passwords" on the recovery key step: macOS has no public API for an app to add an item to the Passwords app. Keep Print and Copy only, or find another way? **Answered (the reviewer, on the owner's delegation, R-0087, 2026-10-11):** dropped. Print and Copy, plus the "I've saved" checkbox (ADR 0019).
+- [x] Restoring with only the recovery key (ADR 0019): where the app offers it on a clean Mac. **Answered (the reviewer, on the owner's delegation, R-0092, 2026-10-11):** "Restore with a Recovery Key…" as a plain text button under Welcome's main actions, and in Settings › Protection and recovery key. Not needed for the design testers; the board comes before the UI. The `RecoverBox` call and its test come with `CreateBox`.
+- [ ] S3-compatible storage from the app (first run's Storage step): where the bucket's credentials live (the Keychain, per box or per bucket), and how they reach restic. Today `portenv init` takes them from the environment. `CreateBox` covers This Mac only first (ADR 0019). Out of 1.5: first run offers only Keep on this Mac for the design testers (R-0092); this stays open for 2.9.
 - [ ] A per-box "Keep running when Portenv quits" option (off by default) with a menu bar item listing boxes still running? Only with Phase 3's lease hand-off (see 2.4).
 - [x] Tab keyboard shortcuts (1.2)? **Answered (2026-10-10):**
   - ⌘T opens a new tab, ⌘1–⌘9 choose a tab, ⌘⇧[ / ⌘⇧] go to the previous / next tab.

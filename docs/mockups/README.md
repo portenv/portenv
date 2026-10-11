@@ -25,8 +25,9 @@ The first-run screens show the full version, from Phase 3. Phases 1 and 2 ship a
 | `notification` | The macOS notification when Claude Code is waiting and the window isn't in front, with Yes, push / Not yet / Show. |
 | `first-run-1-welcome` | Continue with Apple, Continue with GitHub, Continue without an account (no sign-in is ever required for your own machines and storage; ADR 0008), or email. |
 | `first-run-2-protection` | Only you (default) or You, with Portenv's help. |
-| `first-run-3-recovery-key` | Recovery key with Save to Passwords, Print, Copy; Continue enabled only after the confirmation checkbox. |
+| `first-run-3-recovery-key` | Recovery key (ADR 0019's test vector) with Print and Copy; the line says what the key protects; Continue enabled only after the confirmation checkbox. Save to Passwords dropped (R-0087). |
 | `first-run-4-storage` | Portenv storage preselected. In the app, "Use my own server or bucket" and "Keep on this Mac for now" are visible on the same screen, each one click, with no account needed (docs/PLAN.md, Desktop app UX); this render shows the alternatives expanded. |
+| `first-run-4-storage-this-mac` | What 1.5's design-tester build shows: "Keep on this Mac for now" selected, with "If this Mac is lost, they're lost too"; My own server and the S3 bucket dimmed and tagged LATER; no Portenv storage card (no account in 1.5). `first-run-4-storage` stays the Phase 3 design (R-0093). |
 | `first-run-5-first-box` | Name, Start from (GitHub, folder, empty), detected toolbox, Show this box in Finder. |
 | `first-run-6-getting-ready` | Progress through toolbox, encrypted home, clone, start. Add "Setting up Portenv" as the first step on the first run only. |
 

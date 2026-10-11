@@ -46,6 +46,12 @@ enum ScreenRenders {
                 BoxListView(boxes: ["acme-api", "site", "notes"], notice: LaunchDecision.missing("demo"), open: { _ in }, newBox: {}),
                 name: "box-list", in: dir
             )
+            // Closing the last box window goes back here, with no notice
+            // (the owner, 2026-10-11).
+            try snapshot(
+                BoxListView(boxes: ["acme-api", "site", "notes"], notice: nil, open: { _ in }, newBox: {}),
+                name: "box-list-after-closing", in: dir
+            )
             return 0
         } catch {
             FileHandle.standardError.write(Data("render-screens: \(error)\n".utf8))

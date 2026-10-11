@@ -89,6 +89,7 @@ The app has to add a recovery-derived key to every box it makes later, without a
   - **Emptying it:** an entry is removed only after `CreateBox` succeeds. From then on the box's recovery password isn't kept anywhere on the Mac: the repository has the key, and the recovery key derives it again.
   - **When it runs out:** New Box asks for the recovery key once, in its own sheet: "Enter your recovery key to keep making boxes. Portenv doesn't keep it." That refills the pool and checks that the person still has the key. With 32 entries this is rare.
   - **After a suspected compromise:** the person can discard the pool in Settings › Protection and recovery key, and Re-encrypt discards it too. Refilling it needs the recovery key.
+- **A recovery public key.** Rejected (the reviewer, on the owner's delegation, R-0092). The app would keep only an X25519 public key derived from the recovery key, and seal each box's random recovery password to it in a small file stored next to the repository. Nothing about future boxes would sit on the Mac, and New Box would never ask for the key again. But recovery would then depend on that extra file surviving, and on the storage's append-only rules covering it. With HKDF per box ID, the recovery key and a listing of the storage are enough, years later. Restore is the path that must not fail, so the pool's small, discardable exposure (at most 32 future boxes) is the better trade.
 
 **The threat model, plainly.**
 
@@ -189,7 +190,7 @@ message CreateBoxResponse {
 - **On a clean Mac**, with no Keychain items and no Portenv state, the person gives the storage location and the recovery key. The app lists `<storage>/boxes/`, derives each box's recovery password, and calls `RecoverBox(box_id, storage, recovery_password, keys)`.
   - **In that call,** `portenvd` opens the repository with the recovery password, adds a new repository key for this Mac (made by the app and stored in the Keychain first, as in A2), checks it, and writes the config.
   - **The box** then opens like any other, under resume rules 2 to 5.
-- **Where the app offers this** (for example "Restore with a recovery key" on Welcome, and in Settings) needs a board. That's an open question for the owner. The call and its test come with `CreateBox`.
+- **Where the app offers this** (the reviewer, on the owner's delegation, R-0092): "Restore with a Recovery Key…" as a plain text button under Welcome's main actions, and in Settings › Protection and recovery key. Not needed for the design testers; the reviewer draws the board before the UI is built. The call and its clean-Mac test still come with `CreateBox`.
 
 ### Implementations
 
@@ -239,7 +240,8 @@ message CreateBoxResponse {
      - the Portenv directory (configs, pending records, state);
      - the defaults, and the saved application state;
    - any match fails.
-8. **The recovery key stays in the app:**
+8. **The recovery key stays in the app, and the new calls are guarded like `ProvideKeys`:**
+   - `CreateBox`, `RecoverBox` and `AddRecoveryKey` carry keys, so they get the same socket protections and caller checks as `ProvideKeys` (ADR 0014): a test calls each from a process that isn't the app and expects it refused, as `ProvideKeys`' test does;
    - no gRPC message type has a field that could carry the recovery key itself, only `recovery_password`;
    - `portenvd`'s code never imports the derivation (a boundary test, like the engine boundary).
 9. **The pool:**
@@ -255,8 +257,11 @@ message CreateBoxResponse {
   - the Keys list says how the recovery key becomes each box's key;
   - first run's Recovery key step loses Save to Passwords;
   - 1.5's "Not yet" points here.
-- **Two new open questions for the owner:** where the app offers restoring with a recovery key, and where S3 credentials live.
-- **The mockup board** `first-run-3-recovery-key` still shows Save to Passwords. The app doesn't build it, and the board's sample key isn't a valid key; screenshots use the vector key.
+- **What the recovery key protects, said honestly** (the reviewer, on the owner's delegation, R-0092). It opens a box's saves when this Mac's keys are lost. It can't bring back saves that were only on this Mac. For "Keep on this Mac" storage, the design testers' case, losing the Mac loses the saves, key or not. First run says so in these words:
+  - **Recovery key step:** "This key opens your boxes' saves if this Mac's keys are ever lost, on this Mac or a new one. Keep it somewhere safe and separate from this Mac."
+  - **Storage step, "Keep on this Mac for now":** "Saves stay on this Mac only. If this Mac is lost, they're lost too. You can add a server or bucket later."
+- **Storage in 1.5:** first run offers only "Keep on this Mac for now". My own server and an S3-compatible bucket are shown dimmed and marked LATER (R-0092, R-0093). Where S3 credentials live stays an open question for 2.9.
+- **The mockup boards:** `first-run-3-recovery-key` is updated (no Save to Passwords, the vector key, the line above), and `first-run-4-storage-this-mac` is new: it's what 1.5 builds. `first-run-4-storage` stays the Phase 3 design (R-0093).
 - **New calls on `portenvd`:** `CreateBox`, `AddRecoveryKey`, `RecoverBox` and `DiscardCreation`, and `ListBoxes`' `creating` flag. Each is a data-loss path, with its tests first.
 - **New Box** sometimes asks for the recovery key: when the pool of 32 runs out. That's the price of never keeping the recovery key on the Mac.
 - **Re-encrypt and Phase 3's device enrolment** each need a line on the pool when they're designed: Re-encrypt discards it, and an approved device gets its own from the approving device.

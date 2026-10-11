@@ -61,7 +61,7 @@ The title shows the box name, a sync symbol and a chevron; the line under it is 
 | --- | --- | --- |
 | New box, never saved | none | `This Mac · Not saved yet` |
 | Saving | `arrow.triangle.2.circlepath` (animated, unless Reduce Motion) | `This Mac · Saving…` |
-| Saved | `checkmark.circle` | `This Mac · Saved at 14:58` (`Saved just now` for the first minute) |
+| Saved | `checkmark.circle` | `This Mac · Saved at 14:58` (`Saved just now` for the first minute; from the next day `Saved yesterday at 23:43`, then `Saved on 9 Oct at 23:43`, with the year once it's another year; the words change at midnight with no new save) |
 | Offline | `icloud.slash`-style "not synced" symbol | `This Mac · Offline · will save later` |
 | Moving | `arrow.triangle.2.circlepath` | `Moving to Test server…` |
 | Closing the last box window (saving before the list shows) | `arrow.triangle.2.circlepath` | `Saving before closing…`, with the Box menu disabled, until the list shows; the normal line again if the person stays |
@@ -183,7 +183,7 @@ Sections, always in this order, each with a small grey heading:
 
 1. **Where it is.** "Running on <place>" with how long and where it came from; "Saves go to <place>" with "Encrypted on this Mac before they leave it" (or the right equivalent); a Move To… button. When packages from `apt-packages.txt` couldn't be installed: "1 package couldn't be installed: <name> · Retry" ("2 packages couldn't be installed: <a>, <b> · Retry"). The state line stays normal; the box started all the same and Portenv retries in the background.
    - During a move, this section becomes the move's progress, in four steps with a check, current or pending marker each: Saved on <source> (time, size of changes) → Sending changes (progress bar, "x of y MB") → Starting on <destination> → Reconnecting this window. Above the steps: a time estimate once known. Below: "You can keep reading. Typing comes back when the box is running there. If the move stops, the box stays here, saved."
-2. **Saves.** "Last saved <time>", then the five most recent saves, newest first: time, kind and optional name. Kinds: Autosave, Save point ("name"), Saved before moving, Arrived from <place>, Kept when you reverted (with "Nothing reverted away is lost"); and, for kinds portenvd records today: Saved when the box closed (a close), Kept from <machine> (this Mac's copy kept when a newer save came from elsewhere). Hovering a row shows Revert. "Browse All Saves…" link below.
+2. **Saves.** "Last saved <time>" (the state line's rule: "just now", "14:58", "yesterday at 23:43", "on 9 Oct at 23:43"), then the five most recent saves, newest first: time, kind and optional name. Kinds: Autosave, Save point ("name"), Saved before moving, Arrived from <place>, Kept when you reverted (with "Nothing reverted away is lost"); and, for kinds portenvd records today: Saved when the box closed (a close), Kept from <machine> (this Mac's copy kept when a newer save came from elsewhere). Hovering a row shows Revert. "Browse All Saves…" link below.
 3. **Who's here.** You first, then each connected agent: avatar, name, mode ("On your behalf" or "Own lane"), "since <time>", any waiting state in orange text, and a Revoke button (destructive style, confirmation alert).
 4. **Running now.** Tabs, each with what runs in it ("Idle" for just the shell), open ports with "Open in Safari", saved commands with Run buttons and the note "Kept in the box, so they move with it".
 

@@ -66,7 +66,10 @@ struct BoxControllerTests {
 
     @Test func theStateLineFollowsRecordedState() async {
         let cli = FakeDaemon()
-        let c = BoxController(box: "demo", daemon: cli)
+        // A fixed "now", ten minutes after the save (the same day in every
+        // time zone): the words would otherwise depend on the date it runs.
+        let now = ISO8601DateFormatter().date(from: "2026-10-08T09:52:00Z")!
+        let c = BoxController(box: "demo", daemon: cli, now: { now })
         await c.open()
         for (json, line) in [
             (#"{"state":"SAVE_STATE_SAVING"}"#, "This Mac · Saving…"),

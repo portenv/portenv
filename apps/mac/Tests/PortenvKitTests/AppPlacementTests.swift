@@ -166,6 +166,16 @@ struct LaunchdJobTests {
         #expect(BackgroundServiceProblem.of(status: .enabled, launchdJob: "", placement: .applications) == nil)
     }
 
+    /// The app reads its own build's job: a dev lane's build reading the
+    /// release job saw another build's exit 78 and said its own running
+    /// portenvd "didn't start" (found at the Mac with dev-B, 2026-10-11).
+    @Test func theJobReadIsThisBuildsOwn() throws {
+        let devB = try Instance(info: ["PortenvInstance": "dev-B"])
+        #expect(LaunchdJob.target(uid: 501, instance: devB) == "gui/501/com.portenv.portenvd.dev-B")
+        let release = try Instance(info: [:])
+        #expect(LaunchdJob.target(uid: 501, instance: release) == "gui/501/com.portenv.portenvd")
+    }
+
     @Test func exit78IsRefused() {
         #expect(LaunchdJob.refused(in: refused))
         #expect(!LaunchdJob.refused(in: running))

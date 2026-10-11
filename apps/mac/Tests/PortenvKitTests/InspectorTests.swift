@@ -192,7 +192,7 @@ struct InspectorTests {
         #expect(s?.openedAt == ISO8601DateFormatter().date(from: "2026-10-10T09:12:00Z"))
         #expect(BoxState.parse(#"{"state":"SAVE_STATE_SAVED","storage_place":""}"#)?.storagePlace == nil)
         #expect(InspectorText.savesGoTo("test-server.example") == "Saves go to test-server.example")
-        // Fixed "now" on the same day: this once failed once the date passed.
+        // A fixed "now" on the same day: the test doesn't depend on the date it runs.
         let opened = ISO8601DateFormatter().date(from: "2026-10-10T09:12:00Z")!
         #expect(InspectorText.since(opened, now: opened.addingTimeInterval(3600), calendar: .utc) == "Since 09:12")
     }

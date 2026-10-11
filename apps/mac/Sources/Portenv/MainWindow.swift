@@ -28,11 +28,16 @@ struct MainWindow: View {
                     moveTargets: moveTargets,
                     move: { target in Task { await controller.move(to: target) } },
                     retryPackages: { Task { await controller.retryPackages() } },
-                    revert: { Task { await controller.revertToLastSavePoint() } }
+                    revert: { Task { await controller.revertToLastSavePoint() } },
+                    retrySaves: { Task { await controller.refreshSaves() } }
                 )
                 .inspectorColumnWidth(min: 260, ideal: 300, max: 400)
-                // The saves change with each save: read them while open.
-                .task(id: controller.state?.savedAt) { await controller.refreshSaves() }
+                // Read the saves while open and wherever the box runs,
+                // quietly trying again if that fails. A new save reads them
+                // again from the controller (savedAtChanged).
+                .task(id: controller.location) {
+                    await controller.keepSavesLoaded()
+                }
             }
             .navigationTitle(controller.box)
             // The title is the box's menu (Apple's document-menu pattern):

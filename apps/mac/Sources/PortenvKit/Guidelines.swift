@@ -43,6 +43,32 @@ public enum StateLine {
     }
 }
 
+/// §3.1: one rule for when the box was saved, from one recorded time (the
+/// box state's savedAt), for both the state line and the inspector's "Last
+/// saved": "just now" for the first minute, then the time.
+public enum SavedTime {
+    public static let justNowSeconds: TimeInterval = 60
+
+    static func isJustNow(_ at: Date, now: Date) -> Bool { now.timeIntervalSince(at) < justNowSeconds }
+
+    /// "Saved just now" or "Saved at 14:58".
+    public static func stateLine(_ at: Date, now: Date, timeZone: TimeZone = .current, locale: Locale = .current) -> String {
+        isJustNow(at, now: now) ? "Saved just now" : "Saved at " + StateLine.clock(at, timeZone: timeZone, locale: locale)
+    }
+
+    /// "Last saved just now" or "Last saved 14:58" (GUIDELINES §6).
+    public static func inspector(_ at: Date, now: Date, timeZone: TimeZone = .current, locale: Locale = .current) -> String {
+        "Last saved " + (isJustNow(at, now: now) ? "just now" : StateLine.clock(at, timeZone: timeZone, locale: locale))
+    }
+
+    /// When the words change next ("just now" becomes the time), so a view
+    /// redraws then; nil once they no longer change.
+    public static func nextChange(_ at: Date?, now: Date) -> Date? {
+        guard let at, isJustNow(at, now: now) else { return nil }
+        return at.addingTimeInterval(justNowSeconds)
+    }
+}
+
 extension BoxState {
     /// §3.1: the state line, `<Location> · <Save state>`, from this state
     /// alone (recorded facts only).
@@ -55,7 +81,7 @@ extension BoxState {
         case .saving: state = "Saving…"
         case .saved:
             if let at = savedAt {
-                state = now.timeIntervalSince(at) < 60 ? "Saved just now" : "Saved at " + clock(at)
+                state = SavedTime.stateLine(at, now: now, timeZone: timeZone, locale: locale)
             } else {
                 state = "Saved"
             }

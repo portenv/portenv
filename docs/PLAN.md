@@ -1053,6 +1053,12 @@ In this order:
        - Revert on saves other than the newest save point, and Browse All Saves… (1.4);
        - save point names: the row shows a name on a second line, but portenvd doesn't record names yet;
        - a server box's saves, which portenvd lists on the server.
+     - **Review follow-ups (lane B's second PR, 2026-10-11):**
+       - one rule for "Saved …": the state line and the inspector's "Last saved" both come from the box state's saved-at time, "just now" for the first minute and then the time (§3.1), and both redraw when the minute is up (the title once still said "Saved just now" two minutes after the save);
+       - Move To… with nowhere to go says why: "Add a server to move this box.", under it and as its help tag;
+       - saves kept on this Mac read "Encrypted on this Mac"; "before they leave it" stays for a server, a bucket or a drive;
+       - saves that can't be read show "Couldn't load saves." with Try Again, and the app keeps trying quietly, instead of "Loading saves…" forever;
+       - a box that moves back to this Mac shows "Loading saves…" until portenvd answers, never "No saves yet." from before.
 4. **Notifications (§5)** for a finished long command, a move over 10 s, and the Keychain wait from item 1. Answer buttons come with the inline answer card.
    - The app asks for permission the first time something is worth notifying, never at launch. If permission is denied, the state line and the inspector still show everything, and nothing nags.
    - **Status (lane B's PR, 2026-10-10):** built, only when the window isn't in front.
@@ -1071,6 +1077,12 @@ In this order:
      - **Question 3, SwiftTerm overlay alignment:** still open. It needs a prototype overlay, then the reviewer's UI test.
      - **Blocks and the rest stay in Phase 1 provisionally.** If question 3 fails, they move to Phase 2.
      - **Still to do:** the same cases over the SSH forward to a server box (needs the owner's go-ahead for the AWS test server), and real agent CLIs in place of the stand-ins (needs accounts).
+
+**Terminal colours (the owner, 2026-10-11).** The terminal follows the system appearance by default ("Match System"), like Terminal.app's Basic profile:
+- the system's text background and text colours (`NSColor.textBackgroundColor`, `textColor`), changing with light and dark mode, the margin included;
+- one ANSI palette for light and one for dark; the light one uses darker greens, yellows and cyans, and every normal colour is at least 4.5:1 on its background (a test, against the system's own background);
+- the caret and the selection follow the system accent.
+- **Later:** View › Terminal Appearance (other themes). Built in lane B's second PR.
 
 **4b. 1.2b: split view** (the owner, 2026-10-10; reference: docs/mockups/split-view.png)
 

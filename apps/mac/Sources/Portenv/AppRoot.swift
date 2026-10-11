@@ -159,7 +159,8 @@ final class AppModel {
     private func closeToList(_ controller: BoxController) async {
         defer { closing = false }
         await openTask?.value
-        _ = await WindowClose.run(controller.quitFlow, ask: AppDelegate.askOnClose) { [weak self] in
+        _ = await WindowClose.run(controller.quitFlow, ask: AppDelegate.askOnClose,
+                                  closing: { on in await controller.showClosing(on) }) { [weak self] in
             await self?.showList()
         }
     }

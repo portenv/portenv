@@ -24,6 +24,10 @@ public enum StateLine {
 
     public static func moved(to target: String) -> String { "Moved to \(ServerName.display(target))" }
 
+    /// Closing the last box window: the box is saved and released before
+    /// the list shows (WindowClose), so the wait reads as work (R-0061).
+    public static let closing = "Saving before closing…"
+
     public static func reverted(to time: Date, timeZone: TimeZone = .current, locale: Locale = .current) -> String {
         "Reverted to \(clock(time, timeZone: timeZone, locale: locale)) · your changes were kept"
     }
@@ -41,27 +45,78 @@ public enum StateLine {
 
 /// §3.1: one rule for when the box was saved, from one recorded time (the
 /// box state's savedAt), for both the state line and the inspector's "Last
-/// saved": "just now" for the first minute, then the time.
+/// saved": "just now" for the first minute, then the time; from the next
+/// day "yesterday at" the time, then the date and the time (R-0061).
 public enum SavedTime {
     public static let justNowSeconds: TimeInterval = 60
 
     static func isJustNow(_ at: Date, now: Date) -> Bool { now.timeIntervalSince(at) < justNowSeconds }
 
-    /// "Saved just now" or "Saved at 14:58".
+    /// "Saved just now", "Saved at 14:58", "Saved yesterday at 23:43",
+    /// "Saved on 9 Oct at 23:43" (another year: "on 9 Oct 2025 at 23:43").
     public static func stateLine(_ at: Date, now: Date, timeZone: TimeZone = .current, locale: Locale = .current) -> String {
-        isJustNow(at, now: now) ? "Saved just now" : "Saved at " + StateLine.clock(at, timeZone: timeZone, locale: locale)
+        if isJustNow(at, now: now) { return "Saved just now" }
+        let words = when(at, now: now, timeZone: timeZone, locale: locale)
+        return "Saved " + (day(at, now: now, calendar: calendar(timeZone, locale)) == .today ? "at " + words : words)
     }
 
-    /// "Last saved just now" or "Last saved 14:58" (GUIDELINES §6).
+    /// "Last saved just now", "Last saved 14:58", "Last saved yesterday at
+    /// 23:43", "Last saved on 9 Oct at 23:43" (GUIDELINES §6).
     public static func inspector(_ at: Date, now: Date, timeZone: TimeZone = .current, locale: Locale = .current) -> String {
-        "Last saved " + (isJustNow(at, now: now) ? "just now" : StateLine.clock(at, timeZone: timeZone, locale: locale))
+        "Last saved " + (isJustNow(at, now: now) ? "just now" : when(at, now: now, timeZone: timeZone, locale: locale))
     }
 
-    /// When the words change next ("just now" becomes the time), so a view
-    /// redraws then; nil once they no longer change.
-    public static func nextChange(_ at: Date?, now: Date) -> Date? {
-        guard let at, isJustNow(at, now: now) else { return nil }
-        return at.addingTimeInterval(justNowSeconds)
+    /// When the words change next, so a view redraws then: "just now"
+    /// becomes the time, midnight makes today's time "yesterday at" and
+    /// yesterday's the date, and a new year adds the year. Nil once they no
+    /// longer change.
+    public static func nextChange(_ at: Date?, now: Date, timeZone: TimeZone = .current, locale: Locale = .current) -> Date? {
+        guard let at else { return nil }
+        if isJustNow(at, now: now) { return at.addingTimeInterval(justNowSeconds) }
+        let cal = calendar(timeZone, locale)
+        switch day(at, now: now, calendar: cal) {
+        case .today, .yesterday:
+            return cal.date(byAdding: .day, value: 1, to: cal.startOfDay(for: now))
+        case .thisYear:
+            return cal.dateInterval(of: .year, for: now).map(\.end)
+        case .earlier:
+            return nil
+        }
+    }
+
+    enum Day: Equatable { case today, yesterday, thisYear, earlier }
+
+    /// Which day the save was on, seen from now, by the calendar's days (a
+    /// save that looks later than now, from a clock ahead, counts as today).
+    static func day(_ at: Date, now: Date, calendar cal: Calendar) -> Day {
+        let saved = cal.startOfDay(for: at), today = cal.startOfDay(for: now)
+        if saved >= today { return .today }
+        if let y = cal.date(byAdding: .day, value: -1, to: today), saved >= y { return .yesterday }
+        return cal.isDate(at, equalTo: now, toGranularity: .year) ? .thisYear : .earlier
+    }
+
+    /// The time, then with "yesterday at" or "on <date> at" before it.
+    static func when(_ at: Date, now: Date, timeZone: TimeZone, locale: Locale) -> String {
+        let clock = StateLine.clock(at, timeZone: timeZone, locale: locale)
+        let cal = calendar(timeZone, locale)
+        let d = day(at, now: now, calendar: cal)
+        switch d {
+        case .today: return clock
+        case .yesterday: return "yesterday at " + clock
+        case .thisYear, .earlier:
+            let f = DateFormatter()
+            f.locale = locale
+            f.timeZone = timeZone
+            f.calendar = cal
+            f.setLocalizedDateFormatFromTemplate(d == .thisYear ? "dMMM" : "dMMMyyyy")
+            return "on " + f.string(from: at) + " at " + clock
+        }
+    }
+
+    static func calendar(_ timeZone: TimeZone, _ locale: Locale) -> Calendar {
+        var c = locale.calendar
+        c.timeZone = timeZone
+        return c
     }
 }
 
@@ -114,7 +169,8 @@ public struct TitleLook: Equatable, Sendable {
 
     /// A symbol spins only while the line says something is in progress.
     public var consistent: Bool {
-        let inProgress = line.contains("Saving…") || line.contains("Moving to") || line.contains("Opening…") || line.hasSuffix("· retrying")
+        let inProgress = line.contains("Saving…") || line.contains("Moving to") || line.contains("Opening…")
+            || line == StateLine.closing || line.hasSuffix("· retrying")
         return spins == inProgress && (!spins || symbol == "arrow.triangle.2.circlepath")
     }
 }

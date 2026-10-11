@@ -39,6 +39,7 @@ let package = Package(
             name: "Portenv",
             dependencies: ["PortenvKit", .product(name: "SwiftTerm", package: "SwiftTerm")]
         ),
-        .testTarget(name: "PortenvKitTests", dependencies: ["PortenvKit"]),
+        // SwiftTerm: the layout tests put a real terminal in the window.
+        .testTarget(name: "PortenvKitTests", dependencies: ["PortenvKit", .product(name: "SwiftTerm", package: "SwiftTerm")]),
     ]
 )

@@ -49,9 +49,9 @@ From top to bottom, left to right:
 | Toolbar (unified, 52 pt) | sidebar toggle · title button · flexible space · open-port pills · agent avatars · inspector toggle | Title button is the box's document menu |
 | Tab bar (30 pt) | one tab per terminal session, `+` for a new tab | Tabs replace tmux's status bar, which is always hidden |
 | Terminal | blocks, sticky header, inline answer card | Fills the remaining space |
-| Inspector (trailing, 280–320 pt) | Where it is · Saves · Who's here · Running now | Hidden by default, ⌥⌘I or toolbar button |
+| Inspector (trailing, 260–400 pt, 300 by default) | Where it is · Saves · Who's here · Running now | Hidden by default, ⌥⌘I or toolbar button |
 
-Minimum window size: 720 × 480 pt. Below 960 pt wide, the inspector overlays the terminal instead of pushing it.
+Minimum window size: 640 × 440 pt. The inspector always sits beside the terminal and pushes it, never over it: only the window has a minimum width, so with the inspector open the terminal keeps at least 380 pt (the owner, 2026-10-11).
 
 ### 3.1 Title button and state line
 

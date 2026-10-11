@@ -22,6 +22,15 @@ public enum WindowClose {
         showingBox && otherBoxWindows == 0 ? .closeBoxThenShowList : .closeWindow
     }
 
+    /// The window File › Close acts on: the key window, else the main
+    /// window, else the frontmost one (front to back, visible windows that
+    /// can be main). With Portenv behind, or the menu driven through
+    /// accessibility, there's no key window and the command still works
+    /// (R-0061).
+    public static func target<Window: AnyObject>(key: Window?, main: Window?, frontToBack: [Window]) -> Window? {
+        key ?? main ?? frontToBack.first
+    }
+
     /// The alert's text when the box couldn't be saved.
     public static func message(box: String) -> String {
         "\(box) couldn't be saved before closing. Its work is still on this Mac."
@@ -32,12 +41,19 @@ public enum WindowClose {
 
     /// Closes the box, asking on failure, then shows the list. Returns true
     /// once the list is shown, false when the person chose to stay.
+    /// `closing` shows that the box is closing while it saves (true before
+    /// the close, false when the person stays in the box).
     public static func run(
         _ flow: QuitFlow,
         ask: @Sendable (String) async -> QuitChoice,
+        closing: @Sendable (Bool) async -> Void = { _ in },
         showList: @Sendable () async -> Void
     ) async -> Bool {
-        guard await flow.run(message: message(box: flow.box), ask: ask) else { return false }
+        await closing(true)
+        guard await flow.run(message: message(box: flow.box), ask: ask) else {
+            await closing(false)
+            return false
+        }
         await showList()
         return true
     }

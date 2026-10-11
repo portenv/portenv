@@ -468,6 +468,19 @@ public final class BoxController {
         location = .closed
     }
 
+    /// The state line while closing the last box window saves the box
+    /// (StateLine.closing), with the box's menu disabled; off again when
+    /// the person chose to stay in the box.
+    public func showClosing(_ on: Bool) {
+        if on {
+            progress = StateLine.closing
+            busy = true
+        } else if progress == StateLine.closing {
+            progress = nil
+            busy = false
+        }
+    }
+
     public func dismissError() { error = nil }
 
     /// What quitting needs: this box, and whether it is open on this Mac.

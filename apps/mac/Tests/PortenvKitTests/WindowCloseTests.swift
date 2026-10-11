@@ -31,6 +31,50 @@ struct WindowCloseTests {
         #expect(answers.shown.isEmpty)
     }
 
+    /// The window shows that the box is closing while it saves (R-0061):
+    /// before the close, and still showing when the list replaces the box.
+    @Test func theWindowShowsClosingWhileItSaves() async {
+        let cli = FakeDaemon(), order = CloseOrder()
+        cli.onRun = { args in order.add(args.joined(separator: " ")) }
+        let shown = await WindowClose.run(QuitFlow(daemon: cli, box: "acme-api", openHere: true), ask: { _ in .cancel },
+                                          closing: { on in order.add(on ? "closing" : "closing off") }) {
+            order.add("list")
+        }
+        #expect(shown)
+        #expect(order.events == ["closing", "app close acme-api", "list"])
+    }
+
+    /// Staying in the box (Cancel) takes the closing line away again.
+    @Test func cancelTakesTheClosingLineAway() async {
+        let cli = FakeDaemon(), order = CloseOrder()
+        cli.failing["close"] = "the box agent is unavailable"
+        let shown = await WindowClose.run(QuitFlow(daemon: cli, box: "acme-api", openHere: true), ask: { _ in .cancel },
+                                          closing: { on in order.add(on ? "closing" : "closing off") }) {
+            order.add("list")
+        }
+        #expect(!shown)
+        #expect(order.events == ["closing", "closing off"])
+    }
+
+    /// The state line's closing row (GUIDELINES §3.1): the line, a spinning
+    /// symbol, the Box menu disabled; the normal line again on staying.
+    @MainActor
+    @Test func theStateLineSaysClosing() async {
+        let cli = FakeDaemon()
+        let c = BoxController(box: "acme-api", daemon: cli)
+        await c.open()
+        cli.state = #"{"state":"SAVE_STATE_SAVED","saved_at":"2026-10-08T12:58:00Z"}"#
+        await c.refresh()
+        let normal = c.subtitle
+        c.showClosing(true)
+        #expect(c.subtitle == "Saving before closing…")
+        #expect(c.title.spins && c.title.consistent)
+        #expect(c.busy)
+        c.showClosing(false)
+        #expect(c.subtitle == normal)
+        #expect(!c.busy && c.title.consistent)
+    }
+
     /// A failed save asks, in closing's words; Cancel keeps the box open in
     /// its window and never shows the list.
     @Test func aFailedSaveAsksAndCancelStaysInTheBox() async {
@@ -89,6 +133,17 @@ struct WindowCloseTests {
         #expect(WindowClose.action(showingBox: true, otherBoxWindows: 0) == .closeBoxThenShowList)
         #expect(WindowClose.action(showingBox: true, otherBoxWindows: 1) == .closeWindow)
         #expect(WindowClose.action(showingBox: false, otherBoxWindows: 0) == .closeWindow)
+    }
+
+    /// File › Close acts on the key window, else the main window, else the
+    /// frontmost one: with Portenv behind there's no key window (R-0061).
+    @Test func fileCloseFindsItsWindowWithTheAppBehind() {
+        final class Win {}
+        let key = Win(), main = Win(), front = Win(), back = Win()
+        #expect(WindowClose.target(key: key, main: main, frontToBack: [front, back]) === key)
+        #expect(WindowClose.target(key: nil, main: main, frontToBack: [front, back]) === main)
+        #expect(WindowClose.target(key: nil, main: nil, frontToBack: [front, back]) === front)
+        #expect(WindowClose.target(key: nil, main: nil, frontToBack: [Win]()) == nil)
     }
 
     /// The alert's words for closing, and quitting's unchanged.

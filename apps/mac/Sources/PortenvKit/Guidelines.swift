@@ -24,6 +24,10 @@ public enum StateLine {
 
     public static func moved(to target: String) -> String { "Moved to \(ServerName.display(target))" }
 
+    /// Closing the last box window: the box is saved and released before
+    /// the list shows (WindowClose), so the wait reads as work (R-0061).
+    public static let closing = "Saving before closing…"
+
     public static func reverted(to time: Date, timeZone: TimeZone = .current, locale: Locale = .current) -> String {
         "Reverted to \(clock(time, timeZone: timeZone, locale: locale)) · your changes were kept"
     }
@@ -88,7 +92,8 @@ public struct TitleLook: Equatable, Sendable {
 
     /// A symbol spins only while the line says something is in progress.
     public var consistent: Bool {
-        let inProgress = line.contains("Saving…") || line.contains("Moving to") || line.contains("Opening…") || line.hasSuffix("· retrying")
+        let inProgress = line.contains("Saving…") || line.contains("Moving to") || line.contains("Opening…")
+            || line == StateLine.closing || line.hasSuffix("· retrying")
         return spins == inProgress && (!spins || symbol == "arrow.triangle.2.circlepath")
     }
 }

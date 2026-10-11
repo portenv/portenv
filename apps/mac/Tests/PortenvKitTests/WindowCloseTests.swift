@@ -116,6 +116,23 @@ struct WindowCloseTests {
         #expect(order.events == ["app close acme-api", "app leave-unsaved acme-api", "list"])
     }
 
+    /// R-0067: through a failed save, the closing line stays as it is. Try
+    /// Again re-uses it (one "closing", never off), and Close Anyway goes
+    /// straight to the list. The list drops the box's controller
+    /// (AppModel.showList), so the line can't outlive the box.
+    @Test(arguments: [QuitChoice.tryAgain, .quitAnyway])
+    func aFailedSaveKeepsOneClosingLineUntilTheList(_ choice: QuitChoice) async {
+        let cli = FakeDaemon(), order = CloseOrder()
+        cli.failingOnce["close"] = "the box agent is unavailable"
+        let answers = ScriptedAnswers([choice])
+        let shown = await WindowClose.run(QuitFlow(daemon: cli, box: "acme-api", openHere: true), ask: { answers.ask($0) },
+                                          closing: { on in order.add(on ? "closing" : "closing off") }) {
+            order.add("list")
+        }
+        #expect(shown)
+        #expect(order.events == ["closing", "list"])
+    }
+
     /// A box that isn't open on this Mac needs nothing here.
     @Test func aBoxNotOnThisMacGoesStraightToTheList() async {
         let cli = FakeDaemon(), order = CloseOrder()

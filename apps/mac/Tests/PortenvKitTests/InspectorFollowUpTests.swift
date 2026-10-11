@@ -38,8 +38,80 @@ struct InspectorFollowUpTests {
         // (it once still said so two minutes after the save).
         #expect(SavedTime.nextChange(noon, now: noon) == noon.addingTimeInterval(60))
         #expect(SavedTime.nextChange(noon, now: noon.addingTimeInterval(59)) == noon.addingTimeInterval(60))
-        #expect(SavedTime.nextChange(noon, now: noon.addingTimeInterval(60)) == nil)
+        // After the minute, the next change is midnight ("yesterday at").
+        #expect(SavedTime.nextChange(noon, now: noon.addingTimeInterval(60), timeZone: utc, locale: gb)
+            == noon.addingTimeInterval(12 * 3600))
         #expect(SavedTime.nextChange(nil, now: noon) == nil)
+    }
+
+    // MARK: "Saved yesterday at …" (R-0061)
+
+    private func utcDate(_ s: String) -> Date { ISO8601DateFormatter().date(from: s)! }
+
+    @Test func olderSavesSayTheDay() {
+        // GUIDELINES §3.1: today the time; the next day "yesterday at" the
+        // time; then the date (with the year once it's another year).
+        let saved = utcDate("2026-10-09T23:43:00Z")
+        let cases: [(String, String, String)] = [
+            ("2026-10-09T23:50:00Z", "Saved at 23:43", "Last saved 23:43"),
+            ("2026-10-10T00:00:00Z", "Saved yesterday at 23:43", "Last saved yesterday at 23:43"),
+            ("2026-10-10T23:59:59Z", "Saved yesterday at 23:43", "Last saved yesterday at 23:43"),
+            ("2026-10-11T00:00:00Z", "Saved on 9 Oct at 23:43", "Last saved on 9 Oct at 23:43"),
+            ("2026-12-31T23:59:59Z", "Saved on 9 Oct at 23:43", "Last saved on 9 Oct at 23:43"),
+            ("2027-01-01T00:00:00Z", "Saved on 9 Oct 2026 at 23:43", "Last saved on 9 Oct 2026 at 23:43"),
+        ]
+        for (now, title, inspector) in cases {
+            #expect(SavedTime.stateLine(saved, now: utcDate(now), timeZone: utc, locale: gb) == title, "\(now)")
+            #expect(SavedTime.inspector(saved, now: utcDate(now), timeZone: utc, locale: gb) == inspector, "\(now)")
+        }
+        // A save stamped ahead of this Mac's clock is "just now", never a
+        // day: it can't have been yesterday.
+        #expect(SavedTime.stateLine(saved, now: saved.addingTimeInterval(-120), timeZone: utc, locale: gb) == "Saved just now")
+    }
+
+    @Test func theWordsChangeAtMidnightAndAtTheNewYear() {
+        let saved = utcDate("2026-10-09T23:43:00Z")
+        let next = { (now: String) in SavedTime.nextChange(saved, now: self.utcDate(now), timeZone: self.utc, locale: self.gb) }
+        #expect(next("2026-10-09T23:50:00Z") == utcDate("2026-10-10T00:00:00Z"))
+        #expect(next("2026-10-10T05:00:00Z") == utcDate("2026-10-11T00:00:00Z"))
+        #expect(next("2026-10-11T00:00:00Z") == utcDate("2027-01-01T00:00:00Z"))
+        #expect(next("2027-01-01T00:00:00Z") == nil)
+    }
+
+    @Test func daysFollowTheCalendarAcrossTheClockChange() {
+        // Paris leaves summer time on 25 Oct 2026: that day lasts 25 hours,
+        // so its midnight is 23:00 UTC, not 24 hours after the last one.
+        let paris = TimeZone(identifier: "Europe/Paris")!
+        let saved = utcDate("2026-10-24T21:30:00Z") // 23:30 in Paris
+        #expect(SavedTime.stateLine(saved, now: utcDate("2026-10-25T10:00:00Z"), timeZone: paris, locale: gb)
+            == "Saved yesterday at 23:30")
+        #expect(SavedTime.nextChange(saved, now: utcDate("2026-10-25T10:00:00Z"), timeZone: paris, locale: gb)
+            == utcDate("2026-10-25T23:00:00Z"))
+        #expect(SavedTime.stateLine(saved, now: utcDate("2026-10-25T22:59:59Z"), timeZone: paris, locale: gb)
+            == "Saved yesterday at 23:30")
+        #expect(SavedTime.stateLine(saved, now: utcDate("2026-10-25T23:00:00Z"), timeZone: paris, locale: gb)
+            == "Saved on 24 Oct at 23:30")
+    }
+
+    /// Midnight turns "Saved at 23:43" into "Saved yesterday at 23:43" with
+    /// no new state, from the controller's clock (as "just now" does).
+    @Test func midnightRollsOverWithNoNewState() async {
+        var parts = DateComponents(year: 2026, month: 10, day: 9, hour: 23, minute: 43)
+        parts.timeZone = .current
+        let saved = Calendar.current.date(from: parts)!
+        let clock = FakeClock(saved.addingTimeInterval(300))
+        let d = FakeDaemon()
+        let c = BoxController(box: "acme-api", daemon: d, now: { clock.now }, sleep: { clock.advance($0) })
+        await c.open()
+        d.state = #"{"state":"SAVE_STATE_SAVED","saved_at":"\#(ISO8601DateFormatter().string(from: saved))"}"#
+        await c.refresh()
+        let time = StateLine.clock(saved, timeZone: .current, locale: .current)
+        #expect(c.subtitle(at: c.savedTimeNow) == "This Mac · Saved at \(time)")
+        await until { clock.woke.count >= 2 }
+        let midnight = Calendar.current.date(byAdding: .day, value: 1, to: Calendar.current.startOfDay(for: saved))!
+        #expect(clock.woke.first == midnight)
+        #expect(c.subtitle(at: midnight) == "This Mac · Saved yesterday at \(time)")
+        #expect(SavedTime.inspector(saved, now: midnight) == "Last saved yesterday at \(time)")
     }
 
     @Test func theTitleUsesTheTimeItIsDrawnAt() async {
@@ -66,10 +138,16 @@ struct InspectorFollowUpTests {
         d.state = #"{"state":"SAVE_STATE_SAVED","saved_at":"2026-10-06T12:00:00Z"}"#
         await c.refresh()
         #expect(c.subtitle(at: c.savedTimeNow) == "This Mac · Saved just now")
-        await until { c.savedTimeNow >= saved.addingTimeInterval(60) }
-        #expect(c.subtitle(at: c.savedTimeNow).hasPrefix("This Mac · Saved at "))
+        // The ticker wakes a minute after the save; the words then are the
+        // time. (It goes on to midnight and beyond: those have their test.)
+        await until { !clock.woke.isEmpty }
+        let woke = clock.woke[0]
+        #expect(woke == saved.addingTimeInterval(60))
+        #expect(c.subtitle(at: woke).hasPrefix("This Mac · Saved at "))
+        #expect(SavedTime.inspector(saved, now: woke) == "Last saved " + StateLine.clock(saved, timeZone: .current, locale: .current))
+        await until { c.savedTimeNow >= woke }
         let content = InspectorContent(box: c, tabs: TabsController(box: "acme-api", daemon: d))
-        #expect(SavedTime.inspector(saved, now: content.now) == "Last saved " + StateLine.clock(saved, timeZone: .current, locale: .current))
+        #expect(content.now == c.savedTimeNow)
     }
 
     /// R-0066: a new save reads the saves again at once, so the list keeps
@@ -167,7 +245,13 @@ final class FakeClock: @unchecked Sendable {
     private var _now: Date
     init(_ now: Date) { _now = now }
     var now: Date { lock.withLock { _now } }
+    private var _woke: [Date] = []
+    /// The time after each sleep, in order.
+    var woke: [Date] { lock.withLock { _woke } }
     func advance(_ d: Duration) {
-        lock.withLock { _now = _now.addingTimeInterval(Double(d.components.seconds) + Double(d.components.attoseconds) / 1e18) }
+        lock.withLock {
+            _now = _now.addingTimeInterval(Double(d.components.seconds) + Double(d.components.attoseconds) / 1e18)
+            _woke.append(_now)
+        }
     }
 }

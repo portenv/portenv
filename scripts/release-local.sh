@@ -22,7 +22,8 @@
 #   MAKE                    GNU Make 4 or later (default gmake)
 #
 # The build is the Makefile's own (gmake app, no LANE). The result goes to
-# ~/Library/Caches/Portenv/release/<version>-<build>/, outside the repository.
+# ~/Library/Caches/Portenv/release/<version>-<build>/ (build: the commit
+# count, stamped with the commit into the built copy only), outside the repository.
 # Exit status: 0 distributable; 1 failed; 2 built for testing, not distributable.
 set -euo pipefail
 
@@ -36,12 +37,27 @@ for arg in "$@"; do
 	case $arg in
 		--check) check_only=1 ;;
 		--skip-notarize) skip_notarize=1 ;;
-		-h | --help) sed -n '3,26p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+		-h | --help) sed -n '3,27p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
 		*) echo "release-local: unknown argument $arg (see --help)" >&2; exit 1 ;;
 	esac
 done
 
 die() { echo "release-local: $*" >&2; exit 1; }
+# json_field FILE KEY: a top-level string field of notarytool's JSON output
+# (the whole file, or else its last JSON line); empty if absent.
+json_field() {
+	python3 -c '
+import json, sys
+text = open(sys.argv[1]).read()
+try:
+    doc = json.loads(text)
+except ValueError:
+    lines = [l for l in text.splitlines() if l.strip().startswith("{")]
+    doc = json.loads(lines[-1]) if lines else {}
+v = doc.get(sys.argv[2], "") if isinstance(doc, dict) else ""
+print(v if isinstance(v, str) else "")
+' "$1" "$2" 2>/dev/null || true
+}
 # Any failure exits 1, never 2: 2 means only "built for testing".
 test_build_done=0
 trap 'rc=$?; if [[ $rc != 0 && $test_build_done == 0 ]]; then [[ $rc == 1 ]] || echo "release-local: failed (exit $rc)" >&2; exit 1; fi' EXIT
@@ -81,7 +97,7 @@ echo "signing identity: $sign_name"
 if [[ $skip_notarize == 1 ]]; then
 	echo "notarization: SKIPPED (--skip-notarize, testing only)"
 else
-	if ! err=$(xcrun notarytool history --keychain-profile "$profile" 2>&1 >/dev/null); then
+	if ! err=$(xcrun notarytool history --keychain-profile "$profile" --output-format json 2>&1 >/dev/null); then
 		[[ -z $err ]] || awk '{ print "  notarytool: " $0 }' <<<"$err" >&2
 		die "the notary profile '$profile' doesn't work. Owner step: xcrun notarytool store-credentials $profile --key <AuthKey_….p8> --key-id <Key ID> --issuer <Issuer ID>, in your own Terminal"
 	fi
@@ -91,13 +107,17 @@ fi
 info=$root/apps/mac/Info.plist
 pb=/usr/libexec/PlistBuddy
 version=$($pb -c "Print :CFBundleShortVersionString" "$info")
-build=$($pb -c "Print :CFBundleVersion" "$info")
-echo "version: $version ($build)"
+# Tester builds are told apart by their commit: the built copy's
+# CFBundleVersion is the commit count and PortenvCommit the short SHA (the
+# source Info.plist is never changed).
+build=$(git -C "$root" rev-list --count HEAD)
+commit=$(git -C "$root" rev-parse --short HEAD)
+echo "version: $version ($build, commit $commit)"
 
 testing=$((adhoc || skip_notarize))
-if ! git -C "$root" diff --quiet HEAD --; then
-	[[ $testing == 1 ]] || die "the working tree has uncommitted changes: a tester build comes from a commit"
-	echo "warning: uncommitted changes (allowed for a test build only)"
+if [[ -n $(git -C "$root" status --porcelain) ]]; then
+	[[ $testing == 1 ]] || die "the working tree isn't clean (git status --porcelain, untracked files included): a tester build comes from a commit and nothing else"
+	echo "warning: the working tree isn't clean (allowed for a test build only)"
 fi
 command -v "$make_cmd" >/dev/null || die "$make_cmd not found: GNU Make 4 or later (brew install make)"
 
@@ -117,7 +137,11 @@ rm -rf "$out"
 mkdir -p "$out"
 app=$out/Portenv.app
 ditto "$root/bin/Portenv.app" "$app"
+$pb -c "Set :CFBundleVersion $build" "$app/Contents/Info.plist"
+$pb -c "Add :PortenvCommit string $commit" "$app/Contents/Info.plist"
 "$root/scripts/check-app-identity.sh" "$app"
+# Third-party licences ship with the code they cover (gmake app copies them).
+[[ -s $app/Contents/Resources/Licenses/restic-LICENSE.txt ]] || die "restic's licence is missing from Contents/Resources/Licenses: gmake app copies it"
 
 # --- Sign, inside out ------------------------------------------------------
 
@@ -174,17 +198,17 @@ echo "hardened runtime on all ${#signed[@]} signatures"
 # notarize FILE: submits FILE and waits; on anything but Accepted, prints the
 # notary log for the submission and fails.
 notarize() {
-	local file=$1 log
-	log=$out/notary-$(basename "$file").txt
-	local rc=0
-	xcrun notarytool submit "$file" --keychain-profile "$profile" --wait 2>&1 | tee "$log" || rc=$?
-	local id status
-	id=$(grep -Eio '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' "$log" | head -n 1 || true)
-	status=$(awk '$1 == "status:" { s = $2 } END { print s }' "$log")
+	local file=$1 json rc=0 id status
+	json=$out/notary-$(basename "$file").json
+	echo "submitting $(basename "$file") and waiting (usually a few minutes)"
+	xcrun notarytool submit "$file" --keychain-profile "$profile" --wait --output-format json >"$json" || rc=$?
+	id=$(json_field "$json" id)
+	status=$(json_field "$json" status)
+	echo "submission ${id:-?}: ${status:-no status}"
 	if [[ $rc != 0 || $status != Accepted ]]; then
 		if [[ -n $id ]]; then
 			echo "notary log for $id:" >&2
-			xcrun notarytool log "$id" --keychain-profile "$profile" >&2 || true
+			xcrun notarytool log "$id" --keychain-profile "$profile" --output-format json >&2 || true
 		fi
 		die "notarization of $(basename "$file") failed (status '${status:-unknown}', notarytool exit $rc)"
 	fi
@@ -238,6 +262,7 @@ check "codesign (app)" codesign --verify --deep --strict --verbose=2 "$app"
 check "Gatekeeper (app)" spctl -a -vvv -t exec "$app"
 check "Gatekeeper (DMG, install)" spctl -a -vvv -t install "$dmg"
 check "Gatekeeper (DMG, open)" spctl -a -vvv -t open --context context:primary-signature "$dmg"
+check "stapled ticket (app)" xcrun stapler validate "$app"
 check "stapled ticket (DMG)" xcrun stapler validate "$dmg"
 
 sum=$(shasum -a 256 "$dmg")
@@ -257,4 +282,4 @@ if [[ $testing == 1 ]]; then
 	exit 2
 fi
 [[ ${#failed[@]} == 0 ]] || die "verification failed: ${failed[*]}. Don't distribute this DMG."
-echo "Portenv $version ($build) is signed, notarized and stapled: ready for design testers."
+echo "Portenv $version ($build, commit $commit) is signed, notarized and stapled: ready for design testers."

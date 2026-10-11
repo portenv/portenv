@@ -38,6 +38,8 @@ TOOLS := \
 	github.com/zricethezav/gitleaks/v8@v8.30.1 \
 	github.com/restic/restic/cmd/restic@v0.19.1
 TOOLS_STAMP := $(BIN)/.tools-stamp
+# restic's module version (it ships inside Portenv.app, with its licence).
+RESTIC_VERSION := $(lastword $(subst @, ,$(filter github.com/restic/restic/%,$(TOOLS))))
 # shellcheck, which actionlint runs on workflow scripts: the version on CI's
 # runner image, pinned so the Mac and CI agree (scripts/install-shellcheck.sh).
 SHELLCHECK := $(BIN)/shellcheck
@@ -199,6 +201,11 @@ app: build $(TOOLS_STAMP)
 	mkdir -p $(BIN)/Portenv.app/Contents/Library/LaunchAgents
 	cp apps/mac/LaunchAgents/com.portenv.portenvd.plist $(BIN)/Portenv.app/Contents/Library/LaunchAgents/
 	mkdir -p $(BIN)/Portenv.app/Contents/Resources && for b in "$(APP_BUILD)"/release/*.bundle; do [ -e "$$b" ] && cp -R "$$b" $(BIN)/Portenv.app/Contents/Resources/; done; true
+	# Third-party licences ship with the code they cover: restic's
+	# (BSD-2-Clause) from the pinned module, never from the network at copy time.
+	mkdir -p $(BIN)/Portenv.app/Contents/Resources/Licenses
+	GOWORK=off go mod download github.com/restic/restic@$(RESTIC_VERSION)
+	cp "$$(go env GOMODCACHE)/github.com/restic/restic@$(RESTIC_VERSION)/LICENSE" $(BIN)/Portenv.app/Contents/Resources/Licenses/restic-LICENSE.txt
 	$(if $(INSTANCE),scripts/stamp-instance.sh $(BIN)/Portenv.app $(INSTANCE))
 	scripts/check-app-identity.sh $(BIN)/Portenv.app $(INSTANCE)
 	scripts/check-build-paths.sh $(BIN)/Portenv.app/Contents/MacOS/Portenv $(addprefix $(BIN)/Portenv.app/Contents/Helpers/,portenv portenvd restic)

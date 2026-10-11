@@ -51,7 +51,7 @@ From top to bottom, left to right:
 | Terminal | blocks, sticky header, inline answer card | Fills the remaining space |
 | Inspector (trailing, 260–400 pt, 300 by default) | Where it is · Saves · Who's here · Running now | Hidden by default, ⌥⌘I or toolbar button |
 
-Minimum window size: 640 × 440 pt. The inspector always sits beside the terminal and pushes it, never over it: only the window has a minimum width, so with the inspector open the terminal keeps at least 380 pt (the owner, 2026-10-11).
+Minimum window size: 640 × 440 pt. The inspector always sits beside the terminal and pushes it, never over it: only the window has a minimum width, so with the inspector open the terminal keeps at least 340 pt: the inspector stays at its 300 pt default (the owner, 2026-10-11; 340 pt measured, R-0086, R-0087).
 
 ### 3.1 Title button and state line
 

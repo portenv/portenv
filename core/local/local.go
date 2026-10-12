@@ -154,9 +154,9 @@ var NameRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,62}$`)
 
 func (e *Env) ConfigPath(name string) (string, error) {
 	if !NameRE.MatchString(name) {
-		return "", UsageError{Msg: fmt.Sprintf("invalid workspace name %q (letters, digits, '.', '_', '-')", name)}
+		return "", UsageError{Msg: fmt.Sprintf("invalid box name %q (letters, digits, '.', '_', '-')", name)} // workspace-word: ok (the CLI's, renamed with the CLI)
 	}
-	return filepath.Join(e.Dir, "boxes", name+".json"), nil
+	return filepath.Join(e.Dir, "boxes", name+".json"), nil // workspace-word: ok (a path)
 }
 
 // noBoxError: there's no config with this name. It is fs.ErrNotExist.
@@ -166,7 +166,7 @@ type noBoxError struct {
 }
 
 func (e *noBoxError) Error() string {
-	return fmt.Sprintf("no workspace named %s here; create it with portenv init %s", e.name, e.name)
+	return fmt.Sprintf("no box named %s here; create it with portenv init %s", e.name, e.name) // workspace-word: ok (the CLI's, renamed with the CLI)
 }
 func (e *noBoxError) Unwrap() error { return e.err }
 
@@ -325,7 +325,7 @@ func (s *Session) HostRepo() string {
 	case c.Storage == "":
 		return filepath.Join(s.E.Dir, "Repositories", c.ID)
 	case filepath.IsAbs(c.Storage):
-		return filepath.Join(c.Storage, "boxes", c.ID)
+		return filepath.Join(c.Storage, "boxes", c.ID) // workspace-word: ok (a path)
 	}
 	if f := s.RESTForward(); f != nil {
 		return "rest:http+unix://" + f.Socket(ControlDir()) + ":/" + s.Cfg.ID + "/"

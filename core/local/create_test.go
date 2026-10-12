@@ -889,7 +889,7 @@ func TestLoadBoxSaysWhenThereIsNoConfig(t *testing.T) {
 	t.Parallel()
 	e := newCreateEnv(t)
 	_, err := e.LoadBox("acme-api")
-	if !errors.Is(err, fs.ErrNotExist) || err.Error() != "no workspace named acme-api here; create it with portenv init acme-api" {
+	if !errors.Is(err, fs.ErrNotExist) || err.Error() != "no box named acme-api here; create it with portenv init acme-api" {
 		t.Fatalf("missing: %v", err)
 	}
 	p, _ := e.ConfigPath("acme-api")

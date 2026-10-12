@@ -155,7 +155,7 @@ c=portenv-daemon-$(box_id)
 probe "$c" pkill -f '^portenv-agent serve' || true
 sleep 1
 out=$("$portenv" app check d 2>&1) || true; echo "  $out"
-expect "check: the workspace agent is unavailable" grep -q "the workspace agent is unavailable" <<<"$out"
+expect "check: the workspace helper is unavailable" grep -q "the workspace helper is unavailable" <<<"$out"
 probe -u work "$c" sh -c 'echo while-down > /home/work/down.txt'
 out=$("$portenv" app restart d 2>&1) || true; echo "  $out"
 expect "Restart Box keeps the local home (rule 3)" grep -q "rule 3" <<<"$out"
@@ -251,7 +251,7 @@ probe "$c" pkill -f '^portenv-agent serve' || true
 sleep 1
 out=$("$portenv" app close d 2>&1) && st=0 || st=$?; echo "  $out"
 expect "quit with the agent down: the close fails, so the app asks (the alert)" test "$st" -ne 0
-expect "and says why: the workspace agent is unavailable" grep -q "the workspace agent is unavailable" <<<"$out"
+expect "and says why: the workspace helper is unavailable" grep -q "the workspace helper is unavailable" <<<"$out"
 kill -TERM "$dpid"   # Quit Anyway
 for _ in $(seq 240); do kill -0 "$dpid" 2>/dev/null || break; sleep 0.5; done
 wait "$dpid" 2>/dev/null || true
@@ -312,7 +312,7 @@ start_daemon
 c=portenv-daemon-$(box_id)
 probe "$c" sh -c "pkill -f '^portenv-agent serve'; sleep 1; openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -subj /CN=portenv-agent -days 1 -keyout /tmp/i.key -out /tmp/i.crt 2>/dev/null; setsid sh -c 'openssl s_server -accept 7700 -cert /tmp/i.crt -key /tmp/i.key -quiet >/tmp/impostor.log 2>&1' >/dev/null 2>&1 & sleep 1"
 out=$("$portenv" app point d 2>&1) || true; echo "  $out"
-expect "an impostor on the agent's port: portenvd reports the workspace agent unavailable" grep -q "the workspace agent is unavailable" <<<"$out"
+expect "an impostor on the agent's port: portenvd reports the workspace helper unavailable" grep -q "the workspace helper is unavailable" <<<"$out"
 
 # Over the whole run: the image's HEALTHCHECK is the engine's own exec of
 # "portenv-agent ready", and the probes above are this script's; any other

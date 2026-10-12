@@ -189,7 +189,7 @@ func (s *Server) GetVersion(context.Context, *daemonv1.GetVersionRequest) (*daem
 
 // ListBoxes lists the boxes configured on this machine.
 func (s *Server) ListBoxes(context.Context, *daemonv1.ListBoxesRequest) (*daemonv1.ListBoxesResponse, error) {
-	entries, err := os.ReadDir(filepath.Join(s.env.Dir, "boxes"))
+	entries, err := os.ReadDir(filepath.Join(s.env.Dir, "boxes")) // workspace-word: ok (a path)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return nil, err
 	}
@@ -762,7 +762,7 @@ func agentError(err error) error {
 
 // AgentUnavailable is what portenvd says when the box agent's channel is
 // down (Unavailable): portenvd itself is fine.
-const AgentUnavailable = "the workspace agent is unavailable (its channel is down or failed verification); restart the workspace"
+const AgentUnavailable = "the workspace helper is unavailable (its channel is down or failed verification); restart the workspace"
 
 // CheckBox reports whether the box agent answers on its channel.
 func (s *Server) CheckBox(ctx context.Context, req *daemonv1.CheckBoxRequest) (*daemonv1.CheckBoxResponse, error) {
@@ -779,14 +779,14 @@ func (s *Server) CheckBox(ctx context.Context, req *daemonv1.CheckBoxRequest) (*
 		// but still running: its channel's secrets are gone.
 		if sess, err2 := s.env.Open(name); err2 == nil && sess.Drv.Known(sess.ID()) {
 			if st, err3 := sess.Drv.Stats(ctx, sess.ID()); err3 == nil && st.State == driver.StateRunning {
-				return &daemonv1.CheckBoxResponse{Detail: "the workspace agent is unavailable (the workspace runs without a channel); restart the workspace"}, nil
+				return &daemonv1.CheckBoxResponse{Detail: "the workspace helper is unavailable (the workspace runs without a channel); restart the workspace"}, nil
 			}
 		}
 		return nil, err
 	}
 	if ob.agent == nil {
 		ob.agentDown.Store(true)
-		return &daemonv1.CheckBoxResponse{Detail: "the workspace agent is unavailable"}, nil
+		return &daemonv1.CheckBoxResponse{Detail: "the workspace helper is unavailable"}, nil
 	}
 	cctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()

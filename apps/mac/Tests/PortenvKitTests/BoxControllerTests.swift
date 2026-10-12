@@ -117,10 +117,10 @@ struct BoxControllerTests {
         let cli = FakeDaemon()
         let c = BoxController(box: "demo", daemon: cli)
         await c.open()
-        cli.failing["point"] = "the workspace agent is unavailable (its channel is down or failed verification); restart the workspace"
+        cli.failing["point"] = "the workspace helper is unavailable (its channel is down or failed verification); restart the workspace"
         cli.state = #"{"state":"SAVE_STATE_AGENT_UNAVAILABLE"}"#
         await c.makeSavePoint()
-        #expect(c.error?.contains("the workspace agent is unavailable") == true)
+        #expect(c.error?.contains("the workspace helper is unavailable") == true)
         #expect(c.agentUnavailable)
         #expect(c.isOpen)
     }

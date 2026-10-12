@@ -646,7 +646,7 @@ func (d *Driver) Rekey(ctx context.Context, id driver.BoxID) error {
 			d.mu.Lock()
 			delete(d.channels, id)
 			d.mu.Unlock()
-			return fmt.Errorf("the workspace agent didn't take the new channel: %w", err)
+			return fmt.Errorf("the workspace helper didn't take the new channel: %w", err)
 		}
 		time.Sleep(100 * time.Millisecond)
 	}

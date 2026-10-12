@@ -327,7 +327,7 @@ func (e *Env) writeConfig(c BoxConfig) error {
 
 // boxWithID finds the box configured here with this ID.
 func (e *Env) boxWithID(boxID string) (BoxConfig, bool) {
-	ents, _ := os.ReadDir(filepath.Join(e.Dir, "boxes"))
+	ents, _ := os.ReadDir(filepath.Join(e.Dir, "boxes")) // workspace-word: ok (a path)
 	for _, ent := range ents {
 		name, ok := strings.CutSuffix(ent.Name(), ".json")
 		if !ok {

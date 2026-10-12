@@ -19,11 +19,11 @@ import (
 func TestNoChannelIsAnErrorNotACrash(t *testing.T) {
 	ex := ChannelExecutor{Client: func() agentv1.AgentServiceClient { return nil }}
 	_, err := ex.Restic(context.Background(), []string{"snapshots"}, Credentials{Password: []byte("pw")})
-	if status.Code(err) != codes.Unavailable || !strings.Contains(err.Error(), "the workspace agent is unavailable") {
+	if status.Code(err) != codes.Unavailable || !strings.Contains(err.Error(), "the workspace helper is unavailable") {
 		t.Fatalf("Restic with no channel: %v", err)
 	}
 	_, err = ex.PathInfo(context.Background(), "/home")
-	if status.Code(err) != codes.Unavailable || !strings.Contains(err.Error(), "the workspace agent is unavailable") {
+	if status.Code(err) != codes.Unavailable || !strings.Contains(err.Error(), "the workspace helper is unavailable") {
 		t.Fatalf("PathInfo with no channel: %v", err)
 	}
 	if _, err := (ChannelExecutor{}).PathInfo(context.Background(), "/home"); status.Code(err) != codes.Unavailable {

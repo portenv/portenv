@@ -254,7 +254,7 @@ type ChannelExecutor struct {
 
 // errNoChannel: the box has no agent connection (it was just closed or
 // is restarting).
-var errNoChannel = status.Error(codes.Unavailable, "the workspace agent is unavailable (no channel)")
+var errNoChannel = status.Error(codes.Unavailable, "the workspace helper is unavailable (no channel)")
 
 func (c ChannelExecutor) agent() (agentv1.AgentServiceClient, error) {
 	a := c.Agent

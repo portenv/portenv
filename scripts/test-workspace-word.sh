@@ -2,60 +2,88 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # test-workspace-word.sh: check-workspace-word.py flags "box" in what people
-# read and leaves code alone (run by make test).
+# read and leaves code alone (run by make test). Each case is one planted
+# file in a tree of its own.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
-mkdir -p "$tmp/apps/mac/Sources/App" "$tmp/core/daemon"
+fail=0
 
-cat >"$tmp/apps/mac/Sources/App/V.swift" <<'SWIFT'
-let a = Text("Your boxes")
-let b = CommandMenu("Box") {}
-let c = """
+# plant NAME swift|go|gotest FLAGGED|CLEAN: the file's content on stdin.
+plant() {
+	local name=$1 lang=$2 want=$3 root=$tmp/$1 file rc=0 out
+	case $lang in
+		swift) file=$root/apps/mac/Sources/App/V.swift ;;
+		go) file=$root/core/daemon/d.go ;;
+		gotest) file=$root/core/daemon/d_test.go ;;
+	esac
+	mkdir -p "$(dirname "$file")"
+	cat >"$file"
+	out=$(python3 -I "$here/check-workspace-word.py" "$root" 2>&1) || rc=$?
+	if [[ $want == FLAGGED && $rc == 1 ]] || [[ $want == CLEAN && $rc == 0 ]]; then
+		echo "ok    $name: $want"
+	else
+		echo "FAIL  $name: want $want, exit $rc"
+		while IFS= read -r l; do echo "      $l"; done <<<"$out"
+		fail=1
+	fi
+}
+
+# What people read: flagged.
+plant swift-text swift FLAGGED <<<'let a = Text("Your boxes")'
+plant swift-menu-title swift FLAGGED <<<'let b = CommandMenu("Box") {}'
+plant swift-lone-lowercase swift FLAGGED <<<'let c = Text("box")'
+plant swift-interpolation-before swift FLAGGED <<<'let d = "\(n) boxes"'
+plant swift-concatenation swift FLAGGED <<<'let e = "Your " + "boxes"'
+plant swift-raw swift FLAGGED <<<'let f = #"Open the "box" again"#'
+plant swift-multiline swift FLAGGED <<'EOF'
+let g = """
     Nothing can be saved until the box restarts.
     """
-// A comment about the box is fine.
+EOF
+plant swift-quotes-in-interpolation swift FLAGGED <<<'let h = "\(ok ? "a" : "b") box restarts"'
+plant go-error go FLAGGED <<<'var x = errors.New("no key stored for this box")'
+plant go-lone-lowercase go FLAGGED <<<'var x = "box"'
+plant go-backtick-multiline go FLAGGED <<'EOF'
+var help = `Usage:
+  opens the box on this Mac`
+EOF
+plant go-after-a-log-call go FLAGGED <<'EOF'
+func f() error { log.Info("box ready", "box", name); return errors.New("the box stopped") }
+EOF
+
+# Code: clean.
+plant swift-identifiers swift CLEAN <<'EOF'
 let d = "box-name"
 let e = "inspectorOpen.\(box)"
 let f = "\(box) · Saved"
 let g = "the toolbox has git"
 let h = "A workspace ID is box- and 12 hex digits."
-let i = "Restart Box" // workspace-word: ok (testing the mark)
-SWIFT
-cat >"$tmp/core/daemon/d.go" <<'GO'
-package daemon
-
-var x = errors.New("no key stored for this box")
-
+let i = #"raw \#(box) value"#
+// A comment about the box is fine.
+/* And a block comment about boxes. */
+EOF
+plant swift-ok-mark swift CLEAN <<<'let i = "Restart Box" // workspace-word: ok (testing the mark)'
+plant go-log-arguments go CLEAN <<'EOF'
 func f() {
 	s.log.Info("box ready", "box", name)
-	_ = filepath.Join(dir, "boxes", name)
-	_ = "agent channel: the certificate is not this box's" // workspace-word: ok (internal)
+	slog.Warn("saving the box failed",
+		"box", name)
+	t.Fatalf("the box didn't start")
 }
-GO
-cat >"$tmp/core/daemon/d_test.go" <<'GO'
-package daemon
+EOF
+plant go-ok-mark go CLEAN <<'EOF'
+func f() { _ = filepath.Join(dir, "boxes", name) } // workspace-word: ok (a path)
+EOF
+plant go-comment go CLEAN <<<'// the box and its boxes'
+plant go-test-file gotest CLEAN <<<'var y = "a new box in a test"'
 
-var y = "a new box in a test"
-GO
-
-rc=0
-out=$(python3 -I "$here/check-workspace-word.py" "$tmp" 2>&1) || rc=$?
-fail=0
-t() { if "$@"; then echo "ok    ${*: -1}"; else echo "FAIL  ${*: -1}"; fail=1; fi; }
-has() { grep -qF -- "$1" <<<"$out"; }
-hasnt() { ! grep -qF -- "$1" <<<"$out"; }
-if [[ $rc == 1 ]]; then echo "ok    exits 1 on a finding"; else echo "FAIL  exit $rc"; fail=1; fi
-t has 'V.swift:1: "Your boxes"'
-t has 'V.swift:2: "Box"'
-t has 'V.swift:3:'
-t has 'd.go:3: "no key stored for this box"'
-for s in box-name inspectorOpen toolbox 'box- and 12' 'Restart Box' 'box ready' '"boxes"' certificate 'a new box in a test' 'comment about'; do
-	t hasnt "$s"
-done
-[[ $(grep -c '^  ' <<<"$out") == 4 ]] || { echo "FAIL  exactly 4 flagged, got:"; echo "$out"; fail=1; }
-
-# And the repository itself is clean.
-python3 -I "$here/check-workspace-word.py" >/dev/null || { echo "FAIL  the repository says box where people read it"; fail=1; }
+# The repository itself.
+if python3 -I "$here/check-workspace-word.py" >/dev/null; then
+	echo "ok    the repository says workspace where people read it"
+else
+	echo "FAIL  the repository says box where people read it"
+	fail=1
+fi
 if [[ $fail == 0 ]]; then echo "all checks passed"; else exit 1; fi

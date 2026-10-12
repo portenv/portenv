@@ -32,11 +32,13 @@ The UI uses plain words. Internal terms never appear in the app, its notificatio
 | runner, host, `user@IP` | the server's name ("Test server") |
 | storage repository | "Saves go to <place>" |
 | container, image, toolbox | not shown (use "workspace", or the toolbox's name in Settings only) |
-| agent channel, gRPC, socket | not shown ("the workspace agent" only in error recovery) |
+| agent channel, gRPC, socket | not shown ("the workspace helper" only in error recovery) |
 | stand-in mode | "On your behalf" |
 | lane | "Own lane" |
 
 **workspace**: what people see; called *box* in code, APIs and paths (R-0112). Write "workspace" in sentences and "Workspace" only where macOS capitalises: menu names, buttons and window titles ("New Workspace…", "Restart Workspace", the Workspace menu). Box IDs (`box-…`), proto names, paths, Keychain service names and log keys keep "box"; `scripts/check-workspace-word.py` (run by `make lint`) keeps the word out of the app's strings and portenvd's messages.
+
+**the workspace helper**: what people read for `portenv-agent`, the helper inside each workspace (R-0132); only in error recovery. "Agent" means an AI agent and nothing else.
 
 Servers are always shown by the name the user gave them (default: the host name without the user). Never `ubuntu@35.180.23.92` in menus or titles.
 
@@ -68,7 +70,7 @@ The title shows the workspace name, a sync symbol and a chevron; the line under 
 | Moving | `arrow.triangle.2.circlepath` | `Moving to Test server…` |
 | Closing the last workspace window (saving before the list shows) | `arrow.triangle.2.circlepath` | `Saving before closing…`, with the Workspace menu disabled, until the list shows; the normal line again if the person stays |
 | Open on a server | `checkmark.circle` | `Test server · Saved at 15:42` |
-| Workspace agent unavailable | `exclamationmark.triangle` | `This Mac · Not saved since 14:58` (and Restart Workspace offered) |
+| Workspace helper unavailable | `exclamationmark.triangle` | `This Mac · Not saved since 14:58` (and Restart Workspace offered) |
 | Just reverted | `checkmark.circle` | `Reverted to 14:31 · your changes were kept` for 5 s, then the normal line |
 | Waiting for Keychain access | `lock` | `Waiting for Keychain access`, with "Check for a password prompt. It may be behind other windows." under it and a Cancel button; shown when a Keychain read hasn't returned after 2 s, with a notification when the window isn't in front |
 | Portenv quit before saving it | `exclamationmark.triangle` | `This Mac · Not saved since 15:54 · Portenv quit before saving` until the save made on opening completes |
@@ -89,7 +91,7 @@ The title menu and the menu bar's **Workspace** menu contain the same items, in 
 5. Revert To ▸ (Last Save Point with its time; Browse All Saves…)
 6. Make a Save Point ⌘S
 7. ———
-8. Restart Workspace (only shown when the workspace agent is unavailable, or with ⌥ held)
+8. Restart Workspace (only shown when the workspace helper is unavailable, or with ⌥ held)
 9. Show in Finder ⌥⌘R
 
 Menu items that can't work right now are disabled with no explanation in the menu; the explanation appears in the inspector or as an alert when chosen from the palette.
@@ -116,7 +118,7 @@ Menu items that can't work right now are disabled with no explanation in the men
   | ⌘⇧[ / ⌘⇧] | Show the previous / next tab, wrapping around | Window › Show Previous Tab, Show Next Tab |
   | ⌃⇧Tab / ⌃Tab | The same, on any keyboard layout (⌘⇧[ needs a bracket key, which AZERTY and other layouts lack), as in Safari and Terminal | — |
 
-- **Closing a tab that still runs a program asks first:** "Close this tab? <program> is still running.", with Close Tab and Cancel. The program is the tab's foreground process as the workspace agent reports it at that moment. A tab with only its shell closes without asking. The last tab has no close button; ⌘W closes the window instead.
+- **Closing a tab that still runs a program asks first:** "Close this tab? <program> is still running.", with Close Tab and Cancel. The program is the tab's foreground process as the workspace helper reports it at that moment. A tab with only its shell closes without asking. The last tab has no close button; ⌘W closes the window instead.
 
 ### 4.2 Blocks
 
@@ -149,7 +151,7 @@ Shown when a program in the visible tab is waiting for an answer that Portenv ca
 - Sits inside the running block, below the program's latest output, max width 560 pt.
 - Content: small label ("Claude Code is asking"), the question in one line, one primary and one secondary answer button, a trailing link "Answer in the terminal" that dismisses the card and focuses the terminal.
 - If an agent relayed the same question elsewhere, a footer says so: "Grok Bot also sent this to your chat. Answer in either place." The first answer wins everywhere; the card disappears when the question is answered from anywhere.
-- Answers are sent as keystrokes through the workspace agent, attributed to you.
+- Answers are sent as keystrokes through the workspace helper, attributed to you.
 - Portenv never answers on its own. If an agent answers, the card shows who answered for 3 s, then disappears.
 
 ### 4.5 Type and colour

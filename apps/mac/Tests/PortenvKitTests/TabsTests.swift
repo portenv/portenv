@@ -190,8 +190,8 @@ struct TabsTests {
         #expect(!e.message.contains("unknown method"))
         #expect(!e.unavailable)
         // Other failures keep portenvd's own plain message.
-        #expect(DaemonError.fromRPC(message: "no workspace named demo here", unimplemented: false, unavailable: false).message
-                == "no workspace named demo here")
+        #expect(DaemonError.fromRPC(message: "no box named demo here", unimplemented: false, unavailable: false).message
+                == "no box named demo here")
         #expect(DaemonError.fromRPC(message: "connection refused", unimplemented: false, unavailable: true).unavailable)
     }
 
@@ -241,11 +241,11 @@ struct TabsTests {
 
     @Test func aFailureIsSaidPlainly() async {
         let d = FakeDaemon()
-        d.failing["new-tab"] = "the workspace agent is unavailable (its channel is down or failed verification); restart the workspace"
+        d.failing["new-tab"] = "the workspace helper is unavailable (its channel is down or failed verification); restart the workspace"
         let c = TabsController(box: "acme-api", daemon: d)
         await c.load()
         await c.newTab()
-        #expect(c.error == "the workspace agent is unavailable (its channel is down or failed verification); restart the workspace")
+        #expect(c.error == "the workspace helper is unavailable (its channel is down or failed verification); restart the workspace")
         #expect(names(c) == "shell*")
     }
 }

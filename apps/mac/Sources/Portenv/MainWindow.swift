@@ -89,7 +89,7 @@ struct MainWindow: View {
             .background(.background)
         case _ where controller.agentUnavailable && controller.isOpen:
             VStack(spacing: 10) {
-                Text("The workspace agent is unavailable").font(.title3)
+                Text("The workspace helper is unavailable").font(.title3)
                 Text("Nothing can be saved until the workspace restarts. Your unsaved changes stay in the workspace; restarting keeps them.")
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)

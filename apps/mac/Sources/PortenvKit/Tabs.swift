@@ -13,13 +13,78 @@ public struct TabInfo: Equatable, Sendable, Identifiable {
     /// The program running in the tab's foreground, as the box agent sees
     /// it; empty when it's just the shell.
     public var program: String
+    /// What the tab's program is asking, while it waits for an answer
+    /// (ADR 0017's detector; from 1.2c's tab events). For "asking you", the
+    /// answer card and the badge.
+    public var waiting: TabQuestion?
+    /// When the tab last printed anything.
+    public var lastOutputAt: Date?
+    /// Who is typing in the tab now (the author of the latest input).
+    public var typingAuthor: TabAuthor?
+    /// The other viewers that have the tab open without typing (agents, a
+    /// CLI attach): the pane header's "watching".
+    public var watchers: [String]
 
-    public init(id: String, name: String, active: Bool, program: String = "") {
+    public init(id: String, name: String, active: Bool, program: String = "", waiting: TabQuestion? = nil,
+                lastOutputAt: Date? = nil, typingAuthor: TabAuthor? = nil, watchers: [String] = []) {
         self.id = id
         self.name = name
         self.active = active
         self.program = program
+        self.waiting = waiting
+        self.lastOutputAt = lastOutputAt
+        self.typingAuthor = typingAuthor
+        self.watchers = watchers
     }
+
+    /// The pane header's short status, most important first: asking,
+    /// someone typing, someone watching, quiet for a while, running, idle.
+    public func activity(now: Date) -> TabActivity {
+        if let waiting { return .asking(waiting) }
+        if let typingAuthor { return .typing(typingAuthor) }
+        if !watchers.isEmpty { return .watching(watchers) }
+        if !program.isEmpty, let last = lastOutputAt {
+            return now.timeIntervalSince(last) >= TabActivity.quietAfter ? .quiet(since: last) : .running(program)
+        }
+        return program.isEmpty ? .idle : .running(program)
+    }
+}
+
+/// A question a tab's program is waiting on. A secret prompt (a password)
+/// carries no text: it's answered only in the terminal (ADR 0016, 0017).
+public struct TabQuestion: Equatable, Sendable {
+    public let text: String
+    public let secret: Bool
+
+    public init(text: String, secret: Bool) {
+        self.text = secret ? "" : text
+        self.secret = secret
+    }
+}
+
+/// Who typed: a name, and whether it's the person at this Mac.
+public struct TabAuthor: Equatable, Sendable {
+    public let name: String
+    public let isYou: Bool
+
+    public init(name: String, isYou: Bool) {
+        self.name = name
+        self.isYou = isYou
+    }
+}
+
+/// A tab's status for the pane header (split view): "asking you", "Grok Bot
+/// is typing", "watching", "quiet since 15:41".
+public enum TabActivity: Equatable, Sendable {
+    case asking(TabQuestion)
+    case typing(TabAuthor)
+    case watching([String])
+    case quiet(since: Date)
+    case running(String)
+    case idle
+
+    /// A running program that has printed nothing for this long is quiet.
+    public static let quietAfter: TimeInterval = 60
 }
 
 /// The app's viewer name: the box agent gives this app its own grouped tmux

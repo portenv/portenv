@@ -1085,8 +1085,12 @@ In this order:
        1. **1.2c, the control-mode milestone:**
           - the box agent's control client per session (tab events replace the polling);
           - the `TabTerminal` stream in the agent and portenvd;
-          - the app's per-tab terminal (`TabTerminalSource`, `MarkedTerminalView`) in place of today's attached terminal.
-          `portenv attach` stays a plain attach.
+          - the app's per-tab terminal (`TabTerminalSource`, `MarkedTerminalView`) in place of today's attached terminal;
+          - **the latency gate:** keystroke to echo no worse than the attached client by more than 5 ms at p95 locally (within ±0.25 ms at tmux, measured), and the same run on the us-west-2 tester server once it exists. Until it passes, a dev-only switch back to the attached client, which never reaches a release build;
+          - tmux pinned in the image (3.4) and checked at attach;
+          - #73's and #75's no-loss guarantees carried over, with tests.
+
+          `portenv attach` stays a plain attach, and agents' terminal access is unchanged (R-0132).
        2. **Waiting-for-input detection,** from the same control client (ADR 0017's detector).
        3. **Command blocks:** attribution, the sticky header, the inline answer card, then tab badges; the command palette and saved commands after.
      - **tmux's passthrough stays off.** The app's per-tab view filters what a program prints (no clipboard, link or title effects), and a test checks both.
@@ -1104,7 +1108,9 @@ It comes after 1.2's blocks, wherever they land (Phase 1 if the spike succeeds, 
 
 - **Panes:** up to 4 in one window.
   - Each pane shows one of the box's tabs through its own tab terminal (ADR 0020's `TabTerminalSource` and `MarkedTerminalView`). Lane B builds the panes on that interface with `ScriptedTabSource` until 1.2c's control-mode provider lands.
-  - So two panes can't fight over a current tab, and an agent typing in one tab never moves your view. Two panes may show the same tab; the tab has one size, the latest asked for, and the other pane draws that size.
+  - So two panes can't fight over a current tab, and an agent typing in one tab never moves your view. A tab shows in at most one pane.
+  - A tab has one size, the latest asked for. When another viewer (the CLI, an agent) has it larger, the pane keeps the cursor's row in sight.
+  - The pane header's status (asking, typing, watching, quiet since, running) comes from the tab events, not the terminal stream (ADR 0020, `TabInfo.activity`).
 - **Controls:**
   - "Split right" (⌘D) and "Split down" (⇧⌘D), as buttons in the title bar;
   - ⌘⌥ and the arrow keys move between panes;

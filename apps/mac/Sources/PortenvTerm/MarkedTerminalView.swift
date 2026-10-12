@@ -17,9 +17,17 @@ import SwiftTerm
 public final class MarkedTerminalView: TerminalView {
     public private(set) var tracker: OverlayTracker!
     public let overlay = MarkOverlay()
+    /// Where an answer card or other card sits over the text (blocks place
+    /// it with `rect(screenRow:)`). Clicks reach its cards and nothing else.
+    public let cards = CardLayer()
     public private(set) var source: (any TabTerminalSource)?
-    /// Called when the source ends.
+    /// Called after each `reset` is drawn (the stream started, or
+    /// reconnected), with the tab's size.
+    public var onReset: (TabTerminalSize) -> Void = { _ in }
+    /// Called when the stream ends. On `.tabClosed` the last screen stays.
     public var onEnded: (TabTerminalEnd) -> Void = { _ in }
+    /// The size this view's frame fits, as SwiftTerm last worked it out.
+    public internal(set) var fitted: TabTerminalSize?
     private var reading: Task<Void, Never>?
     private let sizes = SizeRelay()
 
@@ -30,6 +38,9 @@ public final class MarkedTerminalView: TerminalView {
         overlay.frame = bounds
         overlay.autoresizingMask = [.width, .height]
         addSubview(overlay)
+        cards.frame = bounds
+        cards.autoresizingMask = [.width, .height]
+        addSubview(cards)
         sizes.view = self
         terminalDelegate = sizes
     }
@@ -40,7 +51,9 @@ public final class MarkedTerminalView: TerminalView {
         detach()
         self.source = source
         let t = getTerminal()
-        source.resize(TabTerminalSize(cols: t.cols, rows: t.rows))
+        let size = fitted ?? TabTerminalSize(cols: t.cols, rows: t.rows)
+        fitted = size
+        source.resize(size)
         reading = Task { @MainActor [weak self] in
             for await event in source.events {
                 guard let self else { return }
@@ -65,6 +78,10 @@ public final class MarkedTerminalView: TerminalView {
             tracker.reset()
             if size.cols != t.cols || size.rows != t.rows { t.resize(cols: size.cols, rows: size.rows) }
             ingest(seed)
+            onReset(size)
+            // The tab was at another size (another viewer, or this view
+            // changed while disconnected): ask for this view's own.
+            if let fitted, fitted != size { source?.resize(fitted) }
         case let .output(bytes):
             ingest(bytes)
         case let .resized(size):
@@ -124,7 +141,11 @@ private final class SizeRelay: TerminalViewDelegate {
     weak var view: MarkedTerminalView?
 
     nonisolated func sizeChanged(source _: TerminalView, newCols: Int, newRows: Int) {
-        MainActor.assumeIsolated { view?.source?.resize(TabTerminalSize(cols: newCols, rows: newRows)) }
+        MainActor.assumeIsolated {
+            let size = TabTerminalSize(cols: newCols, rows: newRows)
+            view?.fitted = size
+            view?.source?.resize(size)
+        }
     }
 
     nonisolated func send(source _: TerminalView, data: ArraySlice<UInt8>) {
@@ -141,6 +162,15 @@ private final class SizeRelay: TerminalViewDelegate {
     nonisolated func clipboardRead(source _: TerminalView) -> Data? { nil }
     nonisolated func iTermContent(source _: TerminalView, content _: ArraySlice<UInt8>) {}
     nonisolated func rangeChanged(source _: TerminalView, startY _: Int, endY _: Int) {}
+}
+
+/// Holds cards over the terminal (the inline answer card). Only its cards
+/// take clicks; everywhere else, clicks go to the terminal.
+public final class CardLayer: NSView {
+    public override func hitTest(_ point: NSPoint) -> NSView? {
+        let hit = super.hitTest(point)
+        return hit === self ? nil : hit
+    }
 }
 
 /// The marks, drawn over the terminal's text. It never takes a click.

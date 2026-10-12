@@ -17,8 +17,11 @@ struct TabTerminalTests {
         return v
     }
 
+    /// A screen row's text, without trailing blanks (a prompt ends in a
+    /// typed space, which SwiftTerm's trimRight keeps).
     func line(_ v: MarkedTerminalView, _ row: Int) -> String {
-        v.getTerminal().getLine(row: row)?.translateToString(trimRight: true) ?? ""
+        let text = v.getTerminal().getLine(row: row)?.translateToString(trimRight: true) ?? ""
+        return String(text.reversed().drop { $0 == " " }.reversed())
     }
 
     /// Lets the view's reading task take the events played so far: waits
@@ -80,5 +83,118 @@ struct TabTerminalTests {
         b.play(.ended(.tabClosed))
         await settle { ended != nil }
         #expect(ended == .tabClosed)
+    }
+
+    @Test func aResetCallsOnResetAndAsksForTheViewsOwnSize() async {
+        let v = view(), s = ScriptedTabSource(tab: "@1")
+        var resets: [TabTerminalSize] = []
+        v.onReset = { resets.append($0) }
+        v.attach(s)
+        let own = TabTerminalSize(cols: 80, rows: 24)
+        // Another viewer had the tab at 120x40.
+        s.play(.reset(TabTerminalSize(cols: 120, rows: 40), seed: Array("x".utf8)))
+        await settle { !resets.isEmpty }
+        #expect(resets == [TabTerminalSize(cols: 120, rows: 40)])
+        #expect(s.sizes.last == own)
+        // A reset at the view's own size asks for nothing more.
+        let before = s.sizes.count
+        s.play(.reset(own, seed: []))
+        await settle { resets.count == 2 }
+        #expect(s.sizes.count == before)
+    }
+
+    @Test func aClosedTabKeepsItsLastScreen() async {
+        let v = view(), s = ScriptedTabSource(tab: "@1")
+        var ended: TabTerminalEnd?
+        v.onEnded = { ended = $0 }
+        v.attach(s)
+        s.play(.reset(TabTerminalSize(cols: 80, rows: 24), seed: Array("last words".utf8)))
+        s.play(.ended(.tabClosed))
+        await settle { ended != nil }
+        #expect(ended == .tabClosed && line(v, 0) == "last words")
+    }
+
+    /// The menu's shortcuts (⌘D, ⇧⌘D, ⌘⌥ arrows, ⌘W, ⌘1–9) are never taken
+    /// by the terminal.
+    @Test func menuShortcutsPassThrough() throws {
+        let v = view()
+        let keys: [(String, NSEvent.ModifierFlags)] = [("d", .command), ("d", [.command, .shift]), ("w", .command),
+                                                       ("1", .command), ("\u{F702}", [.command, .option])]
+        for (key, mods) in keys {
+            let e = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: mods, timestamp: 0,
+                                                  windowNumber: 0, context: nil, characters: key,
+                                                  charactersIgnoringModifiers: key, isARepeat: false, keyCode: 0))
+            #expect(!v.performKeyEquivalent(with: e), "\(mods) \(key) was taken by the terminal")
+        }
+    }
+
+    /// Clicks over the card layer reach its cards, and the terminal
+    /// everywhere else.
+    @Test func theCardLayerTakesOnlyItsCards() {
+        let v = view()
+        v.frame = NSRect(x: 0, y: 0, width: 400, height: 300)
+        let card = NSView(frame: NSRect(x: 10, y: 10, width: 100, height: 40))
+        v.cards.addSubview(card)
+        #expect(v.cards.hitTest(NSPoint(x: 20, y: 20)) === card)
+        #expect(v.cards.hitTest(NSPoint(x: 300, y: 200)) == nil)
+    }
+}
+
+/// The pane's host (ADR 0020, for split view): swapping the source keeps the
+/// view, and focus follows the first responder both ways.
+@MainActor
+struct TabTerminalHostTests {
+    func host() -> (TabTerminalHost, NSWindow) {
+        _ = NSApplication.shared
+        let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 400), styleMask: [.titled],
+                         backing: .buffered, defer: false)
+        w.isReleasedWhenClosed = false
+        let container = NSView(frame: w.contentLayoutRect)
+        w.contentView = container
+        let h = TabTerminalHost(frame: container.bounds)
+        container.addSubview(h)
+        return (h, w)
+    }
+
+    @Test func aNewSourceSwapsInPlace() {
+        let (h, _) = host()
+        let view = h.terminal, a = ScriptedTabSource(tab: "@1"), b = ScriptedTabSource(tab: "@2")
+        h.show(a)
+        h.show(a)
+        #expect(!a.closed)
+        h.show(b)
+        #expect(h.terminal === view && a.closed && h.terminal.source === b)
+    }
+
+    @Test func focusFollowsTheFirstResponder() {
+        let (h, w) = host()
+        var changes: [Bool] = []
+        h.onFocusChange = { changes.append($0) }
+        h.focus()
+        #expect(w.firstResponder === h.terminal)
+        w.makeFirstResponder(nil)
+        #expect(changes == [true, false])
+    }
+}
+
+/// The pane header's status (split view), most important first.
+struct TabActivityTests {
+    @Test func theMostImportantWins() {
+        let now = Date(timeIntervalSinceReferenceDate: 10000)
+        var tab = TabInfo(id: "@1", name: "grok", active: false, program: "grok", lastOutputAt: now.addingTimeInterval(-5))
+        #expect(tab.activity(now: now) == .running("grok"))
+        tab.lastOutputAt = now.addingTimeInterval(-TabActivity.quietAfter)
+        #expect(tab.activity(now: now) == .quiet(since: now.addingTimeInterval(-TabActivity.quietAfter)))
+        tab.watchers = ["Grok Bot"]
+        #expect(tab.activity(now: now) == .watching(["Grok Bot"]))
+        tab.typingAuthor = TabAuthor(name: "Grok Bot", isYou: false)
+        #expect(tab.activity(now: now) == .typing(TabAuthor(name: "Grok Bot", isYou: false)))
+        tab.waiting = TabQuestion(text: "Run the tests?", secret: false)
+        #expect(tab.activity(now: now) == .asking(TabQuestion(text: "Run the tests?", secret: false)))
+        #expect(TabInfo(id: "@2", name: "shell", active: false).activity(now: now) == .idle)
+    }
+
+    @Test func aSecretQuestionCarriesNoText() {
+        #expect(TabQuestion(text: "Password:", secret: true).text.isEmpty)
     }
 }

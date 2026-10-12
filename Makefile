@@ -171,6 +171,10 @@ ifneq ($(LANE),)
 ifeq ($(filter A B C D E F G H I J K L M N O P Q R S T U V W X Y Z,$(LANE)),)
 $(error LANE=$(LANE): a dev lane is one capital letter, for example LANE=B)
 endif
+# One letter only: LANE="B C" would pass the filter above (R-0132).
+ifneq ($(words $(LANE)),1)
+$(error LANE=$(LANE): a dev lane is one capital letter, for example LANE=B)
+endif
 INSTANCE := dev-$(LANE)
 APP_BUILD := $(HOME)/Library/Caches/Portenv/app-build-$(INSTANCE)
 # Go binaries carry their lane (core/internal/instance): a release binary

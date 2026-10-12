@@ -25,8 +25,11 @@ public struct KeychainStoreError: Error, LocalizedError, Equatable {
     public var errorDescription: String? { "The Keychain refused (\(status))." }
 }
 
-/// A Keychain service of the login keychain. Items are never synchronised
-/// and stay on this device (as portenv init's, core/keys).
+/// A Keychain service of the login keychain. Items are written never
+/// synchronised and this-device-only (as portenv init's, core/keys), but the
+/// file-based login keychain ignores kSecAttrAccessible: until the keys move
+/// to the data-protection keychain at 1.8 (PLAN.md), they travel in backups
+/// and Migration Assistant like any login keychain item.
 public struct SystemSecretStore: SecretStore {
     public let service: String
     public init(service: String) { self.service = service }

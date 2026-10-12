@@ -86,10 +86,16 @@ public struct RecoveryPoolStore: Sendable {
         return s.entries
     }
 
-    /// A new pool from the recovery key, replacing any pool there. Nothing
-    /// is written unless all 32 entries were made.
-    public func fill(from key: RecoveryKey, randomBytes: (Int) throws -> [UInt8] = RecoveryKey.systemRandomBytes) throws {
-        try write(RecoveryPool.entries(from: key, randomBytes: randomBytes))
+    /// A new pool from the recovery key, replacing any pool there: the old
+    /// item is deleted and a new one added (an update would keep the old
+    /// item's access list). Nothing is written unless all 32 entries were
+    /// made. The key is wiped afterwards, whatever happens: it lives in
+    /// memory only until the pool is filled (ADR 0019).
+    public func fill(from key: inout RecoveryKey, randomBytes: (Int) throws -> [UInt8] = RecoveryKey.systemRandomBytes) throws {
+        defer { key.wipe() }
+        let data = try JSONEncoder().encode(Stored(entries: RecoveryPool.entries(from: key, randomBytes: randomBytes)))
+        try store.delete(account: RecoveryPool.account)
+        try store.add(account: RecoveryPool.account, data: data, label: RecoveryPool.label)
     }
 
     /// Removes the entries for these box IDs (each box made, or never to be

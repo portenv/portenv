@@ -9,3 +9,7 @@ useDefault = true
 [[allowlists]]
 description = "Public OpenPGP fingerprint of Anthropic's Claude Code release signing key (https://code.claude.com/docs/en/setup)"
 regexes = ['''^31DDDE24DDFAB679F42D7BD2BAA929FF1A7ECACE$''']
+
+[[allowlists]]
+description = "ADR 0019's published test vector: the recovery password for box-0123456789ab derived from the ADR's example recovery key (docs/adr/0019-recovery-key-and-createbox.md, core/keys/recovery/testdata/vectors.json). It opens nothing real."
+regexes = ['''^b4eef5e9da4b5563a65819e2bd99ec3291f9da036e6688e6d6be20cd120d66af$''']

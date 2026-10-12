@@ -65,6 +65,53 @@ public struct CreateBoxError: Error, LocalizedError, Equatable {
     public var errorDescription: String? { message }
 }
 
+/// One holder at a time, across suspension points (an actor alone lets
+/// calls interleave at every await). Waiters go in order.
+public final class AsyncLock: @unchecked Sendable {
+    private let lock = NSLock()
+    private var held = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+    /// Runs when a caller has to wait (for tests).
+    private let onWait: (@Sendable () -> Void)?
+
+    public init(onWait: (@Sendable () -> Void)? = nil) { self.onWait = onWait }
+
+    /// The app's one lock for making workspaces.
+    public static let creating = AsyncLock()
+
+    public func withLock<T: Sendable>(_ body: () async throws -> T) async rethrows -> T {
+        await acquire()
+        defer { release() }
+        return try await body()
+    }
+
+    private func acquire() async {
+        let free: Bool = lock.withLock {
+            if held { return false }
+            held = true
+            return true
+        }
+        if free { return }
+        onWait?()
+        await withCheckedContinuation { c in
+            let now: Bool = lock.withLock {
+                if !held { held = true; return true }
+                waiters.append(c)
+                return false
+            }
+            if now { c.resume() }
+        }
+    }
+
+    private func release() {
+        let next: CheckedContinuation<Void, Never>? = lock.withLock {
+            if waiters.isEmpty { held = false; return nil }
+            return waiters.removeFirst() // held passes to it
+        }
+        next?.resume()
+    }
+}
+
 /// portenvd's calls for making boxes.
 public protocol BoxCreating: Sendable {
     func listings() async throws -> [BoxListing]
@@ -77,7 +124,9 @@ public protocol BoxCreating: Sendable {
 /// to D6): the pool's next entry gives the box ID and the recovery
 /// password; the repository key is made, stored in the Keychain and read
 /// back before CreateBox; the entry goes only once the box exists. The
-/// recovery key is never needed, until the pool runs out.
+/// recovery key is never needed, until the pool runs out. `make` and
+/// `tidyAtLaunch` run one at a time (with the pool's read, change and
+/// write inside), so two never take the same entry.
 public struct BoxMaker: Sendable {
     public enum Failure: Error, LocalizedError, Equatable {
         /// The pool is empty: New Box asks for the recovery key once.
@@ -102,14 +151,17 @@ public struct BoxMaker: Sendable {
     let repositoryKeys: SecretStore
     let pool: RecoveryPoolStore
     let randomBytes: @Sendable (Int) throws -> [UInt8]
+    let lock: AsyncLock
 
     public init(daemon: BoxCreating, repositoryKeys: SecretStore = SystemSecretStore.repositoryKeys,
                 pool: RecoveryPoolStore = RecoveryPoolStore(store: SystemSecretStore.recoveryPool),
-                randomBytes: @escaping @Sendable (Int) throws -> [UInt8] = RecoveryKey.systemRandomBytes) {
+                randomBytes: @escaping @Sendable (Int) throws -> [UInt8] = RecoveryKey.systemRandomBytes,
+                lock: AsyncLock = .creating) {
         self.daemon = daemon
         self.repositoryKeys = repositoryKeys
         self.pool = pool
         self.randomBytes = randomBytes
+        self.lock = lock
     }
 
     static func keyLabel(_ boxID: String) -> String { "Portenv repository key (\(boxID))" }
@@ -117,24 +169,35 @@ public struct BoxMaker: Sendable {
     /// Makes the box `name` on this Mac and returns its box ID. Opening it
     /// (OpenBox, where the first save happens) is the caller's.
     public func make(name: String) async throws -> String {
-        // D3's foreign repository: discard, and once more with the next entry.
-        do {
-            return try await attempt(name: name)
-        } catch Failure.refused(let e) where e.kind == .mismatch {
-            return try await attempt(name: name)
+        try await lock.withLock {
+            // D3's foreign repository: discard, and once more with the next entry.
+            do {
+                return try await attempt(name: name)
+            } catch Failure.refused(let e) where e.kind == .mismatch {
+                return try await attempt(name: name)
+            }
         }
     }
 
     private func attempt(name: String) async throws -> String {
         let pool = self.pool
-        let boxes = try await daemon.listings()
+        var boxes = try await daemon.listings()
         let entries = try await onKeychainQueue { try pool.entries() }
 
         // A1: the entry of this name's unfinished creation, else the first
         // entry no box (finished or not) uses.
         let entry: PoolEntry
-        if let half = boxes.first(where: { $0.name == name && $0.creating }),
-           let e = entries.first(where: { $0.boxID == half.id }) {
+        let half = boxes.first(where: { $0.name == name && $0.creating })
+        if let half, let e = entries.first(where: { $0.boxID == half.id }) {
+            entry = e
+        } else if let half {
+            // This name's creation lost its entry (the pool was refilled):
+            // it can't be finished. Discard it first, or the next entry
+            // would be refused as a taken name, try after try.
+            try await daemon.discardCreation(boxID: half.id)
+            await deleteKeyUnlessMade(half.id)
+            boxes.removeAll { $0.id == half.id }
+            guard let e = entries.first(where: { e in !boxes.contains { $0.id == e.boxID } }) else { throw Failure.poolEmpty }
             entry = e
         } else if let e = entries.first(where: { e in !boxes.contains { $0.id == e.boxID } }) {
             entry = e
@@ -151,7 +214,8 @@ public struct BoxMaker: Sendable {
         do {
             _ = try await daemon.createBox(request)
         } catch let e as CreateBoxError {
-            try await settle(e, boxID: entry.boxID)
+            await settle(e, boxID: entry.boxID)
+            throw Failure.refused(e)
         }
 
         // A3: the box exists; its entry goes. If the Keychain says no, the
@@ -160,29 +224,55 @@ public struct BoxMaker: Sendable {
         return entry.boxID
     }
 
-    /// What a refusal leaves, then the error.
-    private func settle(_ e: CreateBoxError, boxID: String) async throws -> Never {
-        let keys = repositoryKeys, pool = self.pool
+    /// What a refusal leaves (ADR 0019; R-0122). A repository key is never
+    /// deleted while a finished workspace uses its box ID.
+    private func settle(_ e: CreateBoxError, boxID: String) async {
+        let pool = self.pool
         switch e.kind {
         case .invalid, .unsupported:
-            // D1: nothing written. The keys go; the entry stays.
+            // D1: nothing written. The key goes; the entry stays.
             try? await daemon.discardCreation(boxID: boxID)
-            try? await onKeychainQueue { try keys.delete(account: boxID) }
-        case .nameTaken, .mismatch:
-            // A repository may exist for this box ID: never use it again.
-            try? await daemon.discardCreation(boxID: boxID)
-            try? await onKeychainQueue { try keys.delete(account: boxID) }
+            await deleteKeyUnlessMade(boxID)
+        case .nameTaken:
+            // At D1 nothing was written: the key goes, the entry stays. At
+            // D6 the repository exists with this box ID (its pending record
+            // shows it creating): never use the entry again.
+            let atD6 = (try? await daemon.listings())?.contains { $0.id == boxID && $0.creating } ?? false
+            if atD6 {
+                try? await daemon.discardCreation(boxID: boxID)
+                try? await onKeychainQueue { try pool.remove(boxIDs: [boxID]) }
+            }
+            await deleteKeyUnlessMade(boxID)
+        case .mismatch:
+            // The box ID is in use, or a repository that doesn't open is at
+            // its path: never use the entry again.
+            if !(await isMade(boxID)) { try? await daemon.discardCreation(boxID: boxID) }
+            await deleteKeyUnlessMade(boxID)
             try? await onKeychainQueue { try pool.remove(boxIDs: [boxID]) }
         case .unreachable:
-            // The storage at D1, or portenvd gone mid-way: keep the key (a
-            // repository may be encrypted with it) and the entry; the next
-            // try reuses both.
-            try? await daemon.discardCreation(boxID: boxID)
+            // The storage at D1, or portenvd gone at any step: the key (a
+            // repository may be encrypted with it), the entry and any
+            // pending record stay; the next try reuses them.
+            break
         case .deadline, .internal, .daemonGone:
             // Resumable: the pending record, the key and the entry stay.
             break
         }
-        throw Failure.refused(e)
+    }
+
+    /// Whether a finished workspace has this box ID, asked right now. When
+    /// portenvd doesn't answer, it counts as made: nothing is deleted.
+    private func isMade(_ boxID: String) async -> Bool {
+        guard let boxes = try? await daemon.listings() else { return true }
+        return boxes.contains { $0.id == boxID && !$0.creating }
+    }
+
+    /// Deletes the repository key for boxID, unless a finished workspace
+    /// uses that box ID (checked right before deleting).
+    private func deleteKeyUnlessMade(_ boxID: String) async {
+        guard !(await isMade(boxID)) else { return }
+        let keys = repositoryKeys
+        try? await onKeychainQueue { try keys.delete(account: boxID) }
     }
 
     private func storedKey(for boxID: String) async throws -> Data {
@@ -211,6 +301,10 @@ public struct BoxMaker: Sendable {
     /// finishes each box left creating with its key and its entry, or
     /// discards it when either is gone. Returns what couldn't be finished.
     public func tidyAtLaunch() async -> [CreateBoxError] {
+        await lock.withLock { await tidy() }
+    }
+
+    private func tidy() async -> [CreateBoxError] {
         let keys = repositoryKeys, pool = self.pool
         guard let boxes = try? await daemon.listings(),
               let entries = try? await onKeychainQueue({ try pool.entries() }) else { return [] }
@@ -219,11 +313,25 @@ public struct BoxMaker: Sendable {
 
         var failures: [CreateBoxError] = []
         for half in boxes where half.creating {
-            let key = try? await onKeychainQueue { try keys.read(account: half.id) }
-            guard let entry = entries.first(where: { $0.boxID == half.id }), let key = key ?? nil else {
-                // Without its key or its recovery password it can't be
-                // finished; nothing could save into it.
+            guard let entry = entries.first(where: { $0.boxID == half.id }) else {
+                // Without its recovery password it can't be finished, and
+                // nothing could save into it: discard it, and its orphaned key.
                 try? await daemon.discardCreation(boxID: half.id)
+                await deleteKeyUnlessMade(half.id)
+                continue
+            }
+            let key: Data?
+            do {
+                key = try await onKeychainQueue { try keys.read(account: half.id) }
+            } catch {
+                // The Keychain said no (a denied prompt): not "no key". Next launch.
+                continue
+            }
+            guard let key else {
+                // Its key is gone: a repository may be encrypted with the
+                // lost key, so the entry can't serve another workspace.
+                try? await daemon.discardCreation(boxID: half.id)
+                try? await onKeychainQueue { try pool.remove(boxIDs: [half.id]) }
                 continue
             }
             let request = CreateRequest(name: half.name, boxID: half.id, storage: "", keys: [half.id: key],
@@ -232,6 +340,7 @@ public struct BoxMaker: Sendable {
                 _ = try await daemon.createBox(request)
                 try? await onKeychainQueue { try pool.remove(boxIDs: [half.id]) }
             } catch let e as CreateBoxError {
+                await settle(e, boxID: half.id)
                 failures.append(e)
             } catch {
                 failures.append(CreateBoxError(kind: .internal, message: error.localizedDescription))

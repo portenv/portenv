@@ -18,12 +18,19 @@ final class FakeSecretStore: SecretStore, @unchecked Sendable {
     var corruptReads: Set<String> = []
     /// Accounts whose deletes fail.
     var failDeletes: Set<String> = []
+    /// Accounts whose reads fail (a denied prompt).
+    var failReads: Set<String> = []
+    private var _ops: [String] = []
 
     var all: [String: Data] { lock.withLock { items } }
+    /// Each call, as "read a", "add a", "set a", "delete a".
+    var ops: [String] { lock.withLock { _ops } }
     func label(_ account: String) -> String? { lock.withLock { labels[account] } }
 
     func read(account: String) throws -> Data? {
-        lock.withLock {
+        try lock.withLock {
+            _ops.append("read \(account)")
+            if failReads.contains(account) { throw KeychainStoreError(status: errSecAuthFailed) }
             guard let d = items[account] else { return nil }
             return corruptReads.contains(account) ? Data(d.reversed()) : d
         }
@@ -31,6 +38,7 @@ final class FakeSecretStore: SecretStore, @unchecked Sendable {
 
     func add(account: String, data: Data, label: String) throws {
         try lock.withLock {
+            _ops.append("add \(account)")
             if let s = failWrites[account] { throw KeychainStoreError(status: s) }
             guard items[account] == nil else { throw KeychainStoreError(status: errSecDuplicateItem) }
             items[account] = data
@@ -40,6 +48,7 @@ final class FakeSecretStore: SecretStore, @unchecked Sendable {
 
     func set(account: String, data: Data, label: String) throws {
         try lock.withLock {
+            _ops.append("set \(account)")
             if let s = failWrites[account] { throw KeychainStoreError(status: s) }
             items[account] = data
             labels[account] = label
@@ -48,6 +57,7 @@ final class FakeSecretStore: SecretStore, @unchecked Sendable {
 
     func delete(account: String) throws {
         try lock.withLock {
+            _ops.append("delete \(account)")
             if failDeletes.contains(account) { throw KeychainStoreError(status: errSecIO) }
             items[account] = nil
             labels[account] = nil
@@ -76,7 +86,8 @@ let vectorKey = try! RecoveryKey(parsing: "K7QF-M2XA-9TRD-HV4P-W8LC-3NZ5")
     @Test func fillsThirtyTwoEntriesThatMatchTheDerivation() throws {
         let store = FakeSecretStore()
         let pool = RecoveryPoolStore(store: store)
-        try pool.fill(from: vectorKey, randomBytes: countingBytes())
+        var key = vectorKey
+        try pool.fill(from: &key, randomBytes: countingBytes())
         let entries = try pool.entries()
         #expect(entries.count == RecoveryPool.size)
         #expect(RecoveryPool.size == 32)
@@ -88,19 +99,22 @@ let vectorKey = try! RecoveryKey(parsing: "K7QF-M2XA-9TRD-HV4P-W8LC-3NZ5")
         #expect(entries[0].boxID == "box-010203040506")
     }
 
-    /// The ADR's own vector: an entry for box-0123456789ab carries its
-    /// published password.
+    /// The ADR's own vector: an entry for box-0123456789ab carries the
+    /// password in the shared vector file (read from it, not repeated here).
     @Test func anEntryForTheVectorBoxIDCarriesTheVectorPassword() throws {
         let bytes: [UInt8] = [0x01, 0x23, 0x45, 0x67, 0x89, 0xab]
         let entries = try RecoveryPool.entries(from: vectorKey, count: 1, randomBytes: { _ in bytes })
-        #expect(entries == [PoolEntry(boxID: "box-0123456789ab",
-                                      password: "b4eef5e9da4b5563a65819e2bd99ec3291f9da036e6688e6d6be20cd120d66af")])
+        let vector = try #require(RecoveryKeyTests.vectors.derive.first {
+            $0.box_id == "box-0123456789ab" && (try? RecoveryKey(parsing: $0.recovery))?.canonical == vectorKey.canonical
+        })
+        #expect(entries == [PoolEntry(boxID: "box-0123456789ab", password: vector.derived)])
     }
 
     /// Test 9: the recovery key isn't in the item, in any form.
     @Test func theRecoveryKeyIsNeverInTheItem() throws {
         let store = FakeSecretStore()
-        try RecoveryPoolStore(store: store).fill(from: vectorKey, randomBytes: countingBytes())
+        var key = vectorKey
+        try RecoveryPoolStore(store: store).fill(from: &key, randomBytes: countingBytes())
         let data = try #require(store.all[RecoveryPool.account])
         let text = String(decoding: data, as: UTF8.self).lowercased()
         for form in [vectorKey.canonical, vectorKey.grouped, vectorKey.grouped.replacingOccurrences(of: "-", with: " ")] {
@@ -114,9 +128,11 @@ let vectorKey = try! RecoveryKey(parsing: "K7QF-M2XA-9TRD-HV4P-W8LC-3NZ5")
     @Test func discardingEmptiesItAndRefillingNeedsTheKey() throws {
         let store = FakeSecretStore()
         let pool = RecoveryPoolStore(store: store)
-        try pool.fill(from: vectorKey, randomBytes: countingBytes())
+        var key = vectorKey
+        try pool.fill(from: &key, randomBytes: countingBytes())
         let first = try pool.entries()
-        try pool.fill(from: vectorKey, randomBytes: countingBytes(from: 100))
+        var again = vectorKey
+        try pool.fill(from: &again, randomBytes: countingBytes(from: 100))
         #expect(try pool.entries() != first)
         try pool.discard()
         #expect(try pool.entries().isEmpty)
@@ -128,7 +144,8 @@ let vectorKey = try! RecoveryKey(parsing: "K7QF-M2XA-9TRD-HV4P-W8LC-3NZ5")
     @Test func removesOnlyTheNamedEntries() throws {
         let store = FakeSecretStore()
         let pool = RecoveryPoolStore(store: store)
-        try pool.fill(from: vectorKey, randomBytes: countingBytes())
+        var key = vectorKey
+        try pool.fill(from: &key, randomBytes: countingBytes())
         let entries = try pool.entries()
         try pool.remove(boxIDs: [entries[0].boxID, entries[5].boxID, "box-ffffffffffff"])
         let left = try pool.entries()
@@ -149,7 +166,8 @@ let vectorKey = try! RecoveryKey(parsing: "K7QF-M2XA-9TRD-HV4P-W8LC-3NZ5")
     @Test func aRepeatingRandomSourceWritesNothing() throws {
         let store = FakeSecretStore()
         #expect(throws: RecoveryKey.GenerateError.self) {
-            try RecoveryPoolStore(store: store).fill(from: vectorKey, randomBytes: { n in [UInt8](repeating: 7, count: n) })
+            var key = vectorKey
+            try RecoveryPoolStore(store: store).fill(from: &key, randomBytes: { n in [UInt8](repeating: 7, count: n) })
         }
         #expect(store.all.isEmpty)
     }
@@ -159,22 +177,56 @@ let vectorKey = try! RecoveryKey(parsing: "K7QF-M2XA-9TRD-HV4P-W8LC-3NZ5")
         let store = FakeSecretStore()
         struct NoRandom: Error {}
         #expect(throws: NoRandom.self) {
-            try RecoveryPoolStore(store: store).fill(from: vectorKey, randomBytes: { _ in throw NoRandom() })
+            var key = vectorKey
+            try RecoveryPoolStore(store: store).fill(from: &key, randomBytes: { _ in throw NoRandom() })
         }
         #expect(store.all.isEmpty)
     }
 
+    /// Filling replaces an item already there by deleting it and adding a
+    /// new one, never by updating it (an update keeps the old item's
+    /// access list, which another app may have set).
+    @Test func fillDeletesThenAdds() throws {
+        let store = FakeSecretStore()
+        try store.set(account: RecoveryPool.account, data: Data("{}".utf8), label: "someone else's")
+        var key = vectorKey
+        try RecoveryPoolStore(store: store).fill(from: &key, randomBytes: countingBytes())
+        let writes = store.ops.filter { !$0.hasPrefix("read") }.dropFirst() // the test's own set
+        #expect(Array(writes) == ["delete \(RecoveryPool.account)", "add \(RecoveryPool.account)"])
+        #expect(store.label(RecoveryPool.account) == RecoveryPool.label)
+    }
+
+    /// The recovery key is wiped once the pool is filled (ADR 0019: it lives
+    /// in memory only until then), and after a failed fill too.
+    @Test func fillWipesTheRecoveryKey() throws {
+        let store = FakeSecretStore()
+        var key = vectorKey
+        try RecoveryPoolStore(store: store).fill(from: &key, randomBytes: countingBytes())
+        #expect(key.canonical.isEmpty)
+        #expect(throws: RecoveryKey.DeriveError.noKey) { try key.password(boxID: "box-0123456789ab") }
+        #expect(!vectorKey.canonical.isEmpty) // another copy is its holder's
+        struct NoRandom: Error {}
+        var failing = vectorKey
+        #expect(throws: NoRandom.self) {
+            try RecoveryPoolStore(store: store).fill(from: &failing, randomBytes: { _ in throw NoRandom() })
+        }
+        #expect(failing.canonical.isEmpty)
+    }
+
     /// Entries never print their password.
     @Test func entriesDontPrintTheirPassword() throws {
-        let e = PoolEntry(boxID: "box-0123456789ab", password: "b4eef5e9da4b5563a65819e2bd99ec3291f9da036e6688e6d6be20cd120d66af")
+        let e = PoolEntry(boxID: "box-0123456789ab", password: try vectorKey.password(boxID: "box-0123456789ab"))
         for text in [String(describing: e), String(reflecting: e), "\(e)", "\([e])"] {
             #expect(!text.contains(e.password))
         }
     }
 
-    /// Test 9: the Keychain items are written with synchronisation off,
-    /// this device only, in the instance's services.
-    @Test func theKeychainItemsAreNeverSynchronised() throws {
+    /// Test 9: the attributes each new item is written with: never
+    /// synchronised, and this-device-only. This checks the dictionary only.
+    /// In the file-based login keychain macOS ignores kSecAttrAccessible, so
+    /// the items still travel in backups and Migration Assistant until they
+    /// move to the data-protection keychain at 1.8 (PLAN.md, R-0122).
+    @Test func newItemsAreWrittenNeverSynchronised() throws {
         let q = SystemSecretStore.addAttributes(service: "dev.portenv.recovery-pool", account: RecoveryPool.account,
                                                 data: Data("x".utf8), label: RecoveryPool.label)
         #expect(q[kSecAttrSynchronizable as String] as? Bool == false)

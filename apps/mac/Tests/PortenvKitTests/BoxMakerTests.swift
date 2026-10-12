@@ -2,20 +2,58 @@
 
 import Foundation
 import Security
+import GRPCCore
 import Testing
 
 @testable import PortenvKit
 
+/// Opens once; everyone waiting goes on.
+final class Gate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var opened = false
+    private var waiting: [CheckedContinuation<Void, Never>] = []
+
+    func open() {
+        let w: [CheckedContinuation<Void, Never>] = lock.withLock {
+            opened = true
+            defer { waiting = [] }
+            return waiting
+        }
+        w.forEach { $0.resume() }
+    }
+
+    func wait() async {
+        await withCheckedContinuation { c in
+            let now: Bool = lock.withLock {
+                if opened { return true }
+                waiting.append(c)
+                return false
+            }
+            if now { c.resume() }
+        }
+    }
+}
+
 /// portenvd's CreateBox side, as the app sees it: records each request,
 /// checks the key was in the Keychain before the call (ADR 0019: keys are
-/// stored before anything is encrypted with them), and answers as told.
+/// stored before anything is encrypted with them), refuses at D1 as
+/// portenvd does (a box ID or a name in use), and otherwise answers as told.
 final class FakeCreator: BoxCreating, @unchecked Sendable {
     private let lock = NSLock()
     private var _requests: [CreateRequest] = []
     private var _discarded: [String] = []
     private var _boxes: [BoxListing] = []
-    /// Answers for the next CreateBox calls, in order; then success.
+    private var _listingCalls = 0
+    /// Answers for the next CreateBox calls that pass D1, in order; each
+    /// leaves a pending record (past D1). Then success.
     var answers: [CreateBoxError] = []
+    /// Box IDs the next listings() leaves out (a list read just before
+    /// another call finished the box).
+    var hideOnce: Set<String> = []
+    /// Runs before each CreateBox is answered.
+    var beforeCreate: (@Sendable (CreateRequest) async -> Void)?
+    /// Runs after each listings().
+    var afterListing: (@Sendable (Int) -> Void)?
     /// The Keychain the app writes to: checked at each CreateBox.
     let keys: FakeSecretStore
     private(set) var keyWasStoredFirst = true
@@ -32,14 +70,31 @@ final class FakeCreator: BoxCreating, @unchecked Sendable {
         set { lock.withLock { _boxes = newValue } }
     }
 
-    func listings() async throws -> [BoxListing] { boxes }
+    func listings() async throws -> [BoxListing] {
+        let (list, n): ([BoxListing], Int) = lock.withLock {
+            _listingCalls += 1
+            let hide = hideOnce
+            hideOnce = []
+            return (_boxes.filter { !hide.contains($0.id) }, _listingCalls)
+        }
+        afterListing?(n)
+        return list
+    }
 
     func createBox(_ r: CreateRequest) async throws -> Bool {
+        await beforeCreate?(r)
         let stored = (try? keys.read(account: r.boxID)) ?? nil
         return try lock.withLock {
             _requests.append(r)
             if stored != r.keys[r.boxID] { keyWasStoredFirst = false }
-            let already = _boxes.contains { $0.id == r.boxID && !$0.creating }
+            // D1, as portenvd checks it.
+            if let made = _boxes.first(where: { $0.id == r.boxID && !$0.creating }) {
+                if made.name == r.name { return true }
+                throw CreateBoxError(kind: .mismatch, message: "Box ID \(r.boxID) is already \(made.name) with other settings.")
+            }
+            if _boxes.contains(where: { $0.name == r.name && $0.id != r.boxID }) {
+                throw CreateBoxError(kind: .nameTaken, message: "A box named \(r.name) already exists.")
+            }
             if !answers.isEmpty {
                 let e = answers.removeFirst()
                 // Past D1, portenvd has a pending record: the box is creating.
@@ -51,7 +106,7 @@ final class FakeCreator: BoxCreating, @unchecked Sendable {
             }
             _boxes.removeAll { $0.id == r.boxID }
             _boxes.append(BoxListing(name: r.name, id: r.boxID, creating: false))
-            return already
+            return false
         }
     }
 
@@ -71,15 +126,14 @@ private struct Setup {
     let pool: RecoveryPoolStore
     let entries: [PoolEntry]
 
-    init(boxes: [BoxListing] = [], fill: Bool = true) throws {
+    init(boxes: [BoxListing] = [], fill: Bool = true, lock: AsyncLock = AsyncLock()) throws {
         creator = FakeCreator(keys: keys, boxes: boxes)
         pool = RecoveryPoolStore(store: poolStore)
-        if fill { try pool.fill(from: vectorKey, randomBytes: countingBytes()) }
+        if fill { var key = vectorKey; try pool.fill(from: &key, randomBytes: countingBytes()) }
         entries = try pool.entries()
-        maker = BoxMaker(daemon: creator, repositoryKeys: keys, pool: pool, randomBytes: countingBytes(from: 50))
+        maker = BoxMaker(daemon: creator, repositoryKeys: keys, pool: pool, randomBytes: countingBytes(from: 50), lock: lock)
     }
 }
-
 
 @Suite struct BoxMakerTests {
     /// A1 to A3: the pool's first entry gives the box ID and the recovery
@@ -258,9 +312,11 @@ private struct Setup {
     /// discarded (its repository, if any, stays; nothing could save into it).
     @Test func launchDiscardsAHalfMadeBoxItCantFinish() async throws {
         let s = try Setup(boxes: [BoxListing(name: "acme-api", id: "box-ffffffffffff", creating: true)])
+        try s.keys.add(account: "box-ffffffffffff", data: Data("old".utf8), label: "Portenv repository key (box-ffffffffffff)")
         _ = await s.maker.tidyAtLaunch()
         #expect(s.creator.requests.isEmpty)
         #expect(s.creator.discarded == ["box-ffffffffffff"])
+        #expect(s.keys.all["box-ffffffffffff"] == nil) // orphaned: no finished workspace uses it
     }
 
     /// No secret in an error, a request's description, or anything printed.
@@ -275,6 +331,121 @@ private struct Setup {
             #expect(!text.contains(key))
             #expect(!text.contains(s.entries[0].password))
             #expect(!text.contains(vectorKey.canonical))
+        }
+    }
+
+    /// R-0122's blocker: two makes at once with different names. Each
+    /// waits for the other to have read the box list (or to be queued
+    /// behind it): unserialised, both take the same entry and the loser's
+    /// refusal deleted the winner's key. Serialised, both are made, each
+    /// with its own entry and key.
+    @Test func twoMakesAtOnceMakeTwoWorkspaces() async throws {
+        let queued = Gate()
+        let s = try Setup(lock: AsyncLock(onWait: { queued.open() }))
+        let first = Gate()
+        s.creator.afterListing = { n in if n >= 2 { queued.open() } }
+        s.creator.beforeCreate = { r in
+            if r.name == "acme-api" { first.open(); await queued.wait() }
+        }
+        async let a = s.maker.make(name: "acme-api")
+        await first.wait()
+        async let b = s.maker.make(name: "acme-web")
+        let (idA, idB) = try await (a, b)
+        #expect(idA != idB)
+        // One CreateBox each: neither was refused for the other's box ID.
+        #expect(s.creator.requests.count == 2)
+        #expect(s.creator.discarded.isEmpty)
+        let made = s.creator.boxes.filter { !$0.creating }
+        #expect(Set(made.map(\.name)) == ["acme-api", "acme-web"])
+        for box in made {
+            let key = try #require(s.keys.all[box.id])
+            #expect(s.creator.requests.last { $0.boxID == box.id }?.keys[box.id] == key)
+        }
+        #expect(try s.pool.entries().count == RecoveryPool.size - 2)
+    }
+
+    /// A refusal for a box ID that's already a finished workspace (its list
+    /// read just before it was made) never deletes that workspace's key.
+    @Test func aRefusalNeverDeletesAFinishedWorkspacesKey() async throws {
+        var s = try Setup()
+        let live = s.entries[0].boxID
+        s = try Setup(boxes: [BoxListing(name: "acme-web", id: live, creating: false)])
+        let key = Data(String(repeating: "cd", count: 32).utf8)
+        try s.keys.add(account: live, data: key, label: "Portenv repository key (\(live))")
+        s.creator.hideOnce = [live]
+        let id = try await s.maker.make(name: "acme-api")
+        #expect(id == s.entries[1].boxID)
+        #expect(s.keys.all[live] == key)
+    }
+
+    /// R-0122 should-fix 1: this name's creation in progress whose entry is
+    /// gone (the pool was refilled) is discarded first, so the next entry
+    /// isn't refused as a taken name and burnt, try after try. Its orphaned
+    /// key goes.
+    @Test func aCreationWithoutItsEntryIsDiscardedFirst() async throws {
+        let s = try Setup(boxes: [BoxListing(name: "acme-api", id: "box-ffffffffffff", creating: true)])
+        try s.keys.add(account: "box-ffffffffffff", data: Data("old".utf8), label: "Portenv repository key (box-ffffffffffff)")
+        let id = try await s.maker.make(name: "acme-api")
+        #expect(id == s.entries[0].boxID)
+        #expect(s.creator.discarded == ["box-ffffffffffff"])
+        #expect(s.keys.all["box-ffffffffffff"] == nil)
+        #expect(try s.pool.entries() == Array(s.entries.dropFirst()))
+    }
+
+    /// R-0122 should-fix 2: a name already taken (D1) keeps the entry, so
+    /// typing a taken name again and again never drains the pool.
+    @Test func aTakenNameAtD1KeepsTheEntry() async throws {
+        let s = try Setup(boxes: [BoxListing(name: "acme-api", id: "box-eeeeeeeeeeee", creating: false)])
+        let other = Data("theirs".utf8)
+        try s.keys.add(account: "box-eeeeeeeeeeee", data: other, label: "Portenv repository key (box-eeeeeeeeeeee)")
+        for _ in 0..<3 {
+            await #expect(throws: BoxMaker.Failure.self) { try await s.maker.make(name: "acme-api") }
+        }
+        #expect(try s.pool.entries() == s.entries)
+        #expect(s.keys.all == ["box-eeeeeeeeeeee": other])
+    }
+
+    /// R-0122 should-fix 3: a Keychain read that fails (a denied prompt) is
+    /// not "no key": the half-made workspace stays for the next launch.
+    @Test func launchKeepsAHalfMadeBoxWhenTheKeychainSaysNo() async throws {
+        var s = try Setup()
+        let half = s.entries[2].boxID
+        s = try Setup(boxes: [BoxListing(name: "acme-api", id: half, creating: true)])
+        try s.keys.add(account: half, data: Data("k".utf8), label: "Portenv repository key (\(half))")
+        s.keys.failReads = [half]
+        _ = await s.maker.tidyAtLaunch()
+        #expect(s.creator.discarded.isEmpty)
+        #expect(s.creator.requests.isEmpty)
+        #expect(s.keys.all[half] != nil)
+        #expect(try s.pool.entries() == s.entries)
+    }
+
+    /// R-0122 should-fix 3: a refusal at launch goes through the same rules
+    /// as in make (here D6's taken name: discarded, entry burnt), so it
+    /// doesn't come back at every launch.
+    @Test func aRefusalAtLaunchIsSettled() async throws {
+        var s = try Setup()
+        let half = s.entries[2].boxID
+        s = try Setup(boxes: [BoxListing(name: "acme-api", id: half, creating: true)])
+        try s.keys.add(account: half, data: Data(String(repeating: "ab", count: 32).utf8), label: "Portenv repository key (\(half))")
+        s.creator.answers = [CreateBoxError(kind: .nameTaken, message: "A box named acme-api already exists.")]
+        let failures = await s.maker.tidyAtLaunch()
+        #expect(failures.map(\.kind) == [.nameTaken])
+        #expect(s.creator.discarded == [half])
+        #expect(!(try s.pool.entries()).map(\.boxID).contains(half))
+        _ = await s.maker.tidyAtLaunch()
+        #expect(s.creator.requests.count == 1)
+    }
+
+    /// portenvd's gRPC codes, as the client reads them, map to the kinds.
+    @Test func theClientsCodesMapToKinds() {
+        let cases: [(RPCError.Code, CreateBoxError.Kind)] = [
+            (.invalidArgument, .invalid), (.alreadyExists, .nameTaken), (.failedPrecondition, .mismatch),
+            (.unavailable, .unreachable), (.unimplemented, .unsupported), (.deadlineExceeded, .deadline),
+            (.internalError, .internal), (.unknown, .internal), (.permissionDenied, .internal),
+        ]
+        for (code, kind) in cases {
+            #expect(CreateBoxError.Kind(grpcCode: DaemonClient.grpcCode(code)) == kind, "\(code)")
         }
     }
 

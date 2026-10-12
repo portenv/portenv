@@ -195,8 +195,13 @@ struct BoxMenu: View {
             ))
             .disabled(!item.enabled)
         } else {
-            let button = Button(item.title) { Task { await controller.run(item.action) } }
-                .disabled(!item.enabled)
+            // A detail (the last save point's time) is the item's subtitle in
+            // the menu bar's menu.
+            let button = Button { Task { await controller.run(item.action) } } label: {
+                Text(item.title)
+                if let detail = item.detail { Text(detail) }
+            }
+            .disabled(!item.enabled)
             switch item.shortcut {
             case "⌘S": button.keyboardShortcut("s", modifiers: .command)
             case "⌥⌘R": button.keyboardShortcut("r", modifiers: [.command, .option])

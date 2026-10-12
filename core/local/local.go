@@ -154,7 +154,7 @@ var NameRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,62}$`)
 
 func (e *Env) ConfigPath(name string) (string, error) {
 	if !NameRE.MatchString(name) {
-		return "", UsageError{Msg: fmt.Sprintf("invalid box name %q (letters, digits, '.', '_', '-')", name)}
+		return "", UsageError{Msg: fmt.Sprintf("invalid workspace name %q (letters, digits, '.', '_', '-')", name)}
 	}
 	return filepath.Join(e.Dir, "boxes", name+".json"), nil
 }
@@ -166,7 +166,7 @@ type noBoxError struct {
 }
 
 func (e *noBoxError) Error() string {
-	return fmt.Sprintf("no box named %s here; create it with portenv init %s", e.name, e.name)
+	return fmt.Sprintf("no workspace named %s here; create it with portenv init %s", e.name, e.name)
 }
 func (e *noBoxError) Unwrap() error { return e.err }
 

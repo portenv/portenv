@@ -324,7 +324,7 @@ func (s *Server) openBox(ctx context.Context, name string, takeOver bool) (*open
 	if _, err := sess.Drv.AgentChannel(ctx, sess.ID()); errors.Is(err, driver.ErrNoChannel) {
 		// Rekey refuses a box that isn't running; then it simply starts.
 		if err := sess.Drv.Rekey(ctx, sess.ID()); err == nil {
-			step("took over the running box (re-keyed, not restarted)")
+			step("took over the running workspace (re-keyed, not restarted)")
 		} else {
 			s.log.Info("no running box to take over, or the re-key failed: starting it", "box", name, "err", err)
 		}
@@ -337,7 +337,7 @@ func (s *Server) openBox(ctx context.Context, name string, takeOver bool) (*open
 	if _, err := sess.Drv.Start(ctx, sess.ID()); err != nil {
 		return nil, none, err
 	}
-	step("box started")
+	step("workspace started")
 	ob := &openBox{sess: sess, openedAt: time.Now()}
 	// An empty home makes the agent report FAILED; restic still runs.
 	if _, err := ob.connect(ctx, true); err != nil {
@@ -381,9 +381,9 @@ func (s *Server) openBox(ctx context.Context, name string, takeOver bool) (*open
 	if state, err := ob.connect(ctx, false); err != nil {
 		return nil, none, err
 	} else if state != agentv1.ReadinessState_READINESS_STATE_READY {
-		return nil, none, errors.New("the box failed to start")
+		return nil, none, errors.New("the workspace failed to start")
 	}
-	step("box ready")
+	step("workspace ready")
 	return ob, res, nil
 }
 
@@ -406,7 +406,7 @@ func (ob *openBox) connect(ctx context.Context, allowFailed bool) (agentv1.Readi
 	wait := 50 * time.Millisecond
 	for time.Now().Before(deadline) {
 		r, err := ob.agent.GetReadiness(ctx, &agentv1.GetReadinessRequest{})
-		if err != nil && strings.Contains(err.Error(), "the certificate is not this box's") {
+		if err != nil && strings.Contains(err.Error(), "the certificate is not this box's") { // workspace-word: ok (matches the agent's internal error)
 			return 0, err // something else answers on the agent's port: never retry into it
 		}
 		if err == nil {
@@ -417,7 +417,7 @@ func (ob *openBox) connect(ctx context.Context, allowFailed bool) (agentv1.Readi
 				if allowFailed {
 					return r.GetState(), nil
 				}
-				return r.GetState(), fmt.Errorf("the box failed to start: %s", r.GetDetail())
+				return r.GetState(), fmt.Errorf("the workspace failed to start: %s", r.GetDetail())
 			}
 		}
 		select {
@@ -430,7 +430,7 @@ func (ob *openBox) connect(ctx context.Context, allowFailed bool) (agentv1.Readi
 		// the box was ready.
 		wait = min(2*wait, 100*time.Millisecond)
 	}
-	return 0, errors.New("the box did not finish starting within 15 minutes")
+	return 0, errors.New("the workspace did not finish starting within 15 minutes")
 }
 
 // client is the box's current agent client, or nil (safe outside mu).
@@ -754,7 +754,7 @@ func agentError(err error) error {
 		return nil
 	}
 	msg := err.Error()
-	if status.Code(err) == codes.Unavailable || strings.Contains(msg, "the certificate is not this box's") {
+	if status.Code(err) == codes.Unavailable || strings.Contains(msg, "the certificate is not this box's") { // workspace-word: ok (matches the agent's internal error)
 		return status.Error(codes.Unavailable, AgentUnavailable)
 	}
 	return err
@@ -762,7 +762,7 @@ func agentError(err error) error {
 
 // AgentUnavailable is what portenvd says when the box agent's channel is
 // down (Unavailable): portenvd itself is fine.
-const AgentUnavailable = "the box agent is unavailable (its channel is down or failed verification); restart the box"
+const AgentUnavailable = "the workspace agent is unavailable (its channel is down or failed verification); restart the workspace"
 
 // CheckBox reports whether the box agent answers on its channel.
 func (s *Server) CheckBox(ctx context.Context, req *daemonv1.CheckBoxRequest) (*daemonv1.CheckBoxResponse, error) {
@@ -779,14 +779,14 @@ func (s *Server) CheckBox(ctx context.Context, req *daemonv1.CheckBoxRequest) (*
 		// but still running: its channel's secrets are gone.
 		if sess, err2 := s.env.Open(name); err2 == nil && sess.Drv.Known(sess.ID()) {
 			if st, err3 := sess.Drv.Stats(ctx, sess.ID()); err3 == nil && st.State == driver.StateRunning {
-				return &daemonv1.CheckBoxResponse{Detail: "the box agent is unavailable (the box runs without a channel); restart the box"}, nil
+				return &daemonv1.CheckBoxResponse{Detail: "the workspace agent is unavailable (the workspace runs without a channel); restart the workspace"}, nil
 			}
 		}
 		return nil, err
 	}
 	if ob.agent == nil {
 		ob.agentDown.Store(true)
-		return &daemonv1.CheckBoxResponse{Detail: "the box agent is unavailable"}, nil
+		return &daemonv1.CheckBoxResponse{Detail: "the workspace agent is unavailable"}, nil
 	}
 	cctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()

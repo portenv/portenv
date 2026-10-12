@@ -50,7 +50,7 @@ struct PortenvApp: App {
             CommandGroup(replacing: .saveItem) {}
             // The title menu's box actions, also in the menu bar, once a box
             // is open.
-            CommandMenu("Box") {
+            CommandMenu("Workspace") {
                 if let controller = model.controller {
                     BoxMenu(controller: controller)
                 }
@@ -146,7 +146,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The alert when the box couldn't be saved before quitting.
     nonisolated static func ask(_ message: String) async -> QuitChoice {
         await ask(message,
-                  informative: "Try again, or quit now: the box stays as it is and is saved first thing the next time Portenv opens.",
+                  informative: "Try again, or quit now: the workspace stays as it is and is saved first thing the next time Portenv opens.",
                   anyway: "Quit Anyway")
     }
 

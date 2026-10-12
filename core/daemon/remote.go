@@ -177,7 +177,7 @@ func (s *Server) dropRemoteAgent(name string) {
 }
 
 func agentUnavailable(err error) error {
-	return status.Error(codes.Unavailable, "the box agent is unavailable ("+err.Error()+"); restart the box")
+	return status.Error(codes.Unavailable, "the workspace agent is unavailable ("+err.Error()+"); restart the workspace")
 }
 
 // GetChannel returns the channel of a box open here, for the owner of this
@@ -323,7 +323,7 @@ func (s *Server) onServer(ctx context.Context, name string, action string) (stri
 	}
 	out, err := local.AppOn(ctx, host, action, name)
 	if err != nil {
-		if strings.Contains(err.Error(), "the box agent is unavailable") {
+		if strings.Contains(err.Error(), "the workspace agent is unavailable") {
 			s.dropRemoteAgent(name)
 			return "", status.Error(codes.Unavailable, err.Error())
 		}

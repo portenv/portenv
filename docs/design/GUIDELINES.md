@@ -8,7 +8,7 @@ Reference frames (design canvas): Main window, Main window moving, Command palet
 
 ## 1. Principles
 
-1. **The terminal is the product.** Everything else (toolbar, inspector, palette) exists to explain the box or act on it, and gets out of the way when not needed.
+1. **The terminal is the product.** Everything else (toolbar, inspector, palette) exists to explain the workspace or act on it, and gets out of the way when not needed.
 2. **Apple conventions first.** Title menu, menu bar, inspector, ⌘ shortcuts, notifications and system controls behave the way they do in Pages, Finder and Xcode. Don't invent where macOS already has an answer.
 3. **Explain, then offer the obvious action.** A surface that shows state also offers the one action people want next ("Saves go to Test server", then "Move To…"). Settings live only in Settings.
 4. **State is never more confident than the truth.** Save, move and agent states come from recorded facts, never from "the last operation succeeded". If unsure, say less.
@@ -24,17 +24,19 @@ The UI uses plain words. Internal terms never appear in the app, its notificatio
 
 | Internal term | In the app |
 | --- | --- |
-| box | box (the user's project workspace) |
+| box | workspace (the user's project) |
 | snapshot, restic, repository | save |
 | point snapshot | save point |
 | orphaned snapshot | "kept when you reverted" or "unsaved work kept from <machine>" |
 | lease, lease holder | "open on <machine>" |
 | runner, host, `user@IP` | the server's name ("Test server") |
 | storage repository | "Saves go to <place>" |
-| container, image, toolbox | not shown (use "box", or the toolbox's name in Settings only) |
-| agent channel, gRPC, socket | not shown ("the box agent" only in error recovery) |
+| container, image, toolbox | not shown (use "workspace", or the toolbox's name in Settings only) |
+| agent channel, gRPC, socket | not shown ("the workspace agent" only in error recovery) |
 | stand-in mode | "On your behalf" |
 | lane | "Own lane" |
+
+**workspace**: what people see; called *box* in code, APIs and paths (R-0112). Write "workspace" in sentences and "Workspace" only where macOS capitalises: menu names, buttons and window titles ("New Workspace…", "Restart Workspace", the Workspace menu). Box IDs (`box-…`), proto names, paths, Keychain service names and log keys keep "box"; `scripts/check-workspace-word.py` (run by `make lint`) keeps the word out of the app's strings and portenvd's messages.
 
 Servers are always shown by the name the user gave them (default: the host name without the user). Never `ubuntu@35.180.23.92` in menus or titles.
 
@@ -46,7 +48,7 @@ From top to bottom, left to right:
 
 | Area | Contents | Notes |
 | --- | --- | --- |
-| Toolbar (unified, 52 pt) | sidebar toggle · title button · flexible space · open-port pills · agent avatars · inspector toggle | Title button is the box's document menu |
+| Toolbar (unified, 52 pt) | sidebar toggle · title button · flexible space · open-port pills · agent avatars · inspector toggle | Title button is the workspace's document menu |
 | Tab bar (30 pt) | one tab per terminal session, `+` for a new tab | Tabs replace tmux's status bar, which is always hidden |
 | Terminal | blocks, sticky header, inline answer card | Fills the remaining space |
 | Inspector (trailing, 260–400 pt, 300 by default) | Where it is · Saves · Who's here · Running now | Hidden by default, ⌥⌘I or toolbar button |
@@ -55,18 +57,18 @@ Minimum window size: 640 × 440 pt. The inspector always sits beside the termina
 
 ### 3.1 Title button and state line
 
-The title shows the box name, a sync symbol and a chevron; the line under it is the **state line**. Grammar: `<Location> · <Save state>`.
+The title shows the workspace name, a sync symbol and a chevron; the line under it is the **state line**. Grammar: `<Location> · <Save state>`.
 
 | Situation | Symbol | State line |
 | --- | --- | --- |
-| New box, never saved | none | `This Mac · Not saved yet` |
+| New workspace, never saved | none | `This Mac · Not saved yet` |
 | Saving | `arrow.triangle.2.circlepath` (animated, unless Reduce Motion) | `This Mac · Saving…` |
 | Saved | `checkmark.circle` | `This Mac · Saved at 14:58` (`Saved just now` for the first minute; from the next day `Saved yesterday at 23:43`, then `Saved on 9 Oct at 23:43`, with the year once it's another year; the words change at midnight with no new save) |
 | Offline | `icloud.slash`-style "not synced" symbol | `This Mac · Offline · will save later` |
 | Moving | `arrow.triangle.2.circlepath` | `Moving to Test server…` |
-| Closing the last box window (saving before the list shows) | `arrow.triangle.2.circlepath` | `Saving before closing…`, with the Box menu disabled, until the list shows; the normal line again if the person stays |
+| Closing the last workspace window (saving before the list shows) | `arrow.triangle.2.circlepath` | `Saving before closing…`, with the Workspace menu disabled, until the list shows; the normal line again if the person stays |
 | Open on a server | `checkmark.circle` | `Test server · Saved at 15:42` |
-| Box agent unavailable | `exclamationmark.triangle` | `This Mac · Not saved since 14:58` (and Restart Box offered) |
+| Workspace agent unavailable | `exclamationmark.triangle` | `This Mac · Not saved since 14:58` (and Restart Workspace offered) |
 | Just reverted | `checkmark.circle` | `Reverted to 14:31 · your changes were kept` for 5 s, then the normal line |
 | Waiting for Keychain access | `lock` | `Waiting for Keychain access`, with "Check for a password prompt. It may be behind other windows." under it and a Cancel button; shown when a Keychain read hasn't returned after 2 s, with a notification when the window isn't in front |
 | Portenv quit before saving it | `exclamationmark.triangle` | `This Mac · Not saved since 15:54 · Portenv quit before saving` until the save made on opening completes |
@@ -76,9 +78,9 @@ Rules:
 - The state line is derived only from recorded save state: the last recorded save ID and time, the dirty flag, an upload in progress, the lease holder. A test covers each row of this table.
 - Transient messages (revert, move finished) last 5 s, then return to the normal line.
 
-### 3.2 Title menu and Box menu
+### 3.2 Title menu and Workspace menu
 
-The title menu and the menu bar's **Box** menu contain the same items, in the same order:
+The title menu and the menu bar's **Workspace** menu contain the same items, in the same order:
 
 1. Rename…
 2. Move To ▸ (This Mac, then servers by name, then "Add a Server…"; current location shows a **checkmark**, the others stay enabled; the current location is not disabled)
@@ -87,7 +89,7 @@ The title menu and the menu bar's **Box** menu contain the same items, in the sa
 5. Revert To ▸ (Last Save Point with its time; Browse All Saves…)
 6. Make a Save Point ⌘S
 7. ———
-8. Restart Box (only shown when the box agent is unavailable, or with ⌥ held)
+8. Restart Workspace (only shown when the workspace agent is unavailable, or with ⌥ held)
 9. Show in Finder ⌥⌘R
 
 Menu items that can't work right now are disabled with no explanation in the menu; the explanation appears in the inspector or as an alert when chosen from the palette.
@@ -98,7 +100,7 @@ Menu items that can't work right now are disabled with no explanation in the men
 
 ### 4.1 Sessions and tmux
 
-- Each tab is a persistent session in the box, so work survives the window closing, the Mac sleeping and the box moving.
+- Each tab is a persistent session in the workspace, so work survives the window closing, the Mac sleeping and the workspace moving.
 - tmux is plumbing. Its status bar is always off, its prefix key never surfaces, and nothing in the UI mentions it.
 - The app, not tmux, owns tab names, order, badges and the new-tab button.
 - **macOS's own window tabs are off** (no Show Tab Bar, Merge All Windows or Move Tab to New Window in the Window menu): the app's tab bar is the only tabs.
@@ -109,12 +111,12 @@ Menu items that can't work right now are disabled with no explanation in the men
   | Shortcut | Action | Menu |
   | --- | --- | --- |
   | ⌘T | New tab | File › New Tab |
-  | ⌘W | Close the current tab; on the last tab, close the window (which saves and releases the box), like Terminal and Safari | File › Close Tab |
+  | ⌘W | Close the current tab; on the last tab, close the window (which saves and releases the workspace), like Terminal and Safari | File › Close Tab |
   | ⌘1–⌘9 | Show the tab at that position; past the last tab, nothing | Window › Show Tab ▸ |
   | ⌘⇧[ / ⌘⇧] | Show the previous / next tab, wrapping around | Window › Show Previous Tab, Show Next Tab |
   | ⌃⇧Tab / ⌃Tab | The same, on any keyboard layout (⌘⇧[ needs a bracket key, which AZERTY and other layouts lack), as in Safari and Terminal | — |
 
-- **Closing a tab that still runs a program asks first:** "Close this tab? <program> is still running.", with Close Tab and Cancel. The program is the tab's foreground process as the box agent reports it at that moment. A tab with only its shell closes without asking. The last tab has no close button; ⌘W closes the window instead.
+- **Closing a tab that still runs a program asks first:** "Close this tab? <program> is still running.", with Close Tab and Cancel. The program is the tab's foreground process as the workspace agent reports it at that moment. A tab with only its shell closes without asking. The last tab has no close button; ⌘W closes the window instead.
 
 ### 4.2 Blocks
 
@@ -131,7 +133,7 @@ Anatomy, left to right on the block's header row: author avatar (16 pt) · `$` �
 
 Rules:
 - **Author is whoever sent the Enter that started the command.** If someone else typed into a command started by another author, the block shows both avatars ("You and Grok Bot").
-- Your own blocks use your initial on a neutral grey. Each agent gets a stable color, assigned on first connection and kept per box.
+- Your own blocks use your initial on a neutral grey. Each agent gets a stable color, assigned on first connection and kept per workspace.
 - Full-screen and interactive programs (Claude Code, vim, less, top) are one block whose body is the live program. No block decorations inside it.
 - Block background is a subtle tint (one step lighter than the terminal ground in dark mode, one step darker in light mode), radius 8 pt. No coloured side borders.
 - Actions on a block (context menu and hover toolbar): Copy Command, Copy Output, Copy Both, Collapse, and Jump to Start.
@@ -147,7 +149,7 @@ Shown when a program in the visible tab is waiting for an answer that Portenv ca
 - Sits inside the running block, below the program's latest output, max width 560 pt.
 - Content: small label ("Claude Code is asking"), the question in one line, one primary and one secondary answer button, a trailing link "Answer in the terminal" that dismisses the card and focuses the terminal.
 - If an agent relayed the same question elsewhere, a footer says so: "Grok Bot also sent this to your chat. Answer in either place." The first answer wins everywhere; the card disappears when the question is answered from anywhere.
-- Answers are sent as keystrokes through the box agent, attributed to you.
+- Answers are sent as keystrokes through the workspace agent, attributed to you.
 - Portenv never answers on its own. If an agent answers, the card shows who answered for 3 s, then disappears.
 
 ### 4.5 Type and colour
@@ -168,7 +170,7 @@ Shown when a program in the visible tab is waiting for an answer that Portenv ca
 | Move finished | — | state line | notification only if the move took longer than 10 s |
 
 Notification rules:
-- Title: `<box> · <who> is asking` or `<box> · <event>`. Body: the question or result in one line. Subtitle line: who started it and where.
+- Title: `<workspace> · <who> is asking` or `<workspace> · <event>`. Body: the question or result in one line. Subtitle line: who started it and where.
 - Answer buttons in the notification are the same two as the card, plus "Show".
 - One notification per question; a newer state replaces the older notification, it doesn't stack.
 - Notifications respect Focus modes and the user's per-app settings. No sound by default.
@@ -182,11 +184,11 @@ Opened with ⌥⌘I, the toolbar button (`sidebar.right`) or View › Show Inspe
 
 Sections, always in this order, each with a small grey heading:
 
-1. **Where it is.** "Running on <place>" with how long and where it came from; "Saves go to <place>" with "Encrypted on this Mac before they leave it" (or the right equivalent); a Move To… button. When packages from `apt-packages.txt` couldn't be installed: "1 package couldn't be installed: <name> · Retry" ("2 packages couldn't be installed: <a>, <b> · Retry"). The state line stays normal; the box started all the same and Portenv retries in the background.
-   - During a move, this section becomes the move's progress, in four steps with a check, current or pending marker each: Saved on <source> (time, size of changes) → Sending changes (progress bar, "x of y MB") → Starting on <destination> → Reconnecting this window. Above the steps: a time estimate once known. Below: "You can keep reading. Typing comes back when the box is running there. If the move stops, the box stays here, saved."
-2. **Saves.** "Last saved <time>" (the state line's rule: "just now", "14:58", "yesterday at 23:43", "on 9 Oct at 23:43"), then the five most recent saves, newest first: time, kind and optional name. Kinds: Autosave, Save point ("name"), Saved before moving, Arrived from <place>, Kept when you reverted (with "Nothing reverted away is lost"); and, for kinds portenvd records today: Saved when the box closed (a close), Kept from <machine> (this Mac's copy kept when a newer save came from elsewhere). Hovering a row shows Revert. "Browse All Saves…" link below.
+1. **Where it is.** "Running on <place>" with how long and where it came from; "Saves go to <place>" with "Encrypted on this Mac before they leave it" (or the right equivalent); a Move To… button. When packages from `apt-packages.txt` couldn't be installed: "1 package couldn't be installed: <name> · Retry" ("2 packages couldn't be installed: <a>, <b> · Retry"). The state line stays normal; the workspace started all the same and Portenv retries in the background.
+   - During a move, this section becomes the move's progress, in four steps with a check, current or pending marker each: Saved on <source> (time, size of changes) → Sending changes (progress bar, "x of y MB") → Starting on <destination> → Reconnecting this window. Above the steps: a time estimate once known. Below: "You can keep reading. Typing comes back when the workspace is running there. If the move stops, the workspace stays here, saved."
+2. **Saves.** "Last saved <time>" (the state line's rule: "just now", "14:58", "yesterday at 23:43", "on 9 Oct at 23:43"), then the five most recent saves, newest first: time, kind and optional name. Kinds: Autosave, Save point ("name"), Saved before moving, Arrived from <place>, Kept when you reverted (with "Nothing reverted away is lost"); and, for kinds portenvd records today: Saved when the workspace closed (a close), Kept from <machine> (this Mac's copy kept when a newer save came from elsewhere). Hovering a row shows Revert. "Browse All Saves…" link below.
 3. **Who's here.** You first, then each connected agent: avatar, name, mode ("On your behalf" or "Own lane"), "since <time>", any waiting state in orange text, and a Revoke button (destructive style, confirmation alert).
-4. **Running now.** Tabs, each with what runs in it ("Idle" for just the shell), open ports with "Open in Safari", saved commands with Run buttons and the note "Kept in the box, so they move with it".
+4. **Running now.** Tabs, each with what runs in it ("Idle" for just the shell), open ports with "Open in Safari", saved commands with Run buttons and the note "Kept in the workspace, so they move with it".
 
 Empty states use one short sentence ("No agents connected. Connect an Agent…").
 
@@ -194,7 +196,7 @@ Empty states use one short sentence ("No agents connected. Connect an Agent…")
 
 ### 6.1 Connect an Agent sheet
 
-The user chooses the door for each agent, per box, and the sheet says honestly what each door allows. Portenv never picks silently. The sheet shows this wording, in plain language, before connecting.
+The user chooses the door for each agent, per workspace, and the sheet says honestly what each door allows. Portenv never picks silently. The sheet shows this wording, in plain language, before connecting.
 
 **At launch the sheet offers two doors:** stand-in (over SSH, the CLI or the web terminal) and MCP (stdio or remote, with per-tool approvals). **The lane row appears only once lanes exist (Phase 4, 4.1).** It is never shown as available before then.
 
@@ -210,12 +212,12 @@ The user chooses the door for each agent, per box, and the sheet says honestly w
 - **A command an agent refused** (by its own safety checks or its permissions) reaches the user with the reason. Nothing hands it to another agent automatically.
 - **Never describe SSH command rules as a security boundary,** anywhere: in the app, the docs or the website.
 - Each door appears once its milestone lands: stand-in in 2.4, MCP in 2.6 and 2.7, the web terminal in 2.8, lanes in 4.1 (PLAN.md). A door that doesn't exist yet is never listed.
-- **Pairing approval** (ADR 0016): when an agent runs `portenv connect`, the app asks "<Agent> wants to join <box>, code <code>", for example "Grok Bot wants to join acme-api, code 7F3-K2Q". The code shown is the one the agent printed, so the user can match them.
+- **Pairing approval** (ADR 0016): when an agent runs `portenv connect`, the app asks "<Agent> wants to join <workspace>, code <code>", for example "Grok Bot wants to join acme-api, code 7F3-K2Q". The code shown is the one the agent printed, so the user can match them.
 
 ## 7. Command palette
 
 - ⌘K anywhere in the window. Escape closes it. Arrow keys move, Return runs.
-- Groups in this order, each hidden when empty: **Waiting for you** (questions to answer), **Box** (Move To, Make a Save Point, Revert To, Show Inspector), **Tabs** (New Tab, Go to <tab> with its badge), **Saved commands**, **Agents** (Connect an Agent…).
+- Groups in this order, each hidden when empty: **Waiting for you** (questions to answer), **Workspace** (Move To, Make a Save Point, Revert To, Show Inspector), **Tabs** (New Tab, Go to <tab> with its badge), **Saved commands**, **Agents** (Connect an Agent…).
 - Every palette item also exists in a menu. The palette never offers an action that can't be found elsewhere.
 - Items show their shortcut or a short detail on the trailing side.
 - Typing filters with fuzzy matching across all groups; the top match is selected.
@@ -224,9 +226,9 @@ The user chooses the door for each agent, per box, and the sheet says honestly w
 
 ## 8. Saved commands
 
-- Stored in the box at `~/.portenv/commands` (format defined in the plan), so they move with it.
+- Stored in the workspace at `~/.portenv/commands` (format defined in the plan), so they move with it.
 - Each has a name and a command line. Running one opens a new tab named after it, unless the command is already running there, in which case it focuses that tab.
-- Shown in the inspector's Running now and the palette. Edited through Settings › Box, or by editing the file.
+- Shown in the inspector's Running now and the palette. Edited through Settings › Workspace, or by editing the file.
 
 ---
 
@@ -235,14 +237,14 @@ The user chooses the door for each agent, per box, and the sheet says honestly w
 From the own-route rule (ADR 0008):
 - Hosted options appear as ordinary choices once they exist. Choosing one opens a sheet that explains it and offers sign-in.
 - Never required, never blocking, no banners or badges asking for an account, no "coming soon" items.
-- If the service is unreachable, say so only when the user picks that option: "Can't reach Portenv right now. Your boxes keep working."
+- If the service is unreachable, say so only when the user picks that option: "Can't reach Portenv right now. Your workspaces keep working."
 
 ---
 
 ## 10. Writing
 
-- Say what happened, what's safe, and what to do, in that order: "The move stopped because the server couldn't be reached. Your box is still here, saved at 15:02. Try again when the server is back."
-- Name things the user named (box and server names). Use "you" and "your".
+- Say what happened, what's safe, and what to do, in that order: "The move stopped because the server couldn't be reached. Your workspace is still here, saved at 15:02. Try again when the server is back."
+- Name things the user named (workspace and server names). Use "you" and "your".
 - Sentence case for buttons and headings. Ellipsis on commands that open a sheet or ask more ("Move To…", "Connect an Agent…").
 - No exclamation marks, no blame ("You entered…"), no internal terms (section 2).
 - Numbers: "8.2 of 12 MB", "about 6 seconds left", "3 min".
@@ -260,7 +262,7 @@ Use system semantic colours (label, secondaryLabel, separator, controlAccentColo
 | Success | system green | finished dot, ✓ |
 | Attention | system orange | waiting for you |
 | Failure | system red | ✗ exit, Revoke |
-| Agent colours | indigo, teal, purple, pink, brown, mint | assigned in that order per box |
+| Agent colours | indigo, teal, purple, pink, brown, mint | assigned in that order per workspace |
 
 Type: SF Pro for UI (13 pt body, 11 pt section headings semibold secondary, 12 pt details), SF Mono for terminal and commands. Spacing on a 4 pt grid; 8, 12, 16 and 24 pt are the common steps. Radii: 6 pt buttons, 8 pt blocks, 10–12 pt cards and palette. Icons: SF Symbols only (`sidebar.left`, `sidebar.right`, `checkmark.circle`, `arrow.triangle.2.circlepath`, `laptopcomputer`, `server.rack`, `lock`, `eye`, `plus`, `magnifyingglass`, `arrow.up.to.line`).
 
@@ -293,7 +295,7 @@ Type: SF Pro for UI (13 pt body, 11 pt section headings semibold secondary, 12 p
 | Command palette | Native SwiftUI panel over the window |
 | Saved commands | `~/.portenv/commands` in the box, read and run through the agent |
 
-Phasing: Phase 1 ships the state line rules, title and Box menus, tmux hidden, inspector, tab badges, notifications and the inline answer card for Claude Code. Blocks with attribution, the sticky header, the palette and saved commands follow within Phase 1 if the OSC 133 and tmux control-mode spike succeeds; otherwise they move to Phase 2 and the plan says so.
+Phasing: Phase 1 ships the state line rules, title and Workspace menus, tmux hidden, inspector, tab badges, notifications and the inline answer card for Claude Code. Blocks with attribution, the sticky header, the palette and saved commands follow within Phase 1 if the OSC 133 and tmux control-mode spike succeeds; otherwise they move to Phase 2 and the plan says so.
 
 ---
 

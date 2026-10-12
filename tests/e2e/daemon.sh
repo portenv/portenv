@@ -107,9 +107,9 @@ start_daemon
 out=$("$portenv" app state d 2>&1) || true; echo "  $out"
 expect "after kill -9: the new portenvd reports the box interrupted" grep -q '"interrupted":true' <<<"$out"
 out=$("$portenv" app open d 2>&1) || true; echo "  $out"
-# The success line, not "box is open on …" (the lease error) (#58).
+# The success line, not "workspace is open on …" (the lease error) (#58).
 expect "reopened by the new portenvd" grep -qE "^open on [^ ]+ \(resume rule [0-9]" <<<"$out"
-expect "  by re-keying it, not restarting it" grep -q "took over the running box" "$root/portenvd.log"
+expect "  by re-keying it, not restarting it" grep -q "took over the running workspace" "$root/portenvd.log"
 expect "  the box never restarted (same start time)" test "$(docker inspect -f '{{.State.StartedAt}}' "portenv-daemon-$(box_id)")" = "$started"
 expect "  the long command is still running" probe "portenv-daemon-$(box_id)" pgrep -x sleep
 out=$(type_in 'echo back=$((40+2))')
@@ -126,7 +126,7 @@ expect "  leaving the box running (same start time)" test "$(docker inspect -f '
 expect "  and the long command too" probe "portenv-daemon-$(box_id)" pgrep -x sleep
 start_daemon
 out=$("$portenv" app open d 2>&1) || true; echo "  $out"
-expect "the next portenvd takes it over" test "$(grep -c "took over the running box" "$root/portenvd.log")" -ge 2
+expect "the next portenvd takes it over" test "$(grep -c "took over the running workspace" "$root/portenvd.log")" -ge 2
 expect "  still the same start" test "$(docker inspect -f '{{.State.StartedAt}}' "portenv-daemon-$(box_id)")" = "$started"
 out=$(type_in 'echo again=$((40+3))')
 expect "  and the terminal reconnects" grep -q "again=43" <<<"$out"
@@ -155,7 +155,7 @@ c=portenv-daemon-$(box_id)
 probe "$c" pkill -f '^portenv-agent serve' || true
 sleep 1
 out=$("$portenv" app check d 2>&1) || true; echo "  $out"
-expect "check: the box agent is unavailable" grep -q "the box agent is unavailable" <<<"$out"
+expect "check: the workspace agent is unavailable" grep -q "the workspace agent is unavailable" <<<"$out"
 probe -u work "$c" sh -c 'echo while-down > /home/work/down.txt'
 out=$("$portenv" app restart d 2>&1) || true; echo "  $out"
 expect "Restart Box keeps the local home (rule 3)" grep -q "rule 3" <<<"$out"
@@ -251,7 +251,7 @@ probe "$c" pkill -f '^portenv-agent serve' || true
 sleep 1
 out=$("$portenv" app close d 2>&1) && st=0 || st=$?; echo "  $out"
 expect "quit with the agent down: the close fails, so the app asks (the alert)" test "$st" -ne 0
-expect "and says why: the box agent is unavailable" grep -q "the box agent is unavailable" <<<"$out"
+expect "and says why: the workspace agent is unavailable" grep -q "the workspace agent is unavailable" <<<"$out"
 kill -TERM "$dpid"   # Quit Anyway
 for _ in $(seq 240); do kill -0 "$dpid" 2>/dev/null || break; sleep 0.5; done
 wait "$dpid" 2>/dev/null || true
@@ -312,7 +312,7 @@ start_daemon
 c=portenv-daemon-$(box_id)
 probe "$c" sh -c "pkill -f '^portenv-agent serve'; sleep 1; openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -subj /CN=portenv-agent -days 1 -keyout /tmp/i.key -out /tmp/i.crt 2>/dev/null; setsid sh -c 'openssl s_server -accept 7700 -cert /tmp/i.crt -key /tmp/i.key -quiet >/tmp/impostor.log 2>&1' >/dev/null 2>&1 & sleep 1"
 out=$("$portenv" app point d 2>&1) || true; echo "  $out"
-expect "an impostor on the agent's port: portenvd reports the box agent unavailable" grep -q "the box agent is unavailable" <<<"$out"
+expect "an impostor on the agent's port: portenvd reports the workspace agent unavailable" grep -q "the workspace agent is unavailable" <<<"$out"
 
 # Over the whole run: the image's HEALTHCHECK is the engine's own exec of
 # "portenv-agent ready", and the probes above are this script's; any other

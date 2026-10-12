@@ -65,7 +65,7 @@ public enum InspectorText {
     /// Why Move To… can't be used (GUIDELINES §10: what to do), shown under
     /// it and as its help tag; nil when there is somewhere to move.
     public static func moveUnavailable(targets: [String]) -> String? {
-        targets.isEmpty ? "Add a server to move this box." : nil
+        targets.isEmpty ? "Add a server to move this workspace." : nil
     }
 
     /// Packages from apt-packages.txt that couldn't be installed, as the
@@ -85,7 +85,7 @@ public enum InspectorText {
 
     public static func moving(to place: String) -> String { "Moving to \(place)" }
     public static let moveNote =
-        "You can keep reading. Typing comes back when the box is running there. If the move stops, the box stays here, saved."
+        "You can keep reading. Typing comes back when the workspace is running there. If the move stops, the workspace stays here, saved."
 
     /// A save's kind in plain words. GUIDELINES §6 lists the kinds; a kind
     /// this app doesn't know yet still reads as a save.
@@ -93,7 +93,7 @@ public enum InspectorText {
         switch raw {
         case "autosave": "Autosave"
         case "point": "Save point"
-        case "release": "Saved when the box closed"
+        case "release": "Saved when the workspace closed"
         case "orphaned": "Kept from \(machine)"
         default: "Save"
         }
@@ -124,7 +124,7 @@ public enum InspectorText {
 
     /// portenvd lists a server box's saves on the server (ListSaves).
     public static func savesElsewhere(_ server: String) -> String {
-        "Saves are listed on \(server) while the box runs there."
+        "Saves are listed on \(server) while the workspace runs there."
     }
     public static let noSaves = "No saves yet."
     public static let loadingSaves = "Loading saves\u{2026}"
@@ -228,7 +228,7 @@ public enum NotifyText {
 
     public static func moveFinished(box: String, to place: String, seconds: Int) -> Content {
         Content(title: "\(box) · Moved to \(place)",
-                body: "The move took \(duration(seconds)). The box is running there.",
+                body: "The move took \(duration(seconds)). The workspace is running there.",
                 subtitle: "You · \(place)")
     }
 

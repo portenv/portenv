@@ -254,7 +254,7 @@ type ChannelExecutor struct {
 
 // errNoChannel: the box has no agent connection (it was just closed or
 // is restarting).
-var errNoChannel = status.Error(codes.Unavailable, "the box agent is unavailable (no channel)")
+var errNoChannel = status.Error(codes.Unavailable, "the workspace agent is unavailable (no channel)")
 
 func (c ChannelExecutor) agent() (agentv1.AgentServiceClient, error) {
 	a := c.Agent
@@ -279,7 +279,7 @@ func (c ChannelExecutor) Restic(ctx context.Context, args []string, cred Credent
 	}
 	res, err := a.RunRestic(ctx, &agentv1.RunResticRequest{Args: args, Input: input})
 	if err != nil {
-		return ExecResult{}, fmt.Errorf("run restic in box: %w", err)
+		return ExecResult{}, fmt.Errorf("run restic in the workspace: %w", err)
 	}
 	return ExecResult{Stdout: res.GetStdout(), Stderr: res.GetStderr(), ExitCode: int(res.GetExitCode())}, nil
 }
@@ -292,7 +292,7 @@ func (c ChannelExecutor) PathInfo(ctx context.Context, path string) (PathInfo, e
 	}
 	res, err := a.GetPathInfo(ctx, &agentv1.GetPathInfoRequest{Path: path})
 	if err != nil {
-		return PathInfo{}, fmt.Errorf("inspect %s in box: %w", path, err)
+		return PathInfo{}, fmt.Errorf("inspect %s in the workspace: %w", path, err)
 	}
 	return PathInfo{Exists: res.GetExists(), IsDir: res.GetIsDir(), Empty: res.GetEmpty()}, nil
 }

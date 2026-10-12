@@ -101,8 +101,9 @@ test: $(TOOLS_STAMP)
 	for m in $(GO_MODULES); do RESTIC=$(BIN)/restic go test -race ./$$m/...; done
 	scripts/test-scan-excerpt.sh
 	scripts/test-notarize.sh
+	scripts/test-workspace-word.sh
 
-## lint: formatting, vet, golangci-lint, buf lint, workflow lint, SPDX headers
+## lint: formatting, vet, golangci-lint, buf lint, workflow lint, SPDX headers, "workspace" in what people read
 lint: $(TOOLS_STAMP) $(SHELLCHECK) spdx-check
 	test -z "$$(gofmt -l core proto/gen/go | tee /dev/stderr)"
 	for m in $(GO_MODULES); do go vet ./$$m/...; done
@@ -113,6 +114,7 @@ lint: $(TOOLS_STAMP) $(SHELLCHECK) spdx-check
 	scripts/install-shellcheck.sh --check
 	$(BIN)/actionlint -shellcheck=$(SHELLCHECK)
 	scripts/check-no-binaries.sh
+	python3 -I scripts/check-workspace-word.py
 
 ## fmt: format Go and proto sources
 fmt: $(TOOLS_STAMP)

@@ -47,7 +47,7 @@ struct WindowCloseTests {
     /// Staying in the box (Cancel) takes the closing line away again.
     @Test func cancelTakesTheClosingLineAway() async {
         let cli = FakeDaemon(), order = CloseOrder()
-        cli.failing["close"] = "the box agent is unavailable"
+        cli.failing["close"] = "the workspace agent is unavailable"
         let shown = await WindowClose.run(QuitFlow(daemon: cli, box: "acme-api", openHere: true), ask: { _ in .cancel },
                                           closing: { on in order.add(on ? "closing" : "closing off") }) {
             order.add("list")
@@ -79,7 +79,7 @@ struct WindowCloseTests {
     /// its window and never shows the list.
     @Test func aFailedSaveAsksAndCancelStaysInTheBox() async {
         let cli = FakeDaemon(), order = CloseOrder()
-        cli.failing["close"] = "the box agent is unavailable"
+        cli.failing["close"] = "the workspace agent is unavailable"
         let answers = ScriptedAnswers([.cancel])
         let shown = await WindowClose.run(QuitFlow(daemon: cli, box: "acme-api", openHere: true), ask: { answers.ask($0) }) {
             order.add("list")
@@ -92,7 +92,7 @@ struct WindowCloseTests {
     /// Try Again closes again; once saved, the list.
     @Test func tryAgainThenTheList() async {
         let cli = FakeDaemon(), order = CloseOrder()
-        cli.failingOnce["close"] = "the box agent is unavailable"
+        cli.failingOnce["close"] = "the workspace agent is unavailable"
         let answers = ScriptedAnswers([.tryAgain])
         let shown = await WindowClose.run(QuitFlow(daemon: cli, box: "acme-api", openHere: true), ask: { answers.ask($0) }) {
             order.add("list")
@@ -106,7 +106,7 @@ struct WindowCloseTests {
     /// does, so the next open saves it first thing; then the list.
     @Test func closeAnywayLeavesTheMarkerThenTheList() async {
         let cli = FakeDaemon(), order = CloseOrder()
-        cli.failing["close"] = "the box agent is unavailable"
+        cli.failing["close"] = "the workspace agent is unavailable"
         cli.onRun = { args in order.add(args.joined(separator: " ")) }
         let answers = ScriptedAnswers([.quitAnyway])
         let shown = await WindowClose.run(QuitFlow(daemon: cli, box: "acme-api", openHere: true), ask: { answers.ask($0) }) {
@@ -123,7 +123,7 @@ struct WindowCloseTests {
     @Test(arguments: [QuitChoice.tryAgain, .quitAnyway])
     func aFailedSaveKeepsOneClosingLineUntilTheList(_ choice: QuitChoice) async {
         let cli = FakeDaemon(), order = CloseOrder()
-        cli.failingOnce["close"] = "the box agent is unavailable"
+        cli.failingOnce["close"] = "the workspace agent is unavailable"
         let answers = ScriptedAnswers([choice])
         let shown = await WindowClose.run(QuitFlow(daemon: cli, box: "acme-api", openHere: true), ask: { answers.ask($0) },
                                           closing: { on in order.add(on ? "closing" : "closing off") }) {

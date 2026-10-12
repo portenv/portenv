@@ -219,7 +219,7 @@ public enum BoxMenuModel {
             .separator,
         ]
         if agentUnavailable || optionHeld {
-            items.append(BoxMenuItem(title: "Restart Box", enabled: act, action: .restartBox))
+            items.append(BoxMenuItem(title: "Restart Workspace", enabled: act, action: .restartBox))
         }
         items.append(BoxMenuItem(title: "Show in Finder", enabled: false, shortcut: "⌥⌘R"))
         return items
@@ -235,7 +235,7 @@ public enum TerminalLayout {
 
 /// §12: what VoiceOver says for the window's controls.
 public enum A11y {
-    public static func titleLabel(box: String) -> String { "\(box), box menu" }
+    public static func titleLabel(box: String) -> String { "\(box), workspace menu" }
 
     /// The recovery key read one character at a time, group by group, so it
     /// can be written down: "Recovery key: K 7 Q F, M 2 X A, …".

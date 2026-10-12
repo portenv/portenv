@@ -88,7 +88,7 @@ struct InspectorView: View {
                 .fixedSize()
                 .disabled(unavailable != nil)
                 // Disabled, with the reason (§3.2: explained in the inspector).
-                .help(unavailable ?? "Move this box to another place")
+                .help(unavailable ?? "Move this workspace to another place")
                 if let unavailable { Note(unavailable) }
             }
         }

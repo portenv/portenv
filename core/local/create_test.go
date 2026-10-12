@@ -438,7 +438,7 @@ func TestCreateBoxIsIdempotentOnBoxID(t *testing.T) {
 	}
 	taken := createRequest(t, "acme-api", "box-0123456789ac", "")
 	_, err := e.CreateBox(ctx, taken, CreateOptions{})
-	if kindOf(err) != ErrNameTaken || err.Error() != "A box named acme-api already exists." {
+	if kindOf(err) != ErrNameTaken || err.Error() != "A workspace named acme-api already exists." {
 		t.Fatalf("another box with the name: %v", err)
 	}
 	assertOneWorkingBox(t, e, req)
@@ -889,7 +889,7 @@ func TestLoadBoxSaysWhenThereIsNoConfig(t *testing.T) {
 	t.Parallel()
 	e := newCreateEnv(t)
 	_, err := e.LoadBox("acme-api")
-	if !errors.Is(err, fs.ErrNotExist) || err.Error() != "no box named acme-api here; create it with portenv init acme-api" {
+	if !errors.Is(err, fs.ErrNotExist) || err.Error() != "no workspace named acme-api here; create it with portenv init acme-api" {
 		t.Fatalf("missing: %v", err)
 	}
 	p, _ := e.ConfigPath("acme-api")

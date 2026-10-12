@@ -223,8 +223,8 @@ final class AppModel {
 struct AppFirstRunService: FirstRunService {
     /// Lane and other dev builds have their own bundle identifier.
     static var isDevBuild: Bool { Bundle.main.bundleIdentifier != AppMover.bundleID }
-    static let notYetDev = "Dev build: making keys and boxes from the app isn’t built yet. Make a box with portenv init, then open Portenv again."
-    static let notYet = "Making keys and boxes from the app isn’t ready yet."
+    static let notYetDev = "Dev build: making keys and workspaces from the app isn’t built yet. Make a workspace with portenv init, then open Portenv again."
+    static let notYet = "Making keys and workspaces from the app isn’t ready yet."
     private var message: String { Self.isDevBuild ? Self.notYetDev : Self.notYet }
     func makeRecoveryKey() async throws -> String { throw FirstRunError(message, notBuilt: true) }
     func createBox(_: NewBox) async throws { throw FirstRunError(message, notBuilt: true) }

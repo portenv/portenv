@@ -18,12 +18,12 @@ struct FirstRunView: View {
         VStack(alignment: .leading, spacing: 0) {
             if let cancel {
                 Button(action: cancel) {
-                    Label("Your boxes", systemImage: "chevron.left")
+                    Label("Your workspaces", systemImage: "chevron.left")
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
                 .padding(.bottom, 20)
-                .accessibilityLabel("Back to your boxes")
+                .accessibilityLabel("Back to your workspaces")
             }
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)

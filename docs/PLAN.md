@@ -603,16 +603,18 @@ The main window is a terminal with a title; everything else appears only when it
 **Principles**
 
 1. Deference: a thin unified toolbar, full-width terminal, sidebar hidden by default (⌘0).
-2. Automate instead of asking: autosave; closing the window saves and releases the box.
-3. Box actions live in the title menu, like a document's title menu in macOS.
+2. Automate instead of asking: autosave; closing the window saves and releases the workspace.
+3. Workspace actions live in the title menu, like a document's title menu in macOS.
 4. State is shown with quiet symbols (saved, saving, changes) with details on hover.
 5. Undo over "Are you sure?": history makes most actions reversible.
 6. Power lives in menus and keyboard shortcuts.
 7. System font, SF Symbols, system materials, light and dark appearance, VoiceOver labels on every control.
 
+**Words:** what people read says "workspace" (the app, its notifications, portenvd's messages, the docs people read); the code, APIs, proto, box IDs (`box-…`), paths, Keychain service names and log keys keep "box" (the owner, 2026-10-12; R-0112; GUIDELINES §2). The CLI's `portenv box …` group becomes `portenv workspace …` in its own change.
+
 **Main window**
 
-- Title: box name, sync symbol, and a subtitle with machine and save state ("MacBook Air · Saved 2 min ago", "Offline · will save later", "Moving to build-server…").
+- Title: workspace name, sync symbol, and a subtitle with machine and save state ("MacBook Air · Saved 2 min ago", "Offline · will save later", "Moving to build-server…").
 - Tabs: the user's tabs plus agent lanes, labelled with the agent's monogram and a watching or driving indicator.
 - Toolbar items appear only when relevant: listening ports (`:3000 ↗`), agent avatars with an approval badge.
 - Drag a file onto the terminal to copy it into the current folder.
@@ -620,7 +622,7 @@ The main window is a terminal with a title; everything else appears only when it
 **Hosted features** (the own-route guarantee, ADR 0008 G3)
 
 - Hosted options (Portenv Cloud in Move To, Portenv storage, Account) appear as ordinary choices once they exist. Choosing one opens a sheet that explains it and offers sign-in. They are never required, never block a flow, and never show banners or nags.
-- If the service is unreachable, that shows only when the user picks the option: "Can't reach Portenv right now; your boxes keep working."
+- If the service is unreachable, that shows only when the user picks the option: "Can't reach Portenv right now; your workspaces keep working."
 - Before a hosted feature exists, it does not appear at all: no "coming soon" items.
 
 **Title menu** (Apple's document-menu pattern)
@@ -630,7 +632,7 @@ Rename… · Move To ▸ (this Mac, each server, Portenv Cloud once it exists, A
 **Menu bar**
 
 - File › Make Save Point ⌘S.
-- Box › Box Settings… (also reachable from Settings).
+- Workspace › Workspace Settings… (also reachable from Settings).
 - Help › Send Feedback…: a new message in the person's mail app to the feedback address, with only the app's version, build and commit, the macOS version and the chip (R-0088); with no mail app, an alert gives the address with a Copy Address button. Copy Feedback Address sits beside it for webmail, and the two replace the standard Help item until there is a help book (R-0097).
 - Changes are not a menu item: clicking the sync symbol next to the title shows what changed since the last save.
 
@@ -639,8 +641,8 @@ Rename… · Move To ▸ (this Mac, each server, Portenv Cloud once it exists, A
 - Changes (click the sync symbol next to the title): files new, changed or deleted since the last save; a Never saved section with sizes; include or exclude per folder.
 - Browse All Saves (Revert To ▸): a timeline of every save (autosaves, save points, closes and orphaned saves) per machine; open any save read-only, compare any save with now; restore one file or everything.
 - Agent popover (click an avatar): identity, where it connected from, lane and branch, a live glimpse of its terminal, pending approval, Watch, Take Over, permissions in one sentence, Revoke Access.
-- Sidebar (⌘0): Boxes, Machines, Agents.
-- Settings window (⌘,): Account and devices, Protection and recovery key, Storage, Machines, Agents and permissions, Secrets, Box defaults and the open box's Box Settings, Notifications.
+- Sidebar (⌘0): Workspaces, Machines, Agents.
+- Settings window (⌘,): Account and devices, Protection and recovery key, Storage, Machines, Agents and permissions, Secrets, Workspace defaults and the open workspace's Workspace Settings, Notifications.
 
 **Lease and move sheets**
 
@@ -656,8 +658,8 @@ This is the first run once the control plane exists (Phase 3). The mockups show 
 2. Protection: Only you (default) or You, with Portenv's help.
 3. Recovery key: Print, Copy; Continue enabled only after "I've saved my recovery key". (Save to Passwords was dropped: macOS has no public API for it; ADR 0019.)
 4. Storage: Portenv storage can be preselected, but "Use my own server or bucket" and "Keep on this Mac for now" are visible on the same screen, each one click, with no account needed.
-5. First box: name, Start from (GitHub repository, folder on this Mac, empty), detected toolbox with Change…, Show this box in Finder (on).
-6. Getting ready: Setting up Portenv (first run only), toolbox, encrypted home, clone, start. The window opens as soon as the box is usable.
+5. First workspace: name, Start from (GitHub repository, folder on this Mac, empty), detected toolbox with Change…, Show this workspace in Finder (on).
+6. Getting ready: Setting up Portenv (first run only), toolbox, encrypted home, clone, start. The window opens as soon as the workspace is usable.
 
 **First run in Phases 1 and 2 (no Portenv backend)**
 
@@ -666,20 +668,20 @@ Phases 0 to 2 have no Portenv backend, so the first run is reduced. Same six ste
 1. Welcome: a single Get started button. No sign-in; the device key is generated locally.
 2. Protection: fixed to Only you, shown as an explanation (your keys stay on your devices; losing them and the recovery key loses the data). No choice is offered.
 3. Recovery key: unchanged.
-4. Storage: My own server, An S3-compatible bucket, or This Mac only. No Portenv storage. This Mac only keeps the box's repository at `~/Library/Application Support/Portenv/Repositories/<box-id>`, outside the box and the engine VM, and the screen says plainly that saves then have no copy off this Mac. Time Machine may back the folder up; it is already encrypted by restic. After a week of use, one dismissible notice says "Your saves only exist on this Mac. Add a server or bucket to keep a copy elsewhere.", and Settings › Storage shows the same fact as a permanent status line. **In 1.5 (the design testers' build), only "Keep on this Mac for now" is offered**, with "Saves stay on this Mac only. If this Mac is lost, they're lost too. You can add a server or bucket later." My own server and An S3-compatible bucket are shown dimmed and marked LATER (board `first-run-4-storage-this-mac`; the reviewer, on the owner's delegation, R-0092, R-0093).
-5. First box and 6. Getting ready: unchanged.
+4. Storage: My own server, An S3-compatible bucket, or This Mac only. No Portenv storage. This Mac only keeps the workspace's repository at `~/Library/Application Support/Portenv/Repositories/<box-id>`, outside the workspace and the engine VM, and the screen says plainly that saves then have no copy off this Mac. Time Machine may back the folder up; it is already encrypted by restic. After a week of use, one dismissible notice says "Your saves only exist on this Mac. Add a server or bucket to keep a copy elsewhere.", and Settings › Storage shows the same fact as a permanent status line. **In 1.5 (the design testers' build), only "Keep on this Mac for now" is offered**, with "Saves stay on this Mac only. If this Mac is lost, they're lost too. You can add a server or bucket later." My own server and An S3-compatible bucket are shown dimmed and marked LATER (board `first-run-4-storage-this-mac`; the reviewer, on the owner's delegation, R-0092, R-0093).
+5. First workspace and 6. Getting ready: unchanged.
 
-In Phase 3, sign-in, Portenv storage and the recoverable mode are switched on. Existing users get a one-time prompt to create an account and link their devices; their boxes, keys and storage stay as they are.
+In Phase 3, sign-in, Portenv storage and the recoverable mode are switched on. Existing users get a one-time prompt to create an account and link their devices; their workspaces, keys and storage stay as they are.
 
-Unsupported Macs (Intel, or macOS before 26) get one extra screen after Welcome: use Docker Desktop or OrbStack, or run boxes on a server and use this Mac as a client. Notification permission is requested when the first agent connects, not during first run.
+Unsupported Macs (Intel, or macOS before 26) get one extra screen after Welcome: use Docker Desktop or OrbStack, or run workspaces on a server and use this Mac as a client. Notification permission is requested when the first agent connects, not during first run.
 
 **Every launch after**
 
-Reopen the last box directly. Show a sheet only if needed: lease held elsewhere, engine stopped, or recovery required. Offline: the box runs locally and saves queue.
+Reopen the last workspace directly. Show a sheet only if needed: lease held elsewhere, engine stopped, or recovery required. Offline: the workspace runs locally and saves queue.
 
 **Finder (File Provider)**
 
-Each box appears as Documents › Portenv › \<box> and under Locations in the Finder sidebar. Files download on demand when the box runs remotely. `node_modules` and caches are hidden. The home itself stays in the box (no bind mount of the whole home) for speed and Linux case sensitivity. Phase 1 may ship a simpler shared folder (`/home/work/Mac`) before the File Provider.
+Each workspace appears as Documents › Portenv › \<workspace> and under Locations in the Finder sidebar. Files download on demand when the workspace runs remotely. `node_modules` and caches are hidden. The home itself stays in the workspace (no bind mount of the whole home) for speed and Linux case sensitivity. Phase 1 may ship a simpler shared folder (`/home/work/Mac`) before the File Provider.
 
 ## The terminal edition
 
@@ -919,7 +921,7 @@ Milestones: 1.0 walking skeleton · 1.1 `portenvd` with the local gRPC API · 1.
 - **Quitting:** never fails silently (the alert and the marker, #25); the channel is checked after wake (#25); boxes still opening are waited for (#25).
 - **Deadlines:** on every restic run and every process on the daemon side, enforced in CI (#23).
 - **Offline open:** near 2 s (ADR 0011).
-- **The guideline basics (#26):** title and Box menus in the guideline order, servers by name, tmux hidden, VoiceOver labels.
+- **The guideline basics (#26):** title and Workspace menus in the guideline order, servers by name, tmux hidden, VoiceOver labels.
 - **Packages:** a package that can't be installed never stops a box (#28; the inspector line waits for the inspector).
 - **The CLI built in CI, fetched by commit (#27);** the test-path rule and mutation checks (#20).
 
@@ -1008,7 +1010,7 @@ Every UI PR in 1.2 comes with light and dark screenshots next to the matching mo
 
 In this order:
 
-1. **Rename… for boxes** (§3.2). It updates the title, the inspector and the hostname. If the hostname can only change on the box's next start, the rename sheet says so ("The box's hostname changes the next time it starts.").
+1. **Rename… for boxes** (§3.2). It updates the title, the inspector and the hostname. If the hostname can only change on the box's next start, the rename sheet says so ("The workspace's hostname changes the next time it starts.").
 2. **The tab bar (early, §3 and §4.1), built before the spike** on a tab interface in the box agent: list, new, close and rename, plus events. Whether the agent uses tmux control mode or plain tmux commands stays inside the agent, so the tab bar doesn't change after the spike.
    - One tab per tmux window; `+` for a new tab; the app owns names and order.
    - Until it exists, nothing (`portenv box send`, agents) can create a tmux window the user can't see. The agent refuses `new-window` from anything but the app, or maps it to the single visible window.
@@ -1056,7 +1058,7 @@ In this order:
        - a server box's saves, which portenvd lists on the server.
      - **Review follow-ups (lane B's second PR, 2026-10-11):**
        - one rule for "Saved …": the state line and the inspector's "Last saved" both come from the box state's saved-at time, "just now" for the first minute and then the time (§3.1), and both redraw when the minute is up (the title once still said "Saved just now" two minutes after the save);
-       - Move To… with nowhere to go says why: "Add a server to move this box.", under it and as its help tag;
+       - Move To… with nowhere to go says why: "Add a server to move this workspace.", under it and as its help tag;
        - saves kept on this Mac read "Encrypted on this Mac"; "before they leave it" stays for a server, a bucket or a drive;
        - saves that can't be read show "Couldn't load saves." with Try Again, and the app keeps trying quietly, instead of "Loading saves…" forever;
        - a box that moves back to this Mac shows "Loading saves…" until portenvd answers, never "No saves yet." from before.
@@ -1140,14 +1142,14 @@ The Containerization shim, with `docker` as the fallback. The agent drops the fo
 **7. 1.5: first run**
 
 Reduced: no sign-in, Only you, Keychain keys, the recovery key; the Welcome screen has "Continue without an account" (#16). First run lists, in plain words, the exact fields the update check counts (no ID, nothing about the user's work), and how to turn counting off (1.8).
-- **No window for a box that doesn't exist** (found at the Mac, 2026-10-10). Opened without `PORTENV_BOX`, the app shows a window for a default box "demo" that doesn't exist, with "no box named demo here; create it with portenv init demo". That message starts in lower case and sends the user to a terminal command (GUIDELINES §10). First run replaces it: with no box, the app shows first run or the box list, never a window for a missing box.
+- **No window for a box that doesn't exist** (found at the Mac, 2026-10-10). Opened without `PORTENV_BOX`, the app shows a window for a default box "demo" that doesn't exist, with "no workspace named demo here; create it with portenv init demo". That message starts in lower case and sends the user to a terminal command (GUIDELINES §10). First run replaces it: with no box, the app shows first run or the box list, never a window for a missing box.
 - **The box list and New box: build to the boards** `box-list`, `box-list-empty`, `new-box` and `new-box-linked-invalid` in `docs/mockups/` (the owner, 2026-10-10).
-  - **First run** keeps "Make your first box", with step dots.
-  - **The box list's New Box…** opens "New box", with Back (‹ Your boxes) and Cancel, and no step dots.
+  - **First run** keeps "Make your first workspace", with step dots.
+  - **The box list's New Workspace…** opens "New workspace", with Back (‹ Your workspaces) and Cancel, and no step dots.
   - **The name field** has a hint ("Letters, numbers and hyphens, like the project's name."), and an inline error for an invalid name ("Start with a letter or a number.").
   - **Opening a box that's on a server** connects to it there; nothing moves unless the person chooses Move To.
-  - **While the name is invalid** (R-0049): the field has a red border in place of the blue focus ring, and VoiceOver reads the problem as part of the field's description ("Box name. Start with a letter or a number."); Create Box is dimmed as well as disabled.
-- **Closing the last box window goes back to "Your boxes"** instead of quitting (the owner, 2026-10-11). ⌘Q still quits.
+  - **While the name is invalid** (R-0049): the field has a red border in place of the blue focus ring, and VoiceOver reads the problem as part of the field's description ("Workspace name. Start with a letter or a number."); Create Workspace is dimmed as well as disabled.
+- **Closing the last box window goes back to "Your workspaces"** instead of quitting (the owner, 2026-10-11). ⌘Q still quits.
   - The box is closed, saved and released first, exactly as quitting does. If that fails, the app asks "acme-api couldn't be saved before closing. Its work is still on this Mac.", with Try Again, Close Anyway and Cancel.
   - Close Anyway leaves the box as Quit Anyway does (the quit marker; saved first thing on the next open). Cancel keeps the window on the box.
   - A box still opening finishes opening first, so it's never left open with no window. Closing another window on the same box just closes that window. Closing the list or first run, when it's the last window, quits.
@@ -1156,16 +1158,16 @@ Reduced: no sign-in, Only you, Keychain keys, the recovery key; the Welcome scre
   - gh's default scopes, then `gh auth setup-git`, so plain `git clone` and `git push` work for any repository the account can reach; the token lives in the box home's gh config (`hosts.yml`), never in the image;
   - the login is kept in the box's encrypted home and moves with it; Portenv never sees or keeps it;
   - agents working in the box can use that login too, and the dialog says so;
-  - the inspector's Who's here shows "This box can push to GitHub as you", with Sign Out of GitHub.
+  - the inspector's Who's here shows "This workspace can push to GitHub as you", with Sign Out of GitHub.
 - **Built so far** (lane C's first milestone, 2026-10-10):
   - **The launch decision:** with no box, first run; with a box that isn't on this Mac, the box list, saying so; never a window for a missing box (`LaunchDecision`, tested). The app no longer defaults to "demo".
   - **The first-run screens and their flow,** reduced as above: Continue is enabled only when the step is complete; the recovery key needs the "I've saved" checkbox; box names follow the CLI's rule. "Count me in usage numbers" is already on, with the exact fields one click away, on Welcome (before any update check).
-  - **The box list:** open a box, or New Box… (first run's first-box step).
+  - **The box list:** open a box, or New Workspace… (first run's first-box step).
   - **Move to Applications** (lane C's second milestone): before the login item is registered, an app outside /Applications, App Translocation included, asks "Move Portenv to Applications?". Move copies it there (an older Portenv is replaced, anything else named Portenv.app never is), opens the copy and quits; Not Now isn't asked again for the same location. Dev builds can redirect the copy with `PORTENV_MOVE_TO` so UI tests never replace the real app.
   - **portenvd not starting** (R-0028, R-0032): while waiting for portenvd, the app reads the login item's status and `launchctl print` for its job.
     - **launchd refused it (exit 78):** one line with both remedies, Login Items first ("Portenv’s background service didn’t start. Turn Portenv on in System Settings › General › Login Items, and if it’s not in the Applications folder, move it there."), with Open Login Items and Try Again. SMAppService said "enabled" before Portenv was switched on, so the location is never given alone.
     - **Not refused, but the login item isn't enabled:** "Portenv needs permission to run in the background…", with Open Login Items; the wait goes on.
-  - **New Box… from the box list** (the new-box boards): titled "New box", with Cancel, ⎋ and "‹ Your boxes" back to the list, and Create Box. The name field says the rule under it, or what's wrong, in red, in one line.
+  - **New Workspace… from the box list** (the new-box boards): titled "New workspace", with Cancel, ⎋ and "‹ Your workspaces" back to the list, and Create Workspace. The name field says the rule under it, or what's wrong, in red, in one line.
   - **"Not built yet" is a notice,** not an error. Dev builds (their own bundle ID) name the `portenv init` workaround; a release build never sends anyone to Terminal.
   - **Closing to the list and the invalid name's look** (lane C's third milestone): `WindowClose` (the close runs before the list is shown; tested with the order of calls) and `NameFieldLook` (tested), with renders in `docs/screenshots/first-run/`.
   - **Not yet:** making keys, the recovery key and the first box from the app. These are data-loss paths. The decisions are taken and ADR 0019 works out the details (the recovery key's format and check character, the per-box key derivation, the pool of pre-derived passwords, and `CreateBox`'s order of steps); code follows its review, tests first. Built so far: the recovery key's library (format, check character, reading a typed key, the per-box derivation), in Swift (`PortenvKit/RecoveryKey.swift`) and Go (`core/keys/recovery`), both against one vector file (R-0095); and in `portenvd`, `CreateBox` (steps D1 to D6, idempotent on the box ID, a fault and a crash test at every step), `DiscardCreation`, `ListBoxes`' `creating` flag and `RecoverBox`, with the clean-Mac restore test (This Mac and folder storage; server and bucket storage wait for 2.9). The app's pool, `AddRecoveryKey` and first run's wiring come next. Until then, first run says so plainly at Protection. Start from (GitHub, folder) and the detected toolbox on the first-box step also come later.
@@ -1255,7 +1257,7 @@ Developer ID signing, notarisation and Sparkle, with the key backups. Signed pub
 - **The next server session starts with `scripts/fetch-cli.sh` against the server** (#27). The three server scripts install CI's binaries by commit; fix whatever fails there and then. It doesn't block anything before.
 - **#26 follow-ups:**
   - Last Save Point time in the menu (1.4);
-  - Restart Box with ⌥ in the menu bar's Box menu (1.1, once the menu bar is AppKit-backed or SwiftUI can see ⌥);
+  - Restart Workspace with ⌥ in the menu bar's Workspace menu (1.1, once the menu bar is AppKit-backed or SwiftUI can see ⌥);
   - **a live VoiceOver check and a title-menu screenshot with the owner at the Mac** (the next session at the Mac; the screen was locked overnight).
 - **Agent readiness rules apply from now** (2026-10-09): every command added or changed supports `--json`, uses a stable exit code, never asks without a TTY, and its errors say what happened and what to do next (Agent readiness, principles 2 and 3).
 - **Every milestone keeps the test-path rule:** app-relied behaviour is tested through `portenvd` or the runner and the channel, each check mutation-checked, and every e2e call has a time limit.
@@ -1279,7 +1281,7 @@ A thin slice through every layer, in the code where 1.1 and 1.2 continue: a mini
 
 **1.0b A box on a server, the same as on the Mac** (demo: docs/demo/1.0.md)
 
-The minimal server-side piece that 2.1's runner grows from: `portenv-runner` (the same daemon code as `portenvd`, as a systemd service) opens boxes on the server with the agent channel. The Mac moves a box there by enrolling it and opening it through the runner (`sudo /usr/local/bin/portenv app open`, the only sudo command its SSH user `portenv` may run), fetches each start's channel secrets from the runner over the SSH session and keeps them in memory, and reaches the agent's port on the server's loopback through an SSH forward. The same window shows the same terminal on the server, with the state line saying where it runs; save points, Revert To and Restart Box work there exactly as on the Mac. The secrets reach a box only on its stdin, never a file. A runner restart leaves boxes running; the app shows the box agent unavailable and offers Restart Box.
+The minimal server-side piece that 2.1's runner grows from: `portenv-runner` (the same daemon code as `portenvd`, as a systemd service) opens boxes on the server with the agent channel. The Mac moves a box there by enrolling it and opening it through the runner (`sudo /usr/local/bin/portenv app open`, the only sudo command its SSH user `portenv` may run), fetches each start's channel secrets from the runner over the SSH session and keeps them in memory, and reaches the agent's port on the server's loopback through an SSH forward. The same window shows the same terminal on the server, with the state line saying where it runs; save points, Revert To and Restart Workspace work there exactly as on the Mac. The secrets reach a box only on its stdin, never a file. A runner restart leaves boxes running; the app shows the box agent unavailable and offers Restart Workspace.
 
 - [x] The window's terminal runs on the server after Move To; save point and Revert To there; Move To ▸ This Mac brings the edits back (`tests/e2e/server-session.sh`, 2026-10-08: 28 checks, Move To 16.8 s)
 - [x] A runner restart loses nothing; an impostor on the server box's agent port gets nothing; no channel secret on the server's disk, journal or shell history (`tests/e2e/server-session.sh`)

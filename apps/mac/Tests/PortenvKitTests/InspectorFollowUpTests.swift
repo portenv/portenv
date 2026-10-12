@@ -177,7 +177,7 @@ struct InspectorFollowUpTests {
     // MARK: Move To… says why it can't
 
     @Test func moveToSaysWhyWhenThereIsNowhereToMove() {
-        #expect(InspectorText.moveUnavailable(targets: []) == "Add a server to move this box.")
+        #expect(InspectorText.moveUnavailable(targets: []) == "Add a server to move this workspace.")
         #expect(InspectorText.moveUnavailable(targets: ["This Mac"]) == nil)
     }
 

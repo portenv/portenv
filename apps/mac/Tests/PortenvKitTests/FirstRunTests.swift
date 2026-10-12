@@ -164,7 +164,7 @@ struct FirstRunTests {
         }
         // The IP address is seen in transit, so the line never claims it
         // isn't sent (PLAN.md 1.8, CNIL point 4).
-        #expect(FirstRunText.neverCounted == "Never sent: any ID, your name or email, box names, file names or anything in your boxes. Your IP address is seen in transit but never kept.")
+        #expect(FirstRunText.neverCounted == "Never sent: any ID, your name or email, workspace names, file names or anything in your workspaces. Your IP address is seen in transit but never kept.")
         #expect(FirstRunText.turnOff.contains("Settings"))
     }
 
@@ -203,7 +203,7 @@ struct FirstRunTests {
         #expect(FirstRunText.nameProblem(".api", existing: []) == "Start with a letter or a number.")
         #expect(FirstRunText.nameProblem("my project", existing: []) == "Use letters, numbers and hyphens, starting with a letter or number.")
         #expect(FirstRunText.nameProblem(String(repeating: "a", count: 64), existing: []) == "Use letters, numbers and hyphens, starting with a letter or number.")
-        #expect(FirstRunText.nameProblem("acme-api", existing: ["acme-api"]) == "There\u{2019}s already a box called \u{201C}acme-api\u{201D}.")
+        #expect(FirstRunText.nameProblem("acme-api", existing: ["acme-api"]) == "There\u{2019}s already a workspace called \u{201C}acme-api\u{201D}.")
         #expect(FirstRunText.nameHint == "Letters, numbers and hyphens, like the project\u{2019}s name.")
         // Continue agrees with the hint.
         let flow = FirstRunFlow(service: FakeFirstRunService(), at: .firstBox, existing: ["acme-api"])
@@ -219,11 +219,11 @@ struct FirstRunTests {
     /// first run it's "Make your first box" with Continue and the dots.
     @Test func newBoxFromTheListIsTitledNewBox() {
         let fromList = FirstRunFlow(service: FakeFirstRunService(), at: .firstBox, fromBoxList: true)
-        #expect(fromList.firstBoxTitle == "New box")
-        #expect(fromList.primaryButton == "Create Box")
+        #expect(fromList.firstBoxTitle == "New workspace")
+        #expect(fromList.primaryButton == "Create Workspace")
         #expect(!fromList.showsStepDots)
         let firstRun = FirstRunFlow(service: FakeFirstRunService(), at: .firstBox)
-        #expect(firstRun.firstBoxTitle == "Make your first box")
+        #expect(firstRun.firstBoxTitle == "Make your first workspace")
         #expect(firstRun.primaryButton == "Continue")
         #expect(firstRun.showsStepDots)
     }
@@ -236,15 +236,15 @@ struct FirstRunTests {
         let flow = FirstRunFlow(service: FakeFirstRunService(), at: .firstBox, existing: ["acme-api"], fromBoxList: true)
         flow.boxName = "-api"
         #expect(flow.nameField == NameFieldLook(showsError: true, line: "Start with a letter or a number.",
-                                                accessibilityDescription: "Box name. Start with a letter or a number.", accessibilityHelp: nil))
+                                                accessibilityDescription: "Workspace name. Start with a letter or a number.", accessibilityHelp: nil))
         #expect(!flow.canContinue && !flow.primaryProminent)
         flow.boxName = "acme-api"
         #expect(flow.nameField.showsError)
-        #expect(flow.nameField.accessibilityDescription == "Box name. There\u{2019}s already a box called \u{201C}acme-api\u{201D}.")
+        #expect(flow.nameField.accessibilityDescription == "Workspace name. There\u{2019}s already a workspace called \u{201C}acme-api\u{201D}.")
         #expect(!flow.primaryProminent)
         flow.boxName = ""
         #expect(flow.nameField == NameFieldLook(showsError: false, line: FirstRunText.nameHint,
-                                                accessibilityDescription: "Box name", accessibilityHelp: FirstRunText.nameHint))
+                                                accessibilityDescription: "Workspace name", accessibilityHelp: FirstRunText.nameHint))
         #expect(!flow.primaryProminent)
         flow.boxName = "site"
         #expect(!flow.nameField.showsError)

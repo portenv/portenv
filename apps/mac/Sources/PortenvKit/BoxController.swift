@@ -198,7 +198,31 @@ public final class BoxController {
 
     /// The state line as it reads at a time: the title draws it at the time
     /// it's drawn (and again when savedAtChangesAt comes).
-    public func subtitle(at time: Date) -> String { progress ?? transient ?? state?.line(now: time) ?? "" }
+    public func subtitle(at time: Date) -> String {
+        progress ?? transient ?? (engineDown ? DockerText.stateLine : state?.line(now: time)) ?? ""
+    }
+
+    /// Docker Desktop stopped while the box is open on this Mac (R-0098):
+    /// the state line and the window say so, with Open Docker Desktop.
+    public private(set) var engineDown = false
+
+    /// Asks portenvd whether Docker answers, only while the box is open
+    /// here and its agent is unavailable (a working box never asks).
+    public func checkEngine() async {
+        guard isOpen, location == .thisMac, agentUnavailable else {
+            engineDown = false
+            return
+        }
+        engineDown = await daemon.engineRunning() == false
+    }
+
+    /// checkEngine every 2 s until cancelled (alongside follow).
+    public func watchEngine() async {
+        while !Task.isCancelled {
+            await checkEngine()
+            await sleep(DockerText.interval)
+        }
+    }
 
     /// A new save was recorded: the words roll over a minute later, and the
     /// saves list (once read) is read again now, not on a later state.

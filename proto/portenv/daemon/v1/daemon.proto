@@ -65,6 +65,10 @@ service DaemonService {
   rpc Relaunch(RelaunchRequest) returns (RelaunchResponse);
   // The servers a box can move to (Move To), as user@host.
   rpc ListServers(ListServersRequest) returns (ListServersResponse);
+  // Whether this Mac's box engine answers (Docker Desktop is running), for
+  // Welcome's Docker card and the state line (R-0098). It only asks the
+  // engine: it never starts anything, and answers within 2 s.
+  rpc GetEngine(GetEngineRequest) returns (GetEngineResponse);
   // The Keychain items the app reads for a box (service
   // dev.portenv.repository): its repository key, and its storage keys.
   rpc GetKeyIDs(GetKeyIDsRequest) returns (GetKeyIDsResponse);
@@ -351,6 +355,13 @@ message ListServersRequest {}
 
 message ListServersResponse {
   repeated string servers = 1;
+}
+
+message GetEngineRequest {}
+
+message GetEngineResponse {
+  // The engine answered.
+  bool running = 1;
 }
 
 message GetKeyIDsRequest {

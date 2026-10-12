@@ -87,7 +87,9 @@ final class AppModel {
         launch = decision
         switch decision {
         case let .firstRun(step):
-            firstRun = FirstRunFlow(service: AppFirstRunService(), at: step, existing: boxes)
+            // Welcome waits for Docker Desktop's first answer (R-0098).
+            firstRun = FirstRunFlow(service: AppFirstRunService(), at: step, existing: boxes,
+                                    docker: step == .welcome ? nil : .running)
         case let .open(box):
             Task { await open(box) }
         case .boxList:
@@ -132,7 +134,12 @@ final class AppModel {
         await opening.value
         guard self.controller === controller else { return } // closed meanwhile
         // The state line follows the state portenvd pushes (WatchBoxState).
-        followTask = Task { await controller.follow() }
+        // Alongside, whether Docker Desktop stopped (R-0098).
+        followTask = Task {
+            async let follow: Void = controller.follow()
+            async let engine: Void = controller.watchEngine()
+            _ = await (follow, engine)
+        }
     }
 
     /// The window is closing. Closing the last box window goes back to

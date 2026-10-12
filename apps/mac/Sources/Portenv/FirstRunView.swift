@@ -13,6 +13,8 @@ struct FirstRunView: View {
     let opened: (String) -> Void
     /// New Box… from the box list: Cancel, ⎋ and "Your boxes" go back to it.
     var cancel: (() -> Void)?
+    /// Welcome checks Docker Desktop through portenvd (off for renders).
+    var followsDocker = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -81,14 +83,36 @@ struct FirstRunView: View {
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 440)
+            // Docker Desktop isn't running, or isn't installed (R-0098): a
+            // card until it answers, checked again every 2 s.
+            if let card = flow.docker?.card {
+                DockerCardView(card: card) { DockerDesktop.perform(card.action) }
+                    .frame(maxWidth: 460)
+            }
+            // Continue waits for Docker; dimmed as well as disabled (R-0049).
             Button(FirstRunText.welcomeButton) { Task { await flow.next() } }
                 .buttonStyle(.borderedProminent)
+                .tint(flow.primaryProminent ? Color.accentColor : Color.secondary.opacity(0.35))
                 .controlSize(.large)
                 .keyboardShortcut(.defaultAction)
+                .disabled(!flow.canContinue)
+            // Counting needs the update check, which tester builds don't
+            // have yet: hidden until counting exists (R-0098, R-0106).
+            #if PORTENV_COUNTING
             CountingChoice(countUsage: $flow.countUsage)
                 .frame(maxWidth: 440)
+            #endif
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .task {
+            guard followsDocker else { return }
+            await flow.followDocker(check: { await DockerDesktop.status() })
+        }
+        // The card is a status region: VoiceOver hears it appear, change
+        // and go.
+        .onChange(of: flow.docker) { _, status in
+            AccessibilityNotification.Announcement(status?.card?.title ?? DockerDesktop.runningAnnouncement).post()
+        }
     }
 
     private var protection: some View {

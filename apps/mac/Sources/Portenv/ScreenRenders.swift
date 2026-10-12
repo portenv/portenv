@@ -34,15 +34,23 @@ enum ScreenRenders {
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             for step in FirstRunStep.allCases {
                 let flow = await sampleFlow(at: step)
-                try snapshot(FirstRunView(flow: flow, opened: { _ in }), name: "first-run-\(step.rawValue + 1)-\(name(step))", in: dir)
+                try snapshot(FirstRunView(flow: flow, opened: { _ in }, followsDocker: false),
+                             name: "first-run-\(step.rawValue + 1)-\(name(step))", in: dir)
+            }
+            // Welcome while Docker Desktop isn't running, or isn't
+            // installed (R-0098's boards).
+            for (status, suffix) in [(DockerStatus.notRunning, "not-running"), (.missing, "missing")] {
+                let flow = FirstRunFlow(service: Sample(), docker: status)
+                try snapshot(FirstRunView(flow: flow, opened: { _ in }, followsDocker: false),
+                             name: "first-run-1-welcome-docker-\(suffix)", in: dir)
             }
             // New Box… from the box list (the new-box boards).
             let newBox = FirstRunFlow(service: Sample(), at: .firstBox, existing: ["acme-api"], fromBoxList: true)
             newBox.boxName = "site"
-            try snapshot(FirstRunView(flow: newBox, opened: { _ in }, cancel: {}), name: "new-box", in: dir)
+            try snapshot(FirstRunView(flow: newBox, opened: { _ in }, cancel: {}, followsDocker: false), name: "new-box", in: dir)
             let invalid = FirstRunFlow(service: Sample(), at: .firstBox, existing: ["acme-api"], fromBoxList: true)
             invalid.boxName = "-api"
-            try snapshot(FirstRunView(flow: invalid, opened: { _ in }, cancel: {}), name: "new-box-invalid", in: dir)
+            try snapshot(FirstRunView(flow: invalid, opened: { _ in }, cancel: {}, followsDocker: false), name: "new-box-invalid", in: dir)
             try snapshot(
                 BoxListView(boxes: ["acme-api", "site", "notes"], notice: LaunchDecision.missing("demo"), open: { _ in }, newBox: {}),
                 name: "box-list", in: dir

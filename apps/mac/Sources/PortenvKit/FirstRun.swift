@@ -88,6 +88,9 @@ public final class FirstRunFlow {
     public var boxName = ""
     /// Usage counting is on, and shown, before any update check (1.8).
     public var countUsage = true
+    /// Docker Desktop on this Mac (R-0098): Welcome's Continue waits until
+    /// it answers; nil until the first check does.
+    public var docker: DockerStatus?
     public private(set) var error: String?
     /// A plain notice (secondary text), like a step not built yet.
     public private(set) var notice: String?
@@ -101,8 +104,10 @@ public final class FirstRunFlow {
     private let service: FirstRunService
     private let existing: Set<String>
 
-    public init(service: FirstRunService, at start: FirstRunStep = .welcome, existing: [String] = [], fromBoxList: Bool = false) {
+    public init(service: FirstRunService, at start: FirstRunStep = .welcome, existing: [String] = [], fromBoxList: Bool = false,
+                docker: DockerStatus? = .running) {
         self.service = service
+        self.docker = docker
         self.existing = Set(existing)
         self.fromBoxList = fromBoxList
         step = start
@@ -118,7 +123,9 @@ public final class FirstRunFlow {
     public var canContinue: Bool {
         guard !busy else { return false }
         switch step {
-        case .welcome, .protection:
+        case .welcome:
+            return docker == .running
+        case .protection:
             return true
         case .recoveryKey:
             return recoveryKey != nil && recoverySaved
@@ -197,6 +204,19 @@ public final class FirstRunFlow {
         } catch {
             notice = nil
             self.error = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
+    }
+
+    /// Welcome's Docker check (R-0098): at once, then every 2 s while the
+    /// card shows. Stops as soon as Docker answers or Welcome is left. No
+    /// answer from portenvd keeps the last outcome.
+    public func followDocker(every interval: Duration = DockerText.interval,
+                             check: @escaping @MainActor () async -> DockerStatus?,
+                             sleep: @escaping @MainActor (Duration) async -> Void = { try? await Task.sleep(for: $0) }) async {
+        while step == .welcome && !Task.isCancelled {
+            if let status = await check() { docker = status }
+            if docker == .running || step != .welcome { return }
+            await sleep(interval)
         }
     }
 

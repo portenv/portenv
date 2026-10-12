@@ -58,6 +58,16 @@ final class FakeDaemon: DaemonAPI, @unchecked Sendable {
     }
 
     func ping() async -> Bool { (try? await record(["app", "ping"])) != nil }
+    /// What engineRunning answers (nil: portenvd doesn't).
+    var engine: Bool? {
+        get { lock.withLock { _engine } }
+        set { lock.withLock { _engine = newValue } }
+    }
+    private var _engine: Bool? = true
+    func engineRunning() async -> Bool? {
+        guard (try? await record(["app", "engine"])) != nil else { return nil }
+        return engine
+    }
     /// The boxes ListBoxes reports.
     var boxNames: [String] = ["acme-api"]
     func boxes() async throws -> [String] { try await record(["app", "boxes"]); return boxNames }

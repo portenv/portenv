@@ -527,6 +527,18 @@ func (d *Driver) SetResources(ctx context.Context, id driver.BoxID, r driver.Res
 	return r.SharedMemoryBytes != old.SharedMemoryBytes, nil
 }
 
+// Ping reports whether the Docker engine answers (on a Mac, whether Docker
+// Desktop is running), giving up at ctx's deadline. It starts nothing.
+func (d *Driver) Ping(ctx context.Context) error {
+	if _, err := d.cli.Ping(ctx, client.PingOptions{}); err != nil {
+		return fmt.Errorf("docker ping: %w", err)
+	}
+	return nil
+}
+
+// Close releases the driver's connection to the engine.
+func (d *Driver) Close() error { return d.cli.Close() }
+
 // Capabilities describes the engine.
 func (d *Driver) Capabilities(ctx context.Context) (driver.Capabilities, error) {
 	v, err := d.cli.ServerVersion(ctx, client.ServerVersionOptions{})

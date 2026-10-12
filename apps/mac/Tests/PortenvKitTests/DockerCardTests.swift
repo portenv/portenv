@@ -1,0 +1,131 @@
+// SPDX-License-Identifier: Apache-2.0
+
+import Foundation
+import Testing
+
+@testable import PortenvKit
+
+/// Welcome's Docker Desktop card and the state line when Docker stops
+/// (R-0098; the first-run-1-welcome-docker-* boards).
+@MainActor
+struct DockerCardTests {
+    /// The check's three outcomes: the engine answering wins; otherwise
+    /// whether Docker Desktop is installed picks the card. portenvd not
+    /// answering is no outcome at all.
+    @Test func threeOutcomes() {
+        #expect(DockerStatus.from(engine: true, desktopInstalled: true) == .running)
+        #expect(DockerStatus.from(engine: true, desktopInstalled: false) == .running)
+        #expect(DockerStatus.from(engine: false, desktopInstalled: true) == .notRunning)
+        #expect(DockerStatus.from(engine: false, desktopInstalled: false) == .missing)
+        #expect(DockerStatus.from(engine: nil, desktopInstalled: true) == nil)
+    }
+
+    /// The cards' words, exactly as R-0098 gives them.
+    @Test func cardsSayWhatTheBoardsSay() {
+        let notRunning = DockerStatus.notRunning.card
+        #expect(notRunning?.title == "Docker Desktop isn\u{2019}t running")
+        #expect(notRunning?.line == "Portenv runs your boxes in Docker Desktop for now. Open it, and Portenv carries on by itself.")
+        #expect(notRunning?.button == "Open Docker Desktop")
+        #expect(notRunning?.action == .openDockerDesktop)
+
+        let missing = DockerStatus.missing.card
+        #expect(missing?.title == "Portenv needs Docker Desktop for now")
+        #expect(missing?.line == "Install Docker Desktop and open it once. Portenv carries on by itself. A later version won\u{2019}t need it.")
+        #expect(missing?.button == "Get Docker Desktop\u{2026}")
+        #expect(missing?.action == .getDockerDesktop)
+
+        #expect(DockerStatus.running.card == nil)
+        #expect(DockerText.checking == "Checking again by itself")
+        #expect(DockerText.bundleID == "com.docker.docker")
+        #expect(DockerText.download.absoluteString == "https://www.docker.com/products/docker-desktop/")
+    }
+
+    /// Continue on Welcome only once Docker answers; before the first
+    /// answer it's disabled too.
+    @Test func continueWaitsForDocker() async {
+        for (status, can) in [(nil, false), (DockerStatus.missing, false), (.notRunning, false), (.running, true)] {
+            let flow = FirstRunFlow(service: FakeFirstRunService(), docker: status)
+            #expect(flow.canContinue == can, "\(String(describing: status))")
+            await flow.next()
+            #expect(flow.step == (can ? .protection : .welcome), "\(String(describing: status))")
+        }
+    }
+
+    /// The check runs at once, then every 2 s while the card shows, and
+    /// stops as soon as Docker answers: the card goes, Continue enables.
+    @Test func checksEveryTwoSecondsUntilDockerAnswers() async {
+        let flow = FirstRunFlow(service: FakeFirstRunService(), docker: nil)
+        let answers = Answers<DockerStatus?>([.missing, .notRunning, nil, .running, .missing])
+        let slept = Answers<Duration>([])
+        await flow.followDocker(check: { await answers.next() }, sleep: { await slept.add($0) })
+        #expect(flow.docker == .running)
+        #expect(flow.canContinue)
+        #expect(await answers.taken == 4) // stopped at the first "running"
+        #expect(await slept.all == [.seconds(2), .seconds(2), .seconds(2)])
+    }
+
+    /// portenvd not answering keeps the last outcome (no flicker), and
+    /// leaving Welcome stops the checks.
+    @Test func noAnswerKeepsTheCardAndLeavingStops() async {
+        let flow = FirstRunFlow(service: FakeFirstRunService(), docker: nil)
+        let answers = Answers<DockerStatus?>([.notRunning, nil])
+        await flow.followDocker(check: { await answers.next() }, sleep: { _ in
+            if await answers.taken == 2 {
+                #expect(flow.docker == .notRunning)
+                flow.docker = .running
+                await flow.next() // Welcome → Protection
+            }
+        })
+        #expect(flow.step == .protection)
+        #expect(await answers.taken == 2)
+    }
+
+    /// If Docker stops later, the box's state line says so on this Mac, and
+    /// goes back to the normal line once Docker answers.
+    @Test func theStateLineSaysWhenDockerStopped() async {
+        let cli = FakeDaemon()
+        let c = BoxController(box: "demo", daemon: cli)
+        await c.open()
+        cli.state = #"{"state":"SAVE_STATE_AGENT_UNAVAILABLE"}"#
+        await c.refresh()
+        cli.engine = false
+        await c.checkEngine()
+        #expect(c.engineDown)
+        #expect(c.subtitle == "This Mac \u{00B7} Docker Desktop isn\u{2019}t running")
+
+        cli.engine = true
+        await c.checkEngine()
+        #expect(!c.engineDown)
+        #expect(c.subtitle == "This Mac \u{00B7} Not saved")
+    }
+
+    /// Only when the box is open here and its agent is unavailable: a
+    /// working box never asks, and a box on a server never says it.
+    @Test func onlyAskedWhenTheAgentIsUnavailableHere() async {
+        let cli = FakeDaemon()
+        cli.engine = false
+        let c = BoxController(box: "demo", daemon: cli)
+        await c.open()
+        await c.checkEngine()
+        #expect(!c.engineDown)
+        #expect(!cli.calls.contains(["app", "engine"]))
+
+        cli.state = #"{"state":"SAVE_STATE_AGENT_UNAVAILABLE","location":"portenv@server-a"}"#
+        await c.refresh()
+        await c.checkEngine()
+        #expect(!c.engineDown)
+    }
+}
+
+/// Hands out answers in order (then the last one again), counting them.
+actor Answers<T: Sendable> {
+    private var items: [T]
+    private(set) var taken = 0
+    private(set) var all: [T] = []
+    init(_ items: [T]) { self.items = items }
+    func next() -> T {
+        defer { taken += 1 }
+        return taken < items.count ? items[taken] : items[items.count - 1]
+    }
+    func add(_ item: T) { all.append(item) }
+}

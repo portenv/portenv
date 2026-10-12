@@ -44,6 +44,7 @@ const (
 	DaemonService_ProvideKeys_FullMethodName           = "/portenv.daemon.v1.DaemonService/ProvideKeys"
 	DaemonService_Relaunch_FullMethodName              = "/portenv.daemon.v1.DaemonService/Relaunch"
 	DaemonService_ListServers_FullMethodName           = "/portenv.daemon.v1.DaemonService/ListServers"
+	DaemonService_GetEngine_FullMethodName             = "/portenv.daemon.v1.DaemonService/GetEngine"
 	DaemonService_GetKeyIDs_FullMethodName             = "/portenv.daemon.v1.DaemonService/GetKeyIDs"
 	DaemonService_SaveNow_FullMethodName               = "/portenv.daemon.v1.DaemonService/SaveNow"
 	DaemonService_ListSaves_FullMethodName             = "/portenv.daemon.v1.DaemonService/ListSaves"
@@ -117,6 +118,10 @@ type DaemonServiceClient interface {
 	Relaunch(ctx context.Context, in *RelaunchRequest, opts ...grpc.CallOption) (*RelaunchResponse, error)
 	// The servers a box can move to (Move To), as user@host.
 	ListServers(ctx context.Context, in *ListServersRequest, opts ...grpc.CallOption) (*ListServersResponse, error)
+	// Whether this Mac's box engine answers (Docker Desktop is running), for
+	// Welcome's Docker card and the state line (R-0098). It only asks the
+	// engine: it never starts anything, and answers within 2 s.
+	GetEngine(ctx context.Context, in *GetEngineRequest, opts ...grpc.CallOption) (*GetEngineResponse, error)
 	// The Keychain items the app reads for a box (service
 	// dev.portenv.repository): its repository key, and its storage keys.
 	GetKeyIDs(ctx context.Context, in *GetKeyIDsRequest, opts ...grpc.CallOption) (*GetKeyIDsResponse, error)
@@ -360,6 +365,16 @@ func (c *daemonServiceClient) ListServers(ctx context.Context, in *ListServersRe
 	return out, nil
 }
 
+func (c *daemonServiceClient) GetEngine(ctx context.Context, in *GetEngineRequest, opts ...grpc.CallOption) (*GetEngineResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetEngineResponse)
+	err := c.cc.Invoke(ctx, DaemonService_GetEngine_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *daemonServiceClient) GetKeyIDs(ctx context.Context, in *GetKeyIDsRequest, opts ...grpc.CallOption) (*GetKeyIDsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetKeyIDsResponse)
@@ -548,6 +563,10 @@ type DaemonServiceServer interface {
 	Relaunch(context.Context, *RelaunchRequest) (*RelaunchResponse, error)
 	// The servers a box can move to (Move To), as user@host.
 	ListServers(context.Context, *ListServersRequest) (*ListServersResponse, error)
+	// Whether this Mac's box engine answers (Docker Desktop is running), for
+	// Welcome's Docker card and the state line (R-0098). It only asks the
+	// engine: it never starts anything, and answers within 2 s.
+	GetEngine(context.Context, *GetEngineRequest) (*GetEngineResponse, error)
 	// The Keychain items the app reads for a box (service
 	// dev.portenv.repository): its repository key, and its storage keys.
 	GetKeyIDs(context.Context, *GetKeyIDsRequest) (*GetKeyIDsResponse, error)
@@ -645,6 +664,9 @@ func (UnimplementedDaemonServiceServer) Relaunch(context.Context, *RelaunchReque
 }
 func (UnimplementedDaemonServiceServer) ListServers(context.Context, *ListServersRequest) (*ListServersResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListServers not implemented")
+}
+func (UnimplementedDaemonServiceServer) GetEngine(context.Context, *GetEngineRequest) (*GetEngineResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetEngine not implemented")
 }
 func (UnimplementedDaemonServiceServer) GetKeyIDs(context.Context, *GetKeyIDsRequest) (*GetKeyIDsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetKeyIDs not implemented")
@@ -1027,6 +1049,24 @@ func _DaemonService_ListServers_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
+func _DaemonService_GetEngine_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetEngineRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).GetEngine(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_GetEngine_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).GetEngine(ctx, req.(*GetEngineRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _DaemonService_GetKeyIDs_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetKeyIDsRequest)
 	if err := dec(in); err != nil {
@@ -1310,6 +1350,10 @@ var DaemonService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListServers",
 			Handler:    _DaemonService_ListServers_Handler,
+		},
+		{
+			MethodName: "GetEngine",
+			Handler:    _DaemonService_GetEngine_Handler,
 		},
 		{
 			MethodName: "GetKeyIDs",

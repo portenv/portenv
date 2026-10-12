@@ -87,6 +87,20 @@ struct MainWindow: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(.background)
+        // Docker Desktop stopped (R-0098): the same words and button as
+        // Welcome's card; Restart Box comes back once Docker answers.
+        case _ where controller.engineDown:
+            VStack(spacing: 10) {
+                Text(DockerText.notRunningTitle).font(.title3)
+                Text(DockerText.notRunningLine)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 420)
+                Button(DockerText.openButton) { DockerDesktop.perform(.openDockerDesktop) }
+                    .keyboardShortcut(.defaultAction)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(.background)
         case _ where controller.agentUnavailable && controller.isOpen:
             VStack(spacing: 10) {
                 Text("The box agent is unavailable").font(.title3)

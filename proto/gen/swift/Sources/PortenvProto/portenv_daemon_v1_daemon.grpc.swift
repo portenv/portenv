@@ -269,6 +269,19 @@ public enum Portenv_Daemon_V1_DaemonService: Sendable {
                 type: .unary
             )
         }
+        /// Namespace for "GetEngine" metadata.
+        public enum GetEngine: Sendable {
+            /// Request type for "GetEngine".
+            public typealias Input = Portenv_Daemon_V1_GetEngineRequest
+            /// Response type for "GetEngine".
+            public typealias Output = Portenv_Daemon_V1_GetEngineResponse
+            /// Descriptor for "GetEngine".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "GetEngine",
+                type: .unary
+            )
+        }
         /// Namespace for "GetKeyIDs" metadata.
         public enum GetKeyIDs: Sendable {
             /// Request type for "GetKeyIDs".
@@ -446,6 +459,7 @@ public enum Portenv_Daemon_V1_DaemonService: Sendable {
             ProvideKeys.descriptor,
             Relaunch.descriptor,
             ListServers.descriptor,
+            GetEngine.descriptor,
             GetKeyIDs.descriptor,
             SaveNow.descriptor,
             ListSaves.descriptor,
@@ -925,6 +939,31 @@ extension Portenv_Daemon_V1_DaemonService {
             deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_ListServersResponse>,
             options: GRPCCore.CallOptions,
             onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ListServersResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "GetEngine" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Whether this Mac's box engine answers (Docker Desktop is running), for
+        /// > Welcome's Docker card and the state line (R-0098). It only asks the
+        /// > engine: it never starts anything, and answers within 2 s.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_GetEngineRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_GetEngineRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_GetEngineResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func getEngine<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_GetEngineRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_GetEngineRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_GetEngineResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_GetEngineResponse>) async throws -> Result
         ) async throws -> Result where Result: Sendable
 
         /// Call the "GetKeyIDs" method.
@@ -1863,6 +1902,42 @@ extension Portenv_Daemon_V1_DaemonService {
             try await self.client.unary(
                 request: request,
                 descriptor: Portenv_Daemon_V1_DaemonService.Method.ListServers.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
+
+        /// Call the "GetEngine" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Whether this Mac's box engine answers (Docker Desktop is running), for
+        /// > Welcome's Docker card and the state line (R-0098). It only asks the
+        /// > engine: it never starts anything, and answers within 2 s.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_GetEngineRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_GetEngineRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_GetEngineResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func getEngine<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_GetEngineRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_GetEngineRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_GetEngineResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_GetEngineResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.GetEngine.descriptor,
                 serializer: serializer,
                 deserializer: deserializer,
                 options: options,
@@ -2827,6 +2902,37 @@ extension Portenv_Daemon_V1_DaemonService.ClientProtocol {
             request: request,
             serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_ListServersRequest>(),
             deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_ListServersResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "GetEngine" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Whether this Mac's box engine answers (Docker Desktop is running), for
+    /// > Welcome's Docker card and the state line (R-0098). It only asks the
+    /// > engine: it never starts anything, and answers within 2 s.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_GetEngineRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func getEngine<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_GetEngineRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_GetEngineResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.getEngine(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_GetEngineRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_GetEngineResponse>(),
             options: options,
             onResponse: handleResponse
         )
@@ -3804,6 +3910,41 @@ extension Portenv_Daemon_V1_DaemonService.ClientProtocol {
             metadata: metadata
         )
         return try await self.listServers(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "GetEngine" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Whether this Mac's box engine answers (Docker Desktop is running), for
+    /// > Welcome's Docker card and the state line (R-0098). It only asks the
+    /// > engine: it never starts anything, and answers within 2 s.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func getEngine<Result>(
+        _ message: Portenv_Daemon_V1_GetEngineRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_GetEngineResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_GetEngineRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.getEngine(
             request: request,
             options: options,
             onResponse: handleResponse

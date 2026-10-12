@@ -38,6 +38,12 @@ TOOLS := \
 	github.com/zricethezav/gitleaks/v8@v8.30.1 \
 	github.com/restic/restic/cmd/restic@v0.19.1
 TOOLS_STAMP := $(BIN)/.tools-stamp
+# The Go every tool is built with: core/go.mod's, the version CI installs
+# (setup-go's go-version-file, with GOTOOLCHAIN=local). Named exactly, so
+# restic, which ships in Portenv.app, gets this Go's patch release whatever go
+# is first on PATH (R-0110, R-0119), and a tool that needs a newer Go stops
+# with Go's own "requires go >= …" instead of switching to it.
+TOOLS_GO := $(shell sed -n 's/^go //p' core/go.mod)
 # shellcheck, which actionlint runs on workflow scripts: the version on CI's
 # runner image, pinned so the Mac and CI agree (scripts/install-shellcheck.sh).
 SHELLCHECK := $(BIN)/shellcheck
@@ -58,7 +64,8 @@ tools: $(TOOLS_STAMP)
 $(TOOLS_STAMP): Makefile
 	# -trimpath: restic ships inside Portenv.app, and no build may carry
 	# the paths of the machine that built it.
-	for t in $(TOOLS); do GOWORK=off GOBIN=$(BIN) go install -trimpath $$t; done
+	$(if $(TOOLS_GO),,$(error core/go.mod has no go line for the tools' toolchain))
+	for t in $(TOOLS); do GOTOOLCHAIN=go$(TOOLS_GO) GOWORK=off GOBIN=$(BIN) go install -trimpath $$t; done
 	touch $@
 
 $(SHELLCHECK): scripts/install-shellcheck.sh

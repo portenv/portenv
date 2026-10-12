@@ -184,8 +184,11 @@ public struct RecoveryKey: Sendable, CustomStringConvertible, CustomDebugStringC
     public func password(boxID: String) throws -> String {
         guard symbols.count == Self.length else { throw DeriveError.noKey }
         guard Self.isValidBoxID(boxID) else { throw DeriveError.invalidBoxID }
-        var ikm = Array(canonical.utf8)
+        // The canonical characters, built from the symbols straight into a
+        // buffer that's zeroed after (no String copy of the key).
+        var ikm = [UInt8](repeating: 0, count: Self.length)
         defer { for i in ikm.indices { ikm[i] = 0 } }
+        for (i, v) in symbols.enumerated() { ikm[i] = Self.alphabetBytes[Int(v)] }
         let info = Array(Self.infoPrefix.utf8) + [0] + Array(boxID.utf8)
         let out = Self.hkdfSHA256(ikm: ikm, salt: Array(Self.salt.utf8), info: info, length: 32)
         return out.map { String(format: "%02x", $0) }.joined()

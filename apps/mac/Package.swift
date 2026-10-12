@@ -40,6 +40,10 @@ let package = Package(
             dependencies: ["PortenvKit", .product(name: "SwiftTerm", package: "SwiftTerm")]
         ),
         // SwiftTerm: the layout tests put a real terminal in the window.
-        .testTarget(name: "PortenvKitTests", dependencies: ["PortenvKit", .product(name: "SwiftTerm", package: "SwiftTerm")]),
+        .testTarget(name: "PortenvKitTests", dependencies: [
+            "PortenvKit", .product(name: "SwiftTerm", package: "SwiftTerm"),
+            // The client's gRPC status codes (BoxMakerTests).
+            .product(name: "GRPCCore", package: "grpc-swift-2"),
+        ]),
     ]
 )

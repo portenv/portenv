@@ -53,6 +53,16 @@ func (m *Memory) Put(id string, key []byte) error {
 	return nil
 }
 
+// Forget drops the keys with these IDs, if held.
+func (m *Memory) Forget(ids ...string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, id := range ids {
+		clear(m.keys[id])
+		delete(m.keys, id)
+	}
+}
+
 // Layered reads First, then Then; it writes to Then.
 type Layered struct{ First, Then Store }
 

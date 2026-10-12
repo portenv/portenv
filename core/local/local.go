@@ -17,6 +17,7 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/portenv/portenv/core/driver"
@@ -44,6 +45,12 @@ type Env struct {
 	// Provided holds keys the app read from the Keychain and handed to
 	// portenvd (in memory only); they are used before the store's own.
 	Provided *keys.Memory
+
+	// createSlot runs CreateBox, RecoverBox and DiscardCreation one at a
+	// time, so two calls can't both pass the checks for one name or box
+	// ID. A call waiting for it gives up when its context ends.
+	createSlot     chan struct{}
+	createSlotOnce sync.Once
 }
 
 func NewEnv() (*Env, error) {
@@ -103,6 +110,9 @@ type BoxConfig struct {
 	// reaches it through the storage account's SSH connection; backup and
 	// restore in the box keep using SFTP.
 	StorageREST string `json:"storage_rest,omitempty"`
+	// Recovery: the repository also has the recovery-derived key (ADR
+	// 0019), added and checked by CreateBox or RecoverBox. Not a secret.
+	Recovery bool `json:"recovery,omitempty"`
 }
 
 // MachineConfig holds this machine's settings (machine.json).
@@ -149,6 +159,17 @@ func (e *Env) ConfigPath(name string) (string, error) {
 	return filepath.Join(e.Dir, "boxes", name+".json"), nil
 }
 
+// noBoxError: there's no config with this name. It is fs.ErrNotExist.
+type noBoxError struct {
+	name string
+	err  error
+}
+
+func (e *noBoxError) Error() string {
+	return fmt.Sprintf("no box named %s here; create it with portenv init %s", e.name, e.name)
+}
+func (e *noBoxError) Unwrap() error { return e.err }
+
 func (e *Env) LoadBox(name string) (BoxConfig, error) {
 	p, err := e.ConfigPath(name)
 	if err != nil {
@@ -156,7 +177,7 @@ func (e *Env) LoadBox(name string) (BoxConfig, error) {
 	}
 	b, err := os.ReadFile(p) // #nosec G304 -- validated name in the Portenv directory
 	if errors.Is(err, os.ErrNotExist) {
-		return BoxConfig{}, fmt.Errorf("no box named %s here; create it with portenv init %s", name, name)
+		return BoxConfig{}, &noBoxError{name: name, err: err}
 	}
 	if err != nil {
 		return BoxConfig{}, err
@@ -502,11 +523,7 @@ func (e *Env) SaveBox(c BoxConfig) error {
 	if err != nil {
 		return err
 	}
-	tmp := p + ".tmp"
-	if err := os.WriteFile(tmp, append(data, '\n'), 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, p)
+	return writeAtomic(p, append(data, '\n'))
 }
 
 // FromRegistry reports whether an image reference names a registry host

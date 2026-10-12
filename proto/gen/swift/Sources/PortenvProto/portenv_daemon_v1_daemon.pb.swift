@@ -572,6 +572,11 @@ public nonisolated struct Portenv_Daemon_V1_BoxStatus: Sendable {
 
   public var state: Portenv_Types_V1_BoxState = .unspecified
 
+  /// CreateBox started and hasn't finished: the box can't open yet. The app
+  /// finishes it (CreateBox again, the same box_id) or discards it
+  /// (DiscardCreation).
+  public var creating: Bool = false
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -1273,6 +1278,128 @@ public nonisolated struct Portenv_Daemon_V1_WatchTabsResponse: Sendable {
   // methods supported on all messages.
 
   public var tabs: [Portenv_Types_V1_Tab] = []
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Portenv_Daemon_V1_CreateBoxRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// The box name rule (letters, digits, '.', '_', '-').
+  public var name: String = String()
+
+  /// From the app's pool: box- and 12 lowercase hex digits.
+  public var boxID: String = String()
+
+  /// Empty: the default toolbox.
+  public var image: String = String()
+
+  /// As a box's config: empty for this Mac only, or an absolute directory.
+  /// (SFTP and S3 storage come with the server setup, 2.9.)
+  public var storage: String = String()
+
+  public var storageHostKey: String = String()
+
+  public var storageRest: String = String()
+
+  /// Exactly the box's key IDs for this storage (GetKeyIDs), as in
+  /// ProvideKeys. Held in memory only, like ProvideKeys.
+  public var keys: Dictionary<String,Data> = [:]
+
+  /// The recovery-derived restic password (64 lowercase hex characters).
+  /// Used to add and check the recovery key, then dropped: never stored,
+  /// never logged. The recovery key itself never reaches portenvd.
+  public var recoveryPassword: Data = Data()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Portenv_Daemon_V1_CreateBoxResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var boxID: String = String()
+
+  /// An earlier call had finished it.
+  public var alreadyCreated: Bool = false
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Portenv_Daemon_V1_DiscardCreationRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var boxID: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Portenv_Daemon_V1_DiscardCreationResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Portenv_Daemon_V1_RecoverBoxRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// The name the box gets on this Mac.
+  public var name: String = String()
+
+  /// From a listing of the storage's boxes folder.
+  public var boxID: String = String()
+
+  /// Empty: the default toolbox.
+  public var image: String = String()
+
+  /// Where the box's repository is, as in CreateBoxRequest.
+  public var storage: String = String()
+
+  public var storageHostKey: String = String()
+
+  public var storageRest: String = String()
+
+  /// This Mac's new keys for the box (its key IDs, as in CreateBox), which
+  /// the app made and stored in the Keychain first. Held in memory only.
+  public var keys: Dictionary<String,Data> = [:]
+
+  /// The recovery-derived restic password for this box ID. Opens the
+  /// repository to add the new repository key, then dropped.
+  public var recoveryPassword: Data = Data()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Portenv_Daemon_V1_RecoverBoxResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var boxID: String = String()
+
+  /// An earlier call had finished it.
+  public var alreadyRecovered: Bool = false
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -2072,7 +2199,7 @@ nonisolated extension Portenv_Daemon_V1_ListBoxesResponse: SwiftProtobuf.Message
 
 nonisolated extension Portenv_Daemon_V1_BoxStatus: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".BoxStatus"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}box\0\u{1}state\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}box\0\u{1}state\0\u{1}creating\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -2082,6 +2209,7 @@ nonisolated extension Portenv_Daemon_V1_BoxStatus: SwiftProtobuf.Message, SwiftP
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularMessageField(value: &self._box) }()
       case 2: try { try decoder.decodeSingularEnumField(value: &self.state) }()
+      case 3: try { try decoder.decodeSingularBoolField(value: &self.creating) }()
       default: break
       }
     }
@@ -2098,12 +2226,16 @@ nonisolated extension Portenv_Daemon_V1_BoxStatus: SwiftProtobuf.Message, SwiftP
     if self.state != .unspecified {
       try visitor.visitSingularEnumField(value: self.state, fieldNumber: 2)
     }
+    if self.creating != false {
+      try visitor.visitSingularBoolField(value: self.creating, fieldNumber: 3)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Portenv_Daemon_V1_BoxStatus, rhs: Portenv_Daemon_V1_BoxStatus) -> Bool {
     if lhs._box != rhs._box {return false}
     if lhs.state != rhs.state {return false}
+    if lhs.creating != rhs.creating {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -3569,6 +3701,255 @@ nonisolated extension Portenv_Daemon_V1_WatchTabsResponse: SwiftProtobuf.Message
 
   public static func ==(lhs: Portenv_Daemon_V1_WatchTabsResponse, rhs: Portenv_Daemon_V1_WatchTabsResponse) -> Bool {
     if lhs.tabs != rhs.tabs {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Portenv_Daemon_V1_CreateBoxRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".CreateBoxRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{3}box_id\0\u{1}image\0\u{1}storage\0\u{3}storage_host_key\0\u{3}storage_rest\0\u{1}keys\0\u{3}recovery_password\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.name) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.boxID) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.image) }()
+      case 4: try { try decoder.decodeSingularStringField(value: &self.storage) }()
+      case 5: try { try decoder.decodeSingularStringField(value: &self.storageHostKey) }()
+      case 6: try { try decoder.decodeSingularStringField(value: &self.storageRest) }()
+      case 7: try { try decoder.decodeMapField(fieldType: SwiftProtobuf._ProtobufMap<SwiftProtobuf.ProtobufString,SwiftProtobuf.ProtobufBytes>.self, value: &self.keys) }()
+      case 8: try { try decoder.decodeSingularBytesField(value: &self.recoveryPassword) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.name.isEmpty {
+      try visitor.visitSingularStringField(value: self.name, fieldNumber: 1)
+    }
+    if !self.boxID.isEmpty {
+      try visitor.visitSingularStringField(value: self.boxID, fieldNumber: 2)
+    }
+    if !self.image.isEmpty {
+      try visitor.visitSingularStringField(value: self.image, fieldNumber: 3)
+    }
+    if !self.storage.isEmpty {
+      try visitor.visitSingularStringField(value: self.storage, fieldNumber: 4)
+    }
+    if !self.storageHostKey.isEmpty {
+      try visitor.visitSingularStringField(value: self.storageHostKey, fieldNumber: 5)
+    }
+    if !self.storageRest.isEmpty {
+      try visitor.visitSingularStringField(value: self.storageRest, fieldNumber: 6)
+    }
+    if !self.keys.isEmpty {
+      try visitor.visitMapField(fieldType: SwiftProtobuf._ProtobufMap<SwiftProtobuf.ProtobufString,SwiftProtobuf.ProtobufBytes>.self, value: self.keys, fieldNumber: 7)
+    }
+    if !self.recoveryPassword.isEmpty {
+      try visitor.visitSingularBytesField(value: self.recoveryPassword, fieldNumber: 8)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Portenv_Daemon_V1_CreateBoxRequest, rhs: Portenv_Daemon_V1_CreateBoxRequest) -> Bool {
+    if lhs.name != rhs.name {return false}
+    if lhs.boxID != rhs.boxID {return false}
+    if lhs.image != rhs.image {return false}
+    if lhs.storage != rhs.storage {return false}
+    if lhs.storageHostKey != rhs.storageHostKey {return false}
+    if lhs.storageRest != rhs.storageRest {return false}
+    if lhs.keys != rhs.keys {return false}
+    if lhs.recoveryPassword != rhs.recoveryPassword {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Portenv_Daemon_V1_CreateBoxResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".CreateBoxResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}box_id\0\u{3}already_created\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.boxID) }()
+      case 2: try { try decoder.decodeSingularBoolField(value: &self.alreadyCreated) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.boxID.isEmpty {
+      try visitor.visitSingularStringField(value: self.boxID, fieldNumber: 1)
+    }
+    if self.alreadyCreated != false {
+      try visitor.visitSingularBoolField(value: self.alreadyCreated, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Portenv_Daemon_V1_CreateBoxResponse, rhs: Portenv_Daemon_V1_CreateBoxResponse) -> Bool {
+    if lhs.boxID != rhs.boxID {return false}
+    if lhs.alreadyCreated != rhs.alreadyCreated {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Portenv_Daemon_V1_DiscardCreationRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".DiscardCreationRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}box_id\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.boxID) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.boxID.isEmpty {
+      try visitor.visitSingularStringField(value: self.boxID, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Portenv_Daemon_V1_DiscardCreationRequest, rhs: Portenv_Daemon_V1_DiscardCreationRequest) -> Bool {
+    if lhs.boxID != rhs.boxID {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Portenv_Daemon_V1_DiscardCreationResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".DiscardCreationResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Portenv_Daemon_V1_DiscardCreationResponse, rhs: Portenv_Daemon_V1_DiscardCreationResponse) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Portenv_Daemon_V1_RecoverBoxRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".RecoverBoxRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{3}box_id\0\u{1}image\0\u{1}storage\0\u{3}storage_host_key\0\u{3}storage_rest\0\u{1}keys\0\u{3}recovery_password\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.name) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.boxID) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.image) }()
+      case 4: try { try decoder.decodeSingularStringField(value: &self.storage) }()
+      case 5: try { try decoder.decodeSingularStringField(value: &self.storageHostKey) }()
+      case 6: try { try decoder.decodeSingularStringField(value: &self.storageRest) }()
+      case 7: try { try decoder.decodeMapField(fieldType: SwiftProtobuf._ProtobufMap<SwiftProtobuf.ProtobufString,SwiftProtobuf.ProtobufBytes>.self, value: &self.keys) }()
+      case 8: try { try decoder.decodeSingularBytesField(value: &self.recoveryPassword) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.name.isEmpty {
+      try visitor.visitSingularStringField(value: self.name, fieldNumber: 1)
+    }
+    if !self.boxID.isEmpty {
+      try visitor.visitSingularStringField(value: self.boxID, fieldNumber: 2)
+    }
+    if !self.image.isEmpty {
+      try visitor.visitSingularStringField(value: self.image, fieldNumber: 3)
+    }
+    if !self.storage.isEmpty {
+      try visitor.visitSingularStringField(value: self.storage, fieldNumber: 4)
+    }
+    if !self.storageHostKey.isEmpty {
+      try visitor.visitSingularStringField(value: self.storageHostKey, fieldNumber: 5)
+    }
+    if !self.storageRest.isEmpty {
+      try visitor.visitSingularStringField(value: self.storageRest, fieldNumber: 6)
+    }
+    if !self.keys.isEmpty {
+      try visitor.visitMapField(fieldType: SwiftProtobuf._ProtobufMap<SwiftProtobuf.ProtobufString,SwiftProtobuf.ProtobufBytes>.self, value: self.keys, fieldNumber: 7)
+    }
+    if !self.recoveryPassword.isEmpty {
+      try visitor.visitSingularBytesField(value: self.recoveryPassword, fieldNumber: 8)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Portenv_Daemon_V1_RecoverBoxRequest, rhs: Portenv_Daemon_V1_RecoverBoxRequest) -> Bool {
+    if lhs.name != rhs.name {return false}
+    if lhs.boxID != rhs.boxID {return false}
+    if lhs.image != rhs.image {return false}
+    if lhs.storage != rhs.storage {return false}
+    if lhs.storageHostKey != rhs.storageHostKey {return false}
+    if lhs.storageRest != rhs.storageRest {return false}
+    if lhs.keys != rhs.keys {return false}
+    if lhs.recoveryPassword != rhs.recoveryPassword {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Portenv_Daemon_V1_RecoverBoxResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".RecoverBoxResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}box_id\0\u{3}already_recovered\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.boxID) }()
+      case 2: try { try decoder.decodeSingularBoolField(value: &self.alreadyRecovered) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.boxID.isEmpty {
+      try visitor.visitSingularStringField(value: self.boxID, fieldNumber: 1)
+    }
+    if self.alreadyRecovered != false {
+      try visitor.visitSingularBoolField(value: self.alreadyRecovered, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Portenv_Daemon_V1_RecoverBoxResponse, rhs: Portenv_Daemon_V1_RecoverBoxResponse) -> Bool {
+    if lhs.boxID != rhs.boxID {return false}
+    if lhs.alreadyRecovered != rhs.alreadyRecovered {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

@@ -101,6 +101,21 @@ service DaemonService {
   // The tabs at once, then whenever they change. The stream ends when the
   // box closes or its agent goes away; the app watches again.
   rpc WatchTabs(WatchTabsRequest) returns (stream WatchTabsResponse);
+  // Makes a new box from keys the app made and stored in the Keychain (ADR
+  // 0019): writes no key to disk, creates the repository with the box's
+  // repository key, adds the recovery-derived key, checks both, and only
+  // then writes the box's config. Idempotent on box_id: calling again after
+  // a failure or a crash resumes where it stopped. Never logged.
+  rpc CreateBox(CreateBoxRequest) returns (CreateBoxResponse);
+  // Forgets an unfinished creation (ListBoxes shows it as creating): the
+  // name is free again. The repository it may have left, with no snapshot,
+  // is never deleted.
+  rpc DiscardCreation(DiscardCreationRequest) returns (DiscardCreationResponse);
+  // Restores a box on this Mac with only the recovery key (ADR 0019): opens
+  // the repository with the recovery-derived password, adds this Mac's new
+  // repository key, checks it, and writes the box's config. Idempotent on
+  // box_id. Never logged.
+  rpc RecoverBox(RecoverBoxRequest) returns (RecoverBoxResponse);
 }
 
 message CheckBoxRequest {
@@ -225,6 +240,10 @@ message ListBoxesResponse {
 message BoxStatus {
   portenv.types.v1.Box box = 1;
   portenv.types.v1.BoxState state = 2;
+  // CreateBox started and hasn't finished: the box can't open yet. The app
+  // finishes it (CreateBox again, the same box_id) or discards it
+  // (DiscardCreation).
+  bool creating = 3;
 }
 
 message GetChannelRequest {
@@ -486,4 +505,62 @@ message WatchTabsRequest {
 
 message WatchTabsResponse {
   repeated portenv.types.v1.Tab tabs = 1;
+}
+
+message CreateBoxRequest {
+  // The box name rule (letters, digits, '.', '_', '-').
+  string name = 1;
+  // From the app's pool: box- and 12 lowercase hex digits.
+  string box_id = 2;
+  // Empty: the default toolbox.
+  string image = 3;
+  // As a box's config: empty for this Mac only, or an absolute directory.
+  // (SFTP and S3 storage come with the server setup, 2.9.)
+  string storage = 4;
+  string storage_host_key = 5;
+  string storage_rest = 6;
+  // Exactly the box's key IDs for this storage (GetKeyIDs), as in
+  // ProvideKeys. Held in memory only, like ProvideKeys.
+  map<string, bytes> keys = 7;
+  // The recovery-derived restic password (64 lowercase hex characters).
+  // Used to add and check the recovery key, then dropped: never stored,
+  // never logged. The recovery key itself never reaches portenvd.
+  bytes recovery_password = 8;
+}
+
+message CreateBoxResponse {
+  string box_id = 1;
+  // An earlier call had finished it.
+  bool already_created = 2;
+}
+
+message DiscardCreationRequest {
+  string box_id = 1;
+}
+
+message DiscardCreationResponse {}
+
+message RecoverBoxRequest {
+  // The name the box gets on this Mac.
+  string name = 1;
+  // From a listing of the storage's boxes folder.
+  string box_id = 2;
+  // Empty: the default toolbox.
+  string image = 3;
+  // Where the box's repository is, as in CreateBoxRequest.
+  string storage = 4;
+  string storage_host_key = 5;
+  string storage_rest = 6;
+  // This Mac's new keys for the box (its key IDs, as in CreateBox), which
+  // the app made and stored in the Keychain first. Held in memory only.
+  map<string, bytes> keys = 7;
+  // The recovery-derived restic password for this box ID. Opens the
+  // repository to add the new repository key, then dropped.
+  bytes recovery_password = 8;
+}
+
+message RecoverBoxResponse {
+  string box_id = 1;
+  // An earlier call had finished it.
+  bool already_recovered = 2;
 }

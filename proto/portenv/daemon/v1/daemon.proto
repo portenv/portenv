@@ -67,7 +67,8 @@ service DaemonService {
   rpc ListServers(ListServersRequest) returns (ListServersResponse);
   // Whether this Mac's box engine answers (Docker Desktop is running), for
   // Welcome's Docker card and the state line (R-0098). It only asks the
-  // engine: it never starts anything, and answers within 2 s.
+  // engine: it never starts anything. portenvd gives the engine 1.5 s;
+  // the app waits 3 s for the answer.
   rpc GetEngine(GetEngineRequest) returns (GetEngineResponse);
   // The Keychain items the app reads for a box (service
   // dev.portenv.repository): its repository key, and its storage keys.

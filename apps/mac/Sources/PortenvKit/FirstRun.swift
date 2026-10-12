@@ -91,6 +91,10 @@ public final class FirstRunFlow {
     /// Docker Desktop on this Mac (R-0098): Welcome's Continue waits until
     /// it answers; nil until the first check does.
     public var docker: DockerStatus?
+    /// portenvd didn't answer Welcome's last Docker check: Welcome says the
+    /// background service isn't running, with Try Again, so Continue is
+    /// never disabled without a reason (R-0110).
+    public private(set) var daemonGone = false
     public private(set) var error: String?
     /// A plain notice (secondary text), like a step not built yet.
     public private(set) var notice: String?
@@ -209,14 +213,25 @@ public final class FirstRunFlow {
 
     /// Welcome's Docker check (R-0098): at once, then every 2 s while the
     /// card shows. Stops as soon as Docker answers or Welcome is left. No
-    /// answer from portenvd keeps the last outcome.
+    /// answer from portenvd keeps the last outcome and says the background
+    /// service isn't running, until it answers again (R-0110).
     public func followDocker(every interval: Duration = DockerText.interval,
                              check: @escaping @MainActor () async -> DockerStatus?,
                              sleep: @escaping @MainActor (Duration) async -> Void = { try? await Task.sleep(for: $0) }) async {
         while step == .welcome && !Task.isCancelled {
-            if let status = await check() { docker = status }
+            await checkDocker(check)
             if docker == .running || step != .welcome { return }
             await sleep(interval)
+        }
+    }
+
+    /// One Docker check: Try Again asks at once, between followDocker's.
+    public func checkDocker(_ check: @MainActor () async -> DockerStatus?) async {
+        if let status = await check() {
+            docker = status
+            daemonGone = false
+        } else {
+            daemonGone = true
         }
     }
 

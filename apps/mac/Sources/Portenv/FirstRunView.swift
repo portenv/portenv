@@ -83,9 +83,22 @@ struct FirstRunView: View {
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 440)
-            // Docker Desktop isn't running, or isn't installed (R-0098): a
-            // card until it answers, checked again every 2 s.
-            if let card = flow.docker?.card {
+            // portenvd didn't answer the check: say so, with Try Again
+            // (R-0110). Otherwise, Docker Desktop isn't running or isn't
+            // installed (R-0098): a card until it answers, checked again
+            // every 2 s.
+            if flow.daemonGone {
+                VStack(spacing: 10) {
+                    Text(BoxController.daemonGone)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button(InspectorText.tryAgain) {
+                        Task { await flow.checkDocker { await DockerDesktop.status() } }
+                    }
+                }
+                .frame(maxWidth: 440)
+            } else if let card = flow.docker?.card {
                 DockerCardView(card: card) { DockerDesktop.perform(card.action) }
                     .frame(maxWidth: 460)
             }
@@ -108,10 +121,15 @@ struct FirstRunView: View {
             guard followsDocker else { return }
             await flow.followDocker(check: { await DockerDesktop.status() })
         }
-        // The card is a status region: VoiceOver hears it appear, change
-        // and go.
-        .onChange(of: flow.docker) { _, status in
-            AccessibilityNotification.Announcement(status?.card?.title ?? DockerDesktop.runningAnnouncement).post()
+        // The card is a status region: VoiceOver hears it appear and
+        // change, and hears it go only if one was shown (R-0110).
+        .onChange(of: flow.docker) { old, new in
+            if let words = DockerStatus.announcement(from: old, to: new) {
+                AccessibilityNotification.Announcement(words).post()
+            }
+        }
+        .onChange(of: flow.daemonGone) { _, gone in
+            if gone { AccessibilityNotification.Announcement(BoxController.daemonGone).post() }
         }
     }
 

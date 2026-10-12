@@ -18,6 +18,24 @@ public enum DockerStatus: Equatable, Sendable {
         }
     }
 
+    /// Whether Docker Desktop counts as installed, from where Launch
+    /// Services finds it: a copy in a Trash doesn't (R-0110).
+    public static func installed(at app: URL?) -> Bool {
+        guard let app else { return false }
+        let parts = app.standardizedFileURL.pathComponents
+        return !parts.contains(".Trash") && !parts.contains(".Trashes")
+    }
+
+    /// What VoiceOver hears when the outcome changes (R-0110): a card's
+    /// title when one appears or changes, "Docker Desktop is running" only
+    /// when a card goes because Docker answered, and nothing otherwise (so
+    /// someone with Docker already running hears nothing on Welcome).
+    public static func announcement(from old: DockerStatus?, to new: DockerStatus?) -> String? {
+        if let card = new?.card, old != new { return card.title }
+        if new == .running, old?.card != nil { return DockerText.runningAnnouncement }
+        return nil
+    }
+
     /// Welcome's card for this outcome; none once Docker answers.
     public var card: DockerCard? {
         switch self {
@@ -44,12 +62,14 @@ public struct DockerCard: Equatable, Sendable {
 /// The cards' words (R-0098; GUIDELINES §10).
 public enum DockerText {
     public static let notRunningTitle = "Docker Desktop isn\u{2019}t running"
-    public static let notRunningLine = "Portenv runs your boxes in Docker Desktop for now. Open it, and Portenv carries on by itself."
+    public static let notRunningLine = "Portenv runs your workspaces in Docker Desktop for now. Open it, and Portenv carries on by itself."
     public static let openButton = "Open Docker Desktop"
     public static let missingTitle = "Portenv needs Docker Desktop for now"
     public static let missingLine = "Install Docker Desktop and open it once. Portenv carries on by itself. A later version won\u{2019}t need it."
     public static let getButton = "Get Docker Desktop\u{2026}"
     public static let checking = "Checking again by itself"
+    /// What VoiceOver hears when the card goes because Docker answered.
+    public static let runningAnnouncement = "Docker Desktop is running"
     /// The box's state line when Docker stops later, on this Mac.
     public static let stateLine = "This Mac \u{00B7} " + notRunningTitle
 

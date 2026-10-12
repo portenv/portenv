@@ -24,7 +24,7 @@ struct DockerCardTests {
     @Test func cardsSayWhatTheBoardsSay() {
         let notRunning = DockerStatus.notRunning.card
         #expect(notRunning?.title == "Docker Desktop isn\u{2019}t running")
-        #expect(notRunning?.line == "Portenv runs your boxes in Docker Desktop for now. Open it, and Portenv carries on by itself.")
+        #expect(notRunning?.line == "Portenv runs your workspaces in Docker Desktop for now. Open it, and Portenv carries on by itself.")
         #expect(notRunning?.button == "Open Docker Desktop")
         #expect(notRunning?.action == .openDockerDesktop)
 
@@ -64,20 +64,76 @@ struct DockerCardTests {
         #expect(await slept.all == [.seconds(2), .seconds(2), .seconds(2)])
     }
 
-    /// portenvd not answering keeps the last outcome (no flicker), and
-    /// leaving Welcome stops the checks.
+    /// portenvd not answering keeps the last outcome (no flicker) and says
+    /// the background service isn't running (R-0110), and leaving Welcome
+    /// stops the checks.
     @Test func noAnswerKeepsTheCardAndLeavingStops() async {
         let flow = FirstRunFlow(service: FakeFirstRunService(), docker: nil)
         let answers = Answers<DockerStatus?>([.notRunning, nil])
         await flow.followDocker(check: { await answers.next() }, sleep: { _ in
+            if await answers.taken == 1 { #expect(!flow.daemonGone) }
             if await answers.taken == 2 {
                 #expect(flow.docker == .notRunning)
+                #expect(flow.daemonGone)
                 flow.docker = .running
                 await flow.next() // Welcome → Protection
             }
         })
         #expect(flow.step == .protection)
         #expect(await answers.taken == 2)
+    }
+
+    /// No answer from portenvd before any outcome is never a silent dead
+    /// end: Welcome says the background service isn't running, and Try
+    /// Again's check clears it once portenvd answers (R-0110).
+    @Test func noAnswerSaysTheServiceIsntRunning() async {
+        let flow = FirstRunFlow(service: FakeFirstRunService(), docker: nil)
+        await flow.checkDocker { nil }
+        #expect(flow.daemonGone)
+        #expect(flow.docker == nil)
+        #expect(!flow.canContinue)
+        await flow.checkDocker { .running }
+        #expect(!flow.daemonGone)
+        #expect(flow.canContinue)
+    }
+
+    /// VoiceOver hears a card appear or change, and "Docker Desktop is
+    /// running" only when a shown card goes: someone with Docker running
+    /// hears nothing (R-0110).
+    @Test func announcesOnlyAroundACard() {
+        #expect(DockerStatus.announcement(from: nil, to: .running) == nil)
+        #expect(DockerStatus.announcement(from: .running, to: .running) == nil)
+        #expect(DockerStatus.announcement(from: nil, to: .notRunning) == "Docker Desktop isn\u{2019}t running")
+        #expect(DockerStatus.announcement(from: .notRunning, to: .notRunning) == nil)
+        #expect(DockerStatus.announcement(from: .notRunning, to: .missing) == "Portenv needs Docker Desktop for now")
+        #expect(DockerStatus.announcement(from: .notRunning, to: .running) == "Docker Desktop is running")
+        #expect(DockerStatus.announcement(from: .missing, to: .running) == "Docker Desktop is running")
+        #expect(DockerStatus.announcement(from: .notRunning, to: nil) == nil)
+    }
+
+    /// Docker Desktop in the Trash counts as missing (R-0110).
+    @Test func dockerDesktopInTheTrashIsMissing() {
+        #expect(DockerStatus.installed(at: URL(fileURLWithPath: "/Applications/Docker.app")))
+        #expect(DockerStatus.installed(at: URL(fileURLWithPath: "/Users/a/Applications/Docker.app")))
+        #expect(!DockerStatus.installed(at: URL(fileURLWithPath: "/Users/a/.Trash/Docker.app")))
+        #expect(!DockerStatus.installed(at: URL(fileURLWithPath: "/Volumes/X/.Trashes/501/Docker.app")))
+        #expect(!DockerStatus.installed(at: nil))
+    }
+
+    /// watchEngine ends when its task is cancelled (the window closing).
+    @Test func watchEngineStopsWhenCancelled() async {
+        let cli = FakeDaemon()
+        let c = BoxController(box: "demo", daemon: cli, sleep: { _ in await Task.yield() })
+        await c.open()
+        cli.state = #"{"state":"SAVE_STATE_AGENT_UNAVAILABLE"}"#
+        await c.refresh()
+        let watch = Task { await c.watchEngine() }
+        while cli.calls.filter({ $0 == ["app", "engine"] }).count < 2 { await Task.yield() }
+        watch.cancel()
+        await watch.value // returns: the loop saw the cancellation
+        let asked = cli.calls.filter { $0 == ["app", "engine"] }.count
+        for _ in 0..<50 { await Task.yield() }
+        #expect(cli.calls.filter { $0 == ["app", "engine"] }.count == asked) // no more checks
     }
 
     /// If Docker stops later, the box's state line says so on this Mac, and

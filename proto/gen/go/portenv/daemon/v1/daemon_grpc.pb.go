@@ -120,7 +120,8 @@ type DaemonServiceClient interface {
 	ListServers(ctx context.Context, in *ListServersRequest, opts ...grpc.CallOption) (*ListServersResponse, error)
 	// Whether this Mac's box engine answers (Docker Desktop is running), for
 	// Welcome's Docker card and the state line (R-0098). It only asks the
-	// engine: it never starts anything, and answers within 2 s.
+	// engine: it never starts anything. portenvd gives the engine 1.5 s;
+	// the app waits 3 s for the answer.
 	GetEngine(ctx context.Context, in *GetEngineRequest, opts ...grpc.CallOption) (*GetEngineResponse, error)
 	// The Keychain items the app reads for a box (service
 	// dev.portenv.repository): its repository key, and its storage keys.
@@ -565,7 +566,8 @@ type DaemonServiceServer interface {
 	ListServers(context.Context, *ListServersRequest) (*ListServersResponse, error)
 	// Whether this Mac's box engine answers (Docker Desktop is running), for
 	// Welcome's Docker card and the state line (R-0098). It only asks the
-	// engine: it never starts anything, and answers within 2 s.
+	// engine: it never starts anything. portenvd gives the engine 1.5 s;
+	// the app waits 3 s for the answer.
 	GetEngine(context.Context, *GetEngineRequest) (*GetEngineResponse, error)
 	// The Keychain items the app reads for a box (service
 	// dev.portenv.repository): its repository key, and its storage keys.

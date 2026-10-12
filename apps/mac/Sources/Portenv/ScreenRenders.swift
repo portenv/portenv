@@ -44,6 +44,11 @@ enum ScreenRenders {
                 try snapshot(FirstRunView(flow: flow, opened: { _ in }, followsDocker: false),
                              name: "first-run-1-welcome-docker-\(suffix)", in: dir)
             }
+            // Welcome when portenvd doesn't answer the check (R-0110).
+            let gone = FirstRunFlow(service: Sample(), docker: nil)
+            await gone.checkDocker { nil }
+            try snapshot(FirstRunView(flow: gone, opened: { _ in }, followsDocker: false),
+                         name: "first-run-1-welcome-service-down", in: dir)
             // New Box… from the box list (the new-box boards).
             let newBox = FirstRunFlow(service: Sample(), at: .firstBox, existing: ["acme-api"], fromBoxList: true)
             newBox.boxName = "site"

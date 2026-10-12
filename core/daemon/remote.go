@@ -251,14 +251,31 @@ func (s *Server) boxState(ctx context.Context, name string, withPackages bool) (
 	}
 	// Packages that couldn't be installed, for the inspector (never the
 	// state line). A quick question to the agent; no answer, nothing shown.
+	// It also notices a channel that dropped, so the state says the agent
+	// is unavailable before the next action fails (R-0110).
 	if a := ob.client(); a != nil && withPackages {
 		actx, cancel := context.WithTimeout(ctx, time.Second)
-		if rd, err := a.GetReadiness(actx, &agentv1.GetReadinessRequest{}); err == nil {
+		rd, err := a.GetReadiness(actx, &agentv1.GetReadinessRequest{})
+		cancel()
+		ob.noteReadiness(err)
+		if err == nil {
 			r.FailedPackages, r.PackagesError = rd.GetFailedPackages(), rd.GetPackagesError()
 		}
-		cancel()
+		state, _ = saveState(st, ob.saving.Load(), ob.offline.Load(), ob.agentDown.Load(), ob.retrying.Load(), ob.failed.Load(), ob.quitUnsaved.Load())
+		r.State = state
 	}
 	return r, nil
+}
+
+// noteReadiness records what the state poll's readiness question found: a
+// channel that is down marks the agent unavailable, an answer clears it
+// (as CheckBox does). A slow answer (deadline) changes nothing.
+func (ob *openBox) noteReadiness(err error) {
+	if err == nil {
+		ob.agentDown.Store(false)
+		return
+	}
+	_ = ob.noteErr(err)
 }
 
 // notOpenState is the state of a box this portenvd hasn't opened: closed,

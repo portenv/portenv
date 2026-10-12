@@ -947,7 +947,8 @@ extension Portenv_Daemon_V1_DaemonService {
         /// >
         /// > Whether this Mac's box engine answers (Docker Desktop is running), for
         /// > Welcome's Docker card and the state line (R-0098). It only asks the
-        /// > engine: it never starts anything, and answers within 2 s.
+        /// > engine: it never starts anything. portenvd gives the engine 1.5 s;
+        /// > the app waits 3 s for the answer.
         ///
         /// - Parameters:
         ///   - request: A request containing a single `Portenv_Daemon_V1_GetEngineRequest` message.
@@ -1915,7 +1916,8 @@ extension Portenv_Daemon_V1_DaemonService {
         /// >
         /// > Whether this Mac's box engine answers (Docker Desktop is running), for
         /// > Welcome's Docker card and the state line (R-0098). It only asks the
-        /// > engine: it never starts anything, and answers within 2 s.
+        /// > engine: it never starts anything. portenvd gives the engine 1.5 s;
+        /// > the app waits 3 s for the answer.
         ///
         /// - Parameters:
         ///   - request: A request containing a single `Portenv_Daemon_V1_GetEngineRequest` message.
@@ -2913,7 +2915,8 @@ extension Portenv_Daemon_V1_DaemonService.ClientProtocol {
     /// >
     /// > Whether this Mac's box engine answers (Docker Desktop is running), for
     /// > Welcome's Docker card and the state line (R-0098). It only asks the
-    /// > engine: it never starts anything, and answers within 2 s.
+    /// > engine: it never starts anything. portenvd gives the engine 1.5 s;
+    /// > the app waits 3 s for the answer.
     ///
     /// - Parameters:
     ///   - request: A request containing a single `Portenv_Daemon_V1_GetEngineRequest` message.
@@ -3922,7 +3925,8 @@ extension Portenv_Daemon_V1_DaemonService.ClientProtocol {
     /// >
     /// > Whether this Mac's box engine answers (Docker Desktop is running), for
     /// > Welcome's Docker card and the state line (R-0098). It only asks the
-    /// > engine: it never starts anything, and answers within 2 s.
+    /// > engine: it never starts anything. portenvd gives the engine 1.5 s;
+    /// > the app waits 3 s for the answer.
     ///
     /// - Parameters:
     ///   - message: request message to send.

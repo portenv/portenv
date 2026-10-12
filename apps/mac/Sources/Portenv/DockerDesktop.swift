@@ -8,19 +8,21 @@ import SwiftUI
 /// portenvd (only its driver talks to Docker), and opening or getting it.
 @MainActor
 enum DockerDesktop {
-    /// What VoiceOver hears when the card goes because Docker answered.
-    static let runningAnnouncement = "Docker Desktop is running"
-
     static func status() async -> DockerStatus? {
         let engine = await SharedDaemon.client.engineRunning()
-        let installed = NSWorkspace.shared.urlForApplication(withBundleIdentifier: DockerText.bundleID) != nil
-        return DockerStatus.from(engine: engine, desktopInstalled: installed)
+        return DockerStatus.from(engine: engine, desktopInstalled: installedApp != nil)
+    }
+
+    /// Docker Desktop's app, unless it's missing or in the Trash.
+    private static var installedApp: URL? {
+        let app = NSWorkspace.shared.urlForApplication(withBundleIdentifier: DockerText.bundleID)
+        return DockerStatus.installed(at: app) ? app : nil
     }
 
     static func perform(_ action: DockerCard.Action) {
         switch action {
         case .openDockerDesktop:
-            guard let app = NSWorkspace.shared.urlForApplication(withBundleIdentifier: DockerText.bundleID) else {
+            guard let app = installedApp else {
                 NSWorkspace.shared.open(DockerText.download)
                 return
             }

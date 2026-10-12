@@ -211,6 +211,20 @@ func (s *Server) ListBoxes(context.Context, *daemonv1.ListBoxesRequest) (*daemon
 		s.mu.Unlock()
 		resp.Boxes = append(resp.Boxes, &daemonv1.BoxStatus{Box: &typesv1.Box{Id: c.ID, Name: c.Name, ToolboxImage: c.Image}, State: state})
 	}
+	// Boxes CreateBox hasn't finished: shown, never opened (ADR 0019).
+	creating, err := s.env.Creations()
+	if err != nil {
+		return nil, err
+	}
+	for _, c := range creating {
+		// A crash between writing the config and removing the record
+		// leaves both: the box is made (CreateBox again tidies up).
+		if slices.ContainsFunc(resp.Boxes, func(b *daemonv1.BoxStatus) bool { return b.GetBox().GetId() == c.BoxID }) {
+			continue
+		}
+		resp.Boxes = append(resp.Boxes, &daemonv1.BoxStatus{Box: &typesv1.Box{Id: c.BoxID, Name: c.Name, ToolboxImage: c.Image},
+			State: typesv1.BoxState_BOX_STATE_STOPPED, Creating: true})
+	}
 	return resp, nil
 }
 

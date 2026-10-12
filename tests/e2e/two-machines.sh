@@ -99,7 +99,8 @@ echo "== take over and rule 4"
 expect "A autosaves" A app save demo
 in_box a 'echo "unsaved on A" > acme-api/offline.txt'
 out=$(B app open demo --take-over 2>&1); echo "  $out"
-expect "B takes over" grep -q "open on" <<<"$out"
+# The success line, not "box is open on …" (the lease error) (#58).
+expect "B takes over" grep -qE "^open on [^ ]+ \(resume rule [0-9]" <<<"$out"
 in_box b 'echo "from B again" >> acme-api/README.md'
 expect "B closes" B app close demo
 expect "A's autosave is refused after the take over" bash -c "! PORTENV_HOME=$root/a $portenv app save demo"

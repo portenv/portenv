@@ -34,15 +34,39 @@ final class AppModel {
     static let lastBoxKey = "lastBox"
     static let firstRunDoneKey = "firstRunDone"
 
-    /// At launch: offer to move to Applications, make sure portenvd runs,
-    /// list the boxes, and decide.
+    /// "Move Portenv to Applications?" is showing, as a sheet on the window.
+    var moveOffered = false
+    /// Why a move failed, shown once.
+    var moveError: String?
+
+    /// At launch: make sure portenvd runs, offer to move to Applications
+    /// alongside (a sheet; nothing waits for the answer, R-0121), list the
+    /// boxes, and decide.
     func start() async {
         problem = nil
-        if MoveToApplications.offerIfNeeded() { return } // quitting: the copy opens
-        _ = await LoginItem.ensureRegistered()
-        // Never a spinner without end (R-0121): after two missed checks
-        // (about 4 s) the window says the service isn't answering, with Try
-        // Again, and the checks go on.
+        await LaunchOrder.begin(
+            offersMove: MoveToApplications.shouldOffer,
+            register: { _ = await LoginItem.ensureRegistered() },
+            offer: {
+                // Never on a window that's off screen.
+                OnScreen.fixAll()
+                moveOffered = true
+            },
+            wait: { await waitAndDecide() }
+        )
+    }
+
+    /// The sheet's answer: Move quits once the copy opens.
+    func answerMove(_ answer: MoveOffer.Answer) {
+        moveOffered = false
+        Task { moveError = await MoveToApplications.answer(answer) }
+    }
+
+    /// Waits for portenvd, lists the boxes, and decides. Never a spinner
+    /// without end (R-0121): after two missed checks (about 4 s) the window
+    /// says the service isn't answering, with Try Again, and the checks go
+    /// on.
+    private func waitAndDecide() async {
         let outcome = await LaunchWait.untilAnswered(
             ping: { [daemon] in
                 if await daemon.ping() { return true }
@@ -314,5 +338,14 @@ struct AppRoot: View {
         }
         .frame(minWidth: 640, minHeight: 440)
         .background(WindowCloseGuard { window in model.windowShouldClose(window) })
+        // On the window, so it travels with it and never hides on another
+        // Space; the launch carries on behind it (R-0121).
+        .sheet(isPresented: $model.moveOffered) {
+            MoveOfferView { model.answerMove($0) }
+        }
+        .alert(model.moveError ?? "", isPresented: Binding(get: { model.moveError != nil },
+                                                          set: { if !$0 { model.moveError = nil } })) {
+            Button("OK") { model.moveError = nil }
+        }
     }
 }

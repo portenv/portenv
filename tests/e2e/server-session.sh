@@ -81,7 +81,9 @@ echo "== Move To ▸ the server"
 t0=$(python3 -c 'import time; print(time.time())')
 out=$(app move "$box" "$target") || true; echo "  $out"
 t1=$(python3 -c 'import time; print(time.time())')
-expect "Move To ▸ $target ($(python3 -c "print(round($t1 - $t0, 1))") s)" grep -q "open on $target" <<<"$out"
+# Exactly MoveBox's success line: "box is open on $target since …" (a
+# lease error) must not pass (#58).
+expect "Move To ▸ $target ($(python3 -c "print(round($t1 - $t0, 1))") s)" grep -qxF "open on $target" <<<"$out"
 state=$(app state "$box") || true; echo "  state $state"
 expect "the state says where it runs" grep -q "\"location\":\"$target\"" <<<"$state"
 server_kernel=$(A uname -r)

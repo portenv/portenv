@@ -43,9 +43,14 @@ final class AppModel {
     /// alongside (a sheet; nothing waits for the answer, R-0121), list the
     /// boxes, and decide.
     func start() async {
+        // Try Again while Move copies the app doesn't restart the wait
+        // (R-0132).
+        guard MoveToApplications.gate.mayStartWait else { return }
         problem = nil
+        waitStopped = false
         await LaunchOrder.begin(
-            offersMove: MoveToApplications.shouldOffer,
+            // Once per launch: Try Again doesn't ask again (R-0125).
+            offersMove: MoveToApplications.gate.offer(if: MoveToApplications.shouldOffer),
             register: { _ = await LoginItem.ensureRegistered() },
             offer: {
                 // Never on a window that's off screen.
@@ -56,10 +61,34 @@ final class AppModel {
         )
     }
 
-    /// The sheet's answer: Move quits once the copy opens.
+    /// The sheet went away: if it wasn't answered (the system dismissed
+    /// it), release what it held, as Not Now without remembering it
+    /// (R-0132).
+    func moveSheetDismissed() {
+        if let box = MoveToApplications.gate.dismissed() { apply(.open(box)) }
+    }
+
+    /// The launch wait was stopped for a move (R-0125).
+    private var waitStopped = false
+
+    /// The sheet's answer: Move quits once the copy opens. A workspace held
+    /// while the question showed opens now; a failed move that stopped the
+    /// launch wait starts it again (the question isn't asked again).
     func answerMove(_ answer: MoveOffer.Answer) {
+        // Marked answered before the sheet goes, so its dismissal doesn't
+        // release the gate while the answer is carried out.
+        MoveToApplications.gate.answering()
         moveOffered = false
-        Task { moveError = await MoveToApplications.answer(answer) }
+        Task {
+            let result = await MoveToApplications.answer(answer, workspaceOpen: controller != nil,
+                                                         stopWait: { waitStopped = true })
+            moveError = result.error
+            if let box = result.open {
+                apply(.open(box))
+            } else if result.error != nil, launch == nil, waitStopped {
+                await start()
+            }
+        }
     }
 
     /// Waits for portenvd, lists the boxes, and decides.
@@ -67,6 +96,7 @@ final class AppModel {
         let deadline = ContinuousClock.now + .seconds(30)
         var lastJobCheck = ContinuousClock.now - .seconds(10)
         while !(await daemon.ping()) {
+            if waitStopped { return } // moving to Applications
             _ = await LoginItem.ensureRegistered()
             if ContinuousClock.now - lastJobCheck >= .seconds(2) {
                 // The login item's status first (R-0028): waiting for
@@ -87,10 +117,13 @@ final class AppModel {
             }
             try? await Task.sleep(for: .milliseconds(200))
         }
+        if waitStopped { return }
         problem = nil
         do {
             boxes = try await daemon.boxes()
         } catch {
+            // Moving: no Try Again problem mid-move (R-0133).
+            if waitStopped { return }
             problem = BackgroundServiceProblem(
                 message: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription,
                 opensLoginItems: false,
@@ -98,6 +131,8 @@ final class AppModel {
             )
             return
         }
+        // Moving started while the list was read (R-0132).
+        if waitStopped { return }
         let requested = ProcessInfo.processInfo.environment["PORTENV_BOX"]
         apply(LaunchDecision.decide(
             requested: requested,
@@ -108,6 +143,9 @@ final class AppModel {
     }
 
     private func apply(_ decision: Launch) {
+        // No workspace opens while the move question shows: it waits for
+        // the answer (R-0125).
+        if case let .open(box) = decision, MoveToApplications.gate.open(box) == nil { return }
         launch = decision
         switch decision {
         case let .firstRun(step):
@@ -286,7 +324,7 @@ struct AppRoot: View {
         .background(WindowCloseGuard { window in model.windowShouldClose(window) })
         // On the window, so it travels with it and never hides on another
         // Space; the launch carries on behind it (R-0121).
-        .sheet(isPresented: $model.moveOffered) {
+        .sheet(isPresented: $model.moveOffered, onDismiss: { model.moveSheetDismissed() }) {
             MoveOfferView { model.answerMove($0) }
         }
         .alert(model.moveError ?? "", isPresented: Binding(get: { model.moveError != nil },

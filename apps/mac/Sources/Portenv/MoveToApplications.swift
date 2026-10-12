@@ -32,12 +32,21 @@ enum MoveToApplications {
                               here: Bundle.main.bundlePath)
     }
 
-    /// Carries out the sheet's answer (R-0121). Move removes the login item
-    /// registered from here, copies the app, opens the copy and quits; a
+    /// This launch's move question: at most once, no workspace opens while
+    /// it shows, and no registering while moving (R-0125).
+    static let gate = MoveGate()
+
+    /// Carries out the sheet's answer (R-0121, R-0125). Move stops the
+    /// launch wait, removes the login item registered from here, copies the
+    /// app, opens the copy and quits. No workspace can be open then (the
+    /// gate holds it), so quitting has nothing to save and never asks; a
     /// failed move registers again and returns why.
-    static func answer(_ answer: MoveOffer.Answer) async -> String? {
-        await MoveOffer.answer(
+    static func answer(_ answer: MoveOffer.Answer, workspaceOpen: Bool,
+                       stopWait: () -> Void) async -> MoveGate.Result {
+        await gate.answer(
             answer,
+            workspaceOpen: workspaceOpen,
+            stopWait: stopWait,
             unregister: { try? await LoginItem.service.unregister() },
             register: { _ = await LoginItem.ensureRegistered() },
             copyAndOpen: {

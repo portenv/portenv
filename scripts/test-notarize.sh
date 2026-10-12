@@ -11,7 +11,8 @@ trap 'rm -rf "$tmp"' EXIT
 
 # The fake xcrun: answers `notarytool wait` from the queue in $FAKE/waits, one
 # line per call (timeout, progress, accepted, invalid); `info` with $FAKE/info
-# (empty: the network is down); logs every call in $FAKE/calls.
+# (empty: the network is down); `history` with $FAKE/history (default none);
+# logs every call in $FAKE/calls.
 mkdir -p "$tmp/bin"
 cat >"$tmp/bin/xcrun" <<'EOF'
 #!/usr/bin/env bash
@@ -27,7 +28,11 @@ echo "$cmd" >>"$FAKE/calls"
 id=0bc21e4c-4aef-4bca-896a-5ec3b8c841cd
 case $cmd in
 	submit)
-		[[ -f $FAKE/upload-fails ]] && { echo "Error: HTTP status code: 500" >&2; exit 1; }
+		if [[ -f $FAKE/upload-fails ]]; then
+			[[ ! -f $FAKE/upload-hook ]] || bash "$FAKE/upload-hook"
+			echo "Error: HTTP status code: 500" >&2
+			exit 1
+		fi
 		shasum -a 256 <"$3" | cut -d' ' -f1 >"$FAKE/submitted-sha"
 		echo "{\"id\":\"$id\",\"message\":\"Successfully uploaded file\"}"
 		;;
@@ -42,11 +47,15 @@ case $cmd in
 			*) exit 98 ;;
 		esac
 		;;
+	history)
+		if [[ -f $FAKE/history ]]; then cat "$FAKE/history"; else echo '{"history":[],"message":"No submissions"}'; fi
+		;;
 	info)
 		[[ -s $FAKE/info ]] || { echo "Error: NSURLErrorDomain Code=-1009" >&2; exit 1; }
 		echo "{\"id\":\"$id\",\"status\":\"$(cat "$FAKE/info")\"}"
 		;;
 	log)
+		[[ ! -f $FAKE/log-fails ]] || { echo "Error: NSURLErrorDomain Code=-1001" >&2; exit 1; }
 		echo "{\"jobId\":\"$id\",\"sha256\":\"$(cat "$FAKE/log-sha" 2>/dev/null || cat "$FAKE/submitted-sha")\",\"issues\":null}" >"${!#}"
 		;;
 	*) exit 97 ;;
@@ -156,6 +165,66 @@ rm "$tmp/dmgstaple/staple-fails"
 file=Portenv.dmg step=notarize_staple run dmgstaple accepted
 t "  resumed: stapled" [ "$rc" = 0 ]
 t "  without uploading again" [ "$(count dmgstaple submit)" = 0 ]
+
+# notarytool history (R-0124). hist DIR NAME STATUS CREATED ID: one submission.
+hist() {
+	mkdir -p "$tmp/$1"
+	printf '{"history":[{"createdDate":"%s","id":"%s","name":"%s","status":"%s"}],"message":"ok"}\n' "$4" "$5" "$2" "$3" >"$tmp/$1/history"
+}
+now=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)
+hid=0bc21e4c-4aef-4bca-896a-5ec3b8c841cd
+
+hist adopt Portenv.dmg 'In Progress' "$now" "$hid"
+mkdir -p "$tmp/adopt/out" && echo adopt >"$tmp/adopt/out/Portenv.dmg"
+shasum -a 256 <"$tmp/adopt/out/Portenv.dmg" | cut -d' ' -f1 >"$tmp/adopt/log-sha"
+file=Portenv.dmg run adopt progress accepted
+t "a same-name submission in history, made since the file, is adopted" [ "$rc" = 0 ]
+t "  without uploading" [ "$(count adopt submit)" = 0 ]
+t "  saved, marked as from history" grep -qx 'from=history' "$tmp/adopt/out/notary-Portenv.dmg.id"
+t "  and its SHA-256 checked in the log" [ "$(count adopt log)" = 1 ]
+
+hist wrong Portenv.dmg Accepted "$now" "$hid"
+mkdir -p "$tmp/wrong" && printf '%064d\n' 2 >"$tmp/wrong/log-sha"
+file=Portenv.dmg run wrong accepted
+t "an adopted submission with another SHA-256 fails" [ "$rc" = 1 ]
+t "  without uploading" [ "$(count wrong submit)" = 0 ]
+t "  and says so" grep -q 'accepted for a file with SHA-256.*Nothing was uploaded' "$tmp/wrong.out"
+t "  forgetting it" [ ! -f "$tmp/wrong/out/notary-Portenv.dmg.id" ]
+rm "$tmp/wrong/log-sha"
+file=Portenv.dmg run wrong accepted
+t "  the next run skips it and uploads" [ "$rc" = 0 ]
+t "  once" [ "$(count wrong submit)" = 1 ]
+
+hist nologadopt Portenv.dmg Accepted "$now" "$hid"
+mkdir -p "$tmp/nologadopt/out" && echo x >"$tmp/nologadopt/out/Portenv.dmg"
+touch "$tmp/nologadopt/log-fails"
+file=Portenv.dmg run nologadopt accepted
+t "an adopted submission whose log can't be read fails" [ "$rc" = 1 ]
+t "  pointing to --resume, its ID kept" grep -q -- '--resume' "$tmp/nologadopt.out"
+t "  without uploading" [ "$(count nologadopt submit)" = 0 ]
+
+hist older Portenv.dmg Accepted 2020-01-01T00:00:00.000Z "$hid"
+file=Portenv.dmg run older accepted
+t "a same-name submission older than the file: uploads" [ "$(count older submit)" = 1 ]
+hist othername Portenv-app.zip 'In Progress' "$now" "$hid"
+file=Portenv.dmg run othername accepted
+t "another file's submission: uploads" [ "$(count othername submit)" = 1 ]
+hist invalidh Portenv.dmg Invalid "$now" "$hid"
+file=Portenv.dmg run invalidh accepted
+t "an Invalid one in history: uploads" [ "$(count invalidh submit)" = 1 ]
+
+hist lostid Portenv.dmg 'In Progress' "$now" "$hid"
+touch "$tmp/lostid/upload-fails"
+mkdir -p "$tmp/lostid/out" && echo lost >"$tmp/lostid/out/Portenv.dmg"
+shasum -a 256 <"$tmp/lostid/out/Portenv.dmg" | cut -d' ' -f1 >"$tmp/lostid/log-sha"
+rm "$tmp/lostid/history"
+# history is empty before the upload and has it after the failed submit
+cat >"$tmp/lostid/upload-hook" <<EOF
+printf '{"history":[{"createdDate":"$now","id":"$hid","name":"Portenv.dmg","status":"In Progress"}]}\n' >"$tmp/lostid/history"
+EOF
+file=Portenv.dmg run lostid accepted
+t "a submit that fails after Apple got the file: adopted from history" [ "$rc" = 0 ]
+t "  one upload, not two" [ "$(count lostid submit)" = 1 ]
 
 # The script's arguments, checked before anything else runs.
 last=none

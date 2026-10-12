@@ -38,8 +38,6 @@ TOOLS := \
 	github.com/zricethezav/gitleaks/v8@v8.30.1 \
 	github.com/restic/restic/cmd/restic@v0.19.1
 TOOLS_STAMP := $(BIN)/.tools-stamp
-# restic's module version (it ships inside Portenv.app, with its licence).
-RESTIC_VERSION := $(lastword $(subst @, ,$(filter github.com/restic/restic/%,$(TOOLS))))
 # shellcheck, which actionlint runs on workflow scripts: the version on CI's
 # runner image, pinned so the Mac and CI agree (scripts/install-shellcheck.sh).
 SHELLCHECK := $(BIN)/shellcheck
@@ -202,11 +200,15 @@ app: build $(TOOLS_STAMP)
 	mkdir -p $(BIN)/Portenv.app/Contents/Library/LaunchAgents
 	cp apps/mac/LaunchAgents/com.portenv.portenvd.plist $(BIN)/Portenv.app/Contents/Library/LaunchAgents/
 	mkdir -p $(BIN)/Portenv.app/Contents/Resources && for b in "$(APP_BUILD)"/release/*.bundle; do [ -e "$$b" ] && cp -R "$$b" $(BIN)/Portenv.app/Contents/Resources/; done; true
-	# Third-party licences ship with the code they cover: restic's
-	# (BSD-2-Clause) from the pinned module, never from the network at copy time.
-	mkdir -p $(BIN)/Portenv.app/Contents/Resources/Licenses
-	GOWORK=off go mod download github.com/restic/restic@$(RESTIC_VERSION)
-	cp "$$(go env GOMODCACHE)/github.com/restic/restic@$(RESTIC_VERSION)/LICENSE" $(BIN)/Portenv.app/Contents/Resources/Licenses/restic-LICENSE.txt
+	# Third-party notices (R-0096): the licence files of every Go module in the
+	# helpers (read from the binaries), Go's own, and every Swift pin, plus
+	# ThirdPartyNotices.txt for Help › Acknowledgements…. A component without a
+	# recognised licence fails the build unless third-party/allowlist.json
+	# names it, with its text and a reason.
+	go run ./core/tools/notices generate --app $(BIN)/Portenv.app --resolved apps/mac/Package.resolved \
+		--checkouts "$(APP_BUILD)/checkouts" --allowlist third-party/allowlist.json \
+		$(addprefix $(BIN)/Portenv.app/Contents/Helpers/,portenv portenvd restic)
+	go run ./core/tools/notices check --app $(BIN)/Portenv.app --resolved apps/mac/Package.resolved
 	$(if $(INSTANCE),scripts/stamp-instance.sh $(BIN)/Portenv.app $(INSTANCE))
 	scripts/check-app-identity.sh $(BIN)/Portenv.app $(INSTANCE)
 	scripts/check-build-paths.sh $(BIN)/Portenv.app/Contents/MacOS/Portenv $(addprefix $(BIN)/Portenv.app/Contents/Helpers/,portenv portenvd restic)

@@ -57,6 +57,9 @@ enum ScreenRenders {
             try snapshot(MoveOfferView { _ in }.background(.background), name: "move-offer",
                          size: NSSize(width: 440, height: 150), in: dir)
             try renderInspector(to: dir)
+            // Help › Acknowledgements…, with this build's notices (R-0119).
+            try snapshot(view: { AcknowledgementsText.view(Acknowledgements.text(in: .main)) },
+                         name: "acknowledgements", size: NSSize(width: 720, height: 520), in: dir)
             // The terminal paints its background on its layer, which a
             // cached display leaves out: drawn under it here.
             try snapshot(view: { sampleTerminal() }, name: "terminal", size: NSSize(width: 900, height: 452), in: dir,

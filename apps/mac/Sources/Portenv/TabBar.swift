@@ -106,6 +106,7 @@ struct TabCommands: Commands {
                 .keyboardShortcut("t", modifiers: .command)
                 .disabled(tabs == nil)
             Button(TabText.closeButton) {
+                if AcknowledgementsWindow.closeIfKey() { return }
                 guard let tabs else { Self.closeCommandWindow(); return }
                 Task {
                     if await tabs.requestClose() == .closeWindow { Self.closeCommandWindow() }

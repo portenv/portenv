@@ -4,17 +4,19 @@ import AppKit
 import PortenvKit
 import SwiftUI
 
-/// The Help menu (R-0088, R-0097): Send Feedback… opens a new message in the
-/// person's mail app (Feedback); Copy Feedback Address copies the address
-/// for webmail. They replace the standard help item until there is a help
-/// book. With no mail app, an alert gives the address with a button that
-/// copies it.
+/// The Help menu (R-0088, R-0096, R-0097): Send Feedback… opens a new message
+/// in the person's mail app (Feedback); Copy Feedback Address copies the
+/// address for webmail; Acknowledgements… shows the third-party notices.
+/// They replace the standard help item until there is a help book. With no
+/// mail app, an alert gives the address with a button that copies it.
 struct FeedbackCommands: Commands {
     var body: some Commands {
         CommandGroup(replacing: .help) {
             Button(Feedback.menuItem) { SendFeedback.open() }
                 .help(Feedback.menuItemHelp)
             Button(Feedback.copyMenuItem) { SendFeedback.copyAddress() }
+            Divider()
+            Button(Acknowledgements.menuItem) { AcknowledgementsWindow.show() }
         }
     }
 }

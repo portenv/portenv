@@ -241,6 +241,33 @@ struct LaunchWaitTests {
         #expect(await task.value == .cancelled)
     }
 
+    /// A wait replaced while its ask was in flight reports nothing: no
+    /// problem, no notice, no fallback (R-0133).
+    @Test func aReplacedWaitReportsNothing() async {
+        let approval = BackgroundServiceProblem(message: ServiceText.needsApproval, opensLoginItems: true, offersTryAgain: false)
+        for problem in [approval, nil] {
+            var reported: [LaunchWait.Report] = []
+            var pings = 0
+            let (go, release) = AsyncStream<Void>.makeStream()
+            let task = Task { @MainActor in
+                await LaunchWait.untilAnswered(
+                    ping: {
+                        pings += 1
+                        // The last ask of the second check hangs until the wait is replaced.
+                        if pings == 2 * LaunchWait.pingsPerCheck || pings == 1 { for await _ in go { break } }
+                        return false
+                    },
+                    problem: { problem }, report: { reported.append($0) }, sleep: { _ in })
+            }
+            for _ in 0 ..< 20 { await Task.yield() }
+            task.cancel()
+            release.yield()
+            release.yield()
+            #expect(await task.value == .cancelled)
+            #expect(reported.isEmpty, "\(String(describing: problem))")
+        }
+    }
+
     /// Only the last window closing stops the wait: closing a second
     /// window (File › New Window) leaves the first one's launch going
     /// (R-0132).

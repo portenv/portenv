@@ -80,8 +80,10 @@ public enum LaunchWait {
         // approval is said and a refusal ends the wait without waiting 2 s.
         if Task.isCancelled { return .cancelled }
         if await ping() { return .answered }
+        // A wait replaced while it asked says nothing (R-0133).
+        if Task.isCancelled { return .cancelled }
         if let p = problem() {
-            if p.endsWait { return Task.isCancelled ? .cancelled : .refused(p) }
+            if p.endsWait { return .refused(p) }
             report(.problem(p))
             last = .problem(p)
         }
@@ -95,10 +97,11 @@ public enum LaunchWait {
                 await sleep(pollEvery)
             }
             first = false
+            if Task.isCancelled { return .cancelled }
             misses += 1
             let now: Report?
             if let p = problem() {
-                if p.endsWait { return Task.isCancelled ? .cancelled : .refused(p) }
+                if p.endsWait { return .refused(p) }
                 now = .problem(p)
             } else {
                 now = misses >= missesBeforeNotice ? .notAnswering : nil

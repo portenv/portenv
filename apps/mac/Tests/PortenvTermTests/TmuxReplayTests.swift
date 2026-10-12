@@ -26,9 +26,9 @@ private final class Headless: TerminalDelegate {
 
 struct ReplayResult: CustomStringConvertible {
     var promptLines = 0, promptMarks = 0, misplaced = 0, unmarked = 0, startMarks = 0, startMisplaced = 0
-    var scrollMisplaced = 0
+    var scrollMisplaced = 0, onAlternateScreen = false
     var description: String {
-        "prompt lines \(promptLines), prompt marks \(promptMarks), misplaced \(misplaced), prompt lines without a mark \(unmarked); "
+        (onAlternateScreen ? "[ends on the alternate screen: no scrollback, marks ignored] " : "") + "prompt lines \(promptLines), prompt marks \(promptMarks), misplaced \(misplaced), prompt lines without a mark \(unmarked); "
             + "command-start marks \(startMarks), misplaced \(startMisplaced); misplaced while scrolling \(scrollMisplaced)"
     }
 
@@ -36,7 +36,8 @@ struct ReplayResult: CustomStringConvertible {
         Self(promptLines: a.promptLines + b.promptLines, promptMarks: a.promptMarks + b.promptMarks,
              misplaced: a.misplaced + b.misplaced, unmarked: a.unmarked + b.unmarked,
              startMarks: a.startMarks + b.startMarks, startMisplaced: a.startMisplaced + b.startMisplaced,
-             scrollMisplaced: a.scrollMisplaced + b.scrollMisplaced)
+             scrollMisplaced: a.scrollMisplaced + b.scrollMisplaced,
+             onAlternateScreen: a.onAlternateScreen || b.onAlternateScreen)
     }
 }
 
@@ -58,7 +59,28 @@ enum Replay {
         return try text.split(separator: "\n").map { try JSONDecoder().decode(Record.self, from: Data($0.utf8)) }
     }
 
-    /// Replays one path into its terminals (one for A; one per pane for C).
+    /// tmux's switches to and from the alternate screen. An attached client
+    /// draws on it, so the terminal keeps no scrollback; "A, main screen"
+    /// replays without them, as tmux would draw with `smcup@:rmcup@` in its
+    /// terminal-overrides.
+    static let altScreen: [[UInt8]] = ["\u{1b}[?1049h", "\u{1b}[?1049l", "\u{1b}[?47h", "\u{1b}[?47l",
+                                       "\u{1b}[?1047h", "\u{1b}[?1047l"].map { Array($0.utf8) }
+
+    static func strip(_ bytes: [UInt8], _ seqs: [[UInt8]]) -> [UInt8] {
+        var out: [UInt8] = [], i = 0
+        outer: while i < bytes.count {
+            for s in seqs where bytes.count - i >= s.count && Array(bytes[i ..< i + s.count]) == s {
+                i += s.count
+                continue outer
+            }
+            out.append(bytes[i])
+            i += 1
+        }
+        return out
+    }
+
+    /// Replays one path into its terminals: one for A (as recorded) and
+    /// "A-main" (the alternate-screen switches removed), one per pane for C.
     static func run(_ name: String, path: String) throws -> ReplayResult {
         var terms: [String: (Terminal, OverlayTracker, Headless)] = [:]
         var size = (cols: 80, rows: 24)
@@ -76,17 +98,22 @@ enum Replay {
                 for (t, _, _) in terms.values { t.resize(cols: c, rows: rows) }
                 continue
             }
-            guard r.t == "data", r.path == path, let b = r.b64, let data = Data(base64Encoded: b) else { continue }
-            let (t, _, _) = term(path == "A" ? "A" : r.pane ?? "")
-            t.feed(byteArray: [UInt8](data))
+            let source = path == "A-main" ? "A" : path
+            guard r.t == "data", r.path == source, let b = r.b64, let data = Data(base64Encoded: b) else { continue }
+            // The capture ends by killing tmux, which clears the client's
+            // screen: A is judged as it stood just before.
+            if source == "A", String(decoding: data, as: UTF8.self).contains("[server exited]") { break }
+            let (t, _, _) = term(source == "A" ? "A" : r.pane ?? "")
+            t.feed(byteArray: path == "A-main" ? strip([UInt8](data), altScreen) : [UInt8](data))
         }
         return terms.values.map { check($0.0, $0.1) }.reduce(ReplayResult(), +)
     }
 
-    static let promptLine = /^P(\d+)\$ /
+    nonisolated(unsafe) static let promptLine = try! Regex<(Substring, Substring)>("^P([0-9]+)[$#] ")
 
     static func check(_ t: Terminal, _ o: OverlayTracker) -> ReplayResult {
         var r = ReplayResult()
+        r.onAlternateScreen = t.isCurrentBufferAlternate
         o.refresh()
         let first = o.firstValid, last = o.lastValid
         func text(_ row: Int) -> String {
@@ -105,11 +132,15 @@ enum Replay {
         }
         for m in marks where m.kind == .commandStart {
             r.startMarks += 1
-            // Every command here prints its output from the first line after
-            // the command (seq …, or clear's empty screen).
+            // A command's output starts on the line after its command line:
+            // the prompt and the command, or the command alone for the
+            // first one (its prompt came before the client attached). A
+            // command that draws nothing on the main screen (less, clear)
+            // leaves the next prompt on that line.
             let line = text(m.row), above = text(m.row - 1)
-            let ok = above.firstMatch(of: promptLine) != nil && !line.hasPrefix("P")
-            if !ok { r.startMisplaced += 1 }
+            let commandAbove = above.firstMatch(of: promptLine) != nil || above.hasPrefix("seq ")
+            let quiet = above.hasSuffix("less") || above.hasSuffix("clear")
+            if !commandAbove || (line.firstMatch(of: promptLine) != nil && !quiet) { r.startMisplaced += 1 }
         }
         if last >= first {
             for row in first ... last where text(row).firstMatch(of: promptLine) != nil {
@@ -140,10 +171,13 @@ struct TmuxReplayTests {
     /// Prints the table the spike reports; the expectations are the result.
     @Test(arguments: scenarios)
     func replay(_ name: String) throws {
-        let a = try Replay.run(name, path: "A"), c = try Replay.run(name, path: "C")
+        let a = try Replay.run(name, path: "A"), am = try Replay.run(name, path: "A-main"), c = try Replay.run(name, path: "C")
         print("q3 \(name) A: \(a)")
+        print("q3 \(name) A-main: \(am)")
         print("q3 \(name) C: \(c)")
         // C: every mark on its line, every prompt marked, at every scroll.
-        #expect(c.misplaced == 0 && c.startMisplaced == 0 && c.unmarked <= 1 && c.scrollMisplaced == 0, "C, \(name): \(c)")
+        // A and A-main are printed as evidence only (tmux's passthrough is
+        // on for them here and nowhere else).
+        #expect(c.misplaced == 0 && c.startMisplaced == 0 && c.unmarked == 0 && c.scrollMisplaced == 0, "C, \(name): \(c)")
     }
 }

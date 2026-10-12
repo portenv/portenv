@@ -27,21 +27,11 @@ struct FirstRunView: View {
             }
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            if let error = flow.error {
-                Text(error)
-                    .foregroundStyle(.red)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.bottom, 12)
-                    .accessibilityLabel("Problem: \(error)")
-            }
-            // A step not built yet is a notice, not an error (R-0032).
-            if let notice = flow.notice {
-                Text(notice)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.bottom, 12)
-            }
             if flow.step != .welcome {
+                // Why Continue didn't move on, right above it (R-0126).
+                refusal
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .padding(.bottom, 12)
                 footer
             }
         }
@@ -52,12 +42,34 @@ struct FirstRunView: View {
         .onChange(of: flow.made) { _, made in
             if let made { opened(made) }
         }
+        // Every Continue that doesn't move on is heard, even with the same
+        // words as the last one (R-0126).
+        .onChange(of: flow.refusals) { _, _ in
+            if let words = flow.error ?? flow.notice {
+                AccessibilityNotification.Announcement(words).post()
+            }
+        }
+    }
+
+    /// The line saying why Continue didn't move on: an error in red, or a
+    /// notice (a step not built yet, or one that isn't complete).
+    @ViewBuilder private var refusal: some View {
+        if let error = flow.error {
+            Label(error, systemImage: "exclamationmark.triangle")
+                .foregroundStyle(.red)
+                .fixedSize(horizontal: false, vertical: true)
+                .multilineTextAlignment(.trailing)
+                .accessibilityLabel("Problem: \(error)")
+        } else if let notice = flow.notice {
+            Label(notice, systemImage: "info.circle")
+                .fixedSize(horizontal: false, vertical: true)
+                .multilineTextAlignment(.trailing)
+        }
     }
 
     @ViewBuilder private var content: some View {
         switch flow.step {
         case .welcome: welcome
-        case .protection: protection
         case .recoveryKey: recoveryKey
         case .storage: storage
         case .firstBox: firstBox
@@ -85,18 +97,17 @@ struct FirstRunView: View {
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
                 .keyboardShortcut(.defaultAction)
-            CountingChoice(countUsage: $flow.countUsage)
+            // Welcome has no footer: why Continue didn't move on goes under it.
+            refusal
                 .frame(maxWidth: 440)
+            // Counting needs the update check, which tester builds don't
+            // have yet: hidden until counting exists (R-0098, R-0106).
+            if UsageCounting.shown {
+                CountingChoice(countUsage: $flow.countUsage)
+                    .frame(maxWidth: 440)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private var protection: some View {
-        heading(FirstRunText.protectionTitle, FirstRunText.protectionLine) {
-            Label("Only you", systemImage: "lock")
-                .font(.headline)
-                .accessibilityLabel("Protection: only you")
-        }
     }
 
     private var recoveryKey: some View {
@@ -227,12 +238,17 @@ struct FirstRunView: View {
                 }
                 // Filled only when it can be pressed; otherwise dimmed and
                 // disabled, not only inert (R-0049).
+                if flow.busy {
+                    ProgressView().controlSize(.small).padding(.trailing, 4)
+                }
                 Button(flow.primaryButton) { Task { await flow.next() } }
                     .buttonStyle(.borderedProminent)
                     .tint(flow.primaryProminent ? Color.accentColor : Color.secondary.opacity(0.35))
                     .controlSize(.large)
                     .keyboardShortcut(.defaultAction)
                     .disabled(!flow.canContinue)
+                    // Disabled, it says why (R-0126).
+                    .accessibilityHint(flow.whyNot ?? "")
             }
         }
     }
@@ -257,8 +273,8 @@ struct StepDots: View {
     }
 }
 
-/// "Count me in usage numbers", already on, with the exact fields one
-/// click away (PLAN.md 1.8; point 6 of the CNIL criteria).
+/// "Count me in usage numbers", off until ticked (R-0126), with the exact
+/// fields one click away (PLAN.md 1.8; point 6 of the CNIL criteria).
 struct CountingChoice: View {
     @Binding var countUsage: Bool
     @State private var showFields = false

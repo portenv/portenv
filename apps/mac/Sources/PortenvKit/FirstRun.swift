@@ -3,10 +3,22 @@
 import Foundation
 import Observation
 
-/// First run's steps (PLAN.md, "First run in Phases 1 and 2"): the same six
-/// as the mockups, reduced: no sign-in, Only you, no Portenv storage.
+/// First run's steps (PLAN.md, "First run in Phases 1 and 2"), reduced: no
+/// sign-in, no Portenv storage, and no Protection step, whose one choice
+/// ("Only you") is now a sentence on the recovery key (R-0126, R-0129).
 public enum FirstRunStep: Int, CaseIterable, Sendable {
-    case welcome, protection, recoveryKey, storage, firstBox, gettingReady
+    case welcome, recoveryKey, storage, firstBox, gettingReady
+}
+
+/// Usage counting (1.8) needs the update check, which tester builds don't
+/// have: its checkbox stays hidden until counting exists, and then starts
+/// unticked (R-0106, R-0126). Builds with counting set PORTENV_COUNTING.
+public enum UsageCounting {
+    #if PORTENV_COUNTING
+    public static let shown = true
+    #else
+    public static let shown = false
+    #endif
 }
 
 /// Where the first box's saves go (no Portenv storage before Phase 3).
@@ -86,8 +98,8 @@ public final class FirstRunFlow {
     public var serverAddress = ""
     public var bucketURL = ""
     public var boxName = ""
-    /// Usage counting is on, and shown, before any update check (1.8).
-    public var countUsage = true
+    /// Usage counting: off until the person ticks it (opt-in, R-0126).
+    public var countUsage = false
     public private(set) var error: String?
     /// A plain notice (secondary text), like a step not built yet.
     public private(set) var notice: String?
@@ -97,6 +109,10 @@ public final class FirstRunFlow {
     public private(set) var busy = false
     /// The box made at the end, once it exists.
     public private(set) var made: String?
+    /// How many Continues didn't move on. Each one says why (`error` or
+    /// `notice`), and the view announces it again even when the words are
+    /// the same, so a press never looks like nothing happened (R-0126).
+    public private(set) var refusals = 0
 
     private let service: FirstRunService
     private let existing: Set<String>
@@ -118,7 +134,7 @@ public final class FirstRunFlow {
     public var canContinue: Bool {
         guard !busy else { return false }
         switch step {
-        case .welcome, .protection:
+        case .welcome:
             return true
         case .recoveryKey:
             return recoveryKey != nil && recoverySaved
@@ -133,6 +149,27 @@ public final class FirstRunFlow {
             return !boxName.isEmpty && nameProblem == nil
         case .gettingReady:
             return false
+        }
+    }
+
+    /// Why Continue can't go on from this step, in one line; nil while it
+    /// can (or while a press is already working). The disabled button says
+    /// it to VoiceOver, and a press (Return) shows it.
+    public var whyNot: String? {
+        guard !busy, !canContinue else { return nil }
+        switch step {
+        case .welcome, .gettingReady:
+            return nil
+        case .recoveryKey:
+            return recoveryKey == nil ? FirstRunText.noKeyYet : FirstRunText.tickSaved
+        case .storage:
+            switch storage {
+            case .server: return FirstRunText.typeServer
+            case .bucket: return FirstRunText.typeBucket
+            case .thisMac, nil: return FirstRunText.chooseStorage
+            }
+        case .firstBox:
+            return nameProblem ?? FirstRunText.typeName
         }
     }
 
@@ -167,15 +204,22 @@ public final class FirstRunFlow {
         step = steps[i - 1]
     }
 
-    /// Continue: the keys are made on leaving Protection, the box on leaving
-    /// the first box. A failure stays on the step, saying why.
+    /// Continue: the recovery key is made on leaving Welcome (Back and
+    /// forward keep the same key), the box on leaving the first box. Every
+    /// press either moves on or says why it can't (R-0126): a failure stays
+    /// on the step with its line, and so does a step that isn't complete.
     public func next() async {
-        guard canContinue, let i = steps.firstIndex(of: step), i + 1 < steps.count else { return }
+        guard let i = steps.firstIndex(of: step), i + 1 < steps.count else { return }
+        guard canContinue else {
+            // Busy: the press before is still working, and shows it.
+            if let why = whyNot { refuse(notice: why) }
+            return
+        }
         busy = true
         defer { busy = false }
         do {
             switch step {
-            case .protection where recoveryKey == nil:
+            case .welcome where recoveryKey == nil:
                 recoveryKey = try await service.makeRecoveryKey()
             case .firstBox:
                 try await service.createBox(NewBox(
@@ -192,12 +236,16 @@ public final class FirstRunFlow {
             notice = nil
             step = steps[i + 1]
         } catch let failure as FirstRunError where failure.notBuilt {
-            notice = failure.message
-            error = nil
+            refuse(notice: failure.message)
         } catch {
-            notice = nil
-            self.error = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            refuse(error: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
         }
+    }
+
+    private func refuse(notice: String? = nil, error: String? = nil) {
+        self.notice = notice
+        self.error = error
+        refusals += 1
     }
 
     private func trimmed(_ s: String) -> String { s.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -207,15 +255,23 @@ public final class FirstRunFlow {
 public enum FirstRunText {
     public static let welcomeTitle = "Welcome to Portenv"
     public static let welcomeLine = "Your portable workspace. Work on your Mac, continue on a server, and let your agents in, safely."
-    /// The reduced Welcome (#16): no sign-in before Phase 3.
-    public static let welcomeButton = "Continue without an account"
-
-    public static let protectionTitle = "Only you can open your boxes"
-    public static let protectionLine = "Your keys stay on your devices, and Portenv never holds them. If you lose every device and your recovery key, your saves can’t be opened by anyone, including Portenv."
+    /// The reduced Welcome: there's no account to be had, so just
+    /// "Continue" (R-0126).
+    public static let welcomeButton = "Continue"
 
     public static let recoveryTitle = "Save your recovery key"
-    public static let recoveryLine = "It’s the only way back into your boxes if you lose access to all your devices. Keep it somewhere safe and separate from this Mac."
+    /// The Protection step's message leads, then what the key is for
+    /// (R-0129's exact words).
+    public static let recoveryLine = "Only you can open your workspaces\u{2019} saves: Portenv never holds your keys. This key opens them if this Mac\u{2019}s keys are ever lost, on this Mac or a new one. Keep it somewhere safe and separate from this Mac."
     public static let recoverySavedCheck = "I’ve saved my recovery key somewhere safe"
+
+    /// Why Continue can't go on yet (R-0126: never a silent press).
+    public static let noKeyYet = "Your recovery key isn\u{2019}t ready yet."
+    public static let tickSaved = "Tick \u{201C}I\u{2019}ve saved my recovery key somewhere safe\u{201D} to continue."
+    public static let chooseStorage = "Choose where your saves should go."
+    public static let typeServer = "Type your server\u{2019}s address."
+    public static let typeBucket = "Type your bucket\u{2019}s address."
+    public static let typeName = "Give your workspace a name."
 
     public static let storageTitle = "Where should your saves go?"
     public static let storageServer = "My own server"

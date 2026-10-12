@@ -10,10 +10,10 @@ import SwiftUI
 /// samples: no keys, no boxes, no portenvd.
 @MainActor
 enum ScreenRenders {
-    /// A sample recovery key, only ever drawn into renders; built from
+    /// ADR 0019's vector key, as on the board (R-0129), only ever drawn into renders; built from
     /// groups so no key-shaped literal is in the source.
     private struct Sample: FirstRunService {
-        func makeRecoveryKey() async throws -> String { ["SAMP", "LE00", "KEY0", "ONLY", "FOR0", "DOCS"].joined(separator: "-") }
+        func makeRecoveryKey() async throws -> String { ["K7QF", "M2XA", "9TRD", "HV4P", "W8LC", "3NZ5"].joined(separator: "-") }
         func createBox(_: NewBox) async throws {}
     }
 
@@ -36,6 +36,11 @@ enum ScreenRenders {
                 let flow = await sampleFlow(at: step)
                 try snapshot(FirstRunView(flow: flow, opened: { _ in }), name: "first-run-\(step.rawValue + 1)-\(name(step))", in: dir)
             }
+            // A Continue that can't move on says why, by the button (R-0126).
+            let notTicked = await sampleFlow(at: .recoveryKey)
+            notTicked.recoverySaved = false
+            await notTicked.next()
+            try snapshot(FirstRunView(flow: notTicked, opened: { _ in }), name: "first-run-2-recovery-key-not-ticked", in: dir)
             // New Box… from the box list (the new-box boards).
             let newBox = FirstRunFlow(service: Sample(), at: .firstBox, existing: ["acme-api"], fromBoxList: true)
             newBox.boxName = "site"
@@ -73,10 +78,10 @@ enum ScreenRenders {
 
     private static func sampleFlow(at step: FirstRunStep) async -> FirstRunFlow {
         switch step {
-        case .welcome, .protection:
+        case .welcome:
             return FirstRunFlow(service: Sample(), at: step)
         case .recoveryKey:
-            let flow = FirstRunFlow(service: Sample(), at: .protection)
+            let flow = FirstRunFlow(service: Sample(), at: .welcome)
             await flow.next()
             flow.recoverySaved = true
             return flow
@@ -103,7 +108,6 @@ enum ScreenRenders {
     private static func name(_ step: FirstRunStep) -> String {
         switch step {
         case .welcome: "welcome"
-        case .protection: "protection"
         case .recoveryKey: "recovery-key"
         case .storage: "storage"
         case .firstBox: "first-box"

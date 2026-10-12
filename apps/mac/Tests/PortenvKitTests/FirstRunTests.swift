@@ -31,10 +31,10 @@ final class FakeFirstRunService: FirstRunService, @unchecked Sendable {
 
 @MainActor
 struct FirstRunTests {
-    /// The reduced first run (PLAN.md, "First run in Phases 1 and 2"): the
-    /// same six steps, in order.
-    @Test func theSixStepsInOrder() {
-        #expect(FirstRunStep.allCases == [.welcome, .protection, .recoveryKey, .storage, .firstBox, .gettingReady])
+    /// The reduced first run: five steps, the Protection step gone into the
+    /// recovery key's line (R-0126, R-0129).
+    @Test func theFiveStepsInOrder() {
+        #expect(FirstRunStep.allCases == [.welcome, .recoveryKey, .storage, .firstBox, .gettingReady])
         #expect(FirstRunFlow(service: FakeFirstRunService()).step == .welcome)
     }
 
@@ -42,8 +42,7 @@ struct FirstRunTests {
     /// they've saved it (the mockup's checkbox).
     @Test func recoveryKeyNeedsTheKeyAndTheCheckbox() async {
         let flow = FirstRunFlow(service: FakeFirstRunService())
-        await flow.next() // welcome → protection
-        await flow.next() // protection → recovery key (made now)
+        await flow.next() // welcome → recovery key (made now)
         #expect(flow.step == .recoveryKey)
         #expect(flow.recoveryKey == FakeFirstRunService.sampleKey)
         #expect(!flow.canContinue)
@@ -51,15 +50,14 @@ struct FirstRunTests {
         #expect(flow.canContinue)
     }
 
-    /// No key, no recovery step: a failure keeps the person on Protection
-    /// with a plain line, and Continue tries again.
-    @Test func aFailedKeyStaysOnProtectionAndSaysWhy() async {
+    /// No key, no recovery step: a failure keeps the person on Welcome with
+    /// a plain line, and Continue tries again.
+    @Test func aFailedKeyStaysOnWelcomeAndSaysWhy() async {
         let service = FakeFirstRunService()
         service.failure = "Portenv couldn't make your keys."
         let flow = FirstRunFlow(service: service)
         await flow.next()
-        await flow.next()
-        #expect(flow.step == .protection)
+        #expect(flow.step == .welcome)
         #expect(flow.error == "Portenv couldn't make your keys.")
         #expect(flow.recoveryKey == nil)
         service.failure = nil
@@ -112,13 +110,14 @@ struct FirstRunTests {
         let flow = FirstRunFlow(service: FakeFirstRunService())
         #expect(!flow.canGoBack)
         await flow.next()
-        await flow.next()
+        let key = flow.recoveryKey
         flow.recoverySaved = true
         flow.back()
-        #expect(flow.step == .protection)
+        #expect(flow.step == .welcome)
         #expect(!flow.recoverySaved)
         await flow.next()
         #expect(flow.step == .recoveryKey)
+        #expect(flow.recoveryKey == key) // Back and forward keep the same key
     }
 
     /// First run finished before, every box gone: only the first box and
@@ -151,12 +150,14 @@ struct FirstRunTests {
         #expect(service.created.count == 1)
     }
 
-    /// Counting (PLAN.md 1.8, and point 6 of the CNIL criteria): "Count me
-    /// in" is already on and shown, with the exact fields, before any update
-    /// check is sent; nothing in the list identifies anyone.
-    @Test func countingIsOnAndListedInPlainWords() {
+    /// Counting (PLAN.md 1.8, and point 6 of the CNIL criteria): hidden
+    /// while nothing is counted, and unticked when it comes (opt-in,
+    /// R-0106, R-0126), with the exact fields; nothing in the list
+    /// identifies anyone.
+    @Test func countingIsHiddenUntickedAndListedInPlainWords() {
         let flow = FirstRunFlow(service: FakeFirstRunService())
-        #expect(flow.countUsage)
+        #expect(!UsageCounting.shown)
+        #expect(!flow.countUsage)
         #expect(FirstRunText.countMeIn == "Count me in usage numbers (no ID, nothing about your work)")
         let fields = FirstRunText.countedFields.joined(separator: " ")
         for field in ["version", "macOS version", "architecture", "month you installed", "first check each week", "first check each month"] {
@@ -178,8 +179,9 @@ struct FirstRunTests {
     /// never straight ones.
     @Test func copyUsesCurlyApostrophesAndQuotes() {
         let all = [FirstRunText.welcomeTitle, FirstRunText.welcomeLine, FirstRunText.welcomeButton,
-                   FirstRunText.protectionTitle, FirstRunText.protectionLine,
                    FirstRunText.recoveryTitle, FirstRunText.recoveryLine, FirstRunText.recoverySavedCheck,
+                   FirstRunText.noKeyYet, FirstRunText.tickSaved, FirstRunText.chooseStorage, FirstRunText.typeServer,
+                   FirstRunText.typeBucket, FirstRunText.typeName,
                    FirstRunText.storageTitle, FirstRunText.storageServer, FirstRunText.storageBucket,
                    FirstRunText.storageThisMac, FirstRunText.thisMacOnly, FirstRunText.firstBoxTitle,
                    FirstRunText.firstBoxLine, FirstRunText.gettingReadyTitle, FirstRunText.countMeIn,
@@ -189,7 +191,7 @@ struct FirstRunTests {
             #expect(!line.contains("'"), "straight apostrophe in: \(line)")
             #expect(!line.contains("\""), "straight quote in: \(line)")
         }
-        #expect(FirstRunText.recoveryLine.hasPrefix("It\u{2019}s"))
+        #expect(FirstRunText.recoveryLine.contains("workspaces\u{2019} saves"))
         #expect(FirstRunText.recoverySavedCheck.hasPrefix("I\u{2019}ve"))
     }
 
@@ -256,19 +258,107 @@ struct FirstRunTests {
     @Test func notBuiltIsANoticeNotAnError() async {
         let service = FakeFirstRunService()
         service.notBuilt = "Not built yet."
-        let flow = FirstRunFlow(service: service, at: .protection)
+        let flow = FirstRunFlow(service: service)
         await flow.next()
         #expect(flow.notice == "Not built yet.")
         #expect(flow.error == nil)
-        #expect(flow.step == .protection)
+        #expect(flow.step == .welcome)
         service.notBuilt = nil
         await flow.next()
         #expect(flow.notice == nil)
         #expect(flow.step == .recoveryKey)
     }
 
-    /// The reduced Welcome (#16): one way in, "Continue without an account".
-    @Test func welcomeIsContinueWithoutAnAccount() {
-        #expect(FirstRunText.welcomeButton == "Continue without an account")
+    /// Welcome's one way in is "Continue": there's no account to be had
+    /// (R-0126).
+    @Test func welcomeIsJustContinue() {
+        #expect(FirstRunText.welcomeButton == "Continue")
+    }
+
+    /// The recovery key's line starts with what Protection used to say
+    /// (R-0129's exact words).
+    @Test func theRecoveryKeyLineCarriesProtection() {
+        #expect(FirstRunText.recoveryLine == "Only you can open your workspaces\u{2019} saves: Portenv never holds your keys. This key opens them if this Mac\u{2019}s keys are ever lost, on this Mac or a new one. Keep it somewhere safe and separate from this Mac.")
+    }
+
+    /// R-0126: walk forwards and backwards through every step, then all the
+    /// way forwards again. Every press of Continue either moves on or says
+    /// why it can't (a refusal is counted, so the view announces it), and
+    /// Back always lands on the step before.
+    @Test func everyContinueMovesOnOrSaysWhy() async {
+        let service = FakeFirstRunService()
+        let flow = FirstRunFlow(service: service)
+        let steps = FirstRunStep.allCases
+
+        /// Presses Continue; it must move on or say why.
+        func press(expect moved: Bool) async {
+            let before = flow.step, refusals = flow.refusals
+            await flow.next()
+            if flow.step != before {
+                #expect(moved, "moved on from \(before) without being ready")
+                #expect(flow.step == steps[steps.firstIndex(of: before)! + 1])
+                #expect(flow.error == nil && flow.notice == nil)
+            } else {
+                #expect(!moved, "stayed on \(before)")
+                #expect(flow.refusals == refusals + 1, "a silent press on \(before)")
+                #expect((flow.error ?? flow.notice) != nil, "no reason on \(before)")
+            }
+        }
+        /// Makes the step complete, after first pressing while it isn't.
+        func complete() async {
+            switch flow.step {
+            case .recoveryKey:
+                await press(expect: false) // not ticked yet
+                #expect(flow.notice == FirstRunText.tickSaved)
+                flow.recoverySaved = true
+            case .storage:
+                if flow.storage == nil {
+                    await press(expect: false)
+                    #expect(flow.notice == FirstRunText.chooseStorage)
+                }
+                flow.storage = .thisMac
+            case .firstBox:
+                flow.boxName = ""
+                await press(expect: false)
+                #expect(flow.notice == FirstRunText.typeName)
+                flow.boxName = "-x"
+                await press(expect: false)
+                #expect(flow.notice == "Start with a letter or a number.")
+                flow.boxName = "acme-api"
+            default:
+                break
+            }
+        }
+
+        // Forwards to the first workspace, Back one step at a time to
+        // Welcome, then all the way forwards.
+        for _ in 0..<3 {
+            await complete()
+            await press(expect: true)
+        }
+        #expect(flow.step == .firstBox)
+        for target in [FirstRunStep.storage, .recoveryKey, .welcome] {
+            #expect(flow.canGoBack)
+            flow.back()
+            #expect(flow.step == target)
+        }
+        #expect(!flow.canGoBack)
+        while flow.step != .gettingReady {
+            await complete()
+            await press(expect: true)
+        }
+        #expect(service.created.map(\.name) == ["acme-api"])
+
+        // A step that can't be built yet (0.1.0-68's Continue on step 2,
+        // R-0126) says so on every press, not only the first.
+        let stuck = FakeFirstRunService()
+        stuck.notBuilt = "Not ready yet."
+        let flow2 = FirstRunFlow(service: stuck)
+        for n in 1...3 {
+            await flow2.next()
+            #expect(flow2.step == .welcome)
+            #expect(flow2.notice == "Not ready yet.")
+            #expect(flow2.refusals == n)
+        }
     }
 }

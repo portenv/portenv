@@ -10,8 +10,10 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
+	"unicode"
 )
 
 // vectors is testdata/vectors.json, which the Swift tests read too.
@@ -20,7 +22,11 @@ type vectors struct {
 	Salt         string `json:"salt"`
 	InfoPrefix   string `json:"info_prefix"`
 	BoxIDPattern string `json:"box_id_pattern"`
-	RFC5869      struct {
+	Separators   struct {
+		WhiteSpace []string `json:"white_space"`
+		Dashes     []string `json:"dashes"`
+	} `json:"separators"`
+	RFC5869 struct {
 		IKM    string `json:"ikm_hex"`
 		Salt   string `json:"salt_hex"`
 		Info   string `json:"info_hex"`
@@ -188,6 +194,10 @@ func TestParseVectors(t *testing.T) {
 			if pe.Kind != UnknownCharacter || pe.Character != p.Character {
 				t.Errorf("Parse(%q): %+v", p.Input, pe)
 			}
+		case "hidden":
+			if pe.Kind != HiddenCharacter || pe.Character != "" {
+				t.Errorf("Parse(%q): %+v", p.Input, pe)
+			}
 		case "length":
 			if pe.Kind != WrongLength || pe.Length != p.Length {
 				t.Errorf("Parse(%q): %+v", p.Input, pe)
@@ -198,6 +208,67 @@ func TestParseVectors(t *testing.T) {
 			}
 		default:
 			t.Fatalf("unknown error kind %q in vectors", p.Error)
+		}
+	}
+}
+
+// codePoints reads the vectors' "U+XXXX" lists.
+func codePoints(t *testing.T, list []string) map[rune]bool {
+	t.Helper()
+	m := map[rune]bool{}
+	for _, s := range list {
+		n, err := strconv.ParseUint(strings.TrimPrefix(s, "U+"), 16, 32)
+		if err != nil {
+			t.Fatalf("separator %q: %v", s, err)
+		}
+		m[rune(n)] = true
+	}
+	return m
+}
+
+// IsSeparator is exactly the vectors' list, which Swift checks too.
+func TestSeparatorsAreTheVectorsList(t *testing.T) {
+	v := loadVectors(t)
+	ws, dashes := codePoints(t, v.Separators.WhiteSpace), codePoints(t, v.Separators.Dashes)
+	for r := rune(0); r <= unicode.MaxRune; r++ {
+		if want := ws[r] || dashes[r]; IsSeparator(r) != want {
+			t.Errorf("IsSeparator(%U) = %v, want %v", r, !want, want)
+		}
+		// The white-space list is Unicode's White_Space; this catches a new
+		// Unicode version changing it.
+		if unicode.Is(unicode.White_Space, r) != ws[r] {
+			t.Errorf("%U: White_Space %v, in the vectors' list %v", r, !ws[r], ws[r])
+		}
+	}
+}
+
+// Every separator works between groups, around the key, and repeated.
+func TestEverySeparatorIsIgnored(t *testing.T) {
+	v := loadVectors(t)
+	groups := strings.Split(adrVector, "-")
+	for _, list := range [][]string{v.Separators.WhiteSpace, v.Separators.Dashes} {
+		for r := range codePoints(t, list) {
+			sep := string(r)
+			for _, s := range []string{
+				strings.Join(groups, sep),
+				sep + strings.Join(groups, sep+sep) + sep,
+				strings.Join(groups, "") + sep,
+			} {
+				if k, err := Parse(s); err != nil || k.Grouped() != adrVector {
+					t.Errorf("Parse with %U: %v", r, err)
+				}
+			}
+		}
+	}
+}
+
+// A refused character that can't be shown is never put in the message.
+func TestHiddenCharactersAreNotShown(t *testing.T) {
+	for _, r := range []rune{0, 0x7, 0x7F, 0x9F, 0xAD, 0x200B, 0x200E, 0x2060, 0xFEFF, 0xE000, 0x0378, 0x10FFFF} {
+		_, err := Parse("K7QF" + string(r))
+		var pe *ParseError
+		if !errors.As(err, &pe) || pe.Kind != HiddenCharacter || strings.ContainsRune(err.Error(), r) {
+			t.Errorf("%U: %v", r, err)
 		}
 	}
 }

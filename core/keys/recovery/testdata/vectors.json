@@ -6,6 +6,49 @@
     "reduction": 37,
     "alpha": 2
   },
+  "separators": {
+    "comment": "Characters a typed key may carry between its characters (R-0104): Unicode's White_Space characters, and the hyphen with the dashes that notes apps, mail and autocorrect put in its place. Both implementations list exactly these.",
+    "white_space": [
+      "U+0009",
+      "U+000A",
+      "U+000B",
+      "U+000C",
+      "U+000D",
+      "U+0020",
+      "U+0085",
+      "U+00A0",
+      "U+1680",
+      "U+2000",
+      "U+2001",
+      "U+2002",
+      "U+2003",
+      "U+2004",
+      "U+2005",
+      "U+2006",
+      "U+2007",
+      "U+2008",
+      "U+2009",
+      "U+200A",
+      "U+2028",
+      "U+2029",
+      "U+202F",
+      "U+205F",
+      "U+3000"
+    ],
+    "dashes": [
+      "U+002D",
+      "U+2010",
+      "U+2011",
+      "U+2012",
+      "U+2013",
+      "U+2014",
+      "U+2015",
+      "U+2212",
+      "U+FE58",
+      "U+FE63",
+      "U+FF0D"
+    ]
+  },
   "salt": "portenv recovery key v1",
   "info_prefix": "portenv restic password v1",
   "box_id_pattern": "^box-[0-9a-f]{12}$",
@@ -123,18 +166,6 @@
       "message": "Recovery keys don't use the character _."
     },
     {
-      "input": "K7QF–M2XA-9TRD-HV4P-W8LC-3NZ5",
-      "error": "character",
-      "character": "–",
-      "message": "Recovery keys don't use the character –."
-    },
-    {
-      "input": "K7QF-M2XA-9TRD-HV4P-W8LC-3NZ5\n",
-      "error": "character",
-      "character": "\n",
-      "message": "Recovery keys don't use the character \n."
-    },
-    {
       "input": "K7Q0",
       "error": "character",
       "character": "0",
@@ -154,6 +185,133 @@
       "input": "M7QF-M2XA-9TRD-HV4P-W8LC-3NZK",
       "error": "typo",
       "message": "This recovery key has a typo. Check each group against your copy."
+    },
+    {
+      "input": "K7QF\tM2XA\t9TRD\tHV4P\tW8LC\t3NZ5",
+      "canonical": "K7QFM2XA9TRDHV4PW8LC3NZ5"
+    },
+    {
+      "input": "K7QF-M2XA-9TRD-HV4P-W8LC-3NZ5\n",
+      "canonical": "K7QFM2XA9TRDHV4PW8LC3NZ5"
+    },
+    {
+      "input": "K7QF-M2XA-9TRD\r\nHV4P-W8LC-3NZ5\r\n",
+      "canonical": "K7QFM2XA9TRDHV4PW8LC3NZ5"
+    },
+    {
+      "input": "K7QF\u00a0M2XA\u00a09TRD\u00a0HV4P\u00a0W8LC\u00a03NZ5",
+      "canonical": "K7QFM2XA9TRDHV4PW8LC3NZ5"
+    },
+    {
+      "input": "K7QF\u202fM2XA\u202f9TRD\u202fHV4P\u202fW8LC\u202f3NZ5",
+      "canonical": "K7QFM2XA9TRDHV4PW8LC3NZ5"
+    },
+    {
+      "input": "K7QF\u3000M2XA\u30009TRD\u3000HV4P\u3000W8LC\u30003NZ5\u3000",
+      "canonical": "K7QFM2XA9TRDHV4PW8LC3NZ5"
+    },
+    {
+      "input": "K7QF-M2XA-9TRD\u2028HV4P-W8LC-3NZ5",
+      "canonical": "K7QFM2XA9TRDHV4PW8LC3NZ5"
+    },
+    {
+      "input": "K7QF\u2013M2XA\u20139TRD\u2013HV4P\u2013W8LC\u20133NZ5",
+      "canonical": "K7QFM2XA9TRDHV4PW8LC3NZ5"
+    },
+    {
+      "input": "K7QF\u2014M2XA\u20149TRD\u2014HV4P\u2014W8LC\u20143NZ5",
+      "canonical": "K7QFM2XA9TRDHV4PW8LC3NZ5"
+    },
+    {
+      "input": "K7QF\u2010M2XA\u20109TRD\u2010HV4P\u2010W8LC\u20103NZ5",
+      "canonical": "K7QFM2XA9TRDHV4PW8LC3NZ5"
+    },
+    {
+      "input": "K7QF\u2011M2XA\u20119TRD\u2011HV4P\u2011W8LC\u20113NZ5",
+      "canonical": "K7QFM2XA9TRDHV4PW8LC3NZ5"
+    },
+    {
+      "input": "K7QF\u2212M2XA\u22129TRD\u2212HV4P\u2212W8LC\u22123NZ5",
+      "canonical": "K7QFM2XA9TRDHV4PW8LC3NZ5"
+    },
+    {
+      "input": "K7QF\ufe58M2XA\ufe589TRD\ufe58HV4P\ufe58W8LC\ufe583NZ5",
+      "canonical": "K7QFM2XA9TRDHV4PW8LC3NZ5"
+    },
+    {
+      "input": "K7QF\ufe63M2XA\ufe639TRD\ufe63HV4P\ufe63W8LC\ufe633NZ5",
+      "canonical": "K7QFM2XA9TRDHV4PW8LC3NZ5"
+    },
+    {
+      "input": "K7QF\uff0dM2XA\uff0d9TRD\uff0dHV4P\uff0dW8LC\uff0d3NZ5",
+      "canonical": "K7QFM2XA9TRDHV4PW8LC3NZ5"
+    },
+    {
+      "input": "K7QF \u2013 M2XA \u2013 9TRD \u2013 HV4P \u2013 W8LC \u2013 3NZ5",
+      "canonical": "K7QFM2XA9TRDHV4PW8LC3NZ5"
+    },
+    {
+      "input": "K7QF-M2XA\u200b-9TRD-HV4P-W8LC-3NZ5",
+      "error": "hidden",
+      "message": "Recovery keys don't use one of the characters you typed."
+    },
+    {
+      "input": "\ufeffK7QF-M2XA-9TRD-HV4P-W8LC-3NZ5",
+      "error": "hidden",
+      "message": "Recovery keys don't use one of the characters you typed."
+    },
+    {
+      "input": "K7QF-M2XA-9TRD\u00adHV4P-W8LC-3NZ5",
+      "error": "hidden",
+      "message": "Recovery keys don't use one of the characters you typed."
+    },
+    {
+      "input": "K7QF-M2XA-\u00009TRD-HV4P-W8LC-3NZ5",
+      "error": "hidden",
+      "message": "Recovery keys don't use one of the characters you typed."
+    },
+    {
+      "input": "K7QF-M2XA-\u00079TRD-HV4P-W8LC-3NZ5",
+      "error": "hidden",
+      "message": "Recovery keys don't use one of the characters you typed."
+    },
+    {
+      "input": "K7QF-M2XA-\u180e9TRD-HV4P-W8LC-3NZ5",
+      "error": "hidden",
+      "message": "Recovery keys don't use one of the characters you typed."
+    },
+    {
+      "input": "K7QF-M2XA-\ue0009TRD-HV4P-W8LC-3NZ5",
+      "error": "hidden",
+      "message": "Recovery keys don't use one of the characters you typed."
+    },
+    {
+      "input": "K7QF-M2XA-\u03789TRD-HV4P-W8LC-3NZ5",
+      "error": "hidden",
+      "message": "Recovery keys don't use one of the characters you typed."
+    },
+    {
+      "input": "K7Q\u200b",
+      "error": "hidden",
+      "message": "Recovery keys don't use one of the characters you typed."
+    },
+    {
+      "input": "\uff2b7QF-M2XA-9TRD-HV4P-W8LC-3NZ5",
+      "error": "character",
+      "character": "\uff2b",
+      "message": "Recovery keys don't use the character \uff2b."
+    },
+    {
+      "input": "K7QF\u2016M2XA\u20169TRD\u2016HV4P\u2016W8LC\u20163NZ5",
+      "error": "character",
+      "character": "\u2016",
+      "message": "Recovery keys don't use the character \u2016."
+    },
+    {
+      "input": "K7QF\u2e3aM2XA\u2e3a9TRD\u2e3aHV4P\u2e3aW8LC\u2e3a3NZ5",
+      "error": "character",
+      "character": "\u2e3a",
+      "message": "Recovery keys don't use the character \u2e3a."
     }
   ],
   "derive": [

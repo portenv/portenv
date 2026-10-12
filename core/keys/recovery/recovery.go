@@ -19,6 +19,7 @@ import (
 	"io"
 	"regexp"
 	"strings"
+	"unicode"
 )
 
 // Alphabet is the digits 2 to 9 and every letter but I and O: 32
@@ -123,6 +124,9 @@ type ErrorKind int
 
 const (
 	UnknownCharacter ErrorKind = iota + 1
+	// HiddenCharacter is a refused character that can't be shown: a
+	// control, format, private-use or unassigned one (Unicode category C).
+	HiddenCharacter
 	WrongLength
 	Typo
 )
@@ -131,7 +135,7 @@ const (
 // (ADR 0019) and never contains the key.
 type ParseError struct {
 	Kind      ErrorKind
-	Character string // UnknownCharacter: the first one, as typed
+	Character string // UnknownCharacter: the first one, as typed; never set for HiddenCharacter
 	Length    int    // WrongLength: letters and digits read
 }
 
@@ -139,6 +143,8 @@ func (e *ParseError) Error() string {
 	switch e.Kind {
 	case UnknownCharacter:
 		return fmt.Sprintf("Recovery keys don't use the character %s.", e.Character)
+	case HiddenCharacter:
+		return "Recovery keys don't use one of the characters you typed."
 	case WrongLength:
 		return fmt.Sprintf("A recovery key has 24 letters and digits. This one has %d.", e.Length)
 	default:
@@ -146,14 +152,15 @@ func (e *ParseError) Error() string {
 	}
 }
 
-// Parse reads a typed key. Case doesn't matter and spaces and hyphens are
-// ignored. Any other character is refused by name (the first one, as
-// typed), then the length is checked, then the check character.
+// Parse reads a typed key. Case doesn't matter (a to z only), and
+// separators (IsSeparator) are ignored. Any other character is refused by
+// name, the first one as typed, or without its name when it can't be shown;
+// then the length is checked, then the check character.
 func Parse(s string) (Key, error) {
 	var vals []byte
 	defer func() { clear(vals) }()
 	for _, r := range s {
-		if r == ' ' || r == '-' {
+		if IsSeparator(r) {
 			continue
 		}
 		u := r
@@ -162,6 +169,9 @@ func Parse(s string) (Key, error) {
 		}
 		i := strings.IndexRune(Alphabet, u)
 		if i < 0 {
+			if hidden(r) {
+				return Key{}, &ParseError{Kind: HiddenCharacter}
+			}
 			return Key{}, &ParseError{Kind: UnknownCharacter, Character: string(r)}
 		}
 		vals = append(vals, byte(i)) // #nosec G115 -- i is an index into the 32-character Alphabet
@@ -177,6 +187,29 @@ func Parse(s string) (Key, error) {
 	k.valid = true
 	return k, nil
 }
+
+// IsSeparator reports whether a typed key may carry r between its
+// characters (R-0104): pasted keys bring newlines and no-break spaces, and
+// notes apps, mail and autocorrect turn hyphens into dashes. The set is
+// Unicode's White_Space characters and the dashes below, listed here rather
+// than taken from a Unicode table so that Go and Swift agree whatever
+// Unicode version each has; the vectors file lists it too.
+func IsSeparator(r rune) bool {
+	switch {
+	case '\t' <= r && r <= '\r', r == ' ', r == 0x85, r == 0xA0, r == 0x1680,
+		0x2000 <= r && r <= 0x200A, r == 0x2028, r == 0x2029, r == 0x202F,
+		r == 0x205F, r == 0x3000:
+		return true // White_Space
+	case r == '-', 0x2010 <= r && r <= 0x2015, r == 0x2212, r == 0xFE58,
+		r == 0xFE63, r == 0xFF0D:
+		return true // hyphen, the Unicode hyphens and dashes, minus, and their small and full-width forms
+	}
+	return false
+}
+
+// hidden reports whether r is in Unicode's category C (control, format,
+// surrogate, private use or unassigned): a character a message can't show.
+func hidden(r rune) bool { return unicode.Is(unicode.C, r) }
 
 // Password derives the box's restic password: HKDF-SHA256 over the
 // canonical key, as 64 lowercase hex characters. The box ID is checked

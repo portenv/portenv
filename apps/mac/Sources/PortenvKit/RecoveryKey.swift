@@ -65,6 +65,9 @@ public struct RecoveryKey: Sendable, CustomStringConvertible, CustomDebugStringC
     public enum ParseError: Error, Equatable, LocalizedError {
         /// The first character outside the alphabet, as typed.
         case unknownCharacter(String)
+        /// The first character outside the alphabet can't be shown: a
+        /// control, format, private-use or unassigned one (category C).
+        case hiddenCharacter
         /// How many letters and digits were read.
         case wrongLength(Int)
         case typo
@@ -72,6 +75,7 @@ public struct RecoveryKey: Sendable, CustomStringConvertible, CustomDebugStringC
         public var message: String {
             switch self {
             case .unknownCharacter(let c): "Recovery keys don't use the character \(c)."
+            case .hiddenCharacter: "Recovery keys don't use one of the characters you typed."
             case .wrongLength(let n): "A recovery key has 24 letters and digits. This one has \(n)."
             case .typo: "This recovery key has a typo. Check each group against your copy."
             }
@@ -80,19 +84,20 @@ public struct RecoveryKey: Sendable, CustomStringConvertible, CustomDebugStringC
         public var errorDescription: String? { message }
     }
 
-    /// Case doesn't matter, and spaces and hyphens are ignored. Any other
-    /// character is refused by name, then the length is checked, then the
-    /// check character.
+    /// Case doesn't matter (a to z only), and separators (`isSeparator`) are
+    /// ignored. Any other character is refused by name, the first one as
+    /// typed, or without its name when it can't be shown; then the length is
+    /// checked, then the check character.
     public init(parsing text: String) throws {
         var values: [UInt8] = []
         values.reserveCapacity(Self.length)
         for scalar in text.unicodeScalars {
-            if scalar == " " || scalar == "-" { continue }
+            if Self.isSeparator(scalar) { continue }
             var v = scalar.value
             if v >= 0x61 && v <= 0x7A { v -= 0x20 } // a–z only, never Unicode case mapping
             guard v < 128, let i = Self.alphabetBytes.firstIndex(of: UInt8(v)) else {
                 for i in values.indices { values[i] = 0 }
-                throw ParseError.unknownCharacter(String(scalar))
+                throw Self.isHidden(scalar) ? ParseError.hiddenCharacter : ParseError.unknownCharacter(String(scalar))
             }
             values.append(UInt8(i))
         }
@@ -106,6 +111,32 @@ public struct RecoveryKey: Sendable, CustomStringConvertible, CustomDebugStringC
             throw ParseError.typo
         }
         symbols = values
+    }
+
+    /// Whether a typed key may carry this between its characters (R-0104):
+    /// pasted keys bring newlines and no-break spaces, and notes apps, mail
+    /// and autocorrect turn hyphens into dashes. The set is Unicode's
+    /// White_Space characters and the dashes below, listed here rather than
+    /// taken from `properties.isWhitespace` so that Swift and Go agree
+    /// whatever Unicode version each has; the vectors file lists it too.
+    public static func isSeparator(_ s: Unicode.Scalar) -> Bool {
+        switch s.value {
+        case 0x09...0x0D, 0x20, 0x85, 0xA0, 0x1680, 0x2000...0x200A, 0x2028, 0x2029, 0x202F, 0x205F, 0x3000:
+            true // White_Space
+        case 0x2D, 0x2010...0x2015, 0x2212, 0xFE58, 0xFE63, 0xFF0D:
+            true // hyphen, the Unicode hyphens and dashes, minus, and their small and full-width forms
+        default:
+            false
+        }
+    }
+
+    /// Unicode's category C (control, format, surrogate, private use or
+    /// unassigned): a character a message can't show.
+    static func isHidden(_ s: Unicode.Scalar) -> Bool {
+        switch s.properties.generalCategory {
+        case .control, .format, .surrogate, .privateUse, .unassigned: true
+        default: false
+        }
     }
 
     // MARK: Text

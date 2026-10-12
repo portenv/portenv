@@ -20,8 +20,10 @@ struct RecoveryKeyTests {
             let length: Int?
         }
         struct Derive: Decodable { let recovery, box_id, derived: String }
+        struct Separators: Decodable { let white_space, dashes: [String] }
 
         let alphabet, salt, info_prefix, box_id_pattern: String
+        let separators: Separators
         let rfc5869_case1: RFC5869
         let generate: [Generate]
         let parse: [Parse]
@@ -122,6 +124,7 @@ struct RecoveryKeyTests {
                 #expect(e.message == p.message, "\(p.input)")
                 switch kind {
                 case "character": #expect(e == .unknownCharacter(p.character!), "\(p.input)")
+                case "hidden": #expect(e == .hiddenCharacter, "\(p.input)")
                 case "length": #expect(e == .wrongLength(p.length!), "\(p.input)")
                 case "typo": #expect(e == .typo, "\(p.input)")
                 default: Issue.record("unknown error kind \(kind) in vectors")
@@ -129,6 +132,53 @@ struct RecoveryKeyTests {
             default:
                 Issue.record("Parse(\(p.input.debugDescription)) = \(result), want \(p.error ?? "success")")
             }
+        }
+    }
+
+    /// The vectors' "U+XXXX" lists.
+    static func codePoints(_ list: [String]) -> Set<UInt32> {
+        Set(list.map { UInt32($0.dropFirst(2), radix: 16)! })
+    }
+
+    /// `isSeparator` is exactly the vectors' list, which Go checks too, and
+    /// the white-space part is Unicode's White_Space here as well.
+    @Test func separatorsAreTheVectorsList() {
+        let ws = Self.codePoints(Self.vectors.separators.white_space)
+        let dashes = Self.codePoints(Self.vectors.separators.dashes)
+        var wrong: [String] = []
+        for v in UInt32(0)...0x10FFFF {
+            guard let s = Unicode.Scalar(v) else { continue } // surrogates
+            if RecoveryKey.isSeparator(s) != (ws.contains(v) || dashes.contains(v))
+                || s.properties.isWhitespace != ws.contains(v) {
+                wrong.append(String(format: "U+%04X", v))
+            }
+        }
+        #expect(wrong.isEmpty, "\(wrong.prefix(20))")
+    }
+
+    /// Every separator works between groups, around the key, and repeated.
+    @Test func everySeparatorIsIgnored() throws {
+        let groups = Self.adrVector.split(separator: "-").map(String.init)
+        let all = Self.codePoints(Self.vectors.separators.white_space + Self.vectors.separators.dashes)
+        for v in all {
+            let sep = String(Unicode.Scalar(v)!)
+            for s in [groups.joined(separator: sep),
+                      sep + groups.joined(separator: sep + sep) + sep,
+                      groups.joined() + sep] {
+                #expect(try RecoveryKey(parsing: s).grouped == Self.adrVector, "U+\(String(v, radix: 16))")
+            }
+        }
+    }
+
+    /// A refused character that can't be shown is never put in the message.
+    @Test func hiddenCharactersAreNotShown() {
+        for v: UInt32 in [0, 0x7, 0x7F, 0x9F, 0xAD, 0x200B, 0x200E, 0x2060, 0xFEFF, 0xE000, 0x0378, 0x10FFFF] {
+            let s = Unicode.Scalar(v)!
+            let result = Result { try RecoveryKey(parsing: "K7QF" + String(s)) }
+            guard case .failure(let e as RecoveryKey.ParseError) = result else {
+                Issue.record("U+\(String(v, radix: 16)): \(result)"); continue
+            }
+            #expect(e == .hiddenCharacter && !e.message.unicodeScalars.contains(s), "U+\(String(v, radix: 16))")
         }
     }
 

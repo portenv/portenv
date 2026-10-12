@@ -1176,7 +1176,7 @@ Reduced: no sign-in, Only you, Keychain keys, the recovery key; the Welcome scre
 - **Move to Applications first** (the owner, 2026-10-10; found while testing #41):
   - If the app runs from anywhere but `/Applications`, it offers "Move Portenv to Applications?". That includes App Translocation, when the app is opened from Downloads or the DMG. launchd may refuse to start `portenvd` from other places.
   - **Changed 2026-10-12 (R-0121; approved by the reviewer, R-0124, under the owner's delegation):** the question is a sheet on the Portenv window, not an app-modal alert, and the launch doesn't wait for it. The login item is registered and the wait for `portenvd` starts first (`LaunchOrder`, tested). A modal alert before registration once showed on another Space while the window kept a spinner with no agent registered. Move removes the login item registered from the old place before the copy opens, so launchd never keeps running `portenvd` from there; a failed move registers it again (`MoveOffer.answer`, tested).
-  - If launchd still fails to start `portenvd` (for example exit 78, `EX_CONFIG`), the app says so in a plain line. It doesn't wait out the 30-second "background service isn't running" message.
+  - If launchd still fails to start `portenvd` (for example exit 78, `EX_CONFIG`), the app says so in a plain line. It doesn't wait out the "background service isn't answering" notice (about 4 s, R-0121).
 
 **8. 1.6: the port relay**
 

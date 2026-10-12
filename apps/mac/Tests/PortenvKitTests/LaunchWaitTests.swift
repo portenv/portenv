@@ -100,6 +100,29 @@ struct LaunchWaitTests {
         #expect(!flow.daemonGone)
     }
 
+    /// The merged launch order (R-0121, R-0124): the login item is
+    /// registered, the move sheet is only shown, and the launch wait runs
+    /// to its notice and its answer while the question stays unanswered.
+    @Test func theMoveQuestionNeverHoldsUpTheWait() async {
+        var steps: [String] = []
+        var offered = false
+        var pings = 0
+        await LaunchOrder.begin(
+            offersMove: true,
+            register: { steps.append("register") },
+            offer: { offered = true; steps.append("offer") },
+            wait: {
+                let outcome = await LaunchWait.untilAnswered(
+                    ping: { pings += 1; return pings > 2 * LaunchWait.pingsPerCheck },
+                    problem: { nil },
+                    report: { steps.append("\($0)") },
+                    sleep: { _ in })
+                steps.append("\(outcome)")
+            })
+        #expect(offered) // shown, never answered
+        #expect(steps == ["register", "offer", "notAnswering", "answered"])
+    }
+
     /// The spinner has words for VoiceOver.
     @Test func theSpinnerIsLabelled() {
         #expect(LaunchWait.starting == "Starting Portenv\u{2026}")

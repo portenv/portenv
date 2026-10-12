@@ -38,6 +38,8 @@ TOOLS := \
 	github.com/zricethezav/gitleaks/v8@v8.30.1 \
 	github.com/restic/restic/cmd/restic@v0.19.1
 TOOLS_STAMP := $(BIN)/.tools-stamp
+# restic's module version (it ships inside Portenv.app, with its licence).
+RESTIC_VERSION := $(lastword $(subst @, ,$(filter github.com/restic/restic/%,$(TOOLS))))
 # shellcheck, which actionlint runs on workflow scripts: the version on CI's
 # runner image, pinned so the Mac and CI agree (scripts/install-shellcheck.sh).
 SHELLCHECK := $(BIN)/shellcheck
@@ -48,7 +50,7 @@ SWIFT_PROTOBUF := 1.38.1
 GRPC_SWIFT_PROTOBUF := 2.4.1
 SWIFT_PLUGINS := $(BIN)/protoc-gen-swift $(BIN)/protoc-gen-grpc-swift-2
 
-.PHONY: all build app unregister-service test lint fmt proto proto-go proto-swift proto-check proto-check-go agent-linux cli-linux cli-darwin swift-test swift-env-check \
+.PHONY: all build app release-local unregister-service test lint fmt proto proto-go proto-swift proto-check proto-check-go agent-linux cli-linux cli-darwin swift-test swift-env-check \
 	secrets spdx-check check tools clean image image-test driver-test e2e
 
 all: build test lint proto-check
@@ -137,6 +139,10 @@ $(SWIFT_PLUGINS): tools/swift-protoc/Package.swift tools/swift-protoc/Package.re
 	cd tools/swift-protoc && $(SWIFT) build -c release --product protoc-gen-swift && $(SWIFT) build -c release --product protoc-gen-grpc-swift-2
 	cp tools/swift-protoc/.build/release/protoc-gen-swift tools/swift-protoc/.build/release/protoc-gen-grpc-swift-2 $(BIN)/
 
+## release-local: signed, notarized and stapled Portenv.dmg for design testers, built on the owner's Mac (R-0089; ARGS=--check for the preflight only)
+release-local:
+	MAKE="$(MAKE)" scripts/release-local.sh $(ARGS)
+
 ## unregister-service: remove bin/Portenv.app's login item (portenvd under launchd); end any test that registered it with this
 unregister-service:
 	$(BIN)/Portenv.app/Contents/MacOS/Portenv --unregister-service
@@ -195,6 +201,11 @@ app: build $(TOOLS_STAMP)
 	mkdir -p $(BIN)/Portenv.app/Contents/Library/LaunchAgents
 	cp apps/mac/LaunchAgents/com.portenv.portenvd.plist $(BIN)/Portenv.app/Contents/Library/LaunchAgents/
 	mkdir -p $(BIN)/Portenv.app/Contents/Resources && for b in "$(APP_BUILD)"/release/*.bundle; do [ -e "$$b" ] && cp -R "$$b" $(BIN)/Portenv.app/Contents/Resources/; done; true
+	# Third-party licences ship with the code they cover: restic's
+	# (BSD-2-Clause) from the pinned module, never from the network at copy time.
+	mkdir -p $(BIN)/Portenv.app/Contents/Resources/Licenses
+	GOWORK=off go mod download github.com/restic/restic@$(RESTIC_VERSION)
+	cp "$$(go env GOMODCACHE)/github.com/restic/restic@$(RESTIC_VERSION)/LICENSE" $(BIN)/Portenv.app/Contents/Resources/Licenses/restic-LICENSE.txt
 	$(if $(INSTANCE),scripts/stamp-instance.sh $(BIN)/Portenv.app $(INSTANCE))
 	scripts/check-app-identity.sh $(BIN)/Portenv.app $(INSTANCE)
 	scripts/check-build-paths.sh $(BIN)/Portenv.app/Contents/MacOS/Portenv $(addprefix $(BIN)/Portenv.app/Contents/Helpers/,portenv portenvd restic)

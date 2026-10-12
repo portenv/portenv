@@ -15,10 +15,20 @@
 #   PORTENV_NOTARY_MAX_WAIT   seconds to keep waiting before stopping, the
 #                             submission kept for --resume (default 72 h)
 #
-# The saved submission, $out/notary-<file>.id, is two lines:
+# The saved submission, $out/notary-<file>.id, is two or three lines:
 #   id=<submission UUID>
 #   sha256=<the file's SHA-256>
+#   from=history          (only if it was found in notarytool history)
 # It's only reused for a file with that same SHA-256.
+#
+# A slow upload can reach Apple before `notarytool submit` returns, and a
+# submit that then dies loses the ID. So before uploading a file with no saved
+# ID, and again after a failed upload, notarytool history is searched for a
+# submission of the same name, In Progress or Accepted, made since the file
+# (its modification time, less 10 minutes for clock differences). One found
+# is adopted without uploading; once Accepted, its notary log must show this
+# file's SHA-256, or the run fails without uploading and the next run skips
+# that submission ($out/notary-<file>.skip).
 
 # json_field FILE KEY: a top-level string field of notarytool's JSON output
 # (the whole file, or else its last JSON line); empty if absent.
@@ -42,12 +52,55 @@ sha256_of() {
 	echo "${s%% *}"
 }
 
+# notary_find FILE: the newest same-name submission in notarytool history,
+# In Progress or Accepted, made since FILE and not in the skip list; empty if
+# none (or if history can't be read).
+notary_find() {
+	local file=$1 name hist
+	name=$(basename "$file")
+	hist=$out/notary-history.json
+	xcrun notarytool history --keychain-profile "$profile" --output-format json >"$hist" 2>/dev/null || return 0
+	python3 -c '
+import datetime, json, os, sys
+hist, path, skip = sys.argv[1:4]
+try:
+    entries = json.load(open(hist)).get("history", [])
+except (ValueError, AttributeError):
+    sys.exit(0)
+skipped = set(open(skip).read().split()) if os.path.exists(skip) else set()
+since = os.path.getmtime(path) - 600
+best = None
+for e in entries:
+    if not isinstance(e, dict) or e.get("name") != os.path.basename(path):
+        continue
+    if e.get("status") not in ("In Progress", "Accepted") or e.get("id") in skipped:
+        continue
+    try:
+        created = datetime.datetime.fromisoformat(e.get("createdDate", "").replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        continue
+    if created >= since and (best is None or created > best[0]):
+        best = (created, e["id"])
+if best:
+    print(best[1])
+' "$hist" "$file" "$out/notary-$name.skip" 2>/dev/null || true
+}
+
+# save_id IDFILE ID SHA256 [from=history]
+save_id() {
+	{
+		printf 'id=%s\nsha256=%s\n' "$2" "$3"
+		[[ -z ${4:-} ]] || printf '%s\n' "$4"
+	} >"$1.tmp"
+	mv "$1.tmp" "$1"
+}
+
 uuid_re='^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
 
 # notarize FILE: notarizes FILE, reusing its saved submission if there is one;
 # returns once Apple has accepted it, and fails with the notary log otherwise.
 notarize() {
-	local file=$1 name idf sum id='' saved_id saved_sum json rc=0
+	local file=$1 name idf sum id='' saved_id saved_sum json rc=0 adopted=0
 	name=$(basename "$file")
 	idf=$out/notary-$name.id
 	json=$out/notary-$name.json
@@ -57,6 +110,7 @@ notarize() {
 		saved_sum=$(sed -n 's/^sha256=//p' "$idf")
 		if [[ $saved_id =~ $uuid_re && $saved_sum == "$sum" ]]; then
 			id=$saved_id
+			grep -qx 'from=history' "$idf" && adopted=1
 			echo "$name: resuming submission $id (already uploaded; not uploading again)"
 		else
 			echo "$name: the saved submission was for another copy of this file; submitting this one"
@@ -64,17 +118,25 @@ notarize() {
 		fi
 	fi
 	if [[ -z $id ]]; then
-		echo "$name: uploading"
-		xcrun notarytool submit "$file" --keychain-profile "$profile" --output-format json >"$json" || rc=$?
-		id=$(json_field "$json" id)
-		if [[ ! $id =~ $uuid_re ]]; then
-			die "$name: the upload failed (notarytool exit $rc). Before running again, check \`xcrun notarytool history --keychain-profile $profile\`: if it lists this upload, save its ID in $idf (see scripts/notarize-lib.sh) and use --resume"
+		id=$(notary_find "$file")
+		if [[ $id =~ $uuid_re ]]; then
+			adopted=1
+			echo "$name: notarytool history has submission $id for this file name, made since the file: waiting on it instead of uploading (its SHA-256 is checked once Apple accepts it)"
+		else
+			echo "$name: uploading"
+			xcrun notarytool submit "$file" --keychain-profile "$profile" --output-format json >"$json" || rc=$?
+			id=$(json_field "$json" id)
+			if [[ ! $id =~ $uuid_re ]]; then
+				id=$(notary_find "$file")
+				[[ $id =~ $uuid_re ]] || die "$name: the upload failed (notarytool exit $rc), and notarytool history shows no submission of it. Before running again, check \`xcrun notarytool history --keychain-profile $profile\`: if it lists this upload, save its ID in $idf (see scripts/notarize-lib.sh) and use --resume"
+				adopted=1
+				echo "$name: the upload reported a failure (notarytool exit $rc), but notarytool history has submission $id: waiting on it"
+			fi
 		fi
-		printf 'id=%s\nsha256=%s\n' "$id" "$sum" >"$idf.tmp"
-		mv "$idf.tmp" "$idf"
+		if [[ $adopted == 1 ]]; then save_id "$idf" "$id" "$sum" from=history; else save_id "$idf" "$id" "$sum"; fi
 		echo "$name: submission $id (saved in ${idf#"$out"/})"
 	fi
-	notary_wait "$id" "$name" "$sum"
+	notary_wait "$id" "$name" "$sum" "$adopted"
 }
 
 # notarize_staple FILE [BUNDLE]: notarizes FILE and staples the ticket to
@@ -89,9 +151,10 @@ notarize_staple() {
 	[[ $target == "$file" ]] || rm -f "$file"
 }
 
-# notary_wait ID NAME SHA256: waits on submission ID until Apple decides.
+# notary_wait ID NAME SHA256 ADOPTED: waits on submission ID until Apple
+# decides. ADOPTED (1: found in history) makes the SHA-256 check mandatory.
 notary_wait() {
-	local id=$1 name=$2 sum=$3 json err status rc start delay base log logged
+	local id=$1 name=$2 sum=$3 adopted=${4:-0} json err status rc start delay base log logged
 	json=$out/notary-$name.json
 	err=$out/notary-$name.err
 	log=$out/notary-$name.log.json
@@ -114,7 +177,14 @@ notary_wait() {
 				# The accepted submission must be this file.
 				if xcrun notarytool log "$id" --keychain-profile "$profile" "$log" >/dev/null 2>>"$err"; then
 					logged=$(json_field "$log" sha256)
-					[[ $logged == "$sum" ]] || die "$name: submission $id was accepted for a file with SHA-256 '${logged:-?}', not this one ($sum). Delete ${out}/notary-$name.id and run again"
+					if [[ $logged != "$sum" ]]; then
+						# Never this file's: forget it, and skip it from now on.
+						echo "$id" >>"$out/notary-$name.skip"
+						rm -f "$out/notary-$name.id"
+						die "$name: submission $id was accepted for a file with SHA-256 '${logged:-?}', not this one ($sum). Nothing was uploaded; run again to upload this file"
+					fi
+				elif [[ $adopted == 1 ]]; then
+					die "$name: couldn't fetch the notary log of submission $id (found in history) to check it's this file; carry on later with: scripts/release-local.sh --resume $out"
 				else
 					echo "$name: warning: couldn't fetch the notary log to match its SHA-256; stapling checks the ticket" >&2
 				fi

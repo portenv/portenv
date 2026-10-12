@@ -425,6 +425,45 @@ public enum Portenv_Daemon_V1_DaemonService: Sendable {
                 type: .serverStreaming
             )
         }
+        /// Namespace for "CreateBox" metadata.
+        public enum CreateBox: Sendable {
+            /// Request type for "CreateBox".
+            public typealias Input = Portenv_Daemon_V1_CreateBoxRequest
+            /// Response type for "CreateBox".
+            public typealias Output = Portenv_Daemon_V1_CreateBoxResponse
+            /// Descriptor for "CreateBox".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "CreateBox",
+                type: .unary
+            )
+        }
+        /// Namespace for "DiscardCreation" metadata.
+        public enum DiscardCreation: Sendable {
+            /// Request type for "DiscardCreation".
+            public typealias Input = Portenv_Daemon_V1_DiscardCreationRequest
+            /// Response type for "DiscardCreation".
+            public typealias Output = Portenv_Daemon_V1_DiscardCreationResponse
+            /// Descriptor for "DiscardCreation".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "DiscardCreation",
+                type: .unary
+            )
+        }
+        /// Namespace for "RecoverBox" metadata.
+        public enum RecoverBox: Sendable {
+            /// Request type for "RecoverBox".
+            public typealias Input = Portenv_Daemon_V1_RecoverBoxRequest
+            /// Response type for "RecoverBox".
+            public typealias Output = Portenv_Daemon_V1_RecoverBoxResponse
+            /// Descriptor for "RecoverBox".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "RecoverBox",
+                type: .unary
+            )
+        }
         /// Descriptors for all methods in the "portenv.daemon.v1.DaemonService" service.
         public static let descriptors: [GRPCCore.MethodDescriptor] = [
             GetVersion.descriptor,
@@ -457,7 +496,10 @@ public enum Portenv_Daemon_V1_DaemonService: Sendable {
             CloseTab.descriptor,
             RenameTab.descriptor,
             SelectTab.descriptor,
-            WatchTabs.descriptor
+            WatchTabs.descriptor,
+            CreateBox.descriptor,
+            DiscardCreation.descriptor,
+            RecoverBox.descriptor
         ]
     }
 }
@@ -1196,6 +1238,84 @@ extension Portenv_Daemon_V1_DaemonService {
             deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_WatchTabsResponse>,
             options: GRPCCore.CallOptions,
             onResponse handleResponse: @Sendable @escaping (GRPCCore.StreamingClientResponse<Portenv_Daemon_V1_WatchTabsResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "CreateBox" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Makes a new box from keys the app made and stored in the Keychain (ADR
+        /// > 0019): writes no key to disk, creates the repository with the box's
+        /// > repository key, adds the recovery-derived key, checks both, and only
+        /// > then writes the box's config. Idempotent on box_id: calling again after
+        /// > a failure or a crash resumes where it stopped. Never logged.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_CreateBoxRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_CreateBoxRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_CreateBoxResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func createBox<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_CreateBoxRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_CreateBoxRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_CreateBoxResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_CreateBoxResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "DiscardCreation" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Forgets an unfinished creation (ListBoxes shows it as creating): the
+        /// > name is free again. The repository it may have left, with no snapshot,
+        /// > is never deleted.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_DiscardCreationRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_DiscardCreationRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_DiscardCreationResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func discardCreation<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_DiscardCreationRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_DiscardCreationRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_DiscardCreationResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_DiscardCreationResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "RecoverBox" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Restores a box on this Mac with only the recovery key (ADR 0019): opens
+        /// > the repository with the recovery-derived password, adds this Mac's new
+        /// > repository key, checks it, and writes the box's config. Idempotent on
+        /// > box_id. Never logged.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_RecoverBoxRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_RecoverBoxRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_RecoverBoxResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func recoverBox<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_RecoverBoxRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_RecoverBoxRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_RecoverBoxResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_RecoverBoxResponse>) async throws -> Result
         ) async throws -> Result where Result: Sendable
     }
 
@@ -2270,6 +2390,117 @@ extension Portenv_Daemon_V1_DaemonService {
                 onResponse: handleResponse
             )
         }
+
+        /// Call the "CreateBox" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Makes a new box from keys the app made and stored in the Keychain (ADR
+        /// > 0019): writes no key to disk, creates the repository with the box's
+        /// > repository key, adds the recovery-derived key, checks both, and only
+        /// > then writes the box's config. Idempotent on box_id: calling again after
+        /// > a failure or a crash resumes where it stopped. Never logged.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_CreateBoxRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_CreateBoxRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_CreateBoxResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func createBox<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_CreateBoxRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_CreateBoxRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_CreateBoxResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_CreateBoxResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.CreateBox.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
+
+        /// Call the "DiscardCreation" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Forgets an unfinished creation (ListBoxes shows it as creating): the
+        /// > name is free again. The repository it may have left, with no snapshot,
+        /// > is never deleted.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_DiscardCreationRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_DiscardCreationRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_DiscardCreationResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func discardCreation<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_DiscardCreationRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_DiscardCreationRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_DiscardCreationResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_DiscardCreationResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.DiscardCreation.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
+
+        /// Call the "RecoverBox" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Restores a box on this Mac with only the recovery key (ADR 0019): opens
+        /// > the repository with the recovery-derived password, adds this Mac's new
+        /// > repository key, checks it, and writes the box's config. Idempotent on
+        /// > box_id. Never logged.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_RecoverBoxRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_RecoverBoxRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_RecoverBoxResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func recoverBox<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_RecoverBoxRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_RecoverBoxRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_RecoverBoxResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_RecoverBoxResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.RecoverBox.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
     }
 }
 
@@ -3168,6 +3399,102 @@ extension Portenv_Daemon_V1_DaemonService.ClientProtocol {
             request: request,
             serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_WatchTabsRequest>(),
             deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_WatchTabsResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "CreateBox" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Makes a new box from keys the app made and stored in the Keychain (ADR
+    /// > 0019): writes no key to disk, creates the repository with the box's
+    /// > repository key, adds the recovery-derived key, checks both, and only
+    /// > then writes the box's config. Idempotent on box_id: calling again after
+    /// > a failure or a crash resumes where it stopped. Never logged.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_CreateBoxRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func createBox<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_CreateBoxRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_CreateBoxResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.createBox(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_CreateBoxRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_CreateBoxResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "DiscardCreation" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Forgets an unfinished creation (ListBoxes shows it as creating): the
+    /// > name is free again. The repository it may have left, with no snapshot,
+    /// > is never deleted.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_DiscardCreationRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func discardCreation<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_DiscardCreationRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_DiscardCreationResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.discardCreation(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_DiscardCreationRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_DiscardCreationResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "RecoverBox" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Restores a box on this Mac with only the recovery key (ADR 0019): opens
+    /// > the repository with the recovery-derived password, adds this Mac's new
+    /// > repository key, checks it, and writes the box's config. Idempotent on
+    /// > box_id. Never logged.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_RecoverBoxRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func recoverBox<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_RecoverBoxRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_RecoverBoxResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.recoverBox(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_RecoverBoxRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_RecoverBoxResponse>(),
             options: options,
             onResponse: handleResponse
         )
@@ -4193,6 +4520,114 @@ extension Portenv_Daemon_V1_DaemonService.ClientProtocol {
             metadata: metadata
         )
         return try await self.watchTabs(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "CreateBox" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Makes a new box from keys the app made and stored in the Keychain (ADR
+    /// > 0019): writes no key to disk, creates the repository with the box's
+    /// > repository key, adds the recovery-derived key, checks both, and only
+    /// > then writes the box's config. Idempotent on box_id: calling again after
+    /// > a failure or a crash resumes where it stopped. Never logged.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func createBox<Result>(
+        _ message: Portenv_Daemon_V1_CreateBoxRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_CreateBoxResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_CreateBoxRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.createBox(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "DiscardCreation" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Forgets an unfinished creation (ListBoxes shows it as creating): the
+    /// > name is free again. The repository it may have left, with no snapshot,
+    /// > is never deleted.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func discardCreation<Result>(
+        _ message: Portenv_Daemon_V1_DiscardCreationRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_DiscardCreationResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_DiscardCreationRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.discardCreation(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "RecoverBox" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Restores a box on this Mac with only the recovery key (ADR 0019): opens
+    /// > the repository with the recovery-derived password, adds this Mac's new
+    /// > repository key, checks it, and writes the box's config. Idempotent on
+    /// > box_id. Never logged.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func recoverBox<Result>(
+        _ message: Portenv_Daemon_V1_RecoverBoxRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_RecoverBoxResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_RecoverBoxRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.recoverBox(
             request: request,
             options: options,
             onResponse: handleResponse

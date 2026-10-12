@@ -103,6 +103,9 @@ type BoxConfig struct {
 	// reaches it through the storage account's SSH connection; backup and
 	// restore in the box keep using SFTP.
 	StorageREST string `json:"storage_rest,omitempty"`
+	// Recovery: the repository also has the recovery-derived key (ADR
+	// 0019), added and checked by CreateBox or RecoverBox. Not a secret.
+	Recovery bool `json:"recovery,omitempty"`
 }
 
 // MachineConfig holds this machine's settings (machine.json).

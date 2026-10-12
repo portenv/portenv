@@ -1,6 +1,6 @@
 # 0019. The recovery key, and making boxes from the app (CreateBox)
 
-Date: 2026-10-11 · Status: proposed. Decisions 1 to 5 below are taken (the reviewer, on the owner's delegation, R-0087, 2026-10-11); the details this ADR works out wait for review, and code follows that review.
+Date: 2026-10-11 · Status: Accepted (the reviewer, on the owner's delegation, R-0095, 2026-10-11). Decisions 1 to 5 below were taken in R-0087.
 
 ## Context
 
@@ -178,7 +178,7 @@ message CreateBoxResponse {
 
 **What this guarantees.** A box's first save happens only through `OpenBox`, and `OpenBox` needs the config, which D6 writes only after D5. So a box the app made never has a save without both its repository key (stored in the Keychain in A2) and its recovery key (in the repository since D4, and checked in D5). The Delete-a-box invariant holds at every step.
 
-**Storage kinds in 1.5.** `CreateBox` is built and tested first for This Mac only, the only kind whose setup needs nothing else. For SFTP, the storage key still has to be authorised on the server and its REST user added (today `portenv init` prints both); that waits for the setup flows (2.9's wizard). For S3, where the bucket's credentials live is an open question.
+**Storage kinds in 1.5.** `CreateBox` is built and tested first for This Mac only, the only kind whose setup needs nothing else (and an absolute folder, such as a drive, which needs nothing more). SFTP and S3 storage get Unimplemented with a plain line until then. For SFTP, the storage key still has to be authorised on the server and its REST user added (today `portenv init` prints both); that waits for the setup flows (2.9's wizard). For S3, where the bucket's credentials live is an open question.
 
 ### Boxes made before this ADR, and the CLI
 
@@ -190,7 +190,7 @@ message CreateBoxResponse {
 ### Restoring with only the recovery key
 
 - **On a clean Mac**, with no Keychain items and no Portenv state, the person gives the storage location and the recovery key. The app lists `<storage>/boxes/`, derives each box's recovery password, and calls `RecoverBox(box_id, storage, recovery_password, keys)`.
-  - **In that call,** `portenvd` opens the repository with the recovery password, adds a new repository key for this Mac (made by the app and stored in the Keychain first, as in A2), checks it, and writes the config.
+  - **In that call,** `portenvd` opens the repository with the recovery password, adds a new repository key for this Mac (made by the app and stored in the Keychain first, as in A2), checks it, and writes the config. The request carries the same fields as `CreateBox`'s, the name the box gets on this Mac included, since the repository doesn't hold one. Like `CreateBox`, it's idempotent on the box ID (`already_recovered`).
   - **The box** then opens like any other, under resume rules 2 to 5.
 - **Where the app offers this** (the reviewer, on the owner's delegation, R-0092): "Restore with a Recovery Key…" as a plain text button under Welcome's main actions, and in Settings › Protection and recovery key. Not needed for the design testers; the reviewer draws the board before the UI is built. The call and its clean-Mac test still come with `CreateBox`.
 

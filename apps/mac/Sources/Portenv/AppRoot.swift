@@ -44,8 +44,10 @@ final class AppModel {
     /// boxes, and decide.
     func start() async {
         problem = nil
+        waitStopped = false
         await LaunchOrder.begin(
-            offersMove: MoveToApplications.shouldOffer,
+            // Once per launch: Try Again doesn't ask again (R-0125).
+            offersMove: MoveToApplications.gate.offer(if: MoveToApplications.shouldOffer),
             register: { _ = await LoginItem.ensureRegistered() },
             offer: {
                 // Never on a window that's off screen.
@@ -56,10 +58,24 @@ final class AppModel {
         )
     }
 
-    /// The sheet's answer: Move quits once the copy opens.
+    /// The launch wait was stopped for a move (R-0125).
+    private var waitStopped = false
+
+    /// The sheet's answer: Move quits once the copy opens. A workspace held
+    /// while the question showed opens now; a failed move that stopped the
+    /// launch wait starts it again (the question isn't asked again).
     func answerMove(_ answer: MoveOffer.Answer) {
         moveOffered = false
-        Task { moveError = await MoveToApplications.answer(answer) }
+        Task {
+            let result = await MoveToApplications.answer(answer, workspaceOpen: controller != nil,
+                                                         stopWait: { waitStopped = true })
+            moveError = result.error
+            if let box = result.open {
+                apply(.open(box))
+            } else if result.error != nil, launch == nil, waitStopped {
+                await start()
+            }
+        }
     }
 
     /// Waits for portenvd, lists the boxes, and decides.
@@ -67,6 +83,7 @@ final class AppModel {
         let deadline = ContinuousClock.now + .seconds(30)
         var lastJobCheck = ContinuousClock.now - .seconds(10)
         while !(await daemon.ping()) {
+            if waitStopped { return } // moving to Applications
             _ = await LoginItem.ensureRegistered()
             if ContinuousClock.now - lastJobCheck >= .seconds(2) {
                 // The login item's status first (R-0028): waiting for
@@ -87,6 +104,7 @@ final class AppModel {
             }
             try? await Task.sleep(for: .milliseconds(200))
         }
+        if waitStopped { return }
         problem = nil
         do {
             boxes = try await daemon.boxes()
@@ -108,6 +126,9 @@ final class AppModel {
     }
 
     private func apply(_ decision: Launch) {
+        // No workspace opens while the move question shows: it waits for
+        // the answer (R-0125).
+        if case let .open(box) = decision, MoveToApplications.gate.open(box) == nil { return }
         launch = decision
         switch decision {
         case let .firstRun(step):

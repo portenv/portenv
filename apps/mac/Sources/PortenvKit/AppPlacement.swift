@@ -95,6 +95,9 @@ public enum MoveText {
     public static let detail = "Portenv runs its background service, which keeps your workspaces saved, from the Applications folder. It can copy itself there and open again."
     public static let move = "Move to Applications"
     public static let notNow = "Not Now"
+    /// Move chosen with a workspace open (it can't happen through the
+    /// sheet; said if it ever does, R-0125).
+    public static let workspaceOpen = "Portenv can\u{2019}t move while a workspace is open. It will offer again the next time it opens."
     public static let notPortenv = "There’s already an app called Portenv.app in Applications that isn’t Portenv. Rename or remove it, then try again."
 }
 
@@ -212,5 +215,76 @@ public struct BackgroundServiceProblem: Equatable, Sendable {
             return BackgroundServiceProblem(message: ServiceText.needsApproval, opensLoginItems: true, offersTryAgain: false)
         }
         return nil
+    }
+}
+
+/// Move to Applications during one launch (R-0125, R-0130).
+/// - No workspace opens while the question shows: an open waits for the
+///   answer, so Move never stops portenvd under an open workspace.
+/// - Move stops the launch wait, then unregisters the login item, then
+///   copies; while it moves, registering is off, so nothing registers the
+///   old place again. A failed copy turns it back on and registers here.
+/// - The question comes at most once per launch (Try Again doesn't ask
+///   again).
+@MainActor
+public final class MoveGate {
+    public struct Result: Equatable, Sendable {
+        public let error: String?
+        /// The workspace held while the question showed, to open now.
+        public let open: String?
+    }
+
+    public private(set) var offering = false
+    public private(set) var moving = false
+    private var offered = false
+    private var held: String?
+
+    public init() {}
+
+    /// Whether the login item may be registered now (off while moving).
+    public var registrationAllowed: Bool { !moving }
+
+    /// Shows the question if it should be asked and hasn't been this launch.
+    public func offer(if should: Bool) -> Bool {
+        guard should, !offered else { return false }
+        offered = true
+        offering = true
+        return true
+    }
+
+    /// A workspace to open: returned to open now, or held (nil) while the
+    /// question shows.
+    public func open(_ box: String) -> String? {
+        guard offering else { return box }
+        held = box
+        return nil
+    }
+
+    public func answer(_ answer: MoveOffer.Answer,
+                       workspaceOpen: Bool,
+                       stopWait: () -> Void,
+                       unregister: () async -> Void,
+                       register: () async -> Void,
+                       copyAndOpen: () async throws -> Void,
+                       decline: () -> Void) async -> Result {
+        offering = false
+        let waiting = held
+        held = nil
+        switch answer {
+        case .notNow:
+            decline()
+            return Result(error: nil, open: waiting)
+        case .move:
+            guard !workspaceOpen else { return Result(error: MoveText.workspaceOpen, open: waiting) }
+            moving = true
+            stopWait()
+            let error = await MoveOffer.answer(.move, unregister: unregister,
+                                               register: { [self] in
+                                                   moving = false
+                                                   await register()
+                                               },
+                                               copyAndOpen: copyAndOpen, decline: decline)
+            return Result(error: error, open: error == nil ? nil : waiting)
+        }
     }
 }

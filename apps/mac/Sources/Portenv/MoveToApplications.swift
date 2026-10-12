@@ -4,10 +4,10 @@ import AppKit
 import PortenvKit
 import ServiceManagement
 
-/// Move to Applications first (PLAN.md 1.5): before the login item is
-/// registered, an app outside /Applications (App Translocation included)
-/// offers to copy itself there, opens the copy and quits. "Not Now" isn't
-/// asked again for the same location.
+/// Move to Applications (PLAN.md 1.5): an app outside /Applications (App
+/// Translocation included) offers, in a sheet on its window, to copy itself
+/// there, open the copy and quit. The launch doesn't wait for the answer
+/// (R-0121). "Not Now" isn't asked again for the same location.
 @MainActor
 enum MoveToApplications {
     static var placement: AppPlacement {
@@ -24,39 +24,31 @@ enum MoveToApplications {
         return URL(fileURLWithPath: "/Applications", isDirectory: true)
     }
 
-    /// Asks when needed. Returns true when the app is quitting because the
-    /// copy in Applications is opening.
-    static func offerIfNeeded() -> Bool {
-        let here = Bundle.main.bundlePath
-        guard placement.shouldOfferMove,
-              UserDefaults.standard.string(forKey: declinedKey) != here
-        else { return false }
-        // The question is the first thing anyone sees: never on a window
-        // that's off screen.
-        OnScreen.fixAll()
-        let alert = NSAlert()
-        alert.messageText = MoveText.question
-        alert.informativeText = MoveText.detail
-        alert.addButton(withTitle: MoveText.move)
-        alert.addButton(withTitle: MoveText.notNow)
-        guard alert.runModal() == .alertFirstButtonReturn else {
-            UserDefaults.standard.set(here, forKey: declinedKey)
-            return false
-        }
-        do {
-            let copy = try AppMover.copy(Bundle.main.bundleURL, into: destination)
-            let config = NSWorkspace.OpenConfiguration()
-            config.createsNewApplicationInstance = true
-            NSWorkspace.shared.openApplication(at: copy, configuration: config) { _, _ in
-                Task { @MainActor in NSApp.terminate(nil) }
-            }
-            return true
-        } catch {
-            let failed = NSAlert()
-            failed.messageText = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-            failed.runModal()
-            return false
-        }
+    /// Whether to offer the move: outside Applications, unless Not Now was
+    /// chosen for this same place.
+    static var shouldOffer: Bool {
+        MoveOffer.shouldOffer(placement: placement,
+                              declinedPath: UserDefaults.standard.string(forKey: declinedKey),
+                              here: Bundle.main.bundlePath)
+    }
+
+    /// Carries out the sheet's answer (R-0121). Move removes the login item
+    /// registered from here, copies the app, opens the copy and quits; a
+    /// failed move registers again and returns why.
+    static func answer(_ answer: MoveOffer.Answer) async -> String? {
+        await MoveOffer.answer(
+            answer,
+            unregister: { try? await LoginItem.service.unregister() },
+            register: { _ = await LoginItem.ensureRegistered() },
+            copyAndOpen: {
+                let copy = try AppMover.copy(Bundle.main.bundleURL, into: destination)
+                let config = NSWorkspace.OpenConfiguration()
+                config.createsNewApplicationInstance = true
+                _ = try await NSWorkspace.shared.openApplication(at: copy, configuration: config)
+                NSApp.terminate(nil)
+            },
+            decline: { UserDefaults.standard.set(Bundle.main.bundlePath, forKey: declinedKey) }
+        )
     }
 
     /// The login item's status, read from ServiceManagement.

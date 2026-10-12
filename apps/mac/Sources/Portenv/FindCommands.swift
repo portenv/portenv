@@ -27,8 +27,6 @@ struct FindCommands: Commands {
 
     @MainActor
     static func send(_ action: NSTextFinder.Action) {
-        let sender = NSMenuItem()
-        sender.tag = action.rawValue
-        NSApp.sendAction(#selector(NSResponder.performTextFinderAction(_:)), to: nil, from: sender)
+        NSApp.sendAction(#selector(NSResponder.performTextFinderAction(_:)), to: nil, from: FindMenu.sender(action))
     }
 }

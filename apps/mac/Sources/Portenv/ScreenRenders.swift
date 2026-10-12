@@ -55,7 +55,7 @@ enum ScreenRenders {
             )
             try renderInspector(to: dir)
             // Help › Acknowledgements…, with this build's notices (R-0119).
-            try snapshot(view: { AcknowledgementsWindow.content(Acknowledgements.text(in: .main)) },
+            try snapshot(view: { AcknowledgementsText.view(Acknowledgements.text(in: .main)) },
                          name: "acknowledgements", size: NSSize(width: 720, height: 520), in: dir)
             // The terminal paints its background on its layer, which a
             // cached display leaves out: drawn under it here.

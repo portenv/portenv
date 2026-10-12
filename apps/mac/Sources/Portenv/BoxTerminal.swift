@@ -72,9 +72,12 @@ struct BoxTerminal: NSViewRepresentable {
 /// change with the appearance (View › Terminal Appearance comes later).
 final class PaddedTerminal: NSView {
     let terminal = LocalProcessTerminalView(frame: .zero)
+    /// No program in the workspace reads or sets the Mac's clipboard.
+    private var clipboardGuard: ClipboardGuard?
 
     init(margin: CGFloat) {
         super.init(frame: .zero)
+        clipboardGuard = ClipboardGuard.install(on: terminal)
         wantsLayer = true
         matchSystemAppearance()
         terminal.translatesAutoresizingMaskIntoConstraints = false

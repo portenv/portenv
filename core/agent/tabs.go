@@ -64,6 +64,18 @@ var tmuxOwned = []string{
 	";", "set-option", "-g", "automatic-rename", "off",
 }
 
+// tmuxSealed are tmux options chained after new-session that keep tmux from
+// reaching the Mac through the app's terminal (R-0133): it never sets the
+// terminal's clipboard (OSC 52, which `tmux set-buffer -w` and copy mode
+// send), and never passes a program's escape sequences through. A program
+// in the workspace runs as the same user as tmux and could set them back,
+// so the app's terminal drops clipboard requests too (ClipboardGuard); these
+// are the second line.
+var tmuxSealed = []string{
+	";", "set-option", "-g", "set-clipboard", "off",
+	";", "set-option", "-g", "allow-passthrough", "off",
+}
+
 // windowIDRE is a tmux window ID, the only form of tab ID accepted.
 var windowIDRE = regexp.MustCompile(`^@[0-9]{1,9}$`)
 
@@ -103,7 +115,7 @@ func (t tabs) ensure(ctx context.Context) error {
 		return status.Error(codes.InvalidArgument, "viewer names are 1 to 16 lower-case letters, digits or -")
 	}
 	base := append([]string{"new-session", "-d", "-s", t.session, "-n", firstTabName}, tmuxHidden...)
-	if err := t.create(ctx, t.session, append(base, tmuxOwned...)); err != nil {
+	if err := t.create(ctx, t.session, append(append(base, tmuxOwned...), tmuxSealed...)); err != nil {
 		return err
 	}
 	if t.viewer == "" {

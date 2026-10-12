@@ -65,7 +65,9 @@ echo "  on this Mac: ${sum:-(none read)}"
 t0=$(python3 -c 'import time; print(time.time())')
 out=$("$portenv" app move "$box" "$target" 2>&1) || true; echo "  $out"
 t1=$(python3 -c 'import time; print(time.time())')
-expect "Move To ▸ $target ($(python3 -c "print(round($t1 - $t0, 1))") s)" grep -q "open on $target" <<<"$out"
+# Exactly MoveBox's success line: "box is open on $target since …" (a
+# lease error) must not pass (#58).
+expect "Move To ▸ $target ($(python3 -c "print(round($t1 - $t0, 1))") s)" grep -qxF "open on $target" <<<"$out"
 on_server() { R sudo docker exec -u work -w /home/work "portenv-$(box_id)" bash -lc "'$*'"; }
 expect "the server has the Mac's files" bash -c "[[ \$(${ssh_cmd[*]} -- $target sudo docker exec -u work portenv-$(box_id) cat /home/work/note.txt </dev/null) == from-the-mac ]]"
 server_sum="sum=$(R sudo docker exec -u work "portenv-$(box_id)" sh -c "'sha256sum /home/work/data.bin | cut -c1-16'")"

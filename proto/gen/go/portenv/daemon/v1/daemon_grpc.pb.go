@@ -56,6 +56,9 @@ const (
 	DaemonService_RenameTab_FullMethodName             = "/portenv.daemon.v1.DaemonService/RenameTab"
 	DaemonService_SelectTab_FullMethodName             = "/portenv.daemon.v1.DaemonService/SelectTab"
 	DaemonService_WatchTabs_FullMethodName             = "/portenv.daemon.v1.DaemonService/WatchTabs"
+	DaemonService_CreateBox_FullMethodName             = "/portenv.daemon.v1.DaemonService/CreateBox"
+	DaemonService_DiscardCreation_FullMethodName       = "/portenv.daemon.v1.DaemonService/DiscardCreation"
+	DaemonService_RecoverBox_FullMethodName            = "/portenv.daemon.v1.DaemonService/RecoverBox"
 )
 
 // DaemonServiceClient is the client API for DaemonService service.
@@ -148,6 +151,21 @@ type DaemonServiceClient interface {
 	// The tabs at once, then whenever they change. The stream ends when the
 	// box closes or its agent goes away; the app watches again.
 	WatchTabs(ctx context.Context, in *WatchTabsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[WatchTabsResponse], error)
+	// Makes a new box from keys the app made and stored in the Keychain (ADR
+	// 0019): writes no key to disk, creates the repository with the box's
+	// repository key, adds the recovery-derived key, checks both, and only
+	// then writes the box's config. Idempotent on box_id: calling again after
+	// a failure or a crash resumes where it stopped. Never logged.
+	CreateBox(ctx context.Context, in *CreateBoxRequest, opts ...grpc.CallOption) (*CreateBoxResponse, error)
+	// Forgets an unfinished creation (ListBoxes shows it as creating): the
+	// name is free again. The repository it may have left, with no snapshot,
+	// is never deleted.
+	DiscardCreation(ctx context.Context, in *DiscardCreationRequest, opts ...grpc.CallOption) (*DiscardCreationResponse, error)
+	// Restores a box on this Mac with only the recovery key (ADR 0019): opens
+	// the repository with the recovery-derived password, adds this Mac's new
+	// repository key, checks it, and writes the box's config. Idempotent on
+	// box_id. Never logged.
+	RecoverBox(ctx context.Context, in *RecoverBoxRequest, opts ...grpc.CallOption) (*RecoverBoxResponse, error)
 }
 
 type daemonServiceClient struct {
@@ -489,6 +507,36 @@ func (c *daemonServiceClient) WatchTabs(ctx context.Context, in *WatchTabsReques
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type DaemonService_WatchTabsClient = grpc.ServerStreamingClient[WatchTabsResponse]
 
+func (c *daemonServiceClient) CreateBox(ctx context.Context, in *CreateBoxRequest, opts ...grpc.CallOption) (*CreateBoxResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CreateBoxResponse)
+	err := c.cc.Invoke(ctx, DaemonService_CreateBox_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) DiscardCreation(ctx context.Context, in *DiscardCreationRequest, opts ...grpc.CallOption) (*DiscardCreationResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DiscardCreationResponse)
+	err := c.cc.Invoke(ctx, DaemonService_DiscardCreation_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) RecoverBox(ctx context.Context, in *RecoverBoxRequest, opts ...grpc.CallOption) (*RecoverBoxResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RecoverBoxResponse)
+	err := c.cc.Invoke(ctx, DaemonService_RecoverBox_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DaemonServiceServer is the server API for DaemonService service.
 // All implementations must embed UnimplementedDaemonServiceServer
 // for forward compatibility.
@@ -579,6 +627,21 @@ type DaemonServiceServer interface {
 	// The tabs at once, then whenever they change. The stream ends when the
 	// box closes or its agent goes away; the app watches again.
 	WatchTabs(*WatchTabsRequest, grpc.ServerStreamingServer[WatchTabsResponse]) error
+	// Makes a new box from keys the app made and stored in the Keychain (ADR
+	// 0019): writes no key to disk, creates the repository with the box's
+	// repository key, adds the recovery-derived key, checks both, and only
+	// then writes the box's config. Idempotent on box_id: calling again after
+	// a failure or a crash resumes where it stopped. Never logged.
+	CreateBox(context.Context, *CreateBoxRequest) (*CreateBoxResponse, error)
+	// Forgets an unfinished creation (ListBoxes shows it as creating): the
+	// name is free again. The repository it may have left, with no snapshot,
+	// is never deleted.
+	DiscardCreation(context.Context, *DiscardCreationRequest) (*DiscardCreationResponse, error)
+	// Restores a box on this Mac with only the recovery key (ADR 0019): opens
+	// the repository with the recovery-derived password, adds this Mac's new
+	// repository key, checks it, and writes the box's config. Idempotent on
+	// box_id. Never logged.
+	RecoverBox(context.Context, *RecoverBoxRequest) (*RecoverBoxResponse, error)
 	mustEmbedUnimplementedDaemonServiceServer()
 }
 
@@ -681,6 +744,15 @@ func (UnimplementedDaemonServiceServer) SelectTab(context.Context, *SelectTabReq
 }
 func (UnimplementedDaemonServiceServer) WatchTabs(*WatchTabsRequest, grpc.ServerStreamingServer[WatchTabsResponse]) error {
 	return status.Error(codes.Unimplemented, "method WatchTabs not implemented")
+}
+func (UnimplementedDaemonServiceServer) CreateBox(context.Context, *CreateBoxRequest) (*CreateBoxResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CreateBox not implemented")
+}
+func (UnimplementedDaemonServiceServer) DiscardCreation(context.Context, *DiscardCreationRequest) (*DiscardCreationResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DiscardCreation not implemented")
+}
+func (UnimplementedDaemonServiceServer) RecoverBox(context.Context, *RecoverBoxRequest) (*RecoverBoxResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RecoverBox not implemented")
 }
 func (UnimplementedDaemonServiceServer) mustEmbedUnimplementedDaemonServiceServer() {}
 func (UnimplementedDaemonServiceServer) testEmbeddedByValue()                       {}
@@ -1236,6 +1308,60 @@ func _DaemonService_WatchTabs_Handler(srv interface{}, stream grpc.ServerStream)
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type DaemonService_WatchTabsServer = grpc.ServerStreamingServer[WatchTabsResponse]
 
+func _DaemonService_CreateBox_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateBoxRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).CreateBox(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_CreateBox_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).CreateBox(ctx, req.(*CreateBoxRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_DiscardCreation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DiscardCreationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).DiscardCreation(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_DiscardCreation_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).DiscardCreation(ctx, req.(*DiscardCreationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_RecoverBox_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RecoverBoxRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).RecoverBox(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_RecoverBox_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).RecoverBox(ctx, req.(*RecoverBoxRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // DaemonService_ServiceDesc is the grpc.ServiceDesc for DaemonService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1354,6 +1480,18 @@ var DaemonService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SelectTab",
 			Handler:    _DaemonService_SelectTab_Handler,
+		},
+		{
+			MethodName: "CreateBox",
+			Handler:    _DaemonService_CreateBox_Handler,
+		},
+		{
+			MethodName: "DiscardCreation",
+			Handler:    _DaemonService_DiscardCreation_Handler,
+		},
+		{
+			MethodName: "RecoverBox",
+			Handler:    _DaemonService_RecoverBox_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

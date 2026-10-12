@@ -8,6 +8,11 @@
 #
 #   scripts/release-local.sh            build, sign, notarize, staple, verify
 #   scripts/release-local.sh --check    only the preflight (identity, notary profile)
+#   scripts/release-local.sh --resume DIR
+#       carry on an interrupted run in its release folder DIR: no rebuild or
+#       re-signing, and no second upload of a file whose submission is saved
+#       there (scripts/notarize-lib.sh); only waiting, stapling, packaging
+#       and verifying what isn't done yet
 #   scripts/release-local.sh --skip-notarize
 #       TESTING ONLY: no notarization. The result is not distributable, and the
 #       script says so and exits 2. With PORTENV_SIGN_IDENTITY=- it signs
@@ -32,32 +37,30 @@ make_cmd=${MAKE:-gmake}
 profile=${PORTENV_NOTARY_PROFILE:-portenv-notary}
 ent=$root/apps/mac/Portenv.entitlements
 
-check_only=0 skip_notarize=0
-for arg in "$@"; do
-	case $arg in
+check_only=0 skip_notarize=0 resume=''
+while (($#)); do
+	case $1 in
 		--check) check_only=1 ;;
 		--skip-notarize) skip_notarize=1 ;;
-		-h | --help) sed -n '3,27p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
-		*) echo "release-local: unknown argument $arg (see --help)" >&2; exit 1 ;;
+		--resume)
+			[[ $# -ge 2 && -d $2 ]] || { echo "release-local: --resume needs the release folder (~/Library/Caches/Portenv/release/<version>-<build>)" >&2; exit 1; }
+			resume=$(cd "$2" && pwd)
+			shift
+			;;
+		-h | --help) sed -n '3,32p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+		*) echo "release-local: unknown argument $1 (see --help)" >&2; exit 1 ;;
 	esac
+	shift
 done
+if [[ -n $resume ]] && ((check_only || skip_notarize)); then
+	echo "release-local: --resume carries on a real run; it doesn't go with --check or --skip-notarize" >&2
+	exit 1
+fi
 
 die() { echo "release-local: $*" >&2; exit 1; }
-# json_field FILE KEY: a top-level string field of notarytool's JSON output
-# (the whole file, or else its last JSON line); empty if absent.
-json_field() {
-	python3 -c '
-import json, sys
-text = open(sys.argv[1]).read()
-try:
-    doc = json.loads(text)
-except ValueError:
-    lines = [l for l in text.splitlines() if l.strip().startswith("{")]
-    doc = json.loads(lines[-1]) if lines else {}
-v = doc.get(sys.argv[2], "") if isinstance(doc, dict) else ""
-print(v if isinstance(v, str) else "")
-' "$1" "$2" 2>/dev/null || true
-}
+# notarize_staple, json_field
+# shellcheck source=scripts/notarize-lib.sh
+source "$root/scripts/notarize-lib.sh"
 # Any failure exits 1, never 2: 2 means only "built for testing".
 test_build_done=0
 trap 'rc=$?; if [[ $rc != 0 && $test_build_done == 0 ]]; then [[ $rc == 1 ]] || echo "release-local: failed (exit $rc)" >&2; exit 1; fi' EXIT
@@ -112,10 +115,17 @@ version=$($pb -c "Print :CFBundleShortVersionString" "$info")
 # source Info.plist is never changed).
 build=$(git -C "$root" rev-list --count HEAD)
 commit=$(git -C "$root" rev-parse --short HEAD)
+if [[ -n $resume ]]; then
+	# The built copy says what it is; the working tree doesn't matter.
+	[[ -d $resume/Portenv.app ]] || die "--resume: no Portenv.app in $resume"
+	version=$($pb -c "Print :CFBundleShortVersionString" "$resume/Portenv.app/Contents/Info.plist")
+	build=$($pb -c "Print :CFBundleVersion" "$resume/Portenv.app/Contents/Info.plist")
+	commit=$($pb -c "Print :PortenvCommit" "$resume/Portenv.app/Contents/Info.plist")
+fi
 echo "version: $version ($build, commit $commit)"
 
 testing=$((adhoc || skip_notarize))
-if [[ -n $(git -C "$root" status --porcelain) ]]; then
+if [[ -z $resume && -n $(git -C "$root" status --porcelain) ]]; then
 	[[ $testing == 1 ]] || die "the working tree isn't clean (git status --porcelain, untracked files included): a tester build comes from a commit and nothing else"
 	echo "warning: the working tree isn't clean (allowed for a test build only)"
 fi
@@ -127,6 +137,18 @@ if [[ $check_only == 1 ]]; then
 fi
 
 # --- Build -----------------------------------------------------------------
+
+if [[ -n $resume ]]; then
+	step "Resuming in $resume"
+	out=$resume
+	app=$out/Portenv.app
+	codesign --verify --deep --strict "$app" || die "--resume: $app's signature doesn't verify; run again from the start"
+	grep -qxF "Authority=$sign_name" < <(codesign -d --verbose=2 "$app" 2>&1) || die "--resume: $app isn't signed by $sign_name"
+	echo "signed by $sign_name: Portenv.app (built and signed earlier, not again)"
+	ts=(--timestamp) # for the DMG's signature; a resumed run is never ad-hoc
+else
+# The build and the signing below aren't indented under this if, to keep
+# their lines as they were.
 
 step "Building Portenv.app (gmake app, release identity)"
 "$make_cmd" -C "$root" app LANE=
@@ -194,42 +216,32 @@ for s in "${signed[@]}"; do
 	fi
 done
 echo "hardened runtime on all ${#signed[@]} signatures"
+fi
 
 # --- Notarize --------------------------------------------------------------
-
-# notarize FILE: submits FILE and waits; on anything but Accepted, prints the
-# notary log for the submission and fails.
-notarize() {
-	local file=$1 json rc=0 id status
-	json=$out/notary-$(basename "$file").json
-	echo "submitting $(basename "$file") and waiting (usually a few minutes)"
-	xcrun notarytool submit "$file" --keychain-profile "$profile" --wait --output-format json >"$json" || rc=$?
-	id=$(json_field "$json" id)
-	status=$(json_field "$json" status)
-	echo "submission ${id:-?}: ${status:-no status}"
-	if [[ $rc != 0 || $status != Accepted ]]; then
-		if [[ -n $id ]]; then
-			echo "notary log for $id:" >&2
-			xcrun notarytool log "$id" --keychain-profile "$profile" --output-format json >&2 || true
-		fi
-		die "notarization of $(basename "$file") failed (status '${status:-unknown}', notarytool exit $rc)"
-	fi
-}
 
 if [[ $skip_notarize == 0 ]]; then
 	# The app is notarized and stapled on its own too, so a tester who copies
 	# it out of the DMG can open it offline.
 	step "Notarizing Portenv.app"
-	ditto -c -k --keepParent "$app" "$out/Portenv-app.zip"
-	notarize "$out/Portenv-app.zip"
-	rm -f "$out/Portenv-app.zip"
-	xcrun stapler staple "$app"
+	if [[ -n $resume ]] && xcrun stapler validate "$app" >/dev/null 2>&1; then
+		echo "already notarized and stapled"
+	else
+		# A resumed run reuses the zip it uploaded.
+		[[ -n $resume && -f $out/Portenv-app.zip ]] || ditto -c -k --keepParent "$app" "$out/Portenv-app.zip"
+		notarize_staple "$out/Portenv-app.zip" "$app"
+	fi
 fi
 
 # --- Package ---------------------------------------------------------------
 
 step "Packaging Portenv.dmg"
 dmg=$out/Portenv.dmg
+if [[ -n $resume && -f $dmg && -f $out/notary-Portenv.dmg.id ]]; then
+	# Uploaded already: the same DMG, so the saved submission still applies.
+	echo "Portenv.dmg: made earlier and uploaded; not made again"
+else
+# (Not indented either, as above.)
 stage=$out/dmg-root
 mkdir -p "$stage"
 ditto "$app" "$stage/Portenv.app"
@@ -238,11 +250,15 @@ hdiutil create -volname Portenv -srcfolder "$stage" -format UDZO -ov "$dmg"
 rm -rf "$stage"
 codesign --force --sign "$sign_id" "${ts[@]}" "$dmg"
 echo "signed: Portenv.dmg"
+fi
 
 if [[ $skip_notarize == 0 ]]; then
 	step "Notarizing Portenv.dmg"
-	notarize "$dmg"
-	xcrun stapler staple "$dmg"
+	if [[ -n $resume ]] && xcrun stapler validate "$dmg" >/dev/null 2>&1; then
+		echo "already notarized and stapled"
+	else
+		notarize_staple "$dmg"
+	fi
 fi
 
 # --- Verify ----------------------------------------------------------------

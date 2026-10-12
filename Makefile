@@ -100,6 +100,7 @@ agent-linux:
 test: $(TOOLS_STAMP)
 	for m in $(GO_MODULES); do RESTIC=$(BIN)/restic go test -race ./$$m/...; done
 	scripts/test-scan-excerpt.sh
+	scripts/test-notarize.sh
 
 ## lint: formatting, vet, golangci-lint, buf lint, workflow lint, SPDX headers
 lint: $(TOOLS_STAMP) $(SHELLCHECK) spdx-check

@@ -53,6 +53,9 @@ enum ScreenRenders {
                 BoxListView(boxes: ["acme-api", "site", "notes"], notice: nil, open: { _ in }, newBox: {}),
                 name: "box-list-after-closing", in: dir
             )
+            // The move question, as the sheet on the window (R-0121).
+            try snapshot(MoveOfferView { _ in }.background(.background), name: "move-offer",
+                         size: NSSize(width: 440, height: 150), in: dir)
             try renderInspector(to: dir)
             // Help › Acknowledgements…, with this build's notices (R-0119).
             try snapshot(view: { AcknowledgementsText.view(Acknowledgements.text(in: .main)) },

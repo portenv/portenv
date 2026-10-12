@@ -98,6 +98,8 @@ final class AppModel {
             )
             return
         }
+        // A workspace made outside first run (portenv init) ends it too (R-0133).
+        DefaultsFirstRunMemory().forgetIfWorkspacesExist(boxes)
         let requested = ProcessInfo.processInfo.environment["PORTENV_BOX"]
         apply(LaunchDecision.decide(
             requested: requested,

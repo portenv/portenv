@@ -301,6 +301,17 @@ struct FirstRunTests {
         #expect(!FirstRunFlow(service: service, memory: memory).keyShownBefore)
     }
 
+    /// Any workspace on this Mac, made by first run or by portenv init,
+    /// forgets that a key was shown: the note would be wrong (R-0133).
+    @Test func anyWorkspaceForgetsTheShownKey() {
+        let memory = DefaultsFirstRunMemory(defaults: UserDefaults(suiteName: "portenv-test-\(UUID().uuidString)")!)
+        memory.keyShown = true
+        memory.forgetIfWorkspacesExist([])
+        #expect(memory.keyShown)
+        memory.forgetIfWorkspacesExist(["made-with-portenv-init"])
+        #expect(!memory.keyShown)
+    }
+
     /// Welcome's one way in is "Continue": there's no account to be had
     /// (R-0126).
     @Test func welcomeIsJustContinue() {

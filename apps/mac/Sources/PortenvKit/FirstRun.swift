@@ -35,6 +35,14 @@ public protocol FirstRunMemory: AnyObject, Sendable {
     var keyShown: Bool { get set }
 }
 
+public extension FirstRunMemory {
+    /// A workspace on this Mac, however it was made (first run, or portenv
+    /// init), means first run is behind us: a key shown earlier is moot.
+    func forgetIfWorkspacesExist(_ workspaces: [String]) {
+        if !workspaces.isEmpty { keyShown = false }
+    }
+}
+
 /// The app's: a flag in the defaults.
 public final class DefaultsFirstRunMemory: FirstRunMemory, @unchecked Sendable {
     public static let key = "recoveryKeyShown"

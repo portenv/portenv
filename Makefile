@@ -196,6 +196,10 @@ app: build $(TOOLS_STAMP)
 	mkdir -p $(BIN)/Portenv.app/Contents/Helpers && cp $(BIN)/portenv $(BIN)/portenvd $(BIN)/restic $(BIN)/Portenv.app/Contents/Helpers/
 	for f in portenv portenvd restic; do codesign --force --sign - $(BIN)/Portenv.app/Contents/Helpers/$$f; done
 	cp apps/mac/Info.plist $(BIN)/Portenv.app/Contents/Info.plist
+	# The app icon (R-0128); a dev lane's carries its letter, so it's never
+	# mistaken for the release app.
+	scripts/make-app-icon.sh apps/mac/Resources/Assets.xcassets/AppIcon.appiconset \
+		$(BIN)/Portenv.app/Contents/Resources/AppIcon.icns $(LANE) $(if $(LANE),$(SWIFT))
 	# portenvd's launch agent (the login item; SMAppService.agent registers it).
 	mkdir -p $(BIN)/Portenv.app/Contents/Library/LaunchAgents
 	cp apps/mac/LaunchAgents/com.portenv.portenvd.plist $(BIN)/Portenv.app/Contents/Library/LaunchAgents/

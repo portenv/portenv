@@ -20,14 +20,64 @@ public enum AppPlacement: Equatable, Sendable {
         return bundlePath.hasPrefix(folder) ? .applications : .elsewhere
     }
 
-    /// Asked before the login item is registered.
+    /// Offered as a sheet on the window, alongside the launch (R-0121).
     public var shouldOfferMove: Bool { self != .applications }
+}
+
+/// The launch's order (R-0121): the login item is registered and the wait
+/// for portenvd starts first. The move question is a sheet on the window,
+/// shown alongside and never waited for, so it can't hold up the launch or
+/// hide on another Space.
+public enum LaunchOrder {
+    @MainActor
+    public static func begin(offersMove: Bool, register: () async -> Void, offer: () -> Void, wait: () async -> Void) async {
+        await register()
+        if offersMove { offer() }
+        await wait()
+    }
+}
+
+/// "Move Portenv to Applications?" (PLAN.md 1.5, R-0121).
+public enum MoveOffer {
+    public enum Answer: Sendable { case move, notNow }
+
+    /// Outside Applications, unless Not Now was chosen for this same place.
+    public static func shouldOffer(placement: AppPlacement, declinedPath: String?, here: String) -> Bool {
+        placement.shouldOfferMove && declinedPath != here
+    }
+
+    /// Carries out the answer. Move: the login item registered from here
+    /// is removed first, so launchd never keeps running portenvd from the
+    /// old place; then the copy opens (and registers from Applications). A
+    /// failed copy registers the login item here again and returns why.
+    /// Not Now: remembered for this place.
+    @MainActor
+    public static func answer(_ answer: Answer,
+                              unregister: () async -> Void,
+                              register: () async -> Void,
+                              copyAndOpen: () async throws -> Void,
+                              decline: () -> Void) async -> String? {
+        switch answer {
+        case .notNow:
+            decline()
+            return nil
+        case .move:
+            await unregister()
+            do {
+                try await copyAndOpen()
+                return nil
+            } catch {
+                await register()
+                return (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            }
+        }
+    }
 }
 
 /// The move's and launchd's words (GUIDELINES §10).
 public enum MoveText {
     public static let question = "Move Portenv to Applications?"
-    public static let detail = "Portenv runs its background service, which keeps your boxes saved, from the Applications folder. It can copy itself there and open again."
+    public static let detail = "Portenv runs its background service, which keeps your workspaces saved, from the Applications folder. It can copy itself there and open again."
     public static let move = "Move to Applications"
     public static let notNow = "Not Now"
     public static let notPortenv = "There’s already an app called Portenv.app in Applications that isn’t Portenv. Rename or remove it, then try again."

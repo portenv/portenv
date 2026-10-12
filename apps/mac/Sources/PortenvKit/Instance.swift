@@ -25,6 +25,8 @@ public struct Instance: Equatable, Sendable {
     public var daemonLabel: String { suffixed("com.portenv.portenvd", ".") }
     public var daemonPlistName: String { daemonLabel + ".plist" }
     public var keychainService: String { suffixed("dev.portenv.repository", ".") }
+    /// The recovery pool's service (ADR 0019): only the app reads it.
+    public var recoveryPoolService: String { suffixed("dev.portenv.recovery-pool", ".") }
     public var folder: String { suffixed("Portenv", "-") }
     /// Set for what the app starts (the CLI, attach), so it uses the same
     /// Keychain service and folder.

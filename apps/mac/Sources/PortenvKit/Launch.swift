@@ -81,7 +81,7 @@ public enum LaunchWait {
         if Task.isCancelled { return .cancelled }
         if await ping() { return .answered }
         if let p = problem() {
-            if p.endsWait { return .refused(p) }
+            if p.endsWait { return Task.isCancelled ? .cancelled : .refused(p) }
             report(.problem(p))
             last = .problem(p)
         }
@@ -98,7 +98,7 @@ public enum LaunchWait {
             misses += 1
             let now: Report?
             if let p = problem() {
-                if p.endsWait { return .refused(p) }
+                if p.endsWait { return Task.isCancelled ? .cancelled : .refused(p) }
                 now = .problem(p)
             } else {
                 now = misses >= missesBeforeNotice ? .notAnswering : nil
@@ -130,7 +130,8 @@ public enum LaunchWait {
                            decide: ([String]) -> Void) async -> RunOutcome {
         switch await untilAnswered(ping: ping, problem: problem, report: report, sleep: sleep) {
         case .answered: break
-        case let .refused(p): return .refused(p)
+        // A replaced wait never sets the problem (R-0132).
+        case let .refused(p): return Task.isCancelled ? .cancelled : .refused(p)
         case .cancelled: return .cancelled
         }
         guard !Task.isCancelled else { return .cancelled }
@@ -162,5 +163,19 @@ public enum LaunchWait {
     /// earlier run; with one recorded, the (empty) list with the notice.
     public static func fallback(lastBox: String?, firstRunDone: Bool) -> Launch {
         lastBox != nil || firstRunDone ? .boxList(notice: FirstRunText.serviceNotAnswering) : .firstRun(.welcome)
+    }
+}
+
+/// The app's windows showing the launch (R-0132): the launch wait stops
+/// only when the last one closes, never when a second window does.
+public struct LaunchWindows: Sendable {
+    public private(set) var open = 0
+    public init() {}
+    public mutating func appeared() { open += 1 }
+    /// A window closed; true when it was the last.
+    public mutating func disappeared() -> Bool {
+        guard open > 0 else { return false }
+        open -= 1
+        return open == 0
     }
 }

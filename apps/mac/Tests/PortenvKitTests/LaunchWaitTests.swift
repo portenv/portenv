@@ -225,6 +225,37 @@ struct LaunchWaitTests {
         #expect(LaunchWait.applies(.open("acme-api"), fallback: nil, current: nil, firstRunStep: nil))
     }
 
+    /// A wait replaced while the status says launchd refused never sets
+    /// the problem: it ends as cancelled (R-0132).
+    @Test func aReplacedWaitNeverReportsARefusal() async {
+        let refused = BackgroundServiceProblem(message: ServiceText.notStarted, opensLoginItems: true, offersTryAgain: true)
+        let (go, release) = AsyncStream<Void>.makeStream()
+        let task = Task { @MainActor in
+            await LaunchWait.run(ping: { for await _ in go { break }; return false },
+                                 problem: { refused }, report: { _ in }, sleep: { _ in },
+                                 boxes: { [] }, decide: { _ in Issue.record("decided") })
+        }
+        await Task.yield()
+        task.cancel()
+        release.yield()
+        #expect(await task.value == .cancelled)
+    }
+
+    /// Only the last window closing stops the wait: closing a second
+    /// window (File › New Window) leaves the first one's launch going
+    /// (R-0132).
+    @Test func onlyTheLastWindowStopsTheWait() {
+        var windows = LaunchWindows()
+        windows.appeared()
+        windows.appeared()
+        let first = windows.disappeared()
+        #expect(!first) // one is left
+        let last = windows.disappeared()
+        #expect(last) // the last one
+        let again = windows.disappeared()
+        #expect(!again) // never below zero
+    }
+
     /// The spinner has words for VoiceOver.
     @Test func theSpinnerIsLabelled() {
         #expect(LaunchWait.starting == "Starting Portenv\u{2026}")

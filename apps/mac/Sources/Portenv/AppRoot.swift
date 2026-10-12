@@ -132,7 +132,18 @@ final class AppModel {
         startTask = Task { await start() }
     }
 
-    /// The window closed: the launch wait stops asking (R-0125).
+    /// The windows showing the launch: the wait stops only when the last
+    /// one closes (R-0125, R-0132).
+    private var windows = LaunchWindows()
+
+    func windowAppeared() { windows.appeared() }
+
+    func windowDisappeared() {
+        if windows.disappeared() { stopWaiting() }
+    }
+
+    /// The launch wait stops asking: the last window closed, or the app is
+    /// quitting.
     func stopWaiting() {
         startTask?.cancel()
         startTask = nil
@@ -346,7 +357,8 @@ struct AppRoot: View {
         }
         .frame(minWidth: 640, minHeight: 440)
         .background(WindowCloseGuard { window in model.windowShouldClose(window) })
-        .onDisappear { model.stopWaiting() }
+        .onAppear { model.windowAppeared() }
+        .onDisappear { model.windowDisappeared() }
         // On the window, so it travels with it and never hides on another
         // Space; the launch carries on behind it (R-0121).
         .sheet(isPresented: $model.moveOffered) {

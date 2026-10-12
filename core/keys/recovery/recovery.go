@@ -209,7 +209,13 @@ func IsSeparator(r rune) bool {
 
 // hidden reports whether r is in Unicode's category C (control, format,
 // surrogate, private use or unassigned): a character a message can't show.
-func hidden(r rune) bool { return unicode.Is(unicode.C, r) }
+// It is written as "no visible category" (letter, mark, number,
+// punctuation, symbol or separator) rather than unicode.C, so unassigned
+// code points (Cn) are hidden whatever a Go release's C table holds
+// (R-0106).
+func hidden(r rune) bool {
+	return !unicode.In(r, unicode.L, unicode.M, unicode.N, unicode.P, unicode.S, unicode.Z)
+}
 
 // Password derives the box's restic password: HKDF-SHA256 over the
 // canonical key, as 64 lowercase hex characters. The box ID is checked

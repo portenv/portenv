@@ -37,20 +37,22 @@ type vectors struct {
 		Bytes   string `json:"bytes_hex"`
 		Grouped string `json:"grouped"`
 	} `json:"generate"`
-	Parse []struct {
-		Input     string `json:"input"`
-		Canonical string `json:"canonical"`
-		Error     string `json:"error"`
-		Character string `json:"character"`
-		Length    int    `json:"length"`
-		Message   string `json:"message"`
-	} `json:"parse"`
+	Parse  []parseVector `json:"parse"`
 	Derive []struct {
 		Recovery string `json:"recovery"`
 		BoxID    string `json:"box_id"`
 		Derived  string `json:"derived"`
 	} `json:"derive"`
 	InvalidBoxIDs []string `json:"invalid_box_ids"`
+}
+
+type parseVector struct {
+	Input     string `json:"input"`
+	Canonical string `json:"canonical"`
+	Error     string `json:"error"`
+	Character string `json:"character"`
+	Length    int    `json:"length"`
+	Message   string `json:"message"`
 }
 
 func loadVectors(t *testing.T) vectors {
@@ -174,41 +176,48 @@ func TestGenerateFailsWithoutRandomBytes(t *testing.T) {
 func TestParseVectors(t *testing.T) {
 	v := loadVectors(t)
 	for _, p := range v.Parse {
-		k, err := Parse(p.Input)
-		if p.Error == "" {
-			if err != nil || k.Canonical() != p.Canonical {
-				t.Errorf("Parse(%q) = %q, %v; want %q", p.Input, k.Canonical(), err, p.Canonical)
-			}
-			continue
+		t.Run(strconv.QuoteToASCII(p.Input), func(t *testing.T) { checkParseVector(t, p) })
+	}
+}
+
+// checkParseVector is one vector, a subtest of its own so that -v lists
+// each input (non-ASCII as \u escapes).
+func checkParseVector(t *testing.T, p parseVector) {
+	t.Helper()
+	k, err := Parse(p.Input)
+	if p.Error == "" {
+		if err != nil || k.Canonical() != p.Canonical {
+			t.Errorf("Parse(%q) = %q, %v; want %q", p.Input, k.Canonical(), err, p.Canonical)
 		}
-		var pe *ParseError
-		if !errors.As(err, &pe) {
-			t.Errorf("Parse(%q): err %v, want a ParseError", p.Input, err)
-			continue
+		return
+	}
+	var pe *ParseError
+	if !errors.As(err, &pe) {
+		t.Errorf("Parse(%q): err %v, want a ParseError", p.Input, err)
+		return
+	}
+	if err.Error() != p.Message {
+		t.Errorf("Parse(%q): %q, want %q", p.Input, err.Error(), p.Message)
+	}
+	switch p.Error {
+	case "character":
+		if pe.Kind != UnknownCharacter || pe.Character != p.Character {
+			t.Errorf("Parse(%q): %+v", p.Input, pe)
 		}
-		if err.Error() != p.Message {
-			t.Errorf("Parse(%q): %q, want %q", p.Input, err.Error(), p.Message)
+	case "hidden":
+		if pe.Kind != HiddenCharacter || pe.Character != "" {
+			t.Errorf("Parse(%q): %+v", p.Input, pe)
 		}
-		switch p.Error {
-		case "character":
-			if pe.Kind != UnknownCharacter || pe.Character != p.Character {
-				t.Errorf("Parse(%q): %+v", p.Input, pe)
-			}
-		case "hidden":
-			if pe.Kind != HiddenCharacter || pe.Character != "" {
-				t.Errorf("Parse(%q): %+v", p.Input, pe)
-			}
-		case "length":
-			if pe.Kind != WrongLength || pe.Length != p.Length {
-				t.Errorf("Parse(%q): %+v", p.Input, pe)
-			}
-		case "typo":
-			if pe.Kind != Typo {
-				t.Errorf("Parse(%q): %+v", p.Input, pe)
-			}
-		default:
-			t.Fatalf("unknown error kind %q in vectors", p.Error)
+	case "length":
+		if pe.Kind != WrongLength || pe.Length != p.Length {
+			t.Errorf("Parse(%q): %+v", p.Input, pe)
 		}
+	case "typo":
+		if pe.Kind != Typo {
+			t.Errorf("Parse(%q): %+v", p.Input, pe)
+		}
+	default:
+		t.Fatalf("unknown error kind %q in vectors", p.Error)
 	}
 }
 
@@ -258,6 +267,34 @@ func TestEverySeparatorIsIgnored(t *testing.T) {
 					t.Errorf("Parse with %U: %v", r, err)
 				}
 			}
+		}
+	}
+}
+
+// hidden is exactly category C, unassigned code points (Cn) included,
+// checked over every code point against a definition built from the
+// subcategories, so it doesn't depend on whether a Go release's
+// unicode.C table lists Cn (R-0106).
+func TestHiddenIsCategoryCWithUnassigned(t *testing.T) {
+	visible := []*unicode.RangeTable{unicode.L, unicode.M, unicode.N, unicode.P, unicode.S, unicode.Z}
+	named := append(visible, unicode.Cc, unicode.Cf, unicode.Co, unicode.Cs)
+	var cn int
+	for r := rune(0); r <= unicode.MaxRune; r++ {
+		unassigned := !unicode.In(r, named...)
+		if unassigned {
+			cn++
+		}
+		want := unassigned || unicode.In(r, unicode.Cc, unicode.Cf, unicode.Co, unicode.Cs)
+		if hidden(r) != want {
+			t.Fatalf("hidden(%U) = %v, want %v (unassigned %v)", r, hidden(r), want, unassigned)
+		}
+	}
+	if cn < 800000 {
+		t.Fatalf("only %d unassigned code points: the sweep is wrong", cn)
+	}
+	for _, r := range []rune{0x0378, 0x0380, 0xFDD0, 0xE0080, 0x10FFFF} {
+		if !hidden(r) {
+			t.Errorf("unassigned %U isn't hidden", r)
 		}
 	}
 }

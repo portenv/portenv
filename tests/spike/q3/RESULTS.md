@@ -24,7 +24,7 @@ There are three paths:
 - **A-main:** 69 / 67.
 - **C:** 93 / 0.
 
-**Scroll positions:** at every position checked, C's placed prompt marks were all on prompt rows. A-main's weren't: 168 misplaced placements across the six scenarios.
+**Scroll positions:** at every position checked, C's placed prompt marks were all on prompt rows. A-main's weren't: 159 misplaced placements across the six scenarios.
 
 **Why A fails:**
 - An attached client draws on the alternate screen, which has no scrollback, so the tracker keeps no mark.

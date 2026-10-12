@@ -64,15 +64,18 @@ struct DockerCardTests {
         #expect(await slept.all == [.seconds(2), .seconds(2), .seconds(2)])
     }
 
-    /// portenvd not answering keeps the last outcome (no flicker) and says
-    /// the background service isn't running (R-0110), and leaving Welcome
-    /// stops the checks.
+    /// portenvd not answering keeps the last outcome (no flicker); two
+    /// misses in a row say the background service isn't answering (R-0110,
+    /// R-0116); leaving Welcome stops the checks.
     @Test func noAnswerKeepsTheCardAndLeavingStops() async {
         let flow = FirstRunFlow(service: FakeFirstRunService(), docker: nil)
-        let answers = Answers<DockerStatus?>([.notRunning, nil])
+        let answers = Answers<DockerStatus?>([.notRunning, nil, nil])
         await flow.followDocker(check: { await answers.next() }, sleep: { _ in
-            if await answers.taken == 1 { #expect(!flow.daemonGone) }
             if await answers.taken == 2 {
+                #expect(flow.docker == .notRunning)
+                #expect(!flow.daemonGone) // one miss: no notice
+            }
+            if await answers.taken == 3 {
                 #expect(flow.docker == .notRunning)
                 #expect(flow.daemonGone)
                 flow.docker = .running
@@ -80,14 +83,17 @@ struct DockerCardTests {
             }
         })
         #expect(flow.step == .protection)
-        #expect(await answers.taken == 2)
+        #expect(await answers.taken == 3)
     }
 
     /// No answer from portenvd before any outcome is never a silent dead
-    /// end: Welcome says the background service isn't running, and Try
-    /// Again's check clears it once portenvd answers (R-0110).
-    @Test func noAnswerSaysTheServiceIsntRunning() async {
+    /// end: after two misses in a row Welcome says the background service
+    /// isn't answering, and Try Again's check clears it once portenvd
+    /// answers (R-0110, R-0116).
+    @Test func twoMissesSayTheServiceIsntAnswering() async {
         let flow = FirstRunFlow(service: FakeFirstRunService(), docker: nil)
+        await flow.checkDocker { nil }
+        #expect(!flow.daemonGone)
         await flow.checkDocker { nil }
         #expect(flow.daemonGone)
         #expect(flow.docker == nil)
@@ -95,6 +101,61 @@ struct DockerCardTests {
         await flow.checkDocker { .running }
         #expect(!flow.daemonGone)
         #expect(flow.canContinue)
+    }
+
+    /// Misses count only in a row: an answer between two misses resets
+    /// the count (R-0116).
+    @Test func missesCountOnlyInARow() async {
+        let flow = FirstRunFlow(service: FakeFirstRunService(), docker: nil)
+        await flow.checkDocker { nil }
+        await flow.checkDocker { .notRunning }
+        await flow.checkDocker { nil }
+        #expect(!flow.daemonGone)
+        await flow.checkDocker { nil }
+        #expect(flow.daemonGone)
+    }
+
+    /// Try Again during a check in flight does nothing, so a late answer
+    /// can't overtake a newer one or bring the notice back (R-0116).
+    @Test func tryAgainWaitsForTheCheckInFlight() async {
+        let flow = FirstRunFlow(service: FakeFirstRunService(), docker: nil)
+        await flow.checkDocker { nil }
+        let (release, released) = AsyncStream<Void>.makeStream()
+        let first = Task { @MainActor in
+            await flow.checkDocker {
+                for await _ in release { break }
+                return .notRunning
+            }
+        }
+        while !flow.checkingDocker { await Task.yield() }
+        var asked = false
+        await flow.checkDocker { asked = true; return nil } // Try Again
+        #expect(!asked)
+        #expect(!flow.daemonGone) // the ignored miss isn't counted
+        released.yield()
+        await first.value
+        #expect(flow.docker == .notRunning)
+        #expect(!flow.daemonGone)
+        #expect(!flow.checkingDocker)
+    }
+
+    /// Continue, disabled, tells VoiceOver why: the card's title or the
+    /// service notice (R-0116). The notice going with a card still there
+    /// announces the card again.
+    @Test func continueSaysWhyItIsDisabled() async {
+        let flow = FirstRunFlow(service: FakeFirstRunService(), docker: nil)
+        #expect(flow.continueHint == nil) // before the first answer
+        await flow.checkDocker { .notRunning }
+        #expect(flow.continueHint == "Docker Desktop isn\u{2019}t running")
+        await flow.checkDocker { nil }
+        await flow.checkDocker { nil }
+        #expect(flow.continueHint == "Portenv\u{2019}s background service isn\u{2019}t answering. It usually starts by itself in a few seconds.")
+        #expect(flow.serviceNoticeAnnouncement == flow.continueHint)
+        await flow.checkDocker { .notRunning }
+        #expect(flow.serviceNoticeAnnouncement == "Docker Desktop isn\u{2019}t running")
+        await flow.checkDocker { .running }
+        #expect(flow.continueHint == nil)
+        #expect(!FirstRunText.serviceNotAnswering.lowercased().contains("box"))
     }
 
     /// VoiceOver hears a card appear or change, and "Docker Desktop is

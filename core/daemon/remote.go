@@ -257,6 +257,9 @@ func (s *Server) boxState(ctx context.Context, name string, withPackages bool) (
 		actx, cancel := context.WithTimeout(ctx, time.Second)
 		rd, err := a.GetReadiness(actx, &agentv1.GetReadinessRequest{})
 		cancel()
+		// A channel stuck in CONNECTING (dropped packets rather than a
+		// refused connection) ends at this deadline, which counts as slow,
+		// not down: only Unavailable marks the agent unavailable.
 		ob.noteReadiness(err)
 		if err == nil {
 			r.FailedPackages, r.PackagesError = rd.GetFailedPackages(), rd.GetPackagesError()

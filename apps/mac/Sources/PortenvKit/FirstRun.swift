@@ -91,10 +91,16 @@ public final class FirstRunFlow {
     /// Docker Desktop on this Mac (R-0098): Welcome's Continue waits until
     /// it answers; nil until the first check does.
     public var docker: DockerStatus?
-    /// portenvd didn't answer Welcome's last Docker check: Welcome says the
-    /// background service isn't running, with Try Again, so Continue is
-    /// never disabled without a reason (R-0110).
+    /// portenvd missed Welcome's last two Docker checks in a row (about
+    /// 4 s): Welcome says the background service isn't answering, with Try
+    /// Again, so Continue is never disabled without a reason (R-0110,
+    /// R-0116). One slow answer isn't enough.
     public private(set) var daemonGone = false
+    /// Docker checks portenvd missed in a row.
+    private var dockerMisses = 0
+    /// A Docker check is in flight: Try Again doesn't start another, so a
+    /// late answer can't overtake a newer one (R-0116).
+    public private(set) var checkingDocker = false
     public private(set) var error: String?
     /// A plain notice (secondary text), like a step not built yet.
     public private(set) var notice: String?
@@ -226,13 +232,34 @@ public final class FirstRunFlow {
     }
 
     /// One Docker check: Try Again asks at once, between followDocker's.
+    /// While one is in flight, another does nothing.
     public func checkDocker(_ check: @MainActor () async -> DockerStatus?) async {
+        guard !checkingDocker else { return }
+        checkingDocker = true
+        defer { checkingDocker = false }
         if let status = await check() {
             docker = status
+            dockerMisses = 0
             daemonGone = false
         } else {
-            daemonGone = true
+            dockerMisses += 1
+            if dockerMisses >= 2 { daemonGone = true }
         }
+    }
+
+    /// Why Continue is disabled on Welcome, for VoiceOver (R-0116): the
+    /// service notice, or the Docker card's title; nil while it's enabled
+    /// or before the first answer.
+    public var continueHint: String? {
+        guard step == .welcome, !canContinue else { return nil }
+        return daemonGone ? FirstRunText.serviceNotAnswering : docker?.card?.title
+    }
+
+    /// What VoiceOver hears when the service notice comes or goes: the
+    /// notice, or, when it goes and a Docker card is still there, the
+    /// card's title (R-0116).
+    public var serviceNoticeAnnouncement: String? {
+        daemonGone ? FirstRunText.serviceNotAnswering : docker?.card?.title
     }
 
     private func trimmed(_ s: String) -> String { s.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -244,6 +271,9 @@ public enum FirstRunText {
     public static let welcomeLine = "Your portable workspace. Work on your Mac, continue on a server, and let your agents in, safely."
     /// The reduced Welcome (#16): no sign-in before Phase 3.
     public static let welcomeButton = "Continue without an account"
+    /// Welcome when portenvd misses two Docker checks (R-0116): nothing
+    /// exists to save yet, so not BoxController.daemonGone.
+    public static let serviceNotAnswering = "Portenv\u{2019}s background service isn\u{2019}t answering. It usually starts by itself in a few seconds."
 
     public static let protectionTitle = "Only you can open your boxes"
     public static let protectionLine = "Your keys stay on your devices, and Portenv never holds them. If you lose every device and your recovery key, your saves can’t be opened by anyone, including Portenv."

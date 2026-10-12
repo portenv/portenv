@@ -47,6 +47,7 @@ enum ScreenRenders {
             // Welcome when portenvd doesn't answer the check (R-0110).
             let gone = FirstRunFlow(service: Sample(), docker: nil)
             await gone.checkDocker { nil }
+            await gone.checkDocker { nil } // two misses in a row
             try snapshot(FirstRunView(flow: gone, opened: { _ in }, followsDocker: false),
                          name: "first-run-1-welcome-service-down", in: dir)
             // New Box… from the box list (the new-box boards).

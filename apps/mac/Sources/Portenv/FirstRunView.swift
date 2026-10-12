@@ -89,13 +89,14 @@ struct FirstRunView: View {
             // every 2 s.
             if flow.daemonGone {
                 VStack(spacing: 10) {
-                    Text(BoxController.daemonGone)
+                    Text(FirstRunText.serviceNotAnswering)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
                     Button(InspectorText.tryAgain) {
                         Task { await flow.checkDocker { await DockerDesktop.status() } }
                     }
+                    .disabled(flow.checkingDocker)
                 }
                 .frame(maxWidth: 440)
             } else if let card = flow.docker?.card {
@@ -109,6 +110,8 @@ struct FirstRunView: View {
                 .controlSize(.large)
                 .keyboardShortcut(.defaultAction)
                 .disabled(!flow.canContinue)
+                // Disabled, it says why (R-0116).
+                .accessibilityHint(flow.continueHint ?? "")
             // Counting needs the update check, which tester builds don't
             // have yet: hidden until counting exists (R-0098, R-0106).
             #if PORTENV_COUNTING
@@ -128,8 +131,11 @@ struct FirstRunView: View {
                 AccessibilityNotification.Announcement(words).post()
             }
         }
-        .onChange(of: flow.daemonGone) { _, gone in
-            if gone { AccessibilityNotification.Announcement(BoxController.daemonGone).post() }
+        // The notice coming, or going with a card still there (R-0116).
+        .onChange(of: flow.daemonGone) { _, _ in
+            if let words = flow.serviceNoticeAnnouncement {
+                AccessibilityNotification.Announcement(words).post()
+            }
         }
     }
 

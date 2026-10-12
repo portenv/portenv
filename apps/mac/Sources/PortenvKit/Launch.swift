@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
+import Foundation
+
 /// What the app shows when it starts (PLAN.md 1.5). Never a window for a box
 /// that doesn't exist: with no box, first run; with a box that isn't here,
 /// the box list, saying so.
@@ -74,12 +76,25 @@ public enum LaunchWait {
                                      sleep: (Duration) async -> Void) async -> Outcome {
         var misses = 0
         var last: Report?
+        // The first ask, then the login item's status at once (R-0125):
+        // approval is said and a refusal ends the wait without waiting 2 s.
+        if Task.isCancelled { return .cancelled }
+        if await ping() { return .answered }
+        if let p = problem() {
+            if p.endsWait { return .refused(p) }
+            report(.problem(p))
+            last = .problem(p)
+        }
+        await sleep(pollEvery)
+        var first = true
         while true {
-            for _ in 0 ..< pingsPerCheck {
+            // The first check already made its first ask.
+            for _ in 0 ..< (first ? pingsPerCheck - 1 : pingsPerCheck) {
                 if Task.isCancelled { return .cancelled }
                 if await ping() { return .answered }
                 await sleep(pollEvery)
             }
+            first = false
             misses += 1
             let now: Report?
             if let p = problem() {
@@ -93,6 +108,54 @@ public enum LaunchWait {
                 last = now
             }
         }
+    }
+
+    public enum RunOutcome: Equatable, Sendable {
+        case decided
+        case refused(BackgroundServiceProblem)
+        case failed(String)
+        case cancelled
+    }
+
+    /// The whole launch wait: untilAnswered, then the list of workspaces,
+    /// then decide. A cancelled wait (Try Again started another, or the
+    /// window closed) never decides, even if its answer was in flight
+    /// (R-0125).
+    @MainActor
+    public static func run(ping: () async -> Bool,
+                           problem: () -> BackgroundServiceProblem?,
+                           report: (Report) -> Void,
+                           sleep: (Duration) async -> Void,
+                           boxes: () async throws -> [String],
+                           decide: ([String]) -> Void) async -> RunOutcome {
+        switch await untilAnswered(ping: ping, problem: problem, report: report, sleep: sleep) {
+        case .answered: break
+        case let .refused(p): return .refused(p)
+        case .cancelled: return .cancelled
+        }
+        guard !Task.isCancelled else { return .cancelled }
+        let listed: [String]
+        do {
+            listed = try await boxes()
+        } catch {
+            guard !Task.isCancelled else { return .cancelled }
+            return .failed((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
+        }
+        guard !Task.isCancelled else { return .cancelled }
+        decide(listed)
+        return .decided
+    }
+
+    /// Whether portenvd's answer replaces what shows (R-0125). Only while
+    /// the fallback still shows and the person hasn't moved on from it
+    /// (Welcome past its first step, New Workspace…, the list without the
+    /// notice); otherwise the answer only refreshes the list of workspaces.
+    /// Welcome deciding Welcome keeps the one showing.
+    public static func applies(_ decision: Launch, fallback: Launch?, current: Launch?, firstRunStep: FirstRunStep?) -> Bool {
+        guard let fallback else { return true }
+        guard current == fallback else { return false }
+        if case .firstRun = fallback, firstRunStep != .welcome { return false }
+        return decision != current
     }
 
     /// What shows while portenvd isn't answering: Welcome on a Mac with no

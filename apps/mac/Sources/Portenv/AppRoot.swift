@@ -67,7 +67,7 @@ final class AppModel {
     /// says the service isn't answering, with Try Again, and the checks go
     /// on.
     private func waitAndDecide() async {
-        let outcome = await LaunchWait.untilAnswered(
+        let outcome = await LaunchWait.run(
             ping: { [daemon] in
                 if await daemon.ping() { return true }
                 _ = await LoginItem.ensureRegistered()
@@ -85,50 +85,57 @@ final class AppModel {
                 )
             },
             report: { [weak self] report in self?.waiting(report) },
-            sleep: { try? await Task.sleep(for: $0) }
+            sleep: { try? await Task.sleep(for: $0) },
+            boxes: { [daemon] in try await daemon.boxes() },
+            decide: { [weak self] listed in self?.answered(listed) }
         )
         switch outcome {
-        case .answered: break
+        case .decided, .cancelled:
+            break
         case let .refused(p):
             problem = p
-            return
-        case .cancelled:
-            return
+        case let .failed(message):
+            problem = BackgroundServiceProblem(message: message, opensLoginItems: false, offersTryAgain: true)
         }
+    }
+
+    /// portenvd answered: decide, unless the person has moved on from the
+    /// fallback screen, when the answer only refreshes the list (R-0125).
+    private func answered(_ listed: [String]) {
         serviceNotAnswering = false
         problem = nil
-        do {
-            boxes = try await daemon.boxes()
-        } catch {
-            problem = BackgroundServiceProblem(
-                message: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription,
-                opensLoginItems: false,
-                offersTryAgain: true
-            )
-            return
-        }
-        let requested = ProcessInfo.processInfo.environment["PORTENV_BOX"]
+        boxes = listed
         let decision = LaunchDecision.decide(
-            requested: requested,
-            boxes: boxes,
+            requested: ProcessInfo.processInfo.environment["PORTENV_BOX"],
+            boxes: listed,
             lastBox: defaults.string(forKey: Self.lastBoxKey),
             firstRunDone: defaults.bool(forKey: Self.firstRunDoneKey)
         )
-        // Already on Welcome while waiting: keep it (its own checks clear
-        // the notice once portenvd answers).
-        if decision == launch, case .firstRun = decision, firstRun != nil { return }
-        apply(decision)
+        let applies = LaunchWait.applies(decision, fallback: fallbackShown, current: launch,
+                                         firstRunStep: firstRun?.step)
+        fallbackShown = nil
+        if applies { apply(decision) }
     }
+
+    /// The screen shown while portenvd wasn't answering, if any.
+    private var fallbackShown: Launch?
 
     /// portenvd hasn't answered two checks in a row: true until it does.
     private(set) var serviceNotAnswering = false
     /// The running launch wait, so Try Again starts a fresh one.
     private var startTask: Task<Void, Never>?
 
-    /// Starts (or, for Try Again, restarts) the launch.
+    /// Starts (or, for Try Again, restarts) the launch: one wait at a
+    /// time, ending at an answer.
     func begin() {
         startTask?.cancel()
         startTask = Task { await start() }
+    }
+
+    /// The window closed: the launch wait stops asking (R-0125).
+    func stopWaiting() {
+        startTask?.cancel()
+        startTask = nil
     }
 
     /// What the launch wait says, on the window (R-0121).
@@ -143,6 +150,7 @@ final class AppModel {
             let fallback = LaunchWait.fallback(lastBox: defaults.string(forKey: Self.lastBoxKey),
                                                firstRunDone: defaults.bool(forKey: Self.firstRunDoneKey))
             launch = fallback
+            fallbackShown = fallback
             if case .firstRun = fallback {
                 firstRun = FirstRunFlow(service: AppFirstRunService(), at: .welcome, existing: [],
                                         docker: nil, serviceGone: true)
@@ -338,6 +346,7 @@ struct AppRoot: View {
         }
         .frame(minWidth: 640, minHeight: 440)
         .background(WindowCloseGuard { window in model.windowShouldClose(window) })
+        .onDisappear { model.stopWaiting() }
         // On the window, so it travels with it and never hides on another
         // Space; the launch carries on behind it (R-0121).
         .sheet(isPresented: $model.moveOffered) {

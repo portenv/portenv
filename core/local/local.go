@@ -17,6 +17,7 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/portenv/portenv/core/driver"
@@ -44,6 +45,10 @@ type Env struct {
 	// Provided holds keys the app read from the Keychain and handed to
 	// portenvd (in memory only); they are used before the store's own.
 	Provided *keys.Memory
+
+	// createMu runs CreateBox, RecoverBox and DiscardCreation one at a
+	// time, so two calls can't both pass the checks for one name or box ID.
+	createMu sync.Mutex
 }
 
 func NewEnv() (*Env, error) {

@@ -14,7 +14,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/portenv/portenv/core/keys"
 	"github.com/portenv/portenv/core/keys/recovery"
@@ -476,9 +478,19 @@ func TestCreateBoxChecksTheRequestFirst(t *testing.T) {
 	t.Parallel()
 	good := createRequest(t, "acme-api", "box-0123456789ab", "")
 	k, _ := recovery.Parse(vectorText)
+	drives := t.TempDir()
+	notAFolder := filepath.Join(drives, "a-file")
+	if err := os.WriteFile(notAFolder, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	readOnly := filepath.Join(drives, "read-only")
+	if err := os.Mkdir(readOnly, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(readOnly, 0o700) }) // #nosec G302 -- so the test's folder can be removed
 	cases := []struct {
 		name string
-		edit func(r *CreateRequest)
+		edit func(*CreateRequest)
 		want CreateErrorKind
 	}{
 		{"name", func(r *CreateRequest) { r.Name = "../etc" }, ErrInvalid},
@@ -507,6 +519,14 @@ func TestCreateBoxChecksTheRequestFirst(t *testing.T) {
 		}, ErrUnsupported},
 		{"S3 storage", func(r *CreateRequest) { r.Storage = "s3:https://s3.example.com/bucket" }, ErrUnsupported},
 		{"a drive that isn't there", func(r *CreateRequest) { r.Storage = "/Volumes/portenv-test-not-mounted" }, ErrUnreachable},
+		{"a file, not a folder", func(r *CreateRequest) { r.Storage = notAFolder }, ErrUnreachable},
+	}
+	if os.Geteuid() != 0 { // root writes anywhere
+		cases = append(cases, struct {
+			name string
+			edit func(*CreateRequest)
+			want CreateErrorKind
+		}{"a folder Portenv can't write to", func(r *CreateRequest) { r.Storage = readOnly }, ErrUnreachable})
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -671,4 +691,216 @@ func TestRestoreWithOnlyTheRecoveryKey(t *testing.T) {
 		t.Fatalf("restored %d files, saved %d", len(got), len(want))
 	}
 	assertNoSecrets(t, clean.Dir, nil, newKey, []byte(pw), []byte(vectorText), []byte(key.Canonical()))
+}
+
+// TestConcurrentCreatesOfOneName: two CreateBox calls at once (a
+// double-click, or a retry while the first still runs) with one name and
+// two box IDs make exactly one box. The other is refused as taken, its
+// pending record and keys are never written, and neither repository has a
+// snapshot. Without one lock over the whole call, both pass D1 and the
+// second config overwrites the first.
+func TestConcurrentCreatesOfOneName(t *testing.T) {
+	t.Parallel()
+	e := newCreateEnv(t)
+	ctx := context.Background()
+	reqs := []CreateRequest{
+		createRequest(t, "acme-api", "box-0123456789ab", ""),
+		createRequest(t, "acme-api", "box-0123456789ac", ""),
+	}
+	// Each call waits at D2 (up to a second) for the other to get there
+	// too: without the lock both do, and both reserve the name.
+	var atD2 sync.WaitGroup
+	atD2.Add(len(reqs))
+	errs := make([]error, len(reqs))
+	var wg sync.WaitGroup
+	for i, req := range reqs {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, errs[i] = e.CreateBox(ctx, req, CreateOptions{Fault: func(s string) error {
+				if s == "D2" {
+					atD2.Done()
+					waitOrTimeout(&atD2, time.Second)
+				}
+				return nil
+			}})
+		}()
+	}
+	wg.Wait()
+
+	made, refused := -1, -1
+	for i, err := range errs {
+		switch {
+		case err == nil:
+			made = i
+		case kindOf(err) == ErrNameTaken:
+			refused = i
+		default:
+			t.Fatalf("call %d: %v", i, err)
+		}
+	}
+	if made < 0 || refused < 0 {
+		t.Fatalf("results %v, want one box made and one call refused as taken", errs)
+	}
+	c, err := e.LoadBox("acme-api")
+	if err != nil || c.ID != reqs[made].BoxID {
+		t.Fatalf("config %+v, %v, want box %s", c, err, reqs[made].BoxID)
+	}
+	assertOneWorkingBox(t, e, reqs[made])
+	loser := reqs[refused]
+	if _, ok, err := e.creation(loser.BoxID); err != nil || ok {
+		t.Fatalf("the refused call left a pending record: %v, %v", ok, err)
+	}
+	if _, err := e.Provided.Get(loser.BoxID); err == nil {
+		t.Fatal("the refused call's key is held")
+	}
+	for _, req := range reqs {
+		repo := repoOf(e, req)
+		if _, err := os.Stat(filepath.Join(repo, "config")); err != nil {
+			continue
+		}
+		snaps, err := hostEngine(t, repo, req.BoxID, req.Keys[req.BoxID]).History(ctx)
+		if err != nil || len(snaps) != 0 {
+			t.Fatalf("%s: %d snapshots, %v", req.BoxID, len(snaps), err)
+		}
+	}
+}
+
+// waitOrTimeout waits for wg, or gives up after d.
+func waitOrTimeout(wg *sync.WaitGroup, d time.Duration) {
+	done := make(chan struct{})
+	go func() { wg.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(d):
+	}
+}
+
+// TestCreateBoxRefusesANameTakenBeforeD6: if a config with the name appears
+// with another box ID while CreateBox runs (another tool wrote it), D6
+// refuses as taken and writes nothing over it.
+func TestCreateBoxRefusesANameTakenBeforeD6(t *testing.T) {
+	t.Parallel()
+	e := newCreateEnv(t)
+	req := createRequest(t, "acme-api", "box-0123456789ab", "")
+	other := BoxConfig{ID: "box-0123456789ac", Name: "acme-api", Image: "img"}
+	_, err := e.CreateBox(context.Background(), req, CreateOptions{Fault: func(s string) error {
+		if s == "D6" {
+			return e.writeConfig(other)
+		}
+		return nil
+	}})
+	if kindOf(err) != ErrNameTaken {
+		t.Fatalf("CreateBox: %v, want the name taken", err)
+	}
+	if c, err := e.LoadBox("acme-api"); err != nil || c != other {
+		t.Fatalf("config %+v, %v: the other box's config was overwritten", c, err)
+	}
+	assertNoSecrets(t, e.Dir, []error{err}, req.Keys[req.BoxID], req.RecoveryPassword)
+}
+
+// TestWriteAtomicTempNamesDontCollide: writers of one path never share a
+// temporary file, and none is left behind.
+func TestWriteAtomicTempNamesDontCollide(t *testing.T) {
+	t.Parallel()
+	p := filepath.Join(t.TempDir(), "boxes", "acme-api.json")
+	var wg sync.WaitGroup
+	errs := make([]error, 8)
+	for i := range errs {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			errs[i] = writeAtomic(p, bytes.Repeat([]byte{byte('a' + i)}, 1<<16))
+		}()
+	}
+	wg.Wait()
+	for _, err := range errs {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	b, err := os.ReadFile(p) // #nosec G304 -- the test's own file
+	if err != nil || len(b) != 1<<16 || bytes.Count(b, b[:1]) != len(b) {
+		t.Fatalf("the file is a mix of writes (%d bytes, %v)", len(b), err)
+	}
+	ents, _ := os.ReadDir(filepath.Dir(p))
+	if len(ents) != 1 {
+		t.Fatalf("left in the folder: %v", ents)
+	}
+}
+
+// TestRecoverBoxRefusesANameBeingCreated: a recovery and an unfinished
+// creation can't share a name.
+func TestRecoverBoxRefusesANameBeingCreated(t *testing.T) {
+	t.Parallel()
+	e := newCreateEnv(t)
+	ctx := context.Background()
+	req := createRequest(t, "acme-api", "box-0123456789ab", "")
+	stop := errors.New("stop")
+	if _, err := e.CreateBox(ctx, req, CreateOptions{Fault: func(s string) error {
+		if s == "D3" {
+			return stop
+		}
+		return nil
+	}}); !errors.Is(err, stop) {
+		t.Fatal(err)
+	}
+	rec := createRequest(t, "acme-api", "box-0123456789ac", "")
+	if _, err := e.RecoverBox(ctx, rec); kindOf(err) != ErrNameTaken {
+		t.Fatalf("RecoverBox onto a name being created: %v, want the name taken", err)
+	}
+	same := createRequest(t, "acme-web", req.BoxID, "")
+	if _, err := e.RecoverBox(ctx, same); kindOf(err) != ErrMismatch {
+		t.Fatalf("RecoverBox of a box ID being created: %v, want a mismatch", err)
+	}
+	if _, err := e.LoadBox("acme-api"); err == nil {
+		t.Fatal("a config was written")
+	}
+}
+
+// TestDiscardCreationForgetsItsKeys: a discarded box's keys don't stay in
+// portenvd's memory.
+func TestDiscardCreationForgetsItsKeys(t *testing.T) {
+	t.Parallel()
+	e := newCreateEnv(t)
+	ctx := context.Background()
+	req := createRequest(t, "acme-api", "box-0123456789ab", "")
+	stop := errors.New("stop")
+	if _, err := e.CreateBox(ctx, req, CreateOptions{Fault: func(s string) error {
+		if s == "D3" {
+			return stop
+		}
+		return nil
+	}}); !errors.Is(err, stop) {
+		t.Fatal(err)
+	}
+	if _, err := e.Provided.Get(req.BoxID); err != nil {
+		t.Fatal("the key isn't held after the failed call")
+	}
+	if err := e.DiscardCreation(req.BoxID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.Provided.Get(req.BoxID); err == nil {
+		t.Fatal("the discarded box's key is still held")
+	}
+	// A finished box keeps its keys: the discard has nothing to forget.
+	done := createRequest(t, "acme-web", "box-0123456789ac", "")
+	if _, err := e.CreateBox(ctx, done, CreateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.DiscardCreation(done.BoxID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.Provided.Get(done.BoxID); err != nil {
+		t.Fatal("discarding a finished box forgot its key")
+	}
+}
+
+// TestBoxIDPatternIsTheRecoveryKeys: portenvd's box ID pattern is the one
+// the recovery key's derivation accepts (portenvd doesn't link that
+// package; this test may).
+func TestBoxIDPatternIsTheRecoveryKeys(t *testing.T) {
+	if boxIDRE.String() != recovery.BoxIDPattern.String() {
+		t.Fatalf("local %q, recovery %q", boxIDRE.String(), recovery.BoxIDPattern.String())
+	}
 }

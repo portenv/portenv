@@ -110,3 +110,21 @@ func TestHandedOverKeysComeFirst(t *testing.T) {
 		t.Fatalf("a new key goes to the store: %q, %v", k, err)
 	}
 }
+
+func TestMemoryForgets(t *testing.T) {
+	mem := NewMemory()
+	for _, id := range []string{"box-1", "box-1-storage", "box-2"} {
+		if err := mem.Put(id, []byte("k")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mem.Forget("box-1", "box-1-storage", "box-1-rest")
+	for _, id := range []string{"box-1", "box-1-storage"} {
+		if _, err := mem.Get(id); !errors.Is(err, ErrNotFound) {
+			t.Fatalf("%s still held: %v", id, err)
+		}
+	}
+	if _, err := mem.Get("box-2"); err != nil {
+		t.Fatal("another box's key was forgotten")
+	}
+}

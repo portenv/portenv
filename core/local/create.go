@@ -160,12 +160,25 @@ func (e *Env) creation(boxID string) (Creation, bool, error) {
 	return c, true, nil
 }
 
-// DiscardCreation forgets an unfinished creation. A repository it left
-// (with no snapshot: nothing could save into it) is never deleted.
+// DiscardCreation forgets an unfinished creation, and the keys held for
+// it. A repository it left (with no snapshot: nothing could save into it)
+// is never deleted. A finished box keeps its keys.
 func (e *Env) DiscardCreation(boxID string) error {
 	if !boxIDRE.MatchString(boxID) {
 		return createErr(ErrInvalid, "A box ID is box- and 12 lowercase hex digits.")
 	}
+	e.createMu.Lock()
+	defer e.createMu.Unlock()
+	if err := e.removePending(boxID); err != nil {
+		return err
+	}
+	if _, made := e.boxWithID(boxID); !made && e.Provided != nil {
+		e.Provided.Forget(boxID, StorageKeyID(boxID), RESTKeyID(boxID))
+	}
+	return nil
+}
+
+func (e *Env) removePending(boxID string) error {
 	if err := os.Remove(e.pendingPath(boxID)); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
@@ -180,23 +193,18 @@ func writeAtomic(path string, data []byte) error {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
-	tmp := path + ".tmp"
-	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600) // #nosec G304 -- a path in the Portenv directory
+	// A temporary file of its own (mode 0600), so writers never share one.
+	f, err := os.CreateTemp(dir, filepath.Base(path)+".*.tmp")
 	if err != nil {
 		return err
 	}
-	if _, err := f.Write(data); err != nil {
-		_ = f.Close()
-		return err
-	}
-	if err := f.Sync(); err != nil {
-		_ = f.Close()
-		return err
-	}
-	if err := f.Close(); err != nil {
+	tmp := f.Name()
+	if err := writeSynced(f, data); err != nil {
+		_ = os.Remove(tmp)
 		return err
 	}
 	if err := os.Rename(tmp, path); err != nil {
+		_ = os.Remove(tmp)
 		return err
 	}
 	d, err := os.Open(dir) // #nosec G304 -- a directory in the Portenv directory
@@ -205,6 +213,27 @@ func writeAtomic(path string, data []byte) error {
 	}
 	defer func() { _ = d.Close() }()
 	return d.Sync()
+}
+
+func writeSynced(f *os.File, data []byte) error {
+	if _, err := f.Write(data); err != nil {
+		_ = f.Close()
+		return err
+	}
+	if err := f.Sync(); err != nil {
+		_ = f.Close()
+		return err
+	}
+	return f.Close()
+}
+
+// writeNewConfig writes a new box's config, unless another box has taken
+// the name meanwhile: then nothing is written.
+func (e *Env) writeNewConfig(c BoxConfig) error {
+	if existing, err := e.LoadBox(c.Name); err == nil && existing.ID != c.ID {
+		return createErr(ErrNameTaken, "A box named %s already exists.", c.Name)
+	}
+	return e.writeConfig(c)
 }
 
 func (e *Env) writeConfig(c BoxConfig) error {
@@ -232,6 +261,25 @@ func (e *Env) boxWithID(boxID string) (BoxConfig, bool) {
 		}
 	}
 	return BoxConfig{}, false
+}
+
+// checkPending refuses a box whose name another box being created holds,
+// or whose box ID is being created with other settings (or at all, for a
+// recovery).
+func (e *Env) checkPending(c BoxConfig, recovering bool) error {
+	pending, err := e.Creations()
+	if err != nil {
+		return err
+	}
+	for _, p := range pending {
+		switch {
+		case p.BoxID == c.ID && (recovering || !sameBox(p.config(), c)):
+			return createErr(ErrMismatch, "Box ID %s is already being created as %s with other settings.", c.ID, p.Name)
+		case p.BoxID != c.ID && p.Name == c.Name:
+			return createErr(ErrNameTaken, "A box named %s already exists.", c.Name)
+		}
+	}
+	return nil
 }
 
 // checkRequest is D1's check of everything the request says, before
@@ -276,14 +324,25 @@ func checkRequest(req CreateRequest) (BoxConfig, error) {
 }
 
 // reachStorage is D1's check that the storage is there: this Mac's own
-// folder is made; another folder (a drive) must exist.
+// folder is made; another folder (a drive) must be a folder Portenv can
+// write to.
 func (e *Env) reachStorage(c BoxConfig) error {
 	if c.Storage == "" {
 		return os.MkdirAll(filepath.Join(e.Dir, "Repositories"), 0o700)
 	}
-	if !fileExists(c.Storage) { // #nosec G703 -- an absolute folder the user chose
+	fi, err := os.Stat(c.Storage) // #nosec G703 -- an absolute folder the user chose
+	if err != nil {
 		return createErr(ErrUnreachable, "%s can't be reached. Connect the drive and try again.", c.Storage)
 	}
+	if !fi.IsDir() {
+		return createErr(ErrUnreachable, "%s isn't a folder. Choose a folder to keep saves in.", c.Storage)
+	}
+	probe, err := os.CreateTemp(c.Storage, ".portenv-write-check-*") // #nosec G703 -- an absolute folder the user chose
+	if err != nil {
+		return createErr(ErrUnreachable, "Portenv can't write to %s. Choose a folder you can write to.", c.Storage)
+	}
+	_ = probe.Close()
+	_ = os.Remove(probe.Name())
 	return nil
 }
 
@@ -327,6 +386,8 @@ func (e *Env) holdKeys(ks map[string][]byte) {
 // to repeat, and the box ID makes the whole call idempotent: it returns
 // true when an earlier call had finished it.
 func (e *Env) CreateBox(ctx context.Context, req CreateRequest, opt CreateOptions) (alreadyCreated bool, err error) {
+	e.createMu.Lock()
+	defer e.createMu.Unlock()
 	fault := opt.Fault
 	if fault == nil {
 		fault = func(string) error { return nil }
@@ -348,23 +409,14 @@ func (e *Env) CreateBox(ctx context.Context, req CreateRequest, opt CreateOption
 			return false, createErr(ErrNameTaken, "A box named %s already exists.", c.Name)
 		}
 		e.holdKeys(req.Keys)
-		_ = e.DiscardCreation(c.ID)
+		_ = e.removePending(c.ID)
 		return true, nil
 	}
 	if other, ok := e.boxWithID(c.ID); ok {
 		return false, createErr(ErrMismatch, "Box ID %s is already %s with other settings.", c.ID, other.Name)
 	}
-	pending, err := e.Creations()
-	if err != nil {
+	if err := e.checkPending(c, false); err != nil {
 		return false, err
-	}
-	for _, p := range pending {
-		switch {
-		case p.BoxID == c.ID && !sameBox(p.config(), c):
-			return false, createErr(ErrMismatch, "Box ID %s is already being created as %s with other settings.", c.ID, p.Name)
-		case p.BoxID != c.ID && p.Name == c.Name:
-			return false, createErr(ErrNameTaken, "A box named %s already exists.", c.Name)
-		}
 	}
 	if err := e.reachStorage(c); err != nil {
 		return false, err
@@ -438,13 +490,13 @@ func (e *Env) CreateBox(ctx context.Context, req CreateRequest, opt CreateOption
 		return false, err
 	}
 	c.Recovery = true
-	if err := e.writeConfig(c); err != nil {
+	if err := e.writeNewConfig(c); err != nil {
 		return false, err
 	}
 	if err := fault("done"); err != nil {
 		return false, err
 	}
-	if err := e.DiscardCreation(c.ID); err != nil {
+	if err := e.removePending(c.ID); err != nil {
 		return false, err
 	}
 	return false, nil
@@ -456,6 +508,8 @@ func (e *Env) CreateBox(ctx context.Context, req CreateRequest, opt CreateOption
 // and writes the config. It returns true when an earlier call had
 // finished it.
 func (e *Env) RecoverBox(ctx context.Context, req CreateRequest) (alreadyRecovered bool, err error) {
+	e.createMu.Lock()
+	defer e.createMu.Unlock()
 	c, err := checkRequest(req)
 	if err != nil {
 		return false, err
@@ -472,6 +526,9 @@ func (e *Env) RecoverBox(ctx context.Context, req CreateRequest) (alreadyRecover
 	}
 	if other, ok := e.boxWithID(c.ID); ok {
 		return false, createErr(ErrMismatch, "Box ID %s is already %s here.", c.ID, other.Name)
+	}
+	if err := e.checkPending(c, true); err != nil {
+		return false, err
 	}
 	if err := e.reachStorage(c); err != nil {
 		return false, err
@@ -504,7 +561,7 @@ func (e *Env) RecoverBox(ctx context.Context, req CreateRequest) (alreadyRecover
 		}
 	}
 	c.Recovery = true
-	if err := e.writeConfig(c); err != nil {
+	if err := e.writeNewConfig(c); err != nil {
 		return false, err
 	}
 	return false, nil

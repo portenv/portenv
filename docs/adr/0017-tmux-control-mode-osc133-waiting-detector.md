@@ -127,7 +127,7 @@ Each false "waiting" is removed by another signal: OSC 133 removes the idle shel
 
 ## Remaining
 
-- **Question 3, SwiftTerm overlay alignment:** a prototype overlay, then a UI test by the reviewer.
+- **Question 3, SwiftTerm overlay alignment:** answered by ADR 0020 (2026-10-13). Overlays line up when the terminal is fed each tab's own output from control mode, and not through an attached tmux client. The reviewer's UI test follows 1.2c.
 - **The same cases over the SSH forward to a box on a server.** This needs the AWS test server, so it waits for the owner's go-ahead.
 - **Real Claude Code and a real second agent CLI** replace the stand-ins later. They need accounts, so not in this spike (the owner, 2026-10-10).
 - **Inside a real box,** the agent reads `/proc` and runs `stty` as the main user. The spike ran those as that user directly, but the agent's helper for it isn't built yet.

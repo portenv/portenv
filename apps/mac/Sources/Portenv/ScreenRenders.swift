@@ -67,6 +67,12 @@ enum ScreenRenders {
                 BoxListView(boxes: ["acme-api", "site", "notes"], notice: nil, open: { _ in }, newBox: {}),
                 name: "box-list-after-closing", in: dir
             )
+            // A later launch while portenvd isn't answering (R-0121): the
+            // list, empty until it answers, with the notice and Try Again.
+            try snapshot(
+                BoxListView(boxes: [], notice: FirstRunText.serviceNotAnswering, retry: {}, open: { _ in }, newBox: {}),
+                name: "launch-service-down", in: dir
+            )
             try renderInspector(to: dir)
             // The terminal paints its background on its layer, which a
             // cached display leaves out: drawn under it here.

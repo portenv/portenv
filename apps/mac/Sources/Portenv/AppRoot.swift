@@ -40,29 +40,38 @@ final class AppModel {
         problem = nil
         if MoveToApplications.offerIfNeeded() { return } // quitting: the copy opens
         _ = await LoginItem.ensureRegistered()
-        let deadline = ContinuousClock.now + .seconds(30)
-        var lastJobCheck = ContinuousClock.now - .seconds(10)
-        while !(await daemon.ping()) {
-            _ = await LoginItem.ensureRegistered()
-            if ContinuousClock.now - lastJobCheck >= .seconds(2) {
-                // The login item's status first (R-0028): waiting for
-                // approval is said as such and the wait goes on, so the app
-                // carries on once it's approved. launchd refusing an enabled
-                // item (exit 78) is said at once and ends the wait.
-                lastJobCheck = .now
-                problem = BackgroundServiceProblem.of(
+        // Never a spinner without end (R-0121): after two missed checks
+        // (about 4 s) the window says the service isn't answering, with Try
+        // Again, and the checks go on.
+        let outcome = await LaunchWait.untilAnswered(
+            ping: { [daemon] in
+                if await daemon.ping() { return true }
+                _ = await LoginItem.ensureRegistered()
+                return false
+            },
+            // The login item's status first (R-0028): waiting for approval
+            // is said as such and the wait goes on, so the app carries on
+            // once it's approved. launchd refusing an enabled item (exit 78)
+            // is said at once and ends the wait.
+            problem: {
+                BackgroundServiceProblem.of(
                     status: MoveToApplications.serviceStatus,
                     launchdJob: MoveToApplications.launchdJob(),
                     placement: MoveToApplications.placement
                 )
-                if let problem, problem.endsWait { return }
-            }
-            if problem == nil, ContinuousClock.now >= deadline {
-                problem = BackgroundServiceProblem(message: BoxController.daemonGone, opensLoginItems: false, offersTryAgain: true)
-                return
-            }
-            try? await Task.sleep(for: .milliseconds(200))
+            },
+            report: { [weak self] report in self?.waiting(report) },
+            sleep: { try? await Task.sleep(for: $0) }
+        )
+        switch outcome {
+        case .answered: break
+        case let .refused(p):
+            problem = p
+            return
+        case .cancelled:
+            return
         }
+        serviceNotAnswering = false
         problem = nil
         do {
             boxes = try await daemon.boxes()
@@ -75,12 +84,46 @@ final class AppModel {
             return
         }
         let requested = ProcessInfo.processInfo.environment["PORTENV_BOX"]
-        apply(LaunchDecision.decide(
+        let decision = LaunchDecision.decide(
             requested: requested,
             boxes: boxes,
             lastBox: defaults.string(forKey: Self.lastBoxKey),
             firstRunDone: defaults.bool(forKey: Self.firstRunDoneKey)
-        ))
+        )
+        // Already on Welcome while waiting: keep it (its own checks clear
+        // the notice once portenvd answers).
+        if decision == launch, case .firstRun = decision, firstRun != nil { return }
+        apply(decision)
+    }
+
+    /// portenvd hasn't answered two checks in a row: true until it does.
+    private(set) var serviceNotAnswering = false
+    /// The running launch wait, so Try Again starts a fresh one.
+    private var startTask: Task<Void, Never>?
+
+    /// Starts (or, for Try Again, restarts) the launch.
+    func begin() {
+        startTask?.cancel()
+        startTask = Task { await start() }
+    }
+
+    /// What the launch wait says, on the window (R-0121).
+    private func waiting(_ report: LaunchWait.Report) {
+        switch report {
+        case let .problem(p):
+            problem = p
+        case .notAnswering:
+            problem = nil
+            serviceNotAnswering = true
+            guard launch == nil else { return }
+            let fallback = LaunchWait.fallback(lastBox: defaults.string(forKey: Self.lastBoxKey),
+                                               firstRunDone: defaults.bool(forKey: Self.firstRunDoneKey))
+            launch = fallback
+            if case .firstRun = fallback {
+                firstRun = FirstRunFlow(service: AppFirstRunService(), at: .welcome, existing: [],
+                                        docker: nil, serviceGone: true)
+            }
+        }
     }
 
     private func apply(_ decision: Launch) {
@@ -231,7 +274,7 @@ struct AppRoot: View {
                                 .keyboardShortcut(.defaultAction)
                         }
                         if problem.offersTryAgain {
-                            let tryAgain = Button("Try Again") { Task { await model.start() } }
+                            let tryAgain = Button("Try Again") { model.begin() }
                             if problem.opensLoginItems {
                                 tryAgain
                             } else {
@@ -244,16 +287,20 @@ struct AppRoot: View {
             } else {
                 switch model.launch {
                 case nil:
+                    // Never without end: after about 4 s, Welcome or the
+                    // list says the service isn't answering (R-0121).
                     ProgressView().controlSize(.small)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .accessibilityLabel("Starting Portenv")
+                        .accessibilityElement()
+                        .accessibilityLabel(LaunchWait.starting)
                 case .firstRun:
                     if let flow = model.firstRun {
                         FirstRunView(flow: flow, opened: { box in Task { await model.open(box) } },
                                      cancel: flow.fromBoxList ? { model.cancelNewBox() } : nil)
                     }
                 case let .boxList(notice):
-                    BoxListView(boxes: model.boxes, notice: notice) { box in
+                    BoxListView(boxes: model.boxes, notice: notice,
+                                retry: model.serviceNotAnswering ? { model.begin() } : nil) { box in
                         Task { await model.open(box) }
                     } newBox: {
                         model.newBox()

@@ -115,9 +115,12 @@ public final class FirstRunFlow {
     private let existing: Set<String>
 
     public init(service: FirstRunService, at start: FirstRunStep = .welcome, existing: [String] = [], fromBoxList: Bool = false,
-                docker: DockerStatus? = .running) {
+                docker: DockerStatus? = .running, serviceGone: Bool = false) {
         self.service = service
         self.docker = docker
+        // Reached after the launch's own two misses (R-0121): already said.
+        daemonGone = serviceGone
+        dockerMisses = serviceGone ? 2 : 0
         self.existing = Set(existing)
         self.fromBoxList = fromBoxList
         step = start

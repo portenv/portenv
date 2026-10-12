@@ -41,7 +41,8 @@ struct PortenvApp: App {
             AppRoot(model: model)
                 .task {
                     model.onOpen = { [delegate] controller in delegate.controller = controller }
-                    await model.start()
+                    // One launch wait at a time; Try Again restarts it.
+                    model.begin()
                 }
         }
         .windowToolbarStyle(.unified(showsTitle: true))

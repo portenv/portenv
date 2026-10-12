@@ -9,6 +9,8 @@ import SwiftUI
 struct BoxListView: View {
     let boxes: [String]
     let notice: String?
+    /// Try Again under the notice, while portenvd isn't answering (R-0121).
+    var retry: (() -> Void)?
     let open: (String) -> Void
     let newBox: () -> Void
     @State private var selection: String?
@@ -22,6 +24,9 @@ struct BoxListView: View {
                     .font(.title3)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+            }
+            if let retry {
+                Button(InspectorText.tryAgain, action: retry)
             }
             List(boxes, id: \.self, selection: $selection) { box in
                 Label(box, systemImage: "shippingbox")

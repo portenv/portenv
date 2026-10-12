@@ -58,7 +58,7 @@ if [[ -n $resume ]] && ((check_only || skip_notarize)); then
 fi
 
 die() { echo "release-local: $*" >&2; exit 1; }
-# notarize, json_field
+# notarize_staple, json_field
 # shellcheck source=scripts/notarize-lib.sh
 source "$root/scripts/notarize-lib.sh"
 # Any failure exits 1, never 2: 2 means only "built for testing".
@@ -227,9 +227,7 @@ if [[ $skip_notarize == 0 ]]; then
 	else
 		# A resumed run reuses the zip it uploaded.
 		[[ -n $resume && -f $out/Portenv-app.zip ]] || ditto -c -k --keepParent "$app" "$out/Portenv-app.zip"
-		notarize "$out/Portenv-app.zip"
-		rm -f "$out/Portenv-app.zip"
-		xcrun stapler staple "$app"
+		notarize_staple "$out/Portenv-app.zip" "$app"
 	fi
 fi
 
@@ -257,8 +255,7 @@ if [[ $skip_notarize == 0 ]]; then
 	if [[ -n $resume ]] && xcrun stapler validate "$dmg" >/dev/null 2>&1; then
 		echo "already notarized and stapled"
 	else
-		notarize "$dmg"
-		xcrun stapler staple "$dmg"
+		notarize_staple "$dmg"
 	fi
 fi
 

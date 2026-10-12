@@ -77,6 +77,18 @@ notarize() {
 	notary_wait "$id" "$name" "$sum"
 }
 
+# notarize_staple FILE [BUNDLE]: notarizes FILE and staples the ticket to
+# BUNDLE (default FILE itself). An uploaded zip is deleted only once the
+# staple has worked, so a run resumed after a failed staple finds the same
+# zip, with the same SHA-256, and doesn't upload it again.
+notarize_staple() {
+	local file=$1 target=${2:-$1}
+	notarize "$file"
+	xcrun stapler staple "$target" ||
+		die "$(basename "$target"): stapling failed (the submission is accepted and saved); carry on with: scripts/release-local.sh --resume $out"
+	[[ $target == "$file" ]] || rm -f "$file"
+}
+
 # notary_wait ID NAME SHA256: waits on submission ID until Apple decides.
 notary_wait() {
 	local id=$1 name=$2 sum=$3 json err status rc start delay base log logged

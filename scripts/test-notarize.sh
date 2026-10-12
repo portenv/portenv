@@ -16,6 +16,11 @@ mkdir -p "$tmp/bin"
 cat >"$tmp/bin/xcrun" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
+if [[ $1 == stapler ]]; then
+	echo "staple $3" >>"$FAKE/calls"
+	[[ ! -f $FAKE/staple-fails ]] || { echo "The staple and validate action failed! Error 65." >&2; exit 65; }
+	exit 0
+fi
 [[ $1 == notarytool ]] || exit 99
 cmd=$2
 echo "$cmd" >>"$FAKE/calls"
@@ -63,8 +68,10 @@ t() {
 	fi
 }
 
-# run NAME WAITS...: a fresh release folder with a file to notarize; runs
-# notarize on it, leaving its output in $tmp/NAME.out and status in $rc.
+# run NAME WAITS...: a release folder with a file to notarize ($file, default
+# Portenv-app.zip; made once, kept across runs of the same NAME); runs
+# notarize on it (or $step, with $target), leaving its output in $tmp/NAME.out
+# and status in $rc.
 run() {
 	local name=$1
 	shift
@@ -73,15 +80,17 @@ run() {
 	mkdir -p "$FAKE/out"
 	: >"$FAKE/calls"
 	printf '%s\n' "$@" >"$FAKE/waits"
-	echo "$name" >"$FAKE/out/Portenv-app.zip"
-	[[ -n ${seed:-} ]] && printf '%s\n' "$seed" >"$FAKE/out/notary-Portenv-app.zip.id"
+	local f=${file:-Portenv-app.zip}
+	[[ -f $FAKE/out/$f ]] || echo "$name" >"$FAKE/out/$f"
+	[[ -n ${seed:-} ]] && printf '%s\n' "$seed" >"$FAKE/out/notary-$f.id"
 	rc=0
 	(
 		out=$FAKE/out profile=test-profile
+		# shellcheck disable=SC2317 # called by the library
 		die() { echo "release-local: $*" >&2; exit 1; }
 		# shellcheck source=scripts/notarize-lib.sh
 		source "$here/notarize-lib.sh"
-		notarize "$out/Portenv-app.zip"
+		"${step:-notarize}" "$out/$f" ${target:+"$out/$target"}
 	) >"$tmp/$name.out" 2>&1 || rc=$?
 }
 count() { grep -cx "$2" "$tmp/$1/calls" || true; }
@@ -124,6 +133,29 @@ run upload accepted
 t "a failed upload fails" [ "$rc" = 1 ]
 t "  pointing to notarytool history" grep -q 'the upload failed.*notarytool history' "$tmp/upload.out"
 t "  and saves no submission" [ ! -f "$tmp/upload/out/notary-Portenv-app.zip.id" ]
+
+# A failed staple, then --resume: the same upload is reused (R-0114).
+mkdir -p "$tmp/appstaple" && touch "$tmp/appstaple/staple-fails"
+step=notarize_staple target=Portenv.app run appstaple accepted
+t "a failed staple of the app fails" [ "$rc" = 1 ]
+t "  pointing to --resume" grep -q 'stapling failed.*--resume' "$tmp/appstaple.out"
+t "  keeping the uploaded zip" [ -f "$tmp/appstaple/out/Portenv-app.zip" ]
+rm "$tmp/appstaple/staple-fails"
+step=notarize_staple target=Portenv.app run appstaple accepted
+t "  resumed: stapled" [ "$rc" = 0 ]
+t "  without uploading again" [ "$(count appstaple submit)" = 0 ]
+t "  the app is stapled" [ "$(count appstaple "staple $tmp/appstaple/out/Portenv.app")" = 1 ]
+t "  and the zip deleted only then" [ ! -e "$tmp/appstaple/out/Portenv-app.zip" ]
+
+mkdir -p "$tmp/dmgstaple" && touch "$tmp/dmgstaple/staple-fails"
+file=Portenv.dmg step=notarize_staple run dmgstaple accepted
+t "a failed staple of the DMG fails" [ "$rc" = 1 ]
+t "  keeping notary-Portenv.dmg.id" [ -f "$tmp/dmgstaple/out/notary-Portenv.dmg.id" ]
+t "  and the DMG" [ -f "$tmp/dmgstaple/out/Portenv.dmg" ]
+rm "$tmp/dmgstaple/staple-fails"
+file=Portenv.dmg step=notarize_staple run dmgstaple accepted
+t "  resumed: stapled" [ "$rc" = 0 ]
+t "  without uploading again" [ "$(count dmgstaple submit)" = 0 ]
 
 # The script's arguments, checked before anything else runs.
 last=none

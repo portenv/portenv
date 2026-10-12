@@ -102,11 +102,12 @@ func cmdInit(_ context.Context, e *local.Env, name string, args []string) error 
 		}
 		restUser = c.ID + ":" + string(hash)
 	}
-	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil { // #nosec G703 -- box names are validated by local.NameRE
-		return err
-	}
-	data, _ := json.MarshalIndent(c, "", "  ")
-	if err := os.WriteFile(p, append(data, '\n'), 0o600); err != nil { // #nosec G703 -- box names are validated by local.NameRE
+	// Published like CreateBox's: never over a config that appeared meanwhile.
+	if err := e.PublishConfig(c); err != nil {
+		var ce *local.CreateError
+		if errors.As(err, &ce) && ce.Kind == local.ErrNameTaken {
+			return fmt.Errorf("box %s already exists", name)
+		}
 		return err
 	}
 	fmt.Printf("created box %s (%s) on %s\n", name, c.ID, e.Machine)
@@ -188,11 +189,12 @@ func cmdJoin(ctx context.Context, e *local.Env, name string, args []string) erro
 	if err := e.KeyStore().Put(c.ID, own); err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil { // #nosec G703 -- box names are validated by local.NameRE
-		return err
-	}
-	data, _ := json.MarshalIndent(c, "", "  ")
-	if err := os.WriteFile(p, append(data, '\n'), 0o600); err != nil { // #nosec G703 -- box names are validated by local.NameRE
+	// Published like CreateBox's: never over a config that appeared meanwhile.
+	if err := e.PublishConfig(c); err != nil {
+		var ce *local.CreateError
+		if errors.As(err, &ce) && ce.Kind == local.ErrNameTaken {
+			return fmt.Errorf("box %s already exists here", name)
+		}
 		return err
 	}
 	fmt.Printf("joined box %s (%s) on %s\n", name, c.ID, e.Machine)

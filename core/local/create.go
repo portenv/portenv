@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -48,6 +49,8 @@ type CreateRequest struct {
 
 // CreateOptions are for tests.
 type CreateOptions struct {
+	// Queued runs when the call has to wait for another one to finish.
+	Queued func()
 	// Fault runs before each step (D1 to D6, then "done": after the config
 	// is written, before the pending record goes) and stops CreateBox with
 	// its error.
@@ -160,15 +163,41 @@ func (e *Env) creation(boxID string) (Creation, bool, error) {
 	return c, true, nil
 }
 
+// takeSlot waits for the create slot until ctx ends; queued, if set, runs
+// when another call holds it.
+func (e *Env) takeSlot(ctx context.Context, queued func()) (release func(), err error) {
+	e.createSlotOnce.Do(func() { e.createSlot = make(chan struct{}, 1) })
+	select {
+	case e.createSlot <- struct{}{}:
+		return func() { <-e.createSlot }, nil
+	default:
+	}
+	if queued != nil {
+		queued()
+	}
+	select {
+	case e.createSlot <- struct{}{}:
+		return func() { <-e.createSlot }, nil
+	case <-ctx.Done():
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return nil, &CreateError{Kind: ErrDeadline, Msg: "Portenv is still setting up another workspace. Try again in a moment.", Err: ctx.Err()}
+		}
+		return nil, ctx.Err()
+	}
+}
+
 // DiscardCreation forgets an unfinished creation, and the keys held for
 // it. A repository it left (with no snapshot: nothing could save into it)
 // is never deleted. A finished box keeps its keys.
-func (e *Env) DiscardCreation(boxID string) error {
+func (e *Env) DiscardCreation(ctx context.Context, boxID string) error {
 	if !boxIDRE.MatchString(boxID) {
 		return createErr(ErrInvalid, "A box ID is box- and 12 lowercase hex digits.")
 	}
-	e.createMu.Lock()
-	defer e.createMu.Unlock()
+	release, err := e.takeSlot(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer release()
 	if err := e.removePending(boxID); err != nil {
 		return err
 	}
@@ -227,13 +256,61 @@ func writeSynced(f *os.File, data []byte) error {
 	return f.Close()
 }
 
-// writeNewConfig writes a new box's config, unless another box has taken
-// the name meanwhile: then nothing is written.
+// writeNewConfig writes a box's config at D6: it replaces only a config
+// with the same box ID, and publishes a new one only where there is none.
+// A config it can't read (corrupt, no permission) is never written over.
 func (e *Env) writeNewConfig(c BoxConfig) error {
-	if existing, err := e.LoadBox(c.Name); err == nil && existing.ID != c.ID {
+	existing, err := e.LoadBox(c.Name)
+	switch {
+	case err == nil && existing.ID == c.ID:
+		return e.writeConfig(c)
+	case err == nil:
 		return createErr(ErrNameTaken, "A box named %s already exists.", c.Name)
+	case errors.Is(err, fs.ErrNotExist):
+		return e.PublishConfig(c)
+	default:
+		return &CreateError{Kind: ErrInternal, Msg: fmt.Sprintf("Couldn't read the config already named %s; nothing was written.", c.Name), Err: err}
 	}
-	return e.writeConfig(c)
+}
+
+// PublishConfig writes a new box's config where there is none: the file is
+// written and synced under a temporary name, then hard-linked into place,
+// which fails if anything is already there, whoever wrote it. portenv init
+// and join publish the same way.
+func (e *Env) PublishConfig(c BoxConfig) error {
+	p, err := e.ConfigPath(c.Name)
+	if err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(c, "", "  ")
+	if err != nil {
+		return err
+	}
+	dir := filepath.Dir(p)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	f, err := os.CreateTemp(dir, filepath.Base(p)+".*.tmp")
+	if err != nil {
+		return err
+	}
+	tmp := f.Name()
+	defer func() { _ = os.Remove(tmp) }()
+	if err := writeSynced(f, append(data, '\n')); err != nil {
+		return err
+	}
+	if err := os.Link(tmp, p); err != nil {
+		if errors.Is(err, fs.ErrExist) {
+			return createErr(ErrNameTaken, "A box named %s already exists.", c.Name)
+		}
+		return err
+	}
+	d, err := os.Open(dir) // #nosec G304 -- a directory in the Portenv directory
+	if err != nil {
+		return err
+	}
+	defer func() { _ = d.Close() }()
+	return d.Sync()
 }
 
 func (e *Env) writeConfig(c BoxConfig) error {
@@ -342,7 +419,9 @@ func (e *Env) reachStorage(c BoxConfig) error {
 		return createErr(ErrUnreachable, "Portenv can't write to %s. Choose a folder you can write to.", c.Storage)
 	}
 	_ = probe.Close()
-	_ = os.Remove(probe.Name())
+	if err := os.Remove(probe.Name()); err != nil {
+		return &CreateError{Kind: ErrInternal, Msg: fmt.Sprintf("Couldn't remove Portenv's write check %s.", probe.Name()), Err: err}
+	}
 	return nil
 }
 
@@ -386,8 +465,11 @@ func (e *Env) holdKeys(ks map[string][]byte) {
 // to repeat, and the box ID makes the whole call idempotent: it returns
 // true when an earlier call had finished it.
 func (e *Env) CreateBox(ctx context.Context, req CreateRequest, opt CreateOptions) (alreadyCreated bool, err error) {
-	e.createMu.Lock()
-	defer e.createMu.Unlock()
+	release, err := e.takeSlot(ctx, opt.Queued)
+	if err != nil {
+		return false, err
+	}
+	defer release()
 	fault := opt.Fault
 	if fault == nil {
 		fault = func(string) error { return nil }
@@ -508,8 +590,11 @@ func (e *Env) CreateBox(ctx context.Context, req CreateRequest, opt CreateOption
 // and writes the config. It returns true when an earlier call had
 // finished it.
 func (e *Env) RecoverBox(ctx context.Context, req CreateRequest) (alreadyRecovered bool, err error) {
-	e.createMu.Lock()
-	defer e.createMu.Unlock()
+	release, err := e.takeSlot(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer release()
 	c, err := checkRequest(req)
 	if err != nil {
 		return false, err

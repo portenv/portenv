@@ -294,3 +294,38 @@ func TestNoMessageCanCarryTheRecoveryKey(t *testing.T) {
 		t.Fatalf("found %d recovery_password fields, want CreateBox's and RecoverBox's", seen)
 	}
 }
+
+// TestDiscardCreationGivesUpWithItsDeadline: the app's call doesn't wait
+// out a CreateBox that holds the slot: when its deadline passes it gets
+// DeadlineExceeded, promptly.
+func TestDiscardCreationGivesUpWithItsDeadline(t *testing.T) {
+	t.Parallel()
+	s, _ := loggingServer(t)
+	atD3, release := make(chan struct{}), make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		req := createBoxRequest("acme-api", testBoxID)
+		_, _ = s.env.CreateBox(context.Background(), local.CreateRequest{Name: req.GetName(), BoxID: req.GetBoxId(), Image: req.GetImage(),
+			Keys: req.GetKeys(), RecoveryPassword: req.GetRecoveryPassword()}, local.CreateOptions{Fault: func(step string) error {
+			if step == "D3" {
+				close(atD3)
+				<-release
+				return errors.New("stop")
+			}
+			return nil
+		}})
+	}()
+	<-atD3
+	defer func() { close(release); <-done }()
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	t0 := time.Now()
+	_, err := s.DiscardCreation(ctx, &daemonv1.DiscardCreationRequest{BoxId: testBoxID})
+	if status.Code(err) != codes.DeadlineExceeded {
+		t.Fatalf("DiscardCreation while CreateBox runs: %v, want DeadlineExceeded", err)
+	}
+	if d := time.Since(t0); d > 2*time.Second {
+		t.Fatalf("it gave up after %v", d)
+	}
+}

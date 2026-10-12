@@ -58,6 +58,7 @@ func (m *Memory) Forget(ids ...string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, id := range ids {
+		clear(m.keys[id])
 		delete(m.keys, id)
 	}
 }

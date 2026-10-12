@@ -400,7 +400,7 @@ func TestCreateBoxLeavesAForeignRepositoryUntouched(t *testing.T) {
 	if err != nil || len(cs) != 1 || cs[0].BoxID != req.BoxID || cs[0].Name != "acme-api" {
 		t.Fatalf("creations %v, %v", cs, err)
 	}
-	if err := e.DiscardCreation(req.BoxID); err != nil {
+	if err := e.DiscardCreation(context.Background(), req.BoxID); err != nil {
 		t.Fatal(err)
 	}
 	if cs, _ := e.Creations(); len(cs) != 0 {
@@ -464,7 +464,7 @@ func TestACreationReservesItsName(t *testing.T) {
 	if _, err := e.CreateBox(ctx, second, CreateOptions{}); kindOf(err) != ErrNameTaken {
 		t.Fatalf("the name of a box being created: %v", err)
 	}
-	if err := e.DiscardCreation(req.BoxID); err != nil {
+	if err := e.DiscardCreation(ctx, req.BoxID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := e.CreateBox(ctx, second, CreateOptions{}); err != nil {
@@ -697,8 +697,8 @@ func TestRestoreWithOnlyTheRecoveryKey(t *testing.T) {
 // double-click, or a retry while the first still runs) with one name and
 // two box IDs make exactly one box. The other is refused as taken, its
 // pending record and keys are never written, and neither repository has a
-// snapshot. Without one lock over the whole call, both pass D1 and the
-// second config overwrites the first.
+// snapshot. The first call waits at D2 until the second either reaches D2
+// too (no lock: both reserve the name) or queues behind it.
 func TestConcurrentCreatesOfOneName(t *testing.T) {
 	t.Parallel()
 	e := newCreateEnv(t)
@@ -707,47 +707,44 @@ func TestConcurrentCreatesOfOneName(t *testing.T) {
 		createRequest(t, "acme-api", "box-0123456789ab", ""),
 		createRequest(t, "acme-api", "box-0123456789ac", ""),
 	}
-	// Each call waits at D2 (up to a second) for the other to get there
-	// too: without the lock both do, and both reserve the name.
-	var atD2 sync.WaitGroup
-	atD2.Add(len(reqs))
+	firstAtD2 := make(chan struct{})
+	secondArrived := make(chan struct{}) // at D2, or queued
+	var once sync.Once
+	arrived := func() { once.Do(func() { close(secondArrived) }) }
 	errs := make([]error, len(reqs))
 	var wg sync.WaitGroup
-	for i, req := range reqs {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			_, errs[i] = e.CreateBox(ctx, req, CreateOptions{Fault: func(s string) error {
-				if s == "D2" {
-					atD2.Done()
-					waitOrTimeout(&atD2, time.Second)
-				}
-				return nil
-			}})
-		}()
-	}
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		_, errs[0] = e.CreateBox(ctx, reqs[0], CreateOptions{Fault: func(s string) error {
+			if s == "D2" {
+				close(firstAtD2)
+				<-secondArrived
+			}
+			return nil
+		}})
+	}()
+	<-firstAtD2
+	go func() {
+		defer wg.Done()
+		_, errs[1] = e.CreateBox(ctx, reqs[1], CreateOptions{Queued: arrived, Fault: func(s string) error {
+			if s == "D2" {
+				arrived()
+			}
+			return nil
+		}})
+	}()
 	wg.Wait()
 
-	made, refused := -1, -1
-	for i, err := range errs {
-		switch {
-		case err == nil:
-			made = i
-		case kindOf(err) == ErrNameTaken:
-			refused = i
-		default:
-			t.Fatalf("call %d: %v", i, err)
-		}
-	}
-	if made < 0 || refused < 0 {
-		t.Fatalf("results %v, want one box made and one call refused as taken", errs)
+	if errs[0] != nil || kindOf(errs[1]) != ErrNameTaken {
+		t.Fatalf("results %v, want the first box made and the second call refused as taken", errs)
 	}
 	c, err := e.LoadBox("acme-api")
-	if err != nil || c.ID != reqs[made].BoxID {
-		t.Fatalf("config %+v, %v, want box %s", c, err, reqs[made].BoxID)
+	if err != nil || c.ID != reqs[0].BoxID {
+		t.Fatalf("config %+v, %v, want box %s", c, err, reqs[0].BoxID)
 	}
-	assertOneWorkingBox(t, e, reqs[made])
-	loser := reqs[refused]
+	assertOneWorkingBox(t, e, reqs[0])
+	loser := reqs[1]
 	if _, ok, err := e.creation(loser.BoxID); err != nil || ok {
 		t.Fatalf("the refused call left a pending record: %v, %v", ok, err)
 	}
@@ -766,13 +763,169 @@ func TestConcurrentCreatesOfOneName(t *testing.T) {
 	}
 }
 
-// waitOrTimeout waits for wg, or gives up after d.
-func waitOrTimeout(wg *sync.WaitGroup, d time.Duration) {
-	done := make(chan struct{})
-	go func() { wg.Wait(); close(done) }()
-	select {
-	case <-done:
-	case <-time.After(d):
+// TestAWaitingCallGivesUpWithItsContext: a call queued behind a running
+// CreateBox (which can run restic several times) stops waiting when its
+// own context ends, and changes nothing.
+func TestAWaitingCallGivesUpWithItsContext(t *testing.T) {
+	t.Parallel()
+	e := newCreateEnv(t)
+	req := createRequest(t, "acme-api", "box-0123456789ab", "")
+	atD3, release := make(chan struct{}), make(chan struct{})
+	done := make(chan error, 1)
+	go func() {
+		_, err := e.CreateBox(context.Background(), req, CreateOptions{Fault: func(s string) error {
+			if s == "D3" {
+				close(atD3)
+				<-release
+				return errors.New("stop")
+			}
+			return nil
+		}})
+		done <- err
+	}()
+	<-atD3
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	t0 := time.Now()
+	err := e.DiscardCreation(ctx, req.BoxID)
+	if !errors.Is(err, context.DeadlineExceeded) || kindOf(err) != ErrDeadline {
+		t.Fatalf("DiscardCreation while CreateBox runs: %v, want its deadline", err)
+	}
+	if d := time.Since(t0); d > 2*time.Second {
+		t.Fatalf("it gave up after %v", d)
+	}
+	if _, ok, _ := e.creation(req.BoxID); !ok {
+		t.Fatal("the pending record went although the discard gave up")
+	}
+	close(release)
+	<-done
+	if err := e.DiscardCreation(context.Background(), req.BoxID); err != nil {
+		t.Fatalf("once the slot is free: %v", err)
+	}
+}
+
+// TestD6WritesNothingOverAnUnreadableConfig: a config with the name that
+// can't be read (corrupt, or no permission) isn't "free": D6 stops and
+// leaves it as it is.
+func TestD6WritesNothingOverAnUnreadableConfig(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name  string
+		write func(p string) error
+	}{
+		{"corrupt", func(p string) error { return os.WriteFile(p, []byte("{\"id\": \"box-0123"), 0o600) }},
+		{"unreadable", func(p string) error {
+			if os.Geteuid() == 0 {
+				t.Skip("root reads anything")
+			}
+			if err := os.WriteFile(p, []byte(`{"id":"box-0123456789ac","name":"acme-api"}`), 0o600); err != nil {
+				return err
+			}
+			t.Cleanup(func() { _ = os.Chmod(p, 0o600) }) // #nosec G302 -- the test's own file
+			return os.Chmod(p, 0o000)
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			e := newCreateEnv(t)
+			req := createRequest(t, "acme-api", "box-0123456789ab", "")
+			p, _ := e.ConfigPath("acme-api")
+			var before []byte
+			_, err := e.CreateBox(context.Background(), req, CreateOptions{Fault: func(s string) error {
+				if s != "D6" {
+					return nil
+				}
+				if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+					return err
+				}
+				if err := tc.write(p); err != nil {
+					return err
+				}
+				_ = os.Chmod(p, 0o600)     // #nosec G302 -- read it back for the comparison
+				before, _ = os.ReadFile(p) // #nosec G304 -- the test's own file
+				if tc.name == "unreadable" {
+					return os.Chmod(p, 0o000)
+				}
+				return nil
+			}})
+			if err == nil {
+				t.Fatal("CreateBox wrote over a config it couldn't read")
+			}
+			_ = os.Chmod(p, 0o600)                                       // #nosec G302 -- the test's own file
+			if after, _ := os.ReadFile(p); !bytes.Equal(after, before) { // #nosec G304 -- the test's own file
+				t.Fatalf("the config changed: %q, was %q", after, before)
+			}
+			assertNoSecrets(t, e.Dir, []error{err}, req.Keys[req.BoxID], req.RecoveryPassword)
+		})
+	}
+}
+
+// TestPublishConfigNeverReplacesAFile: a new box's config is published
+// with a hard link, which fails if anything is at the path, whoever wrote
+// it and whether or not it took the lock (portenv init and join too).
+func TestPublishConfigNeverReplacesAFile(t *testing.T) {
+	t.Parallel()
+	e := newCreateEnv(t)
+	first := BoxConfig{ID: "box-0123456789ab", Name: "acme-api", Image: "img"}
+	if err := e.PublishConfig(first); err != nil {
+		t.Fatal(err)
+	}
+	second := BoxConfig{ID: "box-0123456789ac", Name: "acme-api", Image: "img"}
+	if err := e.PublishConfig(second); kindOf(err) != ErrNameTaken {
+		t.Fatalf("a second config with the name: %v, want the name taken", err)
+	}
+	if c, err := e.LoadBox("acme-api"); err != nil || c != first {
+		t.Fatalf("config %+v, %v, want the first", c, err)
+	}
+	ents, _ := os.ReadDir(filepath.Join(e.Dir, "boxes"))
+	if len(ents) != 1 {
+		t.Fatalf("left in boxes/: %v", ents)
+	}
+}
+
+// TestLoadBoxSaysWhenThereIsNoConfig: a missing config is fs.ErrNotExist
+// (with the same words), anything else isn't.
+func TestLoadBoxSaysWhenThereIsNoConfig(t *testing.T) {
+	t.Parallel()
+	e := newCreateEnv(t)
+	_, err := e.LoadBox("acme-api")
+	if !errors.Is(err, fs.ErrNotExist) || err.Error() != "no box named acme-api here; create it with portenv init acme-api" {
+		t.Fatalf("missing: %v", err)
+	}
+	p, _ := e.ConfigPath("acme-api")
+	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(p, []byte("{"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.LoadBox("acme-api"); err == nil || errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("corrupt: %v", err)
+	}
+}
+
+// TestSaveBoxWritersDontCollide: SaveBox uses its own temporary file.
+func TestSaveBoxWritersDontCollide(t *testing.T) {
+	t.Parallel()
+	e := newCreateEnv(t)
+	var wg sync.WaitGroup
+	errs := make([]error, 8)
+	for i := range errs {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			errs[i] = e.SaveBox(BoxConfig{ID: "box-0123456789ab", Name: "acme-api", Image: fmt.Sprintf("img-%d", i)})
+		}()
+	}
+	wg.Wait()
+	for _, err := range errs {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	ents, _ := os.ReadDir(filepath.Join(e.Dir, "boxes"))
+	if len(ents) != 1 {
+		t.Fatalf("left in boxes/: %v", ents)
 	}
 }
 
@@ -877,7 +1030,7 @@ func TestDiscardCreationForgetsItsKeys(t *testing.T) {
 	if _, err := e.Provided.Get(req.BoxID); err != nil {
 		t.Fatal("the key isn't held after the failed call")
 	}
-	if err := e.DiscardCreation(req.BoxID); err != nil {
+	if err := e.DiscardCreation(ctx, req.BoxID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := e.Provided.Get(req.BoxID); err == nil {
@@ -888,7 +1041,7 @@ func TestDiscardCreationForgetsItsKeys(t *testing.T) {
 	if _, err := e.CreateBox(ctx, done, CreateOptions{}); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.DiscardCreation(done.BoxID); err != nil {
+	if err := e.DiscardCreation(ctx, done.BoxID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := e.Provided.Get(done.BoxID); err != nil {

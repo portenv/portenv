@@ -21,6 +21,9 @@ import (
 // createStatus turns CreateBox's and RecoverBox's errors into their codes,
 // each one plain line.
 func createStatus(err error) error {
+	if errors.Is(err, context.Canceled) {
+		return status.Error(codes.Canceled, "The request was cancelled.")
+	}
 	var ce *local.CreateError
 	if !errors.As(err, &ce) {
 		return status.Error(codes.Internal, err.Error())
@@ -56,8 +59,8 @@ func (s *Server) CreateBox(ctx context.Context, req *daemonv1.CreateBoxRequest) 
 }
 
 // DiscardCreation implements daemonv1.DaemonServiceServer.
-func (s *Server) DiscardCreation(_ context.Context, req *daemonv1.DiscardCreationRequest) (*daemonv1.DiscardCreationResponse, error) {
-	if err := s.env.DiscardCreation(req.GetBoxId()); err != nil {
+func (s *Server) DiscardCreation(ctx context.Context, req *daemonv1.DiscardCreationRequest) (*daemonv1.DiscardCreationResponse, error) {
+	if err := s.env.DiscardCreation(ctx, req.GetBoxId()); err != nil {
 		return nil, createStatus(err)
 	}
 	s.log.Info("creation discarded", "id", req.GetBoxId())

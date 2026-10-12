@@ -166,10 +166,15 @@ func countKind(cs []notices.Component, kind string) int {
 // command checks every download against the checksum database, whatever this
 // shell or the go env file says (sumEnv).
 func downloadModules(comps []notices.Component) (map[string]string, error) {
-	env, err := sumEnv(os.Environ())
+	goenv, err := exec.Command("go", "env", "GOPROXY", "GOMODCACHE").Output()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("go env: %w", err)
 	}
+	vals := strings.Split(strings.TrimRight(string(goenv), "\n"), "\n")
+	if len(vals) != 2 || vals[1] == "" {
+		return nil, fmt.Errorf("go env: unexpected output %q", goenv)
+	}
+	env := sumEnv(os.Environ(), vals[0], vals[1])
 	var mods []string
 	for _, c := range comps {
 		if c.Kind == notices.KindGo {
@@ -214,25 +219,26 @@ func downloadModules(comps []notices.Component) (map[string]string, error) {
 }
 
 // sumEnv is the go command's environment for downloads that are always
-// checked against the checksum database: no workspace, the go env file left
-// out (it could exempt modules), and no variable that skips or exempts the
-// check. It refuses GOSUMDB=off rather than quietly turning it back on.
-func sumEnv(environ []string) ([]string, error) {
+// checked against Go's own checksum database: GOSUMDB is sum.golang.org
+// whatever the shell says, no workspace, no variable that exempts modules from
+// the check, and the go env file left out (it could exempt them too). The
+// proxy and module cache this machine uses (from `go env`, so the go env file
+// still counts for them) are passed explicitly.
+func sumEnv(environ []string, proxy, modcache string) []string {
 	override := map[string]string{
-		"GOENV":        "off",
-		"GOWORK":       "off",
-		"GOFLAGS":      "-mod=mod",
-		"GONOSUMDB":    "",
-		"GONOSUMCHECK": "",
-		"GOPRIVATE":    "",
-		"GOINSECURE":   "",
+		"GOSUMDB":    "sum.golang.org",
+		"GOENV":      "off",
+		"GOWORK":     "off",
+		"GOFLAGS":    "-mod=mod",
+		"GONOSUMDB":  "",
+		"GOPRIVATE":  "",
+		"GOINSECURE": "",
+		"GOPROXY":    proxy,
+		"GOMODCACHE": modcache,
 	}
 	var out []string
 	for _, kv := range environ {
-		k, v, _ := strings.Cut(kv, "=")
-		if k == "GOSUMDB" && strings.TrimSpace(v) == "off" {
-			return nil, errors.New("GOSUMDB=off: the notices need modules checked against the checksum database; unset it")
-		}
+		k, _, _ := strings.Cut(kv, "=")
 		if _, ok := override[k]; !ok {
 			out = append(out, kv)
 		}
@@ -245,7 +251,7 @@ func sumEnv(environ []string) ([]string, error) {
 	for _, k := range keys {
 		out = append(out, k+"="+override[k])
 	}
-	return out, nil
+	return out
 }
 
 // goStd is the folder with Go's own licence: this machine's GOROOT. Go's

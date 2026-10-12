@@ -50,11 +50,49 @@ func TestIdentify(t *testing.T) {
 	}
 }
 
+// Copyleft terms in any spelling (R-0116), and MPL-2.0's own definition of
+// "Secondary License" isn't one.
+func TestCopyleft(t *testing.T) {
+	for _, tc := range []struct {
+		name, text string
+		want       bool
+	}{
+		{"gpl-2.0 inside an mit file", mitText + "\nPortions are GPL-2.0.", true},
+		{"spdx or-later", "SPDX-License-Identifier: GPL-2.0-or-later", true},
+		{"gplv3", "This program is released under GPLv3.", true},
+		{"capitals", "GNU GENERAL PUBLIC LICENSE\nVersion 2, June 1991", true},
+		{"lgpl", "Licensed under the LGPL-2.1.", true},
+		{"agpl", "AGPLv3 only", true},
+		{"debian copyright", "Files: *\nCopyright: 2020 Someone\nLicense: GPL-2+", true},
+		{"gnu lesser", "the GNU Lesser General Public Licence", true},
+		{"affero", "GNU Affero", true},
+		{"cc by-sa", "Creative Commons BY-SA 4.0", true},
+		{"share-alike", "Attribution-Share-Alike", true},
+		{"mpl's secondary licenses", mplText, false},
+		{"mit", mitText, false},
+		{"apache", apacheText, false},
+		{"ssleay's gnu public licence", "this code cannot simply be copied and put under another distribution licence [including the GNU Public Licence.]", false},
+		{"words that contain gpl", "egplant standby-safe", false},
+	} {
+		if got := len(Copyleft([]byte(tc.text))) > 0; got != tc.want {
+			t.Errorf("%s: Copyleft = %q, want copyleft %v", tc.name, Copyleft([]byte(tc.text)), tc.want)
+		}
+	}
+
+	// A Debian-style COPYRIGHT file (never identified as a licence) still
+	// fails the build.
+	w := newWorld(t)
+	deb := w.add(Component{KindGo, "example.com/deb", "v1.0.0"}, map[string]string{"LICENSE": mitText, "COPYRIGHT": "Files: x/*\nLicense: GPL-2+"})
+	if _, err := Collect([]Component{deb}, w.source, origin, emptyAllowlist(t)); err == nil || !strings.Contains(err.Error(), "copyleft terms in COPYRIGHT (gpl-2)") {
+		t.Errorf("a Debian COPYRIGHT with GPL-2+: %v", err)
+	}
+}
+
 func TestLicenceFiles(t *testing.T) {
 	dir := t.TempDir()
 	for _, n := range []string{
 		"LICENSE", "LICENSE.txt", "LICENCE-MIT", "LICENSE.APACHE", "LICENSE-2.0.txt", "LICENSES.txt",
-		"UNLICENSE", "COPYING", "COPYRIGHT", "NOTICE.md", "PATENTS",
+		"UNLICENSE", "COPYING", "COPYRIGHT", "NOTICE.md", "PATENTS", "LICENSE_THIRD_PARTY", "THIRD_PARTY_NOTICES", "third-party-notices.txt",
 		"LICENSES/MIT.txt", "LICENSES/Apache-2.0.txt", "b2/licenses.csv",
 		"vendor/boringssl/LICENSE", "Sources/CNIOBoringSSL/hash.txt", "third_party/zlib/COPYING.md",
 		"license.go", "LICENSE_test.go", "README.md", "licensing.md", "NOTICES.json",
@@ -68,8 +106,8 @@ func TestLicenceFiles(t *testing.T) {
 	}
 	want := []string{
 		"COPYING", "COPYRIGHT", "LICENCE-MIT", "LICENSE", "LICENSE-2.0.txt", "LICENSE.APACHE", "LICENSE.txt",
-		"LICENSES.txt", "LICENSES/Apache-2.0.txt", "LICENSES/MIT.txt", "NOTICE.md", "PATENTS", "UNLICENSE",
-		"third_party/zlib/COPYING.md", "vendor/boringssl/LICENSE",
+		"LICENSES.txt", "LICENSES/Apache-2.0.txt", "LICENSES/MIT.txt", "LICENSE_THIRD_PARTY", "NOTICE.md", "PATENTS", "THIRD_PARTY_NOTICES", "UNLICENSE",
+		"third-party-notices.txt", "third_party/zlib/COPYING.md", "vendor/boringssl/LICENSE",
 	}
 	if !slices.Equal(got, want) {
 		t.Errorf("LicenceFiles = %q,\nwant %q", got, want)
@@ -305,8 +343,11 @@ func TestGenerateThenCheck(t *testing.T) {
 			t.Errorf("ThirdPartyNotices.txt lacks %q", want)
 		}
 	}
-	if !regexp.MustCompile(`(?m)^github\.com/restic/restic +v0\.19\.1 +BSD-2-Clause$`).MatchString(notices) {
+	if !regexp.MustCompile(`(?m)^github\.com/restic/restic v0\.19\.1 · BSD-2-Clause$`).MatchString(notices) {
 		t.Errorf("the table lacks restic's row:\n%s", notices)
+	}
+	if strings.Contains(notices, "Component") {
+		t.Error("the list still has a column header")
 	}
 	if strings.Contains(notices, "package main") {
 		t.Error("a source file was copied as a licence")
@@ -382,11 +423,11 @@ func TestCollectReportsEveryProblem(t *testing.T) {
 		"example.com/onlynotice v1.0.0: no licence file",
 		"example.com/unknown v1.0.0: licence not recognised in LICENSE",
 		"example.com/hidden v1.0.0: licence not recognised in COPYING",
-		"example.com/gpl v1.0.0: copyleft terms in COPYING (GNU General Public)",
-		"vendored 1.0.0: copyleft terms in third_party/x/LICENSE (GNU Lesser)",
-		"example.com/agpl v1.0.0: copyleft terms in NOTICE (Affero)",
-		"example.com/cc v1.0.0: copyleft terms in LICENSE-docs (ShareAlike)",
-		"example.com/mplplus v1.0.0: copyleft terms in LICENSE (GNU General Public)",
+		"example.com/gpl v1.0.0: copyleft terms in COPYING (general public license)",
+		"vendored 1.0.0: copyleft terms in third_party/x/LICENSE (general public license)",
+		"example.com/agpl v1.0.0: copyleft terms in NOTICE (affero, general public license)",
+		"example.com/cc v1.0.0: copyleft terms in LICENSE-docs (sharealike)",
+		"example.com/mplplus v1.0.0: copyleft terms in LICENSE (general public license)",
 		"nowhere 1.0.0: no source",
 		"example.com/noorigin v1: no source to point to",
 	} {
@@ -401,27 +442,44 @@ func TestCollectReportsEveryProblem(t *testing.T) {
 // files (R-0110: BoringSSL in swift-nio-ssl).
 func TestVendoredCodeNeedsItsLicence(t *testing.T) {
 	w := newWorld(t)
-	marker := "This directory is derived from BoringSSL cloned from https://boringssl.googlesource.com/boringssl at revision 817ab07e\n"
-	ssl := w.add(Component{KindSwift, "swift-nio-ssl", "2.37.5"}, map[string]string{
+	marker := func(rev string) string {
+		return "This directory is derived from BoringSSL cloned from https://boringssl.googlesource.com/boringssl at revision " + rev + "\n"
+	}
+	files := map[string]string{
 		"LICENSE.txt": apacheText, "NOTICE.txt": "This product contains code from boringssl.",
-		"Sources/CNIOBoringSSL/hash.txt": marker, "Sources/CNIOBoringSSL/crypto/mem.cc": "/* Licensed under the OpenSSL license */",
+		"Sources/CNIOBoringSSL/hash.txt": marker("817ab07e"), "Sources/CNIOBoringSSL/crypto/mem.cc": "/* Licensed under the OpenSSL license */",
 		"Sources/NIOSSL/hash.txt": "not vendored",
-	})
+	}
+	ssl := w.add(Component{KindSwift, "swift-nio-ssl", "2.37.5"}, files)
 	_, err := Collect([]Component{ssl}, w.source, origin, emptyAllowlist(t))
 	if err == nil || !strings.Contains(err.Error(), "swift-nio-ssl 2.37.5: vendored code without its licence in Sources/CNIOBoringSSL") {
 		t.Fatalf("Collect without BoringSSL's licence: %v", err)
 	}
 
+	// hash.txt is found at any depth.
+	deep := w.add(Component{KindSwift, "deep", "1.0.0"}, map[string]string{"LICENSE": mitText, "Sources/A/vendor/zlib/hash.txt": "This directory is derived from zlib cloned from https://example.com/zlib at revision abcdef1"})
+	if _, err := Collect([]Component{deep}, w.source, origin, emptyAllowlist(t)); err == nil || !strings.Contains(err.Error(), "vendored code without its licence in Sources/A/vendor/zlib") {
+		t.Errorf("a deep hash.txt: %v", err)
+	}
+
 	dir := t.TempDir()
 	write(t, filepath.Join(dir, "texts", "boringssl-817ab07e-LICENSE"), iscText)
 	list := filepath.Join(dir, "allowlist.json")
-	write(t, list, `[{"kind":"swift","name":"swift-nio-ssl","version":"2.37.5",
-	  "extra":[{"text":"texts/boringssl-817ab07e-LICENSE","as":"Sources/CNIOBoringSSL/LICENSE"}],
-	  "reason":"BoringSSL's LICENSE at the vendored revision; the vendoring script leaves it out."}]`)
-	allow, err := LoadAllowlist(list)
-	if err != nil {
-		t.Fatal(err)
+	entry := func(rev, as string) string {
+		return `[{"kind":"swift","name":"swift-nio-ssl","version":"2.37.5",
+		  "extra":[{"text":"texts/boringssl-817ab07e-LICENSE","as":"` + as + `","revision":"` + rev + `"}],
+		  "reason":"BoringSSL's LICENSE at the vendored revision; the vendoring script leaves it out."}]`
 	}
+	load := func(text string) *Allowlist {
+		t.Helper()
+		write(t, list, text)
+		a, err := LoadAllowlist(list)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return a
+	}
+	allow := load(entry("817ab07e", "Sources/CNIOBoringSSL/LICENSE"))
 	entries, err := Collect([]Component{ssl}, w.source, origin, allow)
 	if err != nil {
 		t.Fatal(err)
@@ -438,18 +496,31 @@ func TestVendoredCodeNeedsItsLicence(t *testing.T) {
 		t.Errorf("files %q, want %q", names, want)
 	}
 
+	// An update that vendors another revision fails until the entry names it.
+	write(t, filepath.Join(w.dirs[ssl], "Sources", "CNIOBoringSSL", "hash.txt"), marker("0226f304"))
+	if _, err := Collect([]Component{ssl}, w.source, origin, allow); err == nil || !strings.Contains(err.Error(), "is for revision 817ab07e, but Sources/CNIOBoringSSL/hash.txt vendors 0226f304") {
+		t.Errorf("a new vendored revision: %v", err)
+	}
+	write(t, filepath.Join(w.dirs[ssl], "Sources", "CNIOBoringSSL", "hash.txt"), marker("817ab07e"))
+
 	// An extra text is checked like the package's own.
 	write(t, filepath.Join(dir, "texts", "boringssl-817ab07e-LICENSE"), gplText)
 	if _, err := Collect([]Component{ssl}, w.source, origin, allow); err == nil || !strings.Contains(err.Error(), "copyleft terms in Sources/CNIOBoringSSL/LICENSE") {
 		t.Errorf("a GPL extra text: %v", err)
 	}
-	// And can't replace one of the package's files.
-	write(t, list, `[{"kind":"swift","name":"swift-nio-ssl","version":"2.37.5","extra":[{"text":"texts/boringssl-817ab07e-LICENSE","as":"LICENSE.txt"}],"reason":"r"}]`)
-	if allow, err = LoadAllowlist(list); err != nil {
-		t.Fatal(err)
+	write(t, filepath.Join(dir, "texts", "boringssl-817ab07e-LICENSE"), iscText)
+	// It can't replace one of the package's files, nor sit outside a vendored folder.
+	for as, want := range map[string]string{"LICENSE.txt": "already in the source", "Sources/NIOSSL/LICENSE": "isn't in a vendored folder"} {
+		if _, err := Collect([]Component{ssl}, w.source, origin, load(entry("817ab07e", as))); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("an extra at %s: %v", as, err)
+		}
 	}
-	if _, err := Collect([]Component{ssl}, w.source, origin, allow); err == nil || !strings.Contains(err.Error(), "already in the source") {
-		t.Errorf("an extra over the package's LICENSE.txt: %v", err)
+	// And it needs its revision.
+	for _, rev := range []string{"", "HEAD", "817ab07e; rm"} {
+		write(t, list, entry(rev, "Sources/CNIOBoringSSL/LICENSE"))
+		if _, err := LoadAllowlist(list); err == nil {
+			t.Errorf("an extra with revision %q was accepted", rev)
+		}
 	}
 }
 
@@ -457,7 +528,13 @@ func TestAllowlist(t *testing.T) {
 	w := newWorld(t)
 	unknown := w.add(Component{KindGo, "example.com/unknown", "v1.0.0"}, map[string]string{"LICENSE": "Do what you like, says the author."})
 	bare := w.add(Component{KindGo, "example.com/bare", "v2.0.0"}, map[string]string{})
-	lgpl := w.add(Component{KindGo, "example.com/lgpl", "v1.0.0"}, map[string]string{"LICENSE": mitText, "COPYING.LESSER": "GNU Lesser General Public License"})
+	// go-digest's case: one file the reviewer read is ignored, the rest is
+	// still checked.
+	docs := w.add(Component{KindGo, "example.com/docs", "v1.0.0"}, map[string]string{"LICENSE": apacheText, "LICENSE.docs": "Creative Commons Attribution-ShareAlike 4.0"})
+	docsGPL := w.add(Component{KindGo, "example.com/docs", "v1.1.0"}, map[string]string{"LICENSE": apacheText, "LICENSE.docs": "CC BY-SA", "NOTICE": "Parts are GPL-2.0."})
+	stale := w.add(Component{KindGo, "example.com/docs", "v1.2.0"}, map[string]string{"LICENSE": apacheText})
+	// A licence exception doesn't switch off the copyleft check.
+	lgpl := w.add(Component{KindGo, "example.com/lgpl", "v1.0.0"}, map[string]string{"LICENSE": "A grant without a name.", "COPYING.LESSER": "GNU Lesser General Public License"})
 
 	dir := t.TempDir()
 	write(t, filepath.Join(dir, "texts", "bare.txt"), mitText)
@@ -465,13 +542,16 @@ func TestAllowlist(t *testing.T) {
 	write(t, list, `[
 	  {"kind":"go","name":"example.com/unknown","version":"v1.0.0","licence":"Unlicense-like","reason":"Read by the reviewer: a permissive grant without a standard name."},
 	  {"kind":"go","name":"example.com/bare","version":"v2.0.0","licence":"MIT","texts":["texts/bare.txt"],"reason":"The repository states MIT in its README; text added by hand."},
-	  {"kind":"go","name":"example.com/lgpl","version":"v1.0.0","licence":"MIT","reason":"COPYING.LESSER covers only a test tool that isn't compiled in."}
+	  {"kind":"go","name":"example.com/docs","version":"v1.0.0","ignore":["LICENSE.docs"],"reason":"Documentation only, not compiled in."},
+	  {"kind":"go","name":"example.com/docs","version":"v1.1.0","ignore":["LICENSE.docs"],"reason":"Documentation only, not compiled in."},
+	  {"kind":"go","name":"example.com/docs","version":"v1.2.0","ignore":["LICENSE.docs"],"reason":"Documentation only, not compiled in."},
+	  {"kind":"go","name":"example.com/lgpl","version":"v1.0.0","licence":"MIT","reason":"r"}
 	]`)
 	allow, err := LoadAllowlist(list)
 	if err != nil {
 		t.Fatal(err)
 	}
-	entries, err := Collect([]Component{unknown, bare, lgpl}, w.source, origin, allow)
+	entries, err := Collect([]Component{unknown, bare, docs}, w.source, origin, allow)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -485,8 +565,17 @@ func TestAllowlist(t *testing.T) {
 	if e := got["example.com/bare"]; e.Licence != "MIT" || len(e.Files) != 1 || string(e.Files[0].Text) != mitText {
 		t.Errorf("bare: %+v", e)
 	}
-	if e := got["example.com/lgpl"]; e.Licence != "MIT" || len(e.Files) != 2 {
-		t.Errorf("an allowlisted copyleft marker: %+v", e)
+	if e := got["example.com/docs"]; e.Licence != "Apache-2.0" || len(e.Files) != 2 {
+		t.Errorf("an ignored file still ships, and the rest is identified: %+v", e)
+	}
+	for c, want := range map[Component]string{
+		docsGPL: "copyleft terms in NOTICE (gpl-2)",
+		stale:   "ignores LICENSE.docs, which isn't among its licence files",
+		lgpl:    "copyleft terms in COPYING.LESSER",
+	} {
+		if _, err := Collect([]Component{c}, w.source, origin, allow); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%s %s: %v, want %q", c.Name, c.Version, err, want)
+		}
 	}
 
 	// Another version isn't covered by the entry.
@@ -509,7 +598,8 @@ func TestAllowlist(t *testing.T) {
 		"extra outside":     `{"kind":"go","name":"a","version":"v1","extra":[{"text":"../x","as":"b"}],"reason":"r"}`,
 		"extra as ..":       `{"kind":"go","name":"a","version":"v1","extra":[{"text":"x","as":"../b"}],"reason":"r"}`,
 		"extra no as":       `{"kind":"go","name":"a","version":"v1","extra":[{"text":"x"}],"reason":"r"}`,
-		"extra twice":       `{"kind":"go","name":"a","version":"v1","extra":[{"text":"x","as":"b/L"},{"text":"y","as":"b//L"}],"reason":"r"}`,
+		"extra twice":       `{"kind":"go","name":"a","version":"v1","extra":[{"text":"x","as":"b/L","revision":"abcdef1"},{"text":"y","as":"b//L","revision":"abcdef1"}],"reason":"r"}`,
+		"ignore outside":    `{"kind":"go","name":"a","version":"v1","ignore":["../LICENSE"],"reason":"r"}`,
 	} {
 		write(t, list, "["+entry+"]")
 		if _, err := LoadAllowlist(list); err == nil {

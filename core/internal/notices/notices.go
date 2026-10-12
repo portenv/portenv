@@ -217,12 +217,12 @@ func (p SwiftPin) CheckoutName() string {
 }
 
 // A licence file: LICENSE, LICENCE, LICENSES, UNLICENSE, COPYING,
-// COPYRIGHT, NOTICE or PATENTS, alone or with a suffix such as .txt, .md,
-// -MIT, -2.0.txt or .APACHE, but not a source file that happens to start with
+// COPYRIGHT, NOTICE, PATENTS or THIRD_PARTY_NOTICES, alone or with a suffix
+// such as .txt, .md, -MIT, -2.0.txt, _THIRD_PARTY or .APACHE, but not a source file that happens to start with
 // one of those words (license.go). Every file in a REUSE LICENSES/ folder is
 // a licence file too.
 var (
-	licenceFileName = regexp.MustCompile(`(?i)^(un)?(licen[cs]es?|copying|copyright|notices?|patents)([-_.][a-z0-9.-]+)?$`)
+	licenceFileName = regexp.MustCompile(`(?i)^(un)?(licen[cs]es?|copying|copyright|notices?|patents|third[-_]party[-_]notices?)([-_.][a-z0-9._-]+)?$`)
 	sourceFile      = regexp.MustCompile(`(?i)\.(go|swift|c|h|m|mm|cc|cpp|s|py|sh|js|ts|json|ya?ml|toml|html?|csv|tsv)$`)
 	reuseDir        = regexp.MustCompile(`(?i)^licen[cs]es$`)
 )
@@ -284,25 +284,34 @@ func LicenceFiles(dir string, recursive bool) ([]string, error) {
 // a licence but needn't name one.
 func isNotice(name string) bool {
 	n := strings.ToLower(path.Base(name))
-	return strings.HasPrefix(n, "notice") || strings.HasPrefix(n, "patents") || strings.HasPrefix(n, "copyright")
+	for _, p := range []string{"notice", "patents", "copyright", "third_party_notice", "third-party-notice"} {
+		if strings.HasPrefix(n, p) {
+			return true
+		}
+	}
+	return false
 }
 
-// copyleftMarkers are phrases of licences whose terms need more than a
-// notice (GPL, LGPL, AGPL, Creative Commons ShareAlike). A file with one of
-// them fails the build unless the allowlist names the component.
-var copyleftMarkers = []string{"GNU General Public", "GNU Lesser", "GNU Library General Public", "Affero", "ShareAlike"}
+// copyleft matches, in a lower-cased normalised text, the names of licences
+// whose terms need more than a notice: GPL, LGPL and AGPL in any spelling
+// (GPL-2.0, GPL-2.0-or-later, GPLv3, a Debian "License: GPL-2+", "GNU
+// GENERAL PUBLIC LICENSE"), Affero, and Creative Commons ShareAlike. Every
+// licence file is read, NOTICE, COPYRIGHT and PATENTS included; a match fails
+// the build unless the allowlist covers the file.
+var copyleft = regexp.MustCompile(`\b[al]?gpl(v?\d|-\d)|general public licen[cs]e|affero|sharealike|share-alike|\bby-sa\b`)
 
 // mplSecondary is MPL-2.0's own definition of "Secondary License", which
 // names the GNU licences without putting the code under them; only this exact
 // sentence is ignored.
 const mplSecondary = "means either the GNU General Public License, Version 2.0, the GNU Lesser General Public License, Version 2.1, the GNU Affero General Public License, Version 3.0, or any later versions of those licenses."
 
-// Copyleft returns the copyleft markers found in a text.
+// Copyleft returns the copyleft terms found in a text, each once, as written
+// in lower case.
 func Copyleft(text []byte) []string {
-	t := strings.ReplaceAll(normalize(text), mplSecondary, "")
+	t := strings.ToLower(strings.ReplaceAll(normalize(text), mplSecondary, ""))
 	var found []string
-	for _, m := range copyleftMarkers {
-		if strings.Contains(t, m) {
+	for _, m := range copyleft.FindAllString(t, -1) {
+		if !contains(found, m) {
 			found = append(found, m)
 		}
 	}
@@ -369,10 +378,13 @@ func Identify(text []byte) []string {
 }
 
 // AllowEntry is a reviewed entry for one component. With a licence, it is an
-// exception: a component whose source has no licence file, whose licence
-// Identify doesn't recognise, or with copyleft terms the reviewer has read.
-// Extra alone adds the licences of code the component vendors but whose
-// licence its source leaves out; they are checked like its own files.
+// exception: a component whose source has no licence file, or whose licence
+// Identify doesn't recognise; the copyleft and vendored-code checks still
+// apply. Without one, it narrows the checks instead:
+// Extra adds the licences of code the component vendors but whose licence its
+// source leaves out (checked like its own files), and Ignore names the files
+// the reviewer has read and exempted from identification and the copyleft
+// check (they still ship).
 type AllowEntry struct {
 	Kind    string      `json:"kind"`
 	Name    string      `json:"name"`
@@ -380,14 +392,18 @@ type AllowEntry struct {
 	Licence string      `json:"licence"`
 	Texts   []string    `json:"texts"` // hand-added files, relative to the allowlist; empty: use the component's own
 	Extra   []ExtraText `json:"extra"`
+	Ignore  []string    `json:"ignore"`
 	Reason  string      `json:"reason"`
 }
 
 // ExtraText is a hand-added licence file (Text, relative to the allowlist)
-// placed at As in the component's folder, beside its own files.
+// placed at As in the component's folder, beside its own files. Revision is
+// the vendored code's revision the text belongs to, as the vendored folder's
+// hash.txt states it.
 type ExtraText struct {
-	Text string `json:"text"`
-	As   string `json:"as"`
+	Text     string `json:"text"`
+	As       string `json:"as"`
+	Revision string `json:"revision"`
 }
 
 // Allowlist is the reviewed list of exceptions.
@@ -411,8 +427,8 @@ func LoadAllowlist(file string) (*Allowlist, error) {
 		return nil, fmt.Errorf("%s: %w", file, err)
 	}
 	for _, e := range list {
-		if e.Name == "" || e.Version == "" || (e.Licence == "" && (len(e.Extra) == 0 || len(e.Texts) > 0)) || strings.TrimSpace(e.Reason) == "" {
-			return nil, fmt.Errorf("%s: every entry needs kind, name, version, a reason and a licence (or only extra texts)", file)
+		if e.Name == "" || e.Version == "" || (e.Licence == "" && (len(e.Extra)+len(e.Ignore) == 0 || len(e.Texts) > 0)) || strings.TrimSpace(e.Reason) == "" {
+			return nil, fmt.Errorf("%s: every entry needs kind, name, version, a reason and a licence (or only extra or ignored files)", file)
 		}
 		if _, ok := kindOrder[e.Kind]; !ok {
 			return nil, fmt.Errorf("%s: %s %s: kind %q isn't %s, %s or %s", file, e.Name, e.Version, e.Kind, KindGo, KindGoStd, KindSwift)
@@ -442,6 +458,14 @@ func LoadAllowlist(file string) (*Allowlist, error) {
 				return nil, fmt.Errorf("%s: %s %s: two extra texts at %s", file, e.Name, e.Version, x.As)
 			} else {
 				names[as] = true
+			}
+			if !revision.MatchString(x.Revision) {
+				return nil, fmt.Errorf("%s: %s %s: extra %s needs the vendored revision it belongs to (hash.txt's)", file, e.Name, e.Version, x.As)
+			}
+		}
+		for _, n := range e.Ignore {
+			if n == "" || !filepath.IsLocal(n) || strings.Contains(filepath.ToSlash(n), "../") {
+				return nil, fmt.Errorf("%s: %s %s: ignored file %q must be a path inside the component", file, e.Name, e.Version, n)
 			}
 		}
 		a.entries[c] = e
@@ -529,12 +553,27 @@ func collectOne(c Component, src Source, origin Origin, allow *Allowlist) (Entry
 			}
 			e.Files = append(e.Files, NamedText{Name: n, Text: b})
 		}
+		var vendored []vendoredFolder
+		if c.Kind != KindGoStd {
+			if vendored, err = vendoredFolders(dir); err != nil {
+				return e, fmt.Errorf("%s %s: %w", c.Name, c.Version, err)
+			}
+		}
 		for _, x := range ae.Extra {
 			as := path.Clean(filepath.ToSlash(x.As))
 			for _, f := range e.Files {
 				if f.Name == as {
 					return e, fmt.Errorf("%s %s: allowlist extra %s is already in the source", c.Name, c.Version, as)
 				}
+			}
+			// The text belongs to one vendored revision: an update that
+			// vendors another fails until the entry is updated with it.
+			v, ok := vendoredFolderOf(vendored, as)
+			switch {
+			case !ok:
+				return e, fmt.Errorf("%s %s: allowlist extra %s isn't in a vendored folder (one with a hash.txt)", c.Name, c.Version, as)
+			case v.revision != x.Revision:
+				return e, fmt.Errorf("%s %s: allowlist extra %s is for revision %s, but %s/hash.txt vendors %s: add that revision's licence", c.Name, c.Version, as, x.Revision, v.folder, v.revision)
 			}
 			b, err := os.ReadFile(filepath.Join(allow.dir, x.Text)) // #nosec G304 -- hand-added texts beside the reviewed allowlist
 			if err != nil {
@@ -543,20 +582,30 @@ func collectOne(c Component, src Source, origin Origin, allow *Allowlist) (Entry
 			e.Files = append(e.Files, NamedText{Name: as, Text: b})
 		}
 		sort.Slice(e.Files, func(i, j int) bool { return e.Files[i].Name < e.Files[j].Name })
-		if !allowed {
-			if missing := vendoredWithoutLicence(dir, e.Files); len(missing) > 0 {
-				return e, fmt.Errorf("%s %s: vendored code without its licence in %s: add its text to the allowlist's extra", c.Name, c.Version, strings.Join(missing, ", "))
-			}
+		if missing := vendoredWithoutLicence(vendored, e.Files); len(missing) > 0 {
+			return e, fmt.Errorf("%s %s: vendored code without its licence in %s: add its text to the allowlist's extra", c.Name, c.Version, strings.Join(missing, ", "))
 		}
 	}
 	// Each licence file is identified on its own, so a recognised LICENSE
 	// can't hide an unrecognised COPYING beside it, and no file may carry
 	// copyleft terms.
-	var ids, unknown, copyleft []string
+	for _, n := range ae.Ignore {
+		found := false
+		for _, f := range e.Files {
+			found = found || f.Name == path.Clean(filepath.ToSlash(n))
+		}
+		if !found {
+			return e, fmt.Errorf("%s %s: the allowlist ignores %s, which isn't among its licence files", c.Name, c.Version, n)
+		}
+	}
+	var ids, unknown, copyleftIn []string
 	licences := 0
 	for _, f := range e.Files {
+		if contains(ae.Ignore, f.Name) {
+			continue // read by the reviewer; it still ships
+		}
 		if m := Copyleft(f.Text); len(m) > 0 {
-			copyleft = append(copyleft, f.Name+" ("+strings.Join(m, ", ")+")")
+			copyleftIn = append(copyleftIn, f.Name+" ("+strings.Join(m, ", ")+")")
 		}
 		if isNotice(f.Name) {
 			continue
@@ -573,12 +622,12 @@ func collectOne(c Component, src Source, origin Origin, allow *Allowlist) (Entry
 		}
 	}
 	switch {
+	case len(copyleftIn) > 0:
+		return e, fmt.Errorf("%s %s: copyleft terms in %s: the allowlist can ignore a file the reviewer has read", c.Name, c.Version, strings.Join(copyleftIn, ", "))
 	case allowed:
 		e.Licence = ae.Licence
 	case licences == 0:
 		return e, fmt.Errorf("%s %s: no licence file", c.Name, c.Version)
-	case len(copyleft) > 0:
-		return e, fmt.Errorf("%s %s: copyleft terms in %s", c.Name, c.Version, strings.Join(copyleft, ", "))
 	case len(unknown) > 0:
 		return e, fmt.Errorf("%s %s: licence not recognised in %s", c.Name, c.Version, strings.Join(unknown, ", "))
 	default:
@@ -592,30 +641,78 @@ func collectOne(c Component, src Source, origin Origin, allow *Allowlist) (Entry
 
 // vendoredMarker is the first line SwiftPM packages that vendor another
 // project write into the vendored folder's hash.txt ("This directory is
-// derived from BoringSSL cloned from …"); their vendoring scripts leave the
-// project's LICENSE out.
-var vendoredMarker = regexp.MustCompile(`(?i)^This directory is derived from \S+ cloned from`)
+// derived from BoringSSL cloned from … at revision 817ab07e…"); their
+// vendoring scripts leave the project's LICENSE out.
+var (
+	vendoredMarker = regexp.MustCompile(`(?i)^This directory is derived from \S+ cloned from \S+(?: at revision ([0-9a-f]{7,64}))?`)
+	revision       = regexp.MustCompile(`^[0-9a-f]{7,64}$`)
+)
 
-// vendoredWithoutLicence lists the Sources/<target> folders that hold
-// vendored code (a hash.txt with vendoredMarker) but no licence file among
-// files.
-func vendoredWithoutLicence(dir string, files []NamedText) []string {
-	hashes, _ := filepath.Glob(filepath.Join(dir, "Sources", "*", "hash.txt"))
-	var out []string
-	for _, h := range hashes {
-		b, err := os.ReadFile(h) // #nosec G304 -- a file in a Swift checkout
-		if err != nil || !vendoredMarker.Match(bytes.TrimSpace(b)) {
-			continue
+// vendoredFolder is a folder of vendored code: its slash path in the
+// component and the revision its hash.txt states.
+type vendoredFolder struct{ folder, revision string }
+
+// vendoredFolders finds every hash.txt with vendoredMarker in a component's
+// source, at any depth except version control, test data and tests.
+func vendoredFolders(dir string) ([]vendoredFolder, error) {
+	var out []vendoredFolder
+	root := filepath.Clean(dir)
+	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
 		}
-		folder := "Sources/" + filepath.Base(filepath.Dir(h)) + "/"
+		if d.IsDir() {
+			if p != root && skipDir(d.Name()) {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		if d.Name() != "hash.txt" || !d.Type().IsRegular() {
+			return nil
+		}
+		b, err := os.ReadFile(p) // #nosec G304 G122 -- reading (never writing) a hash.txt in the module cache or a checkout, both build inputs
+		if err != nil {
+			return err
+		}
+		m := vendoredMarker.FindSubmatch(bytes.TrimSpace(b))
+		if m == nil {
+			return nil
+		}
+		rel, err := filepath.Rel(root, filepath.Dir(p))
+		if err != nil {
+			return err
+		}
+		out = append(out, vendoredFolder{folder: filepath.ToSlash(rel), revision: string(m[1])})
+		return nil
+	})
+	return out, err
+}
+
+// vendoredFolderOf is the vendored folder a file is in (the deepest one).
+func vendoredFolderOf(vs []vendoredFolder, name string) (vendoredFolder, bool) {
+	var best vendoredFolder
+	ok := false
+	for _, v := range vs {
+		if (v.folder == "." || strings.HasPrefix(name, v.folder+"/")) && (!ok || len(v.folder) > len(best.folder)) {
+			best, ok = v, true
+		}
+	}
+	return best, ok
+}
+
+// vendoredWithoutLicence lists the vendored folders with no licence file
+// among files.
+func vendoredWithoutLicence(vs []vendoredFolder, files []NamedText) []string {
+	var out []string
+	for _, v := range vs {
 		found := false
 		for _, f := range files {
-			if strings.HasPrefix(f.Name, folder) && !isNotice(f.Name) {
+			if (v.folder == "." || strings.HasPrefix(f.Name, v.folder+"/")) && !isNotice(f.Name) {
 				found = true
 			}
 		}
 		if !found {
-			out = append(out, strings.TrimSuffix(folder, "/"))
+			out = append(out, v.folder)
 		}
 	}
 	sort.Strings(out)
@@ -671,20 +768,16 @@ func Write(app string, entries []Entry) error {
 	return os.WriteFile(filepath.Join(app, filepath.FromSlash(NoticesFile)), Render(entries), 0o644) // #nosec G306 -- public notices in the app bundle
 }
 
-// Render is ThirdPartyNotices.txt: a table of every component, then each
-// component's licence texts in the same order.
+// Render is ThirdPartyNotices.txt: one line per component ("name version ·
+// licence"), then each component's section with its licence texts, in the
+// same order. The list is for reading, so it has no columns to break in a
+// narrow window.
 func Render(entries []Entry) []byte {
 	var b bytes.Buffer
 	b.WriteString("Portenv includes the following third-party software. Each component's\n")
 	b.WriteString("licence follows below in full, in the same order.\n\n")
-	nameW, verW := len("Component"), len("Version")
 	for _, e := range entries {
-		nameW = max(nameW, len(e.Name))
-		verW = max(verW, len(e.Version))
-	}
-	fmt.Fprintf(&b, "%-*s  %-*s  %s\n", nameW, "Component", verW, "Version", "Licence")
-	for _, e := range entries {
-		fmt.Fprintf(&b, "%-*s  %-*s  %s\n", nameW, e.Name, verW, e.Version, e.Licence)
+		fmt.Fprintf(&b, "%s %s · %s\n", e.Name, e.Version, e.Licence)
 	}
 	for _, e := range entries {
 		fmt.Fprintf(&b, "\n\n%s (%s)\nSource: %s\n", e.Header(), e.Licence, e.Source)

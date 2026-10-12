@@ -33,6 +33,24 @@ struct AcknowledgementsTests {
         #expect(Acknowledgements.text(in: try bundle(notices: "")) == Acknowledgements.missing)
     }
 
+    /// The list of components, one per line, is what gets the hanging
+    /// indent; the intro and the sections don't (R-0119).
+    @Test func listRangeIsTheComponentLines() throws {
+        let notices = "Portenv includes the following third-party software. Each component's\nlicence follows below.\n\n"
+            + "cel.dev/expr v0.25.1 · Apache-2.0\ngithub.com/Azure/azure-sdk-for-go/sdk/azidentity v1.13.1 · MIT\n"
+            + "\n\n== cel.dev/expr v0.25.1 (Apache-2.0)\nSource: https://proxy.golang.org/cel.dev/expr/@v/v0.25.1.zip\n"
+        let range = try #require(Acknowledgements.listRange(in: notices))
+        #expect((notices as NSString).substring(with: range)
+            == "cel.dev/expr v0.25.1 · Apache-2.0\ngithub.com/Azure/azure-sdk-for-go/sdk/azidentity v1.13.1 · MIT\n")
+        #expect(Acknowledgements.listRange(in: Acknowledgements.missing) == nil)
+    }
+
+    /// Edit › Find uses the standard names (R-0119).
+    @Test func findMenuUsesTheStandardNames() {
+        #expect([FindMenu.menu, FindMenu.find, FindMenu.findNext, FindMenu.findPrevious, FindMenu.useSelection]
+            == ["Find", "Find…", "Find Next", "Find Previous", "Use Selection for Find"])
+    }
+
     @Test func menuItemOpensAWindow() {
         // An ellipsis: the item opens a window (GUIDELINES §10).
         #expect(Acknowledgements.menuItem == "Acknowledgements…")

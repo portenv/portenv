@@ -34,6 +34,10 @@ var inputGiveUp = 15 * time.Second
 // long to arrive before the terminal ends.
 var exitGrace = time.Second
 
+// How often a terminal whose client finished sending asks the PTY how much
+// input its program hasn't read yet.
+var inputPoll = 25 * time.Millisecond
+
 // After the program has read all its input, output it prints in reply
 // still reaches the client: the terminal closes once the output has been
 // quiet this long (at most outputLingerMax).
@@ -118,7 +122,13 @@ func ServeTerminal(stream agentv1.AgentService_TerminalServer, cmd *exec.Cmd, co
 				if e := drainInput(ttyName, exited, &lastOutput, &lastLeft); e != nil {
 					stuck.Store(&e)
 				}
-				closePTY()
+				select {
+				case <-exited:
+					// The program ended first: the PTY stays open until
+					// ServeTerminal has counted the input it left (#73).
+				default:
+					closePTY()
+				}
 				return
 			}
 			switch m := req.GetMsg().(type) {
@@ -208,7 +218,7 @@ func drainInput(ttyName string, exited <-chan struct{}, lastOutput, lastLeft *at
 // asked, which both mean the program reads nothing more.
 func waitInputRead(ttyName string, exited <-chan struct{}, lastLeft *atomic.Int64) error {
 	left, progress := -1, time.Now()
-	for zeros := 0; zeros < 2; time.Sleep(25 * time.Millisecond) {
+	for zeros := 0; zeros < 2; time.Sleep(inputPoll) {
 		select {
 		case <-exited:
 			return nil
@@ -234,11 +244,25 @@ func waitInputRead(ttyName string, exited <-chan struct{}, lastLeft *atomic.Int6
 }
 
 // unreadAtExit is the input a program that ended never read: the PTY's
-// count if it can still be asked (Linux keeps it after the exit), else
-// the last count seen.
+// count, which Linux keeps after the exit while the agent holds the PTY
+// open, taken once it stops changing (a write may still be on its way into
+// the queue, and nothing reads it any more). Only if the PTY can't be asked
+// is it the last count seen.
 func unreadAtExit(ttyName string, lastLeft *atomic.Int64) int64 {
-	if n, err := unreadInput(ttyName); err == nil {
-		return int64(n)
+	last := -1
+	for range 20 {
+		n, err := unreadInput(ttyName)
+		if err != nil {
+			break
+		}
+		if n == last {
+			return int64(n)
+		}
+		last = n
+		time.Sleep(inputPoll)
+	}
+	if last >= 0 {
+		return int64(last)
 	}
 	return lastLeft.Load()
 }
@@ -252,6 +276,10 @@ func unreadInput(ttyName string) (int, error) {
 		return 0, err
 	}
 	defer func() { _ = unix.Close(fd) }()
+	// Polling first makes Linux finish moving input written to the PTY into
+	// its queue (n_tty flushes it when nothing is readable yet), so a write
+	// still on its way isn't counted as read (#73).
+	_, _ = unix.Poll([]unix.PollFd{{Fd: int32(fd), Events: unix.POLLIN}}, 0) // #nosec G115 -- a file descriptor
 	n, err := unix.IoctlGetInt(fd, inputQueueReq)
 	if err != nil {
 		return 0, fmt.Errorf("unread input on %s: %w", ttyName, err)

@@ -27,14 +27,18 @@ import (
 
 // TestMain runs this test binary as a program in a test terminal when
 // PORTENV_TERMINAL_HELPER says which: stuck never reads its input; head10
-// reads 10 bytes and exits, like head -c 10.
+// reads 10 bytes and exits, like head -c 10; late10 does the same after
+// 300 ms.
 func TestMain(m *testing.M) {
 	if mode := os.Getenv("PORTENV_TERMINAL_HELPER"); mode != "" {
 		if _, err := term.MakeRaw(0); err != nil {
 			os.Exit(2)
 		}
 		fmt.Print("ready\n")
-		if mode == "head10" {
+		if mode == "late10" {
+			time.Sleep(300 * time.Millisecond)
+		}
+		if mode == "head10" || mode == "late10" {
 			buf := make([]byte, 10)
 			for got := 0; got < len(buf); {
 				n, err := os.Stdin.Read(buf[got:])
@@ -170,6 +174,21 @@ func TestTerminalSaysWhenTheProgramExitsFirst(t *testing.T) {
 			wantDataLoss(t, exited, err, "490 bytes of input didn't reach")
 		})
 	}
+}
+
+// TestTerminalCountsWhatTheProgramLeftAtItsExit (#73): the client has
+// finished sending, and the program reads 10 of 500 bytes only after the
+// agent last asked the PTY what's unread, then exits. The count comes from
+// the PTY after the exit (490), never from that earlier answer (500, or 0
+// while the write was still on its way into the queue).
+func TestTerminalCountsWhatTheProgramLeftAtItsExit(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("macOS discards a terminal's unread input when its program exits; the agent runs on Linux")
+	}
+	defer func(d time.Duration) { inputPoll = d }(inputPoll)
+	inputPoll = 2 * time.Second // one look before the program reads, the next after it exits
+	exited, err := session{mode: "late10", piped: true, input: []byte(strings.Repeat("x", 500))}.run(t)
+	wantDataLoss(t, exited, err, "490 bytes of input didn't reach")
 }
 
 // TestTerminalTypingAfterTheEndIsNotDataLoss (R-0053): a person typing

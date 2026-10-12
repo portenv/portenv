@@ -41,6 +41,21 @@ public enum LaunchOrder {
 public enum MoveOffer {
     public enum Answer: Sendable { case move, notNow }
 
+    /// A button on the sheet, with its key: Return for the default,
+    /// Escape for the cancel (R-0124).
+    public struct Button: Equatable, Sendable {
+        public enum Key: Sendable { case `default`, cancel }
+        public let title: String
+        public let answer: Answer
+        public let key: Key
+    }
+
+    /// The sheet's buttons, left to right.
+    public static let buttons = [
+        Button(title: MoveText.notNow, answer: .notNow, key: .cancel),
+        Button(title: MoveText.move, answer: .move, key: .default),
+    ]
+
     /// Outside Applications, unless Not Now was chosen for this same place.
     public static func shouldOffer(placement: AppPlacement, declinedPath: String?, here: String) -> Bool {
         placement.shouldOfferMove && declinedPath != here

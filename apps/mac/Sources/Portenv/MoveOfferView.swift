@@ -27,11 +27,17 @@ struct MoveOfferView: View {
             }
             HStack {
                 Spacer()
-                Button(MoveText.notNow) { answer(.notNow) }
-                    .keyboardShortcut(.cancelAction)
-                Button(MoveText.move) { answer(.move) }
-                    .buttonStyle(.borderedProminent)
-                    .keyboardShortcut(.defaultAction)
+                ForEach(MoveOffer.buttons, id: \.title) { button in
+                    switch button.key {
+                    case .default:
+                        Button(button.title) { answer(button.answer) }
+                            .buttonStyle(.borderedProminent)
+                            .keyboardShortcut(.defaultAction)
+                    case .cancel:
+                        Button(button.title) { answer(button.answer) }
+                            .keyboardShortcut(.cancelAction)
+                    }
+                }
             }
         }
         .padding(20)

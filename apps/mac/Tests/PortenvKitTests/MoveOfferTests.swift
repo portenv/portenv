@@ -80,6 +80,18 @@ struct MoveOfferTests {
         #expect(log.steps == ["decline"])
     }
 
+    /// The sheet's buttons (R-0124): Not Now then Move, Move the default
+    /// (Return) and Not Now the cancel (Escape), so both are reachable
+    /// from the keyboard and VoiceOver.
+    @Test func theSheetsButtonsHaveTheirKeys() {
+        #expect(MoveOffer.buttons == [
+            MoveOffer.Button(title: "Not Now", answer: .notNow, key: .cancel),
+            MoveOffer.Button(title: "Move to Applications", answer: .move, key: .default),
+        ])
+        #expect(MoveOffer.buttons.filter { $0.key == .default }.count == 1)
+        #expect(MoveOffer.buttons.filter { $0.key == .cancel }.count == 1)
+    }
+
     /// R-0112: the question's detail says workspaces.
     @Test func theDetailSaysWorkspaces() {
         #expect(MoveText.detail == "Portenv runs its background service, which keeps your workspaces saved, from the Applications folder. It can copy itself there and open again.")

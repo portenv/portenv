@@ -255,9 +255,19 @@ public final class MoveGate {
     /// A workspace to open: returned to open now, or held (nil) while the
     /// question shows.
     public func open(_ box: String) -> String? {
-        guard offering else { return box }
+        // Held while the question shows and while Move runs (R-0132).
+        guard offering || moving else { return box }
         held = box
         return nil
+    }
+
+    /// The sheet went away without an answer: release the gate like Not
+    /// Now, but don't remember it. Returns the workspace held, to open now.
+    public func dismissed() -> String? {
+        guard offering else { return nil }
+        offering = false
+        defer { held = nil }
+        return held
     }
 
     public func answer(_ answer: MoveOffer.Answer,
@@ -268,14 +278,18 @@ public final class MoveGate {
                        copyAndOpen: () async throws -> Void,
                        decline: () -> Void) async -> Result {
         offering = false
-        let waiting = held
-        held = nil
         switch answer {
         case .notNow:
             decline()
-            return Result(error: nil, open: waiting)
+            defer { held = nil }
+            return Result(error: nil, open: held)
         case .move:
-            guard !workspaceOpen else { return Result(error: MoveText.workspaceOpen, open: waiting) }
+            // A workspace is open: nothing moves, and nothing else opens
+            // over it (R-0132).
+            guard !workspaceOpen else {
+                held = nil
+                return Result(error: MoveText.workspaceOpen, open: nil)
+            }
             moving = true
             stopWait()
             let error = await MoveOffer.answer(.move, unregister: unregister,
@@ -284,7 +298,9 @@ public final class MoveGate {
                                                    await register()
                                                },
                                                copyAndOpen: copyAndOpen, decline: decline)
-            return Result(error: error, open: error == nil ? nil : waiting)
+            // Held until here, also while moving: a failed move opens it.
+            defer { held = nil }
+            return Result(error: error, open: error == nil ? nil : held)
         }
     }
 }

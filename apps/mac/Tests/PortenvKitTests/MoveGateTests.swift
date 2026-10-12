@@ -101,6 +101,47 @@ struct MoveGateTests {
         #expect(gate.registrationAllowed)
     }
 
+    /// While Move runs, a workspace that would open is held too; if the
+    /// move fails, it opens then (R-0132).
+    @Test func aWorkspaceWaitsWhileMoving() async {
+        let gate = MoveGate()
+        _ = gate.offer(if: true)
+        var duringCopy: String?? = .none
+        let result = await gate.answer(.move, workspaceOpen: false, stopWait: {}, unregister: {}, register: {},
+                                       copyAndOpen: {
+                                           duringCopy = gate.open("acme-api")
+                                           throw MoveError(MoveText.notPortenv)
+                                       },
+                                       decline: {})
+        #expect(duringCopy == .some(nil)) // held while moving
+        #expect(result.open == "acme-api") // opened once the move failed
+        #expect(gate.open("site") == "site") // nothing holds after
+    }
+
+    /// Move refused because a workspace is open never opens another over
+    /// it (R-0132).
+    @Test func aRefusedMoveOpensNothing() async {
+        let gate = MoveGate()
+        _ = gate.offer(if: true)
+        _ = gate.open("site")
+        let result = await gate.answer(.move, workspaceOpen: true, stopWait: {}, unregister: {}, register: {},
+                                       copyAndOpen: {}, decline: {})
+        #expect(result.error == MoveText.workspaceOpen)
+        #expect(result.open == nil)
+    }
+
+    /// The sheet going away without an answer (the system dismissed it)
+    /// releases the gate like Not Now, without remembering it (R-0132).
+    @Test func aDismissedSheetReleasesTheGate() {
+        let gate = MoveGate()
+        _ = gate.offer(if: true)
+        _ = gate.open("acme-api")
+        #expect(gate.dismissed() == "acme-api")
+        #expect(!gate.offering)
+        #expect(gate.open("site") == "site")
+        #expect(gate.dismissed() == nil) // answered already: nothing to release
+    }
+
     /// Once per launch: Try Again's second start doesn't ask again.
     @Test func offeredOncePerLaunch() async {
         let gate = MoveGate()

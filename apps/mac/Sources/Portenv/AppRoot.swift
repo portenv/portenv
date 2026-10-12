@@ -43,6 +43,9 @@ final class AppModel {
     /// alongside (a sheet; nothing waits for the answer, R-0121), list the
     /// boxes, and decide.
     func start() async {
+        // Try Again while Move copies the app doesn't restart the wait
+        // (R-0132).
+        guard !MoveToApplications.gate.moving else { return }
         problem = nil
         waitStopped = false
         await LaunchOrder.begin(
@@ -58,6 +61,19 @@ final class AppModel {
         )
     }
 
+    /// The sheet went away: if it wasn't answered (the system dismissed
+    /// it), release what it held, as Not Now without remembering it
+    /// (R-0132).
+    func moveSheetDismissed() {
+        // An answer clears the flag before the sheet goes; its own task
+        // then carries it out.
+        guard !moveAnswered else { return }
+        if let box = MoveToApplications.gate.dismissed() { apply(.open(box)) }
+    }
+
+    /// The sheet was answered (set before it goes away).
+    private var moveAnswered = false
+
     /// The launch wait was stopped for a move (R-0125).
     private var waitStopped = false
 
@@ -65,6 +81,7 @@ final class AppModel {
     /// while the question showed opens now; a failed move that stopped the
     /// launch wait starts it again (the question isn't asked again).
     func answerMove(_ answer: MoveOffer.Answer) {
+        moveAnswered = true
         moveOffered = false
         Task {
             let result = await MoveToApplications.answer(answer, workspaceOpen: controller != nil,
@@ -116,6 +133,8 @@ final class AppModel {
             )
             return
         }
+        // Moving started while the list was read (R-0132).
+        if waitStopped { return }
         let requested = ProcessInfo.processInfo.environment["PORTENV_BOX"]
         apply(LaunchDecision.decide(
             requested: requested,
@@ -307,7 +326,7 @@ struct AppRoot: View {
         .background(WindowCloseGuard { window in model.windowShouldClose(window) })
         // On the window, so it travels with it and never hides on another
         // Space; the launch carries on behind it (R-0121).
-        .sheet(isPresented: $model.moveOffered) {
+        .sheet(isPresented: $model.moveOffered, onDismiss: { model.moveSheetDismissed() }) {
             MoveOfferView { model.answerMove($0) }
         }
         .alert(model.moveError ?? "", isPresented: Binding(get: { model.moveError != nil },

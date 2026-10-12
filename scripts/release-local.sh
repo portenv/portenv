@@ -140,8 +140,10 @@ ditto "$root/bin/Portenv.app" "$app"
 $pb -c "Set :CFBundleVersion $build" "$app/Contents/Info.plist"
 $pb -c "Add :PortenvCommit string $commit" "$app/Contents/Info.plist"
 "$root/scripts/check-app-identity.sh" "$app"
-# Third-party licences ship with the code they cover (gmake app copies them).
-[[ -s $app/Contents/Resources/Licenses/restic-LICENSE.txt ]] || die "restic's licence is missing from Contents/Resources/Licenses: gmake app copies it"
+# Third-party notices (R-0096): every Go module in the helpers and every
+# Swift pin has its licence in the app (gmake app writes them).
+(cd "$root" && go run ./core/tools/notices check --app "$app" --resolved apps/mac/Package.resolved) ||
+	die "the app's third-party notices don't cover its helpers and Swift packages: gmake app writes them"
 
 # --- Sign, inside out ------------------------------------------------------
 

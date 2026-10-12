@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- Entitlements for a distribution build (scripts/release-local.sh), used for
+     Portenv.app and its helpers (portenv, portenvd, restic), all signed with
+     the hardened runtime. Deliberately empty: the app isn't sandboxed (direct
+     distribution, helper daemons), and nothing it does today needs an
+     exception to the hardened runtime.
+     - No allow-jit or allow-unsigned-executable-memory: Swift and Go code
+       never writes executable memory.
+     - No disable-library-validation: every library is linked in statically
+       (SwiftTerm, gRPC Swift) or is Apple's.
+     - No automation.apple-events: nothing sends Apple Events.
+     - No virtualization: the Apple driver (1.3) isn't built yet. When it is,
+       the process that runs the VM gets com.apple.security.virtualization,
+       in its own file, with the reason here.
+     - No keychain-access-groups yet: moving box keys to the data-protection
+       keychain (ADR 0013) needs it, with a provisioning profile.
+     Add an entitlement only with the reason it's needed. -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict/>
+</plist>

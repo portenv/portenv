@@ -22,3 +22,6 @@ DerivedData/
 *.pem
 *.key
 restic-password*
+
+# Go workspace checksums: never committed, so a release needs no special checkout (R-0096)
+go.work.sum

@@ -12,6 +12,15 @@ import SwiftUI
 enum ScreenRenders {
     /// ADR 0019's vector key, as on the board (R-0129), only ever drawn into renders; built from
     /// groups so no key-shaped literal is in the source.
+    /// Never finishes making the key: Welcome's spinner, for its render.
+    private struct Slow: FirstRunService {
+        func makeRecoveryKey() async throws -> String {
+            try await Task.sleep(for: .seconds(3600))
+            return ""
+        }
+        func createBox(_: NewBox) async throws {}
+    }
+
     private struct Sample: FirstRunService {
         func makeRecoveryKey() async throws -> String { ["K7QF", "M2XA", "9TRD", "HV4P", "W8LC", "3NZ5"].joined(separator: "-") }
         func createBox(_: NewBox) async throws {}
@@ -36,6 +45,18 @@ enum ScreenRenders {
                 let flow = await sampleFlow(at: step)
                 try snapshot(FirstRunView(flow: flow, opened: { _ in }), name: "first-run-\(step.rawValue + 1)-\(name(step))", in: dir)
             }
+            // A key shown in an earlier launch that quit mid-flow (R-0132).
+            let memory = NoFirstRunMemory()
+            memory.keyShown = true
+            let replaced = FirstRunFlow(service: Sample(), memory: memory)
+            await replaced.next()
+            replaced.recoverySaved = true
+            try snapshot(FirstRunView(flow: replaced, opened: { _ in }), name: "first-run-2-recovery-key-replaced", in: dir)
+            // Welcome while the key is made (R-0132).
+            let making = FirstRunFlow(service: Slow())
+            Task { await making.next() }
+            while !making.busy { await Task.yield() }
+            try snapshot(FirstRunView(flow: making, opened: { _ in }), name: "first-run-1-welcome-making-key", in: dir)
             // A Continue that can't move on says why, by the button (R-0126).
             let notTicked = await sampleFlow(at: .recoveryKey)
             notTicked.recoverySaved = false

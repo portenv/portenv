@@ -21,9 +21,35 @@ public enum UsageCounting {
     #endif
 }
 
-/// Where the first box's saves go (no Portenv storage before Phase 3).
+/// Where the first box's saves go (no Portenv storage before Phase 3). In
+/// 1.5 only this Mac: a server and a bucket are shown dimmed, marked LATER
+/// (the first-run-4-storage-this-mac board; R-0092, R-0132).
 public enum StorageChoice: Equatable, Sendable {
     case server, bucket, thisMac
+}
+
+/// What first run remembers across launches: only whether a recovery key
+/// was shown, never the key (ADR 0019). A quit or a crash mid-flow makes a
+/// new key next time, and the recovery screen says the old one wasn't used.
+public protocol FirstRunMemory: AnyObject, Sendable {
+    var keyShown: Bool { get set }
+}
+
+/// The app's: a flag in the defaults.
+public final class DefaultsFirstRunMemory: FirstRunMemory, @unchecked Sendable {
+    public static let key = "recoveryKeyShown"
+    private let defaults: UserDefaults
+    public init(defaults: UserDefaults = .standard) { self.defaults = defaults }
+    public var keyShown: Bool {
+        get { defaults.bool(forKey: Self.key) }
+        set { defaults.set(newValue, forKey: Self.key) }
+    }
+}
+
+/// Remembers nothing (renders, New Workspace…).
+public final class NoFirstRunMemory: FirstRunMemory, @unchecked Sendable {
+    public var keyShown = false
+    public init() {}
 }
 
 /// The first box, as first run makes it.
@@ -79,7 +105,7 @@ public struct NameFieldLook: Equatable, Sendable {
     }
 
     /// The field's name for VoiceOver; UI tests find it by its identifier.
-    public static let fieldName = "Box name"
+    public static let fieldName = "Workspace name"
     public static let identifier = "box-name"
 }
 
@@ -89,14 +115,14 @@ public struct NameFieldLook: Equatable, Sendable {
 @Observable
 public final class FirstRunFlow {
     public private(set) var step: FirstRunStep
-    /// The steps this first run goes through: all six, or only the first box
-    /// when first run was finished before (every box has since gone).
+    /// The steps this first run goes through: all five, or only the first
+    /// workspace when first run was finished before (every one has since
+    /// gone).
     public let steps: [FirstRunStep]
     public private(set) var recoveryKey: String?
     public var recoverySaved = false
-    public var storage: StorageChoice?
-    public var serverAddress = ""
-    public var bucketURL = ""
+    /// This Mac, already chosen: the only storage in 1.5.
+    public var storage: StorageChoice? = .thisMac
     public var boxName = ""
     /// Usage counting: off until the person ticks it (opt-in, R-0126).
     public var countUsage = false
@@ -113,17 +139,23 @@ public final class FirstRunFlow {
     /// `notice`), and the view announces it again even when the words are
     /// the same, so a press never looks like nothing happened (R-0126).
     public private(set) var refusals = 0
+    /// A recovery key was shown in an earlier launch that didn't finish
+    /// first run: the one shown now replaces it (R-0132).
+    public let keyShownBefore: Bool
 
     private let service: FirstRunService
     private let existing: Set<String>
+    private let memory: FirstRunMemory
 
-    public init(service: FirstRunService, at start: FirstRunStep = .welcome, existing: [String] = [], fromBoxList: Bool = false) {
+    public init(service: FirstRunService, at start: FirstRunStep = .welcome, existing: [String] = [], fromBoxList: Bool = false,
+                memory: FirstRunMemory = NoFirstRunMemory()) {
         self.service = service
         self.existing = Set(existing)
         self.fromBoxList = fromBoxList
+        self.memory = memory
+        keyShownBefore = start == .welcome && memory.keyShown
         step = start
         steps = start == .firstBox ? [.firstBox, .gettingReady] : FirstRunStep.allCases
-        if start == .firstBox { storage = .thisMac }
     }
 
     public var canGoBack: Bool {
@@ -139,12 +171,7 @@ public final class FirstRunFlow {
         case .recoveryKey:
             return recoveryKey != nil && recoverySaved
         case .storage:
-            switch storage {
-            case .server: return !trimmed(serverAddress).isEmpty
-            case .bucket: return !trimmed(bucketURL).isEmpty
-            case .thisMac: return true
-            case nil: return false
-            }
+            return storage == .thisMac
         case .firstBox:
             return !boxName.isEmpty && nameProblem == nil
         case .gettingReady:
@@ -153,8 +180,9 @@ public final class FirstRunFlow {
     }
 
     /// Why Continue can't go on from this step, in one line; nil while it
-    /// can (or while a press is already working). The disabled button says
-    /// it to VoiceOver, and a press (Return) shows it.
+    /// can (or while a press is already working). It's shown above
+    /// Continue while it applies, given as the button's VoiceOver hint, and
+    /// announced again on every press (R-0126, R-0132).
     public var whyNot: String? {
         guard !busy, !canContinue else { return nil }
         switch step {
@@ -163,15 +191,15 @@ public final class FirstRunFlow {
         case .recoveryKey:
             return recoveryKey == nil ? FirstRunText.noKeyYet : FirstRunText.tickSaved
         case .storage:
-            switch storage {
-            case .server: return FirstRunText.typeServer
-            case .bucket: return FirstRunText.typeBucket
-            case .thisMac, nil: return FirstRunText.chooseStorage
-            }
+            return storage == nil ? FirstRunText.chooseStorage : FirstRunText.storageLater
         case .firstBox:
             return nameProblem ?? FirstRunText.typeName
         }
     }
+
+    /// What's said under Continue: an error, a notice, or why Continue
+    /// can't go on yet.
+    public var reason: String? { error ?? notice ?? whyNot }
 
     /// What's wrong with the name, in one line, or nil (also while empty).
     public var nameProblem: String? { FirstRunText.nameProblem(boxName, existing: Array(existing)) }
@@ -211,8 +239,10 @@ public final class FirstRunFlow {
     public func next() async {
         guard let i = steps.firstIndex(of: step), i + 1 < steps.count else { return }
         guard canContinue else {
-            // Busy: the press before is still working, and shows it.
-            if let why = whyNot { refuse(notice: why) }
+            // Busy: the press before is still working, and shows it. Else
+            // the reason is already on screen; the press is counted, so it's
+            // announced again.
+            if whyNot != nil { refusals += 1 }
             return
         }
         busy = true
@@ -221,14 +251,16 @@ public final class FirstRunFlow {
             switch step {
             case .welcome where recoveryKey == nil:
                 recoveryKey = try await service.makeRecoveryKey()
+                memory.keyShown = true
             case .firstBox:
                 try await service.createBox(NewBox(
                     name: boxName,
                     storage: storage ?? .thisMac,
-                    serverAddress: storage == .server ? trimmed(serverAddress) : "",
-                    bucketURL: storage == .bucket ? trimmed(bucketURL) : ""
+                    serverAddress: "",
+                    bucketURL: ""
                 ))
                 made = boxName
+                memory.keyShown = false
             default:
                 break
             }
@@ -248,7 +280,6 @@ public final class FirstRunFlow {
         refusals += 1
     }
 
-    private func trimmed(_ s: String) -> String { s.trimmingCharacters(in: .whitespacesAndNewlines) }
 }
 
 /// First run's words (GUIDELINES §10).
@@ -264,27 +295,36 @@ public enum FirstRunText {
     /// (R-0129's exact words).
     public static let recoveryLine = "Only you can open your workspaces\u{2019} saves: Portenv never holds your keys. This key opens them if this Mac\u{2019}s keys are ever lost, on this Mac or a new one. Keep it somewhere safe and separate from this Mac."
     public static let recoverySavedCheck = "I’ve saved my recovery key somewhere safe"
+    /// A key shown in a launch that quit before first run finished was never
+    /// used: this one replaces it (R-0132, ADR 0019).
+    public static let replacedKey = "If you wrote down a key earlier, it wasn\u{2019}t used. Keep this one instead."
+    /// While Welcome's Continue makes the key.
+    public static let makingKey = "Making your recovery key\u{2026}"
 
     /// Why Continue can't go on yet (R-0126: never a silent press).
     public static let noKeyYet = "Your recovery key isn\u{2019}t ready yet."
     public static let tickSaved = "Tick \u{201C}I\u{2019}ve saved my recovery key somewhere safe\u{201D} to continue."
     public static let chooseStorage = "Choose where your saves should go."
-    public static let typeServer = "Type your server\u{2019}s address."
-    public static let typeBucket = "Type your bucket\u{2019}s address."
+    public static let storageLater = "Saving to a server or a bucket comes later. Keep your saves on this Mac for now."
     public static let typeName = "Give your workspace a name."
 
+    /// The first-run-4-storage-this-mac board.
     public static let storageTitle = "Where should your saves go?"
+    public static let storageLine = "Saves are encrypted wherever they\u{2019}re stored, on this Mac too."
+    public static let storageThisMac = "Keep on this Mac for now"
+    public static let thisMacOnly = "Saves stay on this Mac only. If this Mac is lost, they\u{2019}re lost too. You can add a server or bucket later."
     public static let storageServer = "My own server"
+    public static let storageServerLine = "Over SSH, such as a Hetzner or DigitalOcean server."
     public static let storageBucket = "An S3-compatible bucket"
-    public static let storageThisMac = "This Mac only"
-    public static let thisMacOnly = "Your saves will only exist on this Mac, so a lost or broken Mac loses them. You can add a server or bucket later in Settings › Storage."
+    public static let storageBucketLine = "AWS S3, Backblaze B2, Cloudflare R2 and others."
+    public static let later = "LATER"
 
-    public static let firstBoxTitle = "Make your first box"
-    public static let firstBoxLine = "A box is an encrypted workspace for one project. Give it a short name, like the project’s."
+    public static let firstBoxTitle = "Make your first workspace"
+    public static let firstBoxLine = "A workspace holds one project, encrypted. Give it a short name, like the project\u{2019}s."
 
     /// New Box… from the box list (the new-box board).
-    public static let newBoxTitle = "New box"
-    public static let createBox = "Create Box"
+    public static let newBoxTitle = "New workspace"
+    public static let createBox = "Create Workspace"
     public static let nameHint = "Letters, numbers and hyphens, like the project\u{2019}s name."
 
     /// What's wrong with a box name, in one line (R-0032), or nil when it's
@@ -298,7 +338,7 @@ public enum FirstRunText {
             return "Use letters, numbers and hyphens, starting with a letter or number."
         }
         if existing.contains(name) {
-            return "There\u{2019}s already a box called \u{201C}\(name)\u{201D}."
+            return "There\u{2019}s already a workspace called \u{201C}\(name)\u{201D}."
         }
         return nil
     }
@@ -312,9 +352,9 @@ public enum FirstRunText {
         "Portenv’s version, the macOS version and the Mac’s architecture",
         "the month you installed Portenv",
         "whether it’s the first check each week, and the first check each month",
-        "once a week: whether a box moved, whether an agent worked in a box, and rough counts of your boxes and servers (like 2–5)",
+        "once a week: whether a workspace moved, whether an agent worked in a workspace, and rough counts of your workspaces and servers (like 2–5)",
     ]
-    public static let neverCounted = "Never sent: any ID, your name or email, box names, file names or anything in your boxes. Your IP address is seen in transit but never kept."
+    public static let neverCounted = "Never sent: any ID, your name or email, workspace names, file names or anything in your workspaces. Your IP address is seen in transit but never kept."
     public static let whatsCounted = "What’s counted"
     public static let turnOff = "You can turn this off at any time in Settings › Privacy. The update check itself stays, for security updates."
 }

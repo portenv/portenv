@@ -13,6 +13,10 @@ final class FakeFirstRunService: FirstRunService, @unchecked Sendable {
     /// Built at test time, so no key-shaped literal is in the source.
     static let sampleKey = Array(repeating: "TEST", count: 6).joined(separator: "-")
     var recoveryKey = FakeFirstRunService.sampleKey
+    /// A different key on every call (to catch a key made twice).
+    var newKeyEachCall = false
+    private var _keysMade = 0
+    var keysMade: Int { lock.withLock { _keysMade } }
     var failure: String?
     /// Fails as "not built yet" (a notice, not an error).
     var notBuilt: String?
@@ -20,7 +24,8 @@ final class FakeFirstRunService: FirstRunService, @unchecked Sendable {
     func makeRecoveryKey() async throws -> String {
         if let notBuilt { throw FirstRunError(notBuilt, notBuilt: true) }
         if let failure { throw FirstRunError(failure) }
-        return recoveryKey
+        let n = lock.withLock { _keysMade += 1; return _keysMade }
+        return newKeyEachCall ? Array(repeating: "K\(n)AB", count: 6).joined(separator: "-") : recoveryKey
     }
 
     func createBox(_ box: NewBox) async throws {
@@ -66,24 +71,21 @@ struct FirstRunTests {
         #expect(flow.error == nil)
     }
 
-    /// Storage: one of the three choices, and a server or bucket needs its
-    /// address. This Mac only says plainly that saves stay on this Mac.
-    @Test func storageNeedsAChoiceAndItsAddress() {
+    /// Storage (the first-run-4-storage-this-mac board, R-0132): this Mac
+    /// is already chosen, and it's the only choice; a server or a bucket
+    /// comes later and can't go on.
+    @Test func storageIsThisMacForNow() {
         let flow = FirstRunFlow(service: FakeFirstRunService(), at: .storage)
-        #expect(!flow.canContinue)
+        #expect(flow.storage == .thisMac)
+        #expect(flow.canContinue && flow.whyNot == nil)
         flow.storage = .server
         #expect(!flow.canContinue)
-        flow.serverAddress = "  "
-        #expect(!flow.canContinue)
-        flow.serverAddress = "me@test-server"
-        #expect(flow.canContinue)
-        flow.storage = .bucket
-        #expect(!flow.canContinue)
-        flow.bucketURL = "s3:https://s3.example.com/my-bucket"
-        #expect(flow.canContinue)
-        flow.storage = .thisMac
-        #expect(flow.canContinue)
-        #expect(FirstRunText.thisMacOnly.contains("only exist on this Mac"))
+        #expect(flow.whyNot == FirstRunText.storageLater)
+        flow.storage = nil
+        #expect(flow.whyNot == FirstRunText.chooseStorage)
+        #expect(FirstRunText.storageThisMac == "Keep on this Mac for now")
+        #expect(FirstRunText.thisMacOnly == "Saves stay on this Mac only. If this Mac is lost, they\u{2019}re lost too. You can add a server or bucket later.")
+        #expect(FirstRunText.later == "LATER")
     }
 
     /// The first box's name follows the CLI's rule (local.NameRE) and can't
@@ -107,7 +109,9 @@ struct FirstRunTests {
     /// Back goes one step back, never from Welcome or once the box is being
     /// made; leaving the recovery key never keeps the checkbox ticked.
     @Test func backGoesOneStepBack() async {
-        let flow = FirstRunFlow(service: FakeFirstRunService())
+        let service = FakeFirstRunService()
+        service.newKeyEachCall = true
+        let flow = FirstRunFlow(service: service)
         #expect(!flow.canGoBack)
         await flow.next()
         let key = flow.recoveryKey
@@ -118,6 +122,7 @@ struct FirstRunTests {
         await flow.next()
         #expect(flow.step == .recoveryKey)
         #expect(flow.recoveryKey == key) // Back and forward keep the same key
+        #expect(service.keysMade == 1)
     }
 
     /// First run finished before, every box gone: only the first box and
@@ -138,13 +143,11 @@ struct FirstRunTests {
     @Test func gettingReadyMakesTheBoxOnce() async {
         let service = FakeFirstRunService()
         let flow = FirstRunFlow(service: service, at: .storage)
-        flow.storage = .server
-        flow.serverAddress = " me@test-server "
         await flow.next()
         flow.boxName = "acme-api"
         await flow.next()
         #expect(flow.step == .gettingReady)
-        #expect(service.created == [NewBox(name: "acme-api", storage: .server, serverAddress: "me@test-server", bucketURL: "")])
+        #expect(service.created == [NewBox(name: "acme-api", storage: .thisMac, serverAddress: "", bucketURL: "")])
         #expect(flow.made == "acme-api")
         await flow.next()
         #expect(service.created.count == 1)
@@ -165,7 +168,7 @@ struct FirstRunTests {
         }
         // The IP address is seen in transit, so the line never claims it
         // isn't sent (PLAN.md 1.8, CNIL point 4).
-        #expect(FirstRunText.neverCounted == "Never sent: any ID, your name or email, box names, file names or anything in your boxes. Your IP address is seen in transit but never kept.")
+        #expect(FirstRunText.neverCounted == "Never sent: any ID, your name or email, workspace names, file names or anything in your workspaces. Your IP address is seen in transit but never kept.")
         #expect(FirstRunText.turnOff.contains("Settings"))
     }
 
@@ -180,8 +183,9 @@ struct FirstRunTests {
     @Test func copyUsesCurlyApostrophesAndQuotes() {
         let all = [FirstRunText.welcomeTitle, FirstRunText.welcomeLine, FirstRunText.welcomeButton,
                    FirstRunText.recoveryTitle, FirstRunText.recoveryLine, FirstRunText.recoverySavedCheck,
-                   FirstRunText.noKeyYet, FirstRunText.tickSaved, FirstRunText.chooseStorage, FirstRunText.typeServer,
-                   FirstRunText.typeBucket, FirstRunText.typeName,
+                   FirstRunText.noKeyYet, FirstRunText.tickSaved, FirstRunText.chooseStorage, FirstRunText.storageLater,
+                   FirstRunText.typeName, FirstRunText.replacedKey, FirstRunText.makingKey, FirstRunText.storageLine,
+                   FirstRunText.storageServerLine, FirstRunText.storageBucketLine,
                    FirstRunText.storageTitle, FirstRunText.storageServer, FirstRunText.storageBucket,
                    FirstRunText.storageThisMac, FirstRunText.thisMacOnly, FirstRunText.firstBoxTitle,
                    FirstRunText.firstBoxLine, FirstRunText.gettingReadyTitle, FirstRunText.countMeIn,
@@ -205,7 +209,7 @@ struct FirstRunTests {
         #expect(FirstRunText.nameProblem(".api", existing: []) == "Start with a letter or a number.")
         #expect(FirstRunText.nameProblem("my project", existing: []) == "Use letters, numbers and hyphens, starting with a letter or number.")
         #expect(FirstRunText.nameProblem(String(repeating: "a", count: 64), existing: []) == "Use letters, numbers and hyphens, starting with a letter or number.")
-        #expect(FirstRunText.nameProblem("acme-api", existing: ["acme-api"]) == "There\u{2019}s already a box called \u{201C}acme-api\u{201D}.")
+        #expect(FirstRunText.nameProblem("acme-api", existing: ["acme-api"]) == "There\u{2019}s already a workspace called \u{201C}acme-api\u{201D}.")
         #expect(FirstRunText.nameHint == "Letters, numbers and hyphens, like the project\u{2019}s name.")
         // Continue agrees with the hint.
         let flow = FirstRunFlow(service: FakeFirstRunService(), at: .firstBox, existing: ["acme-api"])
@@ -221,11 +225,11 @@ struct FirstRunTests {
     /// first run it's "Make your first box" with Continue and the dots.
     @Test func newBoxFromTheListIsTitledNewBox() {
         let fromList = FirstRunFlow(service: FakeFirstRunService(), at: .firstBox, fromBoxList: true)
-        #expect(fromList.firstBoxTitle == "New box")
-        #expect(fromList.primaryButton == "Create Box")
+        #expect(fromList.firstBoxTitle == "New workspace")
+        #expect(fromList.primaryButton == "Create Workspace")
         #expect(!fromList.showsStepDots)
         let firstRun = FirstRunFlow(service: FakeFirstRunService(), at: .firstBox)
-        #expect(firstRun.firstBoxTitle == "Make your first box")
+        #expect(firstRun.firstBoxTitle == "Make your first workspace")
         #expect(firstRun.primaryButton == "Continue")
         #expect(firstRun.showsStepDots)
     }
@@ -238,15 +242,15 @@ struct FirstRunTests {
         let flow = FirstRunFlow(service: FakeFirstRunService(), at: .firstBox, existing: ["acme-api"], fromBoxList: true)
         flow.boxName = "-api"
         #expect(flow.nameField == NameFieldLook(showsError: true, line: "Start with a letter or a number.",
-                                                accessibilityDescription: "Box name. Start with a letter or a number.", accessibilityHelp: nil))
+                                                accessibilityDescription: "Workspace name. Start with a letter or a number.", accessibilityHelp: nil))
         #expect(!flow.canContinue && !flow.primaryProminent)
         flow.boxName = "acme-api"
         #expect(flow.nameField.showsError)
-        #expect(flow.nameField.accessibilityDescription == "Box name. There\u{2019}s already a box called \u{201C}acme-api\u{201D}.")
+        #expect(flow.nameField.accessibilityDescription == "Workspace name. There\u{2019}s already a workspace called \u{201C}acme-api\u{201D}.")
         #expect(!flow.primaryProminent)
         flow.boxName = ""
         #expect(flow.nameField == NameFieldLook(showsError: false, line: FirstRunText.nameHint,
-                                                accessibilityDescription: "Box name", accessibilityHelp: FirstRunText.nameHint))
+                                                accessibilityDescription: "Workspace name", accessibilityHelp: FirstRunText.nameHint))
         #expect(!flow.primaryProminent)
         flow.boxName = "site"
         #expect(!flow.nameField.showsError)
@@ -267,6 +271,34 @@ struct FirstRunTests {
         await flow.next()
         #expect(flow.notice == nil)
         #expect(flow.step == .recoveryKey)
+    }
+
+    /// Quitting mid-flow and opening again makes a new key, and says the
+    /// old one wasn't used (R-0132, ADR 0019). Only "a key was shown" is
+    /// remembered, never the key; finishing first run forgets it.
+    @Test func aKeyFromAnEarlierLaunchIsSaidToBeReplaced() async {
+        final class Memory: FirstRunMemory, @unchecked Sendable { var keyShown = false }
+        let memory = Memory()
+        let first = FirstRunFlow(service: FakeFirstRunService(), memory: memory)
+        #expect(!first.keyShownBefore)
+        await first.next()
+        #expect(memory.keyShown)
+        // Quit here, open again.
+        let service = FakeFirstRunService()
+        service.newKeyEachCall = true
+        let second = FirstRunFlow(service: service, memory: memory)
+        #expect(second.keyShownBefore)
+        await second.next()
+        #expect(second.recoveryKey != first.recoveryKey)
+        #expect(FirstRunText.replacedKey == "If you wrote down a key earlier, it wasn\u{2019}t used. Keep this one instead.")
+        second.recoverySaved = true
+        await second.next() // storage
+        await second.next() // first workspace
+        second.boxName = "acme-api"
+        await second.next()
+        #expect(second.made == "acme-api")
+        #expect(!memory.keyShown)
+        #expect(!FirstRunFlow(service: service, memory: memory).keyShownBefore)
     }
 
     /// Welcome's one way in is "Continue": there's no account to be had
@@ -298,10 +330,11 @@ struct FirstRunTests {
                 #expect(moved, "moved on from \(before) without being ready")
                 #expect(flow.step == steps[steps.firstIndex(of: before)! + 1])
                 #expect(flow.error == nil && flow.notice == nil)
+                #expect(flow.reason == flow.whyNot)
             } else {
                 #expect(!moved, "stayed on \(before)")
                 #expect(flow.refusals == refusals + 1, "a silent press on \(before)")
-                #expect((flow.error ?? flow.notice) != nil, "no reason on \(before)")
+                #expect(flow.reason != nil, "no reason on \(before)")
             }
         }
         /// Makes the step complete, after first pressing while it isn't.
@@ -309,21 +342,18 @@ struct FirstRunTests {
             switch flow.step {
             case .recoveryKey:
                 await press(expect: false) // not ticked yet
-                #expect(flow.notice == FirstRunText.tickSaved)
+                #expect(flow.reason == FirstRunText.tickSaved)
                 flow.recoverySaved = true
+                #expect(flow.reason == nil) // gone once it no longer applies
             case .storage:
-                if flow.storage == nil {
-                    await press(expect: false)
-                    #expect(flow.notice == FirstRunText.chooseStorage)
-                }
-                flow.storage = .thisMac
+                #expect(flow.storage == .thisMac) // already chosen
             case .firstBox:
                 flow.boxName = ""
                 await press(expect: false)
-                #expect(flow.notice == FirstRunText.typeName)
+                #expect(flow.reason == FirstRunText.typeName)
                 flow.boxName = "-x"
                 await press(expect: false)
-                #expect(flow.notice == "Start with a letter or a number.")
+                #expect(flow.reason == "Start with a letter or a number.")
                 flow.boxName = "acme-api"
             default:
                 break

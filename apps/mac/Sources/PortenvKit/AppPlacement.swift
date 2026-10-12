@@ -261,10 +261,19 @@ public final class MoveGate {
         return nil
     }
 
+    /// Whether the launch wait may start (Try Again): not while Move runs
+    /// (R-0132).
+    public var mayStartWait: Bool { !moving }
+
+    /// The person chose a button: the sheet's dismissal that follows isn't
+    /// a dismissal without an answer.
+    private var answered = false
+    public func answering() { answered = true }
+
     /// The sheet went away without an answer: release the gate like Not
     /// Now, but don't remember it. Returns the workspace held, to open now.
     public func dismissed() -> String? {
-        guard offering else { return nil }
+        guard offering, !answered else { return nil }
         offering = false
         defer { held = nil }
         return held

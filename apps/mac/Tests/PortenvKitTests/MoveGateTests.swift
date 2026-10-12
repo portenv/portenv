@@ -142,6 +142,33 @@ struct MoveGateTests {
         #expect(gate.dismissed() == nil) // answered already: nothing to release
     }
 
+    /// Try Again doesn't start the launch wait while Move runs; it may
+    /// again once a move failed (R-0133).
+    @Test func noWaitStartsWhileMoving() async {
+        let gate = MoveGate()
+        _ = gate.offer(if: true)
+        #expect(gate.mayStartWait)
+        var during = true
+        _ = await gate.answer(.move, workspaceOpen: false, stopWait: {}, unregister: {}, register: {},
+                              copyAndOpen: { during = gate.mayStartWait; throw MoveError(MoveText.notPortenv) },
+                              decline: {})
+        #expect(!during)
+        #expect(gate.mayStartWait)
+    }
+
+    /// An answer marks itself before the sheet goes, so the sheet's own
+    /// dismissal doesn't release what the answer is about to open (R-0133).
+    @Test func anAnswersOwnDismissalReleasesNothing() async {
+        let gate = MoveGate()
+        _ = gate.offer(if: true)
+        _ = gate.open("acme-api")
+        gate.answering()
+        #expect(gate.dismissed() == nil)
+        let result = await gate.answer(.notNow, workspaceOpen: false, stopWait: {}, unregister: {}, register: {},
+                                       copyAndOpen: {}, decline: {})
+        #expect(result.open == "acme-api")
+    }
+
     /// Once per launch: Try Again's second start doesn't ask again.
     @Test func offeredOncePerLaunch() async {
         let gate = MoveGate()

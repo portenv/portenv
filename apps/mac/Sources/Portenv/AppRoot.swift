@@ -45,7 +45,7 @@ final class AppModel {
     func start() async {
         // Try Again while Move copies the app doesn't restart the wait
         // (R-0132).
-        guard !MoveToApplications.gate.moving else { return }
+        guard MoveToApplications.gate.mayStartWait else { return }
         problem = nil
         waitStopped = false
         await LaunchOrder.begin(
@@ -65,14 +65,8 @@ final class AppModel {
     /// it), release what it held, as Not Now without remembering it
     /// (R-0132).
     func moveSheetDismissed() {
-        // An answer clears the flag before the sheet goes; its own task
-        // then carries it out.
-        guard !moveAnswered else { return }
         if let box = MoveToApplications.gate.dismissed() { apply(.open(box)) }
     }
-
-    /// The sheet was answered (set before it goes away).
-    private var moveAnswered = false
 
     /// The launch wait was stopped for a move (R-0125).
     private var waitStopped = false
@@ -81,7 +75,9 @@ final class AppModel {
     /// while the question showed opens now; a failed move that stopped the
     /// launch wait starts it again (the question isn't asked again).
     func answerMove(_ answer: MoveOffer.Answer) {
-        moveAnswered = true
+        // Marked answered before the sheet goes, so its dismissal doesn't
+        // release the gate while the answer is carried out.
+        MoveToApplications.gate.answering()
         moveOffered = false
         Task {
             let result = await MoveToApplications.answer(answer, workspaceOpen: controller != nil,
@@ -126,6 +122,8 @@ final class AppModel {
         do {
             boxes = try await daemon.boxes()
         } catch {
+            // Moving: no Try Again problem mid-move (R-0133).
+            if waitStopped { return }
             problem = BackgroundServiceProblem(
                 message: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription,
                 opensLoginItems: false,

@@ -1,1 +1,27 @@
-[]
+[
+  {
+    "kind": "go",
+    "name": "github.com/opencontainers/go-digest",
+    "version": "v1.0.0",
+    "licence": "Apache-2.0 (documentation: CC-BY-SA-4.0)",
+    "reason": "LICENSE.docs puts the repository's documentation under CC BY-SA 4.0; only the Go code, under LICENSE (Apache-2.0), is compiled into restic. Both files ship in the notices."
+  },
+  {
+    "kind": "swift",
+    "name": "swift-crypto",
+    "version": "5.0.0",
+    "extra": [
+      {"text": "texts/boringssl-0226f30467f5-LICENSE", "as": "Sources/CCryptoBoringSSL/LICENSE"}
+    ],
+    "reason": "Sources/CCryptoBoringSSL vendors BoringSSL at 0226f30467f540a3f62ef48d453f93927da199b6 (its hash.txt), and the vendoring script leaves BoringSSL's LICENSE out. The text is BoringSSL's LICENSE at that revision, from https://boringssl.googlesource.com/boringssl/+/0226f30467f540a3f62ef48d453f93927da199b6/LICENSE."
+  },
+  {
+    "kind": "swift",
+    "name": "swift-nio-ssl",
+    "version": "2.37.5",
+    "extra": [
+      {"text": "texts/boringssl-817ab07ebb53-LICENSE", "as": "Sources/CNIOBoringSSL/LICENSE"}
+    ],
+    "reason": "Sources/CNIOBoringSSL vendors BoringSSL at 817ab07ebb53da35afea409ab9328f578492832d (its hash.txt), and the vendoring script leaves BoringSSL's LICENSE out. The text is BoringSSL's LICENSE at that revision, from https://boringssl.googlesource.com/boringssl/+/817ab07ebb53da35afea409ab9328f578492832d/LICENSE."
+  }
+]

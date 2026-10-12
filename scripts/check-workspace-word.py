@@ -7,8 +7,11 @@
 # Scans every string literal of the Mac app's sources (plain, multi-line and
 # raw #"…"# strings, each piece of a + concatenation) and of the Go messages
 # portenvd can return to it ("…" and multi-line `…`), and fails on the word
-# box or boxes. Code keeps "box" (identifiers, proto, box IDs "box-…", paths,
-# Keychain service names, log keys), so these are not flagged:
+# box or boxes in any case (BOX too), with escapes read as what they
+# write ("Box\u{2026}" is "Box…", "\n" a space) and an interpolation right
+# against the word ("\(n)boxes") counted as a word before it.
+# Code keeps "box" (identifiers, proto, box IDs "box-…", paths, Keychain
+# service names, log keys), so these are not flagged:
 #   - identifier-like strings, with no space once each interpolation counts
 #     as a word ("box-name", "boxes/", "inspectorOpen.\(box)"); a string that
 #     is only the word, "box" or "Boxes", is still flagged (a menu or column
@@ -25,8 +28,8 @@ import re
 import sys
 
 ROOT = pathlib.Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else pathlib.Path(__file__).resolve().parent.parent
-WORD = re.compile(r"\b[Bb]ox(es)?\b")
-LONE = re.compile(r"\s*[Bb]ox(es)?[.…:,]*\s*")
+WORD = re.compile(r"\bbox(es)?\b", re.IGNORECASE)
+LONE = re.compile(r"\s*box(es)?[.…:,]*\s*", re.IGNORECASE)
 OK_MARK = "workspace-word: ok"
 
 SWIFT_DIRS = ["apps/mac/Sources"]
@@ -39,14 +42,33 @@ GO_SKIP_CALL = re.compile(
 INTERP = re.compile(r"\\#*\((?:[^()]|\((?:[^()]|\([^()]*\))*\))*\)")
 
 
+ESCAPES = re.compile(r"\\u\{([0-9A-Fa-f]{1,6})\}|\\u([0-9A-Fa-f]{4})|\\[nrt0]")
+
+
+def unescape(text):
+    """Swift's \\u{…} and Go's \\uXXXX as their characters; \\n, \\t, \\r and
+    \\0 as spaces (they separate words as a space does)."""
+    def one(m):
+        code = m.group(1) or m.group(2)
+        return chr(int(code, 16)) if code else " "
+    return ESCAPES.sub(one, text)
+
+
+# An interpolation right against the word ("\\(n)boxes", "\\(n) boxes").
+TOUCHING = re.compile(r"\x00\s*box(es)?\b|\bbox(es)?\s*\x00", re.IGNORECASE)
+
+
 def flagged(text):
     """The literal's text if it says box or boxes to a person; else None."""
-    as_words = INTERP.sub(" X ", text)
-    if LONE.fullmatch(as_words):
+    plain = unescape(text)
+    as_words = INTERP.sub(" \x00 ", plain)
+    if LONE.fullmatch(as_words.replace("\x00", "")):
         return text
-    if not re.search(r"\s", INTERP.sub("X", text).strip()):
+    if TOUCHING.search(re.sub(r"(?i)\bbox-", "", INTERP.sub("\x00", plain))):
+        return text
+    if not re.search(r"\s", INTERP.sub("X", plain).strip()):
         return None
-    words = re.sub(r"(?i)toolbox(es)?|\bbox-", "", as_words)
+    words = re.sub(r"(?i)toolbox(es)?|\bbox-", "", as_words.replace("\x00", " "))
     return text if WORD.search(words) else None
 
 

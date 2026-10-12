@@ -120,6 +120,10 @@ func New(env *local.Env, log *slog.Logger) *Server {
 	if env != nil && env.Provided == nil {
 		env.Provided = keys.NewMemory()
 	}
+	if env != nil {
+		// What portenvd and the runner say is read in the app.
+		env.AppWords = true
+	}
 	bg, cancel := context.WithCancel(context.Background())
 	return &Server{env: env, log: log, open: map[string]*openBox{}, remote: map[string]*remoteBox{}, gen: map[string]uint64{},
 		now: time.Now, alive: processAlive, bgCtx: bg, bgCancel: cancel}
@@ -343,7 +347,7 @@ func (s *Server) openBox(ctx context.Context, name string, takeOver bool) (*open
 	if _, err := ob.connect(ctx, true); err != nil {
 		return nil, none, agentError(err)
 	}
-	step("agent answers")
+	step("workspace helper answers")
 	// One sync engine for the whole open: its executor follows the box's
 	// current channel, which changes when the box restarts below.
 	if ob.sb, err = sess.SyncWith(boxsync.ChannelExecutor{Client: func() agentv1.AgentServiceClient { return ob.agent }}); err != nil {

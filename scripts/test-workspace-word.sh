@@ -43,6 +43,13 @@ let g = """
     """
 EOF
 plant swift-quotes-in-interpolation swift FLAGGED <<<'let h = "\(ok ? "a" : "b") box restarts"'
+plant swift-all-caps swift FLAGGED <<<'let j = Text("OPEN THE BOX")'
+plant swift-all-caps-lone swift FLAGGED <<<'let k = Text("BOXES")'
+plant swift-before-unicode-escape swift FLAGGED <<<'let l = Button("New Box\u{2026}") {}'
+plant swift-before-newline-escape swift FLAGGED <<<'let m = "Boxes:\nacme-api"'
+plant swift-interpolation-touching swift FLAGGED <<<'let n = "\(count)boxes"'
+plant go-before-escapes go FLAGGED <<<'var x = "Boxes:\n…"'
+plant go-all-caps go FLAGGED <<<'var x = errors.New("NO BOX HERE")'
 plant go-error go FLAGGED <<<'var x = errors.New("no key stored for this box")'
 plant go-lone-lowercase go FLAGGED <<<'var x = "box"'
 plant go-backtick-multiline go FLAGGED <<'EOF'
@@ -63,6 +70,12 @@ let h = "A workspace ID is box- and 12 hex digits."
 let i = #"raw \#(box) value"#
 // A comment about the box is fine.
 /* And a block comment about boxes. */
+EOF
+plant swift-interpolated-identifiers swift CLEAN <<'EOF'
+let o = "keychain-\(box)"
+let p = "command-\(box)-\(tab)"
+let q = "\(box)-storage"
+let r = "boxes/\(name).json"
 EOF
 plant swift-ok-mark swift CLEAN <<<'let i = "Restart Box" // workspace-word: ok (testing the mark)'
 plant go-log-arguments go CLEAN <<'EOF'

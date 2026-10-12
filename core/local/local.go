@@ -45,6 +45,10 @@ type Env struct {
 	// Provided holds keys the app read from the Keychain and handed to
 	// portenvd (in memory only); they are used before the store's own.
 	Provided *keys.Memory
+	// AppWords: messages from here are read in the app (portenvd and the
+	// runner), so they say "workspace" (R-0112). The CLI's own wording
+	// changes with the CLI rename.
+	AppWords bool
 
 	// createSlot runs CreateBox, RecoverBox and DiscardCreation one at a
 	// time, so two calls can't both pass the checks for one name or box
@@ -163,9 +167,13 @@ func (e *Env) ConfigPath(name string) (string, error) {
 type noBoxError struct {
 	name string
 	err  error
+	app  bool
 }
 
 func (e *noBoxError) Error() string {
+	if e.app {
+		return fmt.Sprintf("There's no workspace named %s here.", e.name)
+	}
 	return fmt.Sprintf("no box named %s here; create it with portenv init %s", e.name, e.name) // workspace-word: ok (the CLI's, renamed with the CLI)
 }
 func (e *noBoxError) Unwrap() error { return e.err }
@@ -177,7 +185,7 @@ func (e *Env) LoadBox(name string) (BoxConfig, error) {
 	}
 	b, err := os.ReadFile(p) // #nosec G304 -- validated name in the Portenv directory
 	if errors.Is(err, os.ErrNotExist) {
-		return BoxConfig{}, &noBoxError{name: name, err: err}
+		return BoxConfig{}, &noBoxError{name: name, err: err, app: e.AppWords}
 	}
 	if err != nil {
 		return BoxConfig{}, err

@@ -107,7 +107,8 @@ start_daemon
 out=$("$portenv" app state d 2>&1) || true; echo "  $out"
 expect "after kill -9: the new portenvd reports the box interrupted" grep -q '"interrupted":true' <<<"$out"
 out=$("$portenv" app open d 2>&1) || true; echo "  $out"
-expect "reopened by the new portenvd" grep -q "open on" <<<"$out"
+# The success line, not "box is open on …" (the lease error) (#58).
+expect "reopened by the new portenvd" grep -qE "^open on [^ ]+ \(resume rule [0-9]" <<<"$out"
 expect "  by re-keying it, not restarting it" grep -q "took over the running box" "$root/portenvd.log"
 expect "  the box never restarted (same start time)" test "$(docker inspect -f '{{.State.StartedAt}}' "portenv-daemon-$(box_id)")" = "$started"
 expect "  the long command is still running" probe "portenv-daemon-$(box_id)" pgrep -x sleep

@@ -1,0 +1,372 @@
+{
+  "comment": "ADR 0019's recovery key: the authority for both the Swift (PortenvKit) and Go (core/keys/recovery) implementations. Every key here is a test vector, never a real one.",
+  "alphabet": "23456789ABCDEFGHJKLMNPQRSTUVWXYZ",
+  "field": {
+    "polynomial": "x^5 + x^2 + 1",
+    "reduction": 37,
+    "alpha": 2
+  },
+  "separators": {
+    "comment": "Characters a typed key may carry between its characters (R-0104): Unicode's White_Space characters, and the hyphen with the dashes that notes apps, mail and autocorrect put in its place. Both implementations list exactly these.",
+    "white_space": [
+      "U+0009",
+      "U+000A",
+      "U+000B",
+      "U+000C",
+      "U+000D",
+      "U+0020",
+      "U+0085",
+      "U+00A0",
+      "U+1680",
+      "U+2000",
+      "U+2001",
+      "U+2002",
+      "U+2003",
+      "U+2004",
+      "U+2005",
+      "U+2006",
+      "U+2007",
+      "U+2008",
+      "U+2009",
+      "U+200A",
+      "U+2028",
+      "U+2029",
+      "U+202F",
+      "U+205F",
+      "U+3000"
+    ],
+    "dashes": [
+      "U+002D",
+      "U+2010",
+      "U+2011",
+      "U+2012",
+      "U+2013",
+      "U+2014",
+      "U+2015",
+      "U+2212",
+      "U+FE58",
+      "U+FE63",
+      "U+FF0D"
+    ]
+  },
+  "salt": "portenv recovery key v1",
+  "info_prefix": "portenv restic password v1",
+  "box_id_pattern": "^box-[0-9a-f]{12}$",
+  "rfc5869_case1": {
+    "ikm_hex": "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
+    "salt_hex": "000102030405060708090a0b0c",
+    "info_hex": "f0f1f2f3f4f5f6f7f8f9",
+    "length": 42,
+    "okm_hex": "3cb25f25faacd57a90434f64d0362f2a2d2d0a90cf1a5a4c5db02d56ecc4c5bf34007208d5b887185865"
+  },
+  "generate": [
+    {
+      "bytes_hex": "0000000000000000000000000000000000000000000000",
+      "grouped": "2222-2222-2222-2222-2222-2222"
+    },
+    {
+      "bytes_hex": "ffffffffffffffffffffffffffffffffffffffffffffff",
+      "grouped": "ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZK"
+    },
+    {
+      "bytes_hex": "000102030405060708090a0b0c0d0e0f10111213141516",
+      "grouped": "2345-6789-ABCD-EFGH-JKLM-NPQ4"
+    },
+    {
+      "bytes_hex": "e0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6",
+      "grouped": "2345-6789-ABCD-EFGH-JKLM-NPQ4"
+    },
+    {
+      "bytes_hex": "0b30557a9fc4e90e33587da2c7ec11365b80a5caef1439",
+      "grouped": "DJPU-Z6BG-MSX4-9EKQ-V27C-HNTH"
+    }
+  ],
+  "parse": [
+    {
+      "input": "K7QF-M2XA-9TRD-HV4P-W8LC-3NZ5",
+      "canonical": "K7QFM2XA9TRDHV4PW8LC3NZ5"
+    },
+    {
+      "input": "k7qf-m2xa-9trd-hv4p-w8lc-3nz5",
+      "canonical": "K7QFM2XA9TRDHV4PW8LC3NZ5"
+    },
+    {
+      "input": "K7QFM2XA9TRDHV4PW8LC3NZ5",
+      "canonical": "K7QFM2XA9TRDHV4PW8LC3NZ5"
+    },
+    {
+      "input": "k7qf m2xa 9trd hv4p w8lc 3nz5",
+      "canonical": "K7QFM2XA9TRDHV4PW8LC3NZ5"
+    },
+    {
+      "input": "  k7qf-M2XA 9trd--hv4p w8lc-3NZ5 ",
+      "canonical": "K7QFM2XA9TRDHV4PW8LC3NZ5"
+    },
+    {
+      "input": "K7QFM 2XA9-TRDH V4PW-8LC3 NZ5",
+      "canonical": "K7QFM2XA9TRDHV4PW8LC3NZ5"
+    },
+    {
+      "input": "K7QF-M2XA-9TRD-HV4P-W8LC-3NZE",
+      "error": "typo",
+      "message": "This recovery key has a typo. Check each group against your copy."
+    },
+    {
+      "input": "K7QF-M2XA-9TRD-HV4P-W8LC-3NZ",
+      "error": "length",
+      "length": 23,
+      "message": "A recovery key has 24 letters and digits. This one has 23."
+    },
+    {
+      "input": "K7QF-M2XA-9TRD-HV4P-W8LC-3NZ55",
+      "error": "length",
+      "length": 25,
+      "message": "A recovery key has 24 letters and digits. This one has 25."
+    },
+    {
+      "input": "",
+      "error": "length",
+      "length": 0,
+      "message": "A recovery key has 24 letters and digits. This one has 0."
+    },
+    {
+      "input": "- -",
+      "error": "length",
+      "length": 0,
+      "message": "A recovery key has 24 letters and digits. This one has 0."
+    },
+    {
+      "input": "K7QF-M2XA-9TRD-HV4P-W8LC-3NZ0",
+      "error": "character",
+      "character": "0",
+      "message": "Recovery keys don't use the character 0."
+    },
+    {
+      "input": "K7QF-M2XA-9TRD-HV4P-W8LC-3NZ1",
+      "error": "character",
+      "character": "1",
+      "message": "Recovery keys don't use the character 1."
+    },
+    {
+      "input": "K7QF-M2XA-9TRD-HV4P-W8LC-3NZO",
+      "error": "character",
+      "character": "O",
+      "message": "Recovery keys don't use the character O."
+    },
+    {
+      "input": "k7qf-m2xa-9trd-hv4p-w8lc-3nzi",
+      "error": "character",
+      "character": "i",
+      "message": "Recovery keys don't use the character i."
+    },
+    {
+      "input": "K7QF_M2XA-9TRD-HV4P-W8LC-3NZ5",
+      "error": "character",
+      "character": "_",
+      "message": "Recovery keys don't use the character _."
+    },
+    {
+      "input": "K7Q0",
+      "error": "character",
+      "character": "0",
+      "message": "Recovery keys don't use the character 0."
+    },
+    {
+      "input": "K7QF-M2XA-9TRD-HV4P-W8LC-3N5Z",
+      "error": "typo",
+      "message": "This recovery key has a typo. Check each group against your copy."
+    },
+    {
+      "input": "K7QF-M2XA-9TRD-HV4P-W8LC-4NZ5",
+      "error": "typo",
+      "message": "This recovery key has a typo. Check each group against your copy."
+    },
+    {
+      "input": "M7QF-M2XA-9TRD-HV4P-W8LC-3NZK",
+      "error": "typo",
+      "message": "This recovery key has a typo. Check each group against your copy."
+    },
+    {
+      "input": "K7QF\tM2XA\t9TRD\tHV4P\tW8LC\t3NZ5",
+      "canonical": "K7QFM2XA9TRDHV4PW8LC3NZ5"
+    },
+    {
+      "input": "K7QF-M2XA-9TRD-HV4P-W8LC-3NZ5\n",
+      "canonical": "K7QFM2XA9TRDHV4PW8LC3NZ5"
+    },
+    {
+      "input": "K7QF-M2XA-9TRD\r\nHV4P-W8LC-3NZ5\r\n",
+      "canonical": "K7QFM2XA9TRDHV4PW8LC3NZ5"
+    },
+    {
+      "input": "K7QF\u00a0M2XA\u00a09TRD\u00a0HV4P\u00a0W8LC\u00a03NZ5",
+      "canonical": "K7QFM2XA9TRDHV4PW8LC3NZ5"
+    },
+    {
+      "input": "K7QF\u202fM2XA\u202f9TRD\u202fHV4P\u202fW8LC\u202f3NZ5",
+      "canonical": "K7QFM2XA9TRDHV4PW8LC3NZ5"
+    },
+    {
+      "input": "K7QF\u3000M2XA\u30009TRD\u3000HV4P\u3000W8LC\u30003NZ5\u3000",
+      "canonical": "K7QFM2XA9TRDHV4PW8LC3NZ5"
+    },
+    {
+      "input": "K7QF-M2XA-9TRD\u2028HV4P-W8LC-3NZ5",
+      "canonical": "K7QFM2XA9TRDHV4PW8LC3NZ5"
+    },
+    {
+      "input": "K7QF\u2013M2XA\u20139TRD\u2013HV4P\u2013W8LC\u20133NZ5",
+      "canonical": "K7QFM2XA9TRDHV4PW8LC3NZ5"
+    },
+    {
+      "input": "K7QF\u2014M2XA\u20149TRD\u2014HV4P\u2014W8LC\u20143NZ5",
+      "canonical": "K7QFM2XA9TRDHV4PW8LC3NZ5"
+    },
+    {
+      "input": "K7QF\u2010M2XA\u20109TRD\u2010HV4P\u2010W8LC\u20103NZ5",
+      "canonical": "K7QFM2XA9TRDHV4PW8LC3NZ5"
+    },
+    {
+      "input": "K7QF\u2011M2XA\u20119TRD\u2011HV4P\u2011W8LC\u20113NZ5",
+      "canonical": "K7QFM2XA9TRDHV4PW8LC3NZ5"
+    },
+    {
+      "input": "K7QF\u2212M2XA\u22129TRD\u2212HV4P\u2212W8LC\u22123NZ5",
+      "canonical": "K7QFM2XA9TRDHV4PW8LC3NZ5"
+    },
+    {
+      "input": "K7QF\ufe58M2XA\ufe589TRD\ufe58HV4P\ufe58W8LC\ufe583NZ5",
+      "canonical": "K7QFM2XA9TRDHV4PW8LC3NZ5"
+    },
+    {
+      "input": "K7QF\ufe63M2XA\ufe639TRD\ufe63HV4P\ufe63W8LC\ufe633NZ5",
+      "canonical": "K7QFM2XA9TRDHV4PW8LC3NZ5"
+    },
+    {
+      "input": "K7QF\uff0dM2XA\uff0d9TRD\uff0dHV4P\uff0dW8LC\uff0d3NZ5",
+      "canonical": "K7QFM2XA9TRDHV4PW8LC3NZ5"
+    },
+    {
+      "input": "K7QF \u2013 M2XA \u2013 9TRD \u2013 HV4P \u2013 W8LC \u2013 3NZ5",
+      "canonical": "K7QFM2XA9TRDHV4PW8LC3NZ5"
+    },
+    {
+      "input": "K7QF-M2XA\u200b-9TRD-HV4P-W8LC-3NZ5",
+      "error": "hidden",
+      "message": "Recovery keys don't use one of the characters you typed."
+    },
+    {
+      "input": "\ufeffK7QF-M2XA-9TRD-HV4P-W8LC-3NZ5",
+      "error": "hidden",
+      "message": "Recovery keys don't use one of the characters you typed."
+    },
+    {
+      "input": "K7QF-M2XA-9TRD\u00adHV4P-W8LC-3NZ5",
+      "error": "hidden",
+      "message": "Recovery keys don't use one of the characters you typed."
+    },
+    {
+      "input": "K7QF-M2XA-\u00009TRD-HV4P-W8LC-3NZ5",
+      "error": "hidden",
+      "message": "Recovery keys don't use one of the characters you typed."
+    },
+    {
+      "input": "K7QF-M2XA-\u00079TRD-HV4P-W8LC-3NZ5",
+      "error": "hidden",
+      "message": "Recovery keys don't use one of the characters you typed."
+    },
+    {
+      "input": "K7QF-M2XA-\u180e9TRD-HV4P-W8LC-3NZ5",
+      "error": "hidden",
+      "message": "Recovery keys don't use one of the characters you typed."
+    },
+    {
+      "input": "K7QF-M2XA-\ue0009TRD-HV4P-W8LC-3NZ5",
+      "error": "hidden",
+      "message": "Recovery keys don't use one of the characters you typed."
+    },
+    {
+      "input": "K7QF-M2XA-\u03789TRD-HV4P-W8LC-3NZ5",
+      "error": "hidden",
+      "message": "Recovery keys don't use one of the characters you typed."
+    },
+    {
+      "input": "K7QF-M2XA-\ufdd09TRD-HV4P-W8LC-3NZ5",
+      "error": "hidden",
+      "message": "Recovery keys don't use one of the characters you typed."
+    },
+    {
+      "input": "K7Q\u200b",
+      "error": "hidden",
+      "message": "Recovery keys don't use one of the characters you typed."
+    },
+    {
+      "input": "\uff2b7QF-M2XA-9TRD-HV4P-W8LC-3NZ5",
+      "error": "character",
+      "character": "\uff2b",
+      "message": "Recovery keys don't use the character \uff2b."
+    },
+    {
+      "input": "K7QF\u2016M2XA\u20169TRD\u2016HV4P\u2016W8LC\u20163NZ5",
+      "error": "character",
+      "character": "\u2016",
+      "message": "Recovery keys don't use the character \u2016."
+    },
+    {
+      "input": "K7QF\u2e3aM2XA\u2e3a9TRD\u2e3aHV4P\u2e3aW8LC\u2e3a3NZ5",
+      "error": "character",
+      "character": "\u2e3a",
+      "message": "Recovery keys don't use the character \u2e3a."
+    }
+  ],
+  "derive": [
+    {
+      "recovery": "K7QF-M2XA-9TRD-HV4P-W8LC-3NZ5",
+      "box_id": "box-0123456789ab",
+      "derived": "b4eef5e9da4b5563a65819e2bd99ec3291f9da036e6688e6d6be20cd120d66af"
+    },
+    {
+      "recovery": "K7QF-M2XA-9TRD-HV4P-W8LC-3NZ5",
+      "box_id": "box-0123456789ac",
+      "derived": "32e479fe2dcc4a2fa0b28f9c62f85f88a130de773bf72434019522fa769465e9"
+    },
+    {
+      "recovery": "K7QF-M2XA-9TRD-HV4P-W8LC-3NZ5",
+      "box_id": "box-000000000000",
+      "derived": "fa4f41cdc1bf54d0ad5ba2fb6c356e0f3103f8281cb007524f39cb5ca8e0a0b5"
+    },
+    {
+      "recovery": "K7QF-M2XA-9TRD-HV4P-W8LC-3NZ5",
+      "box_id": "box-ffffffffffff",
+      "derived": "8e68192ae1a69b8bb0b49449205d04abb22155bf4ba66d194d3a4015a6a1f1e8"
+    },
+    {
+      "recovery": "2222-2222-2222-2222-2222-2222",
+      "box_id": "box-0123456789ab",
+      "derived": "e19d3daa1ee47d2f499ff5fa6503f12bded02aadc24ec4c35f31ec6489328ea5"
+    },
+    {
+      "recovery": "ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZK",
+      "box_id": "box-0123456789ab",
+      "derived": "9c809f4c6752e049306a0720abe1961318ed411f0d7abe43785fd01ea06a81ac"
+    },
+    {
+      "recovery": "2345-6789-ABCD-EFGH-JKLM-NPQ4",
+      "box_id": "box-0123456789ab",
+      "derived": "71902579d65f4f137a5b7f5abcc1cff2d2837ad7d0f525fc85e2f80b110f1445"
+    }
+  ],
+  "invalid_box_ids": [
+    "",
+    "box-",
+    "box-0123456789a",
+    "box-0123456789abc",
+    "box-0123456789AB",
+    "Box-0123456789ab",
+    "box_0123456789ab",
+    "box-0123456789ag",
+    " box-0123456789ab",
+    "box-0123456789ab\n",
+    "acme-api"
+  ]
+}

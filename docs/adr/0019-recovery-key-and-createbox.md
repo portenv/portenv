@@ -47,8 +47,10 @@ What the plan already says, and this ADR keeps:
   - every swap of two different characters, adjacent or not, because the 24 weights α^23 … α^0 are distinct (α has order 31);
   - all but 1 in 31 of the remaining errors.
 - **Reading a typed key:**
-  - case doesn't matter, and spaces and hyphens are ignored;
-  - any other character is refused, by name: "Recovery keys don't use the character 0.";
+  - case doesn't matter (a to z only; full-width letters are refused by name);
+  - separators are ignored, so pasted and autocorrected keys read (the reviewer, on the owner's delegation, R-0104): Unicode's White_Space characters (spaces, tabs, newlines, no-break spaces) and the hyphen with every dash that stands in for it (U+2010–U+2015, U+2212, U+FE58, U+FE63, U+FF0D). Both implementations list them explicitly, and `testdata/vectors.json` lists them too;
+  - any other character is refused, by name: "Recovery keys don't use the character 0.". One that can't be shown (Unicode category C: control, format, private use or unassigned) gives "Recovery keys don't use one of the characters you typed." instead;
+  - refusals come in this order: an unknown character, then the length, then the check;
   - the wrong length gives "A recovery key has 24 letters and digits. This one has 23.";
   - a failed check gives "This recovery key has a typo. Check each group against your copy.";
   - the canonical form is the 24 characters, upper case, without hyphens.

@@ -89,7 +89,7 @@ func DialChannel(dial func(ctx context.Context) (net.Conn, error), certPEM []byt
 		InsecureSkipVerify: true, // #nosec G402 -- verified by VerifyConnection below
 		VerifyConnection: func(cs tls.ConnectionState) error {
 			if len(cs.PeerCertificates) == 0 || !bytes.Equal(cs.PeerCertificates[0].Raw, pinned) {
-				return errors.New("agent channel: the certificate is not this box's")
+				return errors.New("agent channel: the certificate is not this box's") // workspace-word: ok (internal, matched by portenvd)
 			}
 			return nil
 		},

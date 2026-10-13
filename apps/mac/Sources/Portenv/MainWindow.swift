@@ -30,8 +30,9 @@ struct MainWindow: View {
                 InspectorView(
                     content: InspectorContent(box: controller, tabs: tabs),
                     yourInitial: String(NSFullUserName().prefix(1)).uppercased(),
-                    moveTargets: moveTargets,
+                    moveMenu: controller.moveMenu,
                     move: { target in Task { await controller.move(to: target) } },
+                    run: { action in Task { await controller.run(action) } },
                     retryPackages: { Task { await controller.retryPackages() } },
                     revert: { Task { await controller.revertToLastSavePoint() } },
                     retrySaves: { Task { await controller.refreshSaves() } }
@@ -69,13 +70,6 @@ struct MainWindow: View {
             }
     }
 
-    /// Move To… in the inspector: every place but where the box is.
-    private var moveTargets: [(String, String)] {
-        (["this-mac"] + controller.servers)
-            .filter { !controller.isCurrent($0) }
-            .map { (ServerName.display($0), $0) }
-    }
-
     @ViewBuilder private var content: some View {
         switch controller.location {
         // Also while reopening after portenvd restarted, so Cancel is
@@ -92,13 +86,13 @@ struct MainWindow: View {
             .background(.background)
         case _ where controller.agentUnavailable && controller.isOpen:
             VStack(spacing: 10) {
-                Text("The box agent is unavailable").font(.title3)
-                Text("Nothing can be saved until the box restarts. Your unsaved changes stay in the box; restarting keeps them.")
+                Text("The workspace helper is unavailable").font(.title3)
+                Text("Nothing can be saved until the workspace restarts. Your unsaved changes stay in the workspace; restarting keeps them.")
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 420)
-                Button("Restart Box") { Task { await controller.restartBox() } }
-                    .accessibilityLabel("Restart Box: the box restarts and keeps your unsaved changes")
+                Button("Restart Workspace") { Task { await controller.restartBox() } }
+                    .accessibilityLabel("Restart Workspace: the workspace restarts and keeps your unsaved changes")
                     .keyboardShortcut(.defaultAction)
                     .disabled(controller.busy)
             }
@@ -204,8 +198,13 @@ struct BoxMenu: View {
             ))
             .disabled(!item.enabled)
         } else {
-            let button = Button(item.title) { Task { await controller.run(item.action) } }
-                .disabled(!item.enabled)
+            // A detail (the last save point's time) is the item's subtitle in
+            // the menu bar's menu.
+            let button = Button { Task { await controller.run(item.action) } } label: {
+                Text(item.title)
+                if let detail = item.detail { Text(detail) }
+            }
+            .disabled(!item.enabled)
             switch item.shortcut {
             case "⌘S": button.keyboardShortcut("s", modifiers: .command)
             case "⌥⌘R": button.keyboardShortcut("r", modifiers: [.command, .option])

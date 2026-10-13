@@ -37,9 +37,15 @@ let package = Package(
                 .product(name: "SwiftTerm", package: "SwiftTerm"),
             ]
         ),
+        // The terminal's SwiftTerm glue (per-row overlays, ADR 0017), kept
+        // out of the app target so it can be tested on a headless terminal.
+        .target(
+            name: "PortenvTerm",
+            dependencies: ["PortenvKit", .product(name: "SwiftTerm", package: "SwiftTerm")]
+        ),
         .executableTarget(
             name: "Portenv",
-            dependencies: ["PortenvKit", .product(name: "SwiftTerm", package: "SwiftTerm")]
+            dependencies: ["PortenvKit", "PortenvTerm", .product(name: "SwiftTerm", package: "SwiftTerm")]
         ),
         // The app's own views, driven through their buttons as VoiceOver
         // would (first run's walk, R-0132): SwiftPM tests an executable
@@ -51,5 +57,9 @@ let package = Package(
             // The client's gRPC status codes (BoxMakerTests).
             .product(name: "GRPCCore", package: "grpc-swift-2"),
         ]),
+        .testTarget(
+            name: "PortenvTermTests",
+            dependencies: ["PortenvTerm", "PortenvKit", .product(name: "SwiftTerm", package: "SwiftTerm")]
+        ),
     ]
 )

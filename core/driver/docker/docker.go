@@ -108,7 +108,7 @@ var idRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]*$`)
 
 func (d *Driver) specPath(id driver.BoxID) (string, error) {
 	if !idRE.MatchString(string(id)) {
-		return "", fmt.Errorf("invalid box ID %q", id)
+		return "", fmt.Errorf("invalid workspace ID %q", id)
 	}
 	return filepath.Join(d.cfg.StateDir, string(id)+".json"), nil
 }
@@ -120,7 +120,7 @@ func (d *Driver) loadSpec(id driver.BoxID) (spec, error) {
 	}
 	b, err := os.ReadFile(p) // #nosec G304 -- validated box ID in the driver's state dir
 	if errors.Is(err, os.ErrNotExist) {
-		return spec{}, fmt.Errorf("box %s does not exist", id)
+		return spec{}, fmt.Errorf("workspace %s does not exist", id)
 	}
 	if err != nil {
 		return spec{}, err
@@ -277,7 +277,7 @@ func (d *Driver) MountHome(ctx context.Context, id driver.BoxID, home driver.Hom
 	if running, err := d.running(ctx, id); err != nil {
 		return err
 	} else if running {
-		return errors.New("MountHome needs the box stopped")
+		return errors.New("MountHome needs the box stopped") // workspace-word: ok (programming error)
 	}
 	if _, err := d.cli.VolumeInspect(ctx, home.Ref, client.VolumeInspectOptions{}); cerrdefs.IsNotFound(err) {
 		opts := client.VolumeCreateOptions{Name: home.Ref, Labels: map[string]string{labelBox: string(id)}}
@@ -504,7 +504,7 @@ func (d *Driver) SetResources(ctx context.Context, id driver.BoxID, r driver.Res
 		return false, err
 	}
 	if r.DockerInBox || r.GPU {
-		return false, errors.New("docker driver: Docker in the box and GPU are not supported yet")
+		return false, errors.New("docker driver: Docker in the workspace and GPU are not supported yet")
 	}
 	old := s.Box.Resources
 	s.Box.Resources = r
@@ -598,7 +598,7 @@ func (d *Driver) Rekey(ctx context.Context, id driver.BoxID) error {
 	if running, err := d.running(ctx, id); err != nil {
 		return err
 	} else if !running {
-		return fmt.Errorf("box %s is not running", id)
+		return fmt.Errorf("workspace %s is not running", id)
 	}
 	sec, err := agent.NewChannelSecrets()
 	if err != nil {
@@ -646,7 +646,7 @@ func (d *Driver) Rekey(ctx context.Context, id driver.BoxID) error {
 			d.mu.Lock()
 			delete(d.channels, id)
 			d.mu.Unlock()
-			return fmt.Errorf("the box agent didn't take the new channel: %w", err)
+			return fmt.Errorf("the workspace helper didn't take the new channel: %w", err)
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
@@ -677,7 +677,7 @@ func (d *Driver) AgentChannel(ctx context.Context, id driver.BoxID) (driver.Agen
 		}
 	}
 	if addr == "" {
-		return driver.AgentChannel{}, fmt.Errorf("box %s: the agent port is not published on the loopback address", id)
+		return driver.AgentChannel{}, fmt.Errorf("workspace %s: the agent port is not published on the loopback address", id)
 	}
 	return driver.AgentChannel{
 		Dial: func(ctx context.Context) (net.Conn, error) {

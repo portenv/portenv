@@ -438,7 +438,7 @@ func TestCreateBoxIsIdempotentOnBoxID(t *testing.T) {
 	}
 	taken := createRequest(t, "acme-api", "box-0123456789ac", "")
 	_, err := e.CreateBox(ctx, taken, CreateOptions{})
-	if kindOf(err) != ErrNameTaken || err.Error() != "A box named acme-api already exists." {
+	if kindOf(err) != ErrNameTaken || err.Error() != "A workspace named acme-api already exists." {
 		t.Fatalf("another box with the name: %v", err)
 	}
 	assertOneWorkingBox(t, e, req)

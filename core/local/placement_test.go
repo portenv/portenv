@@ -84,3 +84,26 @@ func TestServerAnswers(t *testing.T) {
 		t.Fatalf("the probe took %v, over its 2 s deadline", d)
 	}
 }
+
+// TestServerIDsAndNames: a server's ID is stable and carries no address; its
+// name is the app's ServerName.display rule (GUIDELINES §2).
+func TestServerIDsAndNames(t *testing.T) {
+	id := ServerID("ubuntu@test-server.example")
+	if id != ServerID("ubuntu@test-server.example") || !strings.HasPrefix(id, "srv-") || len(id) != 16 {
+		t.Fatalf("id %q", id)
+	}
+	if strings.Contains(id, "ubuntu") || strings.Contains(id, "example") || id == ServerID("ubuntu@other.example") {
+		t.Fatalf("id %q", id)
+	}
+	if host, ok := ServerByID([]string{"me@a", "ubuntu@test-server.example"}, id); !ok || host != "ubuntu@test-server.example" {
+		t.Fatalf("by id: %q, %v", host, ok)
+	}
+	if _, ok := ServerByID([]string{"me@a"}, id); ok {
+		t.Fatal("found an ID among servers that don't have it")
+	}
+	for in, want := range map[string]string{"ubuntu@test-server": "test-server", "this-mac": "This Mac", "studio": "studio", "a@b@c": "c"} {
+		if got := ServerDisplayName(in); got != want {
+			t.Errorf("ServerDisplayName(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

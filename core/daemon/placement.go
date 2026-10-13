@@ -96,7 +96,8 @@ func (s *Server) GetPlacement(ctx context.Context, req *daemonv1.GetPlacementReq
 	}
 	switch {
 	case host != "":
-		resp.Holder, resp.Server = daemonv1.Holder_HOLDER_KNOWN_SERVER, host
+		resp.Holder = daemonv1.Holder_HOLDER_KNOWN_SERVER
+		resp.ServerId, resp.ServerName = local.ServerID(host), local.ServerDisplayName(host)
 		resp.Answers = daemonv1.Answers_ANSWERS_NO
 		if local.ServerAnswers(ctx, host) {
 			resp.Answers = daemonv1.Answers_ANSWERS_YES

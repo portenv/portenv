@@ -172,7 +172,7 @@ const (
 	Holder_HOLDER_UNSPECIFIED Holder = 0
 	// Nobody, or this Mac: OpenBox opens it here.
 	Holder_HOLDER_NONE Holder = 1
-	// One of this Mac's servers (server is user@host).
+	// One of this Mac's servers (server_id, server_name).
 	Holder_HOLDER_KNOWN_SERVER Holder = 2
 	// A machine this Mac can't reach: another Mac, or a server it doesn't
 	// know (machine is its machine ID).
@@ -4141,8 +4141,10 @@ func (x *GetPlacementRequest) GetName() string {
 type GetPlacementResponse struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	Holder Holder                 `protobuf:"varint,1,opt,name=holder,proto3,enum=portenv.daemon.v1.Holder" json:"holder,omitempty"`
-	// user@host, for HOLDER_KNOWN_SERVER.
-	Server string `protobuf:"bytes,2,opt,name=server,proto3" json:"server,omitempty"`
+	// For HOLDER_KNOWN_SERVER: a stable ID for the server (it doesn't carry
+	// the address) and the name it shows by.
+	ServerId   string `protobuf:"bytes,6,opt,name=server_id,json=serverId,proto3" json:"server_id,omitempty"`
+	ServerName string `protobuf:"bytes,7,opt,name=server_name,json=serverName,proto3" json:"server_name,omitempty"`
 	// The holder's machine ID, as the lease names it.
 	Machine string `protobuf:"bytes,3,opt,name=machine,proto3" json:"machine,omitempty"`
 	// The newest save, which carries the lease.
@@ -4189,9 +4191,16 @@ func (x *GetPlacementResponse) GetHolder() Holder {
 	return Holder_HOLDER_UNSPECIFIED
 }
 
-func (x *GetPlacementResponse) GetServer() string {
+func (x *GetPlacementResponse) GetServerId() string {
 	if x != nil {
-		return x.Server
+		return x.ServerId
+	}
+	return ""
+}
+
+func (x *GetPlacementResponse) GetServerName() string {
+	if x != nil {
+		return x.ServerName
 	}
 	return ""
 }
@@ -4436,13 +4445,15 @@ const file_portenv_daemon_v1_daemon_proto_rawDesc = "" +
 	"\x06box_id\x18\x01 \x01(\tR\x05boxId\x12+\n" +
 	"\x11already_recovered\x18\x02 \x01(\bR\x10alreadyRecovered\")\n" +
 	"\x13GetPlacementRequest\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\"\xf3\x01\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\"\xa7\x02\n" +
 	"\x14GetPlacementResponse\x121\n" +
-	"\x06holder\x18\x01 \x01(\x0e2\x19.portenv.daemon.v1.HolderR\x06holder\x12\x16\n" +
-	"\x06server\x18\x02 \x01(\tR\x06server\x12\x18\n" +
+	"\x06holder\x18\x01 \x01(\x0e2\x19.portenv.daemon.v1.HolderR\x06holder\x12\x1b\n" +
+	"\tserver_id\x18\x06 \x01(\tR\bserverId\x12\x1f\n" +
+	"\vserver_name\x18\a \x01(\tR\n" +
+	"serverName\x12\x18\n" +
 	"\amachine\x18\x03 \x01(\tR\amachine\x12@\n" +
 	"\x0enewest_save_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\fnewestSaveAt\x124\n" +
-	"\aanswers\x18\x05 \x01(\x0e2\x1a.portenv.daemon.v1.AnswersR\aanswers*\x93\x02\n" +
+	"\aanswers\x18\x05 \x01(\x0e2\x1a.portenv.daemon.v1.AnswersR\aanswersJ\x04\b\x02\x10\x03R\x06server*\x93\x02\n" +
 	"\tSaveState\x12\x1a\n" +
 	"\x16SAVE_STATE_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18SAVE_STATE_NOT_SAVED_YET\x10\x01\x12\x15\n" +

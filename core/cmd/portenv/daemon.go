@@ -267,11 +267,12 @@ func cmdApp(ctx context.Context, e *local.Env, op string, args []string) error {
 		}
 		b, err := json.Marshal(struct {
 			Holder       string    `json:"holder"`
-			Server       string    `json:"server,omitempty"`
+			ServerID     string    `json:"server_id,omitempty"`
+			ServerName   string    `json:"server_name,omitempty"`
 			Machine      string    `json:"machine,omitempty"`
 			NewestSaveAt time.Time `json:"newest_save_at,omitzero"`
 			Answers      string    `json:"answers,omitempty"`
-		}{r.GetHolder().String(), r.GetServer(), r.GetMachine(), at, r.GetAnswers().String()})
+		}{r.GetHolder().String(), r.GetServerId(), r.GetServerName(), r.GetMachine(), at, r.GetAnswers().String()})
 		if err != nil {
 			return err
 		}

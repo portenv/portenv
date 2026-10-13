@@ -167,7 +167,7 @@ public nonisolated enum Portenv_Daemon_V1_Holder: SwiftProtobuf.Enum, Swift.Case
   /// Nobody, or this Mac: OpenBox opens it here.
   case none // = 1
 
-  /// One of this Mac's servers (server is user@host).
+  /// One of this Mac's servers (server_id, server_name).
   case knownServer // = 2
 
   /// A machine this Mac can't reach: another Mac, or a server it doesn't
@@ -1500,8 +1500,11 @@ public nonisolated struct Portenv_Daemon_V1_GetPlacementResponse: Sendable {
 
   public var holder: Portenv_Daemon_V1_Holder = .unspecified
 
-  /// user@host, for HOLDER_KNOWN_SERVER.
-  public var server: String = String()
+  /// For HOLDER_KNOWN_SERVER: a stable ID for the server (it doesn't carry
+  /// the address) and the name it shows by.
+  public var serverID: String = String()
+
+  public var serverName: String = String()
 
   /// The holder's machine ID, as the lease names it.
   public var machine: String = String()
@@ -4065,7 +4068,7 @@ nonisolated extension Portenv_Daemon_V1_GetPlacementRequest: SwiftProtobuf.Messa
 
 nonisolated extension Portenv_Daemon_V1_GetPlacementResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".GetPlacementResponse"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}holder\0\u{1}server\0\u{1}machine\0\u{3}newest_save_at\0\u{1}answers\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}holder\0\u{2}\u{2}machine\0\u{3}newest_save_at\0\u{1}answers\0\u{3}server_id\0\u{3}server_name\0\u{b}server\0\u{c}\u{2}\u{1}")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -4074,10 +4077,11 @@ nonisolated extension Portenv_Daemon_V1_GetPlacementResponse: SwiftProtobuf.Mess
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularEnumField(value: &self.holder) }()
-      case 2: try { try decoder.decodeSingularStringField(value: &self.server) }()
       case 3: try { try decoder.decodeSingularStringField(value: &self.machine) }()
       case 4: try { try decoder.decodeSingularMessageField(value: &self._newestSaveAt) }()
       case 5: try { try decoder.decodeSingularEnumField(value: &self.answers) }()
+      case 6: try { try decoder.decodeSingularStringField(value: &self.serverID) }()
+      case 7: try { try decoder.decodeSingularStringField(value: &self.serverName) }()
       default: break
       }
     }
@@ -4091,9 +4095,6 @@ nonisolated extension Portenv_Daemon_V1_GetPlacementResponse: SwiftProtobuf.Mess
     if self.holder != .unspecified {
       try visitor.visitSingularEnumField(value: self.holder, fieldNumber: 1)
     }
-    if !self.server.isEmpty {
-      try visitor.visitSingularStringField(value: self.server, fieldNumber: 2)
-    }
     if !self.machine.isEmpty {
       try visitor.visitSingularStringField(value: self.machine, fieldNumber: 3)
     }
@@ -4103,12 +4104,19 @@ nonisolated extension Portenv_Daemon_V1_GetPlacementResponse: SwiftProtobuf.Mess
     if self.answers != .unspecified {
       try visitor.visitSingularEnumField(value: self.answers, fieldNumber: 5)
     }
+    if !self.serverID.isEmpty {
+      try visitor.visitSingularStringField(value: self.serverID, fieldNumber: 6)
+    }
+    if !self.serverName.isEmpty {
+      try visitor.visitSingularStringField(value: self.serverName, fieldNumber: 7)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Portenv_Daemon_V1_GetPlacementResponse, rhs: Portenv_Daemon_V1_GetPlacementResponse) -> Bool {
     if lhs.holder != rhs.holder {return false}
-    if lhs.server != rhs.server {return false}
+    if lhs.serverID != rhs.serverID {return false}
+    if lhs.serverName != rhs.serverName {return false}
     if lhs.machine != rhs.machine {return false}
     if lhs._newestSaveAt != rhs._newestSaveAt {return false}
     if lhs.answers != rhs.answers {return false}

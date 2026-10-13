@@ -115,7 +115,7 @@ func TestGetPlacement(t *testing.T) {
 	for _, tc := range []struct {
 		name, machine string
 		holder        daemonv1.Holder
-		server        string
+		server        string // the address, which must not be in the response
 		answers       daemonv1.Answers
 	}{
 		{"a known server that answers", "up-111111", daemonv1.Holder_HOLDER_KNOWN_SERVER, "me@up", daemonv1.Answers_ANSWERS_YES},
@@ -133,8 +133,19 @@ func TestGetPlacement(t *testing.T) {
 			if d := time.Since(start); d > 2*local.PingDeadline+2*time.Second {
 				t.Fatalf("took %v: the probes are bounded, each at once", d)
 			}
-			if p.GetHolder() != tc.holder || p.GetServer() != tc.server || p.GetAnswers() != tc.answers || p.GetMachine() != tc.machine {
+			if p.GetHolder() != tc.holder || p.GetAnswers() != tc.answers || p.GetMachine() != tc.machine {
 				t.Fatalf("got %v", p)
+			}
+			wantID, wantName := "", ""
+			if tc.server != "" {
+				wantID, wantName = local.ServerID(tc.server), local.ServerDisplayName(tc.server)
+			}
+			if p.GetServerId() != wantID || p.GetServerName() != wantName {
+				t.Fatalf("server %q %q, want %q %q", p.GetServerId(), p.GetServerName(), wantID, wantName)
+			}
+			// Servers show by name: no address anywhere in the answer.
+			if tc.server != "" && strings.Contains(p.String(), tc.server) {
+				t.Fatalf("the address %s is in the response: %v", tc.server, p)
 			}
 		})
 	}

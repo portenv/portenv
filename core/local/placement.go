@@ -4,6 +4,8 @@ package local
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -128,4 +130,34 @@ func ServerAnswers(ctx context.Context, host string) bool {
 func hardStop(cmd *bounded.Cmd) {
 	cmd.Cancel = func() error { return cmd.Process.Kill() }
 	cmd.WaitDelay = 100 * time.Millisecond
+}
+
+// ServerID is a stable ID for one of this Mac's servers that doesn't carry
+// its address: what the app is told, and gives back, instead of user@host.
+func ServerID(target string) string {
+	sum := sha256.Sum256([]byte("portenv server " + target))
+	return "srv-" + hex.EncodeToString(sum[:6])
+}
+
+// ServerByID is the server (user@host) with this ID, among servers.
+func ServerByID(servers []string, id string) (string, bool) {
+	for _, s := range servers {
+		if ServerID(s) == id {
+			return s, true
+		}
+	}
+	return "", false
+}
+
+// ServerDisplayName is the name a server shows by (GUIDELINES §2): its host
+// name, without the user, the rule the app's ServerName.display follows,
+// until Add a Server (2.9) lets the person name it.
+func ServerDisplayName(target string) string {
+	if target == "this-mac" {
+		return "This Mac"
+	}
+	if i := strings.LastIndex(target, "@"); i >= 0 {
+		return target[i+1:]
+	}
+	return target
 }

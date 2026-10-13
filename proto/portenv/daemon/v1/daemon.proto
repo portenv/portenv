@@ -111,6 +111,12 @@ service DaemonService {
   // repository key, checks it, and writes the box's config. Idempotent on
   // box_id. Never logged.
   rpc RecoverBox(RecoverBoxRequest) returns (RecoverBoxResponse);
+  // Where a box is open when it isn't this Mac (2.3, the lease sheet): the
+  // place, its newest save, and whether it answers. A known server is asked
+  // with `portenv app ping`, within 2 s; another machine can't be asked.
+  // OpenBox's refusal for a box open elsewhere carries the trailer
+  // portenv-refusal: open-elsewhere, and the app asks this then.
+  rpc GetPlacement(GetPlacementRequest) returns (GetPlacementResponse);
 }
 
 message CheckBoxRequest {
@@ -551,4 +557,42 @@ message RecoverBoxResponse {
   string box_id = 1;
   // An earlier call had finished it.
   bool already_recovered = 2;
+}
+
+message GetPlacementRequest {
+  string name = 1;
+}
+
+// Who holds a box open.
+enum Holder {
+  HOLDER_UNSPECIFIED = 0;
+  // Nobody, or this Mac: OpenBox opens it here.
+  HOLDER_NONE = 1;
+  // One of this Mac's servers (server is user@host).
+  HOLDER_KNOWN_SERVER = 2;
+  // A machine this Mac can't reach: another Mac, or a server it doesn't
+  // know (machine is its machine ID).
+  HOLDER_OTHER_MACHINE = 3;
+}
+
+// Whether the holder answers.
+enum Answers {
+  ANSWERS_UNSPECIFIED = 0;
+  ANSWERS_YES = 1;
+  // A known server whose portenv app ping failed or took over 2 s.
+  ANSWERS_NO = 2;
+  // Another machine: Portenv can't ask it. Never a reason to take over by
+  // default (R-0168).
+  ANSWERS_CANNOT_ASK = 3;
+}
+
+message GetPlacementResponse {
+  Holder holder = 1;
+  // user@host, for HOLDER_KNOWN_SERVER.
+  string server = 2;
+  // The holder's machine ID, as the lease names it.
+  string machine = 3;
+  // The newest save, which carries the lease.
+  google.protobuf.Timestamp newest_save_at = 4;
+  Answers answers = 5;
 }

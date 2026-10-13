@@ -45,7 +45,7 @@ var commands = map[string]command{
 	"status":     {"status <box>", cmdStatus},
 	"join":       {"join <box> --id BOX-ID --storage DIR [--image IMAGE]   (repository key on stdin)", cmdJoin},
 	"attach":     {"attach <box> [--session NAME]   (through portenvd)", cmdAttach},
-	"app":        {"app open|close|save|point|revert|history|housekeep|check|restart|servers BOX | app move BOX this-mac|USER@HOST   (through portenvd)", cmdApp},
+	"app":        {"app open|close|save|point|revert|history|housekeep|check|restart|placement|servers BOX | app move BOX this-mac|USER@HOST   (through portenvd)", cmdApp},
 	"ssh-config": {"ssh-config <box> --host SERVER [--user USER] [--alias portenv]", cmdSSHConfig},
 }
 
@@ -56,6 +56,18 @@ func run(ctx context.Context, args []string) int {
 	}
 	if args[0] == "version" || args[0] == "--version" {
 		fmt.Println("portenv", version.String())
+		return 0
+	}
+	// This machine's ID, as a save's lease names it: a Mac asks its servers
+	// so the lease sheet can say which one holds a workspace (2.3). Not
+	// secret.
+	if args[0] == "machine-id" {
+		e, err := local.NewEnv()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "portenv:", err)
+			return 1
+		}
+		fmt.Println(e.Machine)
 		return 0
 	}
 	c, ok := commands[args[0]]

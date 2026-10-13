@@ -141,7 +141,7 @@ func startServe(log *slog.Logger) int {
 	// from its first instruction (ADR 0010, conditions).
 	p, err := os.StartProcess(ServeBinary, []string{"portenv-agent", "serve"}, &os.ProcAttr{
 		Files: []*os.File{os.Stdin, os.Stdout, os.Stderr},
-		Env:   []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"},
+		Env:   []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", BoxIDEnv + "=" + BoxID()},
 		// portenv-sync as a supplementary group only to read and run the
 		// restic binary (root:portenv-sync, 0750).
 		Sys: &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: ServeUID, Gid: ServeUID, Groups: []uint32{syncGID}}},

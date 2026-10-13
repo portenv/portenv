@@ -29,6 +29,14 @@ const (
 	ChannelPort = 7700
 	// ChannelEnv set to "stdin" tells init that the secrets come on stdin.
 	ChannelEnv = "PORTENV_CHANNEL"
+	// BoxIDEnv is the box's ID, set by the driver when it makes the
+	// container (R-0172, R-0173). It's an environment variable rather than
+	// part of the secrets line because helpers in older images refuse a
+	// secrets line with a field they don't know (DisallowUnknownFields), so
+	// a new field there would stop older boxes from starting; an unknown
+	// variable is ignored. A container is made afresh for every start, so
+	// it never goes stale.
+	BoxIDEnv = "PORTENV_BOX_ID"
 )
 
 // The API process runs as portenv-agent from a copy of the agent with file

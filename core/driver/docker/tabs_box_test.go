@@ -82,6 +82,11 @@ func TestTabsInABox(t *testing.T) {
 	}
 	defer func() { _ = conn.Close() }()
 	c := agentv1.NewAgentServiceClient(conn)
+	// The helper answers as this box (R-0172, R-0173): the driver passed
+	// its ID when it made the container.
+	if v, err := c.GetVersion(ctx, &agentv1.GetVersionRequest{}); err != nil || v.GetBoxId() != string(id) {
+		t.Fatalf("GetVersion: box_id %q (%v), want %q", v.GetBoxId(), err, id)
+	}
 	names := func(ts []*typesv1.Tab) string {
 		var n []string
 		for _, x := range ts {

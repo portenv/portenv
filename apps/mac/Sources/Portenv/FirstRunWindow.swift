@@ -43,13 +43,6 @@ struct BringsWindowForward: NSViewRepresentable {
     }
 }
 
-/// A window drawn as the active one (coloured traffic lights, the blue
-/// default button) without being made key, so a render never takes focus.
-final class ActiveLookingWindow: NSWindow {
-    override var isKeyWindow: Bool { true }
-    override var isMainWindow: Bool { true }
-}
-
 /// The recovery key sheet (ADR 0019, "When it runs out"): the pool is
 /// empty, so New Workspace asks for the recovery key once. It's checked
 /// against the workspaces here first; with nothing to check against, a new

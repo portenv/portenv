@@ -84,7 +84,7 @@ enum MainWindowRender {
 
 /// A window drawn as the active one (coloured traffic lights, focus states)
 /// without being made key, so a render never takes focus.
-private final class ActiveLookingWindow: NSWindow {
+final class ActiveLookingWindow: NSWindow {
     override var isKeyWindow: Bool { true }
     override var isMainWindow: Bool { true }
 }

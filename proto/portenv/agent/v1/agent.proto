@@ -40,6 +40,12 @@ service AgentService {
   rpc SelectTab(SelectTabRequest) returns (SelectTabResponse);
   // The tabs at once, then again whenever they change.
   rpc WatchTabs(WatchTabsRequest) returns (stream WatchTabsResponse);
+  // One tab's terminal (ADR 0020): its own output from the session's
+  // control-mode client, and input and size to it. The first message from
+  // the client must be open. portenvd relays it as it relays Terminal, and
+  // sets the stream's author from its caller (R-0133 item 4); the app's own
+  // request to portenvd has no author field.
+  rpc TabTerminal(stream TabTerminalRequest) returns (stream TabTerminalResponse);
 }
 
 message RunResticRequest {
@@ -107,6 +113,14 @@ message GetVersionRequest {}
 
 message GetVersionResponse {
   portenv.types.v1.BuildInfo build = 1;
+  // The box this helper runs in, as the driver told it when the box
+  // started (R-0172, R-0173). portenvd refuses a channel that answers as
+  // another box, which catches a misrouted channel (a stale forward, a
+  // reused port). It's the helper's own claim, not proof of identity: that
+  // stays with the channel's per-box TLS certificate and token, and
+  // portenvd checks both. Empty only from a helper older than this field,
+  // or one whose driver didn't pass it.
+  string box_id = 2;
 }
 
 message GetReadinessRequest {}
@@ -192,4 +206,93 @@ message WatchTabsRequest {
 
 message WatchTabsResponse {
   repeated portenv.types.v1.Tab tabs = 1;
+}
+
+message TabTerminalRequest {
+  oneof msg {
+    TabTerminalOpen open = 1;
+    // Keystrokes, pastes, clicks and IME input, as the app's terminal
+    // produced them (never the emulator's replies; ADR 0020, decision 4).
+    bytes input = 2;
+    // The size this view can show, in cells. The tab takes the latest size
+    // asked for, from any viewer.
+    TerminalSize resize = 3;
+  }
+}
+
+message TabTerminalOpen {
+  // The tmux session, for example "main".
+  string session = 1;
+  // A tab ID, "@N".
+  string tab = 2;
+  TerminalSize size = 3;
+  // Who types here, for attribution. Set by portenvd from its caller
+  // (the app over its socket, or an agent's grant), never by a client.
+  string author = 4;
+}
+
+message TabTerminalResponse {
+  oneof msg {
+    // Always first, and again after the helper's control client restarts
+    // or output had to be skipped (ADR 0020, decisions 6 and 11).
+    TabTerminalReset reset = 1;
+    // The tab's own output, in order.
+    bytes output = 2;
+    // The tab's size changed elsewhere (another viewer).
+    TerminalSize resized = 3;
+    // Nothing follows.
+    TabTerminalEnd end = 4;
+    // Who ran a command, for its block's attribution chip. Sent before the
+    // output chunk in which the command's OSC 133;C mark completes.
+    CommandAuthor author = 5;
+  }
+}
+
+message TabTerminalReset {
+  TerminalSize size = 1;
+  // The tab's history and screen, cursor and modes, with the OSC 133
+  // marks the helper knows replayed on their lines (ADR 0020, decision 6).
+  bytes seed = 2;
+  // Every command still in the seed that has a recorded author. Their
+  // line values are the post-reflow lines at the time of the reset,
+  // numbered the same way as this seed's marks.
+  repeated CommandAuthor authors = 3;
+}
+
+enum TabTerminalEnd {
+  TAB_TERMINAL_END_UNSPECIFIED = 0;
+  // The tab was closed (by anyone), or the tab asked for doesn't exist.
+  TAB_TERMINAL_END_TAB_CLOSED = 1;
+  // The box is stopping, or moving away.
+  TAB_TERMINAL_END_BOX_STOPPING = 2;
+}
+
+// Who sent the Enter that started a command. Response-only: no request
+// carries it. The workspace helper records it from the stream the Enter
+// came through, whose identity portenvd set when the stream opened (ADR
+// 0020, R-0133 item 4). The author never travels inside output bytes, not
+// even as a private OSC: a workspace program can write any OSC and forge
+// it, so it's only ever this separate message, and the app's filter keeps
+// dropping unknown OSCs. A command with no recorded author (typed through
+// a plain attach, or started by a program itself) gets no CommandAuthor at
+// all; there is no "unknown" value.
+//
+// The app attaches each author to its mark when the chunk that completes
+// that mark arrives. After that it follows the mark in the app's own row
+// tracker across reflows, so the helper never resends authors after a
+// resize. An author whose line has no mark completing in the next output
+// chunk is dropped by the app: no chip, never a guess.
+message CommandAuthor {
+  // The command's OSC 133;C line, counted from the tab's first line ever,
+  // the same counting as the seed's marks (R-0133 item 6).
+  uint64 line = 1;
+  // As people read it: "You", "Grok Bot".
+  string name = 2;
+  // Set by portenvd for each recipient: true when the author is the caller
+  // receiving this stream. Never set by the helper or any client.
+  bool is_you = 3;
+  // Empty for a person; the agent's ID from its grant (ADR 0016) otherwise.
+  string agent_id = 4;
+  // For "also typed by" (GUIDELINES §4.2's "You and Grok Bot"), later.
+  reserved 5;
 }

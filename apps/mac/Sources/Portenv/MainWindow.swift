@@ -111,9 +111,9 @@ struct MainWindow: View {
                     // Follows the tabs while the box is open here or on a
                     // server; watches again after a restart or a move.
                     .task { await tabs.follow() }
-                BoxTerminal(box: controller.box, generation: controller.terminalGeneration) {
-                    Task { await controller.terminalEnded() }
-                }
+                BoxTerminal(box: controller.box, generation: controller.terminalGeneration,
+                            onEnded: { Task { await controller.terminalEnded() } },
+                            onHoverLink: { controller.hoveredLink = $0 })
                 .accessibilityLabel(A11y.terminal(box: controller.box))
             }
         case .closed:

@@ -114,6 +114,10 @@ Menu items that can't work right now are disabled with no explanation in the men
   | ⌘⇧[ / ⌘⇧] | Show the previous / next tab, wrapping around | Window › Show Previous Tab, Show Next Tab |
   | ⌃⇧Tab / ⌃Tab | The same, on any keyboard layout (⌘⇧[ needs a bracket key, which AZERTY and other layouts lack), as in Safari and Terminal | — |
 
+- **What a program in the workspace can't make the terminal do** (R-0133, R-0134; `TerminalGuard`, which every terminal view gets from `TerminalViews`):
+  - **The clipboard:** it can't read or set the Mac's clipboard (OSC 52).
+  - **Links:** only web pages (http, https) open, and only on the person's own ⌘-click; a `file:` link, `javascript:` or another app's scheme never opens.
+  - **Before anyone clicks:** hovering a link shows its full destination, as a tooltip and in the state line ("Opens https://…"), since a program can label a link anything. A link Portenv won't open says so there instead: "Portenv opens only web links: …".
 - **Closing a tab that still runs a program asks first:** "Close this tab? <program> is still running.", with Close Tab and Cancel. The program is the tab's foreground process as the box agent reports it at that moment. A tab with only its shell closes without asking. The last tab has no close button; ⌘W closes the window instead.
 
 ### 4.2 Blocks

@@ -190,6 +190,9 @@ public final class BoxController {
     /// A message shown for StateLine.transientSeconds (a revert, a move
     /// finished), then the normal line again.
     public private(set) var transient: String?
+    /// The link under the pointer in the terminal, or one it just refused:
+    /// the state line shows where it goes before anyone clicks (R-0134).
+    public var hoveredLink: String?
     private var transientTask: Task<Void, Never>?
 
     /// The title's state line: progress while opening or moving, a transient

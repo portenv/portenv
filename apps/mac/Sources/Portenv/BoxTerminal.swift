@@ -15,9 +15,12 @@ struct BoxTerminal: NSViewRepresentable {
     /// Called when `portenv attach` ends (the session closed, or the box
     /// agent went away).
     var onEnded: @MainActor () -> Void = {}
+    /// The link under the pointer (or one just refused), for the state line.
+    var onHoverLink: @MainActor (String?) -> Void = { _ in }
 
     func makeNSView(context: Context) -> PaddedTerminal {
         let view = PaddedTerminal(margin: TerminalLayout.margin)
+        view.onHoverLink = onHoverLink
         view.terminal.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
         context.coordinator.onEnded = onEnded
         context.coordinator.attach(view.terminal, box: box, generation: generation)
@@ -71,13 +74,18 @@ struct BoxTerminal: NSViewRepresentable {
 /// or dark ANSI palette, and the accent for the caret and selection. They
 /// change with the appearance (View › Terminal Appearance comes later).
 final class PaddedTerminal: NSView {
-    let terminal = LocalProcessTerminalView(frame: .zero)
-    /// No program in the workspace reads or sets the Mac's clipboard.
-    private var clipboardGuard: ClipboardGuard?
+    let terminal: LocalProcessTerminalView
+    /// No program in the workspace reads or sets the Mac's clipboard, or
+    /// opens a link by itself (TerminalGuard).
+    let terminalGuard: TerminalGuard
+    /// The link under the pointer, for the state line, or nil.
+    var onHoverLink: (String?) -> Void = { _ in }
+    private var hovered: String?
 
     init(margin: CGFloat) {
+        (terminal, terminalGuard) = TerminalViews.attached()
         super.init(frame: .zero)
-        clipboardGuard = ClipboardGuard.install(on: terminal)
+        terminalGuard.onRefusedLink = { [weak self] link in self?.setHover(link) }
         wantsLayer = true
         matchSystemAppearance()
         terminal.translatesAutoresizingMaskIntoConstraints = false
@@ -121,6 +129,39 @@ final class PaddedTerminal: NSView {
 
     override func mouseDown(with _: NSEvent) {
         window?.makeFirstResponder(terminal)
+    }
+
+    // MARK: Links (R-0134): the full destination before anyone clicks.
+
+    private var tracking: NSTrackingArea?
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if tracking == nil {
+            let area = NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+                                      owner: self, userInfo: nil)
+            addTrackingArea(area)
+            tracking = area
+        }
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        super.mouseMoved(with: event)
+        setHover(terminalGuard.link(atWindowPoint: event.locationInWindow))
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        super.mouseExited(with: event)
+        setHover(nil)
+    }
+
+    /// The tooltip and the state line show the link's full destination, or
+    /// why Portenv won't open it.
+    private func setHover(_ link: String?) {
+        guard link != hovered else { return }
+        hovered = link
+        terminal.toolTip = link.map(TerminalLinks.status)
+        onHoverLink(link)
     }
 }
 

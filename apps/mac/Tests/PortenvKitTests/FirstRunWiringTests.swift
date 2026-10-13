@@ -6,6 +6,36 @@ import Testing
 
 @testable import PortenvKit
 
+/// A store whose writes wait until the test lets them go, as a Keychain
+/// prompt left up does.
+final class BlockingSecretStore: SecretStore, @unchecked Sendable {
+    let inner = FakeSecretStore()
+    let entered = DispatchSemaphore(value: 0)
+    let release = DispatchSemaphore(value: 0)
+    func read(account: String) throws -> Data? { try inner.read(account: account) }
+    func add(account: String, data: Data, label: String) throws {
+        entered.signal()
+        release.wait()
+        try inner.add(account: account, data: data, label: label)
+    }
+    func set(account: String, data: Data, label: String) throws { try inner.set(account: account, data: data, label: label) }
+    func delete(account: String) throws { try inner.delete(account: account) }
+}
+
+/// Waits up to `seconds` for a signal (a plain wait, outside async code).
+func waitFor(_ s: DispatchSemaphore, seconds: Double) -> Bool {
+    s.wait(timeout: .now() + seconds) == .success
+}
+
+final class LockedBool: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _value = false
+    var value: Bool {
+        get { lock.withLock { _value } }
+        set { lock.withLock { _value = newValue } }
+    }
+}
+
 /// A store whose calls take a while, as a Keychain prompt does.
 final class SlowSecretStore: SecretStore, @unchecked Sendable {
     let inner = FakeSecretStore()
@@ -77,6 +107,47 @@ struct FirstRunWiringTests {
         #expect(r.name == "acme-api" && r.boxID == entries[0].boxID && r.storage == "")
         #expect(r.recoveryPassword == Data(entries[0].password.utf8))
         #expect(try w.pool.entries().count == RecoveryPool.size - 1)
+    }
+
+    /// R-0149: a fill waiting on a Keychain prompt never holds the
+    /// service's lock, so the window can still ask about the key.
+    @Test func aBlockedFillNeverBlocksTheService() async throws {
+        let store = BlockingSecretStore()
+        let creator = FakeCreator(keys: FakeSecretStore())
+        let pool = RecoveryPoolStore(store: store)
+        let service = KeyedFirstRunService(maker: BoxMaker(daemon: creator, repositoryKeys: FakeSecretStore(), pool: pool, lock: AsyncLock()),
+                                           pool: pool, randomBytes: countingBytes(from: 7))
+        _ = try await service.makeRecoveryKey()
+        let fill = Task { try await service.recoveryKeySaved() }
+        await withCheckedContinuation { c in DispatchQueue.global().async { store.entered.wait(); c.resume() } }
+        // The write is blocked now. Asking about the key answers at once
+        // (on another thread, so a held lock fails the test, not hangs it).
+        let answered = DispatchSemaphore(value: 0)
+        let held = LockedBool()
+        DispatchQueue.global().async { held.value = service.holdsKey; answered.signal() }
+        let inTime = waitFor(answered, seconds: 1)
+        store.release.signal()
+        #expect(inTime, "holdsKey waited for the Keychain write")
+        if inTime { #expect(held.value) } // in flight still counts as held
+        else { _ = waitFor(answered, seconds: 5) }
+        try await fill.value
+        #expect(!service.holdsKey)
+        #expect(try pool.entries().count == RecoveryPool.size)
+    }
+
+    /// Once first run has made the first workspace, the flow lets go of
+    /// the key's text (R-0149; best effort).
+    @Test func theFlowDropsTheKeysTextWhenDone() async throws {
+        let w = Wired()
+        let flow = FirstRunFlow(service: w.service)
+        await flow.next()
+        flow.recoverySaved = true
+        await flow.next()
+        await flow.next()
+        flow.boxName = "acme-api"
+        await flow.next()
+        #expect(flow.made == "acme-api")
+        #expect(flow.recoveryKey == nil)
     }
 
     /// A pool that can't be written stays on the recovery key, saying why,

@@ -12,6 +12,8 @@ public final class KeyedFirstRunService: FirstRunService, @unchecked Sendable {
     private let lock = NSLock()
     private var held: RecoveryKey?
     private var filled = false
+    /// A fill is writing the pool (with the lock released).
+    private var filling = false
     private let maker: BoxMaker
     private let pool: RecoveryPoolStore
     private let randomBytes: @Sendable (Int) throws -> [UInt8]
@@ -29,8 +31,9 @@ public final class KeyedFirstRunService: FirstRunService, @unchecked Sendable {
         set { maker.waits.handler = newValue }
     }
 
-    /// Whether the recovery key is still held (until the pool is filled).
-    public var holdsKey: Bool { lock.withLock { held != nil } }
+    /// Whether the recovery key is still held (until the pool is filled;
+    /// a fill in flight still counts). Never waits for the Keychain.
+    public var holdsKey: Bool { lock.withLock { held != nil || filling } }
 
     public func makeRecoveryKey() async throws -> String {
         let key = try RecoveryKey.generate(randomBytes: randomBytes)
@@ -43,35 +46,39 @@ public final class KeyedFirstRunService: FirstRunService, @unchecked Sendable {
         return text
     }
 
-    /// Fills the pool from the held key, once, then wipes the key.
+    /// Fills the pool from the held key, once, then wipes the key. The lock
+    /// is never held across the Keychain write, which can wait behind a
+    /// prompt for as long as the person leaves it (R-0149): the key is taken
+    /// out under the lock, written without it, then put back on failure.
     public func recoveryKeySaved() async throws {
-        guard lock.withLock({ !filled && held != nil }) else { return }
-        let waits = maker.waits
-        do {
-            try await onKeychainQueue(waiting: { waits.report($0) }) { [self] in try fillFromHeld() }
-        } catch {
-            throw FirstRunError(FirstRunText.poolNotStored)
-        }
-    }
-
-    /// On the Keychain queue: the key leaves `held` only once the pool is
-    /// written, and the copy used is the only one left, so wiping it wipes
-    /// the key's symbols.
-    private func fillFromHeld() throws {
-        try lock.withLock {
-            guard var key = held else { return }
+        let taken: RecoveryKey? = lock.withLock {
+            guard !filled, !filling, let key = held else { return nil }
             held = nil
-            do {
-                // fill wipes it, whatever happens: keep a copy for a retry.
+            filling = true
+            return key
+        }
+        guard var key = taken else { return }
+        let pool = self.pool, waits = maker.waits
+        do {
+            // The closure takes its own copy, released when it ends, so the
+            // wipe below reaches the key's only buffer.
+            try await onKeychainQueue(waiting: { waits.report($0) }) { [key] in
+                // fill wipes this copy, whatever happens.
                 var attempt = key
                 try pool.fill(from: &attempt)
-                key.wipe()
-                filled = true
-            } catch {
-                held = key
-                throw error
             }
+        } catch {
+            lock.withLock {
+                filling = false
+                if held == nil { held = key } // kept for the retry
+            }
+            throw FirstRunError(FirstRunText.poolNotStored)
         }
+        lock.withLock {
+            filling = false
+            filled = true
+        }
+        key.wipe()
     }
 
     public func createBox(_ box: NewBox) async throws {

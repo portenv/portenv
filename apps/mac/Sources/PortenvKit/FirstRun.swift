@@ -284,6 +284,9 @@ public final class FirstRunFlow {
                 ))
                 made = boxName
                 memory.keyShown = false
+                // First run is done: let go of the key's text (best effort,
+                // R-0149).
+                recoveryKey = nil
             default:
                 break
             }

@@ -215,6 +215,7 @@ Also checked on tmux 3.4 in the image:
    - **No reply reaches the pane** (decision 4, item 1), and **paste is cleaned** (decision 4, item 3).
    - **One factory (R-0134):** every terminal view the app creates comes from `TerminalViews`, which installs `TerminalGuard` today and this filter and the reply drop for `MarkedTerminalView`. `scripts/check-terminal-views.sh`, in lint, fails on a terminal view constructed anywhere else.
    - **The second line:** tmux's `allow-passthrough off` and `set-clipboard off`.
+     - **It isn't complete.** On tmux 3.4, `tmux set-buffer -w` still reaches a client as OSC 52 with `set-clipboard off`; copy mode's copies don't. Checked in the image (#94). With control mode, that OSC 52 is in the pane's own output, and the filter drops it.
      - The helper sets them on every new session and attach (#94), and again on every `TabTerminal` open.
      - A test asserts both.
      - Turning either on is the owner's decision.

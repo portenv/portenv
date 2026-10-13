@@ -13,7 +13,7 @@ import SwiftUI
 ///   focuses the pane, and `focus()` makes the terminal first responder.
 @MainActor
 public final class TabTerminalHost: NSView {
-    public let terminal = MarkedTerminalView(frame: .zero)
+    public let terminal = TerminalViews.tab()
     /// Called when the terminal gains or loses the keyboard focus.
     public var onFocusChange: (Bool) -> Void = { _ in }
     private var watch: NSKeyValueObservation?

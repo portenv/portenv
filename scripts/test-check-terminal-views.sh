@@ -7,8 +7,8 @@ set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 dir=$(mktemp -d)
 trap 'rm -rf "$dir"' EXIT
-mkdir -p "$dir/PortenvKit" "$dir/Portenv"
-printf 'let v = LocalProcessTerminalView(frame: .zero)\n' >"$dir/PortenvKit/TerminalGuard.swift"
+mkdir -p "$dir/PortenvKit" "$dir/PortenvTerm" "$dir/Portenv"
+printf 'let v = LocalProcessTerminalView(frame: .zero)\nlet t = MarkedTerminalView(frame: .zero)\n' >"$dir/PortenvTerm/TerminalViews.swift"
 check() { scripts/check-terminal-views.sh "$dir" >/dev/null 2>&1; }
 
 printf 'final class PaddedTerminal: NSView {\n    let terminal: LocalProcessTerminalView\n    // LocalProcessTerminalView(frame:) is made by TerminalViews.\n}\n' >"$dir/Portenv/Ok.swift"
@@ -21,11 +21,20 @@ for planted in \
 	'let t = MarkedTerminalView(frame: .zero)' \
 	'let t: LocalProcessTerminalView = LocalProcessTerminalView.init(frame: .zero)' \
 	'views.append(TerminalView(frame: r))'; do
-	printf '%s\n' "$planted" >"$dir/Portenv/Bad.swift"
-	if check; then
-		echo "FAIL: not caught: $planted" >&2
-		exit 1
-	fi
+	for where in Portenv PortenvTerm PortenvKit; do
+		printf '%s\n' "$planted" >"$dir/$where/Bad.swift"
+		if check; then
+			echo "FAIL: not caught in $where: $planted" >&2
+			exit 1
+		fi
+		rm "$dir/$where/Bad.swift"
+	done
 done
-rm "$dir/Portenv/Bad.swift"
+# The old factory file is no exception any more.
+printf 'let v = LocalProcessTerminalView(frame: .zero)\n' >"$dir/PortenvKit/TerminalGuard.swift"
+if check; then
+	echo "FAIL: a construction in PortenvKit/TerminalGuard.swift wasn't caught" >&2
+	exit 1
+fi
+rm "$dir/PortenvKit/TerminalGuard.swift"
 echo "check-terminal-views: ok"

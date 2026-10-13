@@ -10,7 +10,7 @@
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 src=${1:-apps/mac/Sources}
-factory=PortenvKit/TerminalGuard.swift
+factory=PortenvTerm/TerminalViews.swift
 
 # A construction: Type(, Type.init(, or SwiftTerm.Type( for SwiftTerm's
 # terminal views and the app's own (MarkedTerminalView).

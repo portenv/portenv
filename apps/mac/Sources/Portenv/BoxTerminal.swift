@@ -2,6 +2,7 @@
 
 import AppKit
 import PortenvKit
+import PortenvTerm
 import SwiftTerm
 import SwiftUI
 

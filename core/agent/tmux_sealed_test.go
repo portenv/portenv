@@ -20,7 +20,7 @@ import (
 // and allow-passthrough are off, so neither copy mode's copies nor a
 // program's own OSC 52 reach an attached client. (tmux 3.4 still sends
 // `tmux set-buffer -w` as OSC 52 with set-clipboard off; only the app's
-// ClipboardGuard stops that, and its tests cover it.)
+// TerminalGuard stops that, and its tests cover it.)
 func TestTmuxNeverReachesTheMacsClipboard(t *testing.T) {
 	tb, raw := testTabs(t)
 	ctx := context.Background()

@@ -71,7 +71,7 @@ var tmuxOwned = []string{
 // the workspace runs as the same user as tmux and could set them back, and
 // tmux 3.4 sends `tmux set-buffer -w` to the client as OSC 52 even with
 // set-clipboard off. The app's terminal drops every clipboard request
-// (ClipboardGuard); that's the boundary.
+// (TerminalGuard); that's the boundary.
 var tmuxSealed = []string{
 	";", "set-option", "-g", "set-clipboard", "off",
 	";", "set-option", "-g", "allow-passthrough", "off",

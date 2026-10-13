@@ -30,8 +30,9 @@ struct MainWindow: View {
                 InspectorView(
                     content: InspectorContent(box: controller, tabs: tabs),
                     yourInitial: String(NSFullUserName().prefix(1)).uppercased(),
-                    moveTargets: moveTargets,
+                    moveMenu: controller.moveMenu,
                     move: { target in Task { await controller.move(to: target) } },
+                    run: { action in Task { await controller.run(action) } },
                     retryPackages: { Task { await controller.retryPackages() } },
                     revert: { Task { await controller.revertToLastSavePoint() } },
                     retrySaves: { Task { await controller.refreshSaves() } }
@@ -67,13 +68,6 @@ struct MainWindow: View {
             } message: {
                 Text(controller.error ?? "")
             }
-    }
-
-    /// Move To… in the inspector: every place but where the box is.
-    private var moveTargets: [(String, String)] {
-        (["this-mac"] + controller.servers)
-            .filter { !controller.isCurrent($0) }
-            .map { (ServerName.display($0), $0) }
     }
 
     @ViewBuilder private var content: some View {
@@ -118,9 +112,9 @@ struct MainWindow: View {
                     if let renderTerminal {
                         RenderedView(make: renderTerminal)
                     } else {
-                        BoxTerminal(box: controller.box, generation: controller.terminalGeneration) {
-                            Task { await controller.terminalEnded() }
-                        }
+                        BoxTerminal(box: controller.box, generation: controller.terminalGeneration,
+                                    onEnded: { Task { await controller.terminalEnded() } },
+                                    onLinkStatus: { controller.linkStatus = $0 })
                     }
                 }
                 .accessibilityLabel(A11y.terminal(box: controller.box))

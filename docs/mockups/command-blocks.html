@@ -1,0 +1,40 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Command blocks</title><style>body{margin:0;background:#0E0E10;font-family:-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif;color:#F5F5F7}
+.board{padding:44px 48px;display:flex;flex-direction:column;gap:22px;width:2000px;box-sizing:border-box}
+.board>h1{margin:0;font-size:28px} .board>p{margin:0;color:#A1A1A6;font-size:15px;max-width:1800px;line-height:1.5}
+.g{display:grid;grid-template-columns:1040px 820px;gap:40px} .cap{font-size:13px;color:#A1A1A6;margin-bottom:8px;font-weight:600}
+.term{position:relative;background:#141416;border:1px solid #3A3A3D;border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px;font-size:13px;min-height:640px;box-sizing:border-box}
+.blk{border-radius:10px;background:#1C1C1F;border:1px solid #2A2A2D} .blk.failed{border-color:#5A2A28} .blk.running{border-color:#1E3A5A} .blk.folded .bh{border-bottom:none}
+.bh{display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid #2A2A2D;font-family:'SF Mono', ui-monospace, Menlo, monospace;font-size:12.5px}
+.av{width:18px;height:18px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-family:-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif;font-size:10px;font-weight:700;color:#fff;flex-shrink:0}
+.ps{color:#6E6E73} .cmd{color:#F5F5F7;font-family:'SF Mono', ui-monospace, Menlo, monospace} .st{margin-left:auto;color:#8E8E93;font-size:12px}
+.o{margin:0;padding:10px 14px;font-family:'SF Mono', ui-monospace, Menlo, monospace;font-size:12.5px;line-height:1.6;color:#C7C7CC;white-space:pre}
+.okc{color:#7EE2A8} .bad{color:#FF6961} .run{color:#64D2FF} .mut{color:#8E8E93} a{color:#409CFF;font-family:-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif;font-size:12px}
+.acts{display:flex;gap:6px;margin-left:10px} .acts button{font-family:-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif;font-size:11px;min-height:22px;padding:0 8px;border:none;border-radius:5px;background:#3A3A3D;color:#F5F5F7}
+.ask{margin:4px 14px 14px;padding:12px 14px;border-radius:10px;background:#232326;border:1px solid #3A3A3D;display:flex;flex-direction:column;gap:6px;font-family:-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif}
+.ab{display:flex;gap:8px;align-items:center} .ab a{margin-left:auto} button{min-height:28px;padding:0 12px;border:none;border-radius:7px;background:#3A3A3D;color:#F5F5F7;font:inherit;font-size:12.5px} button.p{background:#0A6EDB;color:#fff;font-weight:600}
+.prompt{display:flex;gap:8px;align-items:center;padding:4px 12px;font-family:'SF Mono', ui-monospace, Menlo, monospace} .cur{width:8px;height:16px;background:#C7C7CC}
+.sticky{display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:10px 10px 0 0;background:#232326;border:1px solid #1E3A5A;font-family:'SF Mono', ui-monospace, Menlo, monospace;font-size:12.5px;box-shadow:0 6px 12px rgba(0,0,0,.4)} .jump{font-family:-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif;font-size:11.5px;color:#409CFF;margin-left:12px}
+u.lnk{color:#64A8F0} .tip{align-self:flex-start;margin-left:14px;padding:5px 9px;border-radius:6px;background:#2A2A2D;border:1px solid #48484B;font-size:12px;color:#C7C7CC} .tip.bad2{color:#FFB340}
+.notes{color:#A1A1A6;font-size:14px;line-height:1.6;max-width:1880px} .notes b{color:#F5F5F7}</style></head><body><div class="board"><h1>Command blocks · states, actions, the sticky header and links (for lane A after 1.2c)</h1><p>Every command in a tab becomes a block: who ran it, the command, how it ended and when. Built on ADR 0020’s per-tab terminal and its OSC 133 marks. The happy path is on main-window; this board adds the other states.</p><div class="g"><div><div class="cap">States: folded success · failed · long output (hover shows actions) · running with an answer card</div><div class="term">
+<div class="blk folded"><div class="bh"><span class="av" style="background:#5A5A5E">P</span><span class="ps">$</span><code class="cmd">git pull</code><span class="st"><span class="okc">✓</span> 0.8 s · 14:20</span></div></div>
+<div class="blk failed"><div class="bh"><span class="av" style="background:#5E5CE6">G</span><span class="ps">$</span><code class="cmd">npm test -- retries</code><span class="st"><span class="bad">✗ exit 1</span> 8.4 s · 14:31</span></div><pre class="o">  <span class="bad">×</span> retries a declined payment once (412 ms)
+      Expected attempts: 2   Received: 3
+
+Tests: <span class="bad">1 failed</span>, <span class="okc">23 passed</span>, 24 total</pre></div>
+<div class="blk "><div class="bh"><span class="av" style="background:#5A5A5E">P</span><span class="ps">$</span><code class="cmd">npm run build</code><span class="st"><span class="okc">✓</span> 41 s · 14:33</span><span class="acts"><button>Copy Output</button><button>Copy Command</button><button>Run Again</button></span></div><pre class="o">vite v6.0.3 building for production…
+<span class="mut">… 2,398 lines hidden ·</span> <a>Show All Output</a>
+✓ built in 40.71s</pre></div>
+<div class="blk running"><div class="bh"><span class="av" style="background:#5E5CE6">G</span><span class="ps">$</span><code class="cmd">claude --continue</code><span class="st"><span class="run">● running</span> 3 min · since 14:37</span></div><pre class="o">● Ran the test 40 times: 8 failures, all on the second retry.</pre><div class="ask"><span class="mut">Claude Code is asking</span><b>Push fix/retries to the remote?</b><span class="ab"><button class="p">Yes, push</button><button>Not yet</button><a>Answer in the terminal</a></span></div></div>
+<div class="prompt"><span class="av" style="background:#5A5A5E">P</span><span class="ps">$</span><span class="cur"></span></div></div></div><div><div class="cap">Scrolled inside a long running block: the sticky header, and link hovers</div><div class="term">
+<div class="sticky"><span class="av" style="background:#5E5CE6">G</span><span class="ps">$</span><code class="cmd">npm run test:all</code><span class="st"><span class="run">● running</span> 2 min</span><span class="jump">↑ Top of block</span></div>
+<pre class="o">  ✓ api/payments.spec.ts (31 tests) 812 ms
+  ✓ api/webhooks.spec.ts (12 tests) 240 ms
+  ✓ api/users.spec.ts (44 tests) 1.1 s
+  ✓ api/retries.spec.ts (24 tests) 2.3 s
+  ✓ web/checkout.spec.ts (18 tests) 3.0 s
+  ⠋ web/settings.spec.ts
+
+Docs: <u class=lnk>https://vitest.dev/guide/</u></pre>
+<div class="tip">Opens https://vitest.dev/guide/ (⌘-click)</div>
+<div class="tip bad2">Portenv opens only web links: file:///etc/hosts</div>
+</div></div></div><p class="notes"><b>States:</b> a finished block that succeeded folds to its header once it scrolls off the latest screen (click to unfold); a failed block stays open with its exit code in red; a running block shows elapsed time and a blue edge; long output keeps the first and last 20 lines with “Show All Output”. <b>Who ran it:</b> the avatar is the author portenvd records (ADR 0020 §3/§4), never what the program says. <b>Actions</b> show on hover and by keyboard (⌘↑/⌘↓ move between blocks; ⌥⌘C copies the selected block’s output; Run Again asks first if the command came from an agent). <b>Sticky header:</b> scrolling inside a long block keeps its header at the top with “↑ Top of block”. <b>Links:</b> hover shows the real destination in a tooltip and the state line; only http/https, only on ⌘-click (R-0134). <b>Answer card:</b> as on main-window; answering in the terminal always works. <b>VoiceOver:</b> each block is a group: “Grok Bot ran npm test -- retries, failed, exit 1, 8.4 seconds”, rotor to move between blocks. <b>Update prompt (Sparkle’s standard window):</b> title “A new version of Portenv is ready”, body “Portenv 0.3.0 is available; you have 0.2.0. Your workspaces keep running while it updates; open windows reopen after.”, buttons Install and Relaunch (default) / Later / Skip This Version, release notes below.</p></div></body></html>

@@ -57,6 +57,10 @@ enum ScreenRenders {
             Task { await making.next() }
             while !making.busy { await Task.yield() }
             try snapshot(FirstRunView(flow: making, opened: { _ in }), name: "first-run-1-welcome-making-key", in: dir)
+            // A Keychain call waiting for a prompt (GUIDELINES §3.1).
+            let waiting = await sampleFlow(at: .firstBox)
+            waiting.keychainWaiting = true
+            try snapshot(FirstRunView(flow: waiting, opened: { _ in }), name: "first-run-4-first-box-keychain-waiting", in: dir)
             // A Continue that can't move on says why, by the button (R-0126).
             let notTicked = await sampleFlow(at: .recoveryKey)
             notTicked.recoverySaved = false
@@ -163,22 +167,24 @@ enum ScreenRenders {
             TabInfo(id: "@1", name: "shell", active: false),
             TabInfo(id: "@2", name: "tests", active: false, program: "npm"),
         ])
-        let size = NSSize(width: 300, height: 600)
-        func inspector(_ content: InspectorContent, targets: [(String, String)]) -> some View {
-            InspectorView(content: content, yourInitial: "P", moveTargets: targets, move: { _ in },
+        // Tall enough for every section at the board's type sizes.
+        let size = NSSize(width: 300, height: 780)
+        func inspector(_ content: InspectorContent, servers: [String]) -> some View {
+            InspectorView(content: content, yourInitial: "P",
+                          moveMenu: BoxMenuModel.moveSubmenu(busy: false, location: "this-mac", servers: servers), move: { _ in },
                           retryPackages: {}, revert: {}, scrolls: false)
                 .frame(maxHeight: .infinity, alignment: .top)
                 .background(.background)
         }
         try snapshot(inspector(InspectorContent(storagePlace: "this Mac", openedAt: ago(95), savedAt: ago(2),
-                                                saves: saves, tabs: tabs), targets: []),
+                                                saves: saves, tabs: tabs), servers: []),
                      name: "inspector-this-mac", size: size, in: dir)
         try snapshot(inspector(InspectorContent(storagePlace: "this Mac", openedAt: ago(95), savedAt: ago(2),
-                                                savesLoaded: false, savesFailed: true, tabs: tabs), targets: []),
+                                                savesLoaded: false, savesFailed: true, tabs: tabs), servers: []),
                      name: "inspector-saves-failed", size: size, in: dir)
         try snapshot(inspector(InspectorContent(storagePlace: "your server", openedAt: ago(95), failedPackages: ["ripgrep"],
                                                 savedAt: ago(2), saves: saves, tabs: tabs),
-                               targets: [("test-server", "portenv@test-server")]),
+                               servers: ["portenv@test-server"]),
                      name: "inspector-saves-to-server", size: size, in: dir)
     }
 

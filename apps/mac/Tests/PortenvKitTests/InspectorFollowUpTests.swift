@@ -174,11 +174,49 @@ struct InspectorFollowUpTests {
         for _ in 0..<500 where !done() { await Task.yield() }
     }
 
-    // MARK: Move To… says why it can't
+    /// The inspector's Move To… menu chooses an item as the title menu
+    /// does: a move moves, any other enabled item reaches run, and a
+    /// disabled one does nothing (R-0147).
+    @Test func choosingAnItemRunsItsAction() {
+        var moved: [String] = [], ran: [BoxMenuItem.Action] = []
+        BoxMenuItem(title: "test-server", action: .move("portenv@test-server"))
+            .choose(move: { moved.append($0) }, run: { ran.append($0) })
+        BoxMenuItem(title: "Make a Save Point", action: .makeSavePoint)
+            .choose(move: { moved.append($0) }, run: { ran.append($0) })
+        BoxMenuItem(title: "Add a Server…", enabled: false)
+            .choose(move: { moved.append($0) }, run: { ran.append($0) })
+        BoxMenuItem.separator.choose(move: { moved.append($0) }, run: { ran.append($0) })
+        #expect(moved == ["portenv@test-server"])
+        #expect(ran == [.makeSavePoint])
+    }
 
-    @Test func moveToSaysWhyWhenThereIsNowhereToMove() {
-        #expect(InspectorText.moveUnavailable(targets: []) == "Add a server to move this box.")
-        #expect(InspectorText.moveUnavailable(targets: ["This Mac"]) == nil)
+    // MARK: The board's words (R-0142)
+
+    @Test func runningNowShowsTheTabsOnOneRow() {
+        let rows = InspectorText.tabRows([
+            TabInfo(id: "@0", name: "claude", active: true, program: "claude"),
+            TabInfo(id: "@1", name: "shell", active: false),
+            TabInfo(id: "@2", name: "muse", active: false),
+        ])
+        #expect(InspectorText.tabsLabel == "Tabs")
+        #expect(InspectorText.tabNames(rows) == "claude, shell, muse")
+    }
+
+    @Test func whosHereHasTheTypographicApostrophe() {
+        #expect(InspectorText.whosHere == "Who\u{2019}s here")
+    }
+
+    // MARK: Move To… is never a dead end
+
+    /// With no server, Move To… still opens: This Mac checked, then Add a
+    /// Server… (R-0142, move-and-lease), the title menu's own submenu.
+    @Test func moveToOpensEvenWithNoServer() {
+        let none = BoxMenuModel.moveSubmenu(busy: false, location: "this-mac", servers: [])
+        #expect(none.map(\.title) == ["This Mac", "—", "Add a Server…"])
+        #expect(none.first?.checked == true && none.first?.enabled == true)
+        let some = BoxMenuModel.moveSubmenu(busy: false, location: "this-mac", servers: ["portenv@test-server"])
+        #expect(some.map(\.title) == ["This Mac", "—", "test-server", "—", "Add a Server…"])
+        #expect(some[2].enabled && !some[2].checked)
     }
 
     // MARK: Encryption, This Mac

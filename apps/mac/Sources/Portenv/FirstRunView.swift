@@ -52,6 +52,9 @@ struct FirstRunView: View {
         .onChange(of: flow.refusals) { _, _ in
             if let words = flow.reason { Announce.high(words) }
         }
+        .onChange(of: flow.keychainWaiting) { _, on in
+            if on { Announce.high("\(KeychainWait.line). \(KeychainWait.detail)") }
+        }
     }
 
     /// Why Continue can't go on, or didn't: an error in red, or a notice (a
@@ -59,7 +62,18 @@ struct FirstRunView: View {
     /// as it applies, so Continue is never dimmed without a reason on
     /// screen (R-0132).
     @ViewBuilder private var refusal: some View {
-        if let error = flow.error {
+        if let wait = flow.waitLine {
+            // A Keychain prompt may be up, maybe behind other windows
+            // (GUIDELINES §3.1).
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                ProgressView().controlSize(.small)
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(wait)
+                    Text(KeychainWait.detail).foregroundStyle(.secondary)
+                }
+            }
+            .accessibilityElement(children: .combine)
+        } else if let error = flow.error {
             Label(error, systemImage: "exclamationmark.triangle")
                 .foregroundStyle(.red)
                 .fixedSize(horizontal: false, vertical: true)

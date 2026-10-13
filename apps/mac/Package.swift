@@ -33,7 +33,7 @@ let package = Package(
                 .product(name: "GRPCCore", package: "grpc-swift-2"),
                 .product(name: "GRPCNIOTransportHTTP2", package: "grpc-swift-nio-transport"),
                 .product(name: "SwiftProtobuf", package: "swift-protobuf"),
-                // The terminal's guards (ClipboardGuard).
+                // The terminal's guard (TerminalGuard, TerminalViews).
                 .product(name: "SwiftTerm", package: "SwiftTerm"),
             ]
         ),

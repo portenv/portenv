@@ -11,5 +11,5 @@ import (
 )
 
 func runTerminal(agentv1.AgentService_TerminalServer, Config, *agentv1.TerminalOpen) error {
-	return errors.New("terminals run only inside a box (Linux)")
+	return errors.New("terminals run only inside a box (Linux)") // workspace-word: ok (developer stub, not on a Mac)
 }

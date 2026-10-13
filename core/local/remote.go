@@ -185,7 +185,7 @@ func EnrolOn(ctx context.Context, e *Env, c BoxConfig, host, joinStorage string,
 	join.Stdin = bytes.NewReader(payload)
 	join.Stdout, join.Stderr = out, out
 	if err := join.Run(); err != nil {
-		return fmt.Errorf("enrol on %s: %w (the box is saved and released)", host, err)
+		return fmt.Errorf("enrol on %s: %w (the workspace is saved and released)", host, err)
 	}
 	return nil
 }

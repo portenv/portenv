@@ -113,11 +113,11 @@ func AttachTerminal(ctx context.Context, c daemonv1.DaemonServiceClient, open *d
 		lost := read.Load() - sent.Load()
 		switch {
 		case interrupted.Load() && lost > 0:
-			return fmt.Errorf("interrupted; %d bytes read before Ctrl-C didn't reach the box", lost)
+			return fmt.Errorf("interrupted; %d bytes read before Ctrl-C didn't reach the workspace", lost)
 		case interrupted.Load():
-			return errors.New("interrupted; everything read before Ctrl-C reached the box")
+			return errors.New("interrupted; everything read before Ctrl-C reached the workspace")
 		case lost > 0 && !a.TTY: // at a terminal, keys typed as it ends are normal
-			return fmt.Errorf("%d bytes of input didn't reach the box: the session ended first", lost)
+			return fmt.Errorf("%d bytes of input didn't reach the workspace: the session ended first", lost)
 		}
 		return nil
 	}
@@ -125,7 +125,7 @@ func AttachTerminal(ctx context.Context, c daemonv1.DaemonServiceClient, open *d
 		r, err := stream.Recv()
 		if err != nil {
 			if abandoned.Load() {
-				return errors.New("interrupted twice; input still on its way may not have reached the box")
+				return errors.New("interrupted twice; input still on its way may not have reached the workspace")
 			}
 			if errors.Is(err, io.EOF) {
 				return end()
@@ -135,7 +135,7 @@ func AttachTerminal(ctx context.Context, c daemonv1.DaemonServiceClient, open *d
 		switch m := r.GetMsg().(type) {
 		case *daemonv1.TerminalResponse_Output:
 			if _, err := a.Out.Write(m.Output); err != nil {
-				return fmt.Errorf("writing the box's output: %w", err)
+				return fmt.Errorf("writing the workspace's output: %w", err)
 			}
 		case *daemonv1.TerminalResponse_ExitCode:
 			return end()

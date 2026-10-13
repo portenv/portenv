@@ -11,5 +11,5 @@ import (
 
 // ServeChannelProcess runs only inside a box.
 func ServeChannelProcess(context.Context, Config) error {
-	return errors.New("the agent channel runs only inside a box (Linux)")
+	return errors.New("the agent channel runs only inside a box (Linux)") // workspace-word: ok (developer stub, not on a Mac)
 }

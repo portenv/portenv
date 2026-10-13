@@ -86,13 +86,13 @@ struct MainWindow: View {
             .background(.background)
         case _ where controller.agentUnavailable && controller.isOpen:
             VStack(spacing: 10) {
-                Text("The box agent is unavailable").font(.title3)
-                Text("Nothing can be saved until the box restarts. Your unsaved changes stay in the box; restarting keeps them.")
+                Text("The workspace helper is unavailable").font(.title3)
+                Text("Nothing can be saved until the workspace restarts. Your unsaved changes stay in the workspace; restarting keeps them.")
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 420)
-                Button("Restart Box") { Task { await controller.restartBox() } }
-                    .accessibilityLabel("Restart Box: the box restarts and keeps your unsaved changes")
+                Button("Restart Workspace") { Task { await controller.restartBox() } }
+                    .accessibilityLabel("Restart Workspace: the workspace restarts and keeps your unsaved changes")
                     .keyboardShortcut(.defaultAction)
                     .disabled(controller.busy)
             }

@@ -12,5 +12,5 @@ import (
 
 // Init is only supported inside a Linux box.
 func Init(context.Context, Config, *slog.Logger) error {
-	return errors.New("portenv-agent init runs only inside a Linux box")
+	return errors.New("portenv-agent init runs only inside a Linux box") // workspace-word: ok (developer stub, not on a Mac)
 }

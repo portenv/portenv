@@ -128,7 +128,7 @@ func ensureHome(ctx context.Context, cfg Config, run Runner) error {
 	}
 	// No home, or an empty one.
 	if !cfg.InitHome {
-		return fmt.Errorf("%w: %s (set PORTENV_INIT_HOME=1 only for a brand-new box)", ErrNoHome, home)
+		return fmt.Errorf("%w: %s (set PORTENV_INIT_HOME=1 only for a brand-new box)", ErrNoHome, home) // workspace-word: ok (developer setting)
 	}
 	if err := os.MkdirAll(home, 0o700); err != nil {
 		return fmt.Errorf("create home: %w", err)

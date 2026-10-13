@@ -186,7 +186,7 @@ func (t tabs) find(ctx context.Context, id string) ([]*typesv1.Tab, error) {
 		return nil, err
 	}
 	if !slices.ContainsFunc(ts, func(x *typesv1.Tab) bool { return x.GetId() == id }) {
-		return nil, status.Errorf(codes.NotFound, "no tab %s in this box", id)
+		return nil, status.Errorf(codes.NotFound, "no tab %s in this workspace", id)
 	}
 	return ts, nil
 }
@@ -217,7 +217,7 @@ func (t tabs) close(ctx context.Context, id string) error {
 		return err
 	}
 	if len(ts) == 1 {
-		return status.Error(codes.FailedPrecondition, "a box keeps at least one tab")
+		return status.Error(codes.FailedPrecondition, "a workspace keeps at least one tab")
 	}
 	if _, err := t.tmux(ctx, "kill-window", "-t", id); err != nil {
 		return status.Errorf(codes.Unavailable, "close tab: %v", err)

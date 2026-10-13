@@ -1078,8 +1078,35 @@ In this order:
      - **Question 1, control mode:** yes. Tabs follow tmux through control mode, with #41's window IDs.
      - **Question 2, OSC 133 per tab:** yes for bash and zsh, with exit codes. Inside Claude Code it only sees one long command, never its questions.
      - **Waiting for input:** the combined four-signal detector, used everywhere, is right on all 12 labelled cases. Each signal alone is wrong on 1 to 5 of them. Secret prompts never reach a relay, and answers to them through a relay are refused.
-     - **Question 3, SwiftTerm overlay alignment:** still open. It needs a prototype overlay, then the reviewer's UI test.
-     - **Blocks and the rest stay in Phase 1 provisionally.** If question 3 fails, they move to Phase 2.
+     - **Question 3, SwiftTerm overlay alignment (ADR 0020, 2026-10-13; proposed):** yes, when the terminal is fed the tab's own output.
+       - **How it was measured:** real tmux 3.4 streams for six scenarios (scrolling, long output, a pager, clear, a second tab, resize) were replayed into SwiftTerm with the overlay tracker.
+       - **Today's attached client keeps no mark.** tmux drops OSC 133 on the way to an attached client, and even with passthrough, the client draws on the alternate screen with no scrollback.
+       - **Without the alternate screen,** 51 of 54 prompt marks land on the wrong line.
+       - **Each tab's own output from tmux control mode:** 0 of 94 on the wrong line, 0 prompts missing, and 0 wrong at any scroll position.
+       - A prototype overlay on a real SwiftTerm view stays on its rows through scrolling and a resize.
+     - **So the app's terminal moves to tmux control mode, one terminal per tab (ADR 0020),** and blocks stay in Phase 1, in this order:
+       1. **1.2c, the control-mode milestone:**
+          - the box agent's control client per session (tab events replace the polling);
+          - the `TabTerminal` stream in the agent and portenvd;
+          - the app's per-tab terminal (`TabTerminalSource`, `MarkedTerminalView`) in place of today's attached terminal;
+          - **the latency gate:** keystroke to echo no worse than the attached client by more than 5 ms at p95 locally (within ±0.25 ms at tmux, measured), and the same run on the us-west-2 tester server once it exists. Until it passes, a dev-only switch back to the attached client, which never reaches a release build;
+          - tmux pinned in the image (3.4) and checked at attach;
+          - #73's and #75's no-loss guarantees carried over, with tests.
+          - R-0133's nine changes:
+            - no emulator reply reaches the pane;
+            - a default-deny filter in front of the terminal, fuzzed;
+            - paste cleaned;
+            - authors set by portenvd;
+            - the seed in one command list;
+            - mark lines from the helper's own parse;
+            - "every byte or a reset, and the person is told";
+            - the `%output` decoder and copy mode;
+            - CLI and app resizing in turn.
+
+          `portenv attach` stays a plain attach, and agents' terminal access is unchanged (R-0132).
+       2. **Waiting-for-input detection,** from the same control client (ADR 0017's detector).
+       3. **Command blocks:** attribution, the sticky header, the inline answer card, then tab badges; the command palette and saved commands after.
+     - **tmux's passthrough stays off.** The app's per-tab view filters what a program prints (no clipboard, link or title effects), and a test checks both.
      - **Still to do:** the same cases over the SSH forward to a server box (needs the owner's go-ahead for the AWS test server), and real agent CLIs in place of the stand-ins (needs accounts).
 
 **Terminal colours (the owner, 2026-10-11).** The terminal follows the system appearance by default ("Match System"), like Terminal.app's Basic profile:
@@ -1093,8 +1120,10 @@ In this order:
 It comes after 1.2's blocks, wherever they land (Phase 1 if the spike succeeds, otherwise Phase 2), and before the launch demo. The panes themselves don't depend on blocks; the Warp-style features below apply per pane once they exist.
 
 - **Panes:** up to 4 in one window.
-  - Each pane is its own viewer, on #41's per-viewer grouped sessions, and shows one of the box's tabs.
-  - So two panes can't fight over the current tab, and an agent typing in one tab never moves your view.
+  - Each pane shows one of the box's tabs through its own tab terminal (ADR 0020's `TabTerminalSource` and `MarkedTerminalView`). Lane B builds the panes on that interface with `ScriptedTabSource` until 1.2c's control-mode provider lands.
+  - So two panes can't fight over a current tab, and an agent typing in one tab never moves your view. A tab shows in at most one pane.
+  - A tab has one size, the latest asked for. When another viewer (the CLI, an agent) has it larger, the pane keeps the cursor's row in sight.
+  - The pane header's status (asking, typing, watching, quiet since, running) comes from the tab events, not the terminal stream (ADR 0020, `TabInfo.activity`).
 - **Controls:**
   - "Split right" (⌘D) and "Split down" (⇧⌘D), as buttons in the title bar;
   - ⌘⌥ and the arrow keys move between panes;
@@ -1531,6 +1560,15 @@ These need an owner decision; Claude Code should add new ones here instead of gu
 - [x] "Save to Passwords" on the recovery key step: macOS has no public API for an app to add an item to the Passwords app. Keep Print and Copy only, or find another way? **Answered (the reviewer, on the owner's delegation, R-0087, 2026-10-11):** dropped. Print and Copy, plus the "I've saved" checkbox (ADR 0019).
 - [x] Restoring with only the recovery key (ADR 0019): where the app offers it on a clean Mac. **Answered (the reviewer, on the owner's delegation, R-0092, 2026-10-11):** "Restore with a Recovery Key…" as a plain text button under Welcome's main actions, and in Settings › Protection and recovery key. Not needed for the design testers; the board comes before the UI. The `RecoverBox` call and its test come with `CreateBox`.
 - [ ] S3-compatible storage from the app (first run's Storage step): where the bucket's credentials live (the Keychain, per box or per bucket), and how they reach restic. Today `portenv init` takes them from the environment. `CreateBox` covers This Mac only first (ADR 0019). Out of 1.5: first run offers only Keep on this Mac for the design testers (R-0092); this stays open for 2.9.
+- [x] ADR 0020, decision 9: with control mode, escape sequences a program prints reach the app's terminal instead of stopping at tmux. Is filtering them in the app the same guarantee, or a change to a security default? **Answered (the reviewer, on the owner's delegation, R-0133, 2026-10-13):** the same or stronger, provided every one of these is in:
+  - a default-deny filter in front of the terminal;
+  - no reply from the emulator reaches the pane;
+  - paste cleaned;
+  - tmux's `allow-passthrough` and `set-clipboard` off and asserted;
+  - fixed memory limits.
+
+  Dropping any of them makes it the owner's decision. The check on main found that `set-clipboard external` let any program set the Mac's clipboard through `tmux set-buffer -w`, fixed in #94; links are limited to web pages on the person's click (R-0134).
+- [ ] ADR 0020: should agents' terminal access (2.4) move to the `TabTerminal` stream as well, for per-author attribution of their keystrokes, or stay on today's attach?
 - [ ] A per-box "Keep running when Portenv quits" option (off by default) with a menu bar item listing boxes still running? Only with Phase 3's lease hand-off (see 2.4).
 - [x] Tab keyboard shortcuts (1.2)? **Answered (2026-10-10):**
   - ⌘T opens a new tab, ⌘1–⌘9 choose a tab, ⌘⇧[ / ⌘⇧] go to the previous / next tab.

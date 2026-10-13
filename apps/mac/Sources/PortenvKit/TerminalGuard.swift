@@ -18,7 +18,7 @@ import SwiftTerm
 /// This stands in front of the view as its delegate: clipboard requests are
 /// dropped; a link opens only when it's http or https with a host, and only
 /// on the person's own click; everything else goes to the view as before.
-/// TerminalViews makes every terminal view with one, and keeps it.
+/// TerminalViews (PortenvTerm) makes every terminal view with one, and keeps it.
 @MainActor
 public final class TerminalGuard: TerminalViewDelegate {
     private weak var view: LocalProcessTerminalView?
@@ -108,7 +108,8 @@ public enum TerminalLinks {
         /// reorder part of what's shown.
         case hiddenCharacters
         /// A user name (or password) before the host: `https://apple.com@evil.com/`
-        /// reads as apple.com and goes to evil.com. Shown as its ASCII URL.
+        /// reads as apple.com and goes to evil.com. Carries only the real
+        /// host (in punycode), never the user name or password (R-0144).
         case userInfo(String)
         /// Not http or https with a host: `file:`, `javascript:`, any app's
         /// custom scheme. Shown as it is (it has no hidden characters).
@@ -120,7 +121,7 @@ public enum TerminalLinks {
         guard let url = URL(string: link), let scheme = url.scheme?.lowercased(),
               scheme == "http" || scheme == "https", let host = url.host, !host.isEmpty
         else { return .notWeb(link) }
-        if url.user != nil || url.password != nil { return .userInfo(url.absoluteString) }
+        if url.user != nil || url.password != nil { return .userInfo(host) }
         return .opens(url)
     }
 
@@ -137,7 +138,7 @@ public enum TerminalLinks {
         switch verdict(link) {
         case let .opens(url): "Opens \(url.absoluteString) (⌘-click)"
         case .hiddenCharacters: "Portenv won't open a link with hidden characters"
-        case let .userInfo(shown): "Portenv won't open a link with a user name before the address: \(shown)"
+        case let .userInfo(host): "Portenv won't open a link with a user name before the address. It goes to \(host)."
         case let .notWeb(shown): "Portenv opens only web links: \(shown)"
         }
     }
@@ -150,18 +151,5 @@ public enum TerminalLinks {
         case 0x00 ... 0x1F, 0x7F ... 0x9F, 0x202A ... 0x202E, 0x2066 ... 0x2069, 0x200E, 0x200F, 0x061C: true
         default: false
         }
-    }
-}
-
-/// Makes every terminal view the app shows, each with its guard (R-0134).
-/// Nothing else in the app constructs one; `scripts/check-terminal-views.sh`
-/// fails the build on a terminal view made anywhere else.
-@MainActor
-public enum TerminalViews {
-    /// Today's attached terminal (`portenv attach` in a process), guarded.
-    /// Keep the guard: the view holds its delegate weakly.
-    public static func attached() -> (view: LocalProcessTerminalView, guard: TerminalGuard) {
-        let view = LocalProcessTerminalView(frame: .zero)
-        return (view, TerminalGuard.install(on: view))
     }
 }

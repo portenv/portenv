@@ -118,14 +118,7 @@ final class PaddedTerminal: NSView {
     /// dynamic colour would follow whatever appearance draws next), then
     /// redraws the text and the margin.
     private func matchSystemAppearance() {
-        let system = TerminalPalette.systemColours(effectiveAppearance)
-        terminal.nativeBackgroundColor = NSColor(system.background)
-        terminal.nativeForegroundColor = NSColor(system.foreground)
-        terminal.caretColor = NSColor(system.caret)
-        terminal.selectedTextBackgroundColor = NSColor(system.selection)
-        // installColors also drops the terminal's cached colours and redraws.
-        terminal.installColors(TerminalPalette.matching(effectiveAppearance).ansi.map { SwiftTerm.Color($0) })
-        terminal.needsDisplay = true
+        TerminalColours.apply(to: terminal, for: effectiveAppearance)
         needsDisplay = true
     }
 
@@ -164,17 +157,5 @@ final class PaddedTerminal: NSView {
         shownStatus = status
         terminal.toolTip = status
         onLinkStatus(status)
-    }
-}
-
-extension NSColor {
-    convenience init(_ c: RGB) {
-        self.init(srgbRed: CGFloat(c.red) / 255, green: CGFloat(c.green) / 255, blue: CGFloat(c.blue) / 255, alpha: 1)
-    }
-}
-
-extension SwiftTerm.Color {
-    convenience init(_ c: RGB) {
-        self.init(red8: UInt16(c.red), green8: UInt16(c.green), blue8: UInt16(c.blue))
     }
 }

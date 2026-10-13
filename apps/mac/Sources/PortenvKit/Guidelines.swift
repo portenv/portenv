@@ -190,6 +190,14 @@ public struct BoxMenuItem: Equatable, Sendable {
 
     public static let separator = BoxMenuItem(title: "—", enabled: false)
     public var isSeparator: Bool { title == "—" }
+
+    /// Chooses the item in a menu built from this list: a move goes to
+    /// `move`, any other action to `run` (the title menu's own path), and a
+    /// disabled item or a separator does nothing (R-0147).
+    public func choose(move: (String) -> Void, run: (Action) -> Void) {
+        guard enabled, !isSeparator else { return }
+        if case let .move(target) = action { move(target) } else { run(action) }
+    }
 }
 
 public enum BoxMenuModel {
@@ -200,13 +208,7 @@ public enum BoxMenuModel {
     public static func items(open: Bool, busy: Bool, agentUnavailable: Bool, optionHeld: Bool,
                              location: String?, servers: [String]) -> [BoxMenuItem] {
         let act = open && !busy
-        var move = [BoxMenuItem(title: "This Mac", enabled: !busy, checked: location == "this-mac", action: .move("this-mac"))]
-        if !servers.isEmpty { move.append(.separator) }
-        for s in servers {
-            move.append(BoxMenuItem(title: ServerName.display(s), enabled: !busy, checked: location == s, action: .move(s)))
-        }
-        move.append(.separator)
-        move.append(BoxMenuItem(title: "Add a Server…", enabled: false))
+        let move = moveSubmenu(busy: busy, location: location, servers: servers)
         var items: [BoxMenuItem] = [
             BoxMenuItem(title: "Rename…", enabled: false),
             BoxMenuItem(title: "Move To", enabled: !busy, submenu: move),
@@ -223,6 +225,24 @@ public enum BoxMenuModel {
         }
         items.append(BoxMenuItem(title: "Show in Finder", enabled: false, shortcut: "⌥⌘R"))
         return items
+    }
+}
+
+extension BoxMenuModel {
+    /// Move To ▸, shared by the title menu and the inspector's Move To…
+    /// button: This Mac, the servers, then Add a Server… (the
+    /// move-and-lease board). The current place is checked and the others
+    /// stay enabled; with no server it still opens, to This Mac ✓ and Add a
+    /// Server…, never a dead end (R-0142).
+    public static func moveSubmenu(busy: Bool, location: String?, servers: [String]) -> [BoxMenuItem] {
+        var move = [BoxMenuItem(title: "This Mac", enabled: !busy, checked: location == "this-mac", action: .move("this-mac"))]
+        if !servers.isEmpty { move.append(.separator) }
+        for s in servers {
+            move.append(BoxMenuItem(title: ServerName.display(s), enabled: !busy, checked: location == s, action: .move(s)))
+        }
+        move.append(.separator)
+        move.append(BoxMenuItem(title: "Add a Server…", enabled: false))
+        return move
     }
 }
 

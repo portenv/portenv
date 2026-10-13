@@ -16,11 +16,11 @@ import (
 	"github.com/creack/pty"
 )
 
-// tmux never sets the Mac's clipboard through an attached client, and never
-// passes a program's sequences through (R-0133). Before tmuxSealed, tmux
-// 3.4's default set-clipboard external forwarded `tmux set-buffer -w` (and
-// copy mode's copies) to the client as OSC 52, which the app's terminal put
-// on the Mac's clipboard.
+// tmux's second line against the Mac's clipboard (R-0133): set-clipboard
+// and allow-passthrough are off, so neither copy mode's copies nor a
+// program's own OSC 52 reach an attached client. (tmux 3.4 still sends
+// `tmux set-buffer -w` as OSC 52 with set-clipboard off; only the app's
+// ClipboardGuard stops that, and its tests cover it.)
 func TestTmuxNeverReachesTheMacsClipboard(t *testing.T) {
 	tb, raw := testTabs(t)
 	ctx := context.Background()
@@ -72,15 +72,22 @@ func TestTmuxNeverReachesTheMacsClipboard(t *testing.T) {
 		t.Fatalf("timed out waiting for %s", what)
 	}
 
-	// A program sets tmux's buffer for the clipboard, then writes OSC 52
-	// itself, then prints a line so we know both have been through.
+	// A program writes OSC 52 itself and prints a line; then copy mode
+	// copies that line, as a program can make it do (copy-mode, then
+	// copy-selection), which set-clipboard external would send on.
 	marker := "PORTENV-OSC52-" + strings.Repeat("x", 8)
-	raw("set-buffer", "-w", marker)
 	b64 := base64.StdEncoding.EncodeToString([]byte(marker))
 	raw("send-keys", "-t", "=main:", "-l", "printf '\\033]52;c;"+b64+"\\007'; echo DONE-$((40+2))")
 	raw("send-keys", "-t", "=main:", "Enter")
 	waitFor("the probe's line", func() bool { return seen("DONE-42") })
-	time.Sleep(200 * time.Millisecond)
+	raw("copy-mode", "-t", "=main:")
+	raw("send-keys", "-t", "=main:", "-X", "cursor-up")
+	raw("send-keys", "-t", "=main:", "-X", "select-line")
+	raw("send-keys", "-t", "=main:", "-X", "copy-selection-and-cancel")
+	if got := raw("show-buffer"); !strings.Contains(got, "DONE") {
+		t.Fatalf("copy mode didn't copy the line: %q", got)
+	}
+	time.Sleep(300 * time.Millisecond)
 	if seen("\x1b]52;") {
 		t.Errorf("an OSC 52 clipboard sequence reached the attached client: %q", out.String())
 	}

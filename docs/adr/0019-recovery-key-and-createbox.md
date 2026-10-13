@@ -113,6 +113,7 @@ The app has to add a recovery-derived key to every box it makes later, without a
   - plus `prepareForNewContents(with: .currentHostOnly)`, so Universal Clipboard never carries it to another device.
 - **Print** goes through `NSPrintOperation` with a view drawn on the spot. The app writes no file. macOS's print system spools the job briefly, and "Save as PDF" in the print panel is the person's own choice.
 - **"I've saved my recovery key somewhere safe"** enables Continue (already built). Back and forward keep the same key. Quitting before Continue stores nothing, and the next first run makes a new key: the old one never protected anything.
+- **A key shown in a launch that didn't finish first run** (a quit or a crash mid-flow) was never used: no workspace exists yet, and a refilled pool replaces any pool it filled. The next first run makes a new key, and the recovery screen says so: "If you wrote down a key earlier, it wasn't used. Keep this one instead." The app remembers only that a key was shown (a flag in its defaults, never the key), and forgets it once first run makes the first workspace (the reviewer, on the owner's delegation, R-0132).
 
 ### Making a box: `CreateBox`
 

@@ -33,7 +33,7 @@ let package = Package(
                 .product(name: "GRPCCore", package: "grpc-swift-2"),
                 .product(name: "GRPCNIOTransportHTTP2", package: "grpc-swift-nio-transport"),
                 .product(name: "SwiftProtobuf", package: "swift-protobuf"),
-                // The terminal's guards (ClipboardGuard).
+                // The terminal's guard (TerminalGuard, TerminalViews).
                 .product(name: "SwiftTerm", package: "SwiftTerm"),
             ]
         ),
@@ -47,6 +47,10 @@ let package = Package(
             name: "Portenv",
             dependencies: ["PortenvKit", "PortenvTerm", .product(name: "SwiftTerm", package: "SwiftTerm")]
         ),
+        // The app's own views, driven through their buttons as VoiceOver
+        // would (first run's walk, R-0132): SwiftPM tests an executable
+        // target directly, so no new dependency.
+        .testTarget(name: "PortenvAppTests", dependencies: ["Portenv", "PortenvKit"]),
         // SwiftTerm: the layout tests put a real terminal in the window.
         .testTarget(name: "PortenvKitTests", dependencies: [
             "PortenvKit", .product(name: "SwiftTerm", package: "SwiftTerm"),

@@ -12,6 +12,26 @@ import (
 	"syscall"
 )
 
+// tmuxCmdAs builds a long-running tmux client as the main user, as tmuxAs
+// runs one call.
+func tmuxCmdAs(cfg Config) (tmuxCmdFunc, error) {
+	if err := CheckSwitch(cfg.UID, ForUser); err != nil {
+		return nil, err
+	}
+	groups, err := groupsOf(cfg.User)
+	if err != nil {
+		return nil, err
+	}
+	uid := uint32(cfg.UID) // #nosec G115 -- 1000
+	return func(ctx context.Context, args ...string) *exec.Cmd {
+		cmd := exec.CommandContext(ctx, "tmux", args...) // #nosec G204 -- fixed commands; session validated
+		cmd.Dir = cfg.Home()
+		cmd.Env = envFor(cfg)
+		cmd.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: uid, Gid: uid, Groups: groups}}
+		return cmd
+	}, nil
+}
+
 // tmuxAs runs tmux as the main user, on the same server as their terminals
 // (the same uid, environment and default socket).
 func tmuxAs(cfg Config) (tmuxFunc, error) {

@@ -256,7 +256,24 @@ public final class BoxController {
         case .closed: nil
         }
         return BoxMenuModel.items(open: isOpen, busy: busy, agentUnavailable: agentUnavailable,
-                                  optionHeld: optionHeld, location: here, servers: servers)
+                                  optionHeld: optionHeld, location: here, servers: servers,
+                                  lastSavePoint: lastSavePoint, savesKnown: savesLoaded && location == .thisMac, now: now())
+    }
+
+    /// The newest save point among the saves read here, if any.
+    public var lastSavePoint: Date? {
+        saves.filter { $0.kind == "point" }.map(\.time).max()
+    }
+
+    /// Move To ▸'s places, for the inspector's Move To… button (the same as
+    /// the title menu's).
+    public var moveMenu: [BoxMenuItem] {
+        let here: String? = switch location {
+        case .thisMac: "this-mac"
+        case .server(let s): s
+        case .closed: nil
+        }
+        return BoxMenuModel.moveSubmenu(busy: busy, location: here, servers: servers)
     }
 
     /// Runs a menu item's action.

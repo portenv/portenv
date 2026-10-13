@@ -30,7 +30,7 @@ public enum InspectorText {
     // Section headings, always in this order.
     public static let whereItIs = "Where it is"
     public static let savesHeading = "Saves"
-    public static let whosHere = "Who's here"
+    public static let whosHere = "Who\u{2019}s here"
     public static let runningNow = "Running now"
 
     /// "Running on <place>": This Mac, or the server's name.
@@ -60,12 +60,6 @@ public enum InspectorText {
     public static func encryption(_ server: String?, savesTo storage: String? = nil) -> String {
         if server == nil, storage?.lowercased() == "this mac" { return "Encrypted on this Mac" }
         return "Encrypted on \(server ?? "this Mac") before they leave it"
-    }
-
-    /// Why Move To… can't be used (GUIDELINES §10: what to do), shown under
-    /// it and as its help tag; nil when there is somewhere to move.
-    public static func moveUnavailable(targets: [String]) -> String? {
-        targets.isEmpty ? "Add a server to move this workspace." : nil
     }
 
     /// Packages from apt-packages.txt that couldn't be installed, as the
@@ -127,9 +121,16 @@ public enum InspectorText {
         "Saves are listed on \(server) while the workspace runs there."
     }
     public static let noSaves = "No saves yet."
+    /// Below the saves (§6); the timeline isn't built yet, so it's dimmed.
+    public static let browseAllSaves = "Browse All Saves\u{2026}"
+    /// Running now's Tabs row (the main-window board): one label and the
+    /// tabs' names. What runs in each tab is 2.3's Move confirmation's to
+    /// say, not here (R-0142).
+    public static let tabsLabel = "Tabs"
+    public static func tabNames(_ tabs: [TabRow]) -> String { tabs.map(\.name).joined(separator: ", ") }
     public static let loadingSaves = "Loading saves\u{2026}"
     /// portenvd didn't answer for the saves; Portenv keeps trying quietly.
-    public static let savesFailed = "Couldn't load saves."
+    public static let savesFailed = "Couldn\u{2019}t load saves."
     public static let tryAgain = "Try Again"
 
     /// What the Saves section shows (R-0054).

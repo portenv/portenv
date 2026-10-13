@@ -94,6 +94,8 @@ enum ScreenRenders {
             // (R-0131): with the inspector open, and closed.
             try await MainWindowRender.render(to: dir, terminal: { sampleTerminal() })
             try await MainWindowRender.render(to: dir, name: "main-window-no-inspector", inspector: false, terminal: { sampleTerminal() })
+            // Portenv › Settings…, each pane (R-0137).
+            try await SettingsRender.render(to: dir)
             return 0
         } catch {
             FileHandle.standardError.write(Data("render-screens: \(error)\n".utf8))

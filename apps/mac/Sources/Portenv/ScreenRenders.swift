@@ -191,22 +191,24 @@ enum ScreenRenders {
             TabInfo(id: "@1", name: "shell", active: false),
             TabInfo(id: "@2", name: "tests", active: false, program: "npm"),
         ])
-        let size = NSSize(width: 300, height: 600)
-        func inspector(_ content: InspectorContent, targets: [(String, String)]) -> some View {
-            InspectorView(content: content, yourInitial: "P", moveTargets: targets, move: { _ in },
+        // Tall enough for every section at the board's type sizes.
+        let size = NSSize(width: 300, height: 780)
+        func inspector(_ content: InspectorContent, servers: [String]) -> some View {
+            InspectorView(content: content, yourInitial: "P",
+                          moveMenu: BoxMenuModel.moveSubmenu(busy: false, location: "this-mac", servers: servers), move: { _ in },
                           retryPackages: {}, revert: {}, scrolls: false)
                 .frame(maxHeight: .infinity, alignment: .top)
                 .background(.background)
         }
         try snapshot(inspector(InspectorContent(storagePlace: "this Mac", openedAt: ago(95), savedAt: ago(2),
-                                                saves: saves, tabs: tabs), targets: []),
+                                                saves: saves, tabs: tabs), servers: []),
                      name: "inspector-this-mac", size: size, in: dir)
         try snapshot(inspector(InspectorContent(storagePlace: "this Mac", openedAt: ago(95), savedAt: ago(2),
-                                                savesLoaded: false, savesFailed: true, tabs: tabs), targets: []),
+                                                savesLoaded: false, savesFailed: true, tabs: tabs), servers: []),
                      name: "inspector-saves-failed", size: size, in: dir)
         try snapshot(inspector(InspectorContent(storagePlace: "your server", openedAt: ago(95), failedPackages: ["ripgrep"],
                                                 savedAt: ago(2), saves: saves, tabs: tabs),
-                               targets: [("test-server", "portenv@test-server")]),
+                               servers: ["portenv@test-server"]),
                      name: "inspector-saves-to-server", size: size, in: dir)
     }
 

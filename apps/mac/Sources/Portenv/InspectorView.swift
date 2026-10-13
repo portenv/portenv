@@ -11,9 +11,11 @@ struct InspectorView: View {
     let content: InspectorContent
     /// The first letter of the person's name, for their avatar.
     let yourInitial: String
-    /// Where the box can move: (title, target).
-    let moveTargets: [(String, String)]
+    /// Move To ▸'s places, as in the title menu (BoxMenuModel.moveSubmenu).
+    let moveMenu: [BoxMenuItem]
     let move: (String) -> Void
+    /// Any other menu item's action, as the title menu runs it.
+    var run: (BoxMenuItem.Action) -> Void = { _ in }
     let retryPackages: () -> Void
     let revert: () -> Void
     /// Try Again when the saves couldn't be loaded.
@@ -56,10 +58,14 @@ struct InspectorView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             } else {
+                // Each with its symbol, as on the main-window board: where it
+                // runs, and the lock for where its saves go.
                 Line(InspectorText.runningOn(content.place),
-                     detail: content.openedAt.map { InspectorText.since($0) })
+                     detail: content.openedAt.map { InspectorText.since($0) },
+                     symbol: content.place == nil ? "laptopcomputer" : "server.rack")
                 if let storage = content.storagePlace {
-                    Line(InspectorText.savesGoTo(storage), detail: InspectorText.encryption(content.place, savesTo: storage))
+                    Line(InspectorText.savesGoTo(storage), detail: InspectorText.encryption(content.place, savesTo: storage),
+                         symbol: "lock")
                 }
                 if let packages = InspectorText.packagesLine(content.failedPackages) {
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
@@ -69,27 +75,36 @@ struct InspectorView: View {
                             .font(.system(size: 11))
                             .foregroundStyle(.orange)
                             .accessibilityHidden(true)
-                        Text(packages).font(.system(size: 12))
+                        Text(packages).font(.system(size: 13))
                             .fixedSize(horizontal: false, vertical: true)
                         Button("Retry", action: retryPackages)
                             .buttonStyle(.plain)
                             .foregroundStyle(.tint)
-                            .font(.system(size: 12))
+                            .font(.system(size: 13))
                             .accessibilityLabel(A11y.retryPackages)
                     }
                 }
-                let unavailable = InspectorText.moveUnavailable(targets: moveTargets.map(\.0))
+                // A push button that opens the title menu's Move To ▸: the
+                // current place checked, the others, then Add a Server…
+                // With no server it still opens (R-0142, move-and-lease).
                 Menu("Move To…") {
-                    ForEach(moveTargets, id: \.1) { title, target in
-                        Button(title) { move(target) }
+                    ForEach(Array(moveMenu.enumerated()), id: \.offset) { _, item in
+                        if item.isSeparator {
+                            Divider()
+                        } else if case .move = item.action {
+                            Toggle(item.title, isOn: Binding(get: { item.checked },
+                                                             set: { on in if on { item.choose(move: move, run: run) } }))
+                                .disabled(!item.enabled)
+                        } else {
+                            Button(item.title) { item.choose(move: move, run: run) }
+                                .disabled(!item.enabled)
+                        }
                     }
                 }
-                .menuStyle(.borderlessButton)
+                .menuStyle(.button)
+                .menuIndicator(.hidden)
                 .fixedSize()
-                .disabled(unavailable != nil)
-                // Disabled, with the reason (§3.2: explained in the inspector).
-                .help(unavailable ?? "Move this box to another place")
-                if let unavailable { Note(unavailable) }
+                .help("Move this workspace to another place")
             }
         }
     }
@@ -119,11 +134,20 @@ struct InspectorView: View {
                     // worded at content.now, which moves when "just now"
                     // becomes the time.
                     Text(SavedTime.inspector(last, now: content.now))
-                        .font(.system(size: 12)).foregroundStyle(.secondary)
+                        .font(.system(size: 13, weight: .semibold))
                 }
-                VStack(alignment: .leading, spacing: 6) {
-                    ForEach(content.saves) { row in SaveRowView(row: row, revert: revert, revealRevert: !scrolls) }
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(content.saves.enumerated()), id: \.element.id) { i, row in
+                        SaveRowView(row: row, revert: revert, revealRevert: !scrolls)
+                        if i < content.saves.count - 1 { Divider() }
+                    }
                 }
+                // The full timeline isn't built yet (§6: the link below the
+                // saves); dimmed, as the title menu's Browse All Saves… is.
+                Button(InspectorText.browseAllSaves) {}
+                    .buttonStyle(.link)
+                    .font(.system(size: 12))
+                    .disabled(true)
             }
         }
     }
@@ -133,8 +157,8 @@ struct InspectorView: View {
             HStack(spacing: 8) {
                 Avatar(letter: yourInitial)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(InspectorText.you).font(.system(size: 12, weight: .medium))
-                    Text(content.place ?? "This Mac").font(.system(size: 11)).foregroundStyle(.secondary)
+                    Text(InspectorText.you).font(.system(size: 13))
+                    Text(content.place ?? "This Mac").font(.system(size: 12)).foregroundStyle(.secondary)
                 }
             }
             .accessibilityElement(children: .combine)
@@ -147,20 +171,15 @@ struct InspectorView: View {
             if content.tabs.isEmpty {
                 Note("No tabs open.")
             } else {
-                ForEach(content.tabs) { tab in
-                    HStack(spacing: 6) {
-                        Text(tab.name).font(.system(size: 12))
-                        Spacer(minLength: 8)
-                        if let program = tab.program {
-                            // Only a real program name is in the program style.
-                            Text(program).font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary)
-                        } else {
-                            Text(InspectorText.idle).font(.system(size: 11)).foregroundStyle(.secondary)
-                        }
-                    }
-                    .accessibilityElement(children: .combine)
-                    .accessibilityLabel(A11y.runningTab(tab.name, program: tab.program))
+                // One label/value row, as on the board (R-0142): the tab
+                // bar beside it already shows each tab.
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    Text(InspectorText.tabsLabel).foregroundStyle(.secondary)
+                    Spacer(minLength: 8)
+                    Text(InspectorText.tabNames(content.tabs)).multilineTextAlignment(.trailing)
                 }
+                .font(.system(size: 13))
+                .accessibilityElement(children: .combine)
             }
         }
     }
@@ -187,20 +206,33 @@ private struct Section<Content: View>: View {
     }
 }
 
-/// A line with an optional grey detail under it.
+/// A line with an optional grey detail under it, and an optional symbol
+/// before both (decorative: the words say it).
 private struct Line: View {
     let text: String
     let detail: String?
+    var symbol: String?
 
-    init(_ text: String, detail: String?) {
+    init(_ text: String, detail: String?, symbol: String? = nil) {
         self.text = text
         self.detail = detail
+        self.symbol = symbol
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 1) {
-            Text(text).font(.system(size: 12, weight: .medium))
-            if let detail { Text(detail).font(.system(size: 11)).foregroundStyle(.secondary) }
+        HStack(alignment: .top, spacing: 10) {
+            if let symbol {
+                Image(systemName: symbol)
+                    .font(.system(size: 16, weight: .light))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 20, height: 20)
+                    .accessibilityHidden(true)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(text).font(.system(size: 13, weight: .semibold))
+                if let detail { Text(detail).font(.system(size: 12)).foregroundStyle(.secondary) }
+            }
+            .fixedSize(horizontal: false, vertical: true)
         }
         .accessibilityElement(children: .combine)
     }
@@ -210,7 +242,7 @@ private struct Line: View {
 private struct Note: View {
     let text: String
     init(_ text: String) { self.text = text }
-    var body: some View { Text(text).font(.system(size: 12)).foregroundStyle(.secondary) }
+    var body: some View { Text(text).font(.system(size: 12)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }
 }
 
 /// One save: time and kind; the newest save point offers Revert on hover.
@@ -224,28 +256,34 @@ private struct SaveRowView: View {
     @FocusState private var revertFocused: Bool
 
     var body: some View {
-        HStack(spacing: 8) {
+        let shown = row.revertable && (hovering || revertFocused || revealRevert)
+        HStack(spacing: 10) {
             Text(InspectorText.clock(row.time))
-                .font(.system(size: 11).monospacedDigit())
+                .font(.system(size: 13).monospacedDigit())
                 .foregroundStyle(.secondary)
-                .frame(width: 44, alignment: .leading)
+                .frame(width: 40, alignment: .leading)
             VStack(alignment: .leading, spacing: 1) {
-                Text(row.kind).font(.system(size: 12))
+                Text(row.kind).font(.system(size: 13))
                 if let name = row.name {
-                    Text("“\(name)”").font(.system(size: 11)).foregroundStyle(.secondary)
+                    Text("“\(name)”").font(.system(size: 12)).foregroundStyle(.secondary)
                 }
             }
             Spacer(minLength: 4)
             if row.revertable {
+                // A small push button on the hovered row (the board's
+                // Revert); hidden otherwise, as §6 asks.
                 Button("Revert", action: revert)
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.tint)
-                    .font(.system(size: 12))
-                    .opacity(hovering || revertFocused || revealRevert ? 1 : 0)
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .opacity(shown ? 1 : 0)
                     .focused($revertFocused)
                     .accessibilityHidden(true) // the row's action below says it once
             }
         }
+        .frame(minHeight: 32)
+        .padding(.horizontal, 6)
+        .background(RoundedRectangle(cornerRadius: 6).fill(shown ? Color.primary.opacity(0.07) : .clear))
+        .padding(.horizontal, -6)
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
         .accessibilityElement(children: .combine)
@@ -263,9 +301,9 @@ private struct Avatar: View {
     let letter: String
     var body: some View {
         Text(letter)
-            .font(.system(size: 10, weight: .bold))
+            .font(.system(size: 12, weight: .semibold))
             .foregroundStyle(.white)
-            .frame(width: 22, height: 22)
+            .frame(width: 26, height: 26)
             .background(Circle().fill(Color.gray))
             .accessibilityHidden(true)
     }

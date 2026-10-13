@@ -66,6 +66,13 @@ public enum SavedTime {
         "Last saved " + (isJustNow(at, now: now) ? "just now" : when(at, now: now, timeZone: timeZone, locale: locale))
     }
 
+    /// The time beside Revert To ▸ Last Save Point (§3.2, the title-menu
+    /// board): "11:52 today", "yesterday at 23:43", "on 9 Oct at 23:43".
+    public static func menu(_ at: Date, now: Date, timeZone: TimeZone = .current, locale: Locale = .current) -> String {
+        let words = when(at, now: now, timeZone: timeZone, locale: locale)
+        return day(at, now: now, calendar: calendar(timeZone, locale)) == .today ? words + " today" : words
+    }
+
     /// When the words change next, so a view redraws then: "just now"
     /// becomes the time, midnight makes today's time "yesterday at" and
     /// yesterday's the date, and a new year adds the year. Nil once they no
@@ -185,11 +192,22 @@ public struct BoxMenuItem: Equatable, Sendable {
     public var enabled = true
     public var checked = false
     public var shortcut: String?
+    /// Secondary text at the item's trailing edge, such as the last save
+    /// point's time.
+    public var detail: String?
     public var action: Action = .none
     public var submenu: [BoxMenuItem] = []
 
     public static let separator = BoxMenuItem(title: "—", enabled: false)
     public var isSeparator: Bool { title == "—" }
+
+    /// Chooses the item in a menu built from this list: a move goes to
+    /// `move`, any other action to `run` (the title menu's own path), and a
+    /// disabled item or a separator does nothing (R-0147).
+    public func choose(move: (String) -> Void, run: (Action) -> Void) {
+        guard enabled, !isSeparator else { return }
+        if case let .move(target) = action { move(target) } else { run(action) }
+    }
 }
 
 public enum BoxMenuModel {
@@ -197,22 +215,20 @@ public enum BoxMenuModel {
     /// it exists), —, Revert To ▸, Make a Save Point ⌘S, —, Restart Box
     /// (when the box agent is unavailable, or with ⌥), Show in Finder ⌥⌘R.
     /// Items that can't work yet are disabled, with no explanation here.
+    /// Last Save Point shows its time once the saves are known, and is
+    /// disabled when they're known and none is a save point.
     public static func items(open: Bool, busy: Bool, agentUnavailable: Bool, optionHeld: Bool,
-                             location: String?, servers: [String]) -> [BoxMenuItem] {
+                             location: String?, servers: [String],
+                             lastSavePoint: Date? = nil, savesKnown: Bool = false, now: Date = Date()) -> [BoxMenuItem] {
         let act = open && !busy
-        var move = [BoxMenuItem(title: "This Mac", enabled: !busy, checked: location == "this-mac", action: .move("this-mac"))]
-        if !servers.isEmpty { move.append(.separator) }
-        for s in servers {
-            move.append(BoxMenuItem(title: ServerName.display(s), enabled: !busy, checked: location == s, action: .move(s)))
-        }
-        move.append(.separator)
-        move.append(BoxMenuItem(title: "Add a Server…", enabled: false))
+        let move = moveSubmenu(busy: busy, location: location, servers: servers)
         var items: [BoxMenuItem] = [
             BoxMenuItem(title: "Rename…", enabled: false),
             BoxMenuItem(title: "Move To", enabled: !busy, submenu: move),
             .separator,
             BoxMenuItem(title: "Revert To", enabled: act, submenu: [
-                BoxMenuItem(title: "Last Save Point", enabled: act, action: .revertToLastSavePoint),
+                BoxMenuItem(title: "Last Save Point", enabled: act && (!savesKnown || lastSavePoint != nil),
+                            detail: lastSavePoint.map { SavedTime.menu($0, now: now) }, action: .revertToLastSavePoint),
                 BoxMenuItem(title: "Browse All Saves…", enabled: false),
             ]),
             BoxMenuItem(title: "Make a Save Point", enabled: act, shortcut: "⌘S", action: .makeSavePoint),
@@ -223,6 +239,24 @@ public enum BoxMenuModel {
         }
         items.append(BoxMenuItem(title: "Show in Finder", enabled: false, shortcut: "⌥⌘R"))
         return items
+    }
+}
+
+extension BoxMenuModel {
+    /// Move To ▸, shared by the title menu and the inspector's Move To…
+    /// button: This Mac, the servers, then Add a Server… (the
+    /// move-and-lease board). The current place is checked and the others
+    /// stay enabled; with no server it still opens, to This Mac ✓ and Add a
+    /// Server…, never a dead end (R-0142).
+    public static func moveSubmenu(busy: Bool, location: String?, servers: [String]) -> [BoxMenuItem] {
+        var move = [BoxMenuItem(title: "This Mac", enabled: !busy, checked: location == "this-mac", action: .move("this-mac"))]
+        if !servers.isEmpty { move.append(.separator) }
+        for s in servers {
+            move.append(BoxMenuItem(title: ServerName.display(s), enabled: !busy, checked: location == s, action: .move(s)))
+        }
+        move.append(.separator)
+        move.append(BoxMenuItem(title: "Add a Server…", enabled: false))
+        return move
     }
 }
 

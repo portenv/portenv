@@ -60,6 +60,7 @@ const (
 	DaemonService_DiscardCreation_FullMethodName       = "/portenv.daemon.v1.DaemonService/DiscardCreation"
 	DaemonService_RecoverBox_FullMethodName            = "/portenv.daemon.v1.DaemonService/RecoverBox"
 	DaemonService_CheckRecoveryKey_FullMethodName      = "/portenv.daemon.v1.DaemonService/CheckRecoveryKey"
+	DaemonService_GetPlacement_FullMethodName          = "/portenv.daemon.v1.DaemonService/GetPlacement"
 )
 
 // DaemonServiceClient is the client API for DaemonService service.
@@ -172,6 +173,12 @@ type DaemonServiceClient interface {
 	// against the boxes here that carry a recovery key. Read-only. Never
 	// logged.
 	CheckRecoveryKey(ctx context.Context, in *CheckRecoveryKeyRequest, opts ...grpc.CallOption) (*CheckRecoveryKeyResponse, error)
+	// Where a box is open when it isn't this Mac (2.3, the lease sheet): the
+	// place, its newest save, and whether it answers. A known server is asked
+	// with `portenv app ping`, within 2 s; another machine can't be asked.
+	// OpenBox's refusal for a box open elsewhere carries the trailer
+	// portenv-refusal: open-elsewhere, and the app asks this then.
+	GetPlacement(ctx context.Context, in *GetPlacementRequest, opts ...grpc.CallOption) (*GetPlacementResponse, error)
 }
 
 type daemonServiceClient struct {
@@ -553,6 +560,16 @@ func (c *daemonServiceClient) CheckRecoveryKey(ctx context.Context, in *CheckRec
 	return out, nil
 }
 
+func (c *daemonServiceClient) GetPlacement(ctx context.Context, in *GetPlacementRequest, opts ...grpc.CallOption) (*GetPlacementResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetPlacementResponse)
+	err := c.cc.Invoke(ctx, DaemonService_GetPlacement_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DaemonServiceServer is the server API for DaemonService service.
 // All implementations must embed UnimplementedDaemonServiceServer
 // for forward compatibility.
@@ -663,6 +680,12 @@ type DaemonServiceServer interface {
 	// against the boxes here that carry a recovery key. Read-only. Never
 	// logged.
 	CheckRecoveryKey(context.Context, *CheckRecoveryKeyRequest) (*CheckRecoveryKeyResponse, error)
+	// Where a box is open when it isn't this Mac (2.3, the lease sheet): the
+	// place, its newest save, and whether it answers. A known server is asked
+	// with `portenv app ping`, within 2 s; another machine can't be asked.
+	// OpenBox's refusal for a box open elsewhere carries the trailer
+	// portenv-refusal: open-elsewhere, and the app asks this then.
+	GetPlacement(context.Context, *GetPlacementRequest) (*GetPlacementResponse, error)
 	mustEmbedUnimplementedDaemonServiceServer()
 }
 
@@ -777,6 +800,9 @@ func (UnimplementedDaemonServiceServer) RecoverBox(context.Context, *RecoverBoxR
 }
 func (UnimplementedDaemonServiceServer) CheckRecoveryKey(context.Context, *CheckRecoveryKeyRequest) (*CheckRecoveryKeyResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CheckRecoveryKey not implemented")
+}
+func (UnimplementedDaemonServiceServer) GetPlacement(context.Context, *GetPlacementRequest) (*GetPlacementResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetPlacement not implemented")
 }
 func (UnimplementedDaemonServiceServer) mustEmbedUnimplementedDaemonServiceServer() {}
 func (UnimplementedDaemonServiceServer) testEmbeddedByValue()                       {}
@@ -1404,6 +1430,24 @@ func _DaemonService_CheckRecoveryKey_Handler(srv interface{}, ctx context.Contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _DaemonService_GetPlacement_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetPlacementRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).GetPlacement(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_GetPlacement_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).GetPlacement(ctx, req.(*GetPlacementRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // DaemonService_ServiceDesc is the grpc.ServiceDesc for DaemonService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1538,6 +1582,10 @@ var DaemonService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CheckRecoveryKey",
 			Handler:    _DaemonService_CheckRecoveryKey_Handler,
+		},
+		{
+			MethodName: "GetPlacement",
+			Handler:    _DaemonService_GetPlacement_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

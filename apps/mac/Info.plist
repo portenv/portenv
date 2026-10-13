@@ -9,6 +9,8 @@
 	<string>Portenv</string>
 	<key>CFBundleDisplayName</key>
 	<string>Portenv</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
 	<key>CFBundleExecutable</key>
 	<string>Portenv</string>
 	<key>CFBundlePackageType</key>

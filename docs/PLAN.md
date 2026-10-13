@@ -1307,6 +1307,7 @@ Slow uplinks are a real user condition, not an edge case (the Phase 0 gate ran o
 
 - **Pipeline:** a version tag triggers CI on a macOS runner: build, sign with the Developer ID certificate, notarize and staple, package and sign `Portenv.dmg`, and generate a Sparkle `appcast.xml` signed with Portenv's EdDSA key.
 - **Hosting:** the DMG and `appcast.xml` are assets on the `portenv/portenv` GitHub release.
+- **The app icon** ("Two places", the owner, 2026-10-12, R-0128): `apps/mac/Resources/Assets.xcassets/AppIcon.appiconset` (ten PNGs), compiled into `AppIcon.icns` by `scripts/make-app-icon.sh` in `gmake app`, with the SVG sources in `apps/mac/Resources/icon-source/`. A dev lane's app (`LANE=X`) carries an orange disc with its letter, so it's never mistaken for the release app. macOS 26's layered icon format comes later.
 - **Stable URLs:** `portenv.com/download` and `portenv.com/appcast.xml` redirect to the latest release's assets (Cloudflare redirect rules). The app's Sparkle feed URL is `portenv.com/appcast.xml`, never a GitHub URL, so hosting can move later without breaking updates.
 - **Keys:** the Developer ID certificate and the Sparkle EdDSA private key live only in CI secrets and the owner's Keychain, never in the repository.
 - **Design-tester builds are signed and notarized on the owner's Mac, not in CI** (decided by the reviewer, on the owner's delegation, R-0089, 2026-10-11). `gmake release-local` (`scripts/release-local.sh`):

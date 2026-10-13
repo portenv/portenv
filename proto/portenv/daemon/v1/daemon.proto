@@ -111,6 +111,11 @@ service DaemonService {
   // repository key, checks it, and writes the box's config. Idempotent on
   // box_id. Never logged.
   rpc RecoverBox(RecoverBoxRequest) returns (RecoverBoxResponse);
+  // Checks a typed recovery key before the app refills its pool from it
+  // (ADR 0019): the recovery-derived passwords, one per box ID, are tried
+  // against the boxes here that carry a recovery key. Read-only. Never
+  // logged.
+  rpc CheckRecoveryKey(CheckRecoveryKeyRequest) returns (CheckRecoveryKeyResponse);
   // Where a box is open when it isn't this Mac (2.3, the lease sheet): the
   // place, its newest save, and whether it answers. A known server is asked
   // with `portenv app ping`, within 2 s; another machine can't be asked.
@@ -245,6 +250,9 @@ message BoxStatus {
   // finishes it (CreateBox again, the same box_id) or discards it
   // (DiscardCreation).
   bool creating = 3;
+  // The box's repository also has the recovery-derived key (ADR 0019), so
+  // a typed recovery key can be checked against it. Not a secret.
+  bool carries_recovery_key = 4;
 }
 
 message GetChannelRequest {
@@ -557,6 +565,20 @@ message RecoverBoxResponse {
   string box_id = 1;
   // An earlier call had finished it.
   bool already_recovered = 2;
+}
+
+message CheckRecoveryKeyRequest {
+  // Box ID to its recovery-derived restic password (64 hex characters),
+  // never the recovery key itself. At most 64, and at most as many as
+  // the boxes here with carries_recovery_key: more is InvalidArgument.
+  map<string, bytes> recovery_passwords = 1;
+}
+
+message CheckRecoveryKeyResponse {
+  // How many boxes here carry a recovery key and could be checked.
+  int32 checked = 1;
+  // The key opened one of them.
+  bool opened = 2;
 }
 
 message GetPlacementRequest {

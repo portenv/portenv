@@ -211,6 +211,11 @@ final class AppModel {
 
     /// A first-run flow with real keys, its Keychain waits said in the
     /// window.
+    /// The recovery key sheet's refill, when portenvd can check keys.
+    var refill: RecoveryRefill? {
+        (daemon as? (BoxCreating & RecoveryChecking)).map { RecoveryRefill(daemon: $0) }
+    }
+
     private func makeFlow(at step: FirstRunStep, fromBoxList: Bool, memory: FirstRunMemory) -> FirstRunFlow {
         guard let creating = daemon as? BoxCreating else {
             return FirstRunFlow(service: UnavailableFirstRunService(), at: step, existing: boxes, fromBoxList: fromBoxList, memory: memory)
@@ -280,7 +285,7 @@ struct AppRoot: View {
                 case .firstRun:
                     if let flow = model.firstRun {
                         FirstRunView(flow: flow, opened: { box in Task { await model.open(box) } },
-                                     cancel: flow.fromBoxList ? { model.cancelNewBox() } : nil)
+                                     cancel: flow.fromBoxList ? { model.cancelNewBox() } : nil, refill: model.refill)
                     }
                 case let .boxList(notice):
                     BoxListView(boxes: model.boxes, notice: notice) { box in

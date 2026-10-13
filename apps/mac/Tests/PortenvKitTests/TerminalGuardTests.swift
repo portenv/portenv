@@ -240,6 +240,8 @@ struct TerminalGuardTests {
     /// its own test is in PortenvTermTests.
     func guarded() -> (view: LocalProcessTerminalView, guard: TerminalGuard) {
         let view = LocalProcessTerminalView(frame: .zero)
-        return (view, TerminalGuard.install(on: view))
+        let guardian = TerminalGuard(for: view)
+        view.terminalDelegate = guardian
+        return (view, guardian)
     }
 }

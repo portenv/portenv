@@ -23,4 +23,15 @@ while IFS= read -r -d '' f; do
 		found=1
 	fi
 done < <(find "$src" -name '*.swift' -print0)
+
+# A terminal view's delegate is its guard, set where the view is made and
+# nowhere else (R-0167): only the factory and the tab view itself assign it.
+delegate='(^|[^A-Za-z0-9_])terminalDelegate[[:space:]]*=([^=]|$)'
+while IFS= read -r -d '' f; do
+	case "$f" in */"$factory" | */PortenvTerm/MarkedTerminalView.swift) continue ;; esac
+	if grep -nE "$delegate" "$f" | grep -vE '^[0-9]+:[[:space:]]*//'; then
+		echo "$f: only TerminalViews and MarkedTerminalView set a terminal view's delegate (its guard)" >&2
+		found=1
+	fi
+done < <(find "$src" -name '*.swift' -print0)
 exit "$found"

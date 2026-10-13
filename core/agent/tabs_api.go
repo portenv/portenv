@@ -4,6 +4,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -81,7 +82,22 @@ func (s *apiServer) WatchTabs(req *agentv1.WatchTabsRequest, stream agentv1.Agen
 	if err != nil {
 		return err
 	}
-	return tb.watch(stream.Context(), tabsPoll, func(ts []*typesv1.Tab) error {
-		return stream.Send(&agentv1.WatchTabsResponse{Tabs: ts})
-	})
+	send := func(ts []*typesv1.Tab) error { return stream.Send(&agentv1.WatchTabsResponse{Tabs: ts}) }
+	ctx := stream.Context()
+	// Tab events from the session's control-mode client (ADR 0020); polling
+	// only where control mode can't be used (an older tmux).
+	if hub, err := s.ctlHub(); err == nil {
+		if err := tb.ensure(ctx); err != nil {
+			return err
+		}
+		sub, stop, err := hub.subscribe(ctx, tb.session)
+		if err == nil {
+			defer stop()
+			return tb.watchEvents(ctx, sub, tabsSafety, send)
+		}
+		if !errors.Is(err, errTmuxTooOld) {
+			return status.Errorf(codes.Unavailable, "tab events: %v", err)
+		}
+	}
+	return tb.watch(ctx, tabsPoll, send)
 }

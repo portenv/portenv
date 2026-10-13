@@ -167,6 +167,9 @@ public final class FirstRunFlow {
     /// A Keychain call has waited longer than 2 s: the window says so
     /// (GUIDELINES §3.1).
     public var keychainWaiting = false
+    /// The pool ran out: the window shows the recovery key sheet, and
+    /// `recoveryKeyRefilled` carries on (ADR 0019, "When it runs out").
+    public var needsRecoveryKey = false
     /// A recovery key was shown in an earlier launch that didn't finish
     /// first run: the one shown now replaces it (R-0132).
     public let keyShownBefore: Bool
@@ -305,9 +308,21 @@ public final class FirstRunFlow {
             step = steps[i + 1]
         } catch let failure as FirstRunError where failure.notBuilt {
             refuse(notice: failure.message)
+        } catch BoxMaker.Failure.poolEmpty {
+            // The pool ran out: the recovery key sheet (ADR 0019).
+            needsRecoveryKey = true
+            refuse(notice: BoxMaker.Failure.poolEmpty.errorDescription)
         } catch {
             refuse(error: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
         }
+    }
+
+    /// The sheet refilled the pool: the same Continue (Create Workspace)
+    /// goes on.
+    public func recoveryKeyRefilled() async {
+        needsRecoveryKey = false
+        notice = nil
+        await next()
     }
 
     private func refuse(notice: String? = nil, error: String? = nil) {

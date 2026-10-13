@@ -59,6 +59,11 @@ struct PortenvApp: App {
             InspectorToggle(box: model.controller?.box)
             FindCommands()
             FeedbackCommands()
+            // Portenv › Settings… (⌘,): the toolbar window (R-0137).
+            CommandGroup(replacing: .appSettings) {
+                Button("Settings\u{2026}") { SettingsWindow.show() }
+                    .keyboardShortcut(",", modifiers: .command)
+            }
         }
     }
 }

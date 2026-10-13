@@ -42,7 +42,7 @@ struct TerminalGuardTests {
     @Test func aProgramCantSetTheClipboard() {
         _ = NSApplication.shared
         withClipboard("PORTENV-CLIPBOARD-BEFORE") { pb in
-            let (view, guardian) = TerminalViews.attached()
+            let (view, guardian) = guarded()
             let count = pb.changeCount
             view.feed(byteArray: osc52("PORTENV-FROM-THE-WORKSPACE")[...])
             #expect(pb.changeCount == count)
@@ -66,7 +66,7 @@ struct TerminalGuardTests {
     /// own handling, which notifies its process delegate.
     @Test func everythingElseStillReachesTheView() {
         _ = NSApplication.shared
-        let (view, guardian) = TerminalViews.attached()
+        let (view, guardian) = guarded()
         view.setFrameSize(NSSize(width: 600, height: 400))
         #expect(view.terminalDelegate === guardian)
     }
@@ -89,7 +89,7 @@ struct TerminalGuardTests {
     /// was handed to open.
     func click(_ links: [String]) -> [URL] {
         _ = NSApplication.shared
-        let (view, guardian) = TerminalViews.attached()
+        let (view, guardian) = guarded()
         var opened: [URL] = []
         guardian.open = { opened.append($0) }
         guardian.isPersonsClick = { _ in true }
@@ -136,7 +136,16 @@ struct TerminalGuardTests {
         let links = ["https://apple.com@evil.com/", "https://user:pass@example.com/", "http://@example.com/"]
         #expect(click(links).isEmpty)
         #expect(TerminalLinks.status("https://apple.com@evil.com/")
-            == "Portenv won't open a link with a user name before the address: https://apple.com@evil.com/")
+            == "Portenv won't open a link with a user name before the address. It goes to evil.com.")
+        // The real destination, in punycode; never the user name or password.
+        #expect(TerminalLinks.status("https://user:hunter2@аpple.com/")
+            == "Portenv won't open a link with a user name before the address. It goes to xn--pple-43d.com.")
+        for link in ["https://user:hunter2@example.com/", "https://me:s3cr%21t@example.com/x", "http://:p4ss@example.com/"] {
+            let shown = TerminalLinks.status(link)
+            for secret in ["hunter2", "s3cr", "p4ss", "user:", "me:"] {
+                #expect(!shown.contains(secret), "\(shown) shows \(secret)")
+            }
+        }
         for link in links { #expect(TerminalLinks.destination(link) == nil, "\(link)") }
     }
 
@@ -152,7 +161,7 @@ struct TerminalGuardTests {
     /// `file:` and a custom scheme are refused even then.
     @Test func aLinkOpensOnlyOnTheClickAndOnlyAWebPage() {
         _ = NSApplication.shared
-        let (view, guardian) = TerminalViews.attached()
+        let (view, guardian) = guarded()
         var opened: [URL] = [], refused: [String] = []
         guardian.open = { opened.append($0) }
         guardian.onRefusedLink = { refused.append($0) }
@@ -175,7 +184,7 @@ struct TerminalGuardTests {
     /// A refused link reaches the state line cleaned, never raw (R-0142).
     @Test func aRefusedLinkReachesTheStateLineCleaned() {
         _ = NSApplication.shared
-        let (view, guardian) = TerminalViews.attached()
+        let (view, guardian) = guarded()
         var shown: [String] = []
         guardian.onRefusedLink = { shown.append($0) }
         guardian.isPersonsClick = { _ in true }
@@ -184,7 +193,7 @@ struct TerminalGuardTests {
         for link in raw { guardian.requestOpenLink(source: view, link: link, params: [:]) }
         #expect(shown == ["Portenv won't open a link with hidden characters", "Portenv won't open a link with hidden characters",
                           "Portenv won't open a link with hidden characters",
-                          "Portenv won't open a link with a user name before the address: https://user:pass@example.com/"])
+                          "Portenv won't open a link with a user name before the address. It goes to example.com."])
         for text in shown {
             #expect(!text.unicodeScalars.contains { TerminalLinks.hidden($0) }, "\(text.debugDescription)")
             #expect(!raw.contains(text))
@@ -195,7 +204,7 @@ struct TerminalGuardTests {
     /// check refuses.
     @Test func withoutAClickTheDefaultCheckRefuses() {
         _ = NSApplication.shared
-        let (view, guardian) = TerminalViews.attached()
+        let (view, guardian) = guarded()
         var opened = 0
         guardian.open = { _ in opened += 1 }
         guardian.requestOpenLink(source: view, link: "https://example.com", params: [:])
@@ -206,7 +215,7 @@ struct TerminalGuardTests {
     /// one thing shows where it really goes.
     @Test func hoverFindsTheRealDestination() throws {
         _ = NSApplication.shared
-        let (view, guardian) = TerminalViews.attached()
+        let (view, guardian) = guarded()
         let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 640, height: 400), styleMask: [.titled], backing: .buffered, defer: false)
         w.isReleasedWhenClosed = false
         w.contentView = view
@@ -227,8 +236,10 @@ struct TerminalGuardTests {
         #expect(guardian.link(atWindowPoint: view.convert(NSPoint(x: view.bounds.width - 30, y: 4), to: nil)) == nil)
     }
 
-    @Test func theFactoryInstallsTheGuard() {
-        let (view, guardian) = TerminalViews.attached()
-        #expect(view.terminalDelegate === guardian)
+    /// A guarded view, as TerminalViews.attached() (PortenvTerm) makes it;
+    /// its own test is in PortenvTermTests.
+    func guarded() -> (view: LocalProcessTerminalView, guard: TerminalGuard) {
+        let view = LocalProcessTerminalView(frame: .zero)
+        return (view, TerminalGuard.install(on: view))
     }
 }

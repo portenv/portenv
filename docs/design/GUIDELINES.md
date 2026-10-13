@@ -121,7 +121,7 @@ Menu items that can't work right now are disabled with no explanation in the men
   - **What's shown is the link that opens** (R-0135, R-0140): one decision serves the tooltip, the state line and the click.
     - **The host shows in punycode,** so a look-alike domain shows as `xn--…`.
     - **A link with any control or bidi character never opens,** since those could hide or reorder part of it. The state line says "Portenv won't open a link with hidden characters".
-    - **A link with a user name before the address never opens** either (`https://apple.com@evil.com/` reads as apple.com), and the state line says why.
+    - **A link with a user name before the address never opens** either (`https://apple.com@evil.com/` reads as apple.com). The state line names where it really goes, never the user name or password: "Portenv won't open a link with a user name before the address. It goes to evil.com."
 - **Closing a tab that still runs a program asks first:** "Close this tab? <program> is still running.", with Close Tab and Cancel. The program is the tab's foreground process as the box agent reports it at that moment. A tab with only its shell closes without asking. The last tab has no close button; ⌘W closes the window instead.
 
 ### 4.2 Blocks

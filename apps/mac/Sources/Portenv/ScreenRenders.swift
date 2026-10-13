@@ -86,12 +86,12 @@ enum ScreenRenders {
             let vector = ["K7QF", "M2XA", "9TRD", "HV4P", "W8LC", "3NZ5"].joined(separator: "-")
             try snapshot(RecoveryKeySheet(rendering: refill).frame(maxWidth: .infinity, maxHeight: .infinity).background(.background), name: "recovery-key-sheet",
                          size: NSSize(width: 520, height: 230), in: dir)
-            try snapshot(RecoveryKeySheet(rendering: refill, typed: "K7QF-M2XA-9TRD-HV4P-W8LC-3NZ6", line: RecoveryRefill.Outcome.wrongKey.message)
-                .frame(maxWidth: .infinity, maxHeight: .infinity).background(.background), name: "recovery-key-sheet-wrong-key", size: NSSize(width: 520, height: 270), in: dir)
+            try snapshot(RecoveryKeySheet(rendering: refill, typed: "K7QF-M2XA-9TRD-HV4P-W8LC-3NZ6", line: RecoveryRefill.typo)
+                .frame(maxWidth: .infinity, maxHeight: .infinity).background(.background), name: "recovery-key-sheet-typo", size: NSSize(width: 520, height: 270), in: dir)
             try snapshot(RecoveryKeySheet(rendering: refill, typed: vector, line: RecoveryRefill.Outcome.nothingToCheck.message, offerNewKey: true)
                 .frame(maxWidth: .infinity, maxHeight: .infinity).background(.background), name: "recovery-key-sheet-nothing-to-check", size: NSSize(width: 520, height: 300), in: dir)
             try snapshot(RecoveryKeySheet(rendering: refill, newKey: vector).frame(maxWidth: .infinity, maxHeight: .infinity).background(.background), name: "recovery-key-sheet-new-key",
-                         size: NSSize(width: 520, height: 420), in: dir)
+                         size: NSSize(width: 520, height: 460), in: dir)
             // New Box… from the box list (the new-box boards).
             let newBox = FirstRunFlow(service: Sample(), at: .firstBox, existing: ["acme-api"], fromBoxList: true)
             newBox.boxName = "site"

@@ -230,7 +230,7 @@ public final class DaemonClient: DaemonAPI, Sendable {
 extension DaemonClient: BoxCreating, RecoveryChecking {
     public func listings() async throws -> [BoxListing] {
         try await call {
-            try await api.listBoxes(.init()).boxes.map { BoxListing(name: $0.box.name, id: $0.box.id, creating: $0.creating) }
+            try await api.listBoxes(.init()).boxes.map { BoxListing(name: $0.box.name, id: $0.box.id, creating: $0.creating, hasRecoveryKey: $0.carriesRecoveryKey) }
         }
     }
 

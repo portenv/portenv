@@ -1322,9 +1322,12 @@ type BoxStatus struct {
 	// CreateBox started and hasn't finished: the box can't open yet. The app
 	// finishes it (CreateBox again, the same box_id) or discards it
 	// (DiscardCreation).
-	Creating      bool `protobuf:"varint,3,opt,name=creating,proto3" json:"creating,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Creating bool `protobuf:"varint,3,opt,name=creating,proto3" json:"creating,omitempty"`
+	// The box's repository also has the recovery-derived key (ADR 0019), so
+	// a typed recovery key can be checked against it. Not a secret.
+	CarriesRecoveryKey bool `protobuf:"varint,4,opt,name=carries_recovery_key,json=carriesRecoveryKey,proto3" json:"carries_recovery_key,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *BoxStatus) Reset() {
@@ -1374,6 +1377,13 @@ func (x *BoxStatus) GetState() v1.BoxState {
 func (x *BoxStatus) GetCreating() bool {
 	if x != nil {
 		return x.Creating
+	}
+	return false
+}
+
+func (x *BoxStatus) GetCarriesRecoveryKey() bool {
+	if x != nil {
+		return x.CarriesRecoveryKey
 	}
 	return false
 }
@@ -3984,7 +3994,8 @@ func (x *RecoverBoxResponse) GetAlreadyRecovered() bool {
 type CheckRecoveryKeyRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Box ID to its recovery-derived restic password (64 hex characters),
-	// never the recovery key itself.
+	// never the recovery key itself. At most 64, and at most as many as
+	// the boxes here with carries_recovery_key: more is InvalidArgument.
 	RecoveryPasswords map[string][]byte `protobuf:"bytes,1,rep,name=recovery_passwords,json=recoveryPasswords,proto3" json:"recovery_passwords,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
@@ -4144,11 +4155,12 @@ const file_portenv_daemon_v1_daemon_proto_rawDesc = "" +
 	"\x05build\x18\x01 \x01(\v2\x1b.portenv.types.v1.BuildInfoR\x05build\"\x12\n" +
 	"\x10ListBoxesRequest\"G\n" +
 	"\x11ListBoxesResponse\x122\n" +
-	"\x05boxes\x18\x01 \x03(\v2\x1c.portenv.daemon.v1.BoxStatusR\x05boxes\"\x82\x01\n" +
+	"\x05boxes\x18\x01 \x03(\v2\x1c.portenv.daemon.v1.BoxStatusR\x05boxes\"\xb4\x01\n" +
 	"\tBoxStatus\x12'\n" +
 	"\x03box\x18\x01 \x01(\v2\x15.portenv.types.v1.BoxR\x03box\x120\n" +
 	"\x05state\x18\x02 \x01(\x0e2\x1a.portenv.types.v1.BoxStateR\x05state\x12\x1a\n" +
-	"\bcreating\x18\x03 \x01(\bR\bcreating\"'\n" +
+	"\bcreating\x18\x03 \x01(\bR\bcreating\x120\n" +
+	"\x14carries_recovery_key\x18\x04 \x01(\bR\x12carriesRecoveryKey\"'\n" +
 	"\x11GetChannelRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\"_\n" +
 	"\x12GetChannelResponse\x12\x18\n" +

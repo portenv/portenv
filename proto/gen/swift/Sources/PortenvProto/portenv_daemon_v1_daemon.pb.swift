@@ -577,6 +577,10 @@ public nonisolated struct Portenv_Daemon_V1_BoxStatus: Sendable {
   /// (DiscardCreation).
   public var creating: Bool = false
 
+  /// The box's repository also has the recovery-derived key (ADR 0019), so
+  /// a typed recovery key can be checked against it. Not a secret.
+  public var carriesRecoveryKey: Bool = false
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -1389,7 +1393,8 @@ public nonisolated struct Portenv_Daemon_V1_CheckRecoveryKeyRequest: Sendable {
   // methods supported on all messages.
 
   /// Box ID to its recovery-derived restic password (64 hex characters),
-  /// never the recovery key itself.
+  /// never the recovery key itself. At most 64, and at most as many as
+  /// the boxes here with carries_recovery_key: more is InvalidArgument.
   public var recoveryPasswords: Dictionary<String,Data> = [:]
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
@@ -2206,7 +2211,7 @@ nonisolated extension Portenv_Daemon_V1_ListBoxesResponse: SwiftProtobuf.Message
 
 nonisolated extension Portenv_Daemon_V1_BoxStatus: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".BoxStatus"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}box\0\u{1}state\0\u{1}creating\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}box\0\u{1}state\0\u{1}creating\0\u{3}carries_recovery_key\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -2217,6 +2222,7 @@ nonisolated extension Portenv_Daemon_V1_BoxStatus: SwiftProtobuf.Message, SwiftP
       case 1: try { try decoder.decodeSingularMessageField(value: &self._box) }()
       case 2: try { try decoder.decodeSingularEnumField(value: &self.state) }()
       case 3: try { try decoder.decodeSingularBoolField(value: &self.creating) }()
+      case 4: try { try decoder.decodeSingularBoolField(value: &self.carriesRecoveryKey) }()
       default: break
       }
     }
@@ -2236,6 +2242,9 @@ nonisolated extension Portenv_Daemon_V1_BoxStatus: SwiftProtobuf.Message, SwiftP
     if self.creating != false {
       try visitor.visitSingularBoolField(value: self.creating, fieldNumber: 3)
     }
+    if self.carriesRecoveryKey != false {
+      try visitor.visitSingularBoolField(value: self.carriesRecoveryKey, fieldNumber: 4)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -2243,6 +2252,7 @@ nonisolated extension Portenv_Daemon_V1_BoxStatus: SwiftProtobuf.Message, SwiftP
     if lhs._box != rhs._box {return false}
     if lhs.state != rhs.state {return false}
     if lhs.creating != rhs.creating {return false}
+    if lhs.carriesRecoveryKey != rhs.carriesRecoveryKey {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

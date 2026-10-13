@@ -7,10 +7,14 @@ public struct BoxListing: Equatable, Sendable {
     public let name: String
     public let id: String
     public let creating: Bool
-    public init(name: String, id: String, creating: Bool) {
+    /// Its repository also has the recovery key (a typed key can be checked
+    /// against it).
+    public let hasRecoveryKey: Bool
+    public init(name: String, id: String, creating: Bool, hasRecoveryKey: Bool = false) {
         self.name = name
         self.id = id
         self.creating = creating
+        self.hasRecoveryKey = hasRecoveryKey
     }
 }
 

@@ -50,6 +50,20 @@ public final class RecoveryRefill: @unchecked Sendable {
     }
 
     public static let noKey = "There\u{2019}s no new recovery key to save. Make one first."
+    /// Why the sheet appeared (R-0164).
+    public static let why = "This Mac has used the keys it made from your recovery key. Enter it to make more. Portenv doesn\u{2019}t keep it."
+    /// Above a new key made here: the old one still matters (R-0164).
+    public static let keepBoth = "Workspaces you already have still open with your old recovery key. Keep both."
+    /// The key's own check refused it, before any round trip (R-0164).
+    public static let typo = "That doesn\u{2019}t look like a recovery key. Check for a typo."
+
+    /// A pasted or typed key, normalised (spaces, dashes, case) and grouped,
+    /// when it's a whole valid key; nil otherwise, so typing isn't fought.
+    public static func grouped(_ text: String) -> String? {
+        guard var key = try? RecoveryKey(parsing: text) else { return nil }
+        defer { key.wipe() }
+        return key.grouped
+    }
 
     private let lock = NSLock()
     private var held: RecoveryKey?
@@ -72,14 +86,15 @@ public final class RecoveryRefill: @unchecked Sendable {
         var key: RecoveryKey
         do {
             key = try RecoveryKey(parsing: typed)
-        } catch let e as RecoveryKey.ParseError {
-            return .invalid(e.message)
         } catch {
-            return .invalid(error.localizedDescription)
+            return .invalid(Self.typo)
         }
         defer { key.wipe() }
         do {
-            let ids = try await daemon.listings().filter { !$0.creating }.map(\.id)
+            // Only workspaces that carry a recovery key can be checked, and
+            // portenvd refuses more than that (R-0164).
+            let ids = try await daemon.listings().filter { !$0.creating && $0.hasRecoveryKey }.map(\.id).prefix(64)
+            guard !ids.isEmpty else { return .nothingToCheck }
             var passwords: [String: Data] = [:]
             for id in ids where RecoveryKey.isValidBoxID(id) {
                 passwords[id] = Data(try key.password(boxID: id).utf8)

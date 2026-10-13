@@ -86,6 +86,9 @@ struct RecoveryKeySheet: View {
             if let newKey {
                 Text(FirstRunText.recoveryTitle).font(.title2.bold()).accessibilityAddTraits(.isHeader)
                 Text(FirstRunText.recoveryLine).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                // The old key still opens the workspaces already here (R-0164).
+                Label(RecoveryRefill.keepBoth, systemImage: "exclamationmark.triangle")
+                    .fixedSize(horizontal: false, vertical: true)
                 VStack(spacing: 12) {
                     Text(newKey).font(.system(size: 20, weight: .semibold, design: .monospaced))
                         .accessibilityLabel(A11y.recoveryKey(newKey))
@@ -100,7 +103,7 @@ struct RecoveryKeySheet: View {
                 Toggle(FirstRunText.recoverySavedCheck, isOn: $saved).toggleStyle(.checkbox)
             } else {
                 Text(RefillText.title).font(.title2.bold()).accessibilityAddTraits(.isHeader)
-                Text(BoxMaker.Failure.poolEmpty.errorDescription ?? "").foregroundStyle(.secondary)
+                Text(RecoveryRefill.why).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 TextField(RefillText.field, text: $typed)
                     .textFieldStyle(.roundedBorder)
@@ -108,6 +111,10 @@ struct RecoveryKeySheet: View {
                     .autocorrectionDisabled()
                     .accessibilityLabel(RefillText.field)
                     .onSubmit { Task { await primary() } }
+                    // A pasted key shows grouped (R-0164).
+                    .onChange(of: typed) { _, now in
+                        if let grouped = RecoveryRefill.grouped(now), grouped != now { typed = grouped }
+                    }
             }
             if let line {
                 Label(line, systemImage: "info.circle").fixedSize(horizontal: false, vertical: true)

@@ -42,12 +42,13 @@ struct RecoveryRefillTests {
         return (RecoveryRefill(daemon: checker, pool: pool, randomBytes: countingBytes(from: 90)), checker, pool, store)
     }
 
-    private let made = [BoxListing(name: "acme-api", id: "box-0123456789ab", creating: false),
-                        BoxListing(name: "half", id: "box-0123456789ad", creating: true)]
+    private let made = [BoxListing(name: "acme-api", id: "box-0123456789ab", creating: false, hasRecoveryKey: true),
+                        BoxListing(name: "old", id: "box-0123456789ac", creating: false),
+                        BoxListing(name: "half", id: "box-0123456789ad", creating: true, hasRecoveryKey: true)]
 
     /// The right key, typed as printed: checked first, then the pool is
-    /// filled from it. Only derived passwords for finished workspaces are
-    /// sent, never the key.
+    /// filled from it. Only derived passwords for finished workspaces that
+    /// carry a recovery key are sent (R-0164's bound), never the key.
     @Test func theRightKeyRefillsThePool() async throws {
         let (refill, checker, pool, store) = setup(opensWith: ["box-0123456789ab": vectorPW("box-0123456789ab")], listed: made)
         let outcome = await refill.refill(typed: "k7qf m2xa 9trd hv4p w8lc 3nz5")
@@ -72,19 +73,43 @@ struct RecoveryRefillTests {
     }
 
     /// No workspace here carries a recovery key: it can't be checked, so
-    /// it isn't taken.
+    /// it isn't taken, and portenvd isn't asked. A recovery-flagged one
+    /// whose drive is unplugged comes back as checked 0: the same answer.
     @Test func nothingToCheckAgainstTakesNoKey() async throws {
-        let (refill, _, pool, _) = setup(opensWith: [:], listed: made)
+        let none = made.map { BoxListing(name: $0.name, id: $0.id, creating: $0.creating) }
+        let (refill, checker, pool, _) = setup(opensWith: [:], listed: none)
         #expect(await refill.refill(typed: vectorKey.grouped) == .nothingToCheck)
-        #expect(try pool.entries().isEmpty)
+        #expect(checker.asked.isEmpty)
+        let (unplugged, _, pool2, _) = setup(opensWith: [:], listed: made)
+        #expect(await unplugged.refill(typed: vectorKey.grouped) == .nothingToCheck)
+        #expect(try pool.entries().isEmpty && pool2.entries().isEmpty)
     }
 
-    /// A typo is the key's own line, and portenvd isn't asked.
-    @Test func aTypoIsSaidAndNothingIsAsked() async throws {
+    /// The key's check symbol catches a typo here, before any round trip
+    /// (R-0164), in one line.
+    @Test func aTypoIsCaughtHereAndNothingIsAsked() async throws {
         let (refill, checker, _, _) = setup(opensWith: [:], listed: made)
-        let outcome = await refill.refill(typed: "K7QR-M2XA-9TRD-HV4P-W8LC-3NZ5")
-        #expect(outcome == .invalid(RecoveryKey.ParseError.typo.message))
+        for typed in ["K7QR-M2XA-9TRD-HV4P-W8LC-3NZ5", "K7QF-M2XA-9TRD", "K7QF-M2XA-9TRD-HV4P-W8LC-3NZ!"] {
+            #expect(await refill.refill(typed: typed) == .invalid(RecoveryRefill.typo))
+        }
         #expect(checker.asked.isEmpty)
+        #expect(RecoveryRefill.typo == "That doesn\u{2019}t look like a recovery key. Check for a typo.")
+    }
+
+    /// A pasted key, with any spaces, dashes and case, shows grouped; a
+    /// partly typed one is left alone.
+    @Test func aPastedKeyIsShownGrouped() {
+        #expect(RecoveryRefill.grouped("k7qf m2xa\t9trd–hv4p w8lc 3nz5") == "K7QF-M2XA-9TRD-HV4P-W8LC-3NZ5")
+        #expect(RecoveryRefill.grouped("K7QFM2XA9TRDHV4PW8LC3NZ5") == "K7QF-M2XA-9TRD-HV4P-W8LC-3NZ5")
+        #expect(RecoveryRefill.grouped("K7QF-M2X") == nil)
+        #expect(RecoveryRefill.grouped("K7QR-M2XA-9TRD-HV4P-W8LC-3NZ5") == nil) // a typo stays as typed
+    }
+
+    /// R-0164's words: why the sheet appeared, and what a new key means for
+    /// the old one.
+    @Test func theSheetSaysWhyAndWhatHappensToTheOldKey() {
+        #expect(RecoveryRefill.why == "This Mac has used the keys it made from your recovery key. Enter it to make more. Portenv doesn\u{2019}t keep it.")
+        #expect(RecoveryRefill.keepBoth == "Workspaces you already have still open with your old recovery key. Keep both.")
     }
 
     /// Make a New Recovery Key: a new key, shown; the pool is filled from it

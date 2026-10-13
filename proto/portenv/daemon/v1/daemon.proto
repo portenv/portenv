@@ -244,6 +244,9 @@ message BoxStatus {
   // finishes it (CreateBox again, the same box_id) or discards it
   // (DiscardCreation).
   bool creating = 3;
+  // The box's repository also has the recovery-derived key (ADR 0019), so
+  // a typed recovery key can be checked against it. Not a secret.
+  bool carries_recovery_key = 4;
 }
 
 message GetChannelRequest {
@@ -560,7 +563,8 @@ message RecoverBoxResponse {
 
 message CheckRecoveryKeyRequest {
   // Box ID to its recovery-derived restic password (64 hex characters),
-  // never the recovery key itself.
+  // never the recovery key itself. At most 64, and at most as many as
+  // the boxes here with carries_recovery_key: more is InvalidArgument.
   map<string, bytes> recovery_passwords = 1;
 }
 

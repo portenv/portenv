@@ -5,6 +5,7 @@ package local
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -36,7 +37,7 @@ func TestCheckRecoveryPasswords(t *testing.T) {
 	}
 	before := treeSum(t, repoOf(e, req))
 
-	right := map[string][]byte{req.BoxID: req.RecoveryPassword, "box-0123456789ac": vectorPassword(t, "box-0123456789ac")}
+	right := map[string][]byte{req.BoxID: req.RecoveryPassword}
 	res, err := e.CheckRecoveryPasswords(ctx, right)
 	if err != nil || res.Checked != 1 || !res.Opened {
 		t.Fatalf("the right key: %+v, %v", res, err)
@@ -91,5 +92,51 @@ func TestCheckRecoveryPasswordsSkipsUnreachableStorage(t *testing.T) {
 	res, err := e.CheckRecoveryPasswords(ctx, map[string][]byte{req.BoxID: req.RecoveryPassword})
 	if err != nil || res.Checked != 0 || res.Opened {
 		t.Fatalf("an unplugged drive: %+v, %v", res, err)
+	}
+}
+
+// TestCheckRecoveryPasswordsIsBounded (R-0164): each entry can cost a
+// restic open, so more than 64, or more than this Mac has workspaces with a
+// recovery key, is refused before restic runs at all.
+func TestCheckRecoveryPasswordsIsBounded(t *testing.T) {
+	ctx := context.Background()
+	e := newCreateEnv(t)
+	req := createRequest(t, "acme-api", "box-0123456789ab", "")
+	if _, err := e.CreateBox(ctx, req, CreateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	// Two entries, one workspace with a recovery key here.
+	two := map[string][]byte{req.BoxID: req.RecoveryPassword, "box-0123456789ac": vectorPassword(t, "box-0123456789ac")}
+	t.Setenv("PORTENV_RESTIC", "/nonexistent/restic") // any restic run would fail differently
+	if _, err := e.CheckRecoveryPasswords(ctx, two); kindOf(err) != ErrInvalid {
+		t.Fatalf("more than this Mac's workspaces with a recovery key: %v, want invalid", err)
+	}
+	many := map[string][]byte{}
+	for i := range 65 {
+		id := fmt.Sprintf("box-%012x", i)
+		many[id] = vectorPassword(t, id)
+	}
+	if _, err := e.CheckRecoveryPasswords(ctx, many); kindOf(err) != ErrInvalid {
+		t.Fatalf("65 entries: %v, want invalid", err)
+	}
+}
+
+// TestRecoveryWorkspacesAreCounted: the count the bound uses.
+func TestRecoveryWorkspacesAreCounted(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	e := newCreateEnv(t)
+	if n := e.RecoveryWorkspaces(); n != 0 {
+		t.Fatalf("none yet: %d", n)
+	}
+	req := createRequest(t, "acme-api", "box-0123456789ab", "")
+	if _, err := e.CreateBox(ctx, req, CreateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.PublishConfig(BoxConfig{ID: "box-0123456789ac", Name: "old", Image: "img"}); err != nil {
+		t.Fatal(err)
+	}
+	if n := e.RecoveryWorkspaces(); n != 1 {
+		t.Fatalf("one with a recovery key: %d", n)
 	}
 }

@@ -5,11 +5,33 @@ package local
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 
 	boxsync "github.com/portenv/portenv/core/sync"
 )
+
+// MaxRecoveryChecks bounds one CheckRecoveryPasswords call.
+const MaxRecoveryChecks = 64
+
+// RecoveryWorkspaces counts the workspaces configured here that carry a
+// recovery key.
+func (e *Env) RecoveryWorkspaces() int {
+	ents, _ := os.ReadDir(filepath.Join(e.Dir, "boxes"))
+	n := 0
+	for _, ent := range ents {
+		name, ok := strings.CutSuffix(ent.Name(), ".json")
+		if !ok {
+			continue
+		}
+		if c, err := e.LoadBox(name); err == nil && c.Recovery {
+			n++
+		}
+	}
+	return n
+}
 
 // RecoveryCheck is what checking a typed recovery key found.
 type RecoveryCheck struct {
@@ -29,6 +51,13 @@ type RecoveryCheck struct {
 // stops at the first one that opens. Never logged.
 func (e *Env) CheckRecoveryPasswords(ctx context.Context, passwords map[string][]byte) (RecoveryCheck, error) {
 	var res RecoveryCheck
+	// Each entry can cost a restic open: bounded before any runs (R-0164).
+	if len(passwords) > MaxRecoveryChecks {
+		return res, createErr(ErrInvalid, "At most %d workspaces can be checked at once.", MaxRecoveryChecks)
+	}
+	if len(passwords) > e.RecoveryWorkspaces() {
+		return res, createErr(ErrInvalid, "That's more workspaces than this Mac has with a recovery key.")
+	}
 	ids := make([]string, 0, len(passwords))
 	for id, pw := range passwords {
 		if !boxIDRE.MatchString(id) {

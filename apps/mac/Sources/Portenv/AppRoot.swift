@@ -98,6 +98,8 @@ final class AppModel {
             )
             return
         }
+        // A workspace made outside first run (portenv init) ends it too (R-0133).
+        DefaultsFirstRunMemory().forgetIfWorkspacesExist(boxes)
         let requested = ProcessInfo.processInfo.environment["PORTENV_BOX"]
         apply(LaunchDecision.decide(
             requested: requested,
@@ -111,7 +113,7 @@ final class AppModel {
         launch = decision
         switch decision {
         case let .firstRun(step):
-            firstRun = FirstRunFlow(service: AppFirstRunService(), at: step, existing: boxes)
+            firstRun = FirstRunFlow(service: AppFirstRunService(), at: step, existing: boxes, memory: DefaultsFirstRunMemory())
         case let .open(box):
             Task { await open(box) }
         case .boxList:

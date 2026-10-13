@@ -663,13 +663,14 @@ This is the first run once the control plane exists (Phase 3). The mockups show 
 
 **First run in Phases 1 and 2 (no Portenv backend)**
 
-Phases 0 to 2 have no Portenv backend, so the first run is reduced. Same six steps and layout, with these differences:
+Phases 0 to 2 have no Portenv backend, so the first run is reduced to five steps, in the same layout (R-0126, R-0129):
 
-1. Welcome: a single Get started button. No sign-in; the device key is generated locally.
-2. Protection: fixed to Only you, shown as an explanation (your keys stay on your devices; losing them and the recovery key loses the data). No choice is offered.
-3. Recovery key: unchanged.
-4. Storage: My own server, An S3-compatible bucket, or This Mac only. No Portenv storage. This Mac only keeps the workspace's repository at `~/Library/Application Support/Portenv/Repositories/<box-id>`, outside the workspace and the engine VM, and the screen says plainly that saves then have no copy off this Mac. Time Machine may back the folder up; it is already encrypted by restic. After a week of use, one dismissible notice says "Your saves only exist on this Mac. Add a server or bucket to keep a copy elsewhere.", and Settings › Storage shows the same fact as a permanent status line. **In 1.5 (the design testers' build), only "Keep on this Mac for now" is offered**, with "Saves stay on this Mac only. If this Mac is lost, they're lost too. You can add a server or bucket later." My own server and An S3-compatible bucket are shown dimmed and marked LATER (board `first-run-4-storage-this-mac`; the reviewer, on the owner's delegation, R-0092, R-0093).
-5. First workspace and 6. Getting ready: unchanged.
+1. Welcome: "Your portable workspace." and one Continue button. No sign-in; the device key is generated locally.
+2. Recovery key. There's no Protection step: Only you is fixed, so its message leads the recovery key's line: "Only you can open your workspaces’ saves: Portenv never holds your keys. This key opens them if this Mac’s keys are ever lost, on this Mac or a new one. Keep it somewhere safe and separate from this Mac."
+3. Storage: My own server, An S3-compatible bucket, or This Mac only. No Portenv storage. This Mac only keeps the workspace's repository at `~/Library/Application Support/Portenv/Repositories/<box-id>`, outside the workspace and the engine VM, and the screen says plainly that saves then have no copy off this Mac. Time Machine may back the folder up; it is already encrypted by restic. After a week of use, one dismissible notice says "Your saves only exist on this Mac. Add a server or bucket to keep a copy elsewhere.", and Settings › Storage shows the same fact as a permanent status line. **In 1.5 (the design testers' build), only "Keep on this Mac for now" is offered**, with "Saves stay on this Mac only. If this Mac is lost, they're lost too. You can add a server or bucket later." My own server and An S3-compatible bucket are shown dimmed and marked LATER (board `first-run-4-storage-this-mac`; the reviewer, on the owner's delegation, R-0092, R-0093).
+4. First workspace and 5. Getting ready: unchanged.
+
+Every Continue either moves on or says why it can't, next to the button and to VoiceOver, on every press (R-0126: 0.1.0-68's step 2 looked like it did nothing).
 
 In Phase 3, sign-in, Portenv storage and the recoverable mode are switched on. Existing users get a one-time prompt to create an account and link their devices; their workspaces, keys and storage stay as they are.
 
@@ -1141,8 +1142,8 @@ The Containerization shim, with `docker` as the fallback. The agent drops the fo
 
 **7. 1.5: first run**
 
-Reduced: no sign-in, Only you, Keychain keys, the recovery key; the Welcome screen has "Continue without an account" (#16). First run lists, in plain words, the exact fields the update check counts (no ID, nothing about the user's work), and how to turn counting off (1.8).
-- **No window for a box that doesn't exist** (found at the Mac, 2026-10-10). Opened without `PORTENV_BOX`, the app shows a window for a default box "demo" that doesn't exist, with "no workspace named demo here; create it with portenv init demo". That message starts in lower case and sends the user to a terminal command (GUIDELINES §10). First run replaces it: with no box, the app shows first run or the box list, never a window for a missing box.
+Reduced: no sign-in, Only you, Keychain keys, the recovery key; the Welcome screen has one "Continue" (R-0126; there's no account to be had). First run lists, in plain words, the exact fields the update check counts (no ID, nothing about the user's work), and how to turn counting off (1.8).
+- **No window for a box that doesn't exist** (found at the Mac, 2026-10-10). Opened without `PORTENV_BOX`, the app shows a window for a default box "demo" that doesn't exist, with "no box named demo here; create it with portenv init demo". That message starts in lower case and sends the user to a terminal command (GUIDELINES §10). First run replaces it: with no box, the app shows first run or the box list, never a window for a missing box.
 - **The box list and New box: build to the boards** `box-list`, `box-list-empty`, `new-box` and `new-box-linked-invalid` in `docs/mockups/` (the owner, 2026-10-10).
   - **First run** keeps "Make your first workspace", with step dots.
   - **The box list's New Workspace…** opens "New workspace", with Back (‹ Your workspaces) and Cancel, and no step dots.
@@ -1161,7 +1162,7 @@ Reduced: no sign-in, Only you, Keychain keys, the recovery key; the Welcome scre
   - the inspector's Who's here shows "This workspace can push to GitHub as you", with Sign Out of GitHub.
 - **Built so far** (lane C's first milestone, 2026-10-10):
   - **The launch decision:** with no box, first run; with a box that isn't on this Mac, the box list, saying so; never a window for a missing box (`LaunchDecision`, tested). The app no longer defaults to "demo".
-  - **The first-run screens and their flow,** reduced as above: Continue is enabled only when the step is complete; the recovery key needs the "I've saved" checkbox; box names follow the CLI's rule. "Count me in usage numbers" is already on, with the exact fields one click away, on Welcome (before any update check).
+  - **The first-run screens and their flow,** reduced as above: Continue is enabled only when the step is complete; the recovery key needs the "I've saved" checkbox; box names follow the CLI's rule. "Count me in usage numbers" is hidden until counting exists, and then starts unticked, with the exact fields one click away, on Welcome (before any update check; R-0106, R-0126).
   - **The box list:** open a box, or New Workspace… (first run's first-box step).
   - **Move to Applications** (lane C's second milestone): before the login item is registered, an app outside /Applications, App Translocation included, asks "Move Portenv to Applications?". Move copies it there (an older Portenv is replaced, anything else named Portenv.app never is), opens the copy and quits; Not Now isn't asked again for the same location. Dev builds can redirect the copy with `PORTENV_MOVE_TO` so UI tests never replace the real app.
   - **portenvd not starting** (R-0028, R-0032): while waiting for portenvd, the app reads the login item's status and `launchctl print` for its job.
@@ -1210,7 +1211,7 @@ Developer ID signing, notarisation and Sparkle, with the key backups. Signed pub
     - **At most one check a day,** sent only on days a box was opened.
     - **What they give, all as plain counts:** daily, weekly and monthly actives, cohort retention (actives per install month, per week), activation and depth.
     - **The server keeps aggregated counts only,** with no IP logs. If this needs a minimal Cloudflare Worker behind portenv.com/appcast.xml, it's the named exception to ADR 0008's "no backend before Phase 3" (the Backend row in Decisions already made).
-    - **Settings:** "Count me in usage numbers (no ID, nothing about your work)", on by default, and one click turns it off. Off removes every counting field, but the update check itself stays, for security updates.
+    - **Settings:** "Count me in usage numbers (no ID, nothing about your work)", off until the person ticks it (opt-in: the reviewer, on the owner's delegation, R-0126), and one click turns it off again. Off removes every counting field, but the update check itself stays, for security updates.
     - **An unreachable endpoint never blocks or slows anything** (own-route).
   - **Servers count themselves too, under the same rules:** no identifier, coarse fields, a published list, and an opt-out.
     - **When:** the runner sends its own check, at most once a day, only on days it ran a box.
@@ -1249,7 +1250,7 @@ Developer ID signing, notarisation and Sparkle, with the key backups. Signed pub
        - /privacy says so in a line.
     5. **Who is responsible:** /privacy names the controller and a contact for questions and objections, exactly: "EverydayMoney SAS, 60 Rue François 1er, 75008 Paris, France (RCS Paris 944 681 634). Contact: contact@everydaymoney.eu". It matches the publisher block on portenv.com/legal. Today /privacy covers only the website; this line is added when counting ships (1.8).
     6. **The opt-out is visible before the first count:**
-       - first run (1.5) shows "Count me in usage numbers", with the link to the field list, already on, before the first update check is sent;
+       - first run shows "Count me in usage numbers", with the link to the field list, unticked (opt-in, R-0126), before the first update check is sent; hidden until counting exists;
        - the runner's installer prints its opt-out flag before its first check.
   - **Release checklist:** run the CNIL's self-assessment tool for audience measurement against the final implementation, and keep the filled copy in `docs/` (not on the website). Never describe the counting as "CNIL certified" or "validated": the CNIL forbids that wording.
 
@@ -1306,6 +1307,7 @@ Slow uplinks are a real user condition, not an edge case (the Phase 0 gate ran o
 
 - **Pipeline:** a version tag triggers CI on a macOS runner: build, sign with the Developer ID certificate, notarize and staple, package and sign `Portenv.dmg`, and generate a Sparkle `appcast.xml` signed with Portenv's EdDSA key.
 - **Hosting:** the DMG and `appcast.xml` are assets on the `portenv/portenv` GitHub release.
+- **The app icon** ("Two places", the owner, 2026-10-12, R-0128): `apps/mac/Resources/Assets.xcassets/AppIcon.appiconset` (ten PNGs), compiled into `AppIcon.icns` by `scripts/make-app-icon.sh` in `gmake app`, with the SVG sources in `apps/mac/Resources/icon-source/`. A dev lane's app (`LANE=X`) carries an orange disc with its letter, so it's never mistaken for the release app. macOS 26's layered icon format comes later.
 - **Stable URLs:** `portenv.com/download` and `portenv.com/appcast.xml` redirect to the latest release's assets (Cloudflare redirect rules). The app's Sparkle feed URL is `portenv.com/appcast.xml`, never a GitHub URL, so hosting can move later without breaking updates.
 - **Keys:** the Developer ID certificate and the Sparkle EdDSA private key live only in CI secrets and the owner's Keychain, never in the repository.
 - **Design-tester builds are signed and notarized on the owner's Mac, not in CI** (decided by the reviewer, on the owner's delegation, R-0089, 2026-10-11). `gmake release-local` (`scripts/release-local.sh`):

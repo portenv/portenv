@@ -180,6 +180,10 @@ ifneq ($(LANE),)
 ifeq ($(filter A B C D E F G H I J K L M N O P Q R S T U V W X Y Z,$(LANE)),)
 $(error LANE=$(LANE): a dev lane is one capital letter, for example LANE=B)
 endif
+# One letter only: LANE="B C" would pass the filter above (R-0132).
+ifneq ($(words $(LANE)),1)
+$(error LANE=$(LANE): a dev lane is one capital letter, for example LANE=B)
+endif
 INSTANCE := dev-$(LANE)
 APP_BUILD := $(HOME)/Library/Caches/Portenv/app-build-$(INSTANCE)
 # Go binaries carry their lane (core/internal/instance): a release binary
@@ -205,6 +209,10 @@ app: build $(TOOLS_STAMP)
 	mkdir -p $(BIN)/Portenv.app/Contents/Helpers && cp $(BIN)/portenv $(BIN)/portenvd $(BIN)/restic $(BIN)/Portenv.app/Contents/Helpers/
 	for f in portenv portenvd restic; do codesign --force --sign - $(BIN)/Portenv.app/Contents/Helpers/$$f; done
 	cp apps/mac/Info.plist $(BIN)/Portenv.app/Contents/Info.plist
+	# The app icon (R-0128); a dev lane's carries its letter, so it's never
+	# mistaken for the release app.
+	scripts/make-app-icon.sh apps/mac/Resources/Assets.xcassets/AppIcon.appiconset \
+		$(BIN)/Portenv.app/Contents/Resources/AppIcon.icns $(LANE) $(if $(LANE),$(SWIFT))
 	# portenvd's launch agent (the login item; SMAppService.agent registers it).
 	mkdir -p $(BIN)/Portenv.app/Contents/Library/LaunchAgents
 	cp apps/mac/LaunchAgents/com.portenv.portenvd.plist $(BIN)/Portenv.app/Contents/Library/LaunchAgents/

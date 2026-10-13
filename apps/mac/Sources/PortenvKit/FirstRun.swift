@@ -3,15 +3,61 @@
 import Foundation
 import Observation
 
-/// First run's steps (PLAN.md, "First run in Phases 1 and 2"): the same six
-/// as the mockups, reduced: no sign-in, Only you, no Portenv storage.
+/// First run's steps (PLAN.md, "First run in Phases 1 and 2"), reduced: no
+/// sign-in, no Portenv storage, and no Protection step, whose one choice
+/// ("Only you") is now a sentence on the recovery key (R-0126, R-0129).
 public enum FirstRunStep: Int, CaseIterable, Sendable {
-    case welcome, protection, recoveryKey, storage, firstBox, gettingReady
+    case welcome, recoveryKey, storage, firstBox, gettingReady
 }
 
-/// Where the first box's saves go (no Portenv storage before Phase 3).
+/// Usage counting (1.8) needs the update check, which tester builds don't
+/// have: its checkbox stays hidden until counting exists, and then starts
+/// unticked (R-0106, R-0126). Builds with counting set PORTENV_COUNTING.
+public enum UsageCounting {
+    #if PORTENV_COUNTING
+    public static let shown = true
+    #else
+    public static let shown = false
+    #endif
+}
+
+/// Where the first box's saves go (no Portenv storage before Phase 3). In
+/// 1.5 only this Mac: a server and a bucket are shown dimmed, marked LATER
+/// (the first-run-4-storage-this-mac board; R-0092, R-0132).
 public enum StorageChoice: Equatable, Sendable {
     case server, bucket, thisMac
+}
+
+/// What first run remembers across launches: only whether a recovery key
+/// was shown, never the key (ADR 0019). A quit or a crash mid-flow makes a
+/// new key next time, and the recovery screen says the old one wasn't used.
+public protocol FirstRunMemory: AnyObject, Sendable {
+    var keyShown: Bool { get set }
+}
+
+public extension FirstRunMemory {
+    /// A workspace on this Mac, however it was made (first run, or portenv
+    /// init), means first run is behind us: a key shown earlier is moot.
+    func forgetIfWorkspacesExist(_ workspaces: [String]) {
+        if !workspaces.isEmpty { keyShown = false }
+    }
+}
+
+/// The app's: a flag in the defaults.
+public final class DefaultsFirstRunMemory: FirstRunMemory, @unchecked Sendable {
+    public static let key = "recoveryKeyShown"
+    private let defaults: UserDefaults
+    public init(defaults: UserDefaults = .standard) { self.defaults = defaults }
+    public var keyShown: Bool {
+        get { defaults.bool(forKey: Self.key) }
+        set { defaults.set(newValue, forKey: Self.key) }
+    }
+}
+
+/// Remembers nothing (renders, New Workspace…).
+public final class NoFirstRunMemory: FirstRunMemory, @unchecked Sendable {
+    public var keyShown = false
+    public init() {}
 }
 
 /// The first box, as first run makes it.
@@ -77,17 +123,17 @@ public struct NameFieldLook: Equatable, Sendable {
 @Observable
 public final class FirstRunFlow {
     public private(set) var step: FirstRunStep
-    /// The steps this first run goes through: all six, or only the first box
-    /// when first run was finished before (every box has since gone).
+    /// The steps this first run goes through: all five, or only the first
+    /// workspace when first run was finished before (every one has since
+    /// gone).
     public let steps: [FirstRunStep]
     public private(set) var recoveryKey: String?
     public var recoverySaved = false
-    public var storage: StorageChoice?
-    public var serverAddress = ""
-    public var bucketURL = ""
+    /// This Mac, already chosen: the only storage in 1.5.
+    public var storage: StorageChoice? = .thisMac
     public var boxName = ""
-    /// Usage counting is on, and shown, before any update check (1.8).
-    public var countUsage = true
+    /// Usage counting: off until the person ticks it (opt-in, R-0126).
+    public var countUsage = false
     public private(set) var error: String?
     /// A plain notice (secondary text), like a step not built yet.
     public private(set) var notice: String?
@@ -97,17 +143,27 @@ public final class FirstRunFlow {
     public private(set) var busy = false
     /// The box made at the end, once it exists.
     public private(set) var made: String?
+    /// How many Continues didn't move on. Each one says why (`error` or
+    /// `notice`), and the view announces it again even when the words are
+    /// the same, so a press never looks like nothing happened (R-0126).
+    public private(set) var refusals = 0
+    /// A recovery key was shown in an earlier launch that didn't finish
+    /// first run: the one shown now replaces it (R-0132).
+    public let keyShownBefore: Bool
 
     private let service: FirstRunService
     private let existing: Set<String>
+    private let memory: FirstRunMemory
 
-    public init(service: FirstRunService, at start: FirstRunStep = .welcome, existing: [String] = [], fromBoxList: Bool = false) {
+    public init(service: FirstRunService, at start: FirstRunStep = .welcome, existing: [String] = [], fromBoxList: Bool = false,
+                memory: FirstRunMemory = NoFirstRunMemory()) {
         self.service = service
         self.existing = Set(existing)
         self.fromBoxList = fromBoxList
+        self.memory = memory
+        keyShownBefore = start == .welcome && memory.keyShown
         step = start
         steps = start == .firstBox ? [.firstBox, .gettingReady] : FirstRunStep.allCases
-        if start == .firstBox { storage = .thisMac }
     }
 
     public var canGoBack: Bool {
@@ -118,23 +174,40 @@ public final class FirstRunFlow {
     public var canContinue: Bool {
         guard !busy else { return false }
         switch step {
-        case .welcome, .protection:
+        case .welcome:
             return true
         case .recoveryKey:
             return recoveryKey != nil && recoverySaved
         case .storage:
-            switch storage {
-            case .server: return !trimmed(serverAddress).isEmpty
-            case .bucket: return !trimmed(bucketURL).isEmpty
-            case .thisMac: return true
-            case nil: return false
-            }
+            return storage == .thisMac
         case .firstBox:
             return !boxName.isEmpty && nameProblem == nil
         case .gettingReady:
             return false
         }
     }
+
+    /// Why Continue can't go on from this step, in one line; nil while it
+    /// can (or while a press is already working). It's shown above
+    /// Continue while it applies, given as the button's VoiceOver hint, and
+    /// announced again on every press (R-0126, R-0132).
+    public var whyNot: String? {
+        guard !busy, !canContinue else { return nil }
+        switch step {
+        case .welcome, .gettingReady:
+            return nil
+        case .recoveryKey:
+            return recoveryKey == nil ? FirstRunText.noKeyYet : FirstRunText.tickSaved
+        case .storage:
+            return storage == nil ? FirstRunText.chooseStorage : FirstRunText.storageLater
+        case .firstBox:
+            return nameProblem ?? FirstRunText.typeName
+        }
+    }
+
+    /// What's said under Continue: an error, a notice, or why Continue
+    /// can't go on yet.
+    public var reason: String? { error ?? notice ?? whyNot }
 
     /// What's wrong with the name, in one line, or nil (also while empty).
     public var nameProblem: String? { FirstRunText.nameProblem(boxName, existing: Array(existing)) }
@@ -167,24 +240,35 @@ public final class FirstRunFlow {
         step = steps[i - 1]
     }
 
-    /// Continue: the keys are made on leaving Protection, the box on leaving
-    /// the first box. A failure stays on the step, saying why.
+    /// Continue: the recovery key is made on leaving Welcome (Back and
+    /// forward keep the same key), the box on leaving the first box. Every
+    /// press either moves on or says why it can't (R-0126): a failure stays
+    /// on the step with its line, and so does a step that isn't complete.
     public func next() async {
-        guard canContinue, let i = steps.firstIndex(of: step), i + 1 < steps.count else { return }
+        guard let i = steps.firstIndex(of: step), i + 1 < steps.count else { return }
+        guard canContinue else {
+            // Busy: the press before is still working, and shows it. Else
+            // the reason is already on screen; the press is counted, so it's
+            // announced again.
+            if whyNot != nil { refusals += 1 }
+            return
+        }
         busy = true
         defer { busy = false }
         do {
             switch step {
-            case .protection where recoveryKey == nil:
+            case .welcome where recoveryKey == nil:
                 recoveryKey = try await service.makeRecoveryKey()
+                memory.keyShown = true
             case .firstBox:
                 try await service.createBox(NewBox(
                     name: boxName,
                     storage: storage ?? .thisMac,
-                    serverAddress: storage == .server ? trimmed(serverAddress) : "",
-                    bucketURL: storage == .bucket ? trimmed(bucketURL) : ""
+                    serverAddress: "",
+                    bucketURL: ""
                 ))
                 made = boxName
+                memory.keyShown = false
             default:
                 break
             }
@@ -192,39 +276,59 @@ public final class FirstRunFlow {
             notice = nil
             step = steps[i + 1]
         } catch let failure as FirstRunError where failure.notBuilt {
-            notice = failure.message
-            error = nil
+            refuse(notice: failure.message)
         } catch {
-            notice = nil
-            self.error = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            refuse(error: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
         }
     }
 
-    private func trimmed(_ s: String) -> String { s.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private func refuse(notice: String? = nil, error: String? = nil) {
+        self.notice = notice
+        self.error = error
+        refusals += 1
+    }
+
 }
 
 /// First run's words (GUIDELINES §10).
 public enum FirstRunText {
     public static let welcomeTitle = "Welcome to Portenv"
     public static let welcomeLine = "Your portable workspace. Work on your Mac, continue on a server, and let your agents in, safely."
-    /// The reduced Welcome (#16): no sign-in before Phase 3.
-    public static let welcomeButton = "Continue without an account"
-
-    public static let protectionTitle = "Only you can open your workspaces"
-    public static let protectionLine = "Your keys stay on your devices, and Portenv never holds them. If you lose every device and your recovery key, your saves can’t be opened by anyone, including Portenv."
+    /// The reduced Welcome: there's no account to be had, so just
+    /// "Continue" (R-0126).
+    public static let welcomeButton = "Continue"
 
     public static let recoveryTitle = "Save your recovery key"
-    public static let recoveryLine = "It’s the only way back into your workspaces if you lose access to all your devices. Keep it somewhere safe and separate from this Mac."
+    /// The Protection step's message leads, then what the key is for
+    /// (R-0129's exact words).
+    public static let recoveryLine = "Only you can open your workspaces\u{2019} saves: Portenv never holds your keys. This key opens them if this Mac\u{2019}s keys are ever lost, on this Mac or a new one. Keep it somewhere safe and separate from this Mac."
     public static let recoverySavedCheck = "I’ve saved my recovery key somewhere safe"
+    /// A key shown in a launch that quit before first run finished was never
+    /// used: this one replaces it (R-0132, ADR 0019).
+    public static let replacedKey = "If you wrote down a key earlier, it wasn\u{2019}t used. Keep this one instead."
+    /// While Welcome's Continue makes the key.
+    public static let makingKey = "Making your recovery key\u{2026}"
 
+    /// Why Continue can't go on yet (R-0126: never a silent press).
+    public static let noKeyYet = "Your recovery key isn\u{2019}t ready yet."
+    public static let tickSaved = "Tick \u{201C}I\u{2019}ve saved my recovery key somewhere safe\u{201D} to continue."
+    public static let chooseStorage = "Choose where your saves should go."
+    public static let storageLater = "Saving to a server or a bucket comes later. Keep your saves on this Mac for now."
+    public static let typeName = "Give your workspace a name."
+
+    /// The first-run-4-storage-this-mac board.
     public static let storageTitle = "Where should your saves go?"
+    public static let storageLine = "Saves are encrypted wherever they\u{2019}re stored, on this Mac too."
+    public static let storageThisMac = "Keep on this Mac for now"
+    public static let thisMacOnly = "Saves stay on this Mac only. If this Mac is lost, they\u{2019}re lost too. You can add a server or bucket later."
     public static let storageServer = "My own server"
+    public static let storageServerLine = "Over SSH, such as a Hetzner or DigitalOcean server."
     public static let storageBucket = "An S3-compatible bucket"
-    public static let storageThisMac = "This Mac only"
-    public static let thisMacOnly = "Your saves will only exist on this Mac, so a lost or broken Mac loses them. You can add a server or bucket later in Settings › Storage."
+    public static let storageBucketLine = "AWS S3, Backblaze B2, Cloudflare R2 and others."
+    public static let later = "LATER"
 
     public static let firstBoxTitle = "Make your first workspace"
-    public static let firstBoxLine = "A workspace holds one project, encrypted. Give it a short name, like the project’s."
+    public static let firstBoxLine = "A workspace holds one project, encrypted. Give it a short name, like the project\u{2019}s."
 
     /// New Box… from the box list (the new-box board).
     public static let newBoxTitle = "New workspace"

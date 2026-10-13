@@ -10,10 +10,19 @@ import SwiftUI
 /// samples: no keys, no boxes, no portenvd.
 @MainActor
 enum ScreenRenders {
-    /// A sample recovery key, only ever drawn into renders; built from
+    /// ADR 0019's vector key, as on the board (R-0129), only ever drawn into renders; built from
     /// groups so no key-shaped literal is in the source.
+    /// Never finishes making the key: Welcome's spinner, for its render.
+    private struct Slow: FirstRunService {
+        func makeRecoveryKey() async throws -> String {
+            try await Task.sleep(for: .seconds(3600))
+            return ""
+        }
+        func createBox(_: NewBox) async throws {}
+    }
+
     private struct Sample: FirstRunService {
-        func makeRecoveryKey() async throws -> String { ["SAMP", "LE00", "KEY0", "ONLY", "FOR0", "DOCS"].joined(separator: "-") }
+        func makeRecoveryKey() async throws -> String { ["K7QF", "M2XA", "9TRD", "HV4P", "W8LC", "3NZ5"].joined(separator: "-") }
         func createBox(_: NewBox) async throws {}
     }
 
@@ -36,6 +45,27 @@ enum ScreenRenders {
                 let flow = await sampleFlow(at: step)
                 try snapshot(FirstRunView(flow: flow, opened: { _ in }), name: "first-run-\(step.rawValue + 1)-\(name(step))", in: dir)
             }
+            // A key shown in an earlier launch that quit mid-flow (R-0132).
+            let memory = NoFirstRunMemory()
+            memory.keyShown = true
+            let replaced = FirstRunFlow(service: Sample(), memory: memory)
+            await replaced.next()
+            replaced.recoverySaved = true
+            try snapshot(FirstRunView(flow: replaced, opened: { _ in }), name: "first-run-2-recovery-key-replaced", in: dir)
+            // Welcome while the key is made (R-0132).
+            let making = FirstRunFlow(service: Slow())
+            Task { await making.next() }
+            while !making.busy { await Task.yield() }
+            try snapshot(FirstRunView(flow: making, opened: { _ in }), name: "first-run-1-welcome-making-key", in: dir)
+            // A Keychain call waiting for a prompt (GUIDELINES §3.1).
+            let waiting = await sampleFlow(at: .firstBox)
+            waiting.keychainWaiting = true
+            try snapshot(FirstRunView(flow: waiting, opened: { _ in }), name: "first-run-4-first-box-keychain-waiting", in: dir)
+            // A Continue that can't move on says why, by the button (R-0126).
+            let notTicked = await sampleFlow(at: .recoveryKey)
+            notTicked.recoverySaved = false
+            await notTicked.next()
+            try snapshot(FirstRunView(flow: notTicked, opened: { _ in }), name: "first-run-2-recovery-key-not-ticked", in: dir)
             // New Box… from the box list (the new-box boards).
             let newBox = FirstRunFlow(service: Sample(), at: .firstBox, existing: ["acme-api"], fromBoxList: true)
             newBox.boxName = "site"
@@ -64,6 +94,12 @@ enum ScreenRenders {
             // cached display leaves out: drawn under it here.
             try snapshot(view: { sampleTerminal() }, name: "terminal", size: NSSize(width: 900, height: 452), in: dir,
                          background: { ($0 as? PaddedTerminal)?.terminal.nativeBackgroundColor })
+            // The whole window, toolbar included, beside the main-window board
+            // (R-0131): with the inspector open, and closed.
+            try await MainWindowRender.render(to: dir, terminal: { sampleTerminal() })
+            try await MainWindowRender.render(to: dir, name: "main-window-no-inspector", inspector: false, terminal: { sampleTerminal() })
+            // Portenv › Settings…, each pane (R-0137).
+            try await SettingsRender.render(to: dir)
             return 0
         } catch {
             FileHandle.standardError.write(Data("render-screens: \(error)\n".utf8))
@@ -73,10 +109,10 @@ enum ScreenRenders {
 
     private static func sampleFlow(at step: FirstRunStep) async -> FirstRunFlow {
         switch step {
-        case .welcome, .protection:
+        case .welcome:
             return FirstRunFlow(service: Sample(), at: step)
         case .recoveryKey:
-            let flow = FirstRunFlow(service: Sample(), at: .protection)
+            let flow = FirstRunFlow(service: Sample(), at: .welcome)
             await flow.next()
             flow.recoverySaved = true
             return flow
@@ -103,7 +139,6 @@ enum ScreenRenders {
     private static func name(_ step: FirstRunStep) -> String {
         switch step {
         case .welcome: "welcome"
-        case .protection: "protection"
         case .recoveryKey: "recovery-key"
         case .storage: "storage"
         case .firstBox: "first-box"
@@ -132,22 +167,24 @@ enum ScreenRenders {
             TabInfo(id: "@1", name: "shell", active: false),
             TabInfo(id: "@2", name: "tests", active: false, program: "npm"),
         ])
-        let size = NSSize(width: 300, height: 600)
-        func inspector(_ content: InspectorContent, targets: [(String, String)]) -> some View {
-            InspectorView(content: content, yourInitial: "P", moveTargets: targets, move: { _ in },
+        // Tall enough for every section at the board's type sizes.
+        let size = NSSize(width: 300, height: 780)
+        func inspector(_ content: InspectorContent, servers: [String]) -> some View {
+            InspectorView(content: content, yourInitial: "P",
+                          moveMenu: BoxMenuModel.moveSubmenu(busy: false, location: "this-mac", servers: servers), move: { _ in },
                           retryPackages: {}, revert: {}, scrolls: false)
                 .frame(maxHeight: .infinity, alignment: .top)
                 .background(.background)
         }
         try snapshot(inspector(InspectorContent(storagePlace: "this Mac", openedAt: ago(95), savedAt: ago(2),
-                                                saves: saves, tabs: tabs), targets: []),
+                                                saves: saves, tabs: tabs), servers: []),
                      name: "inspector-this-mac", size: size, in: dir)
         try snapshot(inspector(InspectorContent(storagePlace: "this Mac", openedAt: ago(95), savedAt: ago(2),
-                                                savesLoaded: false, savesFailed: true, tabs: tabs), targets: []),
+                                                savesLoaded: false, savesFailed: true, tabs: tabs), servers: []),
                      name: "inspector-saves-failed", size: size, in: dir)
         try snapshot(inspector(InspectorContent(storagePlace: "your server", openedAt: ago(95), failedPackages: ["ripgrep"],
                                                 savedAt: ago(2), saves: saves, tabs: tabs),
-                               targets: [("test-server", "portenv@test-server")]),
+                               servers: ["portenv@test-server"]),
                      name: "inspector-saves-to-server", size: size, in: dir)
     }
 

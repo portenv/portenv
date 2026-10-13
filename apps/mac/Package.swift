@@ -33,13 +33,33 @@ let package = Package(
                 .product(name: "GRPCCore", package: "grpc-swift-2"),
                 .product(name: "GRPCNIOTransportHTTP2", package: "grpc-swift-nio-transport"),
                 .product(name: "SwiftProtobuf", package: "swift-protobuf"),
+                // The terminal's guard (TerminalGuard, TerminalViews).
+                .product(name: "SwiftTerm", package: "SwiftTerm"),
             ]
+        ),
+        // The terminal's SwiftTerm glue (per-row overlays, ADR 0017), kept
+        // out of the app target so it can be tested on a headless terminal.
+        .target(
+            name: "PortenvTerm",
+            dependencies: ["PortenvKit", .product(name: "SwiftTerm", package: "SwiftTerm")]
         ),
         .executableTarget(
             name: "Portenv",
-            dependencies: ["PortenvKit", .product(name: "SwiftTerm", package: "SwiftTerm")]
+            dependencies: ["PortenvKit", "PortenvTerm", .product(name: "SwiftTerm", package: "SwiftTerm")]
         ),
+        // The app's own views, driven through their buttons as VoiceOver
+        // would (first run's walk, R-0132): SwiftPM tests an executable
+        // target directly, so no new dependency.
+        .testTarget(name: "PortenvAppTests", dependencies: ["Portenv", "PortenvKit"]),
         // SwiftTerm: the layout tests put a real terminal in the window.
-        .testTarget(name: "PortenvKitTests", dependencies: ["PortenvKit", .product(name: "SwiftTerm", package: "SwiftTerm")]),
+        .testTarget(name: "PortenvKitTests", dependencies: [
+            "PortenvKit", .product(name: "SwiftTerm", package: "SwiftTerm"),
+            // The client's gRPC status codes (BoxMakerTests).
+            .product(name: "GRPCCore", package: "grpc-swift-2"),
+        ]),
+        .testTarget(
+            name: "PortenvTermTests",
+            dependencies: ["PortenvTerm", "PortenvKit", .product(name: "SwiftTerm", package: "SwiftTerm")]
+        ),
     ]
 )

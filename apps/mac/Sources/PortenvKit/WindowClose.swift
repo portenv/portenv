@@ -36,7 +36,7 @@ public enum WindowClose {
         "\(box) couldn't be saved before closing. Its work is still on this Mac."
     }
 
-    public static let informative = "Try again, or close now: the box stays as it is and is saved first thing the next time it opens."
+    public static let informative = "Try again, or close now: the workspace stays as it is and is saved first thing the next time it opens."
     public static let anywayButton = "Close Anyway"
 
     /// Closes the box, asking on failure, then shows the list. Returns true

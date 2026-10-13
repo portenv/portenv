@@ -18,7 +18,7 @@ import (
 )
 
 // ErrNotFound means the store holds no key for the box.
-var ErrNotFound = errors.New("no key stored for this box")
+var ErrNotFound = errors.New("no key stored for this workspace")
 
 // ErrNeedsApproval means the Keychain would have to ask the person first.
 // Background processes and scripts never raise that prompt: they get this
@@ -103,7 +103,7 @@ type FileStore struct{ Dir string }
 
 func (f FileStore) path(boxID string) (string, error) {
 	if !boxIDRE.MatchString(boxID) {
-		return "", fmt.Errorf("invalid box ID %q", boxID)
+		return "", fmt.Errorf("invalid workspace ID %q", boxID)
 	}
 	return filepath.Join(f.Dir, boxID+".key"), nil
 }
@@ -157,7 +157,7 @@ func (f FileStore) Put(boxID string, key []byte) error {
 	}
 	fh, err := os.OpenFile(p, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600) // #nosec G304 -- validated box ID
 	if errors.Is(err, os.ErrExist) {
-		return fmt.Errorf("a key for box %s already exists", boxID)
+		return fmt.Errorf("a key for workspace %s already exists", boxID)
 	}
 	if err != nil {
 		return err

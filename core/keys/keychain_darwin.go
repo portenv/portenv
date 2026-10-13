@@ -107,7 +107,7 @@ func (k Keychain) Put(boxID string, key []byte) error {
 	}
 	err = keychain.AddItem(item)
 	if errors.Is(err, keychain.ErrorDuplicateItem) {
-		return errors.New("a key for box " + boxID + " already exists in the Keychain")
+		return errors.New("a key for workspace " + boxID + " already exists in the Keychain")
 	}
 	if needsApproval(k.Interactive, err) {
 		return ErrNeedsApproval

@@ -571,6 +571,8 @@ A developer adds their own server from the app in a few minutes; an open-source 
 
 **Add a Server wizard (no terminal steps)**
 
+ADR 0021 (accepted, R-0143) settles how: Portenv’s own pinned `known_hosts` and key type (confirmed once, a changed key a hard stop), a key just for the server served by a per-run in-memory agent, a Check that never changes the server, sudo without a password only, password-login hardening off by default and proven before it stays, and Remove a Server that never deletes saves without a separate choice. The boards are `add-a-server` (with "Someone is setting one up for me", R-0141) and `settings` (Servers, R-0137).
+
 1. Where is it: name, address, SSH user. Pick an existing key, or let Portenv generate a dedicated key and show the public key to paste into the provider's panel. Alternative path: Copy install command, a one-liner for the provider's web console or the server's user-data field.
 2. Preflight checklist, each failure with a plain fix: supported OS (Ubuntu 22.04 and 24.04, Debian 12), CPU architecture, memory and disk, sudo, outbound access to Portenv, the registry and the snapshot storage, clock sync, KVM availability (recorded for later microVM support).
 3. Install: Docker Engine from Docker's official repository if missing, the runner as a systemd service under its own user, an encrypted volume for box homes. Everything Portenv creates is namespaced (`portenv-*`) and coexists with the developer's own containers. Optional hardening (disable password logins, firewall) is offered, never forced.
@@ -661,13 +663,14 @@ This is the first run once the control plane exists (Phase 3). The mockups show 
 
 **First run in Phases 1 and 2 (no Portenv backend)**
 
-Phases 0 to 2 have no Portenv backend, so the first run is reduced. Same six steps and layout, with these differences:
+Phases 0 to 2 have no Portenv backend, so the first run is reduced to five steps, in the same layout (R-0126, R-0129):
 
-1. Welcome: a single Get started button. No sign-in; the device key is generated locally.
-2. Protection: fixed to Only you, shown as an explanation (your keys stay on your devices; losing them and the recovery key loses the data). No choice is offered.
-3. Recovery key: unchanged.
-4. Storage: My own server, An S3-compatible bucket, or This Mac only. No Portenv storage. This Mac only keeps the box's repository at `~/Library/Application Support/Portenv/Repositories/<box-id>`, outside the box and the engine VM, and the screen says plainly that saves then have no copy off this Mac. Time Machine may back the folder up; it is already encrypted by restic. After a week of use, one dismissible notice says "Your saves only exist on this Mac. Add a server or bucket to keep a copy elsewhere.", and Settings › Storage shows the same fact as a permanent status line. **In 1.5 (the design testers' build), only "Keep on this Mac for now" is offered**, with "Saves stay on this Mac only. If this Mac is lost, they're lost too. You can add a server or bucket later." My own server and An S3-compatible bucket are shown dimmed and marked LATER (board `first-run-4-storage-this-mac`; the reviewer, on the owner's delegation, R-0092, R-0093).
-5. First box and 6. Getting ready: unchanged.
+1. Welcome: "Your portable workspace." and one Continue button. No sign-in; the device key is generated locally.
+2. Recovery key. There's no Protection step: Only you is fixed, so its message leads the recovery key's line: "Only you can open your workspaces’ saves: Portenv never holds your keys. This key opens them if this Mac’s keys are ever lost, on this Mac or a new one. Keep it somewhere safe and separate from this Mac."
+3. Storage: My own server, An S3-compatible bucket, or This Mac only. No Portenv storage. This Mac only keeps the box's repository at `~/Library/Application Support/Portenv/Repositories/<box-id>`, outside the box and the engine VM, and the screen says plainly that saves then have no copy off this Mac. Time Machine may back the folder up; it is already encrypted by restic. After a week of use, one dismissible notice says "Your saves only exist on this Mac. Add a server or bucket to keep a copy elsewhere.", and Settings › Storage shows the same fact as a permanent status line. **In 1.5 (the design testers' build), only "Keep on this Mac for now" is offered**, with "Saves stay on this Mac only. If this Mac is lost, they're lost too. You can add a server or bucket later." My own server and An S3-compatible bucket are shown dimmed and marked LATER (board `first-run-4-storage-this-mac`; the reviewer, on the owner's delegation, R-0092, R-0093).
+4. First workspace and 5. Getting ready: unchanged.
+
+Every Continue either moves on or says why it can't, next to the button and to VoiceOver, on every press (R-0126: 0.1.0-68's step 2 looked like it did nothing).
 
 In Phase 3, sign-in, Portenv storage and the recoverable mode are switched on. Existing users get a one-time prompt to create an account and link their devices; their boxes, keys and storage stay as they are.
 
@@ -1075,8 +1078,35 @@ In this order:
      - **Question 1, control mode:** yes. Tabs follow tmux through control mode, with #41's window IDs.
      - **Question 2, OSC 133 per tab:** yes for bash and zsh, with exit codes. Inside Claude Code it only sees one long command, never its questions.
      - **Waiting for input:** the combined four-signal detector, used everywhere, is right on all 12 labelled cases. Each signal alone is wrong on 1 to 5 of them. Secret prompts never reach a relay, and answers to them through a relay are refused.
-     - **Question 3, SwiftTerm overlay alignment:** still open. It needs a prototype overlay, then the reviewer's UI test.
-     - **Blocks and the rest stay in Phase 1 provisionally.** If question 3 fails, they move to Phase 2.
+     - **Question 3, SwiftTerm overlay alignment (ADR 0020, 2026-10-13; proposed):** yes, when the terminal is fed the tab's own output.
+       - **How it was measured:** real tmux 3.4 streams for six scenarios (scrolling, long output, a pager, clear, a second tab, resize) were replayed into SwiftTerm with the overlay tracker.
+       - **Today's attached client keeps no mark.** tmux drops OSC 133 on the way to an attached client, and even with passthrough, the client draws on the alternate screen with no scrollback.
+       - **Without the alternate screen,** 51 of 54 prompt marks land on the wrong line.
+       - **Each tab's own output from tmux control mode:** 0 of 94 on the wrong line, 0 prompts missing, and 0 wrong at any scroll position.
+       - A prototype overlay on a real SwiftTerm view stays on its rows through scrolling and a resize.
+     - **So the app's terminal moves to tmux control mode, one terminal per tab (ADR 0020),** and blocks stay in Phase 1, in this order:
+       1. **1.2c, the control-mode milestone:**
+          - the box agent's control client per session (tab events replace the polling);
+          - the `TabTerminal` stream in the agent and portenvd;
+          - the app's per-tab terminal (`TabTerminalSource`, `MarkedTerminalView`) in place of today's attached terminal;
+          - **the latency gate:** keystroke to echo no worse than the attached client by more than 5 ms at p95 locally (within ±0.25 ms at tmux, measured), and the same run on the us-west-2 tester server once it exists. Until it passes, a dev-only switch back to the attached client, which never reaches a release build;
+          - tmux pinned in the image (3.4) and checked at attach;
+          - #73's and #75's no-loss guarantees carried over, with tests.
+          - R-0133's nine changes:
+            - no emulator reply reaches the pane;
+            - a default-deny filter in front of the terminal, fuzzed;
+            - paste cleaned;
+            - authors set by portenvd;
+            - the seed in one command list;
+            - mark lines from the helper's own parse;
+            - "every byte or a reset, and the person is told";
+            - the `%output` decoder and copy mode;
+            - CLI and app resizing in turn.
+
+          `portenv attach` stays a plain attach, and agents' terminal access is unchanged (R-0132).
+       2. **Waiting-for-input detection,** from the same control client (ADR 0017's detector).
+       3. **Command blocks:** attribution, the sticky header, the inline answer card, then tab badges; the command palette and saved commands after.
+     - **tmux's passthrough stays off.** The app's per-tab view filters what a program prints (no clipboard, link or title effects), and a test checks both.
      - **Still to do:** the same cases over the SSH forward to a server box (needs the owner's go-ahead for the AWS test server), and real agent CLIs in place of the stand-ins (needs accounts).
 
 **Terminal colours (the owner, 2026-10-11).** The terminal follows the system appearance by default ("Match System"), like Terminal.app's Basic profile:
@@ -1090,8 +1120,10 @@ In this order:
 It comes after 1.2's blocks, wherever they land (Phase 1 if the spike succeeds, otherwise Phase 2), and before the launch demo. The panes themselves don't depend on blocks; the Warp-style features below apply per pane once they exist.
 
 - **Panes:** up to 4 in one window.
-  - Each pane is its own viewer, on #41's per-viewer grouped sessions, and shows one of the box's tabs.
-  - So two panes can't fight over the current tab, and an agent typing in one tab never moves your view.
+  - Each pane shows one of the box's tabs through its own tab terminal (ADR 0020's `TabTerminalSource` and `MarkedTerminalView`). Lane B builds the panes on that interface with `ScriptedTabSource` until 1.2c's control-mode provider lands.
+  - So two panes can't fight over a current tab, and an agent typing in one tab never moves your view. A tab shows in at most one pane.
+  - A tab has one size, the latest asked for. When another viewer (the CLI, an agent) has it larger, the pane keeps the cursor's row in sight.
+  - The pane header's status (asking, typing, watching, quiet since, running) comes from the tab events, not the terminal stream (ADR 0020, `TabInfo.activity`).
 - **Controls:**
   - "Split right" (⌘D) and "Split down" (⇧⌘D), as buttons in the title bar;
   - ⌘⌥ and the arrow keys move between panes;
@@ -1139,7 +1171,7 @@ The Containerization shim, with `docker` as the fallback. The agent drops the fo
 
 **7. 1.5: first run**
 
-Reduced: no sign-in, Only you, Keychain keys, the recovery key; the Welcome screen has "Continue without an account" (#16). First run lists, in plain words, the exact fields the update check counts (no ID, nothing about the user's work), and how to turn counting off (1.8).
+Reduced: no sign-in, Only you, Keychain keys, the recovery key; the Welcome screen has one "Continue" (R-0126; there's no account to be had). First run lists, in plain words, the exact fields the update check counts (no ID, nothing about the user's work), and how to turn counting off (1.8).
 - **No window for a box that doesn't exist** (found at the Mac, 2026-10-10). Opened without `PORTENV_BOX`, the app shows a window for a default box "demo" that doesn't exist, with "no box named demo here; create it with portenv init demo". That message starts in lower case and sends the user to a terminal command (GUIDELINES §10). First run replaces it: with no box, the app shows first run or the box list, never a window for a missing box.
 - **The box list and New box: build to the boards** `box-list`, `box-list-empty`, `new-box` and `new-box-linked-invalid` in `docs/mockups/` (the owner, 2026-10-10).
   - **First run** keeps "Make your first box", with step dots.
@@ -1159,7 +1191,7 @@ Reduced: no sign-in, Only you, Keychain keys, the recovery key; the Welcome scre
   - the inspector's Who's here shows "This box can push to GitHub as you", with Sign Out of GitHub.
 - **Built so far** (lane C's first milestone, 2026-10-10):
   - **The launch decision:** with no box, first run; with a box that isn't on this Mac, the box list, saying so; never a window for a missing box (`LaunchDecision`, tested). The app no longer defaults to "demo".
-  - **The first-run screens and their flow,** reduced as above: Continue is enabled only when the step is complete; the recovery key needs the "I've saved" checkbox; box names follow the CLI's rule. "Count me in usage numbers" is already on, with the exact fields one click away, on Welcome (before any update check).
+  - **The first-run screens and their flow,** reduced as above: Continue is enabled only when the step is complete; the recovery key needs the "I've saved" checkbox; box names follow the CLI's rule. "Count me in usage numbers" is hidden until counting exists, and then starts unticked, with the exact fields one click away, on Welcome (before any update check; R-0106, R-0126).
   - **The box list:** open a box, or New Box… (first run's first-box step).
   - **Move to Applications** (lane C's second milestone): before the login item is registered, an app outside /Applications, App Translocation included, asks "Move Portenv to Applications?". Move copies it there (an older Portenv is replaced, anything else named Portenv.app never is), opens the copy and quits; Not Now isn't asked again for the same location. Dev builds can redirect the copy with `PORTENV_MOVE_TO` so UI tests never replace the real app.
   - **portenvd not starting** (R-0028, R-0032): while waiting for portenvd, the app reads the login item's status and `launchctl print` for its job.
@@ -1168,7 +1200,7 @@ Reduced: no sign-in, Only you, Keychain keys, the recovery key; the Welcome scre
   - **New Box… from the box list** (the new-box boards): titled "New box", with Cancel, ⎋ and "‹ Your boxes" back to the list, and Create Box. The name field says the rule under it, or what's wrong, in red, in one line.
   - **"Not built yet" is a notice,** not an error. Dev builds (their own bundle ID) name the `portenv init` workaround; a release build never sends anyone to Terminal.
   - **Closing to the list and the invalid name's look** (lane C's third milestone): `WindowClose` (the close runs before the list is shown; tested with the order of calls) and `NameFieldLook` (tested), with renders in `docs/screenshots/first-run/`.
-  - **Not yet:** making keys, the recovery key and the first box from the app. These are data-loss paths. The decisions are taken and ADR 0019 works out the details (the recovery key's format and check character, the per-box key derivation, the pool of pre-derived passwords, and `CreateBox`'s order of steps); code follows its review, tests first. Built so far: the recovery key's library (format, check character, reading a typed key, the per-box derivation), in Swift (`PortenvKit/RecoveryKey.swift`) and Go (`core/keys/recovery`), both against one vector file (R-0095); and in `portenvd`, `CreateBox` (steps D1 to D6, idempotent on the box ID, a fault and a crash test at every step), `DiscardCreation`, `ListBoxes`' `creating` flag and `RecoverBox`, with the clean-Mac restore test (This Mac and folder storage; server and bucket storage wait for 2.9). The app's pool, `AddRecoveryKey` and first run's wiring come next. Until then, first run says so plainly at Protection. Start from (GitHub, folder) and the detected toolbox on the first-box step also come later.
+  - **Not yet:** making keys, the recovery key and the first box from the app. These are data-loss paths. The decisions are taken and ADR 0019 works out the details (the recovery key's format and check character, the per-box key derivation, the pool of pre-derived passwords, and `CreateBox`'s order of steps); code follows its review, tests first. Built so far: the recovery key's library (format, check character, reading a typed key, the per-box derivation), in Swift (`PortenvKit/RecoveryKey.swift`) and Go (`core/keys/recovery`), both against one vector file (R-0095); and in `portenvd`, `CreateBox` (steps D1 to D6, idempotent on the box ID, a fault and a crash test at every step), `DiscardCreation`, `ListBoxes`' `creating` flag and `RecoverBox`, with the clean-Mac restore test (This Mac and folder storage; server and bucket storage wait for 2.9). In the app: the pool of 32 pre-derived recovery passwords in its own Keychain item (`RecoveryPool`, never synchronised, never the recovery key), the Keychain writes for repository keys (`SecretStore`, with portenv init's attributes), and steps A1 to A3 around `CreateBox` (`BoxMaker`, one call at a time, never deleting a key a finished workspace uses: the key stored and read back before the call; what each refusal leaves; the entry removed only once the box exists; at launch, used entries removed and half-made boxes finished or discarded), all tested with fakes, never the real Keychain. First run uses them (`KeyedFirstRunService`): the recovery key is made on leaving Welcome and held in memory only, fills the pool on Continue from its step and is wiped, and the first workspace (and New Workspace…) goes through `BoxMaker` and CreateBox; at launch, used entries go and half-made workspaces are finished or discarded; a Keychain call that waits over 2 s says "Waiting for Keychain access" by Continue (GUIDELINES §3.1). Next: asking for the recovery key when the pool runs out, and `AddRecoveryKey`. Until then, first run says so plainly at Protection. Start from (GitHub, folder) and the detected toolbox on the first-box step also come later.
 - **Move to Applications first** (the owner, 2026-10-10; found while testing #41):
   - If the app runs from anywhere but `/Applications`, it offers "Move Portenv to Applications?". That includes App Translocation, when the app is opened from Downloads or the DMG. launchd may refuse to start `portenvd` from other places.
   - **Changed 2026-10-12 (R-0121; approved by the reviewer, R-0124, under the owner's delegation):** the question is a sheet on the Portenv window, not an app-modal alert, and the launch doesn't wait for it. The login item is registered and the wait for `portenvd` starts first (`LaunchOrder`, tested). A modal alert before registration once showed on another Space while the window kept a spinner with no agent registered. Move removes the login item registered from the old place before the copy opens, so launchd never keeps running `portenvd` from there; a failed move registers it again (`MoveOffer.answer`, tested).
@@ -1185,6 +1217,7 @@ Show in Finder (⌥⌘R) stops being disabled here.
 **10. 1.8: releases**
 
 Developer ID signing, notarisation and Sparkle, with the key backups. Signed public CLI releases and their signing key are already on the first-release checklist (#27).
+- **Move the keys to the data-protection keychain** (`kSecUseDataProtectionKeychain`, needs the stable signing identity): the repository keys and the recovery pool (ADR 0013, ADR 0019). Until then they're in the file-based login keychain, which ignores `kSecAttrAccessible`: although written this-device-only and never synchronised, they travel in backups and Migration Assistant like any login keychain item (R-0122). The move needs a migration of existing items, tested, and `portenvd`'s and the CLI's reads moved with it.
 - Signing uses the owner's existing Apple Developer organization team (decided 2026-10-10), so 1.8 needs no new enrolment. It's also the stable-signing fix for item 1e. The team's ID and name aren't written here; at 1.8 they come from the owner's signing setup, kept in local config or CI secrets. Creating the Developer ID Application certificate and the notarization credential (an App Store Connect API key) are account changes the owner makes at 1.8.
 - **Look at again once signing is stable:** run `portenvd` inside a small helper app bundle (`Contents/Helpers/Portenv Helper.app`), so it can post a notification the moment a background save succeeds after Quit Anyway. Until then the next launch of the app shows it (1.1).
 - **`portenvd` still starts after an in-place update** (found at the Mac, 2026-10-10). With ad-hoc-signed dev builds, launchd refused a rebuilt `portenvd` (exit 78, `EX_CONFIG`) until the login item was registered again; the job carries launch constraints. A Developer ID signature stays the same across updates, so releases should be fine. 1.8's Sparkle update test checks it, and the dev workflow re-registers after `gmake app` (`--unregister-service`, then open the app).
@@ -1207,7 +1240,8 @@ Developer ID signing, notarisation and Sparkle, with the key backups. Signed pub
     - **At most one check a day,** sent only on days a box was opened.
     - **What they give, all as plain counts:** daily, weekly and monthly actives, cohort retention (actives per install month, per week), activation and depth.
     - **The server keeps aggregated counts only,** with no IP logs. If this needs a minimal Cloudflare Worker behind portenv.com/appcast.xml, it's the named exception to ADR 0008's "no backend before Phase 3" (the Backend row in Decisions already made).
-    - **Settings:** "Count me in usage numbers (no ID, nothing about your work)", on by default, and one click turns it off. Off removes every counting field, but the update check itself stays, for security updates.
+    - **Settings:** "Count me in usage numbers (no ID, nothing about your work)", off until the person ticks it (opt-in: the reviewer, on the owner's delegation, R-0126), and one click turns it off again. Off removes every counting field, but the update check itself stays, for security updates.
+    - **The choice is stored** (`UsageCounting.choiceKey`, "countUsage"), both from first run's checkbox and from Settings, and `UsageCounting.isOn` reads it. Settings › Updates › What Portenv sends is generated from it, so the Privacy line stays true: today counting doesn't exist and the line says no usage numbers are collected (R-0149, R-0156).
     - **An unreachable endpoint never blocks or slows anything** (own-route).
   - **Servers count themselves too, under the same rules:** no identifier, coarse fields, a published list, and an opt-out.
     - **When:** the runner sends its own check, at most once a day, only on days it ran a box.
@@ -1246,7 +1280,7 @@ Developer ID signing, notarisation and Sparkle, with the key backups. Signed pub
        - /privacy says so in a line.
     5. **Who is responsible:** /privacy names the controller and a contact for questions and objections, exactly: "EverydayMoney SAS, 60 Rue François 1er, 75008 Paris, France (RCS Paris 944 681 634). Contact: contact@everydaymoney.eu". It matches the publisher block on portenv.com/legal. Today /privacy covers only the website; this line is added when counting ships (1.8).
     6. **The opt-out is visible before the first count:**
-       - first run (1.5) shows "Count me in usage numbers", with the link to the field list, already on, before the first update check is sent;
+       - first run shows "Count me in usage numbers", with the link to the field list, unticked (opt-in, R-0126), before the first update check is sent; hidden until counting exists;
        - the runner's installer prints its opt-out flag before its first check.
   - **Release checklist:** run the CNIL's self-assessment tool for audience measurement against the final implementation, and keep the filled copy in `docs/` (not on the website). Never describe the counting as "CNIL certified" or "validated": the CNIL forbids that wording.
 
@@ -1303,6 +1337,7 @@ Slow uplinks are a real user condition, not an edge case (the Phase 0 gate ran o
 
 - **Pipeline:** a version tag triggers CI on a macOS runner: build, sign with the Developer ID certificate, notarize and staple, package and sign `Portenv.dmg`, and generate a Sparkle `appcast.xml` signed with Portenv's EdDSA key.
 - **Hosting:** the DMG and `appcast.xml` are assets on the `portenv/portenv` GitHub release.
+- **The app icon** ("Two places", the owner, 2026-10-12, R-0128): `apps/mac/Resources/Assets.xcassets/AppIcon.appiconset` (ten PNGs), compiled into `AppIcon.icns` by `scripts/make-app-icon.sh` in `gmake app`, with the SVG sources in `apps/mac/Resources/icon-source/`. A dev lane's app (`LANE=X`) carries an orange disc with its letter, so it's never mistaken for the release app. macOS 26's layered icon format comes later.
 - **Stable URLs:** `portenv.com/download` and `portenv.com/appcast.xml` redirect to the latest release's assets (Cloudflare redirect rules). The app's Sparkle feed URL is `portenv.com/appcast.xml`, never a GitHub URL, so hosting can move later without breaking updates.
 - **Keys:** the Developer ID certificate and the Sparkle EdDSA private key live only in CI secrets and the owner's Keychain, never in the repository.
 - **Design-tester builds are signed and notarized on the owner's Mac, not in CI** (decided by the reviewer, on the owner's delegation, R-0089, 2026-10-11). `gmake release-local` (`scripts/release-local.sh`):
@@ -1525,6 +1560,15 @@ These need an owner decision; Claude Code should add new ones here instead of gu
 - [x] "Save to Passwords" on the recovery key step: macOS has no public API for an app to add an item to the Passwords app. Keep Print and Copy only, or find another way? **Answered (the reviewer, on the owner's delegation, R-0087, 2026-10-11):** dropped. Print and Copy, plus the "I've saved" checkbox (ADR 0019).
 - [x] Restoring with only the recovery key (ADR 0019): where the app offers it on a clean Mac. **Answered (the reviewer, on the owner's delegation, R-0092, 2026-10-11):** "Restore with a Recovery Key…" as a plain text button under Welcome's main actions, and in Settings › Protection and recovery key. Not needed for the design testers; the board comes before the UI. The `RecoverBox` call and its test come with `CreateBox`.
 - [ ] S3-compatible storage from the app (first run's Storage step): where the bucket's credentials live (the Keychain, per box or per bucket), and how they reach restic. Today `portenv init` takes them from the environment. `CreateBox` covers This Mac only first (ADR 0019). Out of 1.5: first run offers only Keep on this Mac for the design testers (R-0092); this stays open for 2.9.
+- [x] ADR 0020, decision 9: with control mode, escape sequences a program prints reach the app's terminal instead of stopping at tmux. Is filtering them in the app the same guarantee, or a change to a security default? **Answered (the reviewer, on the owner's delegation, R-0133, 2026-10-13):** the same or stronger, provided every one of these is in:
+  - a default-deny filter in front of the terminal;
+  - no reply from the emulator reaches the pane;
+  - paste cleaned;
+  - tmux's `allow-passthrough` and `set-clipboard` off and asserted;
+  - fixed memory limits.
+
+  Dropping any of them makes it the owner's decision. The check on main found that `set-clipboard external` let any program set the Mac's clipboard through `tmux set-buffer -w`, fixed in #94; links are limited to web pages on the person's click (R-0134).
+- [ ] ADR 0020: should agents' terminal access (2.4) move to the `TabTerminal` stream as well, for per-author attribution of their keystrokes, or stay on today's attach?
 - [ ] A per-box "Keep running when Portenv quits" option (off by default) with a menu bar item listing boxes still running? Only with Phase 3's lease hand-off (see 2.4).
 - [x] Tab keyboard shortcuts (1.2)? **Answered (2026-10-10):**
   - ⌘T opens a new tab, ⌘1–⌘9 choose a tab, ⌘⇧[ / ⌘⇧] go to the previous / next tab.

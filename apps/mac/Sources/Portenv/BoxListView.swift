@@ -15,7 +15,7 @@ struct BoxListView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Your boxes").font(.system(size: 26, weight: .bold))
+            Text("Your workspaces").font(.system(size: 26, weight: .bold))
                 .accessibilityAddTraits(.isHeader)
             if let notice {
                 Text(notice)
@@ -26,8 +26,8 @@ struct BoxListView: View {
             List(boxes, id: \.self, selection: $selection) { box in
                 Label(box, systemImage: "shippingbox")
                     .tag(box)
-                    .accessibilityLabel("Box \(box)")
-                    .accessibilityHint("Opens the box")
+                    .accessibilityLabel("Workspace \(box)")
+                    .accessibilityHint("Opens the workspace")
             }
             .contextMenu(forSelectionType: String.self) { _ in
                 EmptyView()
@@ -36,7 +36,7 @@ struct BoxListView: View {
             }
             .frame(minHeight: 180)
             HStack {
-                Button("New Box…", action: newBox)
+                Button("New Workspace…", action: newBox)
                 Spacer()
                 Button("Open") { if let selection { open(selection) } }
                     .buttonStyle(.borderedProminent)

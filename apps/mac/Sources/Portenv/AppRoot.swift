@@ -98,6 +98,14 @@ final class AppModel {
             )
             return
         }
+        // A workspace made outside first run (portenv init) ends it too (R-0133).
+        DefaultsFirstRunMemory().forgetIfWorkspacesExist(boxes)
+        // Pool entries for workspaces that exist go, and a workspace left
+        // half made is finished or discarded (ADR 0019, A3).
+        if let creating = daemon as? BoxCreating {
+            _ = await BoxMaker(daemon: creating).tidyAtLaunch()
+            if let listed = try? await daemon.boxes() { boxes = listed }
+        }
         let requested = ProcessInfo.processInfo.environment["PORTENV_BOX"]
         apply(LaunchDecision.decide(
             requested: requested,
@@ -111,7 +119,7 @@ final class AppModel {
         launch = decision
         switch decision {
         case let .firstRun(step):
-            firstRun = FirstRunFlow(service: AppFirstRunService(), at: step, existing: boxes)
+            firstRun = makeFlow(at: step, fromBoxList: false, memory: DefaultsFirstRunMemory())
         case let .open(box):
             Task { await open(box) }
         case .boxList:
@@ -201,10 +209,22 @@ final class AppModel {
         launch = .boxList(notice: nil)
     }
 
+    /// A first-run flow with real keys, its Keychain waits said in the
+    /// window.
+    private func makeFlow(at step: FirstRunStep, fromBoxList: Bool, memory: FirstRunMemory) -> FirstRunFlow {
+        guard let creating = daemon as? BoxCreating else {
+            return FirstRunFlow(service: UnavailableFirstRunService(), at: step, existing: boxes, fromBoxList: fromBoxList, memory: memory)
+        }
+        let service = KeyedFirstRunService(maker: BoxMaker(daemon: creating))
+        let flow = FirstRunFlow(service: service, at: step, existing: boxes, fromBoxList: fromBoxList, memory: memory)
+        service.keychainWaiting = { [weak flow] on in Task { @MainActor in flow?.keychainWaiting = on } }
+        return flow
+    }
+
     /// The box list's New Box…: first run's first-box step, titled "New
     /// box", with Cancel back to the list.
     func newBox() {
-        firstRun = FirstRunFlow(service: AppFirstRunService(), at: .firstBox, existing: boxes, fromBoxList: true)
+        firstRun = makeFlow(at: .firstBox, fromBoxList: true, memory: NoFirstRunMemory())
         launch = .firstRun(.firstBox)
     }
 
@@ -215,19 +235,12 @@ final class AppModel {
     }
 }
 
-/// Keys, the recovery key and creating a box from the app aren't built yet:
-/// they're data-loss paths and wait for their ADR and tests (PLAN.md 1.5,
-/// Open questions). Until then first run says so plainly, as a notice:
-/// dev builds name the CLI workaround; a release build never sends anyone
-/// to Terminal (GUIDELINES §10).
-struct AppFirstRunService: FirstRunService {
-    /// Lane and other dev builds have their own bundle identifier.
-    static var isDevBuild: Bool { Bundle.main.bundleIdentifier != AppMover.bundleID }
-    static let notYetDev = "Dev build: making keys and boxes from the app isn’t built yet. Make a box with portenv init, then open Portenv again."
-    static let notYet = "Making keys and boxes from the app isn’t ready yet."
-    private var message: String { Self.isDevBuild ? Self.notYetDev : Self.notYet }
-    func makeRecoveryKey() async throws -> String { throw FirstRunError(message, notBuilt: true) }
-    func createBox(_: NewBox) async throws { throw FirstRunError(message, notBuilt: true) }
+/// First run's keys and workspaces (ADR 0019): the recovery key and pool
+/// from KeyedFirstRunService, the workspace through BoxMaker and portenvd's
+/// CreateBox. Without a connection to portenvd at all, it says so plainly.
+struct UnavailableFirstRunService: FirstRunService {
+    func makeRecoveryKey() async throws -> String { throw FirstRunError(FirstRunText.noBackgroundService) }
+    func createBox(_: NewBox) async throws { throw FirstRunError(FirstRunText.noBackgroundService) }
 }
 
 /// The window's content, from the model's decision.

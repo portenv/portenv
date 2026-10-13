@@ -198,3 +198,37 @@ struct TabActivityTests {
         #expect(TabQuestion(text: "Password:", secret: true).text.isEmpty)
     }
 }
+
+/// The emulator's replies to a program's queries never reach the tab; what
+/// the person types does (ADR 0020, R-0133 item 1).
+@MainActor
+struct QueryReplyTests {
+    static let queries: [(String, String)] = [
+        ("DA1", "\u{1b}[c"), ("DA2", "\u{1b}[>c"), ("DA3", "\u{1b}[=c"), ("DSR status", "\u{1b}[5n"),
+        ("DSR cursor", "\u{1b}[6n"), ("DECXCPR", "\u{1b}[?6n"), ("DECRQSS", "\u{1b}P$qm\u{1b}\\"),
+        ("DECRQM", "\u{1b}[?2004$p"), ("DECRQM ANSI", "\u{1b}[4$p"), ("XTWINOPS size", "\u{1b}[18t"),
+        ("XTWINOPS pixels", "\u{1b}[14t"), ("XTWINOPS title", "\u{1b}[21t"), ("XTVERSION", "\u{1b}[>q"),
+        ("XTGETTCAP", "\u{1b}P+q544e\u{1b}\\"), ("OSC 4", "\u{1b}]4;1;?\u{07}"), ("OSC 10", "\u{1b}]10;?\u{07}"),
+        ("OSC 11", "\u{1b}]11;?\u{1b}\\"), ("OSC 52 query", "\u{1b}]52;c;?\u{07}"), ("DECREQTPARM", "\u{1b}[x"),
+        ("ENQ", "\u{05}"),
+    ]
+
+    @Test func noQueryGetsAReplyIntoTheTab() async {
+        _ = NSApplication.shared
+        let v = MarkedTerminalView(frame: NSRect(x: 0, y: 0, width: 800, height: 480))
+        let s = ScriptedTabSource(tab: "@1")
+        v.attach(s)
+        s.play(.reset(TabTerminalSize(cols: 80, rows: 24), seed: []))
+        for (_, query) in Self.queries { s.play(.output(Array(query.utf8))) }
+        s.play(.output(Array("\r\nDONE".utf8)))
+        func drawn() -> Bool {
+            (0 ..< 24).contains { v.getTerminal().getLine(row: $0)?.translateToString(trimRight: true) == "DONE" }
+        }
+        for _ in 0 ..< 200 where !drawn() { try? await Task.sleep(for: .milliseconds(10)) }
+        #expect(drawn())
+        #expect(s.sent.isEmpty, "replies reached the tab: \(s.sent.map { String(decoding: $0, as: UTF8.self).debugDescription })")
+        // The person's typing still goes.
+        v.send(txt: "y")
+        #expect(s.sent.flatMap { $0 } == Array("y".utf8))
+    }
+}

@@ -115,6 +115,15 @@ public final class MarkedTerminalView: TerminalView {
         return NSRect(x: 0, y: bounds.height - h * CGFloat(screenRow + 1), width: bounds.width, height: h)
     }
 
+    /// The emulator's own replies (to DA, DSR, DECRQSS, DECRQM, XTWINOPS,
+    /// XTGETTCAP, XTVERSION, OSC 4/10/11 and OSC 52 queries) never reach the
+    /// tab (ADR 0020, R-0133 item 1). tmux emulates the pane and answers them
+    /// itself, and a reply sent from here would let a program make the
+    /// terminal type into the tab, as the person. Only what the person types,
+    /// pastes, clicks or enters through IME goes to the source, through
+    /// SwiftTerm's `send(data:)`.
+    public override func send(source _: Terminal, data _: ArraySlice<UInt8>) {}
+
     public override func scrolled(source terminal: Terminal, yDisp: Int) {
         super.scrolled(source: terminal, yDisp: yDisp)
         overlay.needsDisplay = true

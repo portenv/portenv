@@ -1089,6 +1089,16 @@ In this order:
           - **the latency gate:** keystroke to echo no worse than the attached client by more than 5 ms at p95 locally (within ±0.25 ms at tmux, measured), and the same run on the us-west-2 tester server once it exists. Until it passes, a dev-only switch back to the attached client, which never reaches a release build;
           - tmux pinned in the image (3.4) and checked at attach;
           - #73's and #75's no-loss guarantees carried over, with tests.
+          - R-0133's nine changes:
+            - no emulator reply reaches the pane;
+            - a default-deny filter in front of the terminal, fuzzed;
+            - paste cleaned;
+            - authors set by portenvd;
+            - the seed in one command list;
+            - mark lines from the helper's own parse;
+            - "every byte or a reset, and the person is told";
+            - the `%output` decoder and copy mode;
+            - CLI and app resizing in turn.
 
           `portenv attach` stays a plain attach, and agents' terminal access is unchanged (R-0132).
        2. **Waiting-for-input detection,** from the same control client (ADR 0017's detector).
@@ -1544,7 +1554,14 @@ These need an owner decision; Claude Code should add new ones here instead of gu
 - [x] "Save to Passwords" on the recovery key step: macOS has no public API for an app to add an item to the Passwords app. Keep Print and Copy only, or find another way? **Answered (the reviewer, on the owner's delegation, R-0087, 2026-10-11):** dropped. Print and Copy, plus the "I've saved" checkbox (ADR 0019).
 - [x] Restoring with only the recovery key (ADR 0019): where the app offers it on a clean Mac. **Answered (the reviewer, on the owner's delegation, R-0092, 2026-10-11):** "Restore with a Recovery Key…" as a plain text button under Welcome's main actions, and in Settings › Protection and recovery key. Not needed for the design testers; the board comes before the UI. The `RecoverBox` call and its test come with `CreateBox`.
 - [ ] S3-compatible storage from the app (first run's Storage step): where the bucket's credentials live (the Keychain, per box or per bucket), and how they reach restic. Today `portenv init` takes them from the environment. `CreateBox` covers This Mac only first (ADR 0019). Out of 1.5: first run offers only Keep on this Mac for the design testers (R-0092); this stays open for 2.9.
-- [ ] ADR 0020, decision 9: with control mode, escape sequences a program prints reach the app's terminal instead of stopping at tmux, and the app's per-tab view filters them (clipboard, links, titles, inline files). Does the reviewer, and the owner, accept that as the same guarantee enforced in the app, or count it as a change to a security default? tmux's passthrough stays off either way.
+- [x] ADR 0020, decision 9: with control mode, escape sequences a program prints reach the app's terminal instead of stopping at tmux. Is filtering them in the app the same guarantee, or a change to a security default? **Answered (the reviewer, on the owner's delegation, R-0133, 2026-10-13):** the same or stronger, provided every one of these is in:
+  - a default-deny filter in front of the terminal;
+  - no reply from the emulator reaches the pane;
+  - paste cleaned;
+  - tmux's `allow-passthrough` and `set-clipboard` off and asserted;
+  - fixed memory limits.
+
+  Dropping any of them makes it the owner's decision. The check on main found that `set-clipboard external` let any program set the Mac's clipboard through `tmux set-buffer -w`, fixed in #94; links are limited to web pages on the person's click (R-0134).
 - [ ] ADR 0020: should agents' terminal access (2.4) move to the `TabTerminal` stream as well, for per-author attribution of their keystrokes, or stay on today's attach?
 - [ ] A per-box "Keep running when Portenv quits" option (off by default) with a menu bar item listing boxes still running? Only with Phase 3's lease hand-off (see 2.4).
 - [x] Tab keyboard shortcuts (1.2)? **Answered (2026-10-10):**

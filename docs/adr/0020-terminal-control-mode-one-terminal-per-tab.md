@@ -1,6 +1,6 @@
 # 0020. The app's terminal uses tmux control mode, one terminal per tab
 
-Date: 2026-10-13 · Status: proposed. The direction is approved (the reviewer, on the owner's delegation, R-0132 ruling 1); this ADR is the design that ruling asked for, and the per-tab interface is agreed with lane B for split view.
+Date: 2026-10-13 · Status: accepted with the changes R-0133 asked for (the reviewer, on the owner's delegation, R-0132 ruling 1, R-0133, R-0134), which are in this text. The per-tab interface is agreed with lane B for split view. 1.2c follows this text.
 
 ## Context
 
@@ -60,6 +60,19 @@ Also checked on tmux 3.4 in the image:
    - **the waiting-for-input detector and OSC 133 tracking per tab** (ADR 0017), from the same `%output`.
 
    If the client exits, the agent starts it again and every open tab stream ends with `lost(retrying: true)`.
+
+   - **Reading control mode (R-0133 item 8):** `parseControlLine` and `decodeControlOutput` (`core/agent/controlmode.go`, from the spike) read every line.
+     - **`%output %P <data>`:** the data is decoded from control mode's escaping (bytes below 32 and the backslash as `\ooo`, three octal digits).
+     - **`%extended-output %P <age> … : <data>`:** with `pause-after` set, tmux writes this form instead. The decoder takes the data after ` : ` the same way.
+     - **Raw bytes, not text:** each line's data is a byte string. A UTF-8 character or an escape sequence can be split across two `%output` lines, and the decoder never joins, trims or re-encodes. The byte stream goes on as it came, and SwiftTerm and the helper's parser keep their state across chunks.
+     - **The tests:**
+       - a multi-byte character split across two `%output` lines;
+       - an escape split across two lines;
+       - every octal escape from 000 to 037 and `\134`;
+       - `%extended-output` with and without an age field.
+   - **Copy mode can't swallow input.** A program in the workspace can put a pane into a tmux mode (`tmux copy-mode`). The pane's keys would then go to the mode instead of the program.
+     - **Before sending input,** the helper checks `#{pane_in_mode}` and leaves any mode (`copy-mode -q`) in the same command list as the `send-keys -H`.
+     - **The test:** a program enters copy mode, and the next bytes sent still reach the program.
 3. **The proto.** One new RPC on the agent, relayed by portenvd exactly as `Terminal` is (same socket checks, same box ownership, on this Mac or on a server):
 
    ```proto
@@ -79,7 +92,7 @@ Also checked on tmux 3.4 in the image:
      string session = 1;       // the tmux session, for example "main"
      string tab = 2;           // a tab ID, "@N"
      TerminalSize size = 3;
-     string author = 4;        // who types here ("app"; an agent's name from 2.4): for block attribution
+     string author = 4;        // set by portenvd from the caller's identity, never by the client (decision 4)
    }
 
    message TabTerminalResponse {
@@ -116,7 +129,20 @@ Also checked on tmux 3.4 in the image:
      The app derives the header's one-word status from them (`TabInfo.activity`). The order is: asking, then typing, then watching, then quiet (a running program silent for 60 s), then running, then idle.
    - **`NewTab` never changes another view's tab.** A `TabTerminal` stream has no "current tab": it shows the tab it opened. `NewTab` and `SelectTab` change only the calling viewer's own current window, which exists only for attached clients (the CLI).
 4. **Input** goes to the tab's pane as `send-keys -t %P -H <hex>…` on the session's control client, in chunks of at most 512 bytes. Commands on one control client run in order, so the bytes arrive in the order typed.
-   - The agent records which stream sent each Enter, for "author is whoever sent the Enter" (GUIDELINES §4.2). Today, input through an attached client can't be told apart.
+   - **Only the person's input is sent (R-0133 item 1).** That's what they typed, pasted, clicked or entered through IME: SwiftTerm's `send(data:)`.
+     - **The emulator's own replies never are.** These are replies to DA, DSR, DECRQSS, DECRQM, XTWINOPS, XTGETTCAP, XTVERSION, ENQ, and OSC 4, 10, 11 and 52 queries, which reach the view through `send(source: Terminal, data:)`.
+     - **`MarkedTerminalView` overrides that path to drop them.** tmux emulates each pane and answers its program's queries itself. A second reply from the app would be extra input, typed as the person, which a program could use to make the terminal type for it.
+     - **The test (in this PR):** each of those queries yields zero bytes to the source, and typed text still goes. Mutation-checked: without the override, SwiftTerm sent all of them.
+   - **Paste is cleaned before it's framed (R-0133 item 3).**
+     - **What's removed:** `ESC[201~` (the bracketed-paste end marker, which would end the paste early and run the rest as typed commands), and every C0 control except tab, CR and LF.
+     - **Then** the text is wrapped in `ESC[200~`…`ESC[201~` when the program has turned bracketed paste on.
+     - **The test:** a paste holding `ESC[201~rm -rf ~\r` and other controls reaches the pane as one bracketed paste of plain text.
+   - **Attribution (R-0133 item 4):** the agent records which stream sent each Enter, for "author is whoever sent the Enter" (GUIDELINES §4.2).
+     - **The author is set by portenvd** from the caller's identity: the app over its socket, or an agent's grant (ADR 0016). It's never set by the client.
+     - **The proto:** the app's `TabTerminalOpen` to portenvd has no author field; portenvd fills `author` in the request it sends the agent.
+     - **When:** this is in place before any agent can call `TabTerminal`.
+     - **The test:** an agent's call that claims `author: "app"` is attributed to the agent.
+     - Today, input through an attached client can't be told apart.
 5. **Size.** A view's `resize` becomes `refresh-client -C @N:<cols>x<rows>` for that tab's window, with `window-size latest`, as today.
    - **In split view, a tab shows in at most one pane.** So two app views size one tab only through another viewer: a CLI attach or an agent.
    - **One tab has one size.** The latest view to resize a tab sets it, whether that's the app, another pane showing the same tab, or a CLI attach.
@@ -124,27 +150,75 @@ Also checked on tmux 3.4 in the image:
      - **Smaller than the view:** the terminal's own background fills the rest.
      - **Larger than the view:** the view keeps the cursor's row in sight, rather than clipping to the top-left corner.
    - **On a `reset` at a size other than its own,** the view asks for its own size at once. The latest size asked for wins, so an app view that reconnects takes the tab back.
-6. **Reset, and reconnecting.** Every stream starts with `reset`, built on the session's control client in this order: capture, then live output. Control mode returns a command's reply in its `%begin`…`%end` block in order with `%output`, so nothing is lost or repeated between the seed and what follows.
-   - **The seed:**
+   - **The test (R-0133 item 9):** a CLI client and an app view of one tab take turns resizing, ten times. After each turn, the tab has the latest size, the other side gets `resized` or SIGWINCH, and a full-screen program in the tab redraws without garbling.
+6. **Reset, and reconnecting.** Every stream starts with `reset`, built on the session's control client in this order: capture, then live output.
+   - **The seed is one command list (R-0133 item 5).** The capture of the main screen, the capture of the alternate screen and the state read go in one control-mode command line, joined by `;`. tmux runs a command list without reading pane output in between, so no `%output` lands inside the seed. Its reply comes back in order with `%output`, so nothing is lost or repeated between the seed and what follows.
+   - **What the seed holds:**
      - `capture-pane -p -e -S - -E -` of the main screen (history and visible lines);
-     - then, when `#{alternate_on}`, `\e[?1049h` and `capture-pane -a -p -e` of the alternate screen;
-     - then the cursor position, and the modes tmux reports (cursor keys, keypad, bracketed paste, mouse) as their escape sequences.
-   - **Mark replay:**
-     - **Recording:** for each OSC 133 mark it sees, the agent records the mark's line. It reads `#{history_size}`/`#{cursor_y}` on the same client right after the `%output` holding the mark, and keeps the SHA-256 of that line's text.
-     - **Replaying:** in the seed, the mark's escape sequence goes at the start of its line when the captured line still matches. A mark whose line no longer matches is dropped (trimmed history, a cleared screen).
-     - **Rule:** a replayed mark is never on the wrong line, and a missing one costs only a block header in old history.
+     - when `#{alternate_on}`, `\e[?1049h` and `capture-pane -a -p -e` of the alternate screen;
+     - **the state:**
+       - the scroll region (`#{scroll_region_upper}`/`lower`), origin mode (`#{origin_flag}`), autowrap (`#{wrap_flag}`), insert mode;
+       - cursor keys and keypad (`#{keypad_cursor_flag}`, `#{keypad_flag}`), mouse modes (`#{mouse_*_flag}`);
+       - the cursor position and visibility;
+       - bracketed paste, which the helper's parser tracks (tmux 3.4 has no format for it);
+       - the current SGR: the pen the program left set, from the helper's parser, so the next output draws in the right colours.
+
+       Each is written as the escape sequence that sets it, after the captured text.
+   - **The view resets its parser too.** A `reset` starts with SwiftTerm's full reset, so a stream that ended mid-escape or mid-UTF-8 leaves nothing half-parsed.
+     - **The tests:** a reset that lands mid-escape and one that lands mid-UTF-8 both draw the seed correctly.
+     - **And on the seeding side:** a seed taken while the program has a scroll region, origin mode, autowrap off and a colour set gives the same screen as a fresh attach.
+   - **Mark replay (R-0133 item 6):** the helper works out each mark's line from **its own parse of `%output`**, not from `history_size`/`cursor_y` read afterwards, which can race with more output.
+     - **The parser:** the helper runs a small terminal-state parser per pane on the same bytes. It's a Go VT library chosen in 1.2c, licence-checked, and in the notices. It tracks the cursor, scrolling, the scroll region, the alternate screen and the pen.
+     - **How lines are counted:** each mark gets an absolute line number (lines scrolled into history plus the cursor row) when its bytes are parsed.
+     - **Replaying:** in the seed, the mark's escape sequence goes at the start of that line. The line number is mapped to the capture through tmux's `history_size` and `history_limit`, read in the same command list.
+     - **What's dropped:** a mark whose line has left the history (trimmed) or was cleared.
+     - **The rule:** a replayed mark is never on the wrong line, and a missing one costs only a block header in old history.
+     - **The test:** identical prompts (`$ ` twenty times, same text, which a text match can't tell apart). Every replayed mark lands on its own line.
    - **The app's side:** after a reconnect (portenvd or the agent restarting, a move, the Mac waking), the app opens the stream again and draws the new `reset`. The tab's history is the box's, so nothing depends on what the app had kept.
 7. **The app's per-tab terminal interface** (`apps/mac/Sources/PortenvKit/TabTerminal.swift`, in this PR, so split view can build on it now). See "The interface" below.
 8. **The CLI stays a plain attach.** `portenv attach` and `portenv open --tab` keep the `Terminal` RPC and #41's per-viewer grouped sessions, for a person in Terminal, Ghostty or a tiling terminal; their shells get the same OSC 133 marks directly. Agents' terminal access (2.4) is unchanged.
-9. **Security: tmux's `allow-passthrough` stays off,** in the product, the image and the agent's tmux options. A test checks it, and turning it on is the owner's decision.
-   - **What changes:** control mode carries the tab's bytes as the program wrote them. So the app's SwiftTerm now receives escape sequences that tmux used to interpret or drop before they reached an attached client.
-   - **Whose job filtering becomes:** the app's terminal treats every byte from the box as untrusted. The per-tab view's delegate:
-     - doesn't read or set the Mac's clipboard (OSC 52 read returns nothing, writes are ignored);
-     - doesn't open links on a program's request;
-     - ignores titles (the app owns tab names);
-     - ignores iTerm2's inline-file sequences.
-   - **The test:** a sequence suite (OSC 52 set and query, OSC 8, OSC 0/2, OSC 1337 File=, DCS and APC strings, DECRQSS) shows none of them reaches the clipboard, opens anything or renames a tab.
-   - **The reviewer and the owner rule** on whether this counts as a change to a security guarantee. The intent is the same guarantee as today, enforced in the app instead of in tmux.
+9. **Security: the app's terminal treats every byte from the workspace as untrusted** (R-0133 items 1–3, R-0134).
+   - **What changes:** control mode carries the tab's bytes as the program wrote them. So the app's SwiftTerm receives escape sequences that tmux used to interpret or drop before they reached an attached client.
+   - **The boundary is in the app.** tmux options are a second line only: a program in the workspace runs as the same user as tmux and can change them. That's how #94 found the live OSC 52 gap on today's path.
+   - **A default-deny filter sits in front of `feed`.** `MarkedTerminalView.ingest` passes bytes through a small tokenizer before SwiftTerm sees them:
+     - **Printable text** passes, as UTF-8, with partial characters held across chunks.
+     - **C0:** BS, HT, LF, VT, FF, CR, BEL (not sounded; it shows the tab's badge), SO and SI pass. ENQ and the rest are dropped.
+     - **CSI** passes only for an allowlist of final bytes:
+       - cursor movement, erase, insert and delete, scroll, SGR, DECSTBM, tab stops, and mode set and reset;
+       - DSR, DA, DECRQM and XTVERSION pass but get no reply (item 1);
+       - **XTWINOPS (`CSI … t`) is dropped:** it can move, resize and iconify windows, and report titles.
+     - **Private modes (DECSET/DECRST) are an allowlist:**
+       - 1 (cursor keys), 6 (origin), 7 (autowrap), 12 and 25 (cursor);
+       - 47, 1047, 1048 and 1049 (alternate screen);
+       - 1000, 1002, 1003 and 1006 (mouse, SGR encoding only);
+       - 1004 (focus), 2004 (bracketed paste), 2026 (synchronized output).
+
+       Every other mode is dropped.
+     - **ESC sequences:** the allowlist is DECSC/DECRC, IND/NEL/RI, charset designation, DECKPAM/DECKPNM and RIS (below).
+     - **OSC:** only 133 (the tracker) and 8 pass.
+       - **OSC 8 is shown as a link,** and opened only as R-0134 says: http or https only, on the person's own click, after the full URL shows as a tooltip and in the state line.
+       - **Everything else is dropped:** 0, 1 and 2 (titles; the app owns tab names), 7, 52 (the clipboard), 1337 (iTerm2's File= and SetUserVar), 4, 10 and 11, and any other number.
+     - **DCS, APC, PM and SOS strings are dropped whole,** sixel and kitty graphics included.
+     - **Limits:**
+       - one sequence is at most 4 KB (an OSC 8 URL at most 2 KB), after which the sequence is dropped and parsing resumes at the next byte that can start one;
+       - scrollback is 10,000 lines per tab;
+       - the parser's held partial input is at most 4 KB.
+     - **RIS (`ESC c`)** clears the screen and resets modes and the pen, but **keeps the scrollback and its marks.** It becomes "erase screen, home, default modes", not SwiftTerm's full reset, so a program can't wipe the blocks above it.
+   - **Fuzzed:** random and structured streams go through the filter and SwiftTerm, built from the spike's control-mode fixtures, mutated, and split at every byte. The invariants:
+     - no crash;
+     - zero bytes reach the source;
+     - no clipboard, title or link callback;
+     - memory stays under the limits;
+     - marks stay on lines.
+
+     It runs in CI on a fixed seed and nightly on random ones.
+   - **No reply reaches the pane** (decision 4, item 1), and **paste is cleaned** (decision 4, item 3).
+   - **One factory (R-0134):** every terminal view the app creates comes from `TerminalViews`, which installs `TerminalGuard` today and this filter and the reply drop for `MarkedTerminalView`. `scripts/check-terminal-views.sh`, in lint, fails on a terminal view constructed anywhere else.
+   - **The second line:** tmux's `allow-passthrough off` and `set-clipboard off`.
+     - The helper sets them on every new session and attach (#94), and again on every `TabTerminal` open.
+     - A test asserts both.
+     - Turning either on is the owner's decision.
+   - **The ruling (R-0133):** with items 1–3 in place and tested, the second-line options asserted and the fixed memory limits, this is the same guarantee as today or stronger. It's not a security-default change for the owner. If any of it is dropped, it goes to the owner.
 
 10. **tmux is pinned in the toolbox image,** and its version is checked before control mode is used.
     - **The image:** the Dockerfile installs `tmux=3.4-*` (Ubuntu 24.04's, under the digest-pinned base), and `images/toolbox-node/test.sh` fails unless `tmux -V` says 3.4.
@@ -156,7 +230,16 @@ Also checked on tmux 3.4 in the image:
       - **Output:** every byte a tab's program wrote before it exits reaches the stream before `TAB_CLOSED`. Control mode delivers a pane's `%output` before its `%window-close`, and the helper drains the stream before ending it.
       - **Input:** every byte sent reaches the pane in order, or the stream ends with an error naming how many bytes weren't delivered (a `send-keys` refused because the pane has gone). It's never dropped silently.
       - **Ordering:** no output is lost or repeated between a `reset`'s seed and the output after it (decision 6).
-    - Each guarantee gets a test written before the code (see Risks).
+    - **When output can't keep up (R-0133 item 7), the guarantee is: every byte, or a `reset` that replaces it, and the person is told.**
+      - **A pause:** with `pause-after`, tmux skips a paused pane's output for that client rather than queuing it. When the helper's client falls that far behind, tmux sends `%pause`; the helper continues the pane, and every open stream of that tab gets a fresh `reset`.
+      - **The helper's own buffer:** each stream's buffer is bounded at 4 MB. A stream whose reader (portenvd, the app) is that far behind is dropped to a `reset` too, and only that stream.
+      - **The person is told.** The view shows "Output was too fast to show in full. Showing the current screen." on the row where the reset lands. The block that was running is marked as skipped, never shown as complete.
+      - **The waiting detector and marks during a pause:** marks in skipped output are lost, and the helper's parser starts again from the reset's state.
+        - The tab's OSC 133 state becomes "unknown" until its next prompt mark.
+        - ADR 0017's combined verdict already handles "unknown" through the other three signals (blocked on the terminal, quiet, screen asks), so waiting-for-input detection keeps working.
+        - Blocks for the skipped stretch are shown as one skipped block.
+        - The helper reads its control client promptly whatever the app does, so a pause means the helper itself fell behind, not the app.
+    - Each guarantee gets a test written before the code (see Risks): a pause, and a buffer overflow, each end in a reset with the notice and no silent gap.
 12. **The latency gate, and a dev-only switch back to the attached client.**
     - **The gate:** keystroke to echo drawn in SwiftTerm, on dev-A, through portenvd and the helper. Control mode must be no worse than the attached client by more than **5 ms at p95**, on a local workspace.
       - Measured by an app-side harness: a key event into the view, timed to the echo's first byte reaching the view.
@@ -222,7 +305,8 @@ public enum TabTerminalEvent: Equatable, Sendable {
   - `overlay` is the layer blocks draw on;
   - `cards` is the slot for the answer card, which takes clicks only on its cards;
   - `rect(screenRow:)` places things on a row.
-- **What goes back to the source:** input and size go through SwiftTerm's delegate. The view ignores a program's clipboard, link and title requests (decision 9).
+- **What goes back to the source:** the person's input and the size, through SwiftTerm's delegate. The emulator's replies never do (decision 4, item 1). The view ignores a program's clipboard, link and title requests, and the filter in front of `feed` drops them first (decision 9).
+- **How it's made:** only through the factory (R-0134). In 1.2c, `TerminalViews` gains the per-tab view, which installs the filter and the link rules. `check-terminal-views.sh` covers `MarkedTerminalView(` too.
 - **What it never takes:** the menu's shortcuts (⌘D, ⇧⌘D, ⌘⌥ and the arrows, ⌘W, ⌘1–9). It doesn't override `performKeyEquivalent`, and a test keeps it that way.
 - **Edit › Find (⌘F)** goes to the first responder, which is the focused pane's terminal. SwiftTerm handles `performTextFinderAction`.
 
@@ -252,6 +336,15 @@ public enum TabTerminalEvent: Equatable, Sendable {
 | Risk | Test (written before the code) |
 | --- | --- |
 | Input loses or changes bytes: paste, IME, UTF-8, mouse, DEL, large pastes | Agent test on real tmux: bytes sent through `TabTerminal` reach a raw-mode reader unchanged, including a 64 KB bracketed paste, UTF-8, SGR mouse reports, and ordering across 512-byte chunks. App test: SwiftTerm's input reaches the source as typed. |
+| The emulator's replies reach the pane (item 1) | In this PR: twenty queries (DA1–3, DSR, CPR, DECXCPR, DECRQSS, DECRQM, XTWINOPS, XTVERSION, XTGETTCAP, OSC 4/10/11/52, DECREQTPARM, ENQ) yield zero bytes to the source; typed text still goes. Mutation-checked. |
+| A sequence a program prints gets past the filter (item 2) | A table test per rule (each allowed sequence passes, each other one is dropped, the limits hold), and the fuzzer in decision 9. A test that every `MarkedTerminalView` in the app comes from the factory (`check-terminal-views.sh`). |
+| Paste ends early and runs the rest (item 3) | A paste holding `ESC[201~`, NUL, ESC and other C0 controls reaches the pane as one bracketed paste of plain text, with tab, CR and LF kept. |
+| An agent claims to be the person (item 4) | An agent's `TabTerminal` call with `author: "app"` is attributed to the agent; the app's own call has no author field. |
+| A reset lands mid-escape or mid-UTF-8, or misses the scroll region or pen (item 5) | A reset after half an escape and after half a character draws the seed correctly; a seed with a scroll region, origin mode, autowrap off and an SGR colour set matches a fresh attach. |
+| Identical prompts confuse mark replay (item 6) | Twenty identical prompts: every replayed mark is on its own line. |
+| A pause or an overflow loses output silently (item 7) | Each ends in a `reset` with the notice; the skipped block is never shown complete; the waiting detector still reports a question asked during the pause. |
+| UTF-8 split across `%output` lines, `%extended-output`, copy mode (item 8) | A character and an escape split across two lines, every octal escape, `%extended-output` with and without an age; a program puts its pane in copy mode and the next input still reaches it. |
+| A CLI client and the app resize one tab in turn (item 9) | Ten alternating resizes: the latest wins each time, the other side follows, a full-screen program redraws cleanly. |
 | Typing feels slower through send-keys | **The gate (decision 12):** keystroke to echo drawn in SwiftTerm on dev-A, control mode against the attached client, at most +5 ms at p95 on a local workspace. At tmux it's within ±0.25 ms (the table above). The same run on the us-west-2 tester server once it exists. The dev-only switch stays until the gate passes. |
 | Paste | A 64 KB bracketed paste through the view: the pane gets the same bytes in order, framed in `\e[200~`…`\e[201~`, in 512-byte `send-keys` chunks with nothing lost or reordered. |
 | IME (Japanese, Chinese, accented input) | SwiftTerm's marked text (`setMarkedText` … `insertText`) sends only the committed text, once, as UTF-8. A test drives the NSTextInputClient calls and checks the source got exactly the committed string. |
@@ -264,7 +357,7 @@ public enum TabTerminalEvent: Equatable, Sendable {
 | Two views of one tab, or a CLI attach, at different sizes | One tab at two sizes: the latest wins, the other view gets `resized` and draws without garbling, and a full-screen program redraws at the new size. |
 | The control client, the agent or portenvd restarts | Kill the control client, then the agent's channel, then portenvd. Each open stream ends with `lost(retrying: true)` and comes back with a `reset`. Programs in the tabs keep running. |
 | An older tmux | Decision 10: the image pins `tmux=3.4-*` and `test.sh` checks it; the helper refuses a tmux older than 3.4 at attach, with the message in decision 10, and a test runs it with a fake `tmux -V`. |
-| Sequences that used to stop at tmux reach the app | The sequence suite in decision 9, and a test that `allow-passthrough` is off in the agent's tmux options. |
+| Sequences that used to stop at tmux reach the app | The filter's table test and fuzzer (decision 9); a test that `allow-passthrough` and `set-clipboard` are off in the helper's tmux options, re-asserted on each `TabTerminal` open. |
 | A window with more than one pane (a program ran `tmux split-window`) | The stream shows the window's active pane. The agent refuses `split-window` from the app's tabs as it does other tmux UI (§4.1). Test: a split window still streams one pane, and its tab shows it. |
 | The CLI and the app see different things | The same commands in a tab, seen through `portenv attach` and through `TabTerminal`, give the same final screen text. |
 

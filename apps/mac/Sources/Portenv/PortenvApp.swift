@@ -31,6 +31,13 @@ struct PortenvApp: App {
         // Dev builds: write light and dark renders of the first-run screens
         // and the box list to a folder, then exit (for PRs, next to the
         // mockups).
+        // SPIKE (command blocks, slice 0): the folding options' renders.
+        if let i = CommandLine.arguments.firstIndex(of: "--render-blocks-spike"), i + 1 < CommandLine.arguments.count {
+            _ = NSApplication.shared
+            exit(MainActor.assumeIsolated {
+                do { try BlocksSpike.render(to: URL(fileURLWithPath: CommandLine.arguments[i + 1])); return 0 } catch { print(error); return 1 }
+            })
+        }
         if let i = CommandLine.arguments.firstIndex(of: "--render-screens"), i + 1 < CommandLine.arguments.count {
             exit(MainActor.assumeIsolated { ScreenRenders.write(to: CommandLine.arguments[i + 1]) })
         }

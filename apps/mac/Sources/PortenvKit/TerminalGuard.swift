@@ -48,7 +48,7 @@ public final class TerminalGuard: TerminalViewDelegate {
     /// only a web page, and only on that click: a program can't make it.
     public nonisolated func requestOpenLink(source _: TerminalView, link: String, params _: [String: String]) {
         MainActor.assumeIsolated {
-            guard isPersonsClick(view), let url = TerminalLinks.openable(link) else {
+            guard isPersonsClick(view), let url = TerminalLinks.destination(link) else {
                 onRefusedLink(link)
                 return
             }
@@ -95,32 +95,50 @@ public final class TerminalGuard: TerminalViewDelegate {
 }
 
 /// Which links a program printed Portenv will open, and what the state line
-/// and the tooltip say about them (R-0134).
+/// and the tooltip say about them (R-0134, R-0135, R-0140). One decision,
+/// `verdict`, serves the tooltip, the state line and the open, so what's
+/// shown is what opens.
 public enum TerminalLinks {
-    /// A web page (http or https, with a host) Portenv may open; nil for
-    /// anything else: `file:`, `javascript:`, any app's custom scheme.
-    public static func openable(_ link: String) -> URL? {
+    public enum Verdict: Equatable, Sendable {
+        /// A web page, as the ASCII URL that's shown and opened (the host in
+        /// punycode, the rest percent-encoded).
+        case opens(URL)
+        /// A control or bidi character somewhere in it, which could hide or
+        /// reorder part of what's shown.
+        case hiddenCharacters
+        /// A user name (or password) before the host: `https://apple.com@evil.com/`
+        /// reads as apple.com and goes to evil.com. Shown as its ASCII URL.
+        case userInfo(String)
+        /// Not http or https with a host: `file:`, `javascript:`, any app's
+        /// custom scheme. Shown as it is (it has no hidden characters).
+        case notWeb(String)
+    }
+
+    public static func verdict(_ link: String) -> Verdict {
+        if link.unicodeScalars.contains(where: hidden) { return .hiddenCharacters }
         guard let url = URL(string: link), let scheme = url.scheme?.lowercased(),
               scheme == "http" || scheme == "https", let host = url.host, !host.isEmpty
-        else { return nil }
-        return url
+        else { return .notWeb(link) }
+        if url.user != nil || url.password != nil { return .userInfo(url.absoluteString) }
+        return .opens(url)
+    }
+
+    /// The URL a click opens, or nil: Portenv opens nothing else.
+    public static func destination(_ link: String) -> URL? {
+        if case let .opens(url) = verdict(link) { return url }
+        return nil
     }
 
     /// What the tooltip and the state line show for the link under the
-    /// pointer: its full destination, before anyone clicks.
+    /// pointer, before anyone clicks: the full destination that opens, or
+    /// why it won't.
     public static func status(_ link: String) -> String {
-        openable(link) != nil ? "Opens \(display(link)) (⌘-click)" : "Portenv opens only web links: \(display(link))"
-    }
-
-    /// A link as it's safe to show (R-0135): without control characters or
-    /// bidi controls, which could hide or reorder part of it, and a web
-    /// link as its ASCII form, the host in punycode, so a look-alike domain
-    /// (a Cyrillic "а" in "аpple.com") shows as what it is
-    /// ("xn--pple-43d.com"). That's also the URL that opens.
-    public static func display(_ link: String) -> String {
-        let clean = String(String.UnicodeScalarView(link.unicodeScalars.filter { !hidden($0) }))
-        if let url = openable(clean) { return url.absoluteString }
-        return clean
+        switch verdict(link) {
+        case let .opens(url): "Opens \(url.absoluteString) (⌘-click)"
+        case .hiddenCharacters: "Portenv won't open a link with hidden characters"
+        case let .userInfo(shown): "Portenv won't open a link with a user name before the address: \(shown)"
+        case let .notWeb(shown): "Portenv opens only web links: \(shown)"
+        }
     }
 
     /// Control characters (C0, DEL, C1) and the bidi controls: the

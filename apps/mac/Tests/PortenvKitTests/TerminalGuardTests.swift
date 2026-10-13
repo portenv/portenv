@@ -75,36 +75,77 @@ struct TerminalGuardTests {
 
     @Test func onlyWebLinksCanOpen() {
         for ok in ["https://example.com/a?b=c", "http://localhost:3000", "HTTPS://Example.com"] {
-            #expect(TerminalLinks.openable(ok) != nil, "\(ok)")
+            #expect(TerminalLinks.destination(ok) != nil, "\(ok)")
         }
         for refused in ["file:///etc/passwd", "file:///Users/me/Downloads/run.command", "vscode://file/x", "x-apple.systempreferences:com.apple.Security",
                         "javascript:alert(1)", "ssh://host", "https://", "/tmp/x", "example.com", ""] {
-            #expect(TerminalLinks.openable(refused) == nil, "\(refused)")
+            #expect(TerminalLinks.destination(refused) == nil, "\(refused)")
         }
         #expect(TerminalLinks.status("https://example.com") == "Opens https://example.com (⌘-click)")
         #expect(TerminalLinks.status("file:///etc/passwd") == "Portenv opens only web links: file:///etc/passwd")
     }
 
-    /// The link shown is the link that opens: no control or bidi characters
-    /// to hide or reorder part of it (R-0135).
-    @Test func controlAndBidiCharactersAreNeverShown() {
-        let tricky = "https://example.com/\u{202E}gpj.exe\u{202C}\u{2066}x\u{2069}\u{200F}\u{07}\u{1b}[2K\r\n\u{85}"
-        let shown = TerminalLinks.display(tricky)
-        #expect(!shown.unicodeScalars.contains { TerminalLinks.hidden($0) }, "\(shown.debugDescription)")
-        #expect(shown == "https://example.com/gpj.exex%5B2K")
-        #expect(TerminalLinks.status(tricky) == "Opens https://example.com/gpj.exex%5B2K (⌘-click)")
-        // A refused link is cleaned too.
-        #expect(TerminalLinks.status("file:///\u{202E}fdp.exe") == "Portenv opens only web links: file:///fdp.exe")
+    /// Clicks every link in `links` as the person would, and returns what
+    /// was handed to open.
+    func click(_ links: [String]) -> [URL] {
+        _ = NSApplication.shared
+        let (view, guardian) = TerminalViews.attached()
+        var opened: [URL] = []
+        guardian.open = { opened.append($0) }
+        guardian.isPersonsClick = { _ in true }
+        for link in links { guardian.requestOpenLink(source: view, link: link, params: [:]) }
+        return opened
+    }
+
+    /// What's shown is what opens (R-0140): for every link that opens, the
+    /// URL handed to open is exactly the one the state line shows.
+    @Test func theURLThatOpensIsTheOneShown() {
+        let links = ["https://example.com/gpj.exe", "https://аpple.com/login", "https://bücher.example/päth?q=ü",
+                     "https://example.com/a b", "HTTPS://Example.com/x#frag", "http://localhost:3000/"]
+        for link in links {
+            let opened = click([link])
+            #expect(opened.count == 1, "\(link) didn't open")
+            if let url = opened.first {
+                #expect(TerminalLinks.status(link) == "Opens \(url.absoluteString) (⌘-click)", "\(link)")
+                #expect(!url.absoluteString.unicodeScalars.contains { $0.value > 0x7E }, "\(url) isn't ASCII")
+            }
+        }
+    }
+
+    /// A link with any hidden character (control or bidi) isn't opened at
+    /// all, and the state line says so (R-0140).
+    @Test func aLinkWithHiddenCharactersNeverOpens() {
+        let tricky = [
+            "https://example.com/\u{202E}gpj.exe\u{202C}",       // right-to-left override in the path
+            "https://exa\u{202E}mple.com/",                       // in the host
+            "https://example.com/\u{2066}x\u{2069}\u{200F}",      // isolates and a mark
+            "https://example.com/\u{07}\u{1b}[2K\r\n",           // BEL, ESC, CR, LF
+            "https://example.com/\u{85}x",                        // C1 NEL
+            "https://ex\u{00}ample.com@evil.com/",                // NUL in the authority
+            "https://example.com/\u{061C}", "https://example.com/\u{7F}",
+        ]
+        #expect(click(tricky).isEmpty)
+        for link in tricky {
+            #expect(TerminalLinks.destination(link) == nil, "\(link.debugDescription)")
+            #expect(TerminalLinks.status(link) == "Portenv won't open a link with hidden characters", "\(link.debugDescription)")
+        }
+    }
+
+    /// A user name before the host reads as one site and goes to another.
+    @Test func aLinkWithAUserNameNeverOpens() {
+        let links = ["https://apple.com@evil.com/", "https://user:pass@example.com/", "http://@example.com/"]
+        #expect(click(links).isEmpty)
+        #expect(TerminalLinks.status("https://apple.com@evil.com/")
+            == "Portenv won't open a link with a user name before the address: https://apple.com@evil.com/")
+        for link in links { #expect(TerminalLinks.destination(link) == nil, "\(link)") }
     }
 
     /// A look-alike domain shows as what it is: the host in punycode.
     @Test func theHostShowsInPunycode() {
-        #expect(TerminalLinks.display("https://аpple.com/login") == "https://xn--pple-43d.com/login")
         #expect(TerminalLinks.status("https://аpple.com/login") == "Opens https://xn--pple-43d.com/login (⌘-click)")
-        #expect(TerminalLinks.display("https://bücher.example/") == "https://xn--bcher-kva.example/")
-        #expect(TerminalLinks.display("https://apple.com/login") == "https://apple.com/login")
-        // What opens is the same ASCII URL that was shown.
-        #expect(TerminalLinks.openable("https://аpple.com/login")?.absoluteString == "https://xn--pple-43d.com/login")
+        #expect(TerminalLinks.destination("https://аpple.com/login")?.absoluteString == "https://xn--pple-43d.com/login")
+        #expect(TerminalLinks.destination("https://bücher.example/")?.absoluteString == "https://xn--bcher-kva.example/")
+        #expect(TerminalLinks.destination("https://apple.com/login")?.absoluteString == "https://apple.com/login")
     }
 
     /// A link opens only on the person's own click, and only a web page:
@@ -161,7 +202,7 @@ struct TerminalGuardTests {
             }
         }
         #expect(found == "file:///Users/me/evil.command")
-        #expect(TerminalLinks.openable(found ?? "") == nil)
+        #expect(TerminalLinks.destination(found ?? "") == nil)
         // Over plain text, nothing.
         #expect(guardian.link(atWindowPoint: view.convert(NSPoint(x: view.bounds.width - 30, y: 4), to: nil)) == nil)
     }

@@ -59,6 +59,8 @@ type Server struct {
 	// peerUID reads a connection's peer uid (nil: the system's; tests set
 	// another before Serve).
 	peerUID func(fd int) (int, error)
+	// identify is a connection's caller (nil: the owner; tests set another).
+	identify func(net.Conn) caller
 
 	// The background saves after Quit Anyway: they run until bgCtx ends
 	// (portenvd stopping). sleep and closeForQuit are the clock and the
@@ -179,7 +181,7 @@ func (s *Server) Serve(ctx context.Context) error {
 	if peer == nil {
 		peer = socketPeerUID
 	}
-	err = srv.Serve(ownerOnly{Listener: lis, peerUID: peer})
+	err = srv.Serve(ownerOnly{Listener: lis, peerUID: peer, identify: s.identify})
 	if errors.Is(err, grpc.ErrServerStopped) {
 		return nil
 	}

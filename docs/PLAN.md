@@ -571,7 +571,7 @@ A developer adds their own server from the app in a few minutes; an open-source 
 
 **Add a Server wizard (no terminal steps)**
 
-ADR 0021 (proposed) settles how: Portenv's own pinned `known_hosts` (confirmed once, a changed key a hard stop), a key just for the server served by a per-run in-memory agent, a Check that never changes the server, sudo without a password only, password-login hardening off by default and proven before it stays, and Remove a Server that never deletes saves without a separate choice. The boards are `add-a-server` (with "Someone is setting one up for me", R-0141) and `settings` (Servers, R-0137).
+ADR 0021 (accepted, R-0143) settles how: Portenv’s own pinned `known_hosts` and key type (confirmed once, a changed key a hard stop), a key just for the server served by a per-run in-memory agent, a Check that never changes the server, sudo without a password only, password-login hardening off by default and proven before it stays, and Remove a Server that never deletes saves without a separate choice. The boards are `add-a-server` (with "Someone is setting one up for me", R-0141) and `settings` (Servers, R-0137).
 
 1. Where is it: name, address, SSH user. Pick an existing key, or let Portenv generate a dedicated key and show the public key to paste into the provider's panel. Alternative path: Copy install command, a one-liner for the provider's web console or the server's user-data field.
 2. Preflight checklist, each failure with a plain fix: supported OS (Ubuntu 22.04 and 24.04, Debian 12), CPU architecture, memory and disk, sudo, outbound access to Portenv, the registry and the snapshot storage, clock sync, KVM availability (recorded for later microVM support).

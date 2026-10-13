@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sync"
 	"time"
 
@@ -112,6 +113,7 @@ type server struct {
 func (s *server) GetVersion(context.Context, *agentv1.GetVersionRequest) (*agentv1.GetVersionResponse, error) {
 	return &agentv1.GetVersionResponse{
 		Build: &typesv1.BuildInfo{Version: version.Version, Commit: version.Commit},
+		BoxId: BoxID(),
 	}, nil
 }
 
@@ -210,4 +212,17 @@ func AskRetryPackages(ctx context.Context, socket string) error {
 	defer cancel()
 	_, err = agentv1.NewAgentServiceClient(conn).RetryPackages(ctx, &agentv1.RetryPackagesRequest{})
 	return err
+}
+
+// boxIDRE is what a box ID may look like: the app's "box-" IDs and the
+// drivers' test IDs. Anything else is reported as no ID.
+var boxIDRE = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,63}$`)
+
+// BoxID is the box this helper runs in, as the driver told it (BoxIDEnv),
+// or "" when it wasn't told or the value isn't a box ID.
+func BoxID() string {
+	if id := os.Getenv(BoxIDEnv); boxIDRE.MatchString(id) {
+		return id
+	}
+	return ""
 }

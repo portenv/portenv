@@ -159,6 +159,104 @@ public nonisolated enum Portenv_Daemon_V1_NetworkPath: SwiftProtobuf.Enum, Swift
 
 }
 
+/// Who holds a box open.
+public nonisolated enum Portenv_Daemon_V1_Holder: SwiftProtobuf.Enum, Swift.CaseIterable {
+  public typealias RawValue = Int
+  case unspecified // = 0
+
+  /// Nobody, or this Mac: OpenBox opens it here.
+  case none // = 1
+
+  /// One of this Mac's servers (server_id, server_name).
+  case knownServer // = 2
+
+  /// A machine this Mac can't reach: another Mac, or a server it doesn't
+  /// know (machine is its machine ID).
+  case otherMachine // = 3
+  case UNRECOGNIZED(Int)
+
+  public init() {
+    self = .unspecified
+  }
+
+  public init?(rawValue: Int) {
+    switch rawValue {
+    case 0: self = .unspecified
+    case 1: self = .none
+    case 2: self = .knownServer
+    case 3: self = .otherMachine
+    default: self = .UNRECOGNIZED(rawValue)
+    }
+  }
+
+  public var rawValue: Int {
+    switch self {
+    case .unspecified: return 0
+    case .none: return 1
+    case .knownServer: return 2
+    case .otherMachine: return 3
+    case .UNRECOGNIZED(let i): return i
+    }
+  }
+
+  // The compiler won't synthesize support with the UNRECOGNIZED case.
+  public static let allCases: [Portenv_Daemon_V1_Holder] = [
+    .unspecified,
+    .none,
+    .knownServer,
+    .otherMachine,
+  ]
+
+}
+
+/// Whether the holder answers.
+public nonisolated enum Portenv_Daemon_V1_Answers: SwiftProtobuf.Enum, Swift.CaseIterable {
+  public typealias RawValue = Int
+  case unspecified // = 0
+  case yes // = 1
+
+  /// A known server whose portenv app ping failed or took over 2 s.
+  case no // = 2
+
+  /// Another machine: Portenv can't ask it. Never a reason to take over by
+  /// default (R-0168).
+  case cannotAsk // = 3
+  case UNRECOGNIZED(Int)
+
+  public init() {
+    self = .unspecified
+  }
+
+  public init?(rawValue: Int) {
+    switch rawValue {
+    case 0: self = .unspecified
+    case 1: self = .yes
+    case 2: self = .no
+    case 3: self = .cannotAsk
+    default: self = .UNRECOGNIZED(rawValue)
+    }
+  }
+
+  public var rawValue: Int {
+    switch self {
+    case .unspecified: return 0
+    case .yes: return 1
+    case .no: return 2
+    case .cannotAsk: return 3
+    case .UNRECOGNIZED(let i): return i
+    }
+  }
+
+  // The compiler won't synthesize support with the UNRECOGNIZED case.
+  public static let allCases: [Portenv_Daemon_V1_Answers] = [
+    .unspecified,
+    .yes,
+    .no,
+    .cannotAsk,
+  ]
+
+}
+
 public nonisolated struct Portenv_Daemon_V1_CheckBoxRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
@@ -1418,6 +1516,53 @@ public nonisolated struct Portenv_Daemon_V1_CheckRecoveryKeyResponse: Sendable {
   public init() {}
 }
 
+public nonisolated struct Portenv_Daemon_V1_GetPlacementRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var name: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Portenv_Daemon_V1_GetPlacementResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var holder: Portenv_Daemon_V1_Holder = .unspecified
+
+  /// For HOLDER_KNOWN_SERVER: a stable ID for the server (it doesn't carry
+  /// the address) and the name it shows by.
+  public var serverID: String = String()
+
+  public var serverName: String = String()
+
+  /// The holder's machine ID, as the lease names it.
+  public var machine: String = String()
+
+  /// The newest save, which carries the lease.
+  public var newestSaveAt: SwiftProtobuf.Google_Protobuf_Timestamp {
+    get {_newestSaveAt ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
+    set {_newestSaveAt = newValue}
+  }
+  /// Returns true if `newestSaveAt` has been explicitly set.
+  public var hasNewestSaveAt: Bool {self._newestSaveAt != nil}
+  /// Clears the value of `newestSaveAt`. Subsequent reads from it will return its default value.
+  public mutating func clearNewestSaveAt() {self._newestSaveAt = nil}
+
+  public var answers: Portenv_Daemon_V1_Answers = .unspecified
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _newestSaveAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
+}
+
 // MARK: - Code below here is support for the SwiftProtobuf runtime.
 
 fileprivate nonisolated let _protobuf_package = "portenv.daemon.v1"
@@ -1428,6 +1573,14 @@ nonisolated extension Portenv_Daemon_V1_SaveState: SwiftProtobuf._ProtoNameProvi
 
 nonisolated extension Portenv_Daemon_V1_NetworkPath: SwiftProtobuf._ProtoNameProviding {
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0NETWORK_PATH_UNSPECIFIED\0\u{1}NETWORK_PATH_SATISFIED\0\u{1}NETWORK_PATH_UNSATISFIED\0")
+}
+
+nonisolated extension Portenv_Daemon_V1_Holder: SwiftProtobuf._ProtoNameProviding {
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0HOLDER_UNSPECIFIED\0\u{1}HOLDER_NONE\0\u{1}HOLDER_KNOWN_SERVER\0\u{1}HOLDER_OTHER_MACHINE\0")
+}
+
+nonisolated extension Portenv_Daemon_V1_Answers: SwiftProtobuf._ProtoNameProviding {
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0ANSWERS_UNSPECIFIED\0\u{1}ANSWERS_YES\0\u{1}ANSWERS_NO\0\u{1}ANSWERS_CANNOT_ASK\0")
 }
 
 nonisolated extension Portenv_Daemon_V1_CheckBoxRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
@@ -3983,6 +4136,95 @@ nonisolated extension Portenv_Daemon_V1_CheckRecoveryKeyResponse: SwiftProtobuf.
   public static func ==(lhs: Portenv_Daemon_V1_CheckRecoveryKeyResponse, rhs: Portenv_Daemon_V1_CheckRecoveryKeyResponse) -> Bool {
     if lhs.checked != rhs.checked {return false}
     if lhs.opened != rhs.opened {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Portenv_Daemon_V1_GetPlacementRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".GetPlacementRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.name) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.name.isEmpty {
+      try visitor.visitSingularStringField(value: self.name, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Portenv_Daemon_V1_GetPlacementRequest, rhs: Portenv_Daemon_V1_GetPlacementRequest) -> Bool {
+    if lhs.name != rhs.name {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Portenv_Daemon_V1_GetPlacementResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".GetPlacementResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}holder\0\u{2}\u{2}machine\0\u{3}newest_save_at\0\u{1}answers\0\u{3}server_id\0\u{3}server_name\0\u{b}server\0\u{c}\u{2}\u{1}")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularEnumField(value: &self.holder) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.machine) }()
+      case 4: try { try decoder.decodeSingularMessageField(value: &self._newestSaveAt) }()
+      case 5: try { try decoder.decodeSingularEnumField(value: &self.answers) }()
+      case 6: try { try decoder.decodeSingularStringField(value: &self.serverID) }()
+      case 7: try { try decoder.decodeSingularStringField(value: &self.serverName) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    if self.holder != .unspecified {
+      try visitor.visitSingularEnumField(value: self.holder, fieldNumber: 1)
+    }
+    if !self.machine.isEmpty {
+      try visitor.visitSingularStringField(value: self.machine, fieldNumber: 3)
+    }
+    try { if let v = self._newestSaveAt {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 4)
+    } }()
+    if self.answers != .unspecified {
+      try visitor.visitSingularEnumField(value: self.answers, fieldNumber: 5)
+    }
+    if !self.serverID.isEmpty {
+      try visitor.visitSingularStringField(value: self.serverID, fieldNumber: 6)
+    }
+    if !self.serverName.isEmpty {
+      try visitor.visitSingularStringField(value: self.serverName, fieldNumber: 7)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Portenv_Daemon_V1_GetPlacementResponse, rhs: Portenv_Daemon_V1_GetPlacementResponse) -> Bool {
+    if lhs.holder != rhs.holder {return false}
+    if lhs.serverID != rhs.serverID {return false}
+    if lhs.serverName != rhs.serverName {return false}
+    if lhs.machine != rhs.machine {return false}
+    if lhs._newestSaveAt != rhs._newestSaveAt {return false}
+    if lhs.answers != rhs.answers {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

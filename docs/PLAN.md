@@ -1418,6 +1418,11 @@ The title menu's Move To, as found at the Mac on 2026-10-10:
 - **Move To is disabled when the window has no box,** like Revert To and Make a Save Point.
 - **The current location has a checkmark** ("This Mac", or the server's name).
 
+The lease sheet (the board `move-and-lease`; R-0136, R-0140, R-0168), in three PRs:
+- **A1, `portenvd` (built):** OpenBox's refusal for a workspace open elsewhere carries the trailer `portenv-refusal: open-elsewhere`, and `GetPlacement` gives the facts: the holder (one of this Mac's servers, by an ID and the name it shows by, never its address; or another machine), its machine ID, the newest save's time, and whether it answers. A server is found from the lease's machine ID by asking each of this Mac's servers `portenv machine-id` once (remembered in `state/server-machines.json`); it answers if `portenv app ping` over SSH succeeds within 2 s. Another Mac can't be asked. "Move it to this Mac" from a known server closes it there (saved and released) and opens it here. The sheet never waits for the probe: it shows at once with "Checking whether <place> answers…".
+- **A2:** each tab's running command and how long it has run, for the Move confirmation: shown on this Mac only, one line, never logged or sent.
+- **B, the app's three sheets.** Defaults: Connect on the lease sheet, Move on the confirmation. When the place doesn't answer, Move to This Mac is the default only for a known server whose ping failed and whose newest save is under an hour old; a holder that can't be asked never makes it the default: Keep Waiting is, and Move to This Mac says "Another Mac may still be working in it. Anything it hasn't saved yet stays there, and is kept as a separate save when it next saves." (R-0168). "Look without changing anything" is hidden until 1.4's Browse Saves.
+
 **2.4 Stand-in agents over SSH and the CLI** (no control plane, no lanes)
 
 - Doors 1 and 2 for a box on the user's own server, in Continue my work mode. Grok Bot, or any terminal agent, reaches the box, runs Claude Code there and relays its questions back.

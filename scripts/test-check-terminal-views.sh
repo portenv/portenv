@@ -30,6 +30,24 @@ for planted in \
 		rm "$dir/$where/Bad.swift"
 	done
 done
+# A delegate set anywhere but the factory and the tab view is refused;
+# comparing it isn't.
+printf 'if view.terminalDelegate !== relay {}\nlet same = v.terminalDelegate === g\n' >"$dir/Portenv/Compare.swift"
+check || { echo "FAIL: comparing terminalDelegate was refused" >&2; exit 1; }
+for planted in 'view.terminalDelegate = spy' 'v.terminalDelegate=nil' 'terminalDelegate = other'; do
+	for where in Portenv PortenvTerm PortenvKit; do
+		printf '%s\n' "$planted" >"$dir/$where/Bad.swift"
+		if check; then
+			echo "FAIL: delegate not caught in $where: $planted" >&2
+			exit 1
+		fi
+		rm "$dir/$where/Bad.swift"
+	done
+done
+printf 'terminalDelegate = sizes\n' >"$dir/PortenvTerm/MarkedTerminalView.swift"
+check || { echo "FAIL: the tab view's own delegate was refused" >&2; exit 1; }
+printf 'view.terminalDelegate = guardian\n' >>"$dir/PortenvTerm/TerminalViews.swift"
+check || { echo "FAIL: the factory's delegate was refused" >&2; exit 1; }
 # The old factory file is no exception any more.
 printf 'let v = LocalProcessTerminalView(frame: .zero)\n' >"$dir/PortenvKit/TerminalGuard.swift"
 if check; then

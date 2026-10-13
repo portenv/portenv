@@ -256,6 +256,11 @@ func TestKeyCallsOnlyFromThisUser(t *testing.T) {
 			_, err := other.DiscardCreation(ctx, &daemonv1.DiscardCreationRequest{BoxId: testBoxID})
 			return err
 		},
+		"CheckRecoveryKey": func() error {
+			_, err := other.CheckRecoveryKey(ctx, &daemonv1.CheckRecoveryKeyRequest{
+				RecoveryPasswords: map[string][]byte{testBoxID: []byte(vectorDerived)}})
+			return err
+		},
 	}
 	for name, call := range calls {
 		if err := call(); status.Code(err) != codes.Unavailable {
@@ -281,7 +286,10 @@ func TestNoMessageCanCarryTheRecoveryKey(t *testing.T) {
 				switch {
 				case f.Name() == "recovery_password" && f.Kind() == protoreflect.BytesKind:
 					seen++
+				case f.Name() == "recovery_passwords" && f.IsMap() && f.MapValue().Kind() == protoreflect.BytesKind:
+					seen++
 				case f.Name() == "already_recovered" && f.Kind() == protoreflect.BoolKind:
+				case f.Name() == "carries_recovery_key" && f.Kind() == protoreflect.BoolKind:
 				default:
 					t.Errorf("%s.%s could carry the recovery key", m.Name(), f.Name())
 				}
@@ -290,8 +298,8 @@ func TestNoMessageCanCarryTheRecoveryKey(t *testing.T) {
 		}
 	}
 	walk(fd.Messages())
-	if seen != 2 {
-		t.Fatalf("found %d recovery_password fields, want CreateBox's and RecoverBox's", seen)
+	if seen != 3 {
+		t.Fatalf("found %d recovery password fields, want CreateBox's, RecoverBox's and CheckRecoveryKey's", seen)
 	}
 }
 
@@ -328,4 +336,34 @@ func TestDiscardCreationGivesUpWithItsDeadline(t *testing.T) {
 	if d := time.Since(t0); d > 2*time.Second {
 		t.Fatalf("it gave up after %v", d)
 	}
+}
+
+// TestCheckRecoveryKeyThroughPortenvd: the app's check answers how many
+// workspaces were checked and whether the key opened one, a bad password is
+// InvalidArgument, and nothing about the password reaches the log.
+func TestCheckRecoveryKeyThroughPortenvd(t *testing.T) {
+	useRestic(t)
+	s, logs := loggingServer(t)
+	ctx := context.Background()
+	if _, err := s.CreateBox(ctx, createBoxRequest("acme-api", testBoxID)); err != nil {
+		t.Fatal(err)
+	}
+	list, err := s.ListBoxes(ctx, &daemonv1.ListBoxesRequest{})
+	if err != nil || len(list.GetBoxes()) != 1 || !list.GetBoxes()[0].GetCarriesRecoveryKey() {
+		t.Fatalf("ListBoxes: the box made here has a recovery key: %v, %v", list, err)
+	}
+	resp, err := s.CheckRecoveryKey(ctx, &daemonv1.CheckRecoveryKeyRequest{
+		RecoveryPasswords: map[string][]byte{testBoxID: []byte(vectorDerived)}})
+	if err != nil || resp.GetChecked() != 1 || !resp.GetOpened() {
+		t.Fatalf("CheckRecoveryKey: %v, %v", resp, err)
+	}
+	if _, err := s.CheckRecoveryKey(ctx, &daemonv1.CheckRecoveryKeyRequest{RecoveryPasswords: map[string][]byte{
+		testBoxID: []byte(vectorDerived), "box-0123456789ac": []byte(vectorDerived)}}); status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("more entries than workspaces with a recovery key: %v, want InvalidArgument", err)
+	}
+	if _, err := s.CheckRecoveryKey(ctx, &daemonv1.CheckRecoveryKeyRequest{
+		RecoveryPasswords: map[string][]byte{testBoxID: []byte(vectorGrouped)}}); status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("the recovery key itself: %v, want InvalidArgument", err)
+	}
+	secretsIn(t, "portenvd's log", logs.String())
 }

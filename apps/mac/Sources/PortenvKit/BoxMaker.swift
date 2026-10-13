@@ -7,10 +7,14 @@ public struct BoxListing: Equatable, Sendable {
     public let name: String
     public let id: String
     public let creating: Bool
-    public init(name: String, id: String, creating: Bool) {
+    /// Its repository also has the recovery key (a typed key can be checked
+    /// against it).
+    public let hasRecoveryKey: Bool
+    public init(name: String, id: String, creating: Bool, hasRecoveryKey: Bool = false) {
         self.name = name
         self.id = id
         self.creating = creating
+        self.hasRecoveryKey = hasRecoveryKey
     }
 }
 
@@ -139,9 +143,8 @@ public struct BoxMaker: Sendable {
 
         public var errorDescription: String? {
             switch self {
-            // Until the refill sheet lands (ADR 0019's "Enter your recovery
-            // key…"): never point at a field that isn't there (R-0149).
-            case .poolEmpty: "This Mac has no workspace keys left. Adding more from your recovery key comes in the next build."
+            // The refill sheet asks for it (ADR 0019).
+            case .poolEmpty: "Enter your recovery key to keep making workspaces. Portenv doesn\u{2019}t keep it."
             case .keychain(let status): "The Keychain didn't store the new workspace's key (\(status)). Nothing was made."
             case .keyNotStored: "Portenv couldn't store the new workspace's key in the Keychain. Nothing was made."
             case .refused(let e): e.message

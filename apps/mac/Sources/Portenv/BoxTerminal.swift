@@ -15,12 +15,13 @@ struct BoxTerminal: NSViewRepresentable {
     /// Called when `portenv attach` ends (the session closed, or the box
     /// agent went away).
     var onEnded: @MainActor () -> Void = {}
-    /// The link under the pointer (or one just refused), for the state line.
-    var onHoverLink: @MainActor (String?) -> Void = { _ in }
+    /// The state line's text for the link under the pointer (or one just
+    /// refused), already cleaned (TerminalLinks.status).
+    var onLinkStatus: @MainActor (String?) -> Void = { _ in }
 
     func makeNSView(context: Context) -> PaddedTerminal {
         let view = PaddedTerminal(margin: TerminalLayout.margin)
-        view.onHoverLink = onHoverLink
+        view.onLinkStatus = onLinkStatus
         view.terminal.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
         context.coordinator.onEnded = onEnded
         context.coordinator.attach(view.terminal, box: box, generation: generation)
@@ -78,14 +79,14 @@ final class PaddedTerminal: NSView {
     /// No program in the workspace reads or sets the Mac's clipboard, or
     /// opens a link by itself (TerminalGuard).
     let terminalGuard: TerminalGuard
-    /// The link under the pointer, for the state line, or nil.
-    var onHoverLink: (String?) -> Void = { _ in }
-    private var hovered: String?
+    /// The state line's text for the link under the pointer, or nil.
+    var onLinkStatus: (String?) -> Void = { _ in }
+    private var shownStatus: String?
 
     init(margin: CGFloat) {
         (terminal, terminalGuard) = TerminalViews.attached()
         super.init(frame: .zero)
-        terminalGuard.onRefusedLink = { [weak self] link in self?.setHover(link) }
+        terminalGuard.onRefusedLink = { [weak self] status in self?.show(status) }
         wantsLayer = true
         matchSystemAppearance()
         terminal.translatesAutoresizingMaskIntoConstraints = false
@@ -147,21 +148,21 @@ final class PaddedTerminal: NSView {
 
     override func mouseMoved(with event: NSEvent) {
         super.mouseMoved(with: event)
-        setHover(terminalGuard.link(atWindowPoint: event.locationInWindow))
+        show(terminalGuard.link(atWindowPoint: event.locationInWindow).map(TerminalLinks.status))
     }
 
     override func mouseExited(with event: NSEvent) {
         super.mouseExited(with: event)
-        setHover(nil)
+        show(nil)
     }
 
     /// The tooltip and the state line show the link's full destination, or
-    /// why Portenv won't open it.
-    private func setHover(_ link: String?) {
-        guard link != hovered else { return }
-        hovered = link
-        terminal.toolTip = link.map(TerminalLinks.status)
-        onHoverLink(link)
+    /// why Portenv won't open it: TerminalLinks.status, never the raw link.
+    private func show(_ status: String?) {
+        guard status != shownStatus else { return }
+        shownStatus = status
+        terminal.toolTip = status
+        onLinkStatus(status)
     }
 }
 

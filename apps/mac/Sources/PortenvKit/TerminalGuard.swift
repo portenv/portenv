@@ -30,7 +30,8 @@ public final class TerminalGuard: TerminalViewDelegate {
         guard let event = NSApp.currentEvent, event.type == .leftMouseUp else { return false }
         return view?.window != nil && event.window === view?.window
     }
-    /// A link the guard refused, for the state line.
+    /// What the state line shows for a link the guard refused: its status
+    /// (TerminalLinks.status), cleaned, never the raw link (R-0142).
     public var onRefusedLink: (String) -> Void = { _ in }
 
     /// Puts a guard in front of the view and returns it.
@@ -49,7 +50,7 @@ public final class TerminalGuard: TerminalViewDelegate {
     public nonisolated func requestOpenLink(source _: TerminalView, link: String, params _: [String: String]) {
         MainActor.assumeIsolated {
             guard isPersonsClick(view), let url = TerminalLinks.destination(link) else {
-                onRefusedLink(link)
+                onRefusedLink(TerminalLinks.status(link))
                 return
             }
             open(url)

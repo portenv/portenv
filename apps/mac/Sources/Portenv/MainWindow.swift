@@ -113,7 +113,7 @@ struct MainWindow: View {
                     .task { await tabs.follow() }
                 BoxTerminal(box: controller.box, generation: controller.terminalGeneration,
                             onEnded: { Task { await controller.terminalEnded() } },
-                            onHoverLink: { controller.hoveredLink = $0 })
+                            onLinkStatus: { controller.linkStatus = $0 })
                 .accessibilityLabel(A11y.terminal(box: controller.box))
             }
         case .closed:

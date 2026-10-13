@@ -160,7 +160,7 @@ struct TerminalGuardTests {
         // Not a click (a program's doing): nothing opens.
         guardian.isPersonsClick = { _ in false }
         guardian.requestOpenLink(source: view, link: "https://example.com", params: [:])
-        #expect(opened.isEmpty && refused == ["https://example.com"])
+        #expect(opened.isEmpty && refused == [TerminalLinks.status("https://example.com")])
 
         // The person's click: a web page opens; file: and a custom scheme don't.
         guardian.isPersonsClick = { _ in true }
@@ -168,7 +168,27 @@ struct TerminalGuardTests {
             guardian.requestOpenLink(source: view, link: link, params: [:])
         }
         #expect(opened == [URL(string: "https://example.com")!])
-        #expect(refused == ["https://example.com", "file:///etc/passwd", "vscode://file/x"])
+        #expect(refused == [TerminalLinks.status("https://example.com"),
+                            "Portenv opens only web links: file:///etc/passwd", "Portenv opens only web links: vscode://file/x"])
+    }
+
+    /// A refused link reaches the state line cleaned, never raw (R-0142).
+    @Test func aRefusedLinkReachesTheStateLineCleaned() {
+        _ = NSApplication.shared
+        let (view, guardian) = TerminalViews.attached()
+        var shown: [String] = []
+        guardian.onRefusedLink = { shown.append($0) }
+        guardian.isPersonsClick = { _ in true }
+        let raw = ["https://example.com/\u{202E}gpj.exe", "file:///x\u{1b}[2J\u{07}", "https://apple.com@evil.com/\u{2066}",
+                   "https://user:pass@example.com/"]
+        for link in raw { guardian.requestOpenLink(source: view, link: link, params: [:]) }
+        #expect(shown == ["Portenv won't open a link with hidden characters", "Portenv won't open a link with hidden characters",
+                          "Portenv won't open a link with hidden characters",
+                          "Portenv won't open a link with a user name before the address: https://user:pass@example.com/"])
+        for text in shown {
+            #expect(!text.unicodeScalars.contains { TerminalLinks.hidden($0) }, "\(text.debugDescription)")
+            #expect(!raw.contains(text))
+        }
     }
 
     /// With no event being handled (nothing the person did), the default

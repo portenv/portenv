@@ -16,7 +16,7 @@ struct BoxTitle: View {
         // becomes "Saved at <time>" (§3.1): savedTimeNow moves then, with no
         // new state to prompt it.
         // A link under the pointer shows its full destination first (R-0134).
-        title(controller.hoveredLink.map(TerminalLinks.status) ?? controller.subtitle(at: controller.savedTimeNow))
+        title(controller.linkStatus ?? controller.subtitle(at: controller.savedTimeNow))
     }
 
     private func title(_ subtitle: String) -> some View {

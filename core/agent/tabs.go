@@ -185,8 +185,10 @@ func (t tabs) list(ctx context.Context) ([]*typesv1.Tab, error) {
 		}
 		tab := &typesv1.Tab{Id: f[0], Name: f[4], Active: f[1] == "1", Program: program}
 		// The whole command line, for the Move confirmation: to the app
-		// only, never logged (2.3, R-0140).
-		if pid, err := strconv.Atoi(f[3]); err == nil && program != "" {
+		// only, never logged (2.3, R-0140). Read whatever the program's
+		// name: a script run with sh is a command still running, though
+		// tmux names it after its shell.
+		if pid, err := strconv.Atoi(f[3]); err == nil {
 			if cmd, since, ok := foregroundCommand(t.proc(), pid, userHZ); ok {
 				tab.Command = cmd
 				if !since.IsZero() {

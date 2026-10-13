@@ -28,8 +28,18 @@ public final class MarkedTerminalView: TerminalView {
     public var onEnded: (TabTerminalEnd) -> Void = { _ in }
     /// The size this view's frame fits, as SwiftTerm last worked it out.
     public internal(set) var fitted: TabTerminalSize?
+    /// Opens a ⌘-clicked link as TerminalLinks decides (R-0161).
+    public let links = TerminalLinkOpener()
+    /// The filter in front of the terminal (ADR 0020, decision 9).
+    private var filter = TerminalFilter()
     private var reading: Task<Void, Never>?
     private let sizes = SizeRelay()
+    /// Called if anything replaced the view's delegate, which then gets put
+    /// back (R-0161). A failure in debug builds; tests record it.
+    nonisolated(unsafe) static var delegateReplaced: () -> Void = { assertionFailure("a tab view's terminalDelegate was replaced") }
+
+    /// Lines of scrollback a tab keeps (ADR 0020, decision 9).
+    public static let scrollbackLines = 10_000
 
     public override init(frame: NSRect) {
         super.init(frame: frame)
@@ -43,6 +53,35 @@ public final class MarkedTerminalView: TerminalView {
         addSubview(cards)
         sizes.view = self
         terminalDelegate = sizes
+        changeScrollback(Self.scrollbackLines)
+    }
+
+    /// The delegate is the view's own relay, always: SwiftTerm hands it the
+    /// clipboard, links and titles, so nothing else may stand there
+    /// (R-0161). SwiftTerm's property can't be overridden, so it's checked
+    /// before every byte from the workspace is fed, which is when a program
+    /// could reach those, and put back if it was changed.
+    func keepDelegate() {
+        if terminalDelegate !== sizes {
+            Self.delegateReplaced()
+            terminalDelegate = sizes
+        }
+    }
+
+    /// Pasted text is cleaned before it's sent (ADR 0020, R-0133 item 3),
+    /// then bracketed when the program asked for it.
+    public override func paste(_: Any) {
+        paste(text: NSPasteboard.general.string(forType: .string) ?? "")
+    }
+
+    /// Sends `text` as a paste, cleaned.
+    public func paste(text: String) {
+        let clean = PasteText.clean(text)
+        guard !clean.isEmpty else { return }
+        let bracketed = getTerminal().bracketedPasteMode
+        if bracketed { send(txt: "\u{1b}[200~") }
+        send(txt: clean)
+        if bracketed { send(txt: "\u{1b}[201~") }
     }
 
     /// Shows a tab: drops the current one (it keeps running), then plays
@@ -75,6 +114,7 @@ public final class MarkedTerminalView: TerminalView {
         switch event {
         case let .reset(size, seed):
             t.resetToInitialState()
+            filter = TerminalFilter()
             tracker.reset()
             if size.cols != t.cols || size.rows != t.rows { t.resize(cols: size.cols, rows: size.rows) }
             ingest(seed)
@@ -96,9 +136,12 @@ public final class MarkedTerminalView: TerminalView {
     @available(*, unavailable)
     required init?(coder _: NSCoder) { fatalError("not used") }
 
-    /// One tab's output, as tmux control mode gives it.
+    /// One tab's output, as tmux control mode gives it, through the
+    /// default-deny filter.
     public func ingest(_ bytes: [UInt8]) {
-        feed(byteArray: bytes[...])
+        keepDelegate()
+        let allowed = filter.filter(bytes)
+        if !allowed.isEmpty { feed(byteArray: allowed[...]) }
         overlay.needsDisplay = true
     }
 
@@ -165,7 +208,14 @@ private final class SizeRelay: TerminalViewDelegate {
     nonisolated func setTerminalTitle(source _: TerminalView, title _: String) {}
     nonisolated func hostCurrentDirectoryUpdate(source _: TerminalView, directory _: String?) {}
     nonisolated func scrolled(source _: TerminalView, position _: Double) {}
-    nonisolated func requestOpenLink(source _: TerminalView, link _: String, params _: [String: String]) {}
+    /// A ⌘-clicked link goes through TerminalLinks, as in the attached
+    /// terminal (R-0161).
+    nonisolated func requestOpenLink(source _: TerminalView, link: String, params _: [String: String]) {
+        MainActor.assumeIsolated {
+            guard let view else { return }
+            view.links.request(link, in: view)
+        }
+    }
     nonisolated func bell(source _: TerminalView) {}
     nonisolated func clipboardCopy(source _: TerminalView, content _: Data) {}
     nonisolated func clipboardRead(source _: TerminalView) -> Data? { nil }

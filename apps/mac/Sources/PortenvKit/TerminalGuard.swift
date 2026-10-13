@@ -19,20 +19,56 @@ import SwiftTerm
 /// dropped; a link opens only when it's http or https with a host, and only
 /// on the person's own click; everything else goes to the view as before.
 /// TerminalViews (PortenvTerm) makes every terminal view with one, and keeps it.
+/// Opens a link a person clicked in a terminal view, as TerminalLinks
+/// decides (R-0134, R-0140, R-0142): only a web page, only on the person's
+/// own click, as the URL that's shown. Every terminal view uses one: the
+/// attached terminal through TerminalGuard, a tab view directly (R-0161).
 @MainActor
-public final class TerminalGuard: TerminalViewDelegate {
-    private weak var view: LocalProcessTerminalView?
+public final class TerminalLinkOpener {
     /// Opens a link that passed the checks (NSWorkspace; tests replace it).
-    var open: (URL) -> Void = { NSWorkspace.shared.open($0) }
+    public var open: (URL) -> Void = { NSWorkspace.shared.open($0) }
     /// Tells whether the event being handled is the person's own click in
     /// the view's window (tests replace it).
-    var isPersonsClick: (NSView?) -> Bool = { view in
+    public var isPersonsClick: (NSView?) -> Bool = { view in
         guard let event = NSApp.currentEvent, event.type == .leftMouseUp else { return false }
         return view?.window != nil && event.window === view?.window
     }
-    /// What the state line shows for a link the guard refused: its status
+    /// What the state line shows for a link that was refused: its status
     /// (TerminalLinks.status), cleaned, never the raw link (R-0142).
     public var onRefusedLink: (String) -> Void = { _ in }
+
+    public init() {}
+
+    /// SwiftTerm asks this when the person ⌘-clicks a link in `view`.
+    public func request(_ link: String, in view: NSView?) {
+        guard isPersonsClick(view), let url = TerminalLinks.destination(link) else {
+            onRefusedLink(TerminalLinks.status(link))
+            return
+        }
+        open(url)
+    }
+}
+
+@MainActor
+public final class TerminalGuard: TerminalViewDelegate {
+    private weak var view: LocalProcessTerminalView?
+    public let links = TerminalLinkOpener()
+    var open: (URL) -> Void {
+        get { links.open }
+        set { links.open = newValue }
+    }
+
+    var isPersonsClick: (NSView?) -> Bool {
+        get { links.isPersonsClick }
+        set { links.isPersonsClick = newValue }
+    }
+
+    /// What the state line shows for a link the guard refused: its status
+    /// (TerminalLinks.status), cleaned, never the raw link (R-0142).
+    public var onRefusedLink: (String) -> Void {
+        get { links.onRefusedLink }
+        set { links.onRefusedLink = newValue }
+    }
 
     /// Puts a guard in front of the view and returns it.
     public static func install(on view: LocalProcessTerminalView) -> TerminalGuard {
@@ -48,13 +84,7 @@ public final class TerminalGuard: TerminalViewDelegate {
     /// SwiftTerm asks this when the person clicks a link (⌘-click). It opens
     /// only a web page, and only on that click: a program can't make it.
     public nonisolated func requestOpenLink(source _: TerminalView, link: String, params _: [String: String]) {
-        MainActor.assumeIsolated {
-            guard isPersonsClick(view), let url = TerminalLinks.destination(link) else {
-                onRefusedLink(TerminalLinks.status(link))
-                return
-            }
-            open(url)
-        }
+        MainActor.assumeIsolated { links.request(link, in: view) }
     }
 
     /// The link under a point in the view's window: what the person would

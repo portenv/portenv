@@ -29,9 +29,12 @@ func runTerminal(stream agentv1.AgentService_TerminalServer, cfg Config, open *a
 	// tmux is plumbing (GUIDELINES.md §4.1): its status bar is always off
 	// and its prefix key never surfaces, so Ctrl-B reaches the shell. Set
 	// after the user's own tmux config, on every attach.
-	// The app owns tab names (tmuxOwned); a new session starts with one tab.
+	// The app owns tab names (tmuxOwned), tmux never touches the Mac's
+	// clipboard or passes sequences through (tmuxSealed); a new session
+	// starts with one tab.
 	args := append([]string{"new-session", "-A", "-s", open.GetSession(), "-n", firstTabName}, tmuxHidden...)
 	args = append(args, tmuxOwned...)
+	args = append(args, tmuxSealed...)
 	if v := open.GetViewer(); v != "" {
 		// A viewer (the app, an agent) attaches to its own grouped session
 		// over the box's windows, so its current tab is its own; the
@@ -47,6 +50,7 @@ func runTerminal(stream agentv1.AgentService_TerminalServer, cfg Config, open *a
 		defer tb.cleanup(context.Background())
 		args = append([]string{"attach-session", "-t", "=" + tb.view()}, tmuxHidden...)
 		args = append(args, tmuxOwned...)
+		args = append(args, tmuxSealed...)
 	}
 	cmd := exec.CommandContext(stream.Context(), "tmux", args...) // #nosec G204 -- session name validated; fixed options
 	cmd.Dir = cfg.Home()

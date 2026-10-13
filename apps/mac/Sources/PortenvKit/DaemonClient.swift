@@ -227,10 +227,10 @@ public final class DaemonClient: DaemonAPI, Sendable {
     }
 }
 
-extension DaemonClient: BoxCreating {
+extension DaemonClient: BoxCreating, RecoveryChecking {
     public func listings() async throws -> [BoxListing] {
         try await call {
-            try await api.listBoxes(.init()).boxes.map { BoxListing(name: $0.box.name, id: $0.box.id, creating: $0.creating) }
+            try await api.listBoxes(.init()).boxes.map { BoxListing(name: $0.box.name, id: $0.box.id, creating: $0.creating, hasRecoveryKey: $0.carriesRecoveryKey) }
         }
     }
 
@@ -242,6 +242,13 @@ extension DaemonClient: BoxCreating {
         req.keys = r.keys
         req.recoveryPassword = r.recoveryPassword
         return try await creating { try await api.createBox(req).alreadyCreated }
+    }
+
+    public func checkRecoveryKey(_ passwords: [String: Data]) async throws -> RecoveryCheckResult {
+        var req = Portenv_Daemon_V1_CheckRecoveryKeyRequest()
+        req.recoveryPasswords = passwords
+        let r = try await creating { try await api.checkRecoveryKey(req) }
+        return RecoveryCheckResult(checked: Int(r.checked), opened: r.opened)
     }
 
     public func discardCreation(boxID: String) async throws {

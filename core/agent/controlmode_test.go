@@ -27,7 +27,7 @@ func TestParseControlLines(t *testing.T) {
 		{"%window-renamed @3 build and test", ctlEvent{kind: ctlWindowRenamed, window: "@3", name: "build and test"}},
 		{"%exit", ctlEvent{kind: ctlExit}},
 		{"%begin 1 2 0", ctlEvent{}},
-		{"%sessions-changed", ctlEvent{}},
+		{"%sessions-changed", ctlEvent{kind: ctlTabsChanged}},
 	}
 	for _, c := range cases {
 		got := parseControlLine(c.line)

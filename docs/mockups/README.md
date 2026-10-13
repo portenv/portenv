@@ -39,3 +39,7 @@ The first-run screens show the full version, from Phase 3. Phases 1 and 2 ship a
 - Agent identity colors: monogram circles, one hue per agent, consistent everywhere the agent appears (toolbar, tab, popover).
 - Light appearance must be designed too; these renders only cover dark.
 - Every control needs a VoiceOver label (icon-only buttons included).
+
+## History
+
+- `eee47a4` is #102, Mockups: remove the boards first run no longer has (R-0139). It landed on main with the message "test" (R-0163).

@@ -127,6 +127,10 @@ public enum InspectorText {
         "Saves are listed on \(server) while the box runs there."
     }
     public static let noSaves = "No saves yet."
+    /// Below the saves (§6); the timeline isn't built yet, so it's dimmed.
+    public static let browseAllSaves = "Browse All Saves\u{2026}"
+    /// Running now's first label (§6, the main-window board).
+    public static let tabsLabel = "Tabs"
     public static let loadingSaves = "Loading saves\u{2026}"
     /// portenvd didn't answer for the saves; Portenv keeps trying quietly.
     public static let savesFailed = "Couldn't load saves."

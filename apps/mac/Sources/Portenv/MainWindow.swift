@@ -28,6 +28,7 @@ struct MainWindow: View {
                     yourInitial: String(NSFullUserName().prefix(1)).uppercased(),
                     moveMenu: controller.moveMenu,
                     move: { target in Task { await controller.move(to: target) } },
+                    run: { action in Task { await controller.run(action) } },
                     retryPackages: { Task { await controller.retryPackages() } },
                     revert: { Task { await controller.revertToLastSavePoint() } },
                     retrySaves: { Task { await controller.refreshSaves() } }

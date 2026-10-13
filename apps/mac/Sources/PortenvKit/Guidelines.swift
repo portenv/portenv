@@ -190,6 +190,14 @@ public struct BoxMenuItem: Equatable, Sendable {
 
     public static let separator = BoxMenuItem(title: "—", enabled: false)
     public var isSeparator: Bool { title == "—" }
+
+    /// Chooses the item in a menu built from this list: a move goes to
+    /// `move`, any other action to `run` (the title menu's own path), and a
+    /// disabled item or a separator does nothing (R-0147).
+    public func choose(move: (String) -> Void, run: (Action) -> Void) {
+        guard enabled, !isSeparator else { return }
+        if case let .move(target) = action { move(target) } else { run(action) }
+    }
 }
 
 public enum BoxMenuModel {

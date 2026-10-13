@@ -14,6 +14,8 @@ struct InspectorView: View {
     /// Move To ▸'s places, as in the title menu (BoxMenuModel.moveSubmenu).
     let moveMenu: [BoxMenuItem]
     let move: (String) -> Void
+    /// Any other menu item's action, as the title menu runs it.
+    var run: (BoxMenuItem.Action) -> Void = { _ in }
     let retryPackages: () -> Void
     let revert: () -> Void
     /// Try Again when the saves couldn't be loaded.
@@ -89,12 +91,13 @@ struct InspectorView: View {
                     ForEach(Array(moveMenu.enumerated()), id: \.offset) { _, item in
                         if item.isSeparator {
                             Divider()
-                        } else if case let .move(target) = item.action {
+                        } else if case .move = item.action {
                             Toggle(item.title, isOn: Binding(get: { item.checked },
-                                                             set: { on in if on { move(target) } }))
+                                                             set: { on in if on { item.choose(move: move, run: run) } }))
                                 .disabled(!item.enabled)
                         } else {
-                            Button(item.title) {}.disabled(!item.enabled)
+                            Button(item.title) { item.choose(move: move, run: run) }
+                                .disabled(!item.enabled)
                         }
                     }
                 }

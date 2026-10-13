@@ -174,6 +174,22 @@ struct InspectorFollowUpTests {
         for _ in 0..<500 where !done() { await Task.yield() }
     }
 
+    /// The inspector's Move To… menu chooses an item as the title menu
+    /// does: a move moves, any other enabled item reaches run, and a
+    /// disabled one does nothing (R-0147).
+    @Test func choosingAnItemRunsItsAction() {
+        var moved: [String] = [], ran: [BoxMenuItem.Action] = []
+        BoxMenuItem(title: "test-server", action: .move("portenv@test-server"))
+            .choose(move: { moved.append($0) }, run: { ran.append($0) })
+        BoxMenuItem(title: "Make a Save Point", action: .makeSavePoint)
+            .choose(move: { moved.append($0) }, run: { ran.append($0) })
+        BoxMenuItem(title: "Add a Server…", enabled: false)
+            .choose(move: { moved.append($0) }, run: { ran.append($0) })
+        BoxMenuItem.separator.choose(move: { moved.append($0) }, run: { ran.append($0) })
+        #expect(moved == ["portenv@test-server"])
+        #expect(ran == [.makeSavePoint])
+    }
+
     // MARK: The board's words (R-0142)
 
     @Test func runningNowShowsTheTabsOnOneRow() {

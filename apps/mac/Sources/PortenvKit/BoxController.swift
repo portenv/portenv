@@ -254,6 +254,17 @@ public final class BoxController {
                                   optionHeld: optionHeld, location: here, servers: servers)
     }
 
+    /// Move To ▸'s places, for the inspector's Move To… button (the same as
+    /// the title menu's).
+    public var moveMenu: [BoxMenuItem] {
+        let here: String? = switch location {
+        case .thisMac: "this-mac"
+        case .server(let s): s
+        case .closed: nil
+        }
+        return BoxMenuModel.moveSubmenu(busy: busy, location: here, servers: servers)
+    }
+
     /// Runs a menu item's action.
     public func run(_ action: BoxMenuItem.Action) async {
         switch action {

@@ -11,8 +11,8 @@ struct InspectorView: View {
     let content: InspectorContent
     /// The first letter of the person's name, for their avatar.
     let yourInitial: String
-    /// Where the box can move: (title, target).
-    let moveTargets: [(String, String)]
+    /// Move To ▸'s places, as in the title menu (BoxMenuModel.moveSubmenu).
+    let moveMenu: [BoxMenuItem]
     let move: (String) -> Void
     let retryPackages: () -> Void
     let revert: () -> Void
@@ -82,20 +82,26 @@ struct InspectorView: View {
                             .accessibilityLabel(A11y.retryPackages)
                     }
                 }
-                let unavailable = InspectorText.moveUnavailable(targets: moveTargets.map(\.0))
-                // A push button that opens the places (the board's Move To…).
+                // A push button that opens the title menu's Move To ▸: the
+                // current place checked, the others, then Add a Server…
+                // With no server it still opens (R-0142, move-and-lease).
                 Menu("Move To…") {
-                    ForEach(moveTargets, id: \.1) { title, target in
-                        Button(title) { move(target) }
+                    ForEach(Array(moveMenu.enumerated()), id: \.offset) { _, item in
+                        if item.isSeparator {
+                            Divider()
+                        } else if case let .move(target) = item.action {
+                            Toggle(item.title, isOn: Binding(get: { item.checked },
+                                                             set: { on in if on { move(target) } }))
+                                .disabled(!item.enabled)
+                        } else {
+                            Button(item.title) {}.disabled(!item.enabled)
+                        }
                     }
                 }
                 .menuStyle(.button)
                 .menuIndicator(.hidden)
                 .fixedSize()
-                .disabled(unavailable != nil)
-                // Disabled, with the reason (§3.2: explained in the inspector).
-                .help(unavailable ?? "Move this box to another place")
-                if let unavailable { Note(unavailable) }
+                .help("Move this workspace to another place")
             }
         }
     }
@@ -162,24 +168,15 @@ struct InspectorView: View {
             if content.tabs.isEmpty {
                 Note("No tabs open.")
             } else {
-                // The board's Tabs label; each tab keeps what runs in it
-                // (§6: "Tabs, each with what runs in it").
-                Text(InspectorText.tabsLabel).font(.system(size: 13)).foregroundStyle(.secondary)
-                    .accessibilityAddTraits(.isHeader)
-                ForEach(content.tabs) { tab in
-                    HStack(spacing: 6) {
-                        Text(tab.name).font(.system(size: 13))
-                        Spacer(minLength: 8)
-                        if let program = tab.program {
-                            // Only a real program name is in the program style.
-                            Text(program).font(.system(size: 12, design: .monospaced)).foregroundStyle(.secondary)
-                        } else {
-                            Text(InspectorText.idle).font(.system(size: 12)).foregroundStyle(.secondary)
-                        }
-                    }
-                    .accessibilityElement(children: .combine)
-                    .accessibilityLabel(A11y.runningTab(tab.name, program: tab.program))
+                // One label/value row, as on the board (R-0142): the tab
+                // bar beside it already shows each tab.
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    Text(InspectorText.tabsLabel).foregroundStyle(.secondary)
+                    Spacer(minLength: 8)
+                    Text(InspectorText.tabNames(content.tabs)).multilineTextAlignment(.trailing)
                 }
+                .font(.system(size: 13))
+                .accessibilityElement(children: .combine)
             }
         }
     }

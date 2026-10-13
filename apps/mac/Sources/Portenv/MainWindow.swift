@@ -26,7 +26,7 @@ struct MainWindow: View {
                 InspectorView(
                     content: InspectorContent(box: controller, tabs: tabs),
                     yourInitial: String(NSFullUserName().prefix(1)).uppercased(),
-                    moveTargets: moveTargets,
+                    moveMenu: controller.moveMenu,
                     move: { target in Task { await controller.move(to: target) } },
                     retryPackages: { Task { await controller.retryPackages() } },
                     revert: { Task { await controller.revertToLastSavePoint() } },
@@ -64,13 +64,6 @@ struct MainWindow: View {
             } message: {
                 Text(controller.error ?? "")
             }
-    }
-
-    /// Move To… in the inspector: every place but where the box is.
-    private var moveTargets: [(String, String)] {
-        (["this-mac"] + controller.servers)
-            .filter { !controller.isCurrent($0) }
-            .map { (ServerName.display($0), $0) }
     }
 
     @ViewBuilder private var content: some View {

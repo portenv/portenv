@@ -5,7 +5,9 @@ package daemon
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -15,6 +17,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/portenv/portenv/core/local"
 	agentv1 "github.com/portenv/portenv/proto/gen/go/portenv/agent/v1"
@@ -120,6 +123,13 @@ func (f *fakeTabsAgent) WatchTabs(r *agentv1.WatchTabsRequest, stream agentv1.Ag
 // fake.
 func servingTabs(t *testing.T) (*fakeTabsAgent, daemonv1.DaemonServiceClient) {
 	t.Helper()
+	return servingTabsLogging(t, nil)
+}
+
+// servingTabsLogging is servingTabs with portenvd logging to log (nil:
+// nowhere).
+func servingTabsLogging(t *testing.T, log *slog.Logger) (*fakeTabsAgent, daemonv1.DaemonServiceClient) {
+	t.Helper()
 	t.Setenv("PORTENV_KEYS", "file")
 	fake := &fakeTabsAgent{tabs: []*typesv1.Tab{{Id: "@0", Name: "shell", Active: true}}, updates: make(chan []*typesv1.Tab, 4)}
 	lis := bufconn.Listen(1 << 20)
@@ -135,6 +145,9 @@ func servingTabs(t *testing.T) (*fakeTabsAgent, daemonv1.DaemonServiceClient) {
 	}
 	t.Cleanup(func() { _ = conn.Close() })
 	_, c := servingWith(t, func(s *Server) {
+		if log != nil {
+			s.log = log
+		}
 		boxWithState(t, s, "")
 		// closed: the daemon's shutdown has nothing to save (no sync
 		// engine here); tab calls only need the agent.
@@ -243,5 +256,36 @@ func TestWatchTabsRelays(t *testing.T) {
 	close(fake.updates)
 	if _, err := w.Recv(); status.Code(err) != codes.Unavailable {
 		t.Fatalf("after the agent's watch ended: %v, want Unavailable", err)
+	}
+}
+
+// TestATabsCommandIsNeverLogged (2.3, R-0140): a tab's command line can
+// hold a secret. It reaches the app through ListTabs and WatchTabs, as it
+// came, and never portenvd's log, at any level.
+func TestATabsCommandIsNeverLogged(t *testing.T) {
+	logs := &lockedBuffer{}
+	fake, c := servingTabsLogging(t, slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	since := time.Now().Add(-3 * time.Minute)
+	fake.mu.Lock()
+	fake.tabs = []*typesv1.Tab{{Id: "@0", Name: "db", Active: true, Program: "mysql",
+		Command: "mysql -u root -pSECRET", RunningSince: timestamppb.New(since)}}
+	fake.mu.Unlock()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	l, err := c.ListTabs(ctx, &daemonv1.ListTabsRequest{Box: "acme-api"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := l.GetTabs()[0]; got.GetCommand() != "mysql -u root -pSECRET" || !got.GetRunningSince().AsTime().Equal(since) {
+		t.Fatalf("tab %v", got)
+	}
+	// A failing call too: its error and log line carry no command.
+	if _, err := c.CloseTab(ctx, &daemonv1.CloseTabRequest{Box: "acme-api", Id: "@9"}); err == nil {
+		t.Fatal("closing a tab that isn't there")
+	} else if strings.Contains(err.Error(), "SECRET") {
+		t.Fatalf("the error carries the command: %v", err)
+	}
+	if strings.Contains(logs.String(), "SECRET") {
+		t.Fatalf("the command is in portenvd's log:\n%s", logs.String())
 	}
 }

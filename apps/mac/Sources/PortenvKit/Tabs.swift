@@ -24,9 +24,19 @@ public struct TabInfo: Equatable, Sendable, Identifiable {
     /// The other viewers that have the tab open without typing (agents, a
     /// CLI attach): the pane header's "watching".
     public var watchers: [String]
+    /// The foreground command's whole command line, one line, for the Move
+    /// confirmation (2.3); empty when it's just the shell. It can hold a
+    /// secret (mysql -p…): shown on this Mac only, and never printed: a
+    /// tab's description and mirror leave it out (R-0140).
+    public var command: String
+    /// When that command started.
+    public var runningSince: Date?
 
     public init(id: String, name: String, active: Bool, program: String = "", waiting: TabQuestion? = nil,
-                lastOutputAt: Date? = nil, typingAuthor: TabAuthor? = nil, watchers: [String] = []) {
+                lastOutputAt: Date? = nil, typingAuthor: TabAuthor? = nil, watchers: [String] = [],
+                command: String = "", runningSince: Date? = nil) {
+        self.command = command
+        self.runningSince = runningSince
         self.id = id
         self.name = name
         self.active = active
@@ -47,6 +57,14 @@ public struct TabInfo: Equatable, Sendable, Identifiable {
             return now.timeIntervalSince(last) >= TabActivity.quietAfter ? .quiet(since: last) : .running(program)
         }
         return program.isEmpty ? .idle : .running(program)
+    }
+}
+
+extension TabInfo: CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
+    public var description: String { "[tab \(id) \(name)\(program.isEmpty ? "" : ", running \(program)")]" }
+    public var debugDescription: String { description }
+    public var customMirror: Mirror {
+        Mirror(self, children: ["id": id, "name": name, "active": active, "program": program], displayStyle: .struct)
     }
 }
 

@@ -69,7 +69,7 @@ func (c Config) validate() error {
 	case len(c.Password) == 0:
 		return errors.New("sync: no repository password")
 	case !idRE.MatchString(c.BoxID):
-		return fmt.Errorf("sync: invalid box ID %q", c.BoxID)
+		return fmt.Errorf("sync: invalid workspace ID %q", c.BoxID)
 	case !idRE.MatchString(c.MachineID):
 		return fmt.Errorf("sync: invalid machine ID %q", c.MachineID)
 	case c.HomeDir == "" || c.StateDir == "":
@@ -197,7 +197,7 @@ func (e *LeaseHeldError) Error() string {
 	if e.Lease.Stale {
 		stale = " (stale)"
 	}
-	return fmt.Sprintf("box is open on %s%s since %s", e.Lease.Machine, stale, e.Lease.LastSeen.Format(time.RFC3339))
+	return fmt.Sprintf("workspace is open on %s%s since %s", e.Lease.Machine, stale, e.Lease.LastSeen.Format(time.RFC3339))
 }
 
 // LeaseChangedError: since this machine last synced, another machine saved
@@ -206,7 +206,7 @@ func (e *LeaseHeldError) Error() string {
 type LeaseChangedError struct{ Newest Snapshot }
 
 func (e *LeaseChangedError) Error() string {
-	return fmt.Sprintf("box changed elsewhere: newest save %s from %s at %s",
+	return fmt.Sprintf("workspace changed elsewhere: newest save %s from %s at %s",
 		e.Newest.short(), e.Newest.Machine, e.Newest.Time.Format(time.RFC3339))
 }
 
@@ -232,7 +232,7 @@ const (
 func (a Action) String() string {
 	switch a {
 	case ActionNewBox:
-		return "new box"
+		return "new workspace"
 	case ActionStartLocal:
 		return "start local"
 	case ActionRestored:
@@ -429,11 +429,11 @@ func (b *Box) ResumeOffline() (ResumeResult, error) {
 	case err != nil:
 		return ResumeResult{}, err
 	case !known:
-		return ResumeResult{}, fmt.Errorf("%w: this machine has never synced the box", ErrOfflineUnsafe)
+		return ResumeResult{}, fmt.Errorf("%w: this machine has never synced the workspace", ErrOfflineUnsafe)
 	case st.Tree == "" && st.Snapshot == "":
-		return ResumeResult{}, fmt.Errorf("%w: the box has never been saved from this machine", ErrOfflineUnsafe)
+		return ResumeResult{}, fmt.Errorf("%w: the workspace has never been saved from this machine", ErrOfflineUnsafe)
 	case st.Dirty:
-		return ResumeResult{}, fmt.Errorf("%w: the box was not closed cleanly here, so its home may differ from the last save", ErrOfflineUnsafe)
+		return ResumeResult{}, fmt.Errorf("%w: the workspace was not closed cleanly here, so its home may differ from the last save", ErrOfflineUnsafe)
 	case st.Lease != LeaseHeld && st.Lease != LeaseReleased:
 		return ResumeResult{}, fmt.Errorf("%w: this machine's lease state is unknown", ErrOfflineUnsafe)
 	}

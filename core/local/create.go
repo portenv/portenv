@@ -191,7 +191,7 @@ func (e *Env) takeSlot(ctx context.Context, queued func()) (release func(), err 
 // is never deleted. A finished box keeps its keys.
 func (e *Env) DiscardCreation(ctx context.Context, boxID string) error {
 	if !boxIDRE.MatchString(boxID) {
-		return createErr(ErrInvalid, "A box ID is box- and 12 lowercase hex digits.")
+		return createErr(ErrInvalid, "A workspace ID is box- and 12 lowercase hex digits.")
 	}
 	release, err := e.takeSlot(ctx, nil)
 	if err != nil {
@@ -265,7 +265,7 @@ func (e *Env) writeNewConfig(c BoxConfig) error {
 	case err == nil && existing.ID == c.ID:
 		return e.writeConfig(c)
 	case err == nil:
-		return createErr(ErrNameTaken, "A box named %s already exists.", c.Name)
+		return createErr(ErrNameTaken, "A workspace named %s already exists.", c.Name)
 	case errors.Is(err, fs.ErrNotExist):
 		return e.PublishConfig(c)
 	default:
@@ -301,7 +301,7 @@ func (e *Env) PublishConfig(c BoxConfig) error {
 	}
 	if err := os.Link(tmp, p); err != nil {
 		if errors.Is(err, fs.ErrExist) {
-			return createErr(ErrNameTaken, "A box named %s already exists.", c.Name)
+			return createErr(ErrNameTaken, "A workspace named %s already exists.", c.Name)
 		}
 		return err
 	}
@@ -327,7 +327,7 @@ func (e *Env) writeConfig(c BoxConfig) error {
 
 // boxWithID finds the box configured here with this ID.
 func (e *Env) boxWithID(boxID string) (BoxConfig, bool) {
-	ents, _ := os.ReadDir(filepath.Join(e.Dir, "boxes"))
+	ents, _ := os.ReadDir(filepath.Join(e.Dir, "boxes")) // workspace-word: ok (a path)
 	for _, ent := range ents {
 		name, ok := strings.CutSuffix(ent.Name(), ".json")
 		if !ok {
@@ -351,9 +351,9 @@ func (e *Env) checkPending(c BoxConfig, recovering bool) error {
 	for _, p := range pending {
 		switch {
 		case p.BoxID == c.ID && (recovering || !sameBox(p.config(), c)):
-			return createErr(ErrMismatch, "Box ID %s is already being created as %s with other settings.", c.ID, p.Name)
+			return createErr(ErrMismatch, "Workspace ID %s is already being created as %s with other settings.", c.ID, p.Name)
 		case p.BoxID != c.ID && p.Name == c.Name:
-			return createErr(ErrNameTaken, "A box named %s already exists.", c.Name)
+			return createErr(ErrNameTaken, "A workspace named %s already exists.", c.Name)
 		}
 	}
 	return nil
@@ -363,10 +363,10 @@ func (e *Env) checkPending(c BoxConfig, recovering bool) error {
 // anything is written.
 func checkRequest(req CreateRequest) (BoxConfig, error) {
 	if !NameRE.MatchString(req.Name) {
-		return BoxConfig{}, createErr(ErrInvalid, "Box names use letters, digits, '.', '_' and '-', and start with a letter or digit.")
+		return BoxConfig{}, createErr(ErrInvalid, "Workspace names use letters, digits, '.', '_' and '-', and start with a letter or digit.")
 	}
 	if !boxIDRE.MatchString(req.BoxID) {
-		return BoxConfig{}, createErr(ErrInvalid, "A box ID is box- and 12 lowercase hex digits.")
+		return BoxConfig{}, createErr(ErrInvalid, "A workspace ID is box- and 12 lowercase hex digits.")
 	}
 	c := BoxConfig{ID: req.BoxID, Name: req.Name, Image: req.Image, Storage: req.Storage, StorageHostKey: req.StorageHostKey, StorageREST: req.StorageREST}
 	if c.Image == "" {
@@ -377,7 +377,7 @@ func checkRequest(req CreateRequest) (BoxConfig, error) {
 	case strings.HasPrefix(c.Storage, "sftp:"), strings.HasPrefix(c.Storage, "s3:"):
 		// The storage key has to be authorised on the server, and the S3
 		// credentials have no home yet: both come with the server setup.
-		return BoxConfig{}, createErr(ErrUnsupported, "Making a box that saves to a server or a bucket comes with server setup. Keep it on this Mac for now.")
+		return BoxConfig{}, createErr(ErrUnsupported, "Making a workspace that saves to a server or a bucket comes with server setup. Keep it on this Mac for now.")
 	case filepath.IsAbs(c.Storage) && filepath.Clean(c.Storage) == c.Storage:
 	default:
 		return BoxConfig{}, createErr(ErrInvalid, "Storage is this Mac or an absolute folder.")
@@ -486,16 +486,16 @@ func (e *Env) CreateBox(ctx context.Context, req CreateRequest, opt CreateOption
 	if existing, err := e.LoadBox(c.Name); err == nil {
 		if !sameBox(existing, c) {
 			if existing.ID == c.ID {
-				return false, createErr(ErrMismatch, "Box ID %s is already %s with other settings.", c.ID, existing.Name)
+				return false, createErr(ErrMismatch, "Workspace ID %s is already %s with other settings.", c.ID, existing.Name)
 			}
-			return false, createErr(ErrNameTaken, "A box named %s already exists.", c.Name)
+			return false, createErr(ErrNameTaken, "A workspace named %s already exists.", c.Name)
 		}
 		e.holdKeys(req.Keys)
 		_ = e.removePending(c.ID)
 		return true, nil
 	}
 	if other, ok := e.boxWithID(c.ID); ok {
-		return false, createErr(ErrMismatch, "Box ID %s is already %s with other settings.", c.ID, other.Name)
+		return false, createErr(ErrMismatch, "Workspace ID %s is already %s with other settings.", c.ID, other.Name)
 	}
 	if err := e.checkPending(c, false); err != nil {
 		return false, err
@@ -536,7 +536,7 @@ func (e *Env) CreateBox(ctx context.Context, req CreateRequest, opt CreateOption
 	case err != nil:
 		return false, resticFailed("open the repository", err)
 	case !ok:
-		return false, createErr(ErrMismatch, "A repository for %s already exists, and this box's keys don't open it.", c.ID)
+		return false, createErr(ErrMismatch, "A repository for %s already exists, and this workspace's keys don't open it.", c.ID)
 	}
 
 	// D4: the recovery key, unless it's there already.
@@ -602,15 +602,15 @@ func (e *Env) RecoverBox(ctx context.Context, req CreateRequest) (alreadyRecover
 	if existing, err := e.LoadBox(c.Name); err == nil {
 		if !sameBox(existing, c) {
 			if existing.ID == c.ID {
-				return false, createErr(ErrMismatch, "Box ID %s is already %s with other settings.", c.ID, existing.Name)
+				return false, createErr(ErrMismatch, "Workspace ID %s is already %s with other settings.", c.ID, existing.Name)
 			}
-			return false, createErr(ErrNameTaken, "A box named %s already exists.", c.Name)
+			return false, createErr(ErrNameTaken, "A workspace named %s already exists.", c.Name)
 		}
 		e.holdKeys(req.Keys)
 		return true, nil
 	}
 	if other, ok := e.boxWithID(c.ID); ok {
-		return false, createErr(ErrMismatch, "Box ID %s is already %s here.", c.ID, other.Name)
+		return false, createErr(ErrMismatch, "Workspace ID %s is already %s here.", c.ID, other.Name)
 	}
 	if err := e.checkPending(c, true); err != nil {
 		return false, err
@@ -624,11 +624,11 @@ func (e *Env) RecoverBox(ctx context.Context, req CreateRequest) (alreadyRecover
 	}
 	switch ok, err := withRecovery.Opens(ctx); {
 	case errors.Is(err, boxsync.ErrNoRepository):
-		return false, createErr(ErrMismatch, "There's no box %s in that storage.", c.ID)
+		return false, createErr(ErrMismatch, "There's no workspace %s in that storage.", c.ID)
 	case err != nil:
 		return false, resticFailed("open the repository", err)
 	case !ok:
-		return false, createErr(ErrMismatch, "This recovery key doesn't open box %s.", c.ID)
+		return false, createErr(ErrMismatch, "This recovery key doesn't open workspace %s.", c.ID)
 	}
 	e.holdKeys(req.Keys)
 	withKey, err := e.repoEngine(c, req.Keys[c.ID])

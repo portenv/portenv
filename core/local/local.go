@@ -45,6 +45,10 @@ type Env struct {
 	// Provided holds keys the app read from the Keychain and handed to
 	// portenvd (in memory only); they are used before the store's own.
 	Provided *keys.Memory
+	// AppWords: messages from here are read in the app (portenvd and the
+	// runner), so they say "workspace" (R-0112). The CLI's own wording
+	// changes with the CLI rename.
+	AppWords bool
 
 	// createSlot runs CreateBox, RecoverBox and DiscardCreation one at a
 	// time, so two calls can't both pass the checks for one name or box
@@ -154,19 +158,23 @@ var NameRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,62}$`)
 
 func (e *Env) ConfigPath(name string) (string, error) {
 	if !NameRE.MatchString(name) {
-		return "", UsageError{Msg: fmt.Sprintf("invalid box name %q (letters, digits, '.', '_', '-')", name)}
+		return "", UsageError{Msg: fmt.Sprintf("invalid box name %q (letters, digits, '.', '_', '-')", name)} // workspace-word: ok (the CLI's, renamed with the CLI)
 	}
-	return filepath.Join(e.Dir, "boxes", name+".json"), nil
+	return filepath.Join(e.Dir, "boxes", name+".json"), nil // workspace-word: ok (a path)
 }
 
 // noBoxError: there's no config with this name. It is fs.ErrNotExist.
 type noBoxError struct {
 	name string
 	err  error
+	app  bool
 }
 
 func (e *noBoxError) Error() string {
-	return fmt.Sprintf("no box named %s here; create it with portenv init %s", e.name, e.name)
+	if e.app {
+		return fmt.Sprintf("There's no workspace named %s here.", e.name)
+	}
+	return fmt.Sprintf("no box named %s here; create it with portenv init %s", e.name, e.name) // workspace-word: ok (the CLI's, renamed with the CLI)
 }
 func (e *noBoxError) Unwrap() error { return e.err }
 
@@ -177,7 +185,7 @@ func (e *Env) LoadBox(name string) (BoxConfig, error) {
 	}
 	b, err := os.ReadFile(p) // #nosec G304 -- validated name in the Portenv directory
 	if errors.Is(err, os.ErrNotExist) {
-		return BoxConfig{}, &noBoxError{name: name, err: err}
+		return BoxConfig{}, &noBoxError{name: name, err: err, app: e.AppWords}
 	}
 	if err != nil {
 		return BoxConfig{}, err
@@ -325,7 +333,7 @@ func (s *Session) HostRepo() string {
 	case c.Storage == "":
 		return filepath.Join(s.E.Dir, "Repositories", c.ID)
 	case filepath.IsAbs(c.Storage):
-		return filepath.Join(c.Storage, "boxes", c.ID)
+		return filepath.Join(c.Storage, "boxes", c.ID) // workspace-word: ok (a path)
 	}
 	if f := s.RESTForward(); f != nil {
 		return "rest:http+unix://" + f.Socket(ControlDir()) + ":/" + s.Cfg.ID + "/"

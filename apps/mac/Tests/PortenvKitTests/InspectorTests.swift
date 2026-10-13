@@ -29,7 +29,7 @@ struct InspectorTests {
     @Test func duringAMoveTheSectionSaysWhatStillWorks() {
         #expect(InspectorText.moving(to: "test-server") == "Moving to test-server")
         #expect(InspectorText.moveNote
-            == "You can keep reading. Typing comes back when the box is running there. If the move stops, the box stays here, saved.")
+            == "You can keep reading. Typing comes back when the workspace is running there. If the move stops, the workspace stays here, saved.")
     }
 
     // MARK: Saves
@@ -49,7 +49,7 @@ struct InspectorTests {
     @Test func everySaveKindPortenvdReportsHasAPlainLabel() {
         #expect(InspectorText.kind("autosave", machine: "mac") == "Autosave")
         #expect(InspectorText.kind("point", machine: "mac") == "Save point")
-        #expect(InspectorText.kind("release", machine: "mac") == "Saved when the box closed")
+        #expect(InspectorText.kind("release", machine: "mac") == "Saved when the workspace closed")
         #expect(InspectorText.kind("orphaned", machine: "studio") == "Kept from studio")
         // Something newer than this app: shown as a save, never blank.
         #expect(InspectorText.kind("future-kind", machine: "mac") == "Save")
@@ -78,7 +78,7 @@ struct InspectorTests {
     }
 
     @Test func aBoxOnAServerListsItsSavesThere() {
-        #expect(InspectorText.savesElsewhere("test-server") == "Saves are listed on test-server while the box runs there.")
+        #expect(InspectorText.savesElsewhere("test-server") == "Saves are listed on test-server while the workspace runs there.")
         #expect(InspectorText.noSaves == "No saves yet.")
     }
 
@@ -163,7 +163,7 @@ struct InspectorTests {
         #expect(c.subtitle == "You · This Mac")
         let m = NotifyText.moveFinished(box: "acme-api", to: "test-server", seconds: 42)
         #expect(m.title == "acme-api · Moved to test-server")
-        #expect(m.body == "The move took 42 s. The box is running there.")
+        #expect(m.body == "The move took 42 s. The workspace is running there.")
         #expect(NotifyText.duration(9) == "9 s")
         #expect(NotifyText.duration(60) == "1 min")
         #expect(NotifyText.duration(3725) == "1 h 2 min")

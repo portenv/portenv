@@ -184,7 +184,7 @@ func ServeTerminal(stream agentv1.AgentService_TerminalServer, cmd *exec.Cmd, co
 			return *e
 		}
 		if n := unreadAtExit(ttyName, &lastLeft) + unsent.Load(); n > 0 {
-			return status.Errorf(codes.DataLoss, "%d bytes of input didn't reach the box's terminal: the program there ended first", n)
+			return status.Errorf(codes.DataLoss, "%d bytes of input didn't reach the workspace's terminal: the program there ended first", n)
 		}
 	}
 	return stream.Send(&agentv1.TerminalResponse{Msg: &agentv1.TerminalResponse_ExitCode{ExitCode: int32(code)}}) // #nosec G115 -- exit codes fit
@@ -236,7 +236,7 @@ func waitInputRead(ttyName string, exited <-chan struct{}, lastLeft *atomic.Int6
 		case left < 0 || n < left:
 			progress = time.Now()
 		case time.Since(progress) > inputGiveUp:
-			return status.Errorf(codes.DataLoss, "%d bytes of input didn't reach the box's terminal: the program there stopped reading", n)
+			return status.Errorf(codes.DataLoss, "%d bytes of input didn't reach the workspace's terminal: the program there stopped reading", n)
 		}
 		zeros, left = 0, n
 	}

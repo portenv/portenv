@@ -202,7 +202,7 @@ func TestCreateBoxErrorsAreOnePlainLine(t *testing.T) {
 		code codes.Code
 		msg  string
 	}{
-		{"name taken", createBoxRequest("acme-api", "box-0123456789ac"), codes.AlreadyExists, "A box named acme-api already exists."},
+		{"name taken", createBoxRequest("acme-api", "box-0123456789ac"), codes.AlreadyExists, "A workspace named acme-api already exists."},
 		{"bad box ID", bad, codes.InvalidArgument, ""},
 		{"the recovery key itself", recoveryKeyItself, codes.InvalidArgument, ""},
 		{"SFTP storage", sftp, codes.Unimplemented, ""},

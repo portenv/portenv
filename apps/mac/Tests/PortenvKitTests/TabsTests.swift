@@ -241,11 +241,11 @@ struct TabsTests {
 
     @Test func aFailureIsSaidPlainly() async {
         let d = FakeDaemon()
-        d.failing["new-tab"] = "the box agent is unavailable (its channel is down or failed verification); restart the box"
+        d.failing["new-tab"] = "the workspace helper is unavailable (its channel is down or failed verification); restart the workspace"
         let c = TabsController(box: "acme-api", daemon: d)
         await c.load()
         await c.newTab()
-        #expect(c.error == "the box agent is unavailable (its channel is down or failed verification); restart the box")
+        #expect(c.error == "the workspace helper is unavailable (its channel is down or failed verification); restart the workspace")
         #expect(names(c) == "shell*")
     }
 }

@@ -46,7 +46,7 @@ func (s *Server) SaveNow(ctx context.Context, req *daemonv1.SaveNowRequest) (*da
 // ListSaves implements daemonv1.DaemonServiceServer: the box's saves.
 func (s *Server) ListSaves(ctx context.Context, req *daemonv1.ListSavesRequest) (*daemonv1.ListSavesResponse, error) {
 	if s.location(req.GetName()) != "" {
-		return nil, status.Error(codes.FailedPrecondition, "the box runs on a server: list its saves there (portenv app history)")
+		return nil, status.Error(codes.FailedPrecondition, "the workspace runs on a server: list its saves there (portenv app history)")
 	}
 	ob, err := s.get(req.GetName())
 	if err != nil {
@@ -69,7 +69,7 @@ func (s *Server) ListSaves(ctx context.Context, req *daemonv1.ListSavesRequest) 
 // apply retention, and with prune delete data no save uses.
 func (s *Server) Housekeep(ctx context.Context, req *daemonv1.HousekeepRequest) (*daemonv1.HousekeepResponse, error) {
 	if s.location(req.GetName()) != "" {
-		return nil, status.Error(codes.FailedPrecondition, "the box runs on a server: housekeep it there (portenv app housekeep)")
+		return nil, status.Error(codes.FailedPrecondition, "the workspace runs on a server: housekeep it there (portenv app housekeep)")
 	}
 	ob, err := s.get(req.GetName())
 	if err != nil {

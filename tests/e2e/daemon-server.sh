@@ -65,7 +65,7 @@ echo "  on this Mac: ${sum:-(none read)}"
 t0=$(python3 -c 'import time; print(time.time())')
 out=$("$portenv" app move "$box" "$target" 2>&1) || true; echo "  $out"
 t1=$(python3 -c 'import time; print(time.time())')
-# Exactly MoveBox's success line: "box is open on $target since …" (a
+# Exactly MoveBox's success line: "workspace is open on $target since …" (a
 # lease error) must not pass (#58).
 expect "Move To ▸ $target ($(python3 -c "print(round($t1 - $t0, 1))") s)" grep -qxF "open on $target" <<<"$out"
 on_server() { R sudo docker exec -u work -w /home/work "portenv-$(box_id)" bash -lc "'$*'"; }

@@ -2,7 +2,9 @@
 
 Resume your work anywhere, and let your agents work in it for you.
 
-Portenv — your portable workspace (short for portable environment) — is a native Mac app that gives each project an encrypted workspace, a *box*, that can be saved, moved between a Mac, developer-owned servers and Portenv Cloud, and opened safely to AI agents.
+Portenv — your portable workspace (short for portable environment) — is a native Mac app that gives each project an encrypted workspace that can be saved, moved between a Mac, developer-owned servers and Portenv Cloud, and opened safely to AI agents.
+
+In the code, APIs and paths a workspace is called a *box*.
 
 **Status:** early development (Phase 0, foundations). Nothing here is usable yet.
 

@@ -94,6 +94,10 @@ enum ScreenRenders {
             // cached display leaves out: drawn under it here.
             try snapshot(view: { sampleTerminal() }, name: "terminal", size: NSSize(width: 900, height: 452), in: dir,
                          background: { ($0 as? PaddedTerminal)?.terminal.nativeBackgroundColor })
+            // The whole window, toolbar included, beside the main-window board
+            // (R-0131): with the inspector open, and closed.
+            try await MainWindowRender.render(to: dir, terminal: { sampleTerminal() })
+            try await MainWindowRender.render(to: dir, name: "main-window-no-inspector", inspector: false, terminal: { sampleTerminal() })
             return 0
         } catch {
             FileHandle.standardError.write(Data("render-screens: \(error)\n".utf8))

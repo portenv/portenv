@@ -15,19 +15,23 @@ struct BoxTitle: View {
         // Drawn at the time it's drawn, and again when "Saved just now"
         // becomes "Saved at <time>" (§3.1): savedTimeNow moves then, with no
         // new state to prompt it.
-        title(controller.subtitle(at: controller.savedTimeNow))
+        // A link under the pointer shows its full destination first (R-0134).
+        title(controller.linkStatus ?? controller.subtitle(at: controller.savedTimeNow))
     }
 
     private func title(_ subtitle: String) -> some View {
         Button {
             BoxMenuPopup.show(controller)
         } label: {
-            HStack(spacing: 5) {
-                VStack(alignment: .leading, spacing: 0) {
+            // The board's order: the name, its sync symbol and the chevron on
+            // the first line, the state line under them (§3.1).
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: 5) {
                     Text(controller.box).font(.headline)
-                    Text(subtitle).font(.caption).foregroundStyle(.secondary)
+                    SyncSymbol(controller: controller).font(.callout)
+                    Image(systemName: "chevron.down").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
                 }
-                Image(systemName: "chevron.down").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+                Text(subtitle).font(.caption).foregroundStyle(.secondary)
             }
             .padding(.horizontal, 6)
             .contentShape(Rectangle())

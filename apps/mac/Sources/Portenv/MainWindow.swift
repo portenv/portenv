@@ -11,10 +11,14 @@ struct MainWindow: View {
     @Bindable var tabs: TabsController
     /// The inspector's open state, remembered for this box's window (§6).
     @AppStorage private var inspectorOpen: Bool
+    /// Renders only (ScreenRenders): a sample terminal in place of
+    /// `portenv attach`.
+    private let renderTerminal: (() -> NSView)?
 
-    init(controller: BoxController, tabs: TabsController) {
+    init(controller: BoxController, tabs: TabsController, renderTerminal: (() -> NSView)? = nil) {
         self.controller = controller
         self.tabs = tabs
+        self.renderTerminal = renderTerminal
         _inspectorOpen = AppStorage(wrappedValue: false, InspectorToggle.key(controller.box))
     }
 
@@ -43,16 +47,15 @@ struct MainWindow: View {
             }
             .navigationTitle(controller.box)
             // The title is the box's menu (Apple's document-menu pattern):
-            // the system title is replaced by BoxTitle, the box's name over
-            // its state line, next to the sync symbol.
+            // the system title is replaced by BoxTitle, the box's name and
+            // sync symbol over its state line, on the toolbar itself with no
+            // capsule behind it (the main-window board).
             .toolbar(removing: .title)
             .toolbar {
                 ToolbarItem(placement: .navigation) {
-                    SyncSymbol(controller: controller)
-                }
-                ToolbarItem(placement: .navigation) {
                     BoxTitle(controller: controller)
                 }
+                .sharedBackgroundVisibility(.hidden)
             }
             // Busy disables the window, except Cancel while the Keychain asks.
             .disabled(controller.busy && !controller.waitingForKeychain)
@@ -111,9 +114,15 @@ struct MainWindow: View {
                     // Follows the tabs while the box is open here or on a
                     // server; watches again after a restart or a move.
                     .task { await tabs.follow() }
-                BoxTerminal(box: controller.box, generation: controller.terminalGeneration,
-                            onEnded: { Task { await controller.terminalEnded() } },
-                            onLinkStatus: { controller.linkStatus = $0 })
+                Group {
+                    if let renderTerminal {
+                        RenderedView(make: renderTerminal)
+                    } else {
+                        BoxTerminal(box: controller.box, generation: controller.terminalGeneration,
+                                    onEnded: { Task { await controller.terminalEnded() } },
+                                    onLinkStatus: { controller.linkStatus = $0 })
+                    }
+                }
                 .accessibilityLabel(A11y.terminal(box: controller.box))
             }
         case .closed:

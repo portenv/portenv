@@ -144,24 +144,20 @@ private struct GeneralPane: View {
     }
 }
 
-/// The servers portenvd knows, by name. Add a Server…, each server's state
-/// and its … menu come with server setup (2.9, R-0136).
+/// The servers portenvd knows, by name. Each server's state, the … menu
+/// and Add a Server… come with server setup (2.9, R-0136).
 private struct ServersPane: View {
     var sample: [String]?
     @State private var servers: [String]?
 
     var body: some View {
         Form {
-            Section {
+            Section(SettingsText.yourServers) {
                 if let servers, !servers.isEmpty {
                     ForEach(servers, id: \.self) { s in SettingRow(label: ServerName.display(s)) }
                 } else {
                     SettingRow(label: servers == nil ? "" : SettingsText.noServers)
                 }
-            } header: {
-                Text(SettingsText.yourServers)
-            } footer: {
-                Text(SettingsText.serversLine).font(.callout).foregroundStyle(.secondary)
             }
         }
         .task {
@@ -171,39 +167,21 @@ private struct ServersPane: View {
     }
 }
 
-/// No agent can connect yet (2.4); the SSH door shows as it ships: a
-/// preview, off (the owner, R-0102). It can't be turned on here until 2.4.
+/// Until 2.4, only who has access: no agent can connect yet. The SSH door
+/// comes back with 2.4, as on the board: PREVIEW and off (R-0149).
 private struct AgentsPane: View {
     var body: some View {
         Form {
             Section(SettingsText.agentsWithAccess) {
                 SettingRow(label: SettingsText.noAgents)
             }
-            Section {
-                SettingRow(label: SettingsText.allowAgents, line: SettingsText.allowAgentsLine) {
-                    Toggle(SettingsText.allowAgents, isOn: .constant(false))
-                        .toggleStyle(.switch)
-                        .labelsHidden()
-                        .disabled(true)
-                }
-            } header: {
-                HStack(spacing: 8) {
-                    Text(SettingsText.sshHeading)
-                    Text(SettingsText.preview)
-                        .font(.caption2.weight(.bold))
-                        .padding(.horizontal, 5).padding(.vertical, 1)
-                        .background(RoundedRectangle(cornerRadius: 3).fill(Color.yellow.opacity(0.25)))
-                        .accessibilityLabel("Preview")
-                }
-            } footer: {
-                Text(SettingsText.previewNote).font(.callout).foregroundStyle(.secondary)
-            }
         }
     }
 }
 
-/// What's there today, with no buttons: Check… and Make New Key… need ADR
-/// 0019's AddRecoveryKey, after first run's wiring (R-0137).
+/// What's there today: the recovery key's state and where saves go. Check
+/// your key and Make a new key come with ADR 0019's AddRecoveryKey, after
+/// first run's wiring; until then they're not shown (R-0149).
 private struct RecoveryKeyPane: View {
     var sample: RecoveryKeyState?
     @State private var state: RecoveryKeyState?
@@ -219,8 +197,6 @@ private struct RecoveryKeyPane: View {
                         Image(systemName: "checkmark").foregroundStyle(.green).accessibilityHidden(true)
                     }
                 }
-                SettingRow(label: SettingsText.checkKey, line: SettingsText.checkKeyLine)
-                SettingRow(label: SettingsText.newKey, line: SettingsText.newKeyLine)
             }
             Section {
                 SettingRow(label: SettingsText.thisMacOnly, line: SettingsText.thisMacOnlyLine)
@@ -240,31 +216,20 @@ private struct RecoveryKeyPane: View {
     }
 }
 
-/// Updates and privacy. The switch is stored under Sparkle's key; Check Now
-/// waits for Sparkle (1.8), so it's dimmed until then.
+/// Until Sparkle (1.8): the version, and how new versions come. The
+/// automatic check and Check Now come back with Sparkle, working (R-0149).
+/// Release notes are hidden too: there's no release with notes yet.
 private struct UpdatesPane: View {
-    @State private var automatic = UpdateSettings.automaticChecks()
     private let facts = Feedback.Facts.current()
 
     var body: some View {
         Form {
             Section(SettingsText.updatesHeading) {
-                SettingRow(label: SettingsText.automaticChecks, line: SettingsText.automaticChecksLine) {
-                    Toggle(SettingsText.automaticChecks, isOn: $automatic)
-                        .toggleStyle(.switch)
-                        .labelsHidden()
-                        .onChange(of: automatic) { _, on in UpdateSettings.setAutomaticChecks(on) }
-                }
-                SettingRow(label: SettingsText.version(facts)) {
-                    Button(SettingsText.checkNow) {}.disabled(true)
-                }
-                HStack {
-                    Spacer()
-                    Link(SettingsText.releaseNotes, destination: SettingsText.releaseNotesURL)
-                }
+                SettingRow(label: SettingsText.version(facts), line: SettingsText.downloadForNow)
             }
             Section(SettingsText.privacyHeading) {
-                SettingRow(label: SettingsText.whatPortenvSends, line: SettingsText.whatPortenvSendsLine) {
+                SettingRow(label: SettingsText.whatPortenvSends,
+                           line: SettingsText.whatPortenvSendsLine(counting: UsageCounting.isOn())) {
                     Link(SettingsText.readPrivacyPage, destination: SettingsText.privacyURL)
                 }
                 SettingRow(label: SettingsText.feedback, line: Feedback.address) {

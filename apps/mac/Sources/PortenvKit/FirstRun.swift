@@ -19,6 +19,16 @@ public enum UsageCounting {
     #else
     public static let shown = false
     #endif
+
+    /// Where the person's choice is kept once counting exists (it's never
+    /// on before that); Settings › Updates says what's sent from it.
+    public static let choiceKey = "countUsage"
+
+    /// Whether usage numbers are counted: only in a build with counting,
+    /// and only if the person chose it.
+    public static func isOn(_ defaults: UserDefaults = .standard) -> Bool {
+        shown && defaults.bool(forKey: choiceKey)
+    }
 }
 
 /// Where the first box's saves go (no Portenv storage before Phase 3). In

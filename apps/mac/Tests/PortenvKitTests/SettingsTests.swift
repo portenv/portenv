@@ -34,15 +34,40 @@ struct SettingsTests {
         #expect(state.row().state == SettingsText.recoveryUnreadable)
     }
 
-    /// On unless turned off, under Sparkle's own key so it holds once
-    /// Sparkle reads it.
-    @Test func automaticChecksAreOnUntilTurnedOff() throws {
+    /// What Portenv sends follows the real counting setting (R-0149):
+    /// nothing about the person or their work, and usage numbers only if
+    /// they chose to be counted.
+    @Test func whatPortenvSendsFollowsTheCountingSetting() {
+        let off = SettingsText.whatPortenvSendsLine(counting: false)
+        let on = SettingsText.whatPortenvSendsLine(counting: true)
+        #expect(off == "Portenv sends nothing about you or your work, and collects no usage numbers.")
+        #expect(on.hasPrefix("Portenv sends nothing about you or your work."))
+        #expect(on.contains("usage numbers") && !on.contains("no usage numbers"))
+        #expect(!off.contains("update check") && !on.contains("update check"))
+    }
+
+    /// Counting is on only in a build with counting, and only if chosen;
+    /// this build has none, so a stored choice alone never turns it on.
+    @Test func countingIsOffWithoutABuildThatCounts() throws {
         let defaults = try #require(UserDefaults(suiteName: "SettingsTests-\(UUID().uuidString)"))
-        #expect(UpdateSettings.automaticChecksKey == "SUEnableAutomaticChecks")
-        #expect(UpdateSettings.automaticChecks(defaults))
-        UpdateSettings.setAutomaticChecks(false, defaults)
-        #expect(!UpdateSettings.automaticChecks(defaults))
-        #expect(defaults.object(forKey: "SUEnableAutomaticChecks") as? Bool == false)
+        defaults.set(true, forKey: UsageCounting.choiceKey)
+        #expect(UsageCounting.isOn(defaults) == UsageCounting.shown)
+        defaults.set(false, forKey: UsageCounting.choiceKey)
+        #expect(!UsageCounting.isOn(defaults))
+    }
+
+    /// The date is in the app's language, whatever the Mac's is: "12 Oct",
+    /// not fr_FR's "12 oct." (R-0149).
+    @Test func theDateFollowsTheAppsLanguageNotTheMacs() {
+        let made = RecoveryKeyState.made(saved)
+        let later = saved.addingTimeInterval(86400)
+        #expect(SettingsText.appLocale(["en"]).identifier == "en")
+        #expect(made.row(now: later, timeZone: tz, locale: SettingsText.appLocale(["en"])).state == "Saved on 12 Oct")
+        // The default, too: the app's language (this test bundle is in
+        // English), not Locale.current, whatever the Mac is set to.
+        #expect(made.row(now: later, timeZone: tz).state == "Saved on 12 Oct")
+        // What a French Mac's locale would have given.
+        #expect(made.row(now: later, timeZone: tz, locale: Locale(identifier: "fr_FR")).state != "Saved on 12 Oct")
     }
 
     @Test func theVersionRow() {
@@ -50,11 +75,10 @@ struct SettingsTests {
         #expect(SettingsText.version(facts) == "Version 0.2.0 (112)")
     }
 
-    /// The SSH door ships off and marked PREVIEW (the owner, R-0102); the
-    /// copy says so, with typographic apostrophes.
-    @Test func theSSHDoorSaysItsAPreviewAndOff() {
-        #expect(SettingsText.preview == "PREVIEW")
-        #expect(SettingsText.allowAgentsLine.hasPrefix("Off."))
-        #expect(!SettingsText.previewNote.contains("'"))
+    /// Until 2.4 and AddRecoveryKey, rows that would offer what isn't
+    /// built aren't there at all (R-0140, R-0149).
+    @Test func nothingUnbuiltIsOffered() {
+        #expect(SettingsText.downloadForNow.contains("download"))
+        #expect(!SettingsText.downloadForNow.contains("Up to date"))
     }
 }

@@ -66,6 +66,13 @@ public enum SavedTime {
         "Last saved " + (isJustNow(at, now: now) ? "just now" : when(at, now: now, timeZone: timeZone, locale: locale))
     }
 
+    /// The time beside Revert To ▸ Last Save Point (§3.2, the title-menu
+    /// board): "11:52 today", "yesterday at 23:43", "on 9 Oct at 23:43".
+    public static func menu(_ at: Date, now: Date, timeZone: TimeZone = .current, locale: Locale = .current) -> String {
+        let words = when(at, now: now, timeZone: timeZone, locale: locale)
+        return day(at, now: now, calendar: calendar(timeZone, locale)) == .today ? words + " today" : words
+    }
+
     /// When the words change next, so a view redraws then: "just now"
     /// becomes the time, midnight makes today's time "yesterday at" and
     /// yesterday's the date, and a new year adds the year. Nil once they no
@@ -185,6 +192,9 @@ public struct BoxMenuItem: Equatable, Sendable {
     public var enabled = true
     public var checked = false
     public var shortcut: String?
+    /// Secondary text at the item's trailing edge, such as the last save
+    /// point's time.
+    public var detail: String?
     public var action: Action = .none
     public var submenu: [BoxMenuItem] = []
 
@@ -205,8 +215,11 @@ public enum BoxMenuModel {
     /// it exists), —, Revert To ▸, Make a Save Point ⌘S, —, Restart Box
     /// (when the box agent is unavailable, or with ⌥), Show in Finder ⌥⌘R.
     /// Items that can't work yet are disabled, with no explanation here.
+    /// Last Save Point shows its time once the saves are known, and is
+    /// disabled when they're known and none is a save point.
     public static func items(open: Bool, busy: Bool, agentUnavailable: Bool, optionHeld: Bool,
-                             location: String?, servers: [String]) -> [BoxMenuItem] {
+                             location: String?, servers: [String],
+                             lastSavePoint: Date? = nil, savesKnown: Bool = false, now: Date = Date()) -> [BoxMenuItem] {
         let act = open && !busy
         let move = moveSubmenu(busy: busy, location: location, servers: servers)
         var items: [BoxMenuItem] = [
@@ -214,7 +227,8 @@ public enum BoxMenuModel {
             BoxMenuItem(title: "Move To", enabled: !busy, submenu: move),
             .separator,
             BoxMenuItem(title: "Revert To", enabled: act, submenu: [
-                BoxMenuItem(title: "Last Save Point", enabled: act, action: .revertToLastSavePoint),
+                BoxMenuItem(title: "Last Save Point", enabled: act && (!savesKnown || lastSavePoint != nil),
+                            detail: lastSavePoint.map { SavedTime.menu($0, now: now) }, action: .revertToLastSavePoint),
                 BoxMenuItem(title: "Browse All Saves…", enabled: false),
             ]),
             BoxMenuItem(title: "Make a Save Point", enabled: act, shortcut: "⌘S", action: .makeSavePoint),

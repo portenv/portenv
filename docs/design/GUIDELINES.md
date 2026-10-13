@@ -84,7 +84,7 @@ The title menu and the menu bar's **Box** menu contain the same items, in the sa
 2. Move To ▸ (This Mac, then servers by name, then "Add a Server…"; current location shows a **checkmark**, the others stay enabled; the current location is not disabled)
 3. Duplicate for a Task… (when it exists)
 4. ———
-5. Revert To ▸ (Last Save Point with its time; Browse All Saves…)
+5. Revert To ▸ (Last Save Point with its time at the trailing edge, "11:52 today", disabled when the saves are known and none is a save point; Browse All Saves…)
 6. Make a Save Point ⌘S
 7. ———
 8. Restart Box (only shown when the box agent is unavailable, or with ⌥ held)

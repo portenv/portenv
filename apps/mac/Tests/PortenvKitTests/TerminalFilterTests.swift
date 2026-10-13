@@ -71,6 +71,51 @@ struct TerminalFilterTests {
         #expect(f.filter([0x61, 0xC2]) + f.filter([0x9D]) == [0x61, 0xEF, 0xBF, 0xBD])
     }
 
+    /// OSC payloads are printable ASCII (R-0167): a raw 0x9C (which ends an
+    /// OSC in SwiftTerm) or 0x9D inside one drops the OSC, and the byte is
+    /// read afresh as text, so the filter and SwiftTerm agree where it ends.
+    @Test func oscPayloadsArePrintableASCII() {
+        for c: UInt8 in [0x9C, 0x9D] {
+            for start in ["\u{1b}]133;A", "\u{1b}]8;;https://e.com/"] {
+                let input = Array(start.utf8) + [c] + Array("x\u{07}after".utf8)
+                let out = run(input)
+                #expect(!String(decoding: out, as: UTF8.self).contains("\u{1b}]"), "\(start.debugDescription) + 0x\(String(c, radix: 16)) -> \(out)")
+                #expect(out == [0xEF, 0xBF, 0xBD] + Array("x\u{07}after".utf8))
+            }
+        }
+        #expect(run(Array("\u{1b}]8;;https://e.com/é\u{07}".utf8)).isEmpty == false)
+        #expect(!String(decoding: run(Array("\u{1b}]8;;https://e.com/é\u{07}".utf8)), as: UTF8.self).contains("\u{1b}]8"))
+    }
+
+    /// Counts are clamped (R-0167): REP, insert, delete, erase and scroll to
+    /// 4096, every other parameter to 65535.
+    @Test func countsAreClamped() {
+        #expect(run("\u{1b}[65535b") == "\u{1b}[4096b")
+        #expect(run("\u{1b}[4096b") == "\u{1b}[4096b")
+        #expect(run("\u{1b}[4097S") == "\u{1b}[4096S")
+        #expect(run("\u{1b}[4096S") == "\u{1b}[4096S")
+        #expect(run("\u{1b}[99999999999999999999L") == "\u{1b}[4096L")
+        for f in ["@", "P", "X", "M", "T"] { #expect(run("\u{1b}[70000\(f)") == "\u{1b}[4096\(f)") }
+        #expect(run("\u{1b}[70000;70000H") == "\u{1b}[65535;65535H")
+        #expect(run("\u{1b}[38;2;70000;1;2m") == "\u{1b}[38;2;65535;1;2m")
+        #expect(run("\u{1b}[0005b") == "\u{1b}[0005b")
+        #expect(TerminalFilter.clamp(Array("1:2;;3".utf8)[...], to: 2) == Array("1:2;;2".utf8))
+    }
+
+    /// Strict UTF-8 (R-0167): overlongs, surrogates and anything past
+    /// U+10FFFF become U+FFFD.
+    @Test func strictUTF8() {
+        let r: [UInt8] = [0xEF, 0xBF, 0xBD]
+        #expect(run([0xE0, 0x80, 0x80]) == r + r + r)      // overlong
+        #expect(run([0xE0, 0x9F, 0xBF]) == r + r + r)
+        #expect(run([0xF0, 0x8F, 0xBF, 0xBF]) == r + r + r + r)
+        #expect(run([0xED, 0xA0, 0x80]) == r + r + r)      // surrogate
+        #expect(run([0xF4, 0x90, 0x80, 0x80]) == r + r + r + r) // past U+10FFFF
+        for ok in ["€", "\u{D7FF}", "\u{E000}", "\u{10FFFF}", "𐀀", "\u{0800}"] {
+            #expect(run(Array(ok.utf8)) == Array(ok.utf8), "\(ok.debugDescription)")
+        }
+    }
+
     /// RIS clears the screen and resets modes but keeps the scrollback and
     /// its marks.
     @Test func risKeepsTheScrollback() {

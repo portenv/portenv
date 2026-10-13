@@ -74,6 +74,16 @@ public final class MarkedTerminalView: TerminalView {
         paste(text: NSPasteboard.general.string(forType: .string) ?? "")
     }
 
+    /// Text dropped on the view, or sent by a Service, would be another way
+    /// in: SwiftTerm 1.20.0 accepts neither (it registers no dragged types
+    /// and answers no Services), and the view says so explicitly, so any
+    /// text that isn't typed comes through `paste(text:)` (R-0167).
+    public override func validRequestor(forSendType _: NSPasteboard.PasteboardType?, returnType _: NSPasteboard.PasteboardType?) -> Any? {
+        nil
+    }
+
+    public override func registerForDraggedTypes(_: [NSPasteboard.PasteboardType]) {}
+
     /// Sends `text` as a paste, cleaned.
     public func paste(text: String) {
         let clean = PasteText.clean(text)
@@ -205,7 +215,11 @@ private final class SizeRelay: TerminalViewDelegate {
         MainActor.assumeIsolated { view?.source?.send(bytes) }
     }
 
-    nonisolated func setTerminalTitle(source _: TerminalView, title _: String) {}
+    // The delegate check runs in every path SwiftTerm hands the delegate
+    // something (R-0167), as well as before each byte is fed.
+    nonisolated func setTerminalTitle(source _: TerminalView, title _: String) {
+        MainActor.assumeIsolated { view?.keepDelegate() }
+    }
     nonisolated func hostCurrentDirectoryUpdate(source _: TerminalView, directory _: String?) {}
     nonisolated func scrolled(source _: TerminalView, position _: Double) {}
     /// A ⌘-clicked link goes through TerminalLinks, as in the attached
@@ -213,11 +227,14 @@ private final class SizeRelay: TerminalViewDelegate {
     nonisolated func requestOpenLink(source _: TerminalView, link: String, params _: [String: String]) {
         MainActor.assumeIsolated {
             guard let view else { return }
+            view.keepDelegate()
             view.links.request(link, in: view)
         }
     }
     nonisolated func bell(source _: TerminalView) {}
-    nonisolated func clipboardCopy(source _: TerminalView, content _: Data) {}
+    nonisolated func clipboardCopy(source _: TerminalView, content _: Data) {
+        MainActor.assumeIsolated { view?.keepDelegate() }
+    }
     nonisolated func clipboardRead(source _: TerminalView) -> Data? { nil }
     nonisolated func iTermContent(source _: TerminalView, content _: ArraySlice<UInt8>) {}
     nonisolated func rangeChanged(source _: TerminalView, startY _: Int, endY _: Int) {}

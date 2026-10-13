@@ -70,12 +70,11 @@ public final class TerminalGuard: TerminalViewDelegate {
         set { links.onRefusedLink = newValue }
     }
 
-    /// Puts a guard in front of the view and returns it.
-    public static func install(on view: LocalProcessTerminalView) -> TerminalGuard {
-        let g = TerminalGuard()
-        g.view = view
-        view.terminalDelegate = g
-        return g
+    /// A guard for the view. TerminalViews makes it the view's delegate:
+    /// only TerminalViews.swift and MarkedTerminalView.swift set a terminal
+    /// view's delegate (`check-terminal-views.sh`, R-0167).
+    public init(for view: LocalProcessTerminalView) {
+        self.view = view
     }
 
     public nonisolated func clipboardCopy(source _: TerminalView, content _: Data) {}

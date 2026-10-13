@@ -50,9 +50,9 @@ public struct TerminalFilter: Sendable {
     private var state = State.ground
     private var seq: [UInt8] = []
     private var utf8Left = 0
-    /// A C2 lead byte held back: with 80–9F after it, it encodes a C1
-    /// control, which becomes U+FFFD too.
-    private var heldC2 = false
+    /// A UTF-8 lead byte held back until its second byte shows it's strict
+    /// UTF-8 (R-0167).
+    private var heldLead: UInt8?
 
     public init() {}
 
@@ -106,6 +106,10 @@ public struct TerminalFilter: Sendable {
             if b == 0x07 { out += osc(seq); seq = []; state = .ground; return }
             if b == 0x1B { state = .oscEsc; return }
             if b == 0x18 || b == 0x1A { seq = []; state = .ground; return }
+            // Printable ASCII only (R-0167): SwiftTerm ends an OSC at a raw
+            // 0x9C, so a byte outside 0x20–0x7E would make the two disagree
+            // on where it ends. The OSC is dropped and the byte read afresh.
+            guard (0x20 ... 0x7E).contains(b) else { seq = []; state = .ground; ground(b, &out); return }
             seq.append(b)
             if seq.count > Self.maxSequence { seq = []; state = .dropString(endsOnBEL: true) }
         case .oscEsc:
@@ -121,13 +125,18 @@ public struct TerminalFilter: Sendable {
     }
 
     private mutating func ground(_ b: UInt8, _ out: inout [UInt8]) {
-        if heldC2 {
-            heldC2 = false
-            switch b {
-            case 0x80 ... 0x9F: out += Self.replacement; return
-            case 0xA0 ... 0xBF: out += [0xC2, b]; return
-            default: out.append(0xC2) // an unfinished character; SwiftTerm draws U+FFFD
+        if let lead = heldLead {
+            heldLead = nil
+            if Self.secondByte(after: lead).contains(b) {
+                out += [lead, b]
+                utf8Left = Self.length(lead) - 2
+                return
             }
+            // Not UTF-8 (an overlong, a surrogate, past U+10FFFF, or a C1
+            // control written as UTF-8): the lead becomes U+FFFD. A C1's
+            // second byte goes with it; anything else is read afresh.
+            out += Self.replacement
+            if lead == 0xC2, (0x80 ... 0x9F).contains(b) { return }
         }
         if utf8Left > 0 {
             if b & 0xC0 == 0x80 {
@@ -144,16 +153,32 @@ public struct TerminalFilter: Sendable {
             control(b, &out)
         case 0x20 ..< 0x7F:
             out.append(b)
-        case 0xC2:
-            heldC2 = true
-        case 0xC3 ... 0xDF:
-            utf8Left = 1; out.append(b)
-        case 0xE0 ... 0xEF:
-            utf8Left = 2; out.append(b)
-        case 0xF0 ... 0xF4:
-            utf8Left = 3; out.append(b)
+        case 0xC2 ... 0xF4:
+            heldLead = b // checked against the next byte (strict UTF-8)
         default:
             out += Self.replacement // a stray continuation byte (C1) or an invalid lead
+        }
+    }
+
+    private static func length(_ lead: UInt8) -> Int {
+        switch lead {
+        case 0xC2 ... 0xDF: 2
+        case 0xE0 ... 0xEF: 3
+        default: 4
+        }
+    }
+
+    /// The second bytes strict UTF-8 allows after a lead: no overlongs
+    /// (E0 80–9F, F0 80–8F), no surrogates (ED A0–BF), nothing past
+    /// U+10FFFF (F4 90–BF), and no C1 control (C2 80–9F).
+    private static func secondByte(after lead: UInt8) -> ClosedRange<UInt8> {
+        switch lead {
+        case 0xC2: 0xA0 ... 0xBF
+        case 0xE0: 0xA0 ... 0xBF
+        case 0xED: 0x80 ... 0x9F
+        case 0xF0: 0x90 ... 0xBF
+        case 0xF4: 0x80 ... 0x8F
+        default: 0x80 ... 0xBF
         }
     }
 
@@ -189,7 +214,10 @@ public struct TerminalFilter: Sendable {
         let params = rest.prefix { $0 >= 0x30 && $0 <= 0x3B }
         let inter = rest.dropFirst(params.count)
         if inter.contains(where: { $0 < 0x20 || $0 > 0x2F }) { return [] }
-        let whole = [0x1B, 0x5B] + s
+        // Counts are clamped (R-0167): a few bytes of `CSI 65535 b` would
+        // cost the view a lot of work.
+        let limit = Array("b@PXLMST".utf8).contains(final) && prefix == nil ? Self.maxCount : Self.maxParameter
+        let whole = [0x1B, 0x5B] + (prefix.map { [$0] } ?? []) + Self.clamp(params, to: limit) + inter + [final]
         let interString = String(decoding: inter, as: UTF8.self)
         switch (prefix, interString, final) {
         case (nil, "", _) where Array("@ABCDEFGHIJKLMPSTXZ`abdefgmnrsu".utf8).contains(final):
@@ -210,6 +238,28 @@ public struct TerminalFilter: Sendable {
         }
     }
 
+    /// The largest count a repeat, insert, delete, erase or scroll may ask
+    /// for, and the largest any other parameter may be.
+    public static let maxCount = 4096
+    public static let maxParameter = 65535
+
+    /// Parameters with each number clamped; separators kept as they were.
+    static func clamp(_ params: ArraySlice<UInt8>, to limit: Int) -> [UInt8] {
+        var out: [UInt8] = [], digits: [UInt8] = []
+        func flush() {
+            guard !digits.isEmpty else { return }
+            let trimmed = digits.drop { $0 == 0x30 }
+            let n = trimmed.count > 6 ? limit + 1 : Int(String(decoding: trimmed, as: UTF8.self)) ?? 0
+            out += n > limit ? Array(String(limit).utf8) : digits
+            digits = []
+        }
+        for b in params {
+            if b >= 0x30 && b <= 0x39 { digits.append(b) } else { flush(); out.append(b) }
+        }
+        flush()
+        return out
+    }
+
     private func modes(_ params: ArraySlice<UInt8>, keep: Set<Int>, prefix: [UInt8], final: UInt8) -> [UInt8] {
         let kept = params.split(separator: 0x3B, omittingEmptySubsequences: true)
             .compactMap { Int(String(decoding: $0, as: UTF8.self)) }
@@ -222,8 +272,8 @@ public struct TerminalFilter: Sendable {
     private func osc(_ s: [UInt8]) -> [UInt8] {
         let number = String(decoding: s.prefix { $0 != 0x3B }, as: UTF8.self)
         guard number == "133" || (number == "8" && s.count <= Self.maxLink) else { return [] }
-        // Its payload is text: no controls inside.
-        guard !s.contains(where: { $0 < 0x20 || $0 == 0x7F }) else { return [] }
+        // Its payload is printable ASCII (checked as it came in, too).
+        guard s.allSatisfy({ (0x20 ... 0x7E).contains($0) }) else { return [] }
         return [0x1B, 0x5D] + s + [0x1B, 0x5C]
     }
 }

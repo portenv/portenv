@@ -85,6 +85,45 @@ struct TabViewGuardTests {
         #expect(s.sent.flatMap { $0 } == Array("y".utf8))
     }
 
+    /// A reset starts the filter afresh too: output after an unterminated
+    /// DCS (hidden until its ESC \) shows again from the new seed.
+    @Test func aResetClearsTheFiltersState() async {
+        let (v, s) = view()
+        s.play(.reset(TabTerminalSize(cols: 80, rows: 24), seed: Array("\u{1b}Pq never ends".utf8)))
+        s.play(.output(Array("hidden".utf8)))
+        s.play(.reset(TabTerminalSize(cols: 80, rows: 24), seed: Array("shown".utf8)))
+        for _ in 0 ..< 200 where line(v, 0) != "shown" { try? await Task.sleep(for: .milliseconds(10)) }
+        #expect(line(v, 0) == "shown")
+    }
+
+    /// Text can't get in by being dropped on the view or sent by a Service:
+    /// only typing and paste(text:) (R-0167).
+    @Test func noDropsOrServices() {
+        let (v, _) = view()
+        v.registerForDraggedTypes([.string, .fileURL])
+        #expect(v.registeredDraggedTypes.isEmpty)
+        #expect(v.validRequestor(forSendType: nil, returnType: .string) == nil)
+        #expect(v.validRequestor(forSendType: .string, returnType: .string) == nil)
+    }
+
+    /// The delegate check runs in the relay's link, title and clipboard
+    /// paths too (R-0167).
+    @Test func theDelegateCheckRunsInTheRelaysPaths() {
+        let (v, _) = view()
+        var replaced = 0
+        let old = MarkedTerminalView.delegateReplaced
+        MarkedTerminalView.delegateReplaced = { replaced += 1 }
+        defer { MarkedTerminalView.delegateReplaced = old }
+        let relay = v.terminalDelegate
+        for call in [{ relay?.setTerminalTitle(source: v, title: "x") }, { relay?.clipboardCopy(source: v, content: Data()) },
+                     { relay?.requestOpenLink(source: v, link: "https://e.com", params: [:]) }] {
+            v.terminalDelegate = Spy()
+            call()
+            #expect(v.terminalDelegate === relay)
+        }
+        #expect(replaced == 3)
+    }
+
     @Test func pasteIsCleanedAndBracketed() {
         let (v, s) = view()
         v.paste(text: "ls\u{1b}[201~rm -rf ~\r\u{00}\u{1b}x")

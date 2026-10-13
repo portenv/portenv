@@ -1095,6 +1095,13 @@ In this order:
               - a ⌘-clicked link through `TerminalLinks`, as in the attached terminal (R-0161);
               - a delegate nothing can replace: checked before every byte is fed, and put back (R-0161);
               - scrollback capped at 10,000 lines.
+              - **R-0167's changes:**
+                - OSC payloads are printable ASCII only;
+                - counts are clamped (4,096, or 65,535 for other parameters);
+                - text is strict UTF-8;
+                - a reset clears the filter too;
+                - dropped text and Services are refused;
+                - the lint fails on any delegate assignment outside the factory and the tab view, and the runtime check also runs in the relay's paths.
           - **the latency gate:** keystroke to echo no worse than the attached client by more than 5 ms at p95 locally (within ±0.25 ms at tmux, measured), and the same run on the us-west-2 tester server once it exists. Until it passes, a dev-only switch back to the attached client, which never reaches a release build;
           - tmux pinned in the image (3.4) and checked at attach;
           - #73's and #75's no-loss guarantees carried over, with tests.

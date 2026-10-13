@@ -54,6 +54,14 @@ public final class MarkedTerminalView: TerminalView {
         sizes.view = self
         terminalDelegate = sizes
         changeScrollback(Self.scrollbackLines)
+        TerminalColours.apply(to: self, for: effectiveAppearance)
+    }
+
+    /// Follows light and dark with the same colours as the main window's
+    /// terminal (TerminalColours), so every pane matches.
+    public override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        TerminalColours.apply(to: self, for: effectiveAppearance)
     }
 
     /// The delegate is the view's own relay, always: SwiftTerm hands it the

@@ -201,7 +201,8 @@ enum ScreenRenders {
     }
 
     private static func snapshot(_ view: some View, name: String, size: NSSize = NSSize(width: 720, height: 520), in dir: URL) throws {
-        try snapshot(view: { NSHostingView(rootView: view.frame(width: size.width, height: size.height)) }, name: name, size: size, in: dir)
+        try snapshot(view: { NSHostingView(rootView: view.frame(width: size.width, height: size.height).environment(\.isRendering, true)) },
+                     name: name, size: size, in: dir)
     }
 
     /// Light and dark PNGs of a view, made fresh for each appearance.
@@ -210,7 +211,9 @@ enum ScreenRenders {
         for (suffix, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
             let host = make()
             host.frame = NSRect(origin: .zero, size: size)
-            let window = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+            // Drawn as the active window, so the default button is blue as
+            // a tester sees it (R-0153), without taking focus.
+            let window = ActiveLookingWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
             window.appearance = NSAppearance(named: appearance)
             window.contentView = host
             host.layoutSubtreeIfNeeded()

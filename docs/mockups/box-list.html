@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Your workspaces</title>
+<title>Your boxes</title>
 </head>
 <body>
 
@@ -20,45 +20,45 @@ a{color:#409CFF}a:hover{color:#6CB6FF}
 
 <div style="flex-grow: 1; min-height: 0; display: flex; flex-direction: column; gap: 14px; padding: 6px 40px 0">
 <div style="display: flex; align-items: center; gap: 12px">
-<h1 style="margin: 0; flex-grow: 1; font-size: 24px; font-weight: 700">Your workspaces</h1>
+<h1 style="margin: 0; flex-grow: 1; font-size: 24px; font-weight: 700">Your boxes</h1>
 <label style="display: flex; align-items: center; gap: 6px; width: 200px; height: 28px; padding: 0 9px; box-sizing: border-box; background: #2A2A2D; border: 1px solid #48484B; border-radius: 7px; color: #8E8E93">
 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4-4"></path></svg>
-<input type="search" aria-label="Find a workspace" placeholder="Find a workspace" style="flex-grow: 1; min-width: 0; background: transparent; border: none; outline: none; color: #F5F5F7; font: inherit">
+<input type="search" aria-label="Find a box" placeholder="Find a box" style="flex-grow: 1; min-width: 0; background: transparent; border: none; outline: none; color: #F5F5F7; font: inherit">
 </label>
 </div>
 
 <div role="status" style="display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 8px; background: #26303D; color: #D6E4F5">
 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64A8F0" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 11v5"></path><path d="M12 7.5v.5"></path></svg>
-<span>There’s no workspace called “demo” on this Mac. Choose one of your workspaces, or make a new one.</span>
+<span>There’s no box called “demo” on this Mac. Choose one of your boxes, or make a new one.</span>
 </div>
 
-<div role="listbox" aria-label="Workspaces" style="display: flex; flex-direction: column; border: 1px solid #333336; border-radius: 10px; overflow: hidden">
+<div role="listbox" aria-label="Boxes" style="display: flex; flex-direction: column; border: 1px solid #333336; border-radius: 10px; overflow: hidden">
 <div style="display: grid; grid-template-columns: minmax(0, 1fr) 150px 120px 56px; gap: 12px; padding: 7px 14px; background: #232325; border-bottom: 1px solid #333336; font-size: 11px; font-weight: 600; color: #8E8E93">
-<span>Workspace</span><span>Where it is</span><span>Last saved</span><span>Agents</span>
+<span>Box</span><span>Where it is</span><span>Last saved</span><span>Agents</span>
 </div>
 
-<div role="option" aria-selected="true" aria-label="Workspace acme-api, running on Test server, saved 2 minutes ago, Grok Bot working" style="display: grid; grid-template-columns: minmax(0, 1fr) 150px 120px 56px; gap: 12px; align-items: center; padding: 9px 14px; background: #0A6EDB; color: #FFFFFF">
+<div role="option" aria-selected="true" aria-label="Box acme-api, running on Test server, saved 2 minutes ago, Grok Bot working" style="display: grid; grid-template-columns: minmax(0, 1fr) 150px 120px 56px; gap: 12px; align-items: center; padding: 9px 14px; background: #0A6EDB; color: #FFFFFF">
 <span style="display: flex; align-items: center; gap: 9px; min-width: 0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"></path><path d="M12 12l8-4.5M12 12L4 7.5M12 12v9"></path></svg><span style="font-weight: 600">acme-api</span></span>
 <span style="display: flex; align-items: center; gap: 6px"><span style="width: 7px; height: 7px; border-radius: 50%; background: #7EE2A8"></span>Test server</span>
 <span>2 min ago</span>
 <span style="display: flex"><span aria-hidden="true" style="display: flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; background: #5E5CE6; color: #FFFFFF; font-size: 9px; font-weight: 700; border: 1.5px solid #0A6EDB">G</span></span>
 </div>
 
-<div role="option" aria-selected="false" aria-label="Workspace tabs-demo, on This Mac, not running, saved at 11:10" style="display: grid; grid-template-columns: minmax(0, 1fr) 150px 120px 56px; gap: 12px; align-items: center; padding: 9px 14px; border-bottom: 1px solid #2A2A2D">
+<div role="option" aria-selected="false" aria-label="Box tabs-demo, on This Mac, not running, saved at 11:10" style="display: grid; grid-template-columns: minmax(0, 1fr) 150px 120px 56px; gap: 12px; align-items: center; padding: 9px 14px; border-bottom: 1px solid #2A2A2D">
 <span style="display: flex; align-items: center; gap: 9px; min-width: 0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64A8F0" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"></path><path d="M12 12l8-4.5M12 12L4 7.5M12 12v9"></path></svg><span>tabs-demo</span></span>
 <span style="display: flex; align-items: center; gap: 6px; color: #C7C7CC"><span style="width: 7px; height: 7px; border-radius: 50%; border: 1.5px solid #8E8E93; box-sizing: border-box"></span>This Mac</span>
 <span style="color: #A1A1A6">Today, 11:10</span>
 <span style="color: #6E6E73">–</span>
 </div>
 
-<div role="option" aria-selected="false" aria-label="Workspace site, running on This Mac, saved 14 minutes ago" style="display: grid; grid-template-columns: minmax(0, 1fr) 150px 120px 56px; gap: 12px; align-items: center; padding: 9px 14px; border-bottom: 1px solid #2A2A2D">
+<div role="option" aria-selected="false" aria-label="Box site, running on This Mac, saved 14 minutes ago" style="display: grid; grid-template-columns: minmax(0, 1fr) 150px 120px 56px; gap: 12px; align-items: center; padding: 9px 14px; border-bottom: 1px solid #2A2A2D">
 <span style="display: flex; align-items: center; gap: 9px; min-width: 0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64A8F0" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"></path><path d="M12 12l8-4.5M12 12L4 7.5M12 12v9"></path></svg><span>site</span></span>
 <span style="display: flex; align-items: center; gap: 6px; color: #C7C7CC"><span style="width: 7px; height: 7px; border-radius: 50%; background: #30D158"></span>This Mac</span>
 <span style="color: #A1A1A6">14 min ago</span>
 <span style="color: #6E6E73">–</span>
 </div>
 
-<div role="option" aria-selected="false" aria-label="Workspace notes, on Test server, not running, saved yesterday" style="display: grid; grid-template-columns: minmax(0, 1fr) 150px 120px 56px; gap: 12px; align-items: center; padding: 9px 14px">
+<div role="option" aria-selected="false" aria-label="Box notes, on Test server, not running, saved yesterday" style="display: grid; grid-template-columns: minmax(0, 1fr) 150px 120px 56px; gap: 12px; align-items: center; padding: 9px 14px">
 <span style="display: flex; align-items: center; gap: 9px; min-width: 0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64A8F0" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"></path><path d="M12 12l8-4.5M12 12L4 7.5M12 12v9"></path></svg><span>notes</span></span>
 <span style="display: flex; align-items: center; gap: 6px; color: #C7C7CC"><span style="width: 7px; height: 7px; border-radius: 50%; border: 1.5px solid #8E8E93; box-sizing: border-box"></span>Test server</span>
 <span style="color: #A1A1A6">Yesterday</span>
@@ -66,11 +66,11 @@ a{color:#409CFF}a:hover{color:#6CB6FF}
 </div>
 </div>
 
-<p style="margin: 0; font-size: 12px; color: #8E8E93">A filled dot means the workspace is running. Opening a workspace that’s on a server connects to it there; nothing moves unless you choose Move To.</p>
+<p style="margin: 0; font-size: 12px; color: #8E8E93">A filled dot means the box is running. Opening a box that’s on a server connects to it there; nothing moves unless you choose Move To.</p>
 </div>
 
 <div style="display: flex; align-items: center; justify-content: space-between; padding: 14px 40px 24px">
-<button type="button" style="min-height: 32px; padding: 0 14px; background: #3A3A3D; color: #F5F5F7; border: none; border-radius: 8px; font: inherit; cursor: pointer">New Workspace…</button>
+<button type="button" style="min-height: 32px; padding: 0 14px; background: #3A3A3D; color: #F5F5F7; border: none; border-radius: 8px; font: inherit; cursor: pointer">New Box…</button>
 <span style="display: flex; align-items: center; gap: 12px">
 <span style="font-size: 12px; color: #8E8E93">Double-click or ↩ to open</span>
 <button type="button" style="min-height: 32px; padding: 0 20px; background: #0A6EDB; color: #FFFFFF; border: none; border-radius: 8px; font: inherit; font-weight: 600; cursor: pointer">Open</button>

@@ -11,9 +11,9 @@ import (
 	"time"
 )
 
-// fakeProc writes a /proc with a shell (pid 10) whose terminal's foreground
+// fakeProcRoot writes a /proc with a shell (pid 10) whose terminal's foreground
 // process group is led by pid 20, started 500 s after boot.
-func fakeProc(t *testing.T, cmdline string) string {
+func fakeProcRoot(t *testing.T, cmdline string) string {
 	t.Helper()
 	root := t.TempDir()
 	write := func(rel, body string) {
@@ -44,7 +44,7 @@ func fakeProc(t *testing.T, cmdline string) string {
 // TestForegroundCommand: the command the person started in a tab, its whole
 // command line on one line, and when it started.
 func TestForegroundCommand(t *testing.T) {
-	root := fakeProc(t, "mysql\x00-u\x00root\x00-pSECRET\x00")
+	root := fakeProcRoot(t, "mysql\x00-u\x00root\x00-pSECRET\x00")
 	cmd, since, ok := foregroundCommand(root, 10, 100)
 	if !ok || cmd != "mysql -u root -pSECRET" {
 		t.Fatalf("got %q, %v", cmd, ok)
@@ -57,7 +57,7 @@ func TestForegroundCommand(t *testing.T) {
 // TestForegroundCommandIsOneShortLine: control characters and newlines
 // can't break the line, and a long one is cut with an ellipsis.
 func TestForegroundCommandIsOneShortLine(t *testing.T) {
-	root := fakeProc(t, "printf\x00a\nb\x1b[31m\tc\x00"+strings.Repeat("x", 300)+"\x00")
+	root := fakeProcRoot(t, "printf\x00a\nb\x1b[31m\tc\x00"+strings.Repeat("x", 300)+"\x00")
 	cmd, _, ok := foregroundCommand(root, 10, 100)
 	if !ok || strings.ContainsAny(cmd, "\n\r\t\x1b") || !strings.HasPrefix(cmd, "printf a b [31m c x") {
 		t.Fatalf("got %q", cmd)
@@ -70,7 +70,7 @@ func TestForegroundCommandIsOneShortLine(t *testing.T) {
 // TestNoForegroundCommand: the shell itself in front, a vanished process,
 // or no /proc: nothing.
 func TestNoForegroundCommand(t *testing.T) {
-	root := fakeProc(t, "x\x00")
+	root := fakeProcRoot(t, "x\x00")
 	if _, _, ok := foregroundCommand(root, 20, 100); ok {
 		t.Fatal("the leader itself in front is the shell's own group")
 	}

@@ -112,9 +112,9 @@ struct MainWindow: View {
                     if let renderTerminal {
                         RenderedView(make: renderTerminal)
                     } else {
-                        BoxTerminal(box: controller.box, generation: controller.terminalGeneration) {
-                            Task { await controller.terminalEnded() }
-                        }
+                        BoxTerminal(box: controller.box, generation: controller.terminalGeneration,
+                                    onEnded: { Task { await controller.terminalEnded() } },
+                                    onLinkStatus: { controller.linkStatus = $0 })
                     }
                 }
                 .accessibilityLabel(A11y.terminal(box: controller.box))

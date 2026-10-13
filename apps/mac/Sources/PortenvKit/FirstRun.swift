@@ -93,7 +93,14 @@ public struct FirstRunError: Error, LocalizedError, Equatable {
 public protocol FirstRunService: Sendable {
     /// Makes this Mac's keys and returns the recovery key, shown once.
     func makeRecoveryKey() async throws -> String
+    /// The person has saved the recovery key (Continue from its step):
+    /// the pool is filled from it, and it's dropped (ADR 0019).
+    func recoveryKeySaved() async throws
     func createBox(_ box: NewBox) async throws
+}
+
+public extension FirstRunService {
+    func recoveryKeySaved() async throws {}
 }
 
 /// The box name field's look: a red border in place of the focus ring
@@ -147,6 +154,9 @@ public final class FirstRunFlow {
     /// `notice`), and the view announces it again even when the words are
     /// the same, so a press never looks like nothing happened (R-0126).
     public private(set) var refusals = 0
+    /// A Keychain call has waited longer than 2 s: the window says so
+    /// (GUIDELINES §3.1).
+    public var keychainWaiting = false
     /// A recovery key was shown in an earlier launch that didn't finish
     /// first run: the one shown now replaces it (R-0132).
     public let keyShownBefore: Bool
@@ -205,6 +215,9 @@ public final class FirstRunFlow {
         }
     }
 
+    /// "Waiting for Keychain access" while a Keychain call waits, else nil.
+    public var waitLine: String? { keychainWaiting ? KeychainWait.line : nil }
+
     /// What's said under Continue: an error, a notice, or why Continue
     /// can't go on yet.
     public var reason: String? { error ?? notice ?? whyNot }
@@ -260,6 +273,8 @@ public final class FirstRunFlow {
             case .welcome where recoveryKey == nil:
                 recoveryKey = try await service.makeRecoveryKey()
                 memory.keyShown = true
+            case .recoveryKey:
+                try await service.recoveryKeySaved()
             case .firstBox:
                 try await service.createBox(NewBox(
                     name: boxName,
@@ -269,6 +284,9 @@ public final class FirstRunFlow {
                 ))
                 made = boxName
                 memory.keyShown = false
+                // First run is done: let go of the key's text (best effort,
+                // R-0149).
+                recoveryKey = nil
             default:
                 break
             }
@@ -315,6 +333,8 @@ public enum FirstRunText {
     public static let chooseStorage = "Choose where your saves should go."
     public static let storageLater = "Saving to a server or a bucket comes later. Keep your saves on this Mac for now."
     public static let typeName = "Give your workspace a name."
+    public static let noBackgroundService = "Portenv\u{2019}s background service isn\u{2019}t answering. It usually starts by itself in a few seconds."
+    public static let poolNotStored = "Portenv couldn\u{2019}t keep what it needs from your recovery key in the Keychain. Choose Continue to try again."
 
     /// The first-run-4-storage-this-mac board.
     public static let storageTitle = "Where should your saves go?"

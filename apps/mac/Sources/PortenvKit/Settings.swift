@@ -57,7 +57,7 @@ public enum SettingsText {
     public static let recoveryUnreadableLine = "The Keychain didn\u{2019}t answer. Open Settings again to try once more."
     public static let whereSavesGo = "Where saves go"
     public static let thisMacOnly = "This Mac only"
-    public static let thisMacOnlyLine = "Saves have no copy off this Mac. Add a server or bucket to keep one elsewhere."
+    public static let thisMacOnlyLine = "Saves have no copy off this Mac yet."
     public static let encryptedNote = "Saves are encrypted before they\u{2019}re stored, wherever that is."
 
     // Updates.

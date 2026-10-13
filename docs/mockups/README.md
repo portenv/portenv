@@ -23,7 +23,7 @@ The first-run screens show the full version, from Phase 3. Phases 1 and 2 ship a
 | `link-github` | Link GitHub device flow, the same sign-in as `gh auth login` on the Mac: the code, Copy, Open github.com/login/device, waiting with expiry. Not a Portenv account. |
 | `link-github-linked` | Linked: the box can reach every repository the GitHub account can, as on the Mac, and more can be cloned in later; the warning that agents in the box can use the login (inspector Who’s here, Sign Out of GitHub). |
 | `notification` | The macOS notification when Claude Code is waiting and the window isn't in front, with Yes, push / Not yet / Show. |
-| `first-run-1-welcome` | Continue with Apple, Continue with GitHub, Continue without an account (no sign-in is ever required for your own machines and storage; ADR 0008), or email. |
+| `first-run-1-welcome` | Welcome (R-0126, R-0158): the app icon at 112 pt with no tile, "Welcome to Portenv", "Your portable workspace. Work on your Mac, continue on a server, and let your agents in, safely." and one blue Continue. No account buttons: there’s no account to be had before Phase 3. |
 | `first-run-2-protection` | Only you (default) or You, with Portenv's help. |
 | `first-run-3-recovery-key` | Recovery key (ADR 0019's test vector) with Print and Copy; the line says what the key protects; Continue enabled only after the confirmation checkbox. Save to Passwords dropped (R-0087). |
 | `first-run-4-storage` | Portenv storage preselected. In the app, "Use my own server or bucket" and "Keep on this Mac for now" are visible on the same screen, each one click, with no account needed (docs/PLAN.md, Desktop app UX); this render shows the alternatives expanded. |

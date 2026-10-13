@@ -41,6 +41,10 @@ let package = Package(
             name: "Portenv",
             dependencies: ["PortenvKit", .product(name: "SwiftTerm", package: "SwiftTerm")]
         ),
+        // The app's own views, driven through their buttons as VoiceOver
+        // would (first run's walk, R-0132): SwiftPM tests an executable
+        // target directly, so no new dependency.
+        .testTarget(name: "PortenvAppTests", dependencies: ["Portenv", "PortenvKit"]),
         // SwiftTerm: the layout tests put a real terminal in the window.
         .testTarget(name: "PortenvKitTests", dependencies: [
             "PortenvKit", .product(name: "SwiftTerm", package: "SwiftTerm"),

@@ -21,6 +21,21 @@ enum ScreenRenders {
         func createBox(_: NewBox) async throws {}
     }
 
+    /// Renders call nothing.
+    private struct NoChecks: BoxCreating, RecoveryChecking {
+        func listings() async throws -> [BoxListing] { [] }
+        func createBox(_: CreateRequest) async throws -> Bool { false }
+        func discardCreation(boxID _: String) async throws {}
+        func checkRecoveryKey(_: [String: Data]) async throws -> RecoveryCheckResult { RecoveryCheckResult(checked: 0, opened: false) }
+    }
+
+    private struct NoSecrets: SecretStore {
+        func read(account _: String) throws -> Data? { nil }
+        func add(account _: String, data _: Data, label _: String) throws {}
+        func set(account _: String, data _: Data, label _: String) throws {}
+        func delete(account _: String) throws {}
+    }
+
     private struct Sample: FirstRunService {
         func makeRecoveryKey() async throws -> String { ["K7QF", "M2XA", "9TRD", "HV4P", "W8LC", "3NZ5"].joined(separator: "-") }
         func createBox(_: NewBox) async throws {}
@@ -66,6 +81,17 @@ enum ScreenRenders {
             notTicked.recoverySaved = false
             await notTicked.next()
             try snapshot(FirstRunView(flow: notTicked, opened: { _ in }), name: "first-run-2-recovery-key-not-ticked", in: dir)
+            // The recovery key sheet, when the pool runs out (ADR 0019).
+            let refill = RecoveryRefill(daemon: NoChecks(), pool: RecoveryPoolStore(store: NoSecrets()))
+            let vector = ["K7QF", "M2XA", "9TRD", "HV4P", "W8LC", "3NZ5"].joined(separator: "-")
+            try snapshot(RecoveryKeySheet(rendering: refill).frame(maxWidth: .infinity, maxHeight: .infinity).background(.background), name: "recovery-key-sheet",
+                         size: NSSize(width: 520, height: 230), in: dir)
+            try snapshot(RecoveryKeySheet(rendering: refill, typed: "K7QF-M2XA-9TRD-HV4P-W8LC-3NZ6", line: RecoveryRefill.Outcome.wrongKey.message)
+                .frame(maxWidth: .infinity, maxHeight: .infinity).background(.background), name: "recovery-key-sheet-wrong-key", size: NSSize(width: 520, height: 270), in: dir)
+            try snapshot(RecoveryKeySheet(rendering: refill, typed: vector, line: RecoveryRefill.Outcome.nothingToCheck.message, offerNewKey: true)
+                .frame(maxWidth: .infinity, maxHeight: .infinity).background(.background), name: "recovery-key-sheet-nothing-to-check", size: NSSize(width: 520, height: 300), in: dir)
+            try snapshot(RecoveryKeySheet(rendering: refill, newKey: vector).frame(maxWidth: .infinity, maxHeight: .infinity).background(.background), name: "recovery-key-sheet-new-key",
+                         size: NSSize(width: 520, height: 420), in: dir)
             // New Box… from the box list (the new-box boards).
             let newBox = FirstRunFlow(service: Sample(), at: .firstBox, existing: ["acme-api"], fromBoxList: true)
             newBox.boxName = "site"
@@ -201,7 +227,10 @@ enum ScreenRenders {
     }
 
     private static func snapshot(_ view: some View, name: String, size: NSSize = NSSize(width: 720, height: 520), in dir: URL) throws {
-        try snapshot(view: { NSHostingView(rootView: view.frame(width: size.width, height: size.height).environment(\.isRendering, true)) },
+        // Drawn as in the key window of the active app, so the default
+        // button is blue as a tester sees it (R-0153).
+        try snapshot(view: { NSHostingView(rootView: view.frame(width: size.width, height: size.height).environment(\.isRendering, true)
+                                .environment(\.controlActiveState, .key)) },
                      name: name, size: size, in: dir)
     }
 

@@ -66,6 +66,21 @@ struct RecoveryKeySheet: View {
     @State private var line: String?
     @State private var offerNewKey = false
 
+    init(refill: RecoveryRefill, cancel: @escaping () -> Void, done: @escaping () -> Void) {
+        self.refill = refill
+        self.cancel = cancel
+        self.done = done
+    }
+
+    /// A state of the sheet, for renders.
+    init(rendering refill: RecoveryRefill, typed: String = "", line: String? = nil, offerNewKey: Bool = false, newKey: String? = nil) {
+        self.init(refill: refill, cancel: {}, done: {})
+        _typed = State(initialValue: typed)
+        _line = State(initialValue: line)
+        _offerNewKey = State(initialValue: offerNewKey)
+        _newKey = State(initialValue: newKey)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             if let newKey {

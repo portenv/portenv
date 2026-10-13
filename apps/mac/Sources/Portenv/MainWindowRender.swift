@@ -51,40 +51,49 @@ enum MainWindowRender {
             host.sceneBridgingOptions = [.toolbars, .title]
             window.contentView = host
             window.setContentSize(size)
-            // Behind everything on the sharpest screen: drawn at its scale,
-            // covered by the person's windows, never key.
-            window.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopWindow)))
-            // The sharpest screen (the built-in Retina display, say), not
-            // the one with the key window.
-            if let screen = NSScreen.screens.max(by: { $0.backingScaleFactor < $1.backingScaleFactor }) {
-                window.setFrameOrigin(NSPoint(x: screen.visibleFrame.minX, y: screen.visibleFrame.minY))
-            }
-            window.orderBack(nil)
-            defer { window.orderOut(nil) }
-            // Traffic lights and the title follow the app's activity, not
-            // the window's: AppKit's switch for drawing them active, if this
-            // macOS has it (renders only; never in the app).
-            let force = Selector(("_setForceActiveControls:"))
-            if window.responds(to: force) { window.perform(force, with: true as NSNumber) }
-            try? await Task.sleep(for: .seconds(1.5))
+            try await WindowCapture.capture(window, to: dir.appendingPathComponent("\(name)-\(suffix).png"))
+        }
+    }
+}
 
-            let file = dir.appendingPathComponent("\(name)-\(suffix).png")
-            let shot = Process()
-            shot.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
-            // -o: no window shadow; -x: no sound.
-            shot.arguments = ["-x", "-o", "-l", String(window.windowNumber), file.path]
-            try shot.run()
-            shot.waitUntilExit()
-            guard shot.terminationStatus == 0, FileManager.default.fileExists(atPath: file.path) else {
-                throw FirstRunError("screencapture failed for \(name) (Screen Recording permission?)")
-            }
+/// Captures a render's window through the window server (`screencapture
+/// -l`), which draws the system's materials an in-process capture leaves
+/// out.
+@MainActor
+enum WindowCapture {
+    static func capture(_ window: NSWindow, to file: URL) async throws {
+        // Behind everything on the sharpest screen: drawn at its scale,
+        // covered by the person's windows, never key.
+        window.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopWindow)))
+        // The sharpest screen (the built-in Retina display, say), not the
+        // one with the key window.
+        if let screen = NSScreen.screens.max(by: { $0.backingScaleFactor < $1.backingScaleFactor }) {
+            window.setFrameOrigin(NSPoint(x: screen.visibleFrame.minX, y: screen.visibleFrame.minY))
+        }
+        window.orderBack(nil)
+        defer { window.orderOut(nil) }
+        // Traffic lights and the title follow the app's activity, not the
+        // window's: AppKit's switch for drawing them active, if this macOS
+        // has it (renders only; never in the app).
+        let force = Selector(("_setForceActiveControls:"))
+        if window.responds(to: force) { window.perform(force, with: true as NSNumber) }
+        try? await Task.sleep(for: .seconds(1.5))
+
+        let shot = Process()
+        shot.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+        // -o: no window shadow; -x: no sound.
+        shot.arguments = ["-x", "-o", "-l", String(window.windowNumber), file.path]
+        try shot.run()
+        shot.waitUntilExit()
+        guard shot.terminationStatus == 0, FileManager.default.fileExists(atPath: file.path) else {
+            throw FirstRunError("screencapture failed for \(file.lastPathComponent) (Screen Recording permission?)")
         }
     }
 }
 
 /// A window drawn as the active one (coloured traffic lights, focus states)
 /// without being made key, so a render never takes focus.
-private final class ActiveLookingWindow: NSWindow {
+final class ActiveLookingWindow: NSWindow {
     override var isKeyWindow: Bool { true }
     override var isMainWindow: Bool { true }
 }

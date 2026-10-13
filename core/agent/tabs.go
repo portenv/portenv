@@ -65,12 +65,13 @@ var tmuxOwned = []string{
 }
 
 // tmuxSealed are tmux options chained after new-session that keep tmux from
-// reaching the Mac through the app's terminal (R-0133): it never sets the
-// terminal's clipboard (OSC 52, which `tmux set-buffer -w` and copy mode
-// send), and never passes a program's escape sequences through. A program
-// in the workspace runs as the same user as tmux and could set them back,
-// so the app's terminal drops clipboard requests too (ClipboardGuard); these
-// are the second line.
+// reaching the Mac through the app's terminal (R-0133): copy mode's copies
+// never set the terminal's clipboard (OSC 52), and a program's escape
+// sequences are never passed through. They're the second line: a program in
+// the workspace runs as the same user as tmux and could set them back, and
+// tmux 3.4 sends `tmux set-buffer -w` to the client as OSC 52 even with
+// set-clipboard off. The app's terminal drops every clipboard request
+// (ClipboardGuard); that's the boundary.
 var tmuxSealed = []string{
 	";", "set-option", "-g", "set-clipboard", "off",
 	";", "set-option", "-g", "allow-passthrough", "off",

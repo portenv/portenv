@@ -64,6 +64,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
+# tmux is pinned to 3.4: the helper's control mode was measured on it and
+# refuses older (ADR 0020, decision 10); raising it reruns the spike's tests.
 # Base toolchain. The stock "ubuntu" user (uid 1000) is removed so "work" can
 # take uid 1000.
 RUN userdel --remove ubuntu \
@@ -71,7 +73,7 @@ RUN userdel --remove ubuntu \
  && apt-get install -y --no-install-recommends \
       build-essential ca-certificates curl git gnupg jq less libcap2-bin locales \
       openssh-client postgresql-client procps python3 python3-pip \
-      python3-venv ripgrep sudo tmux unzip xz-utils \
+      python3-venv ripgrep sudo 'tmux=3.4-*' unzip xz-utils \
  && rm -rf /var/lib/apt/lists/*
 
 RUN case "$TARGETARCH" in \

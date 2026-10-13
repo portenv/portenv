@@ -80,7 +80,7 @@ var tmuxSealed = []string{
 // windowIDRE is a tmux window ID, the only form of tab ID accepted.
 var windowIDRE = regexp.MustCompile(`^@[0-9]{1,9}$`)
 
-// tabsPoll is how often a watch looks at the session's windows.
+// tabsPoll is how often the fallback watch looks at the session's windows.
 var tabsPoll = 300 * time.Millisecond
 
 // checkTabName: 1 to 32 characters, no control characters, no surrounding
@@ -250,8 +250,85 @@ func (t tabs) selectTab(ctx context.Context, id string) error {
 	return nil
 }
 
+// tabsSafety is how often an event-driven watch lists the tabs anyway: a
+// tab's foreground program can change without any control-mode event.
+var tabsSafety = 2 * time.Second
+
+// outputRelist is the least time between lists caused by output (a new
+// program in a tab usually prints), so busy output doesn't mean busy tmux.
+var outputRelist = time.Second
+
+// watchEvents sends the tabs at once, then again when control-mode events
+// say they may have changed (ADR 0020, decision 2): a window added, closed
+// or renamed, another session's current window, output (at most once per
+// outputRelist), a dropped line or a restarted client; and every safety as
+// a backstop for program changes that print nothing.
+func (t tabs) watchEvents(ctx context.Context, sub *ctlSub, safety time.Duration, send func([]*typesv1.Tab) error) error {
+	var last []*typesv1.Tab
+	sendIfChanged := func(first bool) error {
+		ts, err := t.list(ctx)
+		if err != nil {
+			if ctx.Err() != nil {
+				return nil
+			}
+			return err
+		}
+		if first || !sameTabs(ts, last) {
+			if err := send(ts); err != nil {
+				return err
+			}
+			last = ts
+		}
+		return nil
+	}
+	if err := sendIfChanged(true); err != nil {
+		return err
+	}
+	tick := time.NewTicker(safety)
+	defer tick.Stop()
+	var outputDue <-chan time.Time
+	lastOutputList := time.Time{}
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-tick.C:
+		case <-outputDue:
+			outputDue = nil
+		case <-sub.kick:
+			relist, output := false, false
+			for _, e := range sub.take() {
+				switch e.kind {
+				case ctlOutput:
+					output = true
+				case ctlOther:
+				default:
+					relist = true
+				}
+			}
+			if !relist {
+				if !output || outputDue != nil {
+					continue
+				}
+				if wait := outputRelist - time.Since(lastOutputList); wait > 0 {
+					outputDue = time.After(wait)
+					continue
+				}
+			}
+		}
+		lastOutputList = time.Now()
+		if err := sendIfChanged(false); err != nil {
+			return err
+		}
+		if ctx.Err() != nil {
+			return nil
+		}
+	}
+}
+
 // watch sends the tabs at once and again whenever they change, until ctx
-// ends or send fails.
+// ends or send fails, by listing them every interval: the fallback when
+// control mode can't be used (a tmux older than minTmux).
 func (t tabs) watch(ctx context.Context, every time.Duration, send func([]*typesv1.Tab) error) error {
 	var last []*typesv1.Tab
 	for first := true; ; first = false {

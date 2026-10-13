@@ -63,7 +63,9 @@ check "npm installs globals into the home" as_work 'test "$(npm config get prefi
 check "~/.local/bin on PATH" as_work 'case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) false ;; esac'
 check "psql" as_work 'psql --version'
 check "git" as_work 'git --version'
-check "tmux" as_work 'tmux -V'
+# The helper's control mode was measured on tmux 3.4 and refuses older
+# (ADR 0020, decision 10); the Dockerfile pins it.
+check "tmux 3.4" as_work 'test "$(tmux -V)" = "tmux 3.4"'
 check "ripgrep" as_work 'rg --version'
 check "jq" as_work 'jq --version'
 check "build-essential" as_work 'gcc --version && make --version'

@@ -1087,6 +1087,13 @@ In this order:
      - **So the app's terminal moves to tmux control mode, one terminal per tab (ADR 0020),** and blocks stay in Phase 1, in this order:
        1. **1.2c, the control-mode milestone:**
           - the box agent's control client per session (tab events replace the polling);
+            - **Built (PR 1, 2026-10-13, awaiting review):**
+              - one `tmux -C` client per session, shared, started with the first subscriber and ended with the last;
+              - started again if it exits, with subscribers told to list afresh;
+              - tmux's `set-clipboard` and `allow-passthrough` set off at every start;
+              - WatchTabs follows its events (window added, closed, renamed, another session's current window, output at most once a second), with a 2 s backstop for program changes that print nothing, and polling only below tmux 3.4;
+              - the `%output`/`%extended-output` decoder and a line reader capped at 1 MB per line, each with its own fuzz target, seeded from the spike's tmux 3.4 streams (`make fuzz`, in CI on a 15 s budget);
+              - tmux pinned to 3.4 in the image and checked by `test.sh`; the helper refuses older for control mode.
           - the `TabTerminal` stream in the agent and portenvd;
           - the app's per-tab terminal (`TabTerminalSource`, `MarkedTerminalView`) in place of today's attached terminal;
           - **the latency gate:** keystroke to echo no worse than the attached client by more than 5 ms at p95 locally (within ±0.25 ms at tmux, measured), and the same run on the us-west-2 tester server once it exists. Until it passes, a dev-only switch back to the attached client, which never reaches a release build;

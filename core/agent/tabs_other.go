@@ -10,3 +10,5 @@ import "errors"
 var errNoTabs = errors.New("tabs exist only inside a box (Linux)")
 
 func tmuxAs(Config) (tmuxFunc, error) { return nil, errNoTabs }
+
+func tmuxCmdAs(Config) (tmuxCmdFunc, error) { return nil, errNoTabs }

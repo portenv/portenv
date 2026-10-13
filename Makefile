@@ -54,7 +54,7 @@ SWIFT_PROTOBUF := 1.38.1
 GRPC_SWIFT_PROTOBUF := 2.4.1
 SWIFT_PLUGINS := $(BIN)/protoc-gen-swift $(BIN)/protoc-gen-grpc-swift-2
 
-.PHONY: all build app release-local unregister-service test lint fmt proto proto-go proto-swift proto-check proto-check-go agent-linux cli-linux cli-darwin swift-test swift-env-check \
+.PHONY: all build app release-local unregister-service test fuzz lint fmt proto proto-go proto-swift proto-check proto-check-go agent-linux cli-linux cli-darwin swift-test swift-env-check \
 	secrets spdx-check check tools clean image image-test driver-test e2e
 
 all: build test lint proto-check
@@ -109,6 +109,13 @@ test: $(TOOLS_STAMP)
 	scripts/test-scan-excerpt.sh
 	scripts/test-notarize.sh
 	scripts/test-check-terminal-views.sh
+
+## fuzz: the workspace helper's control-mode decoder and line reader, briefly (R-0162; FUZZTIME=15s)
+FUZZTIME ?= 15s
+fuzz:
+	for f in FuzzDecodeControlOutput FuzzReadControlLines; do \
+		(cd core && go test -run '^$$' -fuzz "^$$f$$" -fuzztime $(FUZZTIME) ./agent/) || exit 1; \
+	done
 
 ## lint: formatting, vet, golangci-lint, buf lint, workflow lint, SPDX headers, terminal views made only by TerminalViews
 lint: $(TOOLS_STAMP) $(SHELLCHECK) spdx-check

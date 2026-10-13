@@ -204,6 +204,32 @@ public struct SplitLayout: Equatable, Sendable {
         }
     }
 
+    /// A divider between two panes or groups: the split's path (for
+    /// resize), its axis, the line it draws, and the space it divides.
+    public struct Divider: Equatable, Sendable {
+        public let path: [Int]
+        public let axis: SplitAxis
+        public let line: CGRect
+        public let span: CGRect
+    }
+
+    /// Every divider, outermost first.
+    public func dividers(in size: CGSize) -> [Divider] {
+        var out: [Divider] = []
+        Self.dividers(root, path: [], in: CGRect(origin: .zero, size: size), into: &out)
+        return out
+    }
+
+    private static func dividers(_ n: PaneNode, path: [Int], in r: CGRect, into out: inout [Divider]) {
+        guard case let .split(axis, a, b, f) = n else { return }
+        let (ra, rb) = divide(r, axis, f)
+        let line = axis == .right ? CGRect(x: rb.minX, y: r.minY, width: 0, height: r.height)
+            : CGRect(x: r.minX, y: rb.minY, width: r.width, height: 0)
+        out.append(Divider(path: path, axis: axis, line: line, span: r))
+        dividers(a, path: path + [0], in: ra, into: &out)
+        dividers(b, path: path + [1], in: rb, into: &out)
+    }
+
     // MARK: Tree helpers
 
     private static func leaves(_ n: PaneNode) -> [PaneID] {
@@ -464,5 +490,101 @@ public final class SplitController {
         } catch {
             self.error = error.localizedDescription
         }
+    }
+}
+
+/// Split view's terminals over ADR 0020's interface: each pane opens its own
+/// source from the workspace's TabTerminalProvider (ScriptedTabSource until
+/// 1.2c's provider lands, R-0171). Choosing another tab opens a new source
+/// and closes the old one; closing a pane closes its source, never the tab.
+@MainActor
+@Observable
+public final class PaneSources: PaneTerminals {
+    /// The size a source opens with; the view sends its real size at once.
+    public static let startSize = TabTerminalSize(cols: 80, rows: 24)
+
+    private let provider: TabTerminalProvider
+    private let makeTab: (String, PaneID) async throws -> TabInfo
+    private var sources: [PaneID: any TabTerminalSource] = [:]
+
+    /// - newTab: makes a tab for one pane's viewer (portenvd's NewTab).
+    public init(provider: TabTerminalProvider, newTab: @escaping (String, PaneID) async throws -> TabInfo) {
+        self.provider = provider
+        makeTab = newTab
+    }
+
+    public func source(for pane: PaneID) -> (any TabTerminalSource)? { sources[pane] }
+
+    public func show(tab: String, in pane: PaneID) async throws {
+        if sources[pane]?.tab == tab { return }
+        sources[pane]?.close()
+        sources[pane] = provider.open(tab: tab, size: Self.startSize)
+    }
+
+    public func newTab(name: String, in pane: PaneID) async throws -> TabInfo {
+        let t = try await makeTab(name, pane)
+        try await show(tab: t.id, in: pane)
+        return t
+    }
+
+    public func closed(_ pane: PaneID) {
+        sources.removeValue(forKey: pane)?.close()
+    }
+}
+
+/// Scripted terminals for split view until 1.2c's provider lands (R-0171),
+/// and for renders: each source starts with a reset seeded with the tab's
+/// sample text.
+@MainActor
+public final class ScriptedTabProvider: TabTerminalProvider {
+    /// Each tab's sample screen, by tab ID.
+    public var seeds: [String: String]
+    public init(seeds: [String: String] = [:]) { self.seeds = seeds }
+
+    public func open(tab: String, size: TabTerminalSize) -> any TabTerminalSource {
+        let s = ScriptedTabSource(tab: tab)
+        let text = (seeds[tab] ?? "").replacingOccurrences(of: "\n", with: "\r\n")
+        s.play(.reset(size, seed: Array(text.utf8)))
+        return s
+    }
+}
+
+/// A pane header's words (the split-view board): on the left, the program
+/// and what it's doing ("Claude Code · asking you", "watching"); on the
+/// right, who is typing ("You", "Grok Bot is typing") or "quiet since 15:41".
+public struct PaneHeader: Equatable, Sendable {
+    public let detail: String
+    public let who: String
+
+    public init(detail: String, who: String) {
+        self.detail = detail
+        self.who = who
+    }
+
+    public init(_ tab: TabInfo, now: Date, timeZone: TimeZone = .current) {
+        let program = tab.program
+        if tab.waiting != nil {
+            detail = program.isEmpty ? "asking you" : "\(program) \u{00B7} asking you"
+        } else if !tab.watchers.isEmpty {
+            detail = "watching"
+        } else {
+            detail = program
+        }
+        if let author = tab.typingAuthor {
+            who = author.isYou ? "You" : "\(author.name) is typing"
+        } else if !program.isEmpty, let last = tab.lastOutputAt, now.timeIntervalSince(last) >= TabActivity.quietAfter {
+            let f = DateFormatter()
+            f.locale = Locale(identifier: "en_GB")
+            f.timeZone = timeZone
+            f.dateFormat = "HH:mm"
+            who = "quiet since \(f.string(from: last))"
+        } else {
+            who = ""
+        }
+    }
+
+    /// What VoiceOver reads for the pane.
+    public func label(tab: String) -> String {
+        SplitText.paneLabel(tab: tab, status: [detail, who].filter { !$0.isEmpty }.joined(separator: ", "))
     }
 }

@@ -118,6 +118,7 @@ Menu items that can't work right now are disabled with no explanation in the men
   - **The clipboard:** it can't read or set the Mac's clipboard (OSC 52).
   - **Links:** only web pages (http, https) open, and only on the person's own ⌘-click; a `file:` link, `javascript:` or another app's scheme never opens.
   - **Before anyone clicks:** hovering a link shows its full destination, as a tooltip and in the state line ("Opens https://…"), since a program can label a link anything. A link Portenv won't open says so there instead: "Portenv opens only web links: …".
+  - **What's shown is the link that opens** (R-0135): without control or bidi characters, which could hide or reorder part of it, and with the host in punycode, so a look-alike domain shows as `xn--…`.
 - **Closing a tab that still runs a program asks first:** "Close this tab? <program> is still running.", with Close Tab and Cancel. The program is the tab's foreground process as the box agent reports it at that moment. A tab with only its shell closes without asking. The last tab has no close button; ⌘W closes the window instead.
 
 ### 4.2 Blocks

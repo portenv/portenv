@@ -85,6 +85,28 @@ struct TerminalGuardTests {
         #expect(TerminalLinks.status("file:///etc/passwd") == "Portenv opens only web links: file:///etc/passwd")
     }
 
+    /// The link shown is the link that opens: no control or bidi characters
+    /// to hide or reorder part of it (R-0135).
+    @Test func controlAndBidiCharactersAreNeverShown() {
+        let tricky = "https://example.com/\u{202E}gpj.exe\u{202C}\u{2066}x\u{2069}\u{200F}\u{07}\u{1b}[2K\r\n\u{85}"
+        let shown = TerminalLinks.display(tricky)
+        #expect(!shown.unicodeScalars.contains { TerminalLinks.hidden($0) }, "\(shown.debugDescription)")
+        #expect(shown == "https://example.com/gpj.exex%5B2K")
+        #expect(TerminalLinks.status(tricky) == "Opens https://example.com/gpj.exex%5B2K (⌘-click)")
+        // A refused link is cleaned too.
+        #expect(TerminalLinks.status("file:///\u{202E}fdp.exe") == "Portenv opens only web links: file:///fdp.exe")
+    }
+
+    /// A look-alike domain shows as what it is: the host in punycode.
+    @Test func theHostShowsInPunycode() {
+        #expect(TerminalLinks.display("https://аpple.com/login") == "https://xn--pple-43d.com/login")
+        #expect(TerminalLinks.status("https://аpple.com/login") == "Opens https://xn--pple-43d.com/login (⌘-click)")
+        #expect(TerminalLinks.display("https://bücher.example/") == "https://xn--bcher-kva.example/")
+        #expect(TerminalLinks.display("https://apple.com/login") == "https://apple.com/login")
+        // What opens is the same ASCII URL that was shown.
+        #expect(TerminalLinks.openable("https://аpple.com/login")?.absoluteString == "https://xn--pple-43d.com/login")
+    }
+
     /// A link opens only on the person's own click, and only a web page:
     /// `file:` and a custom scheme are refused even then.
     @Test func aLinkOpensOnlyOnTheClickAndOnlyAWebPage() {

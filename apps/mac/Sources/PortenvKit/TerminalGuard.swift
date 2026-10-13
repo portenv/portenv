@@ -109,7 +109,28 @@ public enum TerminalLinks {
     /// What the tooltip and the state line show for the link under the
     /// pointer: its full destination, before anyone clicks.
     public static func status(_ link: String) -> String {
-        openable(link) != nil ? "Opens \(link) (⌘-click)" : "Portenv opens only web links: \(link)"
+        openable(link) != nil ? "Opens \(display(link)) (⌘-click)" : "Portenv opens only web links: \(display(link))"
+    }
+
+    /// A link as it's safe to show (R-0135): without control characters or
+    /// bidi controls, which could hide or reorder part of it, and a web
+    /// link as its ASCII form, the host in punycode, so a look-alike domain
+    /// (a Cyrillic "а" in "аpple.com") shows as what it is
+    /// ("xn--pple-43d.com"). That's also the URL that opens.
+    public static func display(_ link: String) -> String {
+        let clean = String(String.UnicodeScalarView(link.unicodeScalars.filter { !hidden($0) }))
+        if let url = openable(clean) { return url.absoluteString }
+        return clean
+    }
+
+    /// Control characters (C0, DEL, C1) and the bidi controls: the
+    /// embeddings and overrides (U+202A–U+202E), the isolates
+    /// (U+2066–U+2069), and the marks (U+200E, U+200F, U+061C).
+    static func hidden(_ c: Unicode.Scalar) -> Bool {
+        switch c.value {
+        case 0x00 ... 0x1F, 0x7F ... 0x9F, 0x202A ... 0x202E, 0x2066 ... 0x2069, 0x200E, 0x200F, 0x061C: true
+        default: false
+        }
     }
 }
 

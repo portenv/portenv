@@ -86,10 +86,11 @@ struct FirstRunView: View {
 
     private var welcome: some View {
         VStack(spacing: 20) {
-            Image(systemName: "house")
-                .font(.system(size: 44, weight: .regular))
-                .frame(width: 84, height: 84)
-                .background(RoundedRectangle(cornerRadius: 20).fill(.quaternary))
+            // Portenv's own icon, with its own shape and shadow: no tile
+            // behind it (R-0151). Dev lanes show their lettered icon.
+            Image(nsImage: WelcomeArt.image)
+                .resizable()
+                .frame(width: WelcomeArt.size, height: WelcomeArt.size)
                 .accessibilityHidden(true)
             Text(FirstRunText.welcomeTitle).font(.system(size: 30, weight: .bold))
                 .accessibilityAddTraits(.isHeader)
@@ -328,6 +329,12 @@ enum Announce {
         NSAccessibility.post(element: NSApp.mainWindow as Any? ?? NSApp as Any, notification: .announcementRequested,
                              userInfo: [.announcement: words, .priority: NSAccessibilityPriorityLevel.high.rawValue])
     }
+}
+
+/// Welcome's picture: the application icon itself (R-0151).
+enum WelcomeArt {
+    static let size: CGFloat = 112
+    @MainActor static var image: NSImage { NSApp.applicationIconImage }
 }
 
 /// The page dots under first run (the mockups'), read as "Step 3 of 5".

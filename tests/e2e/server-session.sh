@@ -81,7 +81,7 @@ echo "== Move To ▸ the server"
 t0=$(python3 -c 'import time; print(time.time())')
 out=$(app move "$box" "$target") || true; echo "  $out"
 t1=$(python3 -c 'import time; print(time.time())')
-# Exactly MoveBox's success line: "box is open on $target since …" (a
+# Exactly MoveBox's success line: "workspace is open on $target since …" (a
 # lease error) must not pass (#58).
 expect "Move To ▸ $target ($(python3 -c "print(round($t1 - $t0, 1))") s)" grep -qxF "open on $target" <<<"$out"
 state=$(app state "$box") || true; echo "  state $state"
@@ -106,7 +106,7 @@ A sudo systemctl restart portenv-runner
 sleep 2
 expect "the box keeps running on the server" A "sudo docker ps --format '{{.Names}}' | grep -q portenv-$(box_id)"
 out=$(app check "$box") || true; echo "  $out"
-expect "check: the box agent is unavailable" grep -q "the box agent is unavailable" <<<"$out"
+expect "check: the workspace helper is unavailable" grep -q "the workspace helper is unavailable" <<<"$out"
 # Processes in the box keep running while the agent is gone: one edits a file.
 A "sudo docker exec -u work portenv-$(box_id) sh -c 'echo while-down > /home/work/r2.txt'"
 out=$(app restart "$box") || true; echo "  $out"
@@ -117,9 +117,9 @@ expect "both edits are still there" grep -q "r1=before-restart r2=while-down" <<
 echo "== an impostor on the server box's agent port"
 A "sudo docker exec portenv-$(box_id) sh -c \"pkill -f '^portenv-agent serve'; sleep 1; openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -subj /CN=portenv-agent -days 1 -keyout /tmp/i.key -out /tmp/i.crt 2>/dev/null; setsid sh -c 'openssl s_server -accept 7700 -cert /tmp/i.crt -key /tmp/i.key -quiet >/tmp/impostor.log 2>&1' >/dev/null 2>&1 & sleep 1\""
 out=$(app point "$box") || true; echo "  $out"
-expect "a save point is refused: the box agent is unavailable" grep -q "the box agent is unavailable" <<<"$out"
+expect "a save point is refused: the workspace helper is unavailable" grep -q "the workspace helper is unavailable" <<<"$out"
 out=$({ sleep 3; } | "$portenv" attach "$box" 2>&1 | tr -d '\r' | tail -1) || true; echo "  $out"
-expect "the terminal is refused: the box agent is unavailable" grep -q "the box agent is unavailable" <<<"$out"
+expect "the terminal is refused: the workspace helper is unavailable" grep -q "the workspace helper is unavailable" <<<"$out"
 token1=$("${ssh_cmd[@]}" -- "$target" sudo /usr/local/bin/portenv app channel "$box" </dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])')
 token=$token1
 impostor_log=$(A "sudo docker exec portenv-$(box_id) cat /tmp/impostor.log" || true)

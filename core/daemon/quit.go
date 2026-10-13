@@ -55,7 +55,7 @@ func (s *Server) startOpening() (done func(), err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.stopping || s.relaunching.Load() {
-		return nil, status.Error(codes.Unavailable, "portenvd is stopping; open the box again when Portenv starts")
+		return nil, status.Error(codes.Unavailable, "portenvd is stopping; open the workspace again when Portenv starts")
 	}
 	s.opening.Add(1)
 	return s.opening.Done, nil

@@ -40,7 +40,7 @@ struct BoxTitle: View {
         .fixedSize()
         .accessibilityLabel(A11y.titleLabel(box: controller.box))
         .accessibilityValue(subtitle)
-        .help("Box actions")
+        .help("Workspace actions")
     }
 }
 

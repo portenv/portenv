@@ -48,7 +48,8 @@ public final class DaemonClient: DaemonAPI, Sendable {
     }
 
     public func boxes() async throws -> [String] {
-        try await call { try await api.listBoxes(.init()).boxes.map(\.box.name) }
+        // A box CreateBox hasn't finished is never opened (ADR 0019).
+        try await call { try await api.listBoxes(.init()).boxes.filter { !$0.creating }.map(\.box.name) }
     }
 
     public func servers() async throws -> [String] {
@@ -222,6 +223,54 @@ public final class DaemonClient: DaemonAPI, Sendable {
                 }
             }
             continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+}
+
+extension DaemonClient: BoxCreating {
+    public func listings() async throws -> [BoxListing] {
+        try await call {
+            try await api.listBoxes(.init()).boxes.map { BoxListing(name: $0.box.name, id: $0.box.id, creating: $0.creating) }
+        }
+    }
+
+    public func createBox(_ r: CreateRequest) async throws -> Bool {
+        var req = Portenv_Daemon_V1_CreateBoxRequest()
+        req.name = r.name
+        req.boxID = r.boxID
+        req.storage = r.storage
+        req.keys = r.keys
+        req.recoveryPassword = r.recoveryPassword
+        return try await creating { try await api.createBox(req).alreadyCreated }
+    }
+
+    public func discardCreation(boxID: String) async throws {
+        _ = try await creating { try await api.discardCreation(.with { $0.boxID = boxID }) }
+    }
+
+    /// CreateBox's and DiscardCreation's errors, by what the app does.
+    private func creating<T: Sendable>(_ body: () async throws -> T) async throws -> T {
+        do {
+            return try await body()
+        } catch let e as RPCError {
+            // The app only makes this-Mac boxes, which every portenvd with
+            // CreateBox makes: Unimplemented is an older portenvd.
+            let message = e.code == .unimplemented ? DaemonError.outOfDate : e.message
+            throw CreateBoxError(kind: CreateBoxError.Kind(grpcCode: Self.grpcCode(e.code)), message: message)
+        } catch {
+            throw CreateBoxError(kind: .daemonGone, message: "Portenv’s background service isn’t answering.")
+        }
+    }
+
+    static func grpcCode(_ c: RPCError.Code) -> Int {
+        switch c {
+        case .invalidArgument: 3
+        case .deadlineExceeded: 4
+        case .alreadyExists: 6
+        case .failedPrecondition: 9
+        case .unimplemented: 12
+        case .unavailable: 14
+        default: 13
         }
     }
 }

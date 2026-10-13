@@ -25,7 +25,24 @@ struct PaneHeaderTests {
 
         let tests = TabInfo(id: "@3", name: "tests", active: false, program: "npm",
                             lastOutputAt: now.addingTimeInterval(-120), watchers: ["Claude Code"])
-        #expect(PaneHeader(tests, now: now, timeZone: utc) == PaneHeader(detail: "watching", who: "quiet since 07:58"))
+        let h24 = AppClock.locale(language: "en", hourCycle: .zeroToTwentyThree)
+        #expect(PaneHeader(tests, now: now, timeZone: utc, locale: h24) == PaneHeader(detail: "watching", who: "quiet since 07:58"))
+    }
+
+    /// "Quiet since" in the app's language and the Mac's 12/24-hour
+    /// setting (R-0172).
+    @Test func quietSinceFollowsTheHourSetting() {
+        let tests = TabInfo(id: "@3", name: "tests", active: false, program: "npm",
+                            lastOutputAt: now.addingTimeInterval(-120 + 6 * 3600))
+        let later = now.addingTimeInterval(6 * 3600)
+        let h12 = AppClock.locale(language: "en", hourCycle: .oneToTwelve)
+        let h24 = AppClock.locale(language: "en", hourCycle: .zeroToTwentyThree)
+        let in12 = PaneHeader(tests, now: later, timeZone: utc, locale: h12).who
+        let in24 = PaneHeader(tests, now: later, timeZone: utc, locale: h24).who
+        #expect(in12.hasPrefix("quiet since 1:58") && in12.hasSuffix("PM"), "\(in12)")
+        #expect(in24 == "quiet since 13:58")
+        // The app's language picks the words around the numbers.
+        #expect(AppClock.locale(language: "fr", hourCycle: .zeroToTwentyThree).language.languageCode == "fr")
     }
 
     @Test func aPlainShell() {

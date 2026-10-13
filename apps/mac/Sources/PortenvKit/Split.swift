@@ -561,7 +561,7 @@ public struct PaneHeader: Equatable, Sendable {
         self.who = who
     }
 
-    public init(_ tab: TabInfo, now: Date, timeZone: TimeZone = .current) {
+    public init(_ tab: TabInfo, now: Date, timeZone: TimeZone = .current, locale: Locale = AppClock.locale()) {
         let program = tab.program
         if tab.waiting != nil {
             detail = program.isEmpty ? "asking you" : "\(program) \u{00B7} asking you"
@@ -573,11 +573,7 @@ public struct PaneHeader: Equatable, Sendable {
         if let author = tab.typingAuthor {
             who = author.isYou ? "You" : "\(author.name) is typing"
         } else if !program.isEmpty, let last = tab.lastOutputAt, now.timeIntervalSince(last) >= TabActivity.quietAfter {
-            let f = DateFormatter()
-            f.locale = Locale(identifier: "en_GB")
-            f.timeZone = timeZone
-            f.dateFormat = "HH:mm"
-            who = "quiet since \(f.string(from: last))"
+            who = "quiet since \(AppClock.short(last, timeZone: timeZone, locale: locale))"
         } else {
             who = ""
         }
@@ -586,5 +582,30 @@ public struct PaneHeader: Equatable, Sendable {
     /// What VoiceOver reads for the pane.
     public func label(tab: String) -> String {
         SplitText.paneLabel(tab: tab, status: [detail, who].filter { !$0.isEmpty }.joined(separator: ", "))
+    }
+}
+
+/// Times in the app (R-0172): the app's language (the first of the bundle's
+/// preferred localizations) and the Mac's own 12/24-hour setting, in the
+/// short time style.
+public enum AppClock {
+    /// The locale times are written in.
+    /// Only the language and the hour setting: the Mac's region would mix
+    /// in its own words ("1:58 in the afternoon" for English in France).
+    public static func locale(language: String = Bundle.main.preferredLocalizations.first ?? "en",
+                              hourCycle: Locale.HourCycle = Locale.current.hourCycle) -> Locale {
+        var c = Locale.Components(identifier: language)
+        c.hourCycle = hourCycle
+        return Locale(components: c)
+    }
+
+    /// "1:58 PM" or "13:58".
+    public static func short(_ date: Date, timeZone: TimeZone = .current, locale: Locale = locale()) -> String {
+        let f = DateFormatter()
+        f.locale = locale
+        f.timeZone = timeZone
+        f.dateStyle = .none
+        f.timeStyle = .short
+        return f.string(from: date)
     }
 }

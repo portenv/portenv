@@ -57,6 +57,10 @@ enum ScreenRenders {
             Task { await making.next() }
             while !making.busy { await Task.yield() }
             try snapshot(FirstRunView(flow: making, opened: { _ in }), name: "first-run-1-welcome-making-key", in: dir)
+            // A Keychain call waiting for a prompt (GUIDELINES §3.1).
+            let waiting = await sampleFlow(at: .firstBox)
+            waiting.keychainWaiting = true
+            try snapshot(FirstRunView(flow: waiting, opened: { _ in }), name: "first-run-4-first-box-keychain-waiting", in: dir)
             // A Continue that can't move on says why, by the button (R-0126).
             let notTicked = await sampleFlow(at: .recoveryKey)
             notTicked.recoverySaved = false

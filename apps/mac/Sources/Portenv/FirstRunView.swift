@@ -16,6 +16,9 @@ struct FirstRunView: View {
     /// Where Continue and Back are, in the window (top-left origin), for
     /// the tests that click them (PortenvAppTests). Nil in the app.
     var controlFrames: (([String: CGRect]) -> Void)?
+    /// Refills the pool when it runs out (the recovery key sheet).
+    var refill: RecoveryRefill?
+    @Environment(\.isRendering) private var isRendering
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -47,6 +50,16 @@ struct FirstRunView: View {
         }
         .coordinateSpace(name: ControlFrames.space)
         .onPreferenceChange(ControlFrames.self) { frames in controlFrames?(frames) }
+        // In front and key when it shows, so Continue is the blue default
+        // and Return reaches it (R-0153). Renders never take focus.
+        .background(BringsWindowForward(enabled: !isRendering))
+        .sheet(isPresented: $flow.needsRecoveryKey) {
+            if let refill {
+                RecoveryKeySheet(refill: refill, cancel: { flow.needsRecoveryKey = false }) {
+                    Task { await flow.recoveryKeyRefilled() }
+                }
+            }
+        }
         // Every Continue that doesn't move on is heard, even with the same
         // words as the last one, at high priority (R-0126, R-0132).
         .onChange(of: flow.refusals) { _, _ in

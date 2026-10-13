@@ -213,7 +213,8 @@ func (s *Server) ListBoxes(context.Context, *daemonv1.ListBoxesRequest) (*daemon
 			state = typesv1.BoxState_BOX_STATE_RUNNING
 		}
 		s.mu.Unlock()
-		resp.Boxes = append(resp.Boxes, &daemonv1.BoxStatus{Box: &typesv1.Box{Id: c.ID, Name: c.Name, ToolboxImage: c.Image}, State: state})
+		resp.Boxes = append(resp.Boxes, &daemonv1.BoxStatus{Box: &typesv1.Box{Id: c.ID, Name: c.Name, ToolboxImage: c.Image}, State: state,
+			CarriesRecoveryKey: c.Recovery})
 	}
 	// Boxes CreateBox hasn't finished: shown, never opened (ADR 0019).
 	creating, err := s.env.Creations()

@@ -13,35 +13,28 @@ struct FirstRunView: View {
     let opened: (String) -> Void
     /// New Box… from the box list: Cancel, ⎋ and "Your boxes" go back to it.
     var cancel: (() -> Void)?
+    /// Where Continue and Back are, in the window (top-left origin), for
+    /// the tests that click them (PortenvAppTests). Nil in the app.
+    var controlFrames: (([String: CGRect]) -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             if let cancel {
                 Button(action: cancel) {
-                    Label("Your boxes", systemImage: "chevron.left")
+                    Label("Your workspaces", systemImage: "chevron.left")
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
                 .padding(.bottom, 20)
-                .accessibilityLabel("Back to your boxes")
+                .accessibilityLabel("Back to your workspaces")
             }
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            if let error = flow.error {
-                Text(error)
-                    .foregroundStyle(.red)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.bottom, 12)
-                    .accessibilityLabel("Problem: \(error)")
-            }
-            // A step not built yet is a notice, not an error (R-0032).
-            if let notice = flow.notice {
-                Text(notice)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.bottom, 12)
-            }
             if flow.step != .welcome {
+                // Why Continue didn't move on, right above it (R-0126).
+                refusal
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .padding(.bottom, 12)
                 footer
             }
         }
@@ -52,12 +45,36 @@ struct FirstRunView: View {
         .onChange(of: flow.made) { _, made in
             if let made { opened(made) }
         }
+        .coordinateSpace(name: ControlFrames.space)
+        .onPreferenceChange(ControlFrames.self) { frames in controlFrames?(frames) }
+        // Every Continue that doesn't move on is heard, even with the same
+        // words as the last one, at high priority (R-0126, R-0132).
+        .onChange(of: flow.refusals) { _, _ in
+            if let words = flow.reason { Announce.high(words) }
+        }
+    }
+
+    /// Why Continue can't go on, or didn't: an error in red, or a notice (a
+    /// step not built yet, or one that isn't complete). Shown for as long
+    /// as it applies, so Continue is never dimmed without a reason on
+    /// screen (R-0132).
+    @ViewBuilder private var refusal: some View {
+        if let error = flow.error {
+            Label(error, systemImage: "exclamationmark.triangle")
+                .foregroundStyle(.red)
+                .fixedSize(horizontal: false, vertical: true)
+                .multilineTextAlignment(.trailing)
+                .accessibilityLabel("Problem: \(error)")
+        } else if let reason = flow.reason {
+            Label(reason, systemImage: "info.circle")
+                .fixedSize(horizontal: false, vertical: true)
+                .multilineTextAlignment(.trailing)
+        }
     }
 
     @ViewBuilder private var content: some View {
         switch flow.step {
         case .welcome: welcome
-        case .protection: protection
         case .recoveryKey: recoveryKey
         case .storage: storage
         case .firstBox: firstBox
@@ -85,26 +102,36 @@ struct FirstRunView: View {
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
                 .keyboardShortcut(.defaultAction)
-            CountingChoice(countUsage: $flow.countUsage)
+                .disabled(flow.busy)
+                .reportsFrame(ControlFrames.continue)
+            // While the key is made (R-0132).
+            if flow.busy {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text(FirstRunText.makingKey).foregroundStyle(.secondary)
+                }
+                .accessibilityElement(children: .combine)
+            }
+            // Welcome has no footer: why Continue didn't move on goes under it.
+            refusal
                 .frame(maxWidth: 440)
+            // Counting needs the update check, which tester builds don't
+            // have yet: hidden until counting exists (R-0098, R-0106).
+            if UsageCounting.shown {
+                CountingChoice(countUsage: $flow.countUsage)
+                    .frame(maxWidth: 440)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private var protection: some View {
-        heading(FirstRunText.protectionTitle, FirstRunText.protectionLine) {
-            Label("Only you", systemImage: "lock")
-                .font(.headline)
-                .accessibilityLabel("Protection: only you")
-        }
     }
 
     private var recoveryKey: some View {
         heading(FirstRunText.recoveryTitle, FirstRunText.recoveryLine) {
             VStack(spacing: 16) {
+                // Not selectable: it's copied only through Copy, concealed,
+                // transient and cleared after 60 s (R-0132).
                 Text(flow.recoveryKey ?? "")
                     .font(.system(size: 22, weight: .semibold, design: .monospaced))
-                    .textSelection(.enabled)
                     .accessibilityLabel(A11y.recoveryKey(flow.recoveryKey ?? ""))
                 HStack(spacing: 12) {
                     Button("Print…") { RecoveryKeyActions.print(flow.recoveryKey ?? "") }
@@ -117,39 +144,29 @@ struct FirstRunView: View {
             Toggle(FirstRunText.recoverySavedCheck, isOn: $flow.recoverySaved)
                 .toggleStyle(.checkbox)
                 .padding(.top, 16)
+            // A key shown in a launch that quit before finishing was never
+            // used (R-0132, ADR 0019).
+            if flow.keyShownBefore {
+                Label(FirstRunText.replacedKey, systemImage: "info.circle")
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 12)
+            }
         }
     }
 
+    /// The first-run-4-storage-this-mac board: this Mac, chosen; a server
+    /// and a bucket dimmed and marked LATER (R-0092, R-0132).
     private var storage: some View {
-        heading(FirstRunText.storageTitle, "") {
-            VStack(alignment: .leading, spacing: 14) {
-                Picker("Where should your saves go?", selection: $flow.storage) {
-                    Text(FirstRunText.storageServer).tag(StorageChoice?.some(.server))
-                    Text(FirstRunText.storageBucket).tag(StorageChoice?.some(.bucket))
-                    Text(FirstRunText.storageThisMac).tag(StorageChoice?.some(.thisMac))
-                }
-                .pickerStyle(.radioGroup)
-                .labelsHidden()
-                switch flow.storage {
-                case .server:
-                    TextField("user@server", text: $flow.serverAddress)
-                        .textFieldStyle(.roundedBorder)
-                        .frame(maxWidth: 360)
-                        .accessibilityLabel("Server address")
-                case .bucket:
-                    TextField("s3:https://…/bucket", text: $flow.bucketURL)
-                        .textFieldStyle(.roundedBorder)
-                        .frame(maxWidth: 360)
-                        .accessibilityLabel("Bucket address")
-                case .thisMac:
-                    Text(FirstRunText.thisMacOnly)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: 520, alignment: .leading)
-                case nil:
-                    EmptyView()
-                }
+        heading(FirstRunText.storageTitle, FirstRunText.storageLine) {
+            VStack(spacing: 12) {
+                StorageRow(icon: "laptopcomputer", title: FirstRunText.storageThisMac, line: FirstRunText.thisMacOnly,
+                           selected: flow.storage == .thisMac, later: false) { flow.storage = .thisMac }
+                StorageRow(icon: "server.rack", title: FirstRunText.storageServer, line: FirstRunText.storageServerLine,
+                           selected: false, later: true) {}
+                StorageRow(icon: "cylinder", title: FirstRunText.storageBucket, line: FirstRunText.storageBucketLine,
+                           selected: false, later: true) {}
             }
+            .frame(maxWidth: 600)
         }
     }
 
@@ -224,21 +241,96 @@ struct FirstRunView: View {
                     Button("Back") { flow.back() }
                         .controlSize(.large)
                         .keyboardShortcut(.cancelAction)
+                        .reportsFrame(ControlFrames.back)
                 }
                 // Filled only when it can be pressed; otherwise dimmed and
                 // disabled, not only inert (R-0049).
+                if flow.busy {
+                    ProgressView().controlSize(.small).padding(.trailing, 4)
+                }
+                // Dimmed while the step isn't complete, but a click still
+                // reaches next(), which says why (R-0049, R-0132).
                 Button(flow.primaryButton) { Task { await flow.next() } }
                     .buttonStyle(.borderedProminent)
                     .tint(flow.primaryProminent ? Color.accentColor : Color.secondary.opacity(0.35))
                     .controlSize(.large)
                     .keyboardShortcut(.defaultAction)
-                    .disabled(!flow.canContinue)
+                    .disabled(flow.busy)
+                    .accessibilityHint(flow.whyNot ?? "")
+                    .reportsFrame(ControlFrames.continue)
             }
         }
     }
 }
 
-/// The page dots under first run (the mockups'), read as "Step 3 of 6".
+/// One storage choice, as a card (the board). A choice that comes later is
+/// dimmed, marked LATER and can't be chosen.
+struct StorageRow: View {
+    let icon: String
+    let title: String
+    let line: String
+    let selected: Bool
+    let later: Bool
+    let choose: () -> Void
+
+    var body: some View {
+        Button(action: choose) {
+            HStack(alignment: .center, spacing: 16) {
+                Image(systemName: icon).font(.title2).frame(width: 32)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title).font(.headline)
+                    Text(line).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 12)
+                if later {
+                    Text(FirstRunText.later).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                }
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .background(RoundedRectangle(cornerRadius: 12).fill(selected ? Color.accentColor.opacity(0.12) : Color.clear))
+            .overlay(RoundedRectangle(cornerRadius: 12)
+                .stroke(selected ? Color.accentColor : Color.secondary.opacity(0.3), lineWidth: selected ? 2 : 1))
+        }
+        .buttonStyle(.plain)
+        .disabled(later)
+        .opacity(later ? 0.5 : 1)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(title). \(line)")
+        .accessibilityValue(later ? "Later" : "")
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+}
+
+/// The frames of first run's buttons, by name, for the tests that click them.
+struct ControlFrames: PreferenceKey {
+    static let `continue` = "continue"
+    static let back = "back"
+    /// The whole view, top-left origin.
+    static let space = "first-run"
+    static let defaultValue: [String: CGRect] = [:]
+    static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) {
+        value.merge(nextValue()) { $1 }
+    }
+}
+
+extension View {
+    func reportsFrame(_ name: String) -> some View {
+        background(GeometryReader { g in Color.clear.preference(key: ControlFrames.self, value: [name: g.frame(in: .named(ControlFrames.space))]) })
+    }
+}
+
+/// Announcements VoiceOver says at once, over what it's reading (R-0132).
+enum Announce {
+    @MainActor
+    static func high(_ words: String) {
+        NSAccessibility.post(element: NSApp.mainWindow as Any? ?? NSApp as Any, notification: .announcementRequested,
+                             userInfo: [.announcement: words, .priority: NSAccessibilityPriorityLevel.high.rawValue])
+    }
+}
+
+/// The page dots under first run (the mockups'), read as "Step 3 of 5".
 struct StepDots: View {
     let steps: [FirstRunStep]
     let current: FirstRunStep
@@ -257,8 +349,8 @@ struct StepDots: View {
     }
 }
 
-/// "Count me in usage numbers", already on, with the exact fields one
-/// click away (PLAN.md 1.8; point 6 of the CNIL criteria).
+/// "Count me in usage numbers", off until ticked (R-0126), with the exact
+/// fields one click away (PLAN.md 1.8; point 6 of the CNIL criteria).
 struct CountingChoice: View {
     @Binding var countUsage: Bool
     @State private var showFields = false

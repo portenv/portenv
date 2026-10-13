@@ -132,7 +132,8 @@ enum ScreenRenders {
             TabInfo(id: "@1", name: "shell", active: false),
             TabInfo(id: "@2", name: "tests", active: false, program: "npm"),
         ])
-        let size = NSSize(width: 300, height: 600)
+        // Tall enough for every section at the board's type sizes.
+        let size = NSSize(width: 300, height: 780)
         func inspector(_ content: InspectorContent, targets: [(String, String)]) -> some View {
             InspectorView(content: content, yourInitial: "P", moveTargets: targets, move: { _ in },
                           retryPackages: {}, revert: {}, scrolls: false)

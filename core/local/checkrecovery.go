@@ -19,7 +19,7 @@ const MaxRecoveryChecks = 64
 // RecoveryWorkspaces counts the workspaces configured here that carry a
 // recovery key.
 func (e *Env) RecoveryWorkspaces() int {
-	ents, _ := os.ReadDir(filepath.Join(e.Dir, "boxes"))
+	ents, _ := os.ReadDir(filepath.Join(e.Dir, "boxes")) // workspace-word: ok (a path)
 	n := 0
 	for _, ent := range ents {
 		name, ok := strings.CutSuffix(ent.Name(), ".json")
@@ -61,7 +61,7 @@ func (e *Env) CheckRecoveryPasswords(ctx context.Context, passwords map[string][
 	ids := make([]string, 0, len(passwords))
 	for id, pw := range passwords {
 		if !boxIDRE.MatchString(id) {
-			return res, createErr(ErrInvalid, "A box ID is box- and 12 lowercase hex digits.")
+			return res, createErr(ErrInvalid, "A workspace ID is box- and 12 lowercase hex digits.")
 		}
 		if !recoveryPasswordRE.Match(pw) {
 			return res, createErr(ErrInvalid, "The recovery password must be the 64 hex characters derived from the recovery key.")

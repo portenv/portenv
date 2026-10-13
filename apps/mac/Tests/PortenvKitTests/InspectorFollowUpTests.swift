@@ -206,6 +206,10 @@ struct InspectorFollowUpTests {
         #expect(InspectorText.whosHere == "Who\u{2019}s here")
     }
 
+    @Test func couldntLoadSavesHasTheTypographicApostrophe() {
+        #expect(InspectorText.savesFailed == "Couldn\u{2019}t load saves.")
+    }
+
     // MARK: Move To… is never a dead end
 
     /// With no server, Move To… still opens: This Mac checked, then Add a
@@ -236,7 +240,7 @@ struct InspectorFollowUpTests {
         #expect(InspectorText.savesShown(loaded: false, failed: false, rows: [], elsewhere: nil) == .loading)
         // Saves already listed stay listed while a later read fails.
         #expect(InspectorText.savesShown(loaded: true, failed: true, rows: row, elsewhere: nil) == .listed)
-        #expect(InspectorText.savesFailed == "Couldn't load saves.")
+        #expect(InspectorText.savesFailed == "Couldn\u{2019}t load saves.")
         #expect(InspectorText.tryAgain == "Try Again")
     }
 

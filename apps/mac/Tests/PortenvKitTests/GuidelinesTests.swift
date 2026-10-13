@@ -123,11 +123,11 @@ struct BoxMenuOrderTests {
 
     @Test func restartBoxOnlyWhenTheAgentIsUnavailableOrWithOption() {
         let normal = BoxMenuModel.items(open: true, busy: false, agentUnavailable: false, optionHeld: false, location: "this-mac", servers: [])
-        #expect(!titles(normal).contains("Restart Box"))
+        #expect(!titles(normal).contains("Restart Workspace"))
         let down = BoxMenuModel.items(open: true, busy: false, agentUnavailable: true, optionHeld: false, location: "this-mac", servers: [])
-        #expect(titles(down) == ["Rename…", "Move To", "—", "Revert To", "Make a Save Point", "—", "Restart Box", "Show in Finder"])
+        #expect(titles(down) == ["Rename…", "Move To", "—", "Revert To", "Make a Save Point", "—", "Restart Workspace", "Show in Finder"])
         let option = BoxMenuModel.items(open: true, busy: false, agentUnavailable: false, optionHeld: true, location: "this-mac", servers: [])
-        #expect(titles(option).contains("Restart Box"))
+        #expect(titles(option).contains("Restart Workspace"))
     }
 
     @Test func whatCantWorkYetIsDisabled() {
@@ -151,7 +151,7 @@ struct TerminalLayoutTests {
 /// §12: every control says what it is or does.
 struct AccessibilityLabelTests {
     @Test func theTitleAndTheSyncSymbol() {
-        #expect(A11y.titleLabel(box: "acme-api") == "acme-api, box menu")
+        #expect(A11y.titleLabel(box: "acme-api") == "acme-api, workspace menu")
         #expect(A11y.symbolLabel(BoxState(save: .saved)) == "Saved")
         #expect(A11y.symbolLabel(BoxState(save: .saving)) == "Saving")
         #expect(A11y.symbolLabel(BoxState(save: .offline)) == "Offline")

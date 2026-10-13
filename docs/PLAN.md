@@ -1254,6 +1254,7 @@ Developer ID signing, notarisation and Sparkle, with the key backups. Signed pub
     - **What they give, all as plain counts:** daily, weekly and monthly actives, cohort retention (actives per install month, per week), activation and depth.
     - **The server keeps aggregated counts only,** with no IP logs. If this needs a minimal Cloudflare Worker behind portenv.com/appcast.xml, it's the named exception to ADR 0008's "no backend before Phase 3" (the Backend row in Decisions already made).
     - **Settings:** "Count me in usage numbers (no ID, nothing about your work)", off until the person ticks it (opt-in: the reviewer, on the owner's delegation, R-0126), and one click turns it off again. Off removes every counting field, but the update check itself stays, for security updates.
+    - **The choice is stored** (`UsageCounting.choiceKey`, "countUsage"), both from first run's checkbox and from Settings, and `UsageCounting.isOn` reads it. Settings › Updates › What Portenv sends is generated from it, so the Privacy line stays true: today counting doesn't exist and the line says no usage numbers are collected (R-0149, R-0156).
     - **An unreachable endpoint never blocks or slows anything** (own-route).
   - **Servers count themselves too, under the same rules:** no identifier, coarse fields, a published list, and an opt-out.
     - **When:** the runner sends its own check, at most once a day, only on days it ran a box.

@@ -79,3 +79,15 @@ func (s *Server) RecoverBox(ctx context.Context, req *daemonv1.RecoverBoxRequest
 	s.log.Info("box recovered", "box", req.GetName(), "id", req.GetBoxId(), "already", already)
 	return &daemonv1.RecoverBoxResponse{BoxId: req.GetBoxId(), AlreadyRecovered: already}, nil
 }
+
+// CheckRecoveryKey implements daemonv1.DaemonServiceServer.
+func (s *Server) CheckRecoveryKey(ctx context.Context, req *daemonv1.CheckRecoveryKeyRequest) (*daemonv1.CheckRecoveryKeyResponse, error) {
+	res, err := s.env.CheckRecoveryPasswords(ctx, req.GetRecoveryPasswords())
+	if err != nil {
+		st := createStatus(err)
+		s.log.Info("recovery key not checked", "code", status.Code(st).String())
+		return nil, st
+	}
+	s.log.Info("recovery key checked", "checked", res.Checked, "opened", res.Opened)
+	return &daemonv1.CheckRecoveryKeyResponse{Checked: int32(res.Checked), Opened: res.Opened}, nil // #nosec G115 -- a count of this Mac's boxes
+}

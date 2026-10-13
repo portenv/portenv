@@ -111,6 +111,11 @@ service DaemonService {
   // repository key, checks it, and writes the box's config. Idempotent on
   // box_id. Never logged.
   rpc RecoverBox(RecoverBoxRequest) returns (RecoverBoxResponse);
+  // Checks a typed recovery key before the app refills its pool from it
+  // (ADR 0019): the recovery-derived passwords, one per box ID, are tried
+  // against the boxes here that carry a recovery key. Read-only. Never
+  // logged.
+  rpc CheckRecoveryKey(CheckRecoveryKeyRequest) returns (CheckRecoveryKeyResponse);
 }
 
 message CheckBoxRequest {
@@ -551,4 +556,17 @@ message RecoverBoxResponse {
   string box_id = 1;
   // An earlier call had finished it.
   bool already_recovered = 2;
+}
+
+message CheckRecoveryKeyRequest {
+  // Box ID to its recovery-derived restic password (64 hex characters),
+  // never the recovery key itself.
+  map<string, bytes> recovery_passwords = 1;
+}
+
+message CheckRecoveryKeyResponse {
+  // How many boxes here carry a recovery key and could be checked.
+  int32 checked = 1;
+  // The key opened one of them.
+  bool opened = 2;
 }

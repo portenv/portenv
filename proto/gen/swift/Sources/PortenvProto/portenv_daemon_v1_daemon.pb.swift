@@ -1383,6 +1383,36 @@ public nonisolated struct Portenv_Daemon_V1_RecoverBoxResponse: Sendable {
   public init() {}
 }
 
+public nonisolated struct Portenv_Daemon_V1_CheckRecoveryKeyRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// Box ID to its recovery-derived restic password (64 hex characters),
+  /// never the recovery key itself.
+  public var recoveryPasswords: Dictionary<String,Data> = [:]
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Portenv_Daemon_V1_CheckRecoveryKeyResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// How many boxes here carry a recovery key and could be checked.
+  public var checked: Int32 = 0
+
+  /// The key opened one of them.
+  public var opened: Bool = false
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
 // MARK: - Code below here is support for the SwiftProtobuf runtime.
 
 fileprivate nonisolated let _protobuf_package = "portenv.daemon.v1"
@@ -3878,6 +3908,71 @@ nonisolated extension Portenv_Daemon_V1_RecoverBoxResponse: SwiftProtobuf.Messag
   public static func ==(lhs: Portenv_Daemon_V1_RecoverBoxResponse, rhs: Portenv_Daemon_V1_RecoverBoxResponse) -> Bool {
     if lhs.boxID != rhs.boxID {return false}
     if lhs.alreadyRecovered != rhs.alreadyRecovered {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Portenv_Daemon_V1_CheckRecoveryKeyRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".CheckRecoveryKeyRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}recovery_passwords\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeMapField(fieldType: SwiftProtobuf._ProtobufMap<SwiftProtobuf.ProtobufString,SwiftProtobuf.ProtobufBytes>.self, value: &self.recoveryPasswords) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.recoveryPasswords.isEmpty {
+      try visitor.visitMapField(fieldType: SwiftProtobuf._ProtobufMap<SwiftProtobuf.ProtobufString,SwiftProtobuf.ProtobufBytes>.self, value: self.recoveryPasswords, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Portenv_Daemon_V1_CheckRecoveryKeyRequest, rhs: Portenv_Daemon_V1_CheckRecoveryKeyRequest) -> Bool {
+    if lhs.recoveryPasswords != rhs.recoveryPasswords {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Portenv_Daemon_V1_CheckRecoveryKeyResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".CheckRecoveryKeyResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}checked\0\u{1}opened\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularInt32Field(value: &self.checked) }()
+      case 2: try { try decoder.decodeSingularBoolField(value: &self.opened) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.checked != 0 {
+      try visitor.visitSingularInt32Field(value: self.checked, fieldNumber: 1)
+    }
+    if self.opened != false {
+      try visitor.visitSingularBoolField(value: self.opened, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Portenv_Daemon_V1_CheckRecoveryKeyResponse, rhs: Portenv_Daemon_V1_CheckRecoveryKeyResponse) -> Bool {
+    if lhs.checked != rhs.checked {return false}
+    if lhs.opened != rhs.opened {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

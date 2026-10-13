@@ -59,6 +59,7 @@ const (
 	DaemonService_CreateBox_FullMethodName             = "/portenv.daemon.v1.DaemonService/CreateBox"
 	DaemonService_DiscardCreation_FullMethodName       = "/portenv.daemon.v1.DaemonService/DiscardCreation"
 	DaemonService_RecoverBox_FullMethodName            = "/portenv.daemon.v1.DaemonService/RecoverBox"
+	DaemonService_CheckRecoveryKey_FullMethodName      = "/portenv.daemon.v1.DaemonService/CheckRecoveryKey"
 )
 
 // DaemonServiceClient is the client API for DaemonService service.
@@ -166,6 +167,11 @@ type DaemonServiceClient interface {
 	// repository key, checks it, and writes the box's config. Idempotent on
 	// box_id. Never logged.
 	RecoverBox(ctx context.Context, in *RecoverBoxRequest, opts ...grpc.CallOption) (*RecoverBoxResponse, error)
+	// Checks a typed recovery key before the app refills its pool from it
+	// (ADR 0019): the recovery-derived passwords, one per box ID, are tried
+	// against the boxes here that carry a recovery key. Read-only. Never
+	// logged.
+	CheckRecoveryKey(ctx context.Context, in *CheckRecoveryKeyRequest, opts ...grpc.CallOption) (*CheckRecoveryKeyResponse, error)
 }
 
 type daemonServiceClient struct {
@@ -537,6 +543,16 @@ func (c *daemonServiceClient) RecoverBox(ctx context.Context, in *RecoverBoxRequ
 	return out, nil
 }
 
+func (c *daemonServiceClient) CheckRecoveryKey(ctx context.Context, in *CheckRecoveryKeyRequest, opts ...grpc.CallOption) (*CheckRecoveryKeyResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CheckRecoveryKeyResponse)
+	err := c.cc.Invoke(ctx, DaemonService_CheckRecoveryKey_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DaemonServiceServer is the server API for DaemonService service.
 // All implementations must embed UnimplementedDaemonServiceServer
 // for forward compatibility.
@@ -642,6 +658,11 @@ type DaemonServiceServer interface {
 	// repository key, checks it, and writes the box's config. Idempotent on
 	// box_id. Never logged.
 	RecoverBox(context.Context, *RecoverBoxRequest) (*RecoverBoxResponse, error)
+	// Checks a typed recovery key before the app refills its pool from it
+	// (ADR 0019): the recovery-derived passwords, one per box ID, are tried
+	// against the boxes here that carry a recovery key. Read-only. Never
+	// logged.
+	CheckRecoveryKey(context.Context, *CheckRecoveryKeyRequest) (*CheckRecoveryKeyResponse, error)
 	mustEmbedUnimplementedDaemonServiceServer()
 }
 
@@ -753,6 +774,9 @@ func (UnimplementedDaemonServiceServer) DiscardCreation(context.Context, *Discar
 }
 func (UnimplementedDaemonServiceServer) RecoverBox(context.Context, *RecoverBoxRequest) (*RecoverBoxResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method RecoverBox not implemented")
+}
+func (UnimplementedDaemonServiceServer) CheckRecoveryKey(context.Context, *CheckRecoveryKeyRequest) (*CheckRecoveryKeyResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CheckRecoveryKey not implemented")
 }
 func (UnimplementedDaemonServiceServer) mustEmbedUnimplementedDaemonServiceServer() {}
 func (UnimplementedDaemonServiceServer) testEmbeddedByValue()                       {}
@@ -1362,6 +1386,24 @@ func _DaemonService_RecoverBox_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _DaemonService_CheckRecoveryKey_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CheckRecoveryKeyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).CheckRecoveryKey(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_CheckRecoveryKey_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).CheckRecoveryKey(ctx, req.(*CheckRecoveryKeyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // DaemonService_ServiceDesc is the grpc.ServiceDesc for DaemonService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1492,6 +1534,10 @@ var DaemonService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RecoverBox",
 			Handler:    _DaemonService_RecoverBox_Handler,
+		},
+		{
+			MethodName: "CheckRecoveryKey",
+			Handler:    _DaemonService_CheckRecoveryKey_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

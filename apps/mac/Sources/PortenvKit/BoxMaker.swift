@@ -139,7 +139,9 @@ public struct BoxMaker: Sendable {
 
         public var errorDescription: String? {
             switch self {
-            case .poolEmpty: "Enter your recovery key to keep making workspaces. Portenv doesn't keep it."
+            // Until the refill sheet lands (ADR 0019's "Enter your recovery
+            // key…"): never point at a field that isn't there (R-0149).
+            case .poolEmpty: "This Mac has no workspace keys left. Adding more from your recovery key comes in the next build."
             case .keychain(let status): "The Keychain didn't store the new workspace's key (\(status)). Nothing was made."
             case .keyNotStored: "Portenv couldn't store the new workspace's key in the Keychain. Nothing was made."
             case .refused(let e): e.message
@@ -152,16 +154,25 @@ public struct BoxMaker: Sendable {
     let pool: RecoveryPoolStore
     let randomBytes: @Sendable (Int) throws -> [UInt8]
     let lock: AsyncLock
+    /// Hears a Keychain call that's waiting (a prompt), to say so.
+    public let waits: KeychainWaitRelay
 
     public init(daemon: BoxCreating, repositoryKeys: SecretStore = SystemSecretStore.repositoryKeys,
                 pool: RecoveryPoolStore = RecoveryPoolStore(store: SystemSecretStore.recoveryPool),
                 randomBytes: @escaping @Sendable (Int) throws -> [UInt8] = RecoveryKey.systemRandomBytes,
-                lock: AsyncLock = .creating) {
+                lock: AsyncLock = .creating, waits: KeychainWaitRelay = KeychainWaitRelay()) {
         self.daemon = daemon
         self.repositoryKeys = repositoryKeys
         self.pool = pool
         self.randomBytes = randomBytes
         self.lock = lock
+        self.waits = waits
+    }
+
+    /// A Keychain call, said when it waits (GUIDELINES §3.1).
+    private func keychain<T: Sendable>(_ body: @escaping @Sendable () throws -> T) async throws -> T {
+        let waits = self.waits
+        return try await onKeychainQueue(waiting: { waits.report($0) }, body)
     }
 
     static func keyLabel(_ boxID: String) -> String { "Portenv repository key (\(boxID))" }
@@ -182,7 +193,7 @@ public struct BoxMaker: Sendable {
     private func attempt(name: String) async throws -> String {
         let pool = self.pool
         var boxes = try await daemon.listings()
-        let entries = try await onKeychainQueue { try pool.entries() }
+        let entries = try await keychain { try pool.entries() }
 
         // A1: the entry of this name's unfinished creation, else the first
         // entry no box (finished or not) uses.
@@ -220,7 +231,7 @@ public struct BoxMaker: Sendable {
 
         // A3: the box exists; its entry goes. If the Keychain says no, the
         // next launch removes it (tidyAtLaunch).
-        try? await onKeychainQueue { try pool.remove(boxIDs: [entry.boxID]) }
+        try? await keychain { try pool.remove(boxIDs: [entry.boxID]) }
         return entry.boxID
     }
 
@@ -240,7 +251,7 @@ public struct BoxMaker: Sendable {
             let atD6 = (try? await daemon.listings())?.contains { $0.id == boxID && $0.creating } ?? false
             if atD6 {
                 try? await daemon.discardCreation(boxID: boxID)
-                try? await onKeychainQueue { try pool.remove(boxIDs: [boxID]) }
+                try? await keychain { try pool.remove(boxIDs: [boxID]) }
             }
             await deleteKeyUnlessMade(boxID)
         case .mismatch:
@@ -248,7 +259,7 @@ public struct BoxMaker: Sendable {
             // its path: never use the entry again.
             if !(await isMade(boxID)) { try? await daemon.discardCreation(boxID: boxID) }
             await deleteKeyUnlessMade(boxID)
-            try? await onKeychainQueue { try pool.remove(boxIDs: [boxID]) }
+            try? await keychain { try pool.remove(boxIDs: [boxID]) }
         case .unreachable:
             // The storage at D1, or portenvd gone at any step: the key (a
             // repository may be encrypted with it), the entry and any
@@ -272,12 +283,12 @@ public struct BoxMaker: Sendable {
     private func deleteKeyUnlessMade(_ boxID: String) async {
         guard !(await isMade(boxID)) else { return }
         let keys = repositoryKeys
-        try? await onKeychainQueue { try keys.delete(account: boxID) }
+        try? await keychain { try keys.delete(account: boxID) }
     }
 
     private func storedKey(for boxID: String) async throws -> Data {
         let keys = repositoryKeys, randomBytes = self.randomBytes
-        return try await onKeychainQueue {
+        return try await keychain {
             if let existing = try keys.read(account: boxID) { return existing }
             // 32 random bytes as hex, like keys.NewKey.
             var raw = try randomBytes(32)
@@ -307,9 +318,9 @@ public struct BoxMaker: Sendable {
     private func tidy() async -> [CreateBoxError] {
         let keys = repositoryKeys, pool = self.pool
         guard let boxes = try? await daemon.listings(),
-              let entries = try? await onKeychainQueue({ try pool.entries() }) else { return [] }
+              let entries = try? await keychain({ try pool.entries() }) else { return [] }
         let made = Set(boxes.filter { !$0.creating }.map(\.id))
-        try? await onKeychainQueue { try pool.remove(boxIDs: made) }
+        try? await keychain { try pool.remove(boxIDs: made) }
 
         var failures: [CreateBoxError] = []
         for half in boxes where half.creating {
@@ -322,7 +333,7 @@ public struct BoxMaker: Sendable {
             }
             let key: Data?
             do {
-                key = try await onKeychainQueue { try keys.read(account: half.id) }
+                key = try await keychain { try keys.read(account: half.id) }
             } catch {
                 // The Keychain said no (a denied prompt): not "no key". Next launch.
                 continue
@@ -331,14 +342,14 @@ public struct BoxMaker: Sendable {
                 // Its key is gone: a repository may be encrypted with the
                 // lost key, so the entry can't serve another workspace.
                 try? await daemon.discardCreation(boxID: half.id)
-                try? await onKeychainQueue { try pool.remove(boxIDs: [half.id]) }
+                try? await keychain { try pool.remove(boxIDs: [half.id]) }
                 continue
             }
             let request = CreateRequest(name: half.name, boxID: half.id, storage: "", keys: [half.id: key],
                                         recoveryPassword: Data(entry.password.utf8))
             do {
                 _ = try await daemon.createBox(request)
-                try? await onKeychainQueue { try pool.remove(boxIDs: [half.id]) }
+                try? await keychain { try pool.remove(boxIDs: [half.id]) }
             } catch let e as CreateBoxError {
                 await settle(e, boxID: half.id)
                 failures.append(e)

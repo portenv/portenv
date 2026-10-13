@@ -94,11 +94,46 @@ public struct SystemSecretStore: SecretStore {
 }
 
 /// Runs Keychain work on the Keychain queue, never on the cooperative pool:
-/// a call can block for as long as macOS's prompt is up.
-public func onKeychainQueue<T: Sendable>(_ body: @escaping @Sendable () throws -> T) async throws -> T {
-    try await withCheckedThrowingContinuation { continuation in
+/// a call can block for as long as macOS's prompt is up. `waiting` hears
+/// true once the call has taken longer than `after` (GUIDELINES §3.1:
+/// "Waiting for Keychain access"), and false when it's done.
+public func onKeychainQueue<T: Sendable>(waiting: (@Sendable (Bool) -> Void)? = nil, after threshold: Duration = KeychainWait.threshold,
+                                         _ body: @escaping @Sendable () throws -> T) async throws -> T {
+    let state = WaitState()
+    let timer = waiting.map { report in
+        Task {
+            try? await Task.sleep(for: threshold)
+            if state.fire() { report(true) }
+        }
+    }
+    defer {
+        timer?.cancel()
+        state.finish()
+        waiting?(false)
+    }
+    return try await withCheckedThrowingContinuation { continuation in
         KeychainWait.queue.async {
             continuation.resume(with: Result { try body() })
         }
     }
+}
+
+/// Whether a Keychain wait was said: once finished, it never is.
+private final class WaitState: @unchecked Sendable {
+    private let lock = NSLock()
+    private var done = false
+    func fire() -> Bool { lock.withLock { !done && !Task.isCancelled } }
+    func finish() { lock.withLock { done = true } }
+}
+
+/// Where a Keychain wait is said: the app's window sets the handler.
+public final class KeychainWaitRelay: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _handler: (@Sendable (Bool) -> Void)?
+    public init() {}
+    public var handler: (@Sendable (Bool) -> Void)? {
+        get { lock.withLock { _handler } }
+        set { lock.withLock { _handler = newValue } }
+    }
+    public func report(_ on: Bool) { handler?(on) }
 }

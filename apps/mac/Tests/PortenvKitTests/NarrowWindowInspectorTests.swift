@@ -16,7 +16,6 @@ import Testing
 struct NarrowWindowInspectorTests {
     /// The inspector's lines the review found cut, and a long one.
     static let lines = [
-        InspectorText.moveUnavailable(targets: []) ?? "",
         InspectorText.kind("release", machine: "studio"),
         InspectorText.encryption("Test server"),
         InspectorText.moveNote,

@@ -334,7 +334,7 @@ enum Announce {
 /// Welcome's picture: the application icon itself (R-0151).
 enum WelcomeArt {
     static let size: CGFloat = 112
-    @MainActor static var image: NSImage { NSApp.applicationIconImage }
+    @MainActor static var image: NSImage { PortenvIcon.image }
 }
 
 /// The page dots under first run (the mockups'), read as "Step 3 of 5".

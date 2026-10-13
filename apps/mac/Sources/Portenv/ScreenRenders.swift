@@ -28,20 +28,6 @@ enum ScreenRenders {
 
     static func write(to dir: String) -> Int32 {
         _ = NSApplication.shared
-        // Run unbundled (swift build, from apps/mac or the repository), the
-        // app has no icon of its own: use the asset catalogue's, so Welcome
-        // and the move sheet show it. No #filePath: the app binary must not
-        // carry the build machine's paths.
-        if Bundle.main.bundleIdentifier == nil {
-            let here = FileManager.default.currentDirectoryPath
-            let asset = "Resources/Assets.xcassets/AppIcon.appiconset/icon_512x512.png"
-            for path in ["\(here)/\(asset)", "\(here)/apps/mac/\(asset)"] {
-                if let image = NSImage(contentsOfFile: path) {
-                    NSApp.applicationIconImage = image
-                    break
-                }
-            }
-        }
         var code: Int32 = 1
         var done = false
         Task { @MainActor in

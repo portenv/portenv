@@ -23,6 +23,7 @@ import (
 	"github.com/portenv/portenv/core/local"
 	agentv1 "github.com/portenv/portenv/proto/gen/go/portenv/agent/v1"
 	daemonv1 "github.com/portenv/portenv/proto/gen/go/portenv/daemon/v1"
+	typesv1 "github.com/portenv/portenv/proto/gen/go/portenv/types/v1"
 )
 
 // fakeTabHelper is one workspace's helper: it answers GetVersion as boxID
@@ -153,12 +154,13 @@ func resetFirst() []*agentv1.TabTerminalResponse {
 	}}}}
 }
 
-var agentGrok = caller{kind: callerAgent, id: "grok-bot", box: "acme-api"}
+var agentGrok = caller{kind: callerAgent, id: "grok-bot", name: "Grok Bot", box: "acme-api"}
 
 // TestAnAgentsTabTerminalCantClaimTheApp (required, ADR 0020 decision 4,
 // R-0172): an agent opens a tab saying it's the app, in request metadata
 // and in a stray field 4 of the open (where the helper's own open carries
-// author). The helper is told the agent's identity, never "app".
+// author). The helper is told the agent's name and ID (R-0178), never the
+// owner's.
 func TestAnAgentsTabTerminalCantClaimTheApp(t *testing.T) {
 	w := servingTabTerminals(t, agentGrok, &fakeTabHelper{boxID: "box-a", script: resetFirst()}, &fakeTabHelper{boxID: "box-b"})
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -175,8 +177,8 @@ func TestAnAgentsTabTerminalCantClaimTheApp(t *testing.T) {
 	if len(opens) != 1 {
 		t.Fatalf("the helper got %d opens, want 1", len(opens))
 	}
-	if got := opens[0].GetAuthor(); got != "agent:grok-bot" {
-		t.Fatalf("author %q, want agent:grok-bot", got)
+	if got, id := opens[0].GetAuthor(), opens[0].GetAuthorAgentId(); got != "Grok Bot" || id != "grok-bot" {
+		t.Fatalf("author %q (%q), want Grok Bot (grok-bot)", got, id)
 	}
 	if opens[0].GetSession() != "main" || opens[0].GetTab() != "@1" || opens[0].GetSize().GetCols() != 80 {
 		t.Fatalf("open relayed as %v", opens[0])
@@ -184,17 +186,22 @@ func TestAnAgentsTabTerminalCantClaimTheApp(t *testing.T) {
 	_ = st.CloseSend()
 }
 
-// The app's own open, with nothing claimed, is the app's.
+// The app's own open, with nothing claimed, is the owner's: their name,
+// never empty or "You", and no agent ID (R-0178).
 func TestTheAppsTabTerminalIsTheApps(t *testing.T) {
-	w := servingTabTerminals(t, ownerCaller, &fakeTabHelper{boxID: "box-a", script: resetFirst()}, &fakeTabHelper{boxID: "box-b"})
+	w := servingTabTerminals(t, ownerCaller(), &fakeTabHelper{boxID: "box-a", script: resetFirst()}, &fakeTabHelper{boxID: "box-b"})
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	st := openTab(ctx, t, w.c, &daemonv1.TabTerminalOpen{Box: "acme-api", Session: "main", Tab: "@0"})
 	if _, err := st.Recv(); err != nil {
 		t.Fatal(err)
 	}
-	if opens, _ := w.a.seen(); len(opens) != 1 || opens[0].GetAuthor() != "app" {
-		t.Fatalf("opens %v, want one with author app", opens)
+	opens, _ := w.a.seen()
+	if len(opens) != 1 {
+		t.Fatalf("opens %v, want one", opens)
+	}
+	if name := opens[0].GetAuthor(); name == "" || name != ownerName() || strings.EqualFold(name, "you") || opens[0].GetAuthorAgentId() != "" {
+		t.Fatalf("the app's open: author %q (%q), want %q with no agent ID", name, opens[0].GetAuthorAgentId(), ownerName())
 	}
 	_ = st.CloseSend()
 }
@@ -232,7 +239,7 @@ func TestAChannelAnsweringAsAnotherBoxIsRefused(t *testing.T) {
 		"box-bb": "reached another workspace's helper",
 		"":       "didn't say which workspace it runs in",
 	} {
-		w := servingTabTerminals(t, ownerCaller, &fakeTabHelper{boxID: "box-a"}, &fakeTabHelper{boxID: answers, script: resetFirst()})
+		w := servingTabTerminals(t, ownerCaller(), &fakeTabHelper{boxID: "box-a"}, &fakeTabHelper{boxID: answers, script: resetFirst()})
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		st := openTab(ctx, t, w.c, &daemonv1.TabTerminalOpen{Box: "web", Session: "main", Tab: "@0"})
 		_, err := st.Recv()
@@ -245,7 +252,7 @@ func TestAChannelAnsweringAsAnotherBoxIsRefused(t *testing.T) {
 		}
 	}
 	// The right box goes through, on the server's route too.
-	w := servingTabTerminals(t, ownerCaller, &fakeTabHelper{boxID: "box-a"}, &fakeTabHelper{boxID: "box-b", script: resetFirst()})
+	w := servingTabTerminals(t, ownerCaller(), &fakeTabHelper{boxID: "box-a"}, &fakeTabHelper{boxID: "box-b", script: resetFirst()})
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	st := openTab(ctx, t, w.c, &daemonv1.TabTerminalOpen{Box: "web", Session: "main", Tab: "@0"})
@@ -263,10 +270,10 @@ func TestTabTerminalRelaysBothWays(t *testing.T) {
 		&agentv1.TabTerminalResponse{Msg: &agentv1.TabTerminalResponse_Author{Author: &agentv1.CommandAuthor{Line: 3, Name: "Grok Bot", IsYou: true, AgentId: "grok-bot"}}},
 		&agentv1.TabTerminalResponse{Msg: &agentv1.TabTerminalResponse_Output{Output: []byte("hello\r\n")}},
 		&agentv1.TabTerminalResponse{Msg: &agentv1.TabTerminalResponse_Resized{Resized: &agentv1.TerminalSize{Cols: 100, Rows: 30}}},
-		&agentv1.TabTerminalResponse{Msg: &agentv1.TabTerminalResponse_Author{Author: &agentv1.CommandAuthor{Line: 4, Name: "You"}}},
+		&agentv1.TabTerminalResponse{Msg: &agentv1.TabTerminalResponse_Author{Author: &agentv1.CommandAuthor{Line: 4, Name: "Retnan"}}},
 		&agentv1.TabTerminalResponse{Msg: &agentv1.TabTerminalResponse_End{End: agentv1.TabTerminalEnd_TAB_TERMINAL_END_TAB_CLOSED}},
 	)
-	w := servingTabTerminals(t, ownerCaller, &fakeTabHelper{boxID: "box-a", script: script}, &fakeTabHelper{boxID: "box-b"})
+	w := servingTabTerminals(t, ownerCaller(), &fakeTabHelper{boxID: "box-a", script: script}, &fakeTabHelper{boxID: "box-b"})
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	st := openTab(ctx, t, w.c, &daemonv1.TabTerminalOpen{Box: "acme-api", Session: "main", Tab: "@0"})
@@ -301,7 +308,7 @@ func TestTabTerminalRelaysBothWays(t *testing.T) {
 			got = append(got, "end "+v.End.String())
 		}
 	}
-	want := []string{"reset $ ", "author Grok Bot", "output hello\r\n", "resized", "author You (you)", "end TAB_TERMINAL_END_TAB_CLOSED"}
+	want := []string{"reset $ ", "author Grok Bot", "output hello\r\n", "resized", "author Retnan (you)", "end TAB_TERMINAL_END_TAB_CLOSED"}
 	if len(got) != len(want) {
 		t.Fatalf("got %q, want %q", got, want)
 	}
@@ -324,5 +331,141 @@ func TestTabTerminalRelaysBothWays(t *testing.T) {
 			t.Fatalf("the helper got %d messages, want 3", len(in))
 		}
 		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// relayed collects one stream's responses until it ends.
+func relayed(t *testing.T, st daemonv1.DaemonService_TabTerminalClient) []*daemonv1.TabTerminalResponse {
+	t.Helper()
+	var got []*daemonv1.TabTerminalResponse
+	for {
+		r, err := st.Recv()
+		if errors.Is(err, io.EOF) {
+			return got
+		}
+		if err != nil {
+			t.Fatalf("after %d messages: %v", len(got), err)
+		}
+		got = append(got, r)
+	}
+}
+
+func endsClosed() *agentv1.TabTerminalResponse {
+	return &agentv1.TabTerminalResponse{Msg: &agentv1.TabTerminalResponse_End{End: agentv1.TabTerminalEnd_TAB_TERMINAL_END_TAB_CLOSED}}
+}
+
+// TestAnAgentsCommandIsYouOnlyToThatAgent (R-0178): a command the agent
+// ran comes back is_you=false to the app and true to that agent; the
+// owner's command, the other way round. Whatever is_you the helper sent
+// is ignored.
+func TestAnAgentsCommandIsYouOnlyToThatAgent(t *testing.T) {
+	byGrok := &agentv1.CommandAuthor{Line: 7, Name: "Grok Bot", AgentId: "grok-bot", IsYou: true}
+	byOwner := &agentv1.CommandAuthor{Line: 8, Name: ownerName(), IsYou: true}
+	script := []*agentv1.TabTerminalResponse{
+		{Msg: &agentv1.TabTerminalResponse_Reset_{Reset_: &agentv1.TabTerminalReset{Seed: []byte("$ "), Authors: []*agentv1.CommandAuthor{byGrok, byOwner}}}},
+		{Msg: &agentv1.TabTerminalResponse_Author{Author: byGrok}},
+		{Msg: &agentv1.TabTerminalResponse_Author{Author: byOwner}},
+		endsClosed(),
+	}
+	for _, c := range []struct {
+		who             caller
+		grokYou, ownYou bool
+	}{
+		{ownerCaller(), false, true},
+		{agentGrok, true, false},
+		{caller{kind: callerAgent, id: "other-bot", name: "Other Bot", box: "acme-api"}, false, false},
+	} {
+		w := servingTabTerminals(t, c.who, &fakeTabHelper{boxID: "box-a", script: script}, &fakeTabHelper{boxID: "box-b"})
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		got := relayed(t, openTab(ctx, t, w.c, &daemonv1.TabTerminalOpen{Box: "acme-api", Session: "main", Tab: "@0"}))
+		cancel()
+		if len(got) != 4 {
+			t.Fatalf("%s: %d messages, want 4", c.who.name, len(got))
+		}
+		ra := got[0].GetReset_().GetAuthors()
+		if len(ra) != 2 || ra[0].GetIsYou() != c.grokYou || ra[1].GetIsYou() != c.ownYou {
+			t.Fatalf("%s: reset authors %v", c.who.name, ra)
+		}
+		if got[1].GetAuthor().GetIsYou() != c.grokYou || got[1].GetAuthor().GetName() != "Grok Bot" || got[1].GetAuthor().GetAgentId() != "grok-bot" {
+			t.Fatalf("%s: Grok's command came back as %v", c.who.name, got[1].GetAuthor())
+		}
+		if got[2].GetAuthor().GetIsYou() != c.ownYou {
+			t.Fatalf("%s: the owner's command came back as %v", c.who.name, got[2].GetAuthor())
+		}
+	}
+}
+
+// TestSkippedArrives (R-0178): a reset the helper marks skipped reaches the
+// app marked skipped, and one that isn't, isn't.
+func TestSkippedArrives(t *testing.T) {
+	script := []*agentv1.TabTerminalResponse{
+		{Msg: &agentv1.TabTerminalResponse_Reset_{Reset_: &agentv1.TabTerminalReset{Seed: []byte("a")}}},
+		{Msg: &agentv1.TabTerminalResponse_Reset_{Reset_: &agentv1.TabTerminalReset{Seed: []byte("b"), Skipped: true}}},
+		endsClosed(),
+	}
+	w := servingTabTerminals(t, ownerCaller(), &fakeTabHelper{boxID: "box-a", script: script}, &fakeTabHelper{boxID: "box-b"})
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	got := relayed(t, openTab(ctx, t, w.c, &daemonv1.TabTerminalOpen{Box: "acme-api", Session: "main", Tab: "@0"}))
+	if len(got) != 3 || got[0].GetReset_().GetSkipped() || !got[1].GetReset_().GetSkipped() {
+		t.Fatalf("got %v, want a plain reset, then one marked skipped", got)
+	}
+}
+
+// TestABadAuthorFromTheHelperIsDropped (R-0178): the helper lives in the
+// workspace, so an author whose name is over 64 characters, or has control
+// or bidi characters (here U+202E, which can make "Grok Bot" read as
+// someone else), is dropped, in a reset and on its own. It is never
+// repaired, and the stream carries on.
+func TestABadAuthorFromTheHelperIsDropped(t *testing.T) {
+	bad := []*agentv1.CommandAuthor{
+		{Line: 1, Name: "Grok\u202eBot", AgentId: "grok-bot"},
+		{Line: 2, Name: "\u2066Retnan"},
+		{Line: 3, Name: strings.Repeat("a", 65)},
+		{Line: 4, Name: "Grok\x1b[31mBot"},
+		{Line: 5, Name: "Grok Bot", AgentId: "grok\u202ebot"},
+	}
+	good := &agentv1.CommandAuthor{Line: 6, Name: strings.Repeat("b", 64)}
+	script := []*agentv1.TabTerminalResponse{
+		{Msg: &agentv1.TabTerminalResponse_Reset_{Reset_: &agentv1.TabTerminalReset{Seed: []byte("$ "), Authors: append(append([]*agentv1.CommandAuthor{}, bad...), good)}}},
+	}
+	for _, a := range bad {
+		script = append(script, &agentv1.TabTerminalResponse{Msg: &agentv1.TabTerminalResponse_Author{Author: a}})
+	}
+	script = append(script,
+		&agentv1.TabTerminalResponse{Msg: &agentv1.TabTerminalResponse_Author{Author: good}},
+		&agentv1.TabTerminalResponse{Msg: &agentv1.TabTerminalResponse_Output{Output: []byte("still here")}},
+		endsClosed())
+	w := servingTabTerminals(t, ownerCaller(), &fakeTabHelper{boxID: "box-a", script: script}, &fakeTabHelper{boxID: "box-b"})
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	got := relayed(t, openTab(ctx, t, w.c, &daemonv1.TabTerminalOpen{Box: "acme-api", Session: "main", Tab: "@0"}))
+	if len(got) != 4 {
+		t.Fatalf("got %d messages (%v), want reset, the good author, output and end", len(got), got)
+	}
+	if ra := got[0].GetReset_().GetAuthors(); len(ra) != 1 || ra[0].GetLine() != 6 {
+		t.Fatalf("reset authors %v, want only line 6", ra)
+	}
+	if a := got[1].GetAuthor(); a.GetLine() != 6 || a.GetName() != good.GetName() {
+		t.Fatalf("author %v, want line 6 unchanged", a)
+	}
+	if string(got[2].GetOutput()) != "still here" {
+		t.Fatalf("then %v, want the output", got[2])
+	}
+}
+
+// TestTabTerminalEndMapsByValue (R-0178): each end value maps to its own,
+// and one this portenvd doesn't know is UNSPECIFIED.
+func TestTabTerminalEndMapsByValue(t *testing.T) {
+	for in, want := range map[agentv1.TabTerminalEnd]typesv1.TabTerminalEnd{
+		agentv1.TabTerminalEnd_TAB_TERMINAL_END_UNSPECIFIED:  typesv1.TabTerminalEnd_TAB_TERMINAL_END_UNSPECIFIED,
+		agentv1.TabTerminalEnd_TAB_TERMINAL_END_TAB_CLOSED:   typesv1.TabTerminalEnd_TAB_TERMINAL_END_TAB_CLOSED,
+		agentv1.TabTerminalEnd_TAB_TERMINAL_END_BOX_STOPPING: typesv1.TabTerminalEnd_TAB_TERMINAL_END_BOX_STOPPING,
+		agentv1.TabTerminalEnd(3):                            typesv1.TabTerminalEnd_TAB_TERMINAL_END_UNSPECIFIED,
+		agentv1.TabTerminalEnd(99):                           typesv1.TabTerminalEnd_TAB_TERMINAL_END_UNSPECIFIED,
+	} {
+		if got := endFor(in); got != want {
+			t.Errorf("%v: %v, want %v", in, got, want)
+		}
 	}
 }

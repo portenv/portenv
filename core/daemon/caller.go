@@ -5,6 +5,12 @@ package daemon
 import (
 	"context"
 	"net"
+	"os"
+	"os/user"
+	"strings"
+	"sync"
+	"unicode"
+	"unicode/utf8"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -16,13 +22,15 @@ import (
 // fixed when the connection is accepted, from the socket alone, and never
 // read from a request: a request can claim anything (ADR 0020 decision 4).
 //
-// Its label (callerLabel) is portenvd's internal stream identity, the
-// author it hands the workspace helper. The app is shown CommandAuthor,
-// never these labels.
+// Its name, and its id for an agent, are the author portenvd hands the
+// workspace helper for the caller's stream (ADR 0020, R-0178).
 type caller struct {
 	kind callerKind
 	// id names an agent (ADR 0016's identity). Empty for the app.
 	id string
+	// name is the caller as people read it: the owner's first name, or the
+	// agent's grant name ("Grok Bot"). Never "You": is_you makes that.
+	name string
 	// box limits the caller to one workspace. Empty: every workspace on
 	// this machine, which only the owner has.
 	box string
@@ -47,14 +55,64 @@ const (
 )
 
 // ownerCaller is the caller on the owner-only socket.
-var ownerCaller = caller{kind: callerApp}
+func ownerCaller() caller { return caller{kind: callerApp, name: ownerName()} }
 
-// callerLabel is the author portenvd records for the caller's input.
-func (c caller) callerLabel() string {
-	if c.kind == callerAgent {
-		return "agent:" + c.id
+// ownerName is the owner's name for attribution, read once (Serve reads it
+// at start) and then the same for the daemon's life.
+var ownerName = sync.OnceValue(readOwnerName)
+
+func readOwnerName() string {
+	login := os.Getenv("USER")
+	if u, err := user.Current(); err == nil && u.Username != "" {
+		login = u.Username
 	}
-	return "app"
+	return ownerDisplayName(accountFullName(), login)
+}
+
+// ownerDisplayName is the first word of the account's full name, or the
+// login name when that isn't usable, and never empty or "You".
+func ownerDisplayName(full, login string) string {
+	for _, n := range []string{firstWord(full), login} {
+		if n != "" && !strings.EqualFold(n, "you") && validAuthorName(n) {
+			return n
+		}
+	}
+	return "Owner"
+}
+
+func firstWord(s string) string {
+	if f := strings.Fields(s); len(f) > 0 {
+		return f[0]
+	}
+	return ""
+}
+
+// helperAuthor is what the helper's open records for the caller's commands.
+func (c caller) helperAuthor() (name, agentID string) {
+	if c.kind == callerAgent {
+		return c.name, c.id
+	}
+	return c.name, ""
+}
+
+// maxAuthorName bounds an author's name, in characters.
+const maxAuthorName = 64
+
+// validAuthorName is a name portenvd passes on: at most 64 characters of
+// valid UTF-8, with no control characters and no bidi controls
+// (U+202A–202E, U+2066–2069), which could make a name read as another.
+// The helper lives in the workspace, so its authors are checked, and a
+// bad one is dropped, never repaired (R-0178).
+func validAuthorName(n string) bool {
+	if !utf8.ValidString(n) || utf8.RuneCountInString(n) > maxAuthorName {
+		return false
+	}
+	for _, r := range n {
+		if unicode.IsControl(r) || (r >= 0x202A && r <= 0x202E) || (r >= 0x2066 && r <= 0x2069) {
+			return false
+		}
+	}
+	return true
 }
 
 // mayOpen refuses a workspace the caller isn't limited to. It runs before

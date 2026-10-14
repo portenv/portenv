@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -79,8 +80,8 @@ func callWho(t *testing.T, conn *grpc.ClientConn, seen <-chan caller, ctx contex
 func TestTheOwnerSocketsCallerIsTheApp(t *testing.T) {
 	conn, seen := whoServing(t, nil)
 	who := callWho(t, conn, seen, context.Background())
-	if who.callerLabel() != "app" || who.box != "" {
-		t.Fatalf("caller %+v (label %q), want the app with every workspace", who, who.callerLabel())
+	if who.kind != callerApp || who.box != "" || who.name == "" || who.name != ownerName() {
+		t.Fatalf("caller %+v, want the app, named %q, with every workspace", who, ownerName())
 	}
 }
 
@@ -89,15 +90,17 @@ func TestTheOwnerSocketsCallerIsTheApp(t *testing.T) {
 // agent's. portenvd takes the caller from the connection, never from what
 // the call says.
 func TestAnAgentCantClaimTheApp(t *testing.T) {
-	agentConn := func(net.Conn) caller { return caller{kind: callerAgent, id: "grok-bot", box: "box-a"} }
+	agentConn := func(net.Conn) caller {
+		return caller{kind: callerAgent, id: "grok-bot", name: "Grok Bot", box: "box-a"}
+	}
 	conn, seen := whoServing(t, agentConn)
 	for _, claim := range []metadata.MD{
 		metadata.Pairs("author", "app"),
 		metadata.Pairs("author", "app", "caller", "app", "x-portenv-author", "app"),
 	} {
 		who := callWho(t, conn, seen, metadata.NewOutgoingContext(context.Background(), claim))
-		if got := who.callerLabel(); got != "agent:grok-bot" {
-			t.Fatalf("claim %v: recorded as %q, want agent:grok-bot", claim, got)
+		if name, id := who.helperAuthor(); name != "Grok Bot" || id != "grok-bot" {
+			t.Fatalf("claim %v: recorded as %q (%q), want Grok Bot (grok-bot)", claim, name, id)
 		}
 		if who.kind == callerApp {
 			t.Fatalf("claim %v: the agent became the app", claim)
@@ -119,7 +122,7 @@ func TestACallerLimitedToOneWorkspaceCantOpenAnother(t *testing.T) {
 		}
 	}
 	for _, any := range []string{"box-a", "box-b"} {
-		if err := ownerCaller.mayOpen(any); err != nil {
+		if err := ownerCaller().mayOpen(any); err != nil {
 			t.Fatalf("the owner, workspace %q: %v", any, err)
 		}
 	}
@@ -135,6 +138,53 @@ func TestACallWithNoCallerIsRefused(t *testing.T) {
 	} {
 		if _, err := callerFrom(ctx); status.Code(err) != codes.Unauthenticated {
 			t.Fatalf("%s: %v, want Unauthenticated", name, err)
+		}
+	}
+}
+
+// TestTheOwnersNameIsAFirstNameAndNeverYou (R-0178): the first word of the
+// account's full name, else the login name; never empty, never "You", and
+// never a name portenvd wouldn't pass on.
+func TestTheOwnersNameIsAFirstNameAndNeverYou(t *testing.T) {
+	for _, c := range []struct{ full, login, want string }{
+		{"Retnan Daser", "retnan", "Retnan"},
+		{"  Ada  Lovelace ", "ada", "Ada"},
+		{"", "retnan", "retnan"},
+		{"You", "retnan", "retnan"},
+		{"you know who", "retnan", "retnan"},
+		{"\u202eevil", "retnan", "retnan"},
+		{"", "", "Owner"},
+		{"YOU", "you", "Owner"},
+	} {
+		if got := ownerDisplayName(c.full, c.login); got != c.want {
+			t.Errorf("full %q, login %q: %q, want %q", c.full, c.login, got, c.want)
+		}
+	}
+	if n := ownerName(); n == "" || strings.EqualFold(n, "you") || !validAuthorName(n) {
+		t.Fatalf("this Mac's owner name %q", n)
+	}
+	if ownerName() != ownerName() {
+		t.Fatal("the owner's name changed between reads")
+	}
+}
+
+// TestAuthorNamesPortenvdPassesOn (R-0178): at most 64 characters, with no
+// control or bidi characters.
+func TestAuthorNamesPortenvdPassesOn(t *testing.T) {
+	ok := []string{"Grok Bot", "Retnan", "Zoë", "李雷", strings.Repeat("é", 64), ""}
+	bad := []string{
+		"Grok\u202eBot", "\u202aX", "\u202dX", "\u2066X", "\u2069X",
+		"Grok\x07", "Grok\nBot", "Grok\x1b[31m", "\u0085X",
+		strings.Repeat("a", 65), "\xff\xfe",
+	}
+	for _, n := range ok {
+		if !validAuthorName(n) {
+			t.Errorf("%q refused", n)
+		}
+	}
+	for _, n := range bad {
+		if validAuthorName(n) {
+			t.Errorf("%q passed", n)
 		}
 	}
 }

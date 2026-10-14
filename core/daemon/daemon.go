@@ -184,6 +184,7 @@ func (s *Server) Serve(ctx context.Context) error {
 	if peer == nil {
 		peer = socketPeerUID
 	}
+	ownerName() // read once, at start
 	err = srv.Serve(ownerOnly{Listener: lis, peerUID: peer, identify: s.identify})
 	if errors.Is(err, grpc.ErrServerStopped) {
 		return nil

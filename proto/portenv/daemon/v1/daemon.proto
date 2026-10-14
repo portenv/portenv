@@ -687,6 +687,10 @@ message TabTerminalReset {
   bytes seed = 2;
   // Every command still in the seed that has a recorded author.
   repeated CommandAuthor authors = 3;
+  // Output was skipped since the last reset (the helper or its reader fell
+  // too far behind; ADR 0020, decision 11): the app tells the person and
+  // marks the block that was running as skipped, never complete.
+  bool skipped = 4;
 }
 
 // Who sent the Enter that started a command: the helper's CommandAuthor
@@ -695,7 +699,10 @@ message TabTerminalReset {
 message CommandAuthor {
   // The command's OSC 133;C line, counted from the tab's first line ever.
   uint64 line = 1;
-  // As people read it: "You", "Grok Bot".
+  // The author's own name, as people read it: the owner's first name, or
+  // "Grok Bot". Never "You": is_you is what makes the app say "You".
+  // portenvd drops an author whose name is over 64 characters or has
+  // control or bidi characters; it never repairs one.
   string name = 2;
   // True when the author is the caller receiving this stream. Set by
   // portenvd for each recipient; whatever the helper sent is replaced.

@@ -4673,7 +4673,11 @@ type TabTerminalReset struct {
 	// marks replayed on their lines.
 	Seed []byte `protobuf:"bytes,2,opt,name=seed,proto3" json:"seed,omitempty"`
 	// Every command still in the seed that has a recorded author.
-	Authors       []*CommandAuthor `protobuf:"bytes,3,rep,name=authors,proto3" json:"authors,omitempty"`
+	Authors []*CommandAuthor `protobuf:"bytes,3,rep,name=authors,proto3" json:"authors,omitempty"`
+	// Output was skipped since the last reset (the helper or its reader fell
+	// too far behind; ADR 0020, decision 11): the app tells the person and
+	// marks the block that was running as skipped, never complete.
+	Skipped       bool `protobuf:"varint,4,opt,name=skipped,proto3" json:"skipped,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4729,6 +4733,13 @@ func (x *TabTerminalReset) GetAuthors() []*CommandAuthor {
 	return nil
 }
 
+func (x *TabTerminalReset) GetSkipped() bool {
+	if x != nil {
+		return x.Skipped
+	}
+	return false
+}
+
 // Who sent the Enter that started a command: the helper's CommandAuthor
 // (agent.v1), as portenvd hands it to one recipient. Response-only, and
 // never inside output bytes. A command with no recorded author has none.
@@ -4736,7 +4747,10 @@ type CommandAuthor struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The command's OSC 133;C line, counted from the tab's first line ever.
 	Line uint64 `protobuf:"varint,1,opt,name=line,proto3" json:"line,omitempty"`
-	// As people read it: "You", "Grok Bot".
+	// The author's own name, as people read it: the owner's first name, or
+	// "Grok Bot". Never "You": is_you is what makes the app say "You".
+	// portenvd drops an author whose name is over 64 characters or has
+	// control or bidi characters; it never repairs one.
 	Name string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
 	// True when the author is the caller receiving this stream. Set by
 	// portenvd for each recipient; whatever the helper sent is replaced.
@@ -5060,11 +5074,12 @@ const file_portenv_daemon_v1_daemon_proto_rawDesc = "" +
 	"\aresized\x18\x03 \x01(\v2\x1f.portenv.daemon.v1.TerminalSizeH\x00R\aresized\x124\n" +
 	"\x03end\x18\x04 \x01(\x0e2 .portenv.types.v1.TabTerminalEndH\x00R\x03end\x12:\n" +
 	"\x06author\x18\x05 \x01(\v2 .portenv.daemon.v1.CommandAuthorH\x00R\x06authorB\x05\n" +
-	"\x03msg\"\x97\x01\n" +
+	"\x03msg\"\xb1\x01\n" +
 	"\x10TabTerminalReset\x123\n" +
 	"\x04size\x18\x01 \x01(\v2\x1f.portenv.daemon.v1.TerminalSizeR\x04size\x12\x12\n" +
 	"\x04seed\x18\x02 \x01(\fR\x04seed\x12:\n" +
-	"\aauthors\x18\x03 \x03(\v2 .portenv.daemon.v1.CommandAuthorR\aauthors\"o\n" +
+	"\aauthors\x18\x03 \x03(\v2 .portenv.daemon.v1.CommandAuthorR\aauthors\x12\x18\n" +
+	"\askipped\x18\x04 \x01(\bR\askipped\"o\n" +
 	"\rCommandAuthor\x12\x12\n" +
 	"\x04line\x18\x01 \x01(\x04R\x04line\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x15\n" +

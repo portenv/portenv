@@ -30,7 +30,7 @@ func (l ownerOnly) Accept() (net.Conn, error) {
 		}
 		if uc, ok := c.(*net.UnixConn); ok {
 			if uid, err := connPeerUID(uc, l.peerUID); err == nil && uid == os.Getuid() {
-				who := ownerCaller
+				who := ownerCaller()
 				if l.identify != nil {
 					who = l.identify(c)
 				}

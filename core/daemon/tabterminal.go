@@ -61,11 +61,13 @@ func (s *Server) TabTerminal(stream daemonv1.DaemonService_TabTerminalServer) er
 		}
 		return agentError(err)
 	}
+	author, authorAgentID := who.helperAuthor()
 	if err := at.Send(&agentv1.TabTerminalRequest{Msg: &agentv1.TabTerminalRequest_Open{Open: &agentv1.TabTerminalOpen{
-		Session: open.GetSession(),
-		Tab:     open.GetTab(),
-		Size:    agentSize(open.GetSize()),
-		Author:  who.callerLabel(),
+		Session:       open.GetSession(),
+		Tab:           open.GetTab(),
+		Size:          agentSize(open.GetSize()),
+		Author:        author,
+		AuthorAgentId: authorAgentID,
 	}}}); err != nil {
 		return s.terminalEnd(name, gen, err)
 	}
@@ -98,9 +100,11 @@ func (s *Server) TabTerminal(stream daemonv1.DaemonService_TabTerminalServer) er
 		var m daemonv1.TabTerminalResponse
 		switch v := r.GetMsg().(type) {
 		case *agentv1.TabTerminalResponse_Reset_:
-			reset := &daemonv1.TabTerminalReset{Size: daemonSize(v.Reset_.GetSize()), Seed: v.Reset_.GetSeed()}
+			reset := &daemonv1.TabTerminalReset{Size: daemonSize(v.Reset_.GetSize()), Seed: v.Reset_.GetSeed(), Skipped: v.Reset_.GetSkipped()}
 			for _, a := range v.Reset_.GetAuthors() {
-				reset.Authors = append(reset.Authors, authorFor(a, who))
+				if da := authorFor(a, who); da != nil {
+					reset.Authors = append(reset.Authors, da)
+				}
 			}
 			m.Msg = &daemonv1.TabTerminalResponse_Reset_{Reset_: reset}
 		case *agentv1.TabTerminalResponse_Output:
@@ -108,9 +112,13 @@ func (s *Server) TabTerminal(stream daemonv1.DaemonService_TabTerminalServer) er
 		case *agentv1.TabTerminalResponse_Resized:
 			m.Msg = &daemonv1.TabTerminalResponse_Resized{Resized: daemonSize(v.Resized)}
 		case *agentv1.TabTerminalResponse_End:
-			m.Msg = &daemonv1.TabTerminalResponse_End{End: typesv1.TabTerminalEnd(v.End)}
+			m.Msg = &daemonv1.TabTerminalResponse_End{End: endFor(v.End)}
 		case *agentv1.TabTerminalResponse_Author:
-			m.Msg = &daemonv1.TabTerminalResponse_Author{Author: authorFor(v.Author, who)}
+			da := authorFor(v.Author, who)
+			if da == nil {
+				continue // dropped: not passed on, never repaired
+			}
+			m.Msg = &daemonv1.TabTerminalResponse_Author{Author: da}
 		default:
 			continue
 		}
@@ -175,10 +183,27 @@ func checkBoxID(ctx context.Context, ac agentv1.AgentServiceClient, want string)
 
 // authorFor is the helper's CommandAuthor as one recipient sees it: is_you
 // is portenvd's to set, from that recipient's caller, never the helper's.
+// An author whose name portenvd won't pass on (validAuthorName) is nil.
 func authorFor(a *agentv1.CommandAuthor, who caller) *daemonv1.CommandAuthor {
+	if !validAuthorName(a.GetName()) || !validAuthorName(a.GetAgentId()) {
+		return nil
+	}
 	id := a.GetAgentId()
 	isYou := (who.kind == callerApp && id == "") || (who.kind == callerAgent && id != "" && id == who.id)
 	return &daemonv1.CommandAuthor{Line: a.GetLine(), Name: a.GetName(), IsYou: isYou, AgentId: id}
+}
+
+// endFor maps the helper's end value by value; one this portenvd doesn't
+// know is UNSPECIFIED.
+func endFor(e agentv1.TabTerminalEnd) typesv1.TabTerminalEnd {
+	switch e {
+	case agentv1.TabTerminalEnd_TAB_TERMINAL_END_TAB_CLOSED:
+		return typesv1.TabTerminalEnd_TAB_TERMINAL_END_TAB_CLOSED
+	case agentv1.TabTerminalEnd_TAB_TERMINAL_END_BOX_STOPPING:
+		return typesv1.TabTerminalEnd_TAB_TERMINAL_END_BOX_STOPPING
+	default:
+		return typesv1.TabTerminalEnd_TAB_TERMINAL_END_UNSPECIFIED
+	}
 }
 
 func agentSize(z *daemonv1.TerminalSize) *agentv1.TerminalSize {

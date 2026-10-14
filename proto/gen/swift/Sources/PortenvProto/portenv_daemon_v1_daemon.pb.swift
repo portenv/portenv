@@ -1745,6 +1745,11 @@ public nonisolated struct Portenv_Daemon_V1_TabTerminalReset: Sendable {
   /// Every command still in the seed that has a recorded author.
   public var authors: [Portenv_Daemon_V1_CommandAuthor] = []
 
+  /// Output was skipped since the last reset (the helper or its reader fell
+  /// too far behind; ADR 0020, decision 11): the app tells the person and
+  /// marks the block that was running as skipped, never complete.
+  public var skipped: Bool = false
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -1763,7 +1768,10 @@ public nonisolated struct Portenv_Daemon_V1_CommandAuthor: Sendable {
   /// The command's OSC 133;C line, counted from the tab's first line ever.
   public var line: UInt64 = 0
 
-  /// As people read it: "You", "Grok Bot".
+  /// The author's own name, as people read it: the owner's first name, or
+  /// "Grok Bot". Never "You": is_you is what makes the app say "You".
+  /// portenvd drops an author whose name is over 64 characters or has
+  /// control or bidi characters; it never repairs one.
   public var name: String = String()
 
   /// True when the author is the caller receiving this stream. Set by
@@ -4693,7 +4701,7 @@ nonisolated extension Portenv_Daemon_V1_TabTerminalResponse: SwiftProtobuf.Messa
 
 nonisolated extension Portenv_Daemon_V1_TabTerminalReset: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".TabTerminalReset"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}size\0\u{1}seed\0\u{1}authors\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}size\0\u{1}seed\0\u{1}authors\0\u{1}skipped\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -4704,6 +4712,7 @@ nonisolated extension Portenv_Daemon_V1_TabTerminalReset: SwiftProtobuf.Message,
       case 1: try { try decoder.decodeSingularMessageField(value: &self._size) }()
       case 2: try { try decoder.decodeSingularBytesField(value: &self.seed) }()
       case 3: try { try decoder.decodeRepeatedMessageField(value: &self.authors) }()
+      case 4: try { try decoder.decodeSingularBoolField(value: &self.skipped) }()
       default: break
       }
     }
@@ -4723,6 +4732,9 @@ nonisolated extension Portenv_Daemon_V1_TabTerminalReset: SwiftProtobuf.Message,
     if !self.authors.isEmpty {
       try visitor.visitRepeatedMessageField(value: self.authors, fieldNumber: 3)
     }
+    if self.skipped != false {
+      try visitor.visitSingularBoolField(value: self.skipped, fieldNumber: 4)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -4730,6 +4742,7 @@ nonisolated extension Portenv_Daemon_V1_TabTerminalReset: SwiftProtobuf.Message,
     if lhs._size != rhs._size {return false}
     if lhs.seed != rhs.seed {return false}
     if lhs.authors != rhs.authors {return false}
+    if lhs.skipped != rhs.skipped {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

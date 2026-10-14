@@ -126,7 +126,12 @@ Also checked on tmux 3.4 in the image:
    **As built (1.2c PR 4):** `DaemonService.TabTerminal` in `proto/portenv/daemon/v1/daemon.proto`.
    - Its messages are appended after the file's others, the RPC is last in the service, and `TabTerminalEnd` lives in `types/v1/types.proto`, so the regenerated code renumbers none of the existing types (the owner's merge guard).
    - Its `TabTerminalOpen` has no author: field 4, the helper's `author`, is reserved, and portenvd builds the helper's open field by field, so a stray field 4 is never copied through.
-   - The author is the caller fixed when the connection was accepted: `app` on the owner-only socket, `agent:<id>` for an agent's grant once one can reach portenvd (2.4). These labels stay inside portenvd and the helper; the app sees `CommandAuthor`, whose `is_you` portenvd sets for each recipient.
+   - The author is the caller fixed when the connection was accepted (R-0178):
+     - **the owner** on the owner-only socket, named by the first word of the account's full name (`id -F` on a Mac), else the login name. It's never empty and never "You", and it's read once at start;
+     - **an agent,** once one can reach portenvd (2.4): its grant's name, with `author_agent_id` its ID.
+   - The helper's open carries `author` and `author_agent_id` as #115 defines them. The app sees `CommandAuthor`, whose `is_you` portenvd sets for each recipient.
+   - **Checking the helper's authors:** the helper lives in the workspace, so portenvd drops a `CommandAuthor` whose name or agent ID is over 64 characters or has control or bidi characters (U+202A–202E, U+2066–2069). It never repairs one.
+   - **`skipped`** on a reset is passed through. The end value is mapped value by value, with an unknown one becoming UNSPECIFIED.
    - A caller limited to one workspace is refused any other before a helper is contacted (R-0162).
    - The helper must answer `GetVersion` with the box ID portenvd reached it for. Another box, or none, is refused before anything is relayed (R-0172, R-0173). None is refused here because `TabTerminal` and `box_id` arrived in the same helper.
 

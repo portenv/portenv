@@ -129,8 +129,9 @@ func masterLock(id string) *sync.Mutex {
 	return m.(*sync.Mutex)
 }
 
-// dropMadeKey forgets a server's made key and closes its shared
-// connection, so nothing reaches it without the key again (R-0187).
+// dropMadeKey forgets a made-key server's key and closes its shared
+// connection, so nothing reaches it without the key again (R-0187). A
+// server that signs in with this Mac's own SSH setup has neither.
 func dropMadeKey(id, target string) {
 	madeKeys.Lock()
 	delete(madeKeys.m, id)

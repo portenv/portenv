@@ -628,7 +628,7 @@ func (e *Env) ForgetServerKey(id string) error {
 		r.State, r.Key, r.ConfirmedFrom, r.Scanned = ServerUnconfirmed, "", "", ""
 		return nil
 	})
-	if err == nil {
+	if err == nil && r.SignIn == SignInMadeKey {
 		dropMadeKey(id, r.Target)
 	}
 	return err
@@ -701,7 +701,9 @@ func (e *Env) RemoveServer(server string) error {
 		return err
 	}
 	for _, r := range gone {
-		dropMadeKey(r.ID, r.Target)
+		if r.SignIn == SignInMadeKey {
+			dropMadeKey(r.ID, r.Target)
+		}
 	}
 	return nil
 }

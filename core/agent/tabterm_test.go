@@ -166,6 +166,33 @@ func (tt *tabTerm) until(within time.Duration, what string, ok func(out []byte) 
 
 func tail(b []byte) []byte { return b[max(0, len(b)-300):] }
 
+// ranCommand is true once a command has run: its OSC 133 C mark, want after
+// it, then the next prompt's B mark. Waiting for the prompt means the next
+// command is typed at it, not ahead while the shell finishes; and the C mark
+// first means the terminal's own echo of typed text ("echo two\r\n", which
+// the kernel echoes while the shell isn't reading) is never taken for the
+// command's output.
+func ranCommand(want string) func([]byte) bool {
+	return func(out []byte) bool {
+		c := bytes.Index(out, []byte("\x1b]133;C"))
+		if c < 0 {
+			return false
+		}
+		w := bytes.Index(out[c:], []byte(want))
+		return w >= 0 && bytes.Contains(out[c+w:], []byte("\x1b]133;B"))
+	}
+}
+
+// atPrompt waits until the shell shows its prompt (a B mark in the seed or
+// the output since).
+func (tt *tabTerm) atPrompt(seed []byte) {
+	tt.t.Helper()
+	if bytes.Contains(seed, []byte("\x1b]133;B")) {
+		return
+	}
+	tt.until(10*time.Second, "the prompt", func(out []byte) bool { return bytes.Contains(out, []byte("\x1b]133;B")) })
+}
+
 // A tab terminal starts with a reset: the tab's history and screen, the
 // marks of the commands before it on their lines, and their authors; then
 // typed input runs, and its command's author comes before the output that
@@ -175,6 +202,13 @@ func TestTabTerminalSeedsThenStreams(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	tab := h.firstTab()
+	// The shell's first prompt, drawn before any stream (so no mark of it
+	// is known): its "%".
+	for end := time.Now().Add(10 * time.Second); !strings.Contains(h.raw("capture-pane", "-p", "-t", tab), "%"); time.Sleep(20 * time.Millisecond) {
+		if time.Now().After(end) {
+			t.Fatal("no prompt")
+		}
+	}
 	// A first stream runs two commands, as Retnan.
 	a := h.open(ctx, tab, "Retnan", 80, 24)
 	if m := a.next(5 * time.Second); m.GetReset_() == nil {
@@ -183,7 +217,7 @@ func TestTabTerminalSeedsThenStreams(t *testing.T) {
 	for _, c := range []string{"echo one", "echo two"} {
 		a.input(c + "\r")
 		var authorFirst bool
-		msgs := a.until(5*time.Second, c, func(out []byte) bool { return bytes.Contains(out, []byte(strings.TrimPrefix(c, "echo ")+"\r\n")) })
+		msgs := a.until(5*time.Second, c, ranCommand(strings.TrimPrefix(c, "echo ")+"\r\n"))
 		for _, m := range msgs {
 			if au := m.GetAuthor(); au != nil {
 				if au.GetName() != "Retnan" {
@@ -228,15 +262,16 @@ func TestTabTerminalSeedsThenStreams(t *testing.T) {
 	}
 	// A command typed with no author records none, nor does one typed
 	// through another client (a person's own tmux attach).
+	b.atPrompt(r.GetSeed())
 	b.input("echo three\r")
-	for _, m := range b.until(5*time.Second, "three", func(out []byte) bool { return bytes.Contains(out, []byte("three\r\n")) }) {
+	for _, m := range b.until(5*time.Second, "three", ranCommand("three\r\n")) {
 		if m.GetAuthor() != nil {
 			t.Errorf("an author %v for a stream without one", m.GetAuthor())
 		}
 	}
 	h.raw("send-keys", "-t", tab, "echo four", "Enter")
 	for _, tt := range []*tabTerm{a, b} {
-		for _, m := range tt.until(5*time.Second, "four", func(out []byte) bool { return bytes.Contains(out, []byte("four\r\n")) }) {
+		for _, m := range tt.until(5*time.Second, "four", ranCommand("four\r\n")) {
 			if m.GetAuthor() != nil {
 				t.Errorf("an author %v for a command typed elsewhere", m.GetAuthor())
 			}

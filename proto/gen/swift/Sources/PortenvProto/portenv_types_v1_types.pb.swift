@@ -218,6 +218,51 @@ public nonisolated enum Portenv_Types_V1_LeaseSource: SwiftProtobuf.Enum, Swift.
 
 }
 
+/// How a tab's terminal ended (ADR 0020): shared by portenvd's TabTerminal
+/// and the app. Kept here, not in daemon.proto, so adding it moves none of
+/// the daemon's generated type indices.
+public nonisolated enum Portenv_Types_V1_TabTerminalEnd: SwiftProtobuf.Enum, Swift.CaseIterable {
+  public typealias RawValue = Int
+  case unspecified // = 0
+
+  /// The tab was closed (by anyone), or the tab asked for doesn't exist.
+  case tabClosed // = 1
+
+  /// The box is stopping, or moving away.
+  case boxStopping // = 2
+  case UNRECOGNIZED(Int)
+
+  public init() {
+    self = .unspecified
+  }
+
+  public init?(rawValue: Int) {
+    switch rawValue {
+    case 0: self = .unspecified
+    case 1: self = .tabClosed
+    case 2: self = .boxStopping
+    default: self = .UNRECOGNIZED(rawValue)
+    }
+  }
+
+  public var rawValue: Int {
+    switch self {
+    case .unspecified: return 0
+    case .tabClosed: return 1
+    case .boxStopping: return 2
+    case .UNRECOGNIZED(let i): return i
+    }
+  }
+
+  // The compiler won't synthesize support with the UNRECOGNIZED case.
+  public static let allCases: [Portenv_Types_V1_TabTerminalEnd] = [
+    .unspecified,
+    .tabClosed,
+    .boxStopping,
+  ]
+
+}
+
 /// A box: a toolbox image plus a portable home. Only the home travels between
 /// machines; the image is pulled or rebuilt on each one.
 public nonisolated struct Portenv_Types_V1_Box: Sendable {
@@ -417,6 +462,10 @@ nonisolated extension Portenv_Types_V1_SnapshotKind: SwiftProtobuf._ProtoNamePro
 
 nonisolated extension Portenv_Types_V1_LeaseSource: SwiftProtobuf._ProtoNameProviding {
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0LEASE_SOURCE_UNSPECIFIED\0\u{1}LEASE_SOURCE_SNAPSHOT_TAG\0\u{1}LEASE_SOURCE_CONTROL_PLANE\0")
+}
+
+nonisolated extension Portenv_Types_V1_TabTerminalEnd: SwiftProtobuf._ProtoNameProviding {
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0TAB_TERMINAL_END_UNSPECIFIED\0\u{1}TAB_TERMINAL_END_TAB_CLOSED\0\u{1}TAB_TERMINAL_END_BOX_STOPPING\0")
 }
 
 nonisolated extension Portenv_Types_V1_Box: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {

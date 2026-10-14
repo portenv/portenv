@@ -11,6 +11,7 @@ import (
 
 	agentv1 "github.com/portenv/portenv/proto/gen/go/portenv/agent/v1"
 	daemonv1 "github.com/portenv/portenv/proto/gen/go/portenv/daemon/v1"
+	typesv1 "github.com/portenv/portenv/proto/gen/go/portenv/types/v1"
 )
 
 // boxIDCheckTimeout bounds the helper's GetVersion before a tab opens.
@@ -107,7 +108,7 @@ func (s *Server) TabTerminal(stream daemonv1.DaemonService_TabTerminalServer) er
 		case *agentv1.TabTerminalResponse_Resized:
 			m.Msg = &daemonv1.TabTerminalResponse_Resized{Resized: daemonSize(v.Resized)}
 		case *agentv1.TabTerminalResponse_End:
-			m.Msg = &daemonv1.TabTerminalResponse_End{End: daemonv1.TabTerminalEnd(v.End)}
+			m.Msg = &daemonv1.TabTerminalResponse_End{End: typesv1.TabTerminalEnd(v.End)}
 		case *agentv1.TabTerminalResponse_Author:
 			m.Msg = &daemonv1.TabTerminalResponse_Author{Author: authorFor(v.Author, who)}
 		default:

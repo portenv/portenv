@@ -126,19 +126,6 @@ public enum Portenv_Daemon_V1_DaemonService: Sendable {
                 type: .bidirectionalStreaming
             )
         }
-        /// Namespace for "TabTerminal" metadata.
-        public enum TabTerminal: Sendable {
-            /// Request type for "TabTerminal".
-            public typealias Input = Portenv_Daemon_V1_TabTerminalRequest
-            /// Response type for "TabTerminal".
-            public typealias Output = Portenv_Daemon_V1_TabTerminalResponse
-            /// Descriptor for "TabTerminal".
-            public static let descriptor = GRPCCore.MethodDescriptor(
-                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
-                method: "TabTerminal",
-                type: .bidirectionalStreaming
-            )
-        }
         /// Namespace for "CheckBox" metadata.
         public enum CheckBox: Sendable {
             /// Request type for "CheckBox".
@@ -503,6 +490,19 @@ public enum Portenv_Daemon_V1_DaemonService: Sendable {
                 type: .unary
             )
         }
+        /// Namespace for "TabTerminal" metadata.
+        public enum TabTerminal: Sendable {
+            /// Request type for "TabTerminal".
+            public typealias Input = Portenv_Daemon_V1_TabTerminalRequest
+            /// Response type for "TabTerminal".
+            public typealias Output = Portenv_Daemon_V1_TabTerminalResponse
+            /// Descriptor for "TabTerminal".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "TabTerminal",
+                type: .bidirectionalStreaming
+            )
+        }
         /// Descriptors for all methods in the "portenv.daemon.v1.DaemonService" service.
         public static let descriptors: [GRPCCore.MethodDescriptor] = [
             GetVersion.descriptor,
@@ -513,7 +513,6 @@ public enum Portenv_Daemon_V1_DaemonService: Sendable {
             RevertToLastSavePoint.descriptor,
             MoveBox.descriptor,
             Terminal.descriptor,
-            TabTerminal.descriptor,
             CheckBox.descriptor,
             RestartBox.descriptor,
             GetChannel.descriptor,
@@ -541,7 +540,8 @@ public enum Portenv_Daemon_V1_DaemonService: Sendable {
             DiscardCreation.descriptor,
             RecoverBox.descriptor,
             CheckRecoveryKey.descriptor,
-            GetPlacement.descriptor
+            GetPlacement.descriptor,
+            TabTerminal.descriptor
         ]
     }
 }
@@ -740,33 +740,6 @@ extension Portenv_Daemon_V1_DaemonService {
             deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_TerminalResponse>,
             options: GRPCCore.CallOptions,
             onResponse handleResponse: @Sendable @escaping (GRPCCore.StreamingClientResponse<Portenv_Daemon_V1_TerminalResponse>) async throws -> Result
-        ) async throws -> Result where Result: Sendable
-
-        /// Call the "TabTerminal" method.
-        ///
-        /// > Source IDL Documentation:
-        /// >
-        /// > One tab's terminal (ADR 0020), relayed to the workspace helper's
-        /// > TabTerminal as Terminal is: same socket, same box routing, on this Mac
-        /// > or on a server. The first message must be open. portenvd sets the
-        /// > stream's author from the connection's caller; nothing in the request
-        /// > can, and the open has no author field.
-        ///
-        /// - Parameters:
-        ///   - request: A streaming request producing `Portenv_Daemon_V1_TabTerminalRequest` messages.
-        ///   - serializer: A serializer for `Portenv_Daemon_V1_TabTerminalRequest` messages.
-        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_TabTerminalResponse` messages.
-        ///   - options: Options to apply to this RPC.
-        ///   - handleResponse: A closure which handles the response and returns its result to
-        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
-        ///       already finished.
-        /// - Returns: The result of `handleResponse`.
-        func tabTerminal<Result>(
-            request: GRPCCore.StreamingClientRequest<Portenv_Daemon_V1_TabTerminalRequest>,
-            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_TabTerminalRequest>,
-            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_TabTerminalResponse>,
-            options: GRPCCore.CallOptions,
-            onResponse handleResponse: @Sendable @escaping (GRPCCore.StreamingClientResponse<Portenv_Daemon_V1_TabTerminalResponse>) async throws -> Result
         ) async throws -> Result where Result: Sendable
 
         /// Call the "CheckBox" method.
@@ -1439,6 +1412,33 @@ extension Portenv_Daemon_V1_DaemonService {
             options: GRPCCore.CallOptions,
             onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_GetPlacementResponse>) async throws -> Result
         ) async throws -> Result where Result: Sendable
+
+        /// Call the "TabTerminal" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > One tab's terminal (ADR 0020), relayed to the workspace helper's
+        /// > TabTerminal as Terminal is: same socket, same box routing, on this Mac
+        /// > or on a server. The first message must be open. portenvd sets the
+        /// > stream's author from the connection's caller; nothing in the request
+        /// > can, and the open has no author field.
+        ///
+        /// - Parameters:
+        ///   - request: A streaming request producing `Portenv_Daemon_V1_TabTerminalRequest` messages.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_TabTerminalRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_TabTerminalResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func tabTerminal<Result>(
+            request: GRPCCore.StreamingClientRequest<Portenv_Daemon_V1_TabTerminalRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_TabTerminalRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_TabTerminalResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.StreamingClientResponse<Portenv_Daemon_V1_TabTerminalResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
     }
 
     /// Generated client for the "portenv.daemon.v1.DaemonService" service.
@@ -1717,42 +1717,6 @@ extension Portenv_Daemon_V1_DaemonService {
             try await self.client.bidirectionalStreaming(
                 request: request,
                 descriptor: Portenv_Daemon_V1_DaemonService.Method.Terminal.descriptor,
-                serializer: serializer,
-                deserializer: deserializer,
-                options: options,
-                onResponse: handleResponse
-            )
-        }
-
-        /// Call the "TabTerminal" method.
-        ///
-        /// > Source IDL Documentation:
-        /// >
-        /// > One tab's terminal (ADR 0020), relayed to the workspace helper's
-        /// > TabTerminal as Terminal is: same socket, same box routing, on this Mac
-        /// > or on a server. The first message must be open. portenvd sets the
-        /// > stream's author from the connection's caller; nothing in the request
-        /// > can, and the open has no author field.
-        ///
-        /// - Parameters:
-        ///   - request: A streaming request producing `Portenv_Daemon_V1_TabTerminalRequest` messages.
-        ///   - serializer: A serializer for `Portenv_Daemon_V1_TabTerminalRequest` messages.
-        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_TabTerminalResponse` messages.
-        ///   - options: Options to apply to this RPC.
-        ///   - handleResponse: A closure which handles the response and returns its result to
-        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
-        ///       already finished.
-        /// - Returns: The result of `handleResponse`.
-        public func tabTerminal<Result>(
-            request: GRPCCore.StreamingClientRequest<Portenv_Daemon_V1_TabTerminalRequest>,
-            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_TabTerminalRequest>,
-            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_TabTerminalResponse>,
-            options: GRPCCore.CallOptions = .defaults,
-            onResponse handleResponse: @Sendable @escaping (GRPCCore.StreamingClientResponse<Portenv_Daemon_V1_TabTerminalResponse>) async throws -> Result
-        ) async throws -> Result where Result: Sendable {
-            try await self.client.bidirectionalStreaming(
-                request: request,
-                descriptor: Portenv_Daemon_V1_DaemonService.Method.TabTerminal.descriptor,
                 serializer: serializer,
                 deserializer: deserializer,
                 options: options,
@@ -2734,6 +2698,42 @@ extension Portenv_Daemon_V1_DaemonService {
                 onResponse: handleResponse
             )
         }
+
+        /// Call the "TabTerminal" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > One tab's terminal (ADR 0020), relayed to the workspace helper's
+        /// > TabTerminal as Terminal is: same socket, same box routing, on this Mac
+        /// > or on a server. The first message must be open. portenvd sets the
+        /// > stream's author from the connection's caller; nothing in the request
+        /// > can, and the open has no author field.
+        ///
+        /// - Parameters:
+        ///   - request: A streaming request producing `Portenv_Daemon_V1_TabTerminalRequest` messages.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_TabTerminalRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_TabTerminalResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func tabTerminal<Result>(
+            request: GRPCCore.StreamingClientRequest<Portenv_Daemon_V1_TabTerminalRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_TabTerminalRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_TabTerminalResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.StreamingClientResponse<Portenv_Daemon_V1_TabTerminalResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.bidirectionalStreaming(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.TabTerminal.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
     }
 }
 
@@ -2958,37 +2958,6 @@ extension Portenv_Daemon_V1_DaemonService.ClientProtocol {
             request: request,
             serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_TerminalRequest>(),
             deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_TerminalResponse>(),
-            options: options,
-            onResponse: handleResponse
-        )
-    }
-
-    /// Call the "TabTerminal" method.
-    ///
-    /// > Source IDL Documentation:
-    /// >
-    /// > One tab's terminal (ADR 0020), relayed to the workspace helper's
-    /// > TabTerminal as Terminal is: same socket, same box routing, on this Mac
-    /// > or on a server. The first message must be open. portenvd sets the
-    /// > stream's author from the connection's caller; nothing in the request
-    /// > can, and the open has no author field.
-    ///
-    /// - Parameters:
-    ///   - request: A streaming request producing `Portenv_Daemon_V1_TabTerminalRequest` messages.
-    ///   - options: Options to apply to this RPC.
-    ///   - handleResponse: A closure which handles the response and returns its result to
-    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
-    ///       already finished.
-    /// - Returns: The result of `handleResponse`.
-    public func tabTerminal<Result>(
-        request: GRPCCore.StreamingClientRequest<Portenv_Daemon_V1_TabTerminalRequest>,
-        options: GRPCCore.CallOptions = .defaults,
-        onResponse handleResponse: @Sendable @escaping (GRPCCore.StreamingClientResponse<Portenv_Daemon_V1_TabTerminalResponse>) async throws -> Result
-    ) async throws -> Result where Result: Sendable {
-        try await self.tabTerminal(
-            request: request,
-            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_TabTerminalRequest>(),
-            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_TabTerminalResponse>(),
             options: options,
             onResponse: handleResponse
         )
@@ -3828,6 +3797,37 @@ extension Portenv_Daemon_V1_DaemonService.ClientProtocol {
             onResponse: handleResponse
         )
     }
+
+    /// Call the "TabTerminal" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > One tab's terminal (ADR 0020), relayed to the workspace helper's
+    /// > TabTerminal as Terminal is: same socket, same box routing, on this Mac
+    /// > or on a server. The first message must be open. portenvd sets the
+    /// > stream's author from the connection's caller; nothing in the request
+    /// > can, and the open has no author field.
+    ///
+    /// - Parameters:
+    ///   - request: A streaming request producing `Portenv_Daemon_V1_TabTerminalRequest` messages.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func tabTerminal<Result>(
+        request: GRPCCore.StreamingClientRequest<Portenv_Daemon_V1_TabTerminalRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.StreamingClientResponse<Portenv_Daemon_V1_TabTerminalResponse>) async throws -> Result
+    ) async throws -> Result where Result: Sendable {
+        try await self.tabTerminal(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_TabTerminalRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_TabTerminalResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
 }
 
 // Helpers providing sugared APIs for 'ClientProtocol' methods.
@@ -4083,42 +4083,6 @@ extension Portenv_Daemon_V1_DaemonService.ClientProtocol {
             producer: producer
         )
         return try await self.terminal(
-            request: request,
-            options: options,
-            onResponse: handleResponse
-        )
-    }
-
-    /// Call the "TabTerminal" method.
-    ///
-    /// > Source IDL Documentation:
-    /// >
-    /// > One tab's terminal (ADR 0020), relayed to the workspace helper's
-    /// > TabTerminal as Terminal is: same socket, same box routing, on this Mac
-    /// > or on a server. The first message must be open. portenvd sets the
-    /// > stream's author from the connection's caller; nothing in the request
-    /// > can, and the open has no author field.
-    ///
-    /// - Parameters:
-    ///   - metadata: Additional metadata to send, defaults to empty.
-    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
-    ///   - producer: A closure producing request messages to send to the server. Returning
-    ///       from the closure closes the request stream.
-    ///   - handleResponse: A closure which handles the response and returns its result to
-    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
-    ///       already finished.
-    /// - Returns: The result of `handleResponse`.
-    public func tabTerminal<Result>(
-        metadata: GRPCCore.Metadata = [:],
-        options: GRPCCore.CallOptions = .defaults,
-        requestProducer producer: @Sendable @escaping (GRPCCore.RPCWriter<Portenv_Daemon_V1_TabTerminalRequest>) async throws -> Void,
-        onResponse handleResponse: @Sendable @escaping (GRPCCore.StreamingClientResponse<Portenv_Daemon_V1_TabTerminalResponse>) async throws -> Result
-    ) async throws -> Result where Result: Sendable {
-        let request = GRPCCore.StreamingClientRequest<Portenv_Daemon_V1_TabTerminalRequest>(
-            metadata: metadata,
-            producer: producer
-        )
-        return try await self.tabTerminal(
             request: request,
             options: options,
             onResponse: handleResponse
@@ -5066,6 +5030,42 @@ extension Portenv_Daemon_V1_DaemonService.ClientProtocol {
             metadata: metadata
         )
         return try await self.getPlacement(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "TabTerminal" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > One tab's terminal (ADR 0020), relayed to the workspace helper's
+    /// > TabTerminal as Terminal is: same socket, same box routing, on this Mac
+    /// > or on a server. The first message must be open. portenvd sets the
+    /// > stream's author from the connection's caller; nothing in the request
+    /// > can, and the open has no author field.
+    ///
+    /// - Parameters:
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - producer: A closure producing request messages to send to the server. Returning
+    ///       from the closure closes the request stream.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func tabTerminal<Result>(
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        requestProducer producer: @Sendable @escaping (GRPCCore.RPCWriter<Portenv_Daemon_V1_TabTerminalRequest>) async throws -> Void,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.StreamingClientResponse<Portenv_Daemon_V1_TabTerminalResponse>) async throws -> Result
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.StreamingClientRequest<Portenv_Daemon_V1_TabTerminalRequest>(
+            metadata: metadata,
+            producer: producer
+        )
+        return try await self.tabTerminal(
             request: request,
             options: options,
             onResponse: handleResponse

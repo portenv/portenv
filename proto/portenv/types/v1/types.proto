@@ -126,3 +126,14 @@ message Tab {
   // the shell (closing the tab asks first when it isn't empty).
   string program = 4;
 }
+
+// How a tab's terminal ended (ADR 0020): shared by portenvd's TabTerminal
+// and the app. Kept here, not in daemon.proto, so adding it moves none of
+// the daemon's generated type indices.
+enum TabTerminalEnd {
+  TAB_TERMINAL_END_UNSPECIFIED = 0;
+  // The tab was closed (by anyone), or the tab asked for doesn't exist.
+  TAB_TERMINAL_END_TAB_CLOSED = 1;
+  // The box is stopping, or moving away.
+  TAB_TERMINAL_END_BOX_STOPPING = 2;
+}

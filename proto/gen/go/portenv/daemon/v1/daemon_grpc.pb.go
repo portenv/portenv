@@ -61,6 +61,7 @@ const (
 	DaemonService_RecoverBox_FullMethodName            = "/portenv.daemon.v1.DaemonService/RecoverBox"
 	DaemonService_CheckRecoveryKey_FullMethodName      = "/portenv.daemon.v1.DaemonService/CheckRecoveryKey"
 	DaemonService_GetPlacement_FullMethodName          = "/portenv.daemon.v1.DaemonService/GetPlacement"
+	DaemonService_TabTerminal_FullMethodName           = "/portenv.daemon.v1.DaemonService/TabTerminal"
 )
 
 // DaemonServiceClient is the client API for DaemonService service.
@@ -179,6 +180,12 @@ type DaemonServiceClient interface {
 	// OpenBox's refusal for a box open elsewhere carries the trailer
 	// portenv-refusal: open-elsewhere, and the app asks this then.
 	GetPlacement(ctx context.Context, in *GetPlacementRequest, opts ...grpc.CallOption) (*GetPlacementResponse, error)
+	// One tab's terminal (ADR 0020), relayed to the workspace helper's
+	// TabTerminal as Terminal is: same socket, same box routing, on this Mac
+	// or on a server. The first message must be open. portenvd sets the
+	// stream's author from the connection's caller; nothing in the request
+	// can, and the open has no author field.
+	TabTerminal(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[TabTerminalRequest, TabTerminalResponse], error)
 }
 
 type daemonServiceClient struct {
@@ -570,6 +577,19 @@ func (c *daemonServiceClient) GetPlacement(ctx context.Context, in *GetPlacement
 	return out, nil
 }
 
+func (c *daemonServiceClient) TabTerminal(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[TabTerminalRequest, TabTerminalResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &DaemonService_ServiceDesc.Streams[3], DaemonService_TabTerminal_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[TabTerminalRequest, TabTerminalResponse]{ClientStream: stream}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type DaemonService_TabTerminalClient = grpc.BidiStreamingClient[TabTerminalRequest, TabTerminalResponse]
+
 // DaemonServiceServer is the server API for DaemonService service.
 // All implementations must embed UnimplementedDaemonServiceServer
 // for forward compatibility.
@@ -686,6 +706,12 @@ type DaemonServiceServer interface {
 	// OpenBox's refusal for a box open elsewhere carries the trailer
 	// portenv-refusal: open-elsewhere, and the app asks this then.
 	GetPlacement(context.Context, *GetPlacementRequest) (*GetPlacementResponse, error)
+	// One tab's terminal (ADR 0020), relayed to the workspace helper's
+	// TabTerminal as Terminal is: same socket, same box routing, on this Mac
+	// or on a server. The first message must be open. portenvd sets the
+	// stream's author from the connection's caller; nothing in the request
+	// can, and the open has no author field.
+	TabTerminal(grpc.BidiStreamingServer[TabTerminalRequest, TabTerminalResponse]) error
 	mustEmbedUnimplementedDaemonServiceServer()
 }
 
@@ -803,6 +829,9 @@ func (UnimplementedDaemonServiceServer) CheckRecoveryKey(context.Context, *Check
 }
 func (UnimplementedDaemonServiceServer) GetPlacement(context.Context, *GetPlacementRequest) (*GetPlacementResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetPlacement not implemented")
+}
+func (UnimplementedDaemonServiceServer) TabTerminal(grpc.BidiStreamingServer[TabTerminalRequest, TabTerminalResponse]) error {
+	return status.Error(codes.Unimplemented, "method TabTerminal not implemented")
 }
 func (UnimplementedDaemonServiceServer) mustEmbedUnimplementedDaemonServiceServer() {}
 func (UnimplementedDaemonServiceServer) testEmbeddedByValue()                       {}
@@ -1448,6 +1477,13 @@ func _DaemonService_GetPlacement_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
+func _DaemonService_TabTerminal_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(DaemonServiceServer).TabTerminal(&grpc.GenericServerStream[TabTerminalRequest, TabTerminalResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type DaemonService_TabTerminalServer = grpc.BidiStreamingServer[TabTerminalRequest, TabTerminalResponse]
+
 // DaemonService_ServiceDesc is the grpc.ServiceDesc for DaemonService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1604,6 +1640,12 @@ var DaemonService_ServiceDesc = grpc.ServiceDesc{
 			StreamName:    "WatchTabs",
 			Handler:       _DaemonService_WatchTabs_Handler,
 			ServerStreams: true,
+		},
+		{
+			StreamName:    "TabTerminal",
+			Handler:       _DaemonService_TabTerminal_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
 		},
 	},
 	Metadata: "portenv/daemon/v1/daemon.proto",

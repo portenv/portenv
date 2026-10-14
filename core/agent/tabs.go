@@ -330,7 +330,7 @@ func (t tabs) watchEvents(ctx context.Context, sub *ctlSub, safety time.Duration
 					return nil
 				case ctlOutput:
 					output = true
-				case ctlOther:
+				case ctlOther, ctlReply:
 				default:
 					relist = true
 				}

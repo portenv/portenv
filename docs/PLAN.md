@@ -1094,7 +1094,7 @@ In this order:
               - started again if it exits, with subscribers told to list afresh;
               - tmux's `set-clipboard` and `allow-passthrough` set off at every start;
               - WatchTabs follows its events (window added, closed, renamed, another session's current window, output at most once a second), with a 2 s backstop for program changes that print nothing, and polling only below tmux 3.4;
-              - the `%output`/`%extended-output` decoder and a line reader capped at 1 MB per line, each with its own fuzz target, seeded from the spike's tmux 3.4 streams (`make fuzz`, in CI on a 15 s budget);
+              - the `%output`/`%extended-output` decoder and a line reader capped at 1 MB per line, each with its own fuzz target, seeded from the spike's tmux 3.4 streams (`make fuzz`, in CI on a fixed number of runs, not a duration, which failed now and then on a slow runner);
               - tmux pinned to 3.4 in the image and checked by `test.sh`; the helper refuses older for control mode.
             - **Built (PR 2, 2026-10-14, awaiting review):** the helper's per-pane parser, `charmbracelet/x/vt` v0.1.0 on R-0142's terms. Not yet wired to a stream; PR 3 does that.
               - **Pinned:** exact, with `go mod verify` in lint. The notices tool passes with its 16 MIT and BSD modules.
@@ -1103,9 +1103,25 @@ In this order:
               - **Bounded:** the size is capped and the scrollback emptied after every chunk.
               - **Fuzzed:** `FuzzPaneParser`.
               - **Line counts:** each mark's line is counted from the pane's own output. A test checks against tmux 3.4 through scrolling, long output, the alternate screen and identical prompts.
-              - **Epochs:** a full-screen erase or a width change starts an epoch. Across one, tmux's count can differ: it counts written spaces on an erase, and reflows on a width change. The seed aligns each epoch on its own.
+              - **Epochs:** a full-screen erase or a width change starts an epoch. Across one, tmux's count can differ: it counts written spaces on an erase, and reflows on a width change. The seed replays only the current epoch's marks (PR 3).
               - **Session gone:** the control client stops when its session is gone (R-0167), instead of restarting every 5 s.
           - the `TabTerminal` stream in the agent and portenvd;
+            - **Built (PR 3, 2026-10-14, awaiting review):** `TabTerminal` in the helper (ADR 0020, decision 6, "As built").
+              - **The reset:** history, screen, alternate screen, modes, pen and cursor, with current-epoch marks and their authors on their lines. It finishes any escape or UTF-8 character the output left unfinished.
+              - **Then:** output, input and resizes until the tab closes.
+              - **Falling behind:** a new reset marked `skipped`.
+              - **Tests:** on real tmux, for nothing lost or repeated across ten reopenings, 64 KB of every byte value arriving unchanged from copy mode, authors, resizes taking turns with another client, a gone tab, falling behind, and resets mid-sequence. The driver test checks that `work` can't open a tab terminal over the channel or the local socket (R-0175). Another test checks that the parser's drain goroutine ends (R-0176).
+              - **Known limitation:** marks from before a full-screen erase or a width change aren't replayed.
+            - **Built (the flood PR, 2026-10-14, awaiting review; R-0178):** the tmux reader never waits on a parser or a stream.
+              - **Lanes:** each pane's output goes through its own queue, capped at 4 MB. Past the cap, that pane's waiting output is dropped and its streams reseed with `skipped`.
+              - **Its own pane only:** a tab terminal takes only its pane's output.
+              - **Tests:** a 200,000-line flood under `-race`, another tab staying live, no client restart, and resets clearing the pen and bracketed paste.
+            - **Built in portenvd (PR 4, 2026-10-14, awaiting review):** `DaemonService.TabTerminal` relays to the helper's, on this Mac or over a server's forward.
+              - **Who's typing:** from the connection's caller, fixed at accept (`caller.go`); the app's open has no author field (4 is reserved), and nothing in a request can set one.
+              - **Scope:** a caller limited to one workspace is refused any other before a helper is contacted.
+              - **Box ID:** the helper must answer `GetVersion` as the box it was reached for; another box or none is refused before anything is relayed.
+              - **Authors:** the helper is told the owner's first name, or an agent's grant name and ID. `is_you` is set by portenvd for each recipient. An author with a name over 64 characters, or with control or bidi characters, is dropped (R-0178).
+              - **`skipped`** on a reset reaches the app.
           - the app's per-tab terminal (`TabTerminalSource`, `MarkedTerminalView`) in place of today's attached terminal;
             - **Built (PR 5, 2026-10-13, awaiting review):** the tab view's guards, ahead of the live provider:
               - the default-deny filter in front of what it's fed (`TerminalFilter`, ADR 0020 decision 9), with a table test per rule and fuzzing over random bytes and the spike's mutated tmux streams;
@@ -1576,6 +1592,7 @@ These need an owner decision; Claude Code should add new ones here instead of gu
 - [ ] Point-in-time autosaves while the box runs: worth a file system with snapshots (for example btrfs on the Apple disk image), or are file-consistent saves plus the pre-save hook enough? (ADR 0005)
 - [ ] Before each door is built: confirm the target agents can actually reach it (for example outbound SSH from their computers for door 1).
 - [ ] Does Grok Bot read `~/.agents/skills` and can it run the install script? (The owner is testing it.)
+- [ ] tmux (3.4 and 3.7c) sometimes drops a pane's last output in control mode when the program exits at once: the pane is gone before tmux writes the queued output, about 2 times in 100 under load. The app's tab terminal then misses it, although the tab's own history is fine until the window closes. The helper delivers everything tmux sends (tested). A fix would set `remain-on-exit` on, then have the helper close a dead pane once its own control client reports it dead. A subscription to `#{pane_dead}` arrives after the pane's output. That changes when tabs close, so it needs a decision. (1.2c PR 3)
 - [ ] Before 2.5: can the target agents be woken by an incoming webhook? If not, an agent keeping `portenv events --follow` running does the job and 2.5 drops in priority (ADR 0008).
 - [x] Apple Developer Program enrolment, needed for Developer ID signing and notarization in 1.8. **Answered (2026-10-10):** Portenv is signed with the owner's existing organization team; no new enrolment is needed (see 1.8).
 - [ ] Approval timeout default (30 minutes assumed) and what happens when it expires.

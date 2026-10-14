@@ -111,12 +111,18 @@ test: $(TOOLS_STAMP)
 	scripts/test-workspace-word.sh
 	scripts/test-check-terminal-views.sh
 
-## fuzz: the workspace helper's control-mode decoder, line reader and pane parser, briefly (R-0162, R-0142; FUZZTIME=15s)
-FUZZTIME ?= 15s
+## fuzz: the workspace helper's control-mode decoder, line reader and pane parser, briefly (R-0162, R-0142)
+# Counts of runs, not durations: with a duration, go test fails with
+# "context deadline exceeded" when the time runs out while a worker is still
+# minimizing a new input, which a slow runner hits now and then. The
+# decoders are fast; the parser runs a terminal per input.
+FUZZRUNS ?= 500000x
+FUZZRUNS_PARSER ?= 30000x
 fuzz:
-	for f in FuzzDecodeControlOutput FuzzReadControlLines FuzzPaneParser; do \
-		(cd core && go test -run '^$$' -fuzz "^$$f$$" -fuzztime $(FUZZTIME) ./agent/) || exit 1; \
+	for f in FuzzDecodeControlOutput FuzzReadControlLines; do \
+		(cd core && go test -run '^$$' -fuzz "^$$f$$" -fuzztime $(FUZZRUNS) -timeout 10m ./agent/) || exit 1; \
 	done
+	cd core && go test -run '^$$' -fuzz '^FuzzPaneParser$$' -fuzztime $(FUZZRUNS_PARSER) -timeout 10m ./agent/
 
 ## lint: formatting, vet, golangci-lint, buf lint, workflow lint, SPDX headers, terminal views made only by TerminalViews, "workspace" in what people read
 lint: $(TOOLS_STAMP) $(SHELLCHECK) spdx-check
@@ -225,6 +231,7 @@ app: build $(TOOLS_STAMP)
 	# mistaken for the release app.
 	scripts/make-app-icon.sh apps/mac/Resources/Assets.xcassets/AppIcon.appiconset \
 		$(BIN)/Portenv.app/Contents/Resources/AppIcon.icns $(LANE) $(if $(LANE),$(SWIFT))
+	test -s $(BIN)/Portenv.app/Contents/Resources/AppIcon.icns || { echo "Portenv.app has no AppIcon.icns" >&2; exit 1; }
 	# portenvd's launch agent (the login item; SMAppService.agent registers it).
 	mkdir -p $(BIN)/Portenv.app/Contents/Library/LaunchAgents
 	cp apps/mac/LaunchAgents/com.portenv.portenvd.plist $(BIN)/Portenv.app/Contents/Library/LaunchAgents/

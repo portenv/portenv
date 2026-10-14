@@ -163,8 +163,11 @@ func TestTheOwnersNameIsAFirstNameAndNeverYou(t *testing.T) {
 	if n := ownerName(); n == "" || strings.EqualFold(n, "you") || !validAuthorName(n) {
 		t.Fatalf("this Mac's owner name %q", n)
 	}
-	if ownerName() != ownerName() {
-		t.Fatal("the owner's name changed between reads")
+	// Read once: a later change to the account doesn't reach a running
+	// portenvd's author (the name is fixed at start, like the caller).
+	first := ownerName()
+	if again := ownerName(); again != first {
+		t.Fatalf("the owner's name changed between reads: %q, then %q", first, again)
 	}
 }
 

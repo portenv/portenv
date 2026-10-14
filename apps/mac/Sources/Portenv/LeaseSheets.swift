@@ -38,6 +38,11 @@ struct LeaseSheetView: View {
                 Text(line).font(.callout).fixedSize(horizontal: false, vertical: true)
             }
             HStack {
+                // Not answering: Cancel on the left, the honest way out with
+                // Look hidden (R-0178).
+                if sheet.kind == .notAnswering {
+                    Button("Cancel", action: cancel).keyboardShortcut(.cancelAction)
+                }
                 Spacer()
                 if sheet.kind != .notAnswering {
                     Button("Cancel", action: cancel).keyboardShortcut(.cancelAction)

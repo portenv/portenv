@@ -326,6 +326,7 @@ public final class BoxController {
 
     /// Opens the box (on this Mac, or shows it where it runs).
     public func open() async {
+        stopWaiting() // a new open ends Keep Waiting (R-0178)
         progress = resuming ? nil : "Opening…"
         var elsewhere = false
         await perform {
@@ -363,15 +364,57 @@ public final class BoxController {
 
     /// The sheet at once, naming the place; then the probe (up to 2 s)
     /// fills it in (R-0140). Never an error line.
-    private func showWhereItIsOpen() async {
+    private func showWhereItIsOpen(retried: Bool = false) async {
         guard let first = try? await daemon.placement(box, probe: false) else {
             error = "\(box) is open somewhere else."
+            return
+        }
+        // The other place let go meanwhile: open it once more (R-0178).
+        if first.holder == .none {
+            await openOnceMore(retried: retried)
             return
         }
         leaseSheet = LeaseSheet(box: box, placement: first, now: now())
         guard case .knownServer = first.holder else { return }
         if let probed = try? await daemon.placement(box, probe: true), leaseSheet != nil {
+            if probed.holder == .none {
+                leaseSheet = nil
+                await openOnceMore(retried: retried)
+                return
+            }
             leaseSheet = LeaseSheet(box: box, placement: probed, now: now())
+        }
+    }
+
+    /// One more open after the other place let go; refused again, the
+    /// sheet as usual (never a second retry).
+    private func openOnceMore(retried: Bool) async {
+        guard !retried else {
+            error = "\(box) is open somewhere else."
+            return
+        }
+        var elsewhere = false
+        await perform {
+            do {
+                try await self.daemon.open(self.box)
+            } catch let e as DaemonError where e.openElsewhere {
+                elsewhere = true
+                return
+            }
+            self.terminalGeneration += 1
+            await self.refresh()
+        }
+        if elsewhere { await showWhereItIsOpen(retried: true) }
+    }
+
+    /// Stop Waiting, or anything else that ends the wait: no further open
+    /// is tried (R-0178).
+    public func stopWaiting() {
+        waiting?.cancel()
+        waiting = nil
+        if waitingFor != nil {
+            waitingFor = nil
+            progress = nil
         }
     }
 
@@ -434,7 +477,13 @@ public final class BoxController {
                     }
                     continue
                 } catch {
-                    continue
+                    // Anything else (the Keychain, the server removed) ends
+                    // the wait and is said (R-0178).
+                    if Task.isCancelled { return }
+                    self.waitingFor = nil
+                    self.progress = nil
+                    self.error = error.localizedDescription
+                    return
                 }
             }
         }
@@ -443,7 +492,9 @@ public final class BoxController {
     /// Move To asks first, naming every command that will stop.
     public func requestMove(to target: String) async {
         guard !isCurrent(target) else { return }
-        let tabs = (try? await daemon.tabs(box)) ?? []
+        stopWaiting()
+        // nil when they can't be read: then nothing is claimed (R-0178).
+        let tabs = try? await daemon.tabs(box)
         moveConfirmation = MoveConfirmation(box: box, target: target, tabs: tabs, now: now())
     }
 
@@ -681,6 +732,7 @@ public final class BoxController {
 
     /// Closing the window saves and releases a box open on this Mac.
     public func close() async {
+        stopWaiting()
         guard location == .thisMac else { return }
         await perform { try await self.daemon.close(self.box) }
         location = .closed

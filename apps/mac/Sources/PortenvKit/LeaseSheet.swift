@@ -142,9 +142,11 @@ public struct LeaseSheet: Equatable, Sendable {
                     : "\(box) was last open there. Its newest save on \(place) is from \(saveLine)."
             }
             detail = nil
-            let from = placement.newestSaveAt.map { "it starts from the \(clock($0)) save" } ?? "it starts from its newest save"
+            let from = placement.newestSaveAt.map { "It starts from the \(clock($0)) save." } ?? "It starts from its newest save."
+            // Another Mac: R-0168's line under the buttons says the rest.
             warning = Warning(title: "If you move it to this Mac now:",
-                              text: "\(from). Anything done on \(place) after that isn\u{2019}t lost: when \(place) comes back, Portenv keeps it as a separate save you can open.")
+                              text: cannotAsk ? from
+                                  : "\(from) Anything done on \(place) after that isn\u{2019}t lost: when \(place) comes back, Portenv keeps it as a separate save you can open.")
             footnote = cannotAsk ? nil : "Or wait: Portenv keeps trying \(place) and tells you when it answers."
             choices = [
                 Choice(action: .keepWaiting, title: "Keep Waiting", detail: nil, button: "Keep Waiting"),
@@ -178,18 +180,20 @@ public struct MoveConfirmation: Equatable, Sendable {
 
     public static let footer = "Tabs, files and saved commands come along. Agents connected here are disconnected and can reconnect there."
 
-    public init(box: String, target: String, tabs: [TabInfo], now: Date) {
+    /// tabs nil: they couldn't be read, so nothing is claimed (R-0178).
+    public init(box: String, target: String, tabs: [TabInfo]?, now: Date) {
         self.target = target
         let place = ServerName.display(target)
         title = "Move \(box) to \(place)?"
         body = target == "this-mac"
             ? "Portenv saves it where it runs, stops it there, and starts it on this Mac from that save. It takes about a minute; you can keep reading while it moves."
             : "Portenv saves it here, stops it on this Mac, and starts it on \(place) from that save. It takes about a minute; you can keep reading while it moves."
-        running = tabs.filter { !$0.command.isEmpty }.map { t in
-            let minutes = t.runningSince.map { " \u{00B7} \(max(1, Int((now.timeIntervalSince($0) / 60).rounded()))) min" } ?? ""
-            return "\(t.command) in the \(t.name) tab\(minutes)"
+        running = (tabs ?? []).filter { !$0.command.isEmpty }.map { t in
+            let since = t.runningSince.map { " \u{00B7} \(LeaseSheet.minutes(now.timeIntervalSince($0)))" } ?? ""
+            return "\(t.command) in the \(t.name) tab\(since)"
         }
         switch running.count {
+        case _ where tabs == nil: runningTitle = "Portenv couldn\u{2019}t check what\u{2019}s running. Anything still running will stop."
         case 0: runningTitle = "Nothing is running."
         case 1: runningTitle = "1 command is still running and will stop:"
         default: runningTitle = "\(running.count) commands are still running and will stop:"

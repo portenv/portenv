@@ -47,6 +47,17 @@ struct MainWindow: View {
                 .inspectorToggle(isOpen: $inspectorOpen)
             }
             .navigationTitle(controller.box)
+            // Keep Waiting's way out (R-0178), next to "Waiting for …".
+            .toolbar {
+                if let place = controller.waitingFor {
+                    ToolbarItem(placement: .primaryAction) {
+                        Button("Stop Waiting") { controller.stopWaiting() }
+                            .help("Stop trying to open it while \(place) holds it")
+                    }
+                }
+            }
+            // The window going away ends the wait too.
+            .onDisappear { controller.stopWaiting() }
             // 2.3: open somewhere else, and Move To's confirmation.
             .sheet(isPresented: Binding(get: { controller.leaseSheet != nil }, set: { if !$0 { controller.cancelLeaseSheet() } })) {
                 if let sheet = controller.leaseSheet {

@@ -96,6 +96,69 @@ struct LeaseFlowTests {
         #expect(c.waitingFor == nil)
     }
 
+    /// R-0178: Stop Waiting ends the wait, and no open is tried after it;
+    /// Move To and a new open end it too.
+    @Test func stopWaitingStopsTheOpens() async throws {
+        let daemon = FakeDaemon()
+        daemon.openElsewhere = Placement(holder: .otherMachine(id: "studio-1a2b3c"), newestSaveAt: Date(), answers: .cannotAsk)
+        let c = BoxController(box: "acme-api", daemon: daemon)
+        c.keepWaitingEvery = .milliseconds(20)
+        await c.open()
+        await c.choose(.keepWaiting)
+        for _ in 0..<500 where daemon.calls.filter({ $0 == ["app", "open", "acme-api"] }).count < 2 {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        c.stopWaiting()
+        #expect(c.waitingFor == nil)
+        let opens = daemon.calls.filter { $0 == ["app", "open", "acme-api"] }.count
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(daemon.calls.filter { $0 == ["app", "open", "acme-api"] }.count == opens)
+
+        await c.open() // refused again: the sheet
+        await c.choose(.keepWaiting)
+        #expect(c.waitingFor != nil)
+        await c.requestMove(to: "ubuntu@test-server")
+        #expect(c.waitingFor == nil)
+    }
+
+    /// R-0178: any other error ends the wait and is shown.
+    @Test func anotherErrorEndsTheWait() async throws {
+        let daemon = FakeDaemon()
+        daemon.openElsewhere = Placement(holder: .otherMachine(id: "studio-1a2b3c"), newestSaveAt: Date(), answers: .cannotAsk)
+        let c = BoxController(box: "acme-api", daemon: daemon)
+        c.keepWaitingEvery = .milliseconds(20)
+        await c.open()
+        await c.choose(.keepWaiting)
+        daemon.openElsewhere = nil
+        daemon.failing["open"] = "test-server was removed from this Mac."
+        for _ in 0..<500 where c.waitingFor != nil { try await Task.sleep(for: .milliseconds(20)) }
+        #expect(c.waitingFor == nil)
+        #expect(c.error == "test-server was removed from this Mac.")
+    }
+
+    /// R-0178: the place let go by the time GetPlacement answers (nobody
+    /// holds it): the open is tried once more, and no sheet says a place
+    /// isn't answering.
+    @Test func whenNobodyHoldsItAnyMoreItOpens() async {
+        let daemon = FakeDaemon()
+        daemon.openElsewhere = Placement(holder: .none, newestSaveAt: nil, answers: nil)
+        let c = BoxController(box: "acme-api", daemon: daemon)
+        daemon.onPlacement = { _ in daemon.openElsewhere = nil }
+        await c.open()
+        #expect(c.leaseSheet == nil)
+        #expect(daemon.calls.filter { $0 == ["app", "open", "acme-api"] }.count == 2)
+        #expect(c.error == nil)
+    }
+
+    /// R-0178: Move To says it couldn't check, when the tabs can't be read.
+    @Test func moveToWhenTheTabsCantBeRead() async {
+        let daemon = FakeDaemon()
+        daemon.failing["list-tab"] = "the workspace helper isn't answering"
+        let c = BoxController(box: "acme-api", daemon: daemon)
+        await c.run(.move("ubuntu@test-server"))
+        #expect(c.moveConfirmation?.runningTitle == "Portenv couldn\u{2019}t check what\u{2019}s running. Anything still running will stop.")
+    }
+
     /// Cancel leaves it where it is: nothing opens or moves.
     @Test func cancelLeavesItThere() async {
         let daemon = FakeDaemon()
@@ -115,7 +178,7 @@ struct LeaseFlowTests {
                                 runningSince: drawn.addingTimeInterval(-180))])
         let c = BoxController(box: "acme-api", daemon: daemon, now: { drawn })
         await c.run(.move("ubuntu@test-server"))
-        #expect(c.moveConfirmation?.running == ["claude --continue in the claude tab \u{00B7} 3 min"])
+        #expect(c.moveConfirmation?.running == ["claude --continue in the claude tab \u{00B7} 3 minutes"])
         #expect(!daemon.calls.contains { $0.count > 1 && $0[1] == "move" })
         c.cancelMove()
         #expect(c.moveConfirmation == nil)

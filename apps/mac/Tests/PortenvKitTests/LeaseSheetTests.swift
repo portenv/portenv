@@ -52,6 +52,10 @@ struct LeaseSheetTests {
         #expect(s.defaultAction == .keepWaiting)
         #expect(s.choices.map(\.action) == [.keepWaiting, .moveHereTakingOver])
         #expect(s.choices.last?.detail == "Another Mac may still be working in it. Anything it hasn\u{2019}t saved yet stays there, and is kept as a separate save when it next saves.")
+        // The box says only where it starts from: the line under the
+        // buttons says the rest (R-0178).
+        #expect(s.warning?.text.hasPrefix("It starts from") == true)
+        #expect(s.warning.map { !$0.text.contains("separate save") } == true)
     }
 
     /// The newest save's time and age are said, and the warning box says
@@ -62,7 +66,7 @@ struct LeaseSheetTests {
                            clock: { _ in "14:58" })
         #expect(s.body == "acme-api was last open there. Its newest save on test-server is from 14:58, 26 minutes ago.")
         #expect(s.warning?.title == "If you move it to this Mac now:")
-        #expect(s.warning?.text == "it starts from the 14:58 save. Anything done on test-server after that isn\u{2019}t lost: when test-server comes back, Portenv keeps it as a separate save you can open.")
+        #expect(s.warning?.text == "It starts from the 14:58 save. Anything done on test-server after that isn\u{2019}t lost: when test-server comes back, Portenv keeps it as a separate save you can open.")
     }
 
     /// The Move confirmation names every running command, its tab and how
@@ -72,7 +76,14 @@ struct LeaseSheetTests {
                     TabInfo(id: "@1", name: "shell", active: false)]
         let m = MoveConfirmation(box: "acme-api", target: "ubuntu@test-server", tabs: tabs, now: now)
         #expect(m.title == "Move acme-api to test-server?")
-        #expect(m.running == ["claude --continue in the claude tab \u{00B7} 3 min"])
+        #expect(m.running == ["claude --continue in the claude tab \u{00B7} 3 minutes"])
+        let long = MoveConfirmation(box: "acme-api", target: "ubuntu@test-server",
+                                    tabs: [TabInfo(id: "@2", name: "build", active: false, command: "make", runningSince: ago(120))], now: now)
+        #expect(long.running == ["make in the build tab \u{00B7} 2 hours"])
+        // tabs couldn't be read: never "Nothing is running." (R-0178)
+        let unknown = MoveConfirmation(box: "acme-api", target: "ubuntu@test-server", tabs: nil, now: now)
+        #expect(unknown.runningTitle == "Portenv couldn\u{2019}t check what\u{2019}s running. Anything still running will stop.")
+        #expect(unknown.running.isEmpty)
         #expect(m.runningTitle == "1 command is still running and will stop:")
         let idle = MoveConfirmation(box: "acme-api", target: "this-mac", tabs: [tabs[1]], now: now)
         #expect(idle.running.isEmpty)

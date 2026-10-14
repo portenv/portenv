@@ -376,6 +376,7 @@ extension BoxState {
         storagePlace = r.storagePlace.isEmpty ? nil : r.storagePlace
         openedAt = r.hasOpenedAt ? r.openedAt.date : nil
         restartedForSecurityUpdate = r.restartedForSecurityUpdate
+        if r.hasImagePull { imagePull = ImagePull(done: r.imagePull.doneBytes, total: r.imagePull.totalBytes) }
     }
 }
 

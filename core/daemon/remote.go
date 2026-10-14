@@ -235,7 +235,9 @@ func (s *Server) boxState(ctx context.Context, name string, withPackages bool) (
 	}
 	ob, err := s.get(name)
 	if err != nil {
-		return s.notOpenState(name), nil
+		st := s.notOpenState(name)
+		st.ImagePull = s.pullOf(name) // the first open's pull, while it runs
+		return st, nil
 	}
 	st, _, err := ob.sb.LocalState()
 	if err != nil {

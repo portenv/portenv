@@ -16,6 +16,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/moby/moby/api/types/jsonstream"
 	"iter"
 	"net"
 	"net/netip"
@@ -213,10 +214,54 @@ func (d *Driver) ensureImage(ctx context.Context, ref string) error {
 		return fmt.Errorf("pull %s: %w", ref, err)
 	}
 	defer func() { _ = resp.Close() }()
-	if err := resp.Wait(ctx); err != nil {
-		return fmt.Errorf("pull %s: %w", ref, err)
+	// Read layer by layer, so whoever opens the box can show the pull's
+	// progress (R-0211).
+	var tally pullTally
+	for msg, err := range resp.JSONMessages(ctx) {
+		if err != nil {
+			return fmt.Errorf("pull %s: %w", ref, err)
+		}
+		if msg.Error != nil {
+			return fmt.Errorf("pull %s: %s", ref, msg.Error.Message)
+		}
+		done, total := tally.update(msg)
+		driver.ReportPull(ctx, done, total)
 	}
 	return nil
+}
+
+// pullTally adds up a pull's bytes over its layers, from Docker's
+// per-layer messages: a layer's download counts as it goes, in full once
+// it's downloaded, and a layer already here counts for nothing. Extracting
+// (its own progress) is never counted again.
+type pullTally struct {
+	layers map[string]*[2]int64 // id: done, total
+}
+
+func (p *pullTally) update(msg jsonstream.Message) (done, total int64) {
+	if p.layers == nil {
+		p.layers = map[string]*[2]int64{}
+	}
+	l := p.layers[msg.ID]
+	switch msg.Status {
+	case "Downloading":
+		if msg.Progress != nil && msg.Progress.Total > 0 {
+			if l == nil {
+				l = &[2]int64{}
+				p.layers[msg.ID] = l
+			}
+			l[0], l[1] = msg.Progress.Current, msg.Progress.Total
+		}
+	case "Download complete", "Verifying Checksum", "Pull complete":
+		if l != nil {
+			l[0] = l[1]
+		}
+	}
+	for _, l := range p.layers {
+		done += l[0]
+		total += l[1]
+	}
+	return done, total
 }
 
 // recreate replaces the box's container with a fresh one from its spec.

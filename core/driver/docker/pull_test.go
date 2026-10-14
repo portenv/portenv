@@ -88,14 +88,14 @@ func TestAPullReportsItsProgress(t *testing.T) {
 	}
 	var seen [][2]int64
 	ctx := driver.WithPullProgress(context.Background(), func(done, total int64) { seen = append(seen, [2]int64{done, total}) })
-	if err := d.ensureImage(ctx, "ghcr.io/portenv/toolbox-node:main"); err != nil {
+	if err := d.ensureImage(ctx, driver.Box{ID: "box-0123456789ab", ToolboxImage: "ghcr.io/portenv/toolbox-node:main"}); err != nil {
 		t.Fatal(err)
 	}
 	if len(seen) == 0 || seen[len(seen)-1] != [2]int64{900, 900} || !slices.Contains(seen, [2]int64{312, 900}) {
 		t.Fatalf("progress %v", seen)
 	}
 	fail = true
-	if err := d.ensureImage(context.Background(), "ghcr.io/portenv/toolbox-node:main"); err == nil || !strings.Contains(err.Error(), "no space left on device") {
+	if err := d.ensureImage(context.Background(), driver.Box{ID: "box-0123456789ab", ToolboxImage: "ghcr.io/portenv/toolbox-node:main"}); err == nil || !strings.Contains(err.Error(), "no space left on device") {
 		t.Fatalf("an engine's error during the pull: %v", err)
 	}
 }

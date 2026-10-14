@@ -156,7 +156,9 @@ func TestTakeOverRefusesAnOldMountBeforeReKeying(t *testing.T) {
 	if r := old.readiness(ctx, t); !strings.Contains(r, "READINESS_STATE_FAILED") || !strings.Contains(r, "other workspaces") {
 		t.Fatalf("the helper started with every workspace's repositories mounted: %s", r)
 	}
-	if _, code := old.sh(ctx, t, "", "echo kept > /home/portenv-test-kept"); code != 0 {
+	// A box left running across the update has its home: the helper here
+	// refused before making one, so make it as it would be, work's own.
+	if _, code := old.sh(ctx, t, "", "mkdir -p /home/work && echo kept > /home/work/kept.txt && chown -R 1000:1000 /home/work"); code != 0 {
 		t.Fatal("write to the home")
 	}
 	oldCh, err := old.d.AgentChannel(ctx, old.id)
@@ -202,7 +204,7 @@ func TestTakeOverRefusesAnOldMountBeforeReKeying(t *testing.T) {
 	if out, _ := restarted.sh(ctx, t, "", "ls -A "+StorageMount); out != string(old.id) {
 		t.Fatalf("after the restart, %s lists %q", StorageMount, out)
 	}
-	if out, _ := restarted.sh(ctx, t, "", "cat /home/portenv-test-kept"); out != "kept" {
+	if out, _ := restarted.sh(ctx, t, "", "cat /home/work/kept.txt"); out != "kept" {
 		t.Fatalf("the home after the restart: %q, want it as it was", out)
 	}
 	if err := now.Rekey(ctx, old.id); err != nil {

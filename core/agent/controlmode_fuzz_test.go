@@ -112,3 +112,34 @@ func FuzzReadControlLines(f *testing.F) {
 		}
 	})
 }
+
+// FuzzPaneParser: the helper's per-pane parser (charmbracelet/x/vt, R-0142)
+// reads any bytes at any size without escaping a panic, keeps its
+// scrollback empty between chunks, never counts lines backwards, and keeps
+// at most maxPaneMarks marks.
+func FuzzPaneParser(f *testing.F) {
+	for i, b := range spikeOutputs(f) {
+		if i%3 == 0 {
+			f.Add(b, uint8(80), uint8(24))
+		}
+	}
+	f.Add([]byte("\x1b[9999S\x1b[2J\x1b[3J\x1b]133;A\x07\x1b[?1049h\x1b]133;C\x07\x1b[?1049l\x1bc"), uint8(10), uint8(3))
+	f.Fuzz(func(t *testing.T, b []byte, cols, rows uint8) {
+		p := newPaneParser(int(cols), int(rows), func(string, ...any) {})
+		defer p.stop()
+		var last uint64
+		for i := 0; i < len(b); i += 97 {
+			p.feed(b[i:min(len(b), i+97)])
+			if p.emu.ScrollbackLen() != 0 {
+				t.Fatalf("scrollback holds %d lines", p.emu.ScrollbackLen())
+			}
+			if p.scrolled < last {
+				t.Fatalf("lines counted backwards: %d after %d", p.scrolled, last)
+			}
+			last = p.scrolled
+		}
+		if len(p.allMarks()) > maxPaneMarks {
+			t.Fatalf("%d marks", len(p.allMarks()))
+		}
+	})
+}

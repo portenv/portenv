@@ -118,6 +118,11 @@ Also checked on tmux 3.4 in the image:
 
    The existing `Terminal` RPC stays for `portenv attach` (decision 8).
 
+   **As built (1.2c PR 3a):** `proto/portenv/agent/v1/agent.proto` is the source of truth.
+   - `TabTerminalResponse` also carries `CommandAuthor author = 5`, and `TabTerminalReset` carries `repeated CommandAuthor authors = 3`. Who ran each command is agreed with lane D for the blocks' attribution chip.
+   - The author never travels inside output bytes.
+   - `GetVersionResponse` carries `box_id` (R-0172, R-0173). The driver passes the box ID as `PORTENV_BOX_ID` when it makes the container, not in the secrets line, which older helpers refuse when it has a field they don't know.
+
    - **Opening a tab that's gone** ends promptly with `TAB_CLOSED`: within one control-client round trip, and never by waiting for a timeout.
    - **Tab events** (`WatchTabs`, `portenv.types.v1.Tab`) gain what split view's pane header needs. The stream itself stays bytes only.
      - **`waiting`:** the question text from ADR 0017's detector, empty and `secret` for a password prompt. It feeds "asking you", the answer card and the badge.

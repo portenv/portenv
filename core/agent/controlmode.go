@@ -35,6 +35,9 @@ const (
 	// ctlRestart: the control client exited and was started again; events
 	// between the two were never seen (ADR 0020, decision 2).
 	ctlRestart
+	// ctlSessionGone: the session no longer exists, so its client stopped
+	// for good (R-0167); the next subscriber starts one again.
+	ctlSessionGone
 )
 
 // maxCtlLine is the longest control-mode line the helper buffers (R-0162).

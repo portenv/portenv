@@ -1096,6 +1096,15 @@ In this order:
               - WatchTabs follows its events (window added, closed, renamed, another session's current window, output at most once a second), with a 2 s backstop for program changes that print nothing, and polling only below tmux 3.4;
               - the `%output`/`%extended-output` decoder and a line reader capped at 1 MB per line, each with its own fuzz target, seeded from the spike's tmux 3.4 streams (`make fuzz`, in CI on a 15 s budget);
               - tmux pinned to 3.4 in the image and checked by `test.sh`; the helper refuses older for control mode.
+            - **Built (PR 2, 2026-10-14, awaiting review):** the helper's per-pane parser, `charmbracelet/x/vt` v0.1.0 on R-0142's terms. Not yet wired to a stream; PR 3 does that.
+              - **Pinned:** exact, with `go mod verify` in lint. The notices tool passes with its 16 MIT and BSD modules.
+              - **Read-only:** replies are drained and dropped, so a query never blocks it.
+              - **Panics:** each pane's parser runs under `recover`, resets that pane only, and logs once.
+              - **Bounded:** the size is capped and the scrollback emptied after every chunk.
+              - **Fuzzed:** `FuzzPaneParser`.
+              - **Line counts:** each mark's line is counted from the pane's own output. A test checks against tmux 3.4 through scrolling, long output, the alternate screen and identical prompts.
+              - **Epochs:** a full-screen erase or a width change starts an epoch. Across one, tmux's count can differ: it counts written spaces on an erase, and reflows on a width change. The seed aligns each epoch on its own.
+              - **Session gone:** the control client stops when its session is gone (R-0167), instead of restarting every 5 s.
           - the `TabTerminal` stream in the agent and portenvd;
           - the app's per-tab terminal (`TabTerminalSource`, `MarkedTerminalView`) in place of today's attached terminal;
             - **Built (PR 5, 2026-10-13, awaiting review):** the tab view's guards, ahead of the live provider:
@@ -1408,6 +1417,11 @@ The title menu's Move To, as found at the Mac on 2026-10-10:
 - **Servers are shown by name** (GUIDELINES §2), never by address. A server added before names existed (the Phase 0 setup) shows "52.47.207.191" today. It gets a name, defaulting to its host name, and the user can rename it.
 - **Move To is disabled when the window has no box,** like Revert To and Make a Save Point.
 - **The current location has a checkmark** ("This Mac", or the server's name).
+
+The lease sheet (the board `move-and-lease`; R-0136, R-0140, R-0168), in three PRs:
+- **A1, `portenvd` (built):** OpenBox's refusal for a workspace open elsewhere carries the trailer `portenv-refusal: open-elsewhere`, and `GetPlacement` gives the facts: the holder (one of this Mac's servers, by an ID and the name it shows by, never its address; or another machine), its machine ID, the newest save's time, and whether it answers. A server is found from the lease's machine ID by asking each of this Mac's servers `portenv machine-id` once (remembered in `state/server-machines.json`); it answers if `portenv app ping` over SSH succeeds within 2 s. Another Mac can't be asked. "Move it to this Mac" from a known server closes it there (saved and released) and opens it here. The sheet never waits for the probe: it shows at once with "Checking whether <place> answers…".
+- **A2:** each tab's running command and how long it has run, for the Move confirmation: shown on this Mac only, one line, never logged or sent.
+- **B, the app's three sheets.** Defaults: Connect on the lease sheet, Move on the confirmation. When the place doesn't answer, Move to This Mac is the default only for a known server whose ping failed and whose newest save is under an hour old; a holder that can't be asked never makes it the default: Keep Waiting is, and Move to This Mac says "Another Mac may still be working in it. Anything it hasn't saved yet stays there, and is kept as a separate save when it next saves." (R-0168). "Look without changing anything" is hidden until 1.4's Browse Saves.
 
 **2.4 Stand-in agents over SSH and the CLI** (no control plane, no lanes)
 

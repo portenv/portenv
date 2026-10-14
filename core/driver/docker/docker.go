@@ -195,7 +195,7 @@ func (d *Driver) recreate(ctx context.Context, s spec) error {
 	if _, err := d.cli.ContainerRemove(ctx, name, client.ContainerRemoveOptions{}); err != nil && !cerrdefs.IsNotFound(err) {
 		return fmt.Errorf("remove old container: %w", err)
 	}
-	env := []string{agent.ChannelEnv + "=stdin"}
+	env := []string{agent.ChannelEnv + "=stdin", agent.BoxIDEnv + "=" + string(s.Box.ID)}
 	if s.Home.Fresh {
 		env = append(env, "PORTENV_INIT_HOME=1")
 	}

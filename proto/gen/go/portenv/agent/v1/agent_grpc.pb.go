@@ -37,6 +37,7 @@ const (
 	AgentService_RenameTab_FullMethodName     = "/portenv.agent.v1.AgentService/RenameTab"
 	AgentService_SelectTab_FullMethodName     = "/portenv.agent.v1.AgentService/SelectTab"
 	AgentService_WatchTabs_FullMethodName     = "/portenv.agent.v1.AgentService/WatchTabs"
+	AgentService_TabTerminal_FullMethodName   = "/portenv.agent.v1.AgentService/TabTerminal"
 )
 
 // AgentServiceClient is the client API for AgentService service.
@@ -74,6 +75,12 @@ type AgentServiceClient interface {
 	SelectTab(ctx context.Context, in *SelectTabRequest, opts ...grpc.CallOption) (*SelectTabResponse, error)
 	// The tabs at once, then again whenever they change.
 	WatchTabs(ctx context.Context, in *WatchTabsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[WatchTabsResponse], error)
+	// One tab's terminal (ADR 0020): its own output from the session's
+	// control-mode client, and input and size to it. The first message from
+	// the client must be open. portenvd relays it as it relays Terminal, and
+	// sets the stream's author from its caller (R-0133 item 4); the app's own
+	// request to portenvd has no author field.
+	TabTerminal(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[TabTerminalRequest, TabTerminalResponse], error)
 }
 
 type agentServiceClient struct {
@@ -216,6 +223,19 @@ func (c *agentServiceClient) WatchTabs(ctx context.Context, in *WatchTabsRequest
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type AgentService_WatchTabsClient = grpc.ServerStreamingClient[WatchTabsResponse]
 
+func (c *agentServiceClient) TabTerminal(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[TabTerminalRequest, TabTerminalResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &AgentService_ServiceDesc.Streams[2], AgentService_TabTerminal_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[TabTerminalRequest, TabTerminalResponse]{ClientStream: stream}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type AgentService_TabTerminalClient = grpc.BidiStreamingClient[TabTerminalRequest, TabTerminalResponse]
+
 // AgentServiceServer is the server API for AgentService service.
 // All implementations must embed UnimplementedAgentServiceServer
 // for forward compatibility.
@@ -251,6 +271,12 @@ type AgentServiceServer interface {
 	SelectTab(context.Context, *SelectTabRequest) (*SelectTabResponse, error)
 	// The tabs at once, then again whenever they change.
 	WatchTabs(*WatchTabsRequest, grpc.ServerStreamingServer[WatchTabsResponse]) error
+	// One tab's terminal (ADR 0020): its own output from the session's
+	// control-mode client, and input and size to it. The first message from
+	// the client must be open. portenvd relays it as it relays Terminal, and
+	// sets the stream's author from its caller (R-0133 item 4); the app's own
+	// request to portenvd has no author field.
+	TabTerminal(grpc.BidiStreamingServer[TabTerminalRequest, TabTerminalResponse]) error
 	mustEmbedUnimplementedAgentServiceServer()
 }
 
@@ -296,6 +322,9 @@ func (UnimplementedAgentServiceServer) SelectTab(context.Context, *SelectTabRequ
 }
 func (UnimplementedAgentServiceServer) WatchTabs(*WatchTabsRequest, grpc.ServerStreamingServer[WatchTabsResponse]) error {
 	return status.Error(codes.Unimplemented, "method WatchTabs not implemented")
+}
+func (UnimplementedAgentServiceServer) TabTerminal(grpc.BidiStreamingServer[TabTerminalRequest, TabTerminalResponse]) error {
+	return status.Error(codes.Unimplemented, "method TabTerminal not implemented")
 }
 func (UnimplementedAgentServiceServer) mustEmbedUnimplementedAgentServiceServer() {}
 func (UnimplementedAgentServiceServer) testEmbeddedByValue()                      {}
@@ -516,6 +545,13 @@ func _AgentService_WatchTabs_Handler(srv interface{}, stream grpc.ServerStream) 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type AgentService_WatchTabsServer = grpc.ServerStreamingServer[WatchTabsResponse]
 
+func _AgentService_TabTerminal_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(AgentServiceServer).TabTerminal(&grpc.GenericServerStream[TabTerminalRequest, TabTerminalResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type AgentService_TabTerminalServer = grpc.BidiStreamingServer[TabTerminalRequest, TabTerminalResponse]
+
 // AgentService_ServiceDesc is the grpc.ServiceDesc for AgentService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -575,6 +611,12 @@ var AgentService_ServiceDesc = grpc.ServiceDesc{
 			StreamName:    "WatchTabs",
 			Handler:       _AgentService_WatchTabs_Handler,
 			ServerStreams: true,
+		},
+		{
+			StreamName:    "TabTerminal",
+			Handler:       _AgentService_TabTerminal_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
 		},
 	},
 	Metadata: "portenv/agent/v1/agent.proto",

@@ -19,8 +19,11 @@ public struct ServerKeyInfo: Equatable, Sendable {
     public let keyType: String
     /// Its key changed and was forgotten: the question says so first.
     public let wasChanged: Bool
+    /// It signs in with a key Portenv made for it.
+    public let madeKey: Bool
 
-    public init(id: String, name: String, state: State, fingerprint: String, fromKnownHosts: Bool = false, keyType: String = "", wasChanged: Bool = false) {
+    public init(id: String, name: String, state: State, fingerprint: String, fromKnownHosts: Bool = false, keyType: String = "", wasChanged: Bool = false,
+                madeKey: Bool = false) {
         self.id = id
         self.name = name
         self.state = state
@@ -28,6 +31,7 @@ public struct ServerKeyInfo: Equatable, Sendable {
         self.fromKnownHosts = fromKnownHosts
         self.keyType = keyType
         self.wasChanged = wasChanged
+        self.madeKey = madeKey
     }
 }
 

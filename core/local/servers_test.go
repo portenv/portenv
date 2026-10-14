@@ -124,7 +124,7 @@ func confirmedServers(t *testing.T, targets ...string) *Env {
 		}
 	}
 	e.UseForServers()
-	t.Cleanup(func() { useForServers(nil) })
+	t.Cleanup(func() { useForServers(nil); forgetMadeKeys() })
 	return e
 }
 

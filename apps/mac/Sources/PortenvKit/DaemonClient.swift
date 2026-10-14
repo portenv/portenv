@@ -398,7 +398,14 @@ extension DaemonClient: ServerKeys {
         case .changed: .changed
         default: .unconfirmed
         }
-        return ServerKeyInfo(id: i.id, name: i.name, state: state, fingerprint: i.fingerprint, fromKnownHosts: i.fromKnownHosts, keyType: keyType, wasChanged: i.wasChanged)
+        return ServerKeyInfo(id: i.id, name: i.name, state: state, fingerprint: i.fingerprint, fromKnownHosts: i.fromKnownHosts, keyType: keyType,
+                             wasChanged: i.wasChanged, madeKey: i.madeKey)
+    }
+}
+
+extension DaemonClient: ServerKeyHandover {
+    public func provideServerKey(_ id: String, seed: Data) async throws {
+        _ = try await call { try await api.provideServerKey(.with { $0.serverID = id; $0.key = seed }) }
     }
 }
 

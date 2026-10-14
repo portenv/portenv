@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -886,5 +887,46 @@ func TestTabTerminalFloodStallsNoOtherTab(t *testing.T) {
 		if e.kind == ctlRestart || e.kind == ctlReady || e.kind == ctlExit {
 			t.Errorf("the control client restarted during the flood (%v)", e.kind)
 		}
+	}
+}
+
+// laneGoroutines counts the pane lanes running.
+func laneGoroutines() int {
+	buf := make([]byte, 1<<22)
+	buf = buf[:runtime.Stack(buf, true)]
+	return bytes.Count(buf, []byte("agent.(*ctlClient).runLane("))
+}
+
+// Lanes end with their panes, layout seen or not (R-0179): after 50 tabs
+// open and close, half of them exiting at once, the session's goroutines
+// are back where they started.
+func TestPaneLanesEndWithTheirPanes(t *testing.T) {
+	h := newTabTermHarness(t, "sh -c 'exec sleep 600'")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	tt := h.open(ctx, h.firstTab(), "", 80, 24)
+	if tt.next(5*time.Second).GetReset_() == nil {
+		t.Fatal("no reset")
+	}
+	time.Sleep(200 * time.Millisecond)
+	lanes, all := laneGoroutines(), runtime.NumGoroutine()
+	for i := range 50 {
+		if i%2 == 0 {
+			h.raw("new-window", "-d", "-t", "=main:", "echo gone-at-once")
+			continue
+		}
+		w := strings.TrimSpace(h.raw("new-window", "-d", "-P", "-F", "#{window_id}", "-t", "=main:", "sh -c 'echo here; exec sleep 600'"))
+		time.Sleep(20 * time.Millisecond)
+		h.raw("kill-window", "-t", w)
+	}
+	end := time.Now().Add(5 * time.Second)
+	for (laneGoroutines() != lanes || runtime.NumGoroutine() > all) && time.Now().Before(end) {
+		time.Sleep(50 * time.Millisecond)
+	}
+	if n := laneGoroutines(); n != lanes {
+		t.Errorf("%d lanes after 50 tabs came and went, from %d", n, lanes)
+	}
+	if n := runtime.NumGoroutine(); n > all {
+		t.Errorf("%d goroutines after 50 tabs came and went, from %d", n, all)
 	}
 }

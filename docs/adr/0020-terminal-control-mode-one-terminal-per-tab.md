@@ -202,6 +202,8 @@ Also checked on tmux 3.4 in the image:
        - It hands each pane's events to that pane's own queue, which holds at most 4 MB of output (`core/agent/panelane.go`).
        - Past that limit, the waiting output is dropped and the pane's parser starts afresh. Its tab terminals then reset with `skipped`, from a capture taken after the drop.
        - Each tab terminal takes only its own pane's output, so another tab's flood never fills its queue.
+       - **The memory bound:** 4 MB per pane, so 20 flooding tabs could hold 80 MB in the helper. If PR 7's latency gate shows no gain above 1 MB, the cap drops to 1 MB.
+       - **Lanes end with their panes:** after each window closes, the helper lists the session's panes and ends the lanes of panes that are gone, whether or not their layouts were seen.
        - Tests:
          - a 200,000-line flood to a reader that stops reading;
          - another tab's output keeps arriving less than 1 s apart while a pane floods;

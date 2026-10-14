@@ -2,7 +2,10 @@
 
 package agent
 
-import "sync"
+import (
+	"strings"
+	"sync"
+)
 
 // The tmux reader never waits on a parser or a stream (R-0178): it decodes
 // each line and hands a pane's events to that pane's lane, a goroutine that
@@ -162,6 +165,27 @@ func (c *ctlClient) stopLanes() {
 	}
 	for _, l := range lanes {
 		<-l.done
+	}
+}
+
+// pruneLanes takes the session's pane list and ends the lanes of panes not
+// in it, with their parsers.
+func (c *ctlClient) pruneLanes(lines []string) {
+	live := map[string]bool{}
+	for _, l := range lines {
+		live[strings.TrimSpace(l)] = true
+	}
+	c.lmu.Lock()
+	var gone []*paneLane
+	for pane, l := range c.lanes {
+		if !live[pane] {
+			gone = append(gone, l)
+		}
+	}
+	c.lmu.Unlock()
+	for _, l := range gone {
+		pane := l.pane
+		l.push(laneItem{last: true, run: func() { c.closePane(pane) }})
 	}
 }
 

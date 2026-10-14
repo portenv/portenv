@@ -384,6 +384,10 @@ func (h *ctlHub) once(ctx context.Context, session string, c *ctlClient, restart
 			}})
 			return
 		case ctlWindowClose:
+			// Then end the lanes of panes that are gone, whether or not
+			// their windows' layouts were seen (R-0179): the reply comes
+			// after their last output.
+			_, _ = c.send("list-panes -s -F '#{pane_id}'", "", c.pruneLanes)
 			// After the pane's last output.
 			if pane := c.windowPane(e.window); pane != "" {
 				c.lane(pane).push(laneItem{last: true, run: func() {
@@ -553,11 +557,22 @@ func (c *ctlClient) windowPane(window string) string {
 // closeWindow drops a closed window's pane: its parser, size and authors.
 func (c *ctlClient) closeWindow(window string) {
 	c.pmu.Lock()
-	defer c.pmu.Unlock()
 	pane := c.windows[window]
 	delete(c.windows, window)
-	if pane == "" {
-		return
+	c.pmu.Unlock()
+	if pane != "" {
+		c.closePane(pane)
+	}
+}
+
+// closePane drops a gone pane's parser, size and authors.
+func (c *ctlClient) closePane(pane string) {
+	c.pmu.Lock()
+	defer c.pmu.Unlock()
+	for w, p := range c.windows {
+		if p == pane {
+			delete(c.windows, w)
+		}
 	}
 	if p := c.parsers[pane]; p != nil {
 		p.stop()

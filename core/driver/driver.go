@@ -185,5 +185,11 @@ type AgentChannel struct {
 	Token   string
 }
 
+// ErrMountsChanged: Rekey found the running box started with other mounts
+// than its spec gives now (a portenvd from before R-0201 started it with
+// every box's repositories). No key material was made or sent; the box
+// must be stopped and started again, which recreates it.
+var ErrMountsChanged = errors.New("the workspace was started with other mounts than it should have; it must restart")
+
 // ErrNoChannel: this process has no agent channel for the box's start.
 var ErrNoChannel = errors.New("no agent channel for this start of the workspace (restart it to open one)")

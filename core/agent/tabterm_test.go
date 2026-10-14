@@ -363,13 +363,19 @@ func TestTabTerminalInputArrivesUnchanged(t *testing.T) {
 	dir := t.TempDir()
 	out := filepath.Join(dir, "got")
 	const n = 64 << 10
-	h := newTabTermHarness(t, fmt.Sprintf("sh -c 'stty raw -echo; head -c %d > %s; sleep 600'", n, out))
+	// The program says when its terminal is raw: before that, the terminal
+	// takes control bytes as signals (a ^C in the paste would end it).
+	h := newTabTermHarness(t, fmt.Sprintf("sh -c 'stty raw -echo; echo raw-now; head -c %d > %s; sleep 600'", n, out))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	tab := h.firstTab()
 	tt := h.open(ctx, tab, "", 80, 24)
-	if tt.next(5*time.Second).GetReset_() == nil {
+	r := tt.next(5 * time.Second).GetReset_()
+	if r == nil {
 		t.Fatal("no reset")
+	}
+	if !bytes.Contains(r.GetSeed(), []byte("raw-now")) {
+		tt.until(10*time.Second, "the program's raw terminal", func(o []byte) bool { return bytes.Contains(o, []byte("raw-now")) })
 	}
 	// A program put the pane in copy mode: the input still reaches it.
 	h.raw("copy-mode", "-t", tab)
@@ -395,6 +401,9 @@ func TestTabTerminalInputArrivesUnchanged(t *testing.T) {
 			return
 		}
 		if time.Now().After(end) {
+			// Say what the pane was doing, if it's still there.
+			panes, err := h.tb.tmux(context.Background(), "list-panes", "-a", "-F", "#{pane_id} #{pane_dead} #{pane_current_command} #{pane_in_mode}")
+			t.Logf("panes: %q (%v)", panes, err)
 			t.Fatalf("%d of %d bytes arrived", len(got), n)
 		}
 	}

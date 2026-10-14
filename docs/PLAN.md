@@ -1116,6 +1116,12 @@ In this order:
               - **Lanes:** each pane's output goes through its own queue, capped at 4 MB. Past the cap, that pane's waiting output is dropped and its streams reseed with `skipped`.
               - **Its own pane only:** a tab terminal takes only its pane's output.
               - **Tests:** a 200,000-line flood under `-race`, another tab staying live, no client restart, and resets clearing the pen and bracketed paste.
+            - **Built in portenvd (PR 4, 2026-10-14, awaiting review):** `DaemonService.TabTerminal` relays to the helper's, on this Mac or over a server's forward.
+              - **Who's typing:** from the connection's caller, fixed at accept (`caller.go`); the app's open has no author field (4 is reserved), and nothing in a request can set one.
+              - **Scope:** a caller limited to one workspace is refused any other before a helper is contacted.
+              - **Box ID:** the helper must answer `GetVersion` as the box it was reached for; another box or none is refused before anything is relayed.
+              - **Authors:** the helper is told the owner's first name, or an agent's grant name and ID. `is_you` is set by portenvd for each recipient. An author with a name over 64 characters, or with control or bidi characters, is dropped (R-0178).
+              - **`skipped`** on a reset reaches the app.
           - the app's per-tab terminal (`TabTerminalSource`, `MarkedTerminalView`) in place of today's attached terminal;
             - **Built (PR 5, 2026-10-13, awaiting review):** the tab view's guards, ahead of the live provider:
               - the default-deny filter in front of what it's fed (`TerminalFilter`, ADR 0020 decision 9), with a table test per rule and fuzzing over random bytes and the spike's mutated tmux streams;

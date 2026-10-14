@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -380,5 +381,36 @@ func TestWatchTabsSeesEveryWindow(t *testing.T) {
 	case s := <-got:
 		t.Fatalf("an update with no change: %q", s)
 	case <-time.After(300 * time.Millisecond):
+	}
+}
+
+// TestTabsSayTheWholeCommand (Linux, where the agent runs): the command
+// line in front of a tab's terminal, and when it started, for the Move
+// confirmation (2.3). A planted -pSECRET is in it: it reaches the app, and
+// the agent's log must never see it.
+func TestTabsSayTheWholeCommand(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("reads /proc: Linux only, as the agent")
+	}
+	tb, raw := testTabs(t)
+	ts := mustList(t, tb)
+	if c := ts[0].GetCommand(); c != "" {
+		t.Fatalf("an idle shell reports command %q", c)
+	}
+	start := time.Now()
+	raw("send-keys", "-t", ts[0].GetId(), "sh -c 'sleep 30; true' sh -u root -pSECRET", "Enter")
+	var tab *typesv1.Tab
+	for range 100 {
+		if tab = mustList(t, tb)[0]; strings.Contains(tab.GetCommand(), "-pSECRET") {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if got := tab.GetCommand(); got != "sh -c sleep 30; true sh -u root -pSECRET" {
+		t.Fatalf("command %q", got)
+	}
+	since := tab.GetRunningSince().AsTime()
+	if since.Before(start.Add(-5*time.Second)) || since.After(time.Now().Add(5*time.Second)) {
+		t.Fatalf("running since %v, started about %v", since, start)
 	}
 }

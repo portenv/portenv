@@ -6,6 +6,7 @@ import (
 	"context"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -14,6 +15,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	typesv1 "github.com/portenv/portenv/proto/gen/go/portenv/types/v1"
 )
@@ -36,6 +38,16 @@ type tabs struct {
 	// session's windows (view), so its current tab is its own: one viewer
 	// choosing a tab never moves another's.
 	viewer string
+	// procRoot is /proc, where a tab's running command is read ("" means
+	// /proc; tests point it elsewhere).
+	procRoot string
+}
+
+func (t tabs) proc() string {
+	if t.procRoot != "" {
+		return t.procRoot
+	}
+	return "/proc"
 }
 
 // viewerRE is a viewer's name: short, lower case, plain.
@@ -157,21 +169,34 @@ func (t tabs) list(ctx context.Context) ([]*typesv1.Tab, error) {
 	if err := t.ensure(ctx); err != nil {
 		return nil, err
 	}
-	out, err := t.tmux(ctx, "list-windows", "-t", t.target(), "-F", "#{window_id}\t#{window_active}\t#{pane_current_command}\t#{window_name}")
+	out, err := t.tmux(ctx, "list-windows", "-t", t.target(), "-F", "#{window_id}\t#{window_active}\t#{pane_current_command}\t#{pane_pid}\t#{window_name}")
 	if err != nil {
 		return nil, status.Errorf(codes.Unavailable, "list tabs: %v", err)
 	}
 	var ts []*typesv1.Tab
 	for _, line := range strings.Split(strings.TrimRight(out, "\n"), "\n") {
-		f := strings.SplitN(line, "\t", 4)
-		if len(f) != 4 || !windowIDRE.MatchString(f[0]) {
+		f := strings.SplitN(line, "\t", 5)
+		if len(f) != 5 || !windowIDRE.MatchString(f[0]) {
 			continue
 		}
 		program := f[2]
 		if shells[program] {
 			program = ""
 		}
-		ts = append(ts, &typesv1.Tab{Id: f[0], Name: f[3], Active: f[1] == "1", Program: program})
+		tab := &typesv1.Tab{Id: f[0], Name: f[4], Active: f[1] == "1", Program: program}
+		// The whole command line, for the Move confirmation: to the app
+		// only, never logged (2.3, R-0140). Read whatever the program's
+		// name: a script run with sh is a command still running, though
+		// tmux names it after its shell.
+		if pid, err := strconv.Atoi(f[3]); err == nil {
+			if cmd, since, ok := foregroundCommand(t.proc(), pid, userHZ); ok {
+				tab.Command = cmd
+				if !since.IsZero() {
+					tab.RunningSince = timestamppb.New(since)
+				}
+			}
+		}
+		ts = append(ts, tab)
 	}
 	return ts, nil
 }

@@ -125,4 +125,12 @@ message Tab {
   // The program running in the tab's foreground, or empty when it's just
   // the shell (closing the tab asks first when it isn't empty).
   string program = 4;
+  // The foreground command's whole command line, as one line (at most 160
+  // characters), for the Move confirmation (2.3): shown on this Mac only.
+  // It can hold secrets (mysql -p…, TOKEN=… ./deploy), so it's never
+  // logged, never in Send Feedback or a crash report (R-0140). Empty when
+  // the tab is just the shell.
+  string command = 5;
+  // When that command started.
+  google.protobuf.Timestamp running_since = 6;
 }

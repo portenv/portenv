@@ -1573,6 +1573,219 @@ public nonisolated struct Portenv_Daemon_V1_GetPlacementResponse: Sendable {
   fileprivate var _newestSaveAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
 }
 
+public nonisolated struct Portenv_Daemon_V1_TabTerminalRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var msg: Portenv_Daemon_V1_TabTerminalRequest.OneOf_Msg? = nil
+
+  public var `open`: Portenv_Daemon_V1_TabTerminalOpen {
+    get {
+      if case .open(let v)? = msg {return v}
+      return Portenv_Daemon_V1_TabTerminalOpen()
+    }
+    set {msg = .open(newValue)}
+  }
+
+  /// Keystrokes, pastes, clicks and IME input, as the app's terminal
+  /// produced them (never the emulator's replies; ADR 0020, decision 4).
+  public var input: Data {
+    get {
+      if case .input(let v)? = msg {return v}
+      return Data()
+    }
+    set {msg = .input(newValue)}
+  }
+
+  /// The size this view can show, in cells.
+  public var resize: Portenv_Daemon_V1_TerminalSize {
+    get {
+      if case .resize(let v)? = msg {return v}
+      return Portenv_Daemon_V1_TerminalSize()
+    }
+    set {msg = .resize(newValue)}
+  }
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public nonisolated enum OneOf_Msg: Equatable, Sendable {
+    case `open`(Portenv_Daemon_V1_TabTerminalOpen)
+    /// Keystrokes, pastes, clicks and IME input, as the app's terminal
+    /// produced them (never the emulator's replies; ADR 0020, decision 4).
+    case input(Data)
+    /// The size this view can show, in cells.
+    case resize(Portenv_Daemon_V1_TerminalSize)
+
+  }
+
+  public init() {}
+}
+
+public nonisolated struct Portenv_Daemon_V1_TabTerminalOpen: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// The tmux session, for example "main".
+  public var session: String = String()
+
+  /// A tab ID, "@N".
+  public var tab: String = String()
+
+  public var size: Portenv_Daemon_V1_TerminalSize {
+    get {_size ?? Portenv_Daemon_V1_TerminalSize()}
+    set {_size = newValue}
+  }
+  /// Returns true if `size` has been explicitly set.
+  public var hasSize: Bool {self._size != nil}
+  /// Clears the value of `size`. Subsequent reads from it will return its default value.
+  public mutating func clearSize() {self._size = nil}
+
+  public var box: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _size: Portenv_Daemon_V1_TerminalSize? = nil
+}
+
+public nonisolated struct Portenv_Daemon_V1_TabTerminalResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var msg: Portenv_Daemon_V1_TabTerminalResponse.OneOf_Msg? = nil
+
+  /// Always first, and again after the helper's control client restarts
+  /// or output had to be skipped.
+  public var reset: Portenv_Daemon_V1_TabTerminalReset {
+    get {
+      if case .reset(let v)? = msg {return v}
+      return Portenv_Daemon_V1_TabTerminalReset()
+    }
+    set {msg = .reset(newValue)}
+  }
+
+  /// The tab's own output, in order.
+  public var output: Data {
+    get {
+      if case .output(let v)? = msg {return v}
+      return Data()
+    }
+    set {msg = .output(newValue)}
+  }
+
+  /// The tab's size changed elsewhere (another viewer).
+  public var resized: Portenv_Daemon_V1_TerminalSize {
+    get {
+      if case .resized(let v)? = msg {return v}
+      return Portenv_Daemon_V1_TerminalSize()
+    }
+    set {msg = .resized(newValue)}
+  }
+
+  /// Nothing follows.
+  public var end: Portenv_Types_V1_TabTerminalEnd {
+    get {
+      if case .end(let v)? = msg {return v}
+      return .unspecified
+    }
+    set {msg = .end(newValue)}
+  }
+
+  /// Who ran a command, for its block's attribution chip.
+  public var author: Portenv_Daemon_V1_CommandAuthor {
+    get {
+      if case .author(let v)? = msg {return v}
+      return Portenv_Daemon_V1_CommandAuthor()
+    }
+    set {msg = .author(newValue)}
+  }
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public nonisolated enum OneOf_Msg: Equatable, Sendable {
+    /// Always first, and again after the helper's control client restarts
+    /// or output had to be skipped.
+    case reset(Portenv_Daemon_V1_TabTerminalReset)
+    /// The tab's own output, in order.
+    case output(Data)
+    /// The tab's size changed elsewhere (another viewer).
+    case resized(Portenv_Daemon_V1_TerminalSize)
+    /// Nothing follows.
+    case end(Portenv_Types_V1_TabTerminalEnd)
+    /// Who ran a command, for its block's attribution chip.
+    case author(Portenv_Daemon_V1_CommandAuthor)
+
+  }
+
+  public init() {}
+}
+
+public nonisolated struct Portenv_Daemon_V1_TabTerminalReset: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var size: Portenv_Daemon_V1_TerminalSize {
+    get {_size ?? Portenv_Daemon_V1_TerminalSize()}
+    set {_size = newValue}
+  }
+  /// Returns true if `size` has been explicitly set.
+  public var hasSize: Bool {self._size != nil}
+  /// Clears the value of `size`. Subsequent reads from it will return its default value.
+  public mutating func clearSize() {self._size = nil}
+
+  /// The tab's history and screen, cursor and modes, with its OSC 133
+  /// marks replayed on their lines.
+  public var seed: Data = Data()
+
+  /// Every command still in the seed that has a recorded author.
+  public var authors: [Portenv_Daemon_V1_CommandAuthor] = []
+
+  /// Output was skipped since the last reset (the helper or its reader fell
+  /// too far behind; ADR 0020, decision 11): the app tells the person and
+  /// marks the block that was running as skipped, never complete.
+  public var skipped: Bool = false
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _size: Portenv_Daemon_V1_TerminalSize? = nil
+}
+
+/// Who sent the Enter that started a command: the helper's CommandAuthor
+/// (agent.v1), as portenvd hands it to one recipient. Response-only, and
+/// never inside output bytes. A command with no recorded author has none.
+public nonisolated struct Portenv_Daemon_V1_CommandAuthor: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// The command's OSC 133;C line, counted from the tab's first line ever.
+  public var line: UInt64 = 0
+
+  /// The author's own name, as people read it: the owner's first name, or
+  /// "Grok Bot". Never "You": is_you is what makes the app say "You".
+  /// portenvd drops an author whose name is over 64 characters or has
+  /// control or bidi characters; it never repairs one.
+  public var name: String = String()
+
+  /// True when the author is the caller receiving this stream. Set by
+  /// portenvd for each recipient; whatever the helper sent is replaced.
+  public var isYou: Bool = false
+
+  /// Empty for a person; the agent's ID from its grant (ADR 0016) otherwise.
+  public var agentID: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
 // MARK: - Code below here is support for the SwiftProtobuf runtime.
 
 fileprivate nonisolated let _protobuf_package = "portenv.daemon.v1"
@@ -4245,6 +4458,336 @@ nonisolated extension Portenv_Daemon_V1_GetPlacementResponse: SwiftProtobuf.Mess
     if lhs.machine != rhs.machine {return false}
     if lhs._newestSaveAt != rhs._newestSaveAt {return false}
     if lhs.answers != rhs.answers {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Portenv_Daemon_V1_TabTerminalRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".TabTerminalRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}open\0\u{1}input\0\u{1}resize\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try {
+        var v: Portenv_Daemon_V1_TabTerminalOpen?
+        var hadOneofValue = false
+        if let current = self.msg {
+          hadOneofValue = true
+          if case .open(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.msg = .open(v)
+        }
+      }()
+      case 2: try {
+        var v: Data?
+        try decoder.decodeSingularBytesField(value: &v)
+        if let v = v {
+          if self.msg != nil {try decoder.handleConflictingOneOf()}
+          self.msg = .input(v)
+        }
+      }()
+      case 3: try {
+        var v: Portenv_Daemon_V1_TerminalSize?
+        var hadOneofValue = false
+        if let current = self.msg {
+          hadOneofValue = true
+          if case .resize(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.msg = .resize(v)
+        }
+      }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    switch self.msg {
+    case .open?: try {
+      guard case .open(let v)? = self.msg else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+    }()
+    case .input?: try {
+      guard case .input(let v)? = self.msg else { preconditionFailure() }
+      try visitor.visitSingularBytesField(value: v, fieldNumber: 2)
+    }()
+    case .resize?: try {
+      guard case .resize(let v)? = self.msg else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 3)
+    }()
+    case nil: break
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Portenv_Daemon_V1_TabTerminalRequest, rhs: Portenv_Daemon_V1_TabTerminalRequest) -> Bool {
+    if lhs.msg != rhs.msg {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Portenv_Daemon_V1_TabTerminalOpen: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".TabTerminalOpen"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}session\0\u{1}tab\0\u{1}size\0\u{2}\u{2}box\0\u{b}author\0\u{c}\u{4}\u{1}")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.session) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.tab) }()
+      case 3: try { try decoder.decodeSingularMessageField(value: &self._size) }()
+      case 5: try { try decoder.decodeSingularStringField(value: &self.box) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    if !self.session.isEmpty {
+      try visitor.visitSingularStringField(value: self.session, fieldNumber: 1)
+    }
+    if !self.tab.isEmpty {
+      try visitor.visitSingularStringField(value: self.tab, fieldNumber: 2)
+    }
+    try { if let v = self._size {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 3)
+    } }()
+    if !self.box.isEmpty {
+      try visitor.visitSingularStringField(value: self.box, fieldNumber: 5)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Portenv_Daemon_V1_TabTerminalOpen, rhs: Portenv_Daemon_V1_TabTerminalOpen) -> Bool {
+    if lhs.session != rhs.session {return false}
+    if lhs.tab != rhs.tab {return false}
+    if lhs._size != rhs._size {return false}
+    if lhs.box != rhs.box {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Portenv_Daemon_V1_TabTerminalResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".TabTerminalResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}reset\0\u{1}output\0\u{1}resized\0\u{1}end\0\u{1}author\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try {
+        var v: Portenv_Daemon_V1_TabTerminalReset?
+        var hadOneofValue = false
+        if let current = self.msg {
+          hadOneofValue = true
+          if case .reset(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.msg = .reset(v)
+        }
+      }()
+      case 2: try {
+        var v: Data?
+        try decoder.decodeSingularBytesField(value: &v)
+        if let v = v {
+          if self.msg != nil {try decoder.handleConflictingOneOf()}
+          self.msg = .output(v)
+        }
+      }()
+      case 3: try {
+        var v: Portenv_Daemon_V1_TerminalSize?
+        var hadOneofValue = false
+        if let current = self.msg {
+          hadOneofValue = true
+          if case .resized(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.msg = .resized(v)
+        }
+      }()
+      case 4: try {
+        var v: Portenv_Types_V1_TabTerminalEnd?
+        try decoder.decodeSingularEnumField(value: &v)
+        if let v = v {
+          if self.msg != nil {try decoder.handleConflictingOneOf()}
+          self.msg = .end(v)
+        }
+      }()
+      case 5: try {
+        var v: Portenv_Daemon_V1_CommandAuthor?
+        var hadOneofValue = false
+        if let current = self.msg {
+          hadOneofValue = true
+          if case .author(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.msg = .author(v)
+        }
+      }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    switch self.msg {
+    case .reset?: try {
+      guard case .reset(let v)? = self.msg else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+    }()
+    case .output?: try {
+      guard case .output(let v)? = self.msg else { preconditionFailure() }
+      try visitor.visitSingularBytesField(value: v, fieldNumber: 2)
+    }()
+    case .resized?: try {
+      guard case .resized(let v)? = self.msg else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 3)
+    }()
+    case .end?: try {
+      guard case .end(let v)? = self.msg else { preconditionFailure() }
+      try visitor.visitSingularEnumField(value: v, fieldNumber: 4)
+    }()
+    case .author?: try {
+      guard case .author(let v)? = self.msg else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 5)
+    }()
+    case nil: break
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Portenv_Daemon_V1_TabTerminalResponse, rhs: Portenv_Daemon_V1_TabTerminalResponse) -> Bool {
+    if lhs.msg != rhs.msg {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Portenv_Daemon_V1_TabTerminalReset: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".TabTerminalReset"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}size\0\u{1}seed\0\u{1}authors\0\u{1}skipped\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularMessageField(value: &self._size) }()
+      case 2: try { try decoder.decodeSingularBytesField(value: &self.seed) }()
+      case 3: try { try decoder.decodeRepeatedMessageField(value: &self.authors) }()
+      case 4: try { try decoder.decodeSingularBoolField(value: &self.skipped) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._size {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+    } }()
+    if !self.seed.isEmpty {
+      try visitor.visitSingularBytesField(value: self.seed, fieldNumber: 2)
+    }
+    if !self.authors.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.authors, fieldNumber: 3)
+    }
+    if self.skipped != false {
+      try visitor.visitSingularBoolField(value: self.skipped, fieldNumber: 4)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Portenv_Daemon_V1_TabTerminalReset, rhs: Portenv_Daemon_V1_TabTerminalReset) -> Bool {
+    if lhs._size != rhs._size {return false}
+    if lhs.seed != rhs.seed {return false}
+    if lhs.authors != rhs.authors {return false}
+    if lhs.skipped != rhs.skipped {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Portenv_Daemon_V1_CommandAuthor: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".CommandAuthor"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}line\0\u{1}name\0\u{3}is_you\0\u{3}agent_id\0\u{c}\u{5}\u{1}")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularUInt64Field(value: &self.line) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.name) }()
+      case 3: try { try decoder.decodeSingularBoolField(value: &self.isYou) }()
+      case 4: try { try decoder.decodeSingularStringField(value: &self.agentID) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.line != 0 {
+      try visitor.visitSingularUInt64Field(value: self.line, fieldNumber: 1)
+    }
+    if !self.name.isEmpty {
+      try visitor.visitSingularStringField(value: self.name, fieldNumber: 2)
+    }
+    if self.isYou != false {
+      try visitor.visitSingularBoolField(value: self.isYou, fieldNumber: 3)
+    }
+    if !self.agentID.isEmpty {
+      try visitor.visitSingularStringField(value: self.agentID, fieldNumber: 4)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Portenv_Daemon_V1_CommandAuthor, rhs: Portenv_Daemon_V1_CommandAuthor) -> Bool {
+    if lhs.line != rhs.line {return false}
+    if lhs.name != rhs.name {return false}
+    if lhs.isYou != rhs.isYou {return false}
+    if lhs.agentID != rhs.agentID {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

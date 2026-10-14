@@ -4359,6 +4359,466 @@ func (x *GetPlacementResponse) GetAnswers() Answers {
 	return Answers_ANSWERS_UNSPECIFIED
 }
 
+type TabTerminalRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Msg:
+	//
+	//	*TabTerminalRequest_Open
+	//	*TabTerminalRequest_Input
+	//	*TabTerminalRequest_Resize
+	Msg           isTabTerminalRequest_Msg `protobuf_oneof:"msg"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TabTerminalRequest) Reset() {
+	*x = TabTerminalRequest{}
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[78]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TabTerminalRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TabTerminalRequest) ProtoMessage() {}
+
+func (x *TabTerminalRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[78]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TabTerminalRequest.ProtoReflect.Descriptor instead.
+func (*TabTerminalRequest) Descriptor() ([]byte, []int) {
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{78}
+}
+
+func (x *TabTerminalRequest) GetMsg() isTabTerminalRequest_Msg {
+	if x != nil {
+		return x.Msg
+	}
+	return nil
+}
+
+func (x *TabTerminalRequest) GetOpen() *TabTerminalOpen {
+	if x != nil {
+		if x, ok := x.Msg.(*TabTerminalRequest_Open); ok {
+			return x.Open
+		}
+	}
+	return nil
+}
+
+func (x *TabTerminalRequest) GetInput() []byte {
+	if x != nil {
+		if x, ok := x.Msg.(*TabTerminalRequest_Input); ok {
+			return x.Input
+		}
+	}
+	return nil
+}
+
+func (x *TabTerminalRequest) GetResize() *TerminalSize {
+	if x != nil {
+		if x, ok := x.Msg.(*TabTerminalRequest_Resize); ok {
+			return x.Resize
+		}
+	}
+	return nil
+}
+
+type isTabTerminalRequest_Msg interface {
+	isTabTerminalRequest_Msg()
+}
+
+type TabTerminalRequest_Open struct {
+	Open *TabTerminalOpen `protobuf:"bytes,1,opt,name=open,proto3,oneof"`
+}
+
+type TabTerminalRequest_Input struct {
+	// Keystrokes, pastes, clicks and IME input, as the app's terminal
+	// produced them (never the emulator's replies; ADR 0020, decision 4).
+	Input []byte `protobuf:"bytes,2,opt,name=input,proto3,oneof"`
+}
+
+type TabTerminalRequest_Resize struct {
+	// The size this view can show, in cells.
+	Resize *TerminalSize `protobuf:"bytes,3,opt,name=resize,proto3,oneof"`
+}
+
+func (*TabTerminalRequest_Open) isTabTerminalRequest_Msg() {}
+
+func (*TabTerminalRequest_Input) isTabTerminalRequest_Msg() {}
+
+func (*TabTerminalRequest_Resize) isTabTerminalRequest_Msg() {}
+
+type TabTerminalOpen struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The tmux session, for example "main".
+	Session string `protobuf:"bytes,1,opt,name=session,proto3" json:"session,omitempty"`
+	// A tab ID, "@N".
+	Tab           string        `protobuf:"bytes,2,opt,name=tab,proto3" json:"tab,omitempty"`
+	Size          *TerminalSize `protobuf:"bytes,3,opt,name=size,proto3" json:"size,omitempty"`
+	Box           string        `protobuf:"bytes,5,opt,name=box,proto3" json:"box,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TabTerminalOpen) Reset() {
+	*x = TabTerminalOpen{}
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[79]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TabTerminalOpen) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TabTerminalOpen) ProtoMessage() {}
+
+func (x *TabTerminalOpen) ProtoReflect() protoreflect.Message {
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[79]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TabTerminalOpen.ProtoReflect.Descriptor instead.
+func (*TabTerminalOpen) Descriptor() ([]byte, []int) {
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{79}
+}
+
+func (x *TabTerminalOpen) GetSession() string {
+	if x != nil {
+		return x.Session
+	}
+	return ""
+}
+
+func (x *TabTerminalOpen) GetTab() string {
+	if x != nil {
+		return x.Tab
+	}
+	return ""
+}
+
+func (x *TabTerminalOpen) GetSize() *TerminalSize {
+	if x != nil {
+		return x.Size
+	}
+	return nil
+}
+
+func (x *TabTerminalOpen) GetBox() string {
+	if x != nil {
+		return x.Box
+	}
+	return ""
+}
+
+type TabTerminalResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Msg:
+	//
+	//	*TabTerminalResponse_Reset_
+	//	*TabTerminalResponse_Output
+	//	*TabTerminalResponse_Resized
+	//	*TabTerminalResponse_End
+	//	*TabTerminalResponse_Author
+	Msg           isTabTerminalResponse_Msg `protobuf_oneof:"msg"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TabTerminalResponse) Reset() {
+	*x = TabTerminalResponse{}
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[80]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TabTerminalResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TabTerminalResponse) ProtoMessage() {}
+
+func (x *TabTerminalResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[80]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TabTerminalResponse.ProtoReflect.Descriptor instead.
+func (*TabTerminalResponse) Descriptor() ([]byte, []int) {
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{80}
+}
+
+func (x *TabTerminalResponse) GetMsg() isTabTerminalResponse_Msg {
+	if x != nil {
+		return x.Msg
+	}
+	return nil
+}
+
+func (x *TabTerminalResponse) GetReset_() *TabTerminalReset {
+	if x != nil {
+		if x, ok := x.Msg.(*TabTerminalResponse_Reset_); ok {
+			return x.Reset_
+		}
+	}
+	return nil
+}
+
+func (x *TabTerminalResponse) GetOutput() []byte {
+	if x != nil {
+		if x, ok := x.Msg.(*TabTerminalResponse_Output); ok {
+			return x.Output
+		}
+	}
+	return nil
+}
+
+func (x *TabTerminalResponse) GetResized() *TerminalSize {
+	if x != nil {
+		if x, ok := x.Msg.(*TabTerminalResponse_Resized); ok {
+			return x.Resized
+		}
+	}
+	return nil
+}
+
+func (x *TabTerminalResponse) GetEnd() v1.TabTerminalEnd {
+	if x != nil {
+		if x, ok := x.Msg.(*TabTerminalResponse_End); ok {
+			return x.End
+		}
+	}
+	return v1.TabTerminalEnd(0)
+}
+
+func (x *TabTerminalResponse) GetAuthor() *CommandAuthor {
+	if x != nil {
+		if x, ok := x.Msg.(*TabTerminalResponse_Author); ok {
+			return x.Author
+		}
+	}
+	return nil
+}
+
+type isTabTerminalResponse_Msg interface {
+	isTabTerminalResponse_Msg()
+}
+
+type TabTerminalResponse_Reset_ struct {
+	// Always first, and again after the helper's control client restarts
+	// or output had to be skipped.
+	Reset_ *TabTerminalReset `protobuf:"bytes,1,opt,name=reset,proto3,oneof"`
+}
+
+type TabTerminalResponse_Output struct {
+	// The tab's own output, in order.
+	Output []byte `protobuf:"bytes,2,opt,name=output,proto3,oneof"`
+}
+
+type TabTerminalResponse_Resized struct {
+	// The tab's size changed elsewhere (another viewer).
+	Resized *TerminalSize `protobuf:"bytes,3,opt,name=resized,proto3,oneof"`
+}
+
+type TabTerminalResponse_End struct {
+	// Nothing follows.
+	End v1.TabTerminalEnd `protobuf:"varint,4,opt,name=end,proto3,enum=portenv.types.v1.TabTerminalEnd,oneof"`
+}
+
+type TabTerminalResponse_Author struct {
+	// Who ran a command, for its block's attribution chip.
+	Author *CommandAuthor `protobuf:"bytes,5,opt,name=author,proto3,oneof"`
+}
+
+func (*TabTerminalResponse_Reset_) isTabTerminalResponse_Msg() {}
+
+func (*TabTerminalResponse_Output) isTabTerminalResponse_Msg() {}
+
+func (*TabTerminalResponse_Resized) isTabTerminalResponse_Msg() {}
+
+func (*TabTerminalResponse_End) isTabTerminalResponse_Msg() {}
+
+func (*TabTerminalResponse_Author) isTabTerminalResponse_Msg() {}
+
+type TabTerminalReset struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Size  *TerminalSize          `protobuf:"bytes,1,opt,name=size,proto3" json:"size,omitempty"`
+	// The tab's history and screen, cursor and modes, with its OSC 133
+	// marks replayed on their lines.
+	Seed []byte `protobuf:"bytes,2,opt,name=seed,proto3" json:"seed,omitempty"`
+	// Every command still in the seed that has a recorded author.
+	Authors []*CommandAuthor `protobuf:"bytes,3,rep,name=authors,proto3" json:"authors,omitempty"`
+	// Output was skipped since the last reset (the helper or its reader fell
+	// too far behind; ADR 0020, decision 11): the app tells the person and
+	// marks the block that was running as skipped, never complete.
+	Skipped       bool `protobuf:"varint,4,opt,name=skipped,proto3" json:"skipped,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TabTerminalReset) Reset() {
+	*x = TabTerminalReset{}
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[81]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TabTerminalReset) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TabTerminalReset) ProtoMessage() {}
+
+func (x *TabTerminalReset) ProtoReflect() protoreflect.Message {
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[81]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TabTerminalReset.ProtoReflect.Descriptor instead.
+func (*TabTerminalReset) Descriptor() ([]byte, []int) {
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{81}
+}
+
+func (x *TabTerminalReset) GetSize() *TerminalSize {
+	if x != nil {
+		return x.Size
+	}
+	return nil
+}
+
+func (x *TabTerminalReset) GetSeed() []byte {
+	if x != nil {
+		return x.Seed
+	}
+	return nil
+}
+
+func (x *TabTerminalReset) GetAuthors() []*CommandAuthor {
+	if x != nil {
+		return x.Authors
+	}
+	return nil
+}
+
+func (x *TabTerminalReset) GetSkipped() bool {
+	if x != nil {
+		return x.Skipped
+	}
+	return false
+}
+
+// Who sent the Enter that started a command: the helper's CommandAuthor
+// (agent.v1), as portenvd hands it to one recipient. Response-only, and
+// never inside output bytes. A command with no recorded author has none.
+type CommandAuthor struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The command's OSC 133;C line, counted from the tab's first line ever.
+	Line uint64 `protobuf:"varint,1,opt,name=line,proto3" json:"line,omitempty"`
+	// The author's own name, as people read it: the owner's first name, or
+	// "Grok Bot". Never "You": is_you is what makes the app say "You".
+	// portenvd drops an author whose name is over 64 characters or has
+	// control or bidi characters; it never repairs one.
+	Name string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	// True when the author is the caller receiving this stream. Set by
+	// portenvd for each recipient; whatever the helper sent is replaced.
+	IsYou bool `protobuf:"varint,3,opt,name=is_you,json=isYou,proto3" json:"is_you,omitempty"`
+	// Empty for a person; the agent's ID from its grant (ADR 0016) otherwise.
+	AgentId       string `protobuf:"bytes,4,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CommandAuthor) Reset() {
+	*x = CommandAuthor{}
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[82]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CommandAuthor) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CommandAuthor) ProtoMessage() {}
+
+func (x *CommandAuthor) ProtoReflect() protoreflect.Message {
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[82]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CommandAuthor.ProtoReflect.Descriptor instead.
+func (*CommandAuthor) Descriptor() ([]byte, []int) {
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{82}
+}
+
+func (x *CommandAuthor) GetLine() uint64 {
+	if x != nil {
+		return x.Line
+	}
+	return 0
+}
+
+func (x *CommandAuthor) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *CommandAuthor) GetIsYou() bool {
+	if x != nil {
+		return x.IsYou
+	}
+	return false
+}
+
+func (x *CommandAuthor) GetAgentId() string {
+	if x != nil {
+		return x.AgentId
+	}
+	return ""
+}
+
 var File_portenv_daemon_v1_daemon_proto protoreflect.FileDescriptor
 
 const file_portenv_daemon_v1_daemon_proto_rawDesc = "" +
@@ -4597,7 +5057,34 @@ const file_portenv_daemon_v1_daemon_proto_rawDesc = "" +
 	"serverName\x12\x18\n" +
 	"\amachine\x18\x03 \x01(\tR\amachine\x12@\n" +
 	"\x0enewest_save_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\fnewestSaveAt\x124\n" +
-	"\aanswers\x18\x05 \x01(\x0e2\x1a.portenv.daemon.v1.AnswersR\aanswersJ\x04\b\x02\x10\x03R\x06server*\x93\x02\n" +
+	"\aanswers\x18\x05 \x01(\x0e2\x1a.portenv.daemon.v1.AnswersR\aanswersJ\x04\b\x02\x10\x03R\x06server\"\xa8\x01\n" +
+	"\x12TabTerminalRequest\x128\n" +
+	"\x04open\x18\x01 \x01(\v2\".portenv.daemon.v1.TabTerminalOpenH\x00R\x04open\x12\x16\n" +
+	"\x05input\x18\x02 \x01(\fH\x00R\x05input\x129\n" +
+	"\x06resize\x18\x03 \x01(\v2\x1f.portenv.daemon.v1.TerminalSizeH\x00R\x06resizeB\x05\n" +
+	"\x03msg\"\x92\x01\n" +
+	"\x0fTabTerminalOpen\x12\x18\n" +
+	"\asession\x18\x01 \x01(\tR\asession\x12\x10\n" +
+	"\x03tab\x18\x02 \x01(\tR\x03tab\x123\n" +
+	"\x04size\x18\x03 \x01(\v2\x1f.portenv.daemon.v1.TerminalSizeR\x04size\x12\x10\n" +
+	"\x03box\x18\x05 \x01(\tR\x03boxJ\x04\b\x04\x10\x05R\x06author\"\xa2\x02\n" +
+	"\x13TabTerminalResponse\x12;\n" +
+	"\x05reset\x18\x01 \x01(\v2#.portenv.daemon.v1.TabTerminalResetH\x00R\x05reset\x12\x18\n" +
+	"\x06output\x18\x02 \x01(\fH\x00R\x06output\x12;\n" +
+	"\aresized\x18\x03 \x01(\v2\x1f.portenv.daemon.v1.TerminalSizeH\x00R\aresized\x124\n" +
+	"\x03end\x18\x04 \x01(\x0e2 .portenv.types.v1.TabTerminalEndH\x00R\x03end\x12:\n" +
+	"\x06author\x18\x05 \x01(\v2 .portenv.daemon.v1.CommandAuthorH\x00R\x06authorB\x05\n" +
+	"\x03msg\"\xb1\x01\n" +
+	"\x10TabTerminalReset\x123\n" +
+	"\x04size\x18\x01 \x01(\v2\x1f.portenv.daemon.v1.TerminalSizeR\x04size\x12\x12\n" +
+	"\x04seed\x18\x02 \x01(\fR\x04seed\x12:\n" +
+	"\aauthors\x18\x03 \x03(\v2 .portenv.daemon.v1.CommandAuthorR\aauthors\x12\x18\n" +
+	"\askipped\x18\x04 \x01(\bR\askipped\"o\n" +
+	"\rCommandAuthor\x12\x12\n" +
+	"\x04line\x18\x01 \x01(\x04R\x04line\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x15\n" +
+	"\x06is_you\x18\x03 \x01(\bR\x05isYou\x12\x19\n" +
+	"\bagent_id\x18\x04 \x01(\tR\aagentIdJ\x04\b\x05\x10\x06*\x93\x02\n" +
 	"\tSaveState\x12\x1a\n" +
 	"\x16SAVE_STATE_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18SAVE_STATE_NOT_SAVED_YET\x10\x01\x12\x15\n" +
@@ -4623,7 +5110,7 @@ const file_portenv_daemon_v1_daemon_proto_rawDesc = "" +
 	"\vANSWERS_YES\x10\x01\x12\x0e\n" +
 	"\n" +
 	"ANSWERS_NO\x10\x02\x12\x16\n" +
-	"\x12ANSWERS_CANNOT_ASK\x10\x032\x84\x1a\n" +
+	"\x12ANSWERS_CANNOT_ASK\x10\x032\xe6\x1a\n" +
 	"\rDaemonService\x12Y\n" +
 	"\n" +
 	"GetVersion\x12$.portenv.daemon.v1.GetVersionRequest\x1a%.portenv.daemon.v1.GetVersionResponse\x12V\n" +
@@ -4664,7 +5151,8 @@ const file_portenv_daemon_v1_daemon_proto_rawDesc = "" +
 	"\n" +
 	"RecoverBox\x12$.portenv.daemon.v1.RecoverBoxRequest\x1a%.portenv.daemon.v1.RecoverBoxResponse\x12k\n" +
 	"\x10CheckRecoveryKey\x12*.portenv.daemon.v1.CheckRecoveryKeyRequest\x1a+.portenv.daemon.v1.CheckRecoveryKeyResponse\x12_\n" +
-	"\fGetPlacement\x12&.portenv.daemon.v1.GetPlacementRequest\x1a'.portenv.daemon.v1.GetPlacementResponseB\xce\x01\n" +
+	"\fGetPlacement\x12&.portenv.daemon.v1.GetPlacementRequest\x1a'.portenv.daemon.v1.GetPlacementResponse\x12`\n" +
+	"\vTabTerminal\x12%.portenv.daemon.v1.TabTerminalRequest\x1a&.portenv.daemon.v1.TabTerminalResponse(\x010\x01B\xce\x01\n" +
 	"\x15com.portenv.daemon.v1B\vDaemonProtoP\x01ZBgithub.com/portenv/portenv/proto/gen/go/portenv/daemon/v1;daemonv1\xa2\x02\x03PDX\xaa\x02\x11Portenv.Daemon.V1\xca\x02\x11Portenv\\Daemon\\V1\xe2\x02\x1dPortenv\\Daemon\\V1\\GPBMetadata\xea\x02\x13Portenv::Daemon::V1b\x06proto3"
 
 var (
@@ -4680,7 +5168,7 @@ func file_portenv_daemon_v1_daemon_proto_rawDescGZIP() []byte {
 }
 
 var file_portenv_daemon_v1_daemon_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_portenv_daemon_v1_daemon_proto_msgTypes = make([]protoimpl.MessageInfo, 82)
+var file_portenv_daemon_v1_daemon_proto_msgTypes = make([]protoimpl.MessageInfo, 87)
 var file_portenv_daemon_v1_daemon_proto_goTypes = []any{
 	(SaveState)(0),                        // 0: portenv.daemon.v1.SaveState
 	(NetworkPath)(0),                      // 1: portenv.daemon.v1.NetworkPath
@@ -4764,126 +5252,143 @@ var file_portenv_daemon_v1_daemon_proto_goTypes = []any{
 	(*CheckRecoveryKeyResponse)(nil),      // 79: portenv.daemon.v1.CheckRecoveryKeyResponse
 	(*GetPlacementRequest)(nil),           // 80: portenv.daemon.v1.GetPlacementRequest
 	(*GetPlacementResponse)(nil),          // 81: portenv.daemon.v1.GetPlacementResponse
-	nil,                                   // 82: portenv.daemon.v1.ProvideKeysRequest.KeysEntry
-	nil,                                   // 83: portenv.daemon.v1.CreateBoxRequest.KeysEntry
-	nil,                                   // 84: portenv.daemon.v1.RecoverBoxRequest.KeysEntry
-	nil,                                   // 85: portenv.daemon.v1.CheckRecoveryKeyRequest.RecoveryPasswordsEntry
-	(*v1.SnapshotRef)(nil),                // 86: portenv.types.v1.SnapshotRef
-	(*v1.BuildInfo)(nil),                  // 87: portenv.types.v1.BuildInfo
-	(*v1.Box)(nil),                        // 88: portenv.types.v1.Box
-	(v1.BoxState)(0),                      // 89: portenv.types.v1.BoxState
-	(*timestamppb.Timestamp)(nil),         // 90: google.protobuf.Timestamp
-	(*v1.Tab)(nil),                        // 91: portenv.types.v1.Tab
+	(*TabTerminalRequest)(nil),            // 82: portenv.daemon.v1.TabTerminalRequest
+	(*TabTerminalOpen)(nil),               // 83: portenv.daemon.v1.TabTerminalOpen
+	(*TabTerminalResponse)(nil),           // 84: portenv.daemon.v1.TabTerminalResponse
+	(*TabTerminalReset)(nil),              // 85: portenv.daemon.v1.TabTerminalReset
+	(*CommandAuthor)(nil),                 // 86: portenv.daemon.v1.CommandAuthor
+	nil,                                   // 87: portenv.daemon.v1.ProvideKeysRequest.KeysEntry
+	nil,                                   // 88: portenv.daemon.v1.CreateBoxRequest.KeysEntry
+	nil,                                   // 89: portenv.daemon.v1.RecoverBoxRequest.KeysEntry
+	nil,                                   // 90: portenv.daemon.v1.CheckRecoveryKeyRequest.RecoveryPasswordsEntry
+	(*v1.SnapshotRef)(nil),                // 91: portenv.types.v1.SnapshotRef
+	(*v1.BuildInfo)(nil),                  // 92: portenv.types.v1.BuildInfo
+	(*v1.Box)(nil),                        // 93: portenv.types.v1.Box
+	(v1.BoxState)(0),                      // 94: portenv.types.v1.BoxState
+	(*timestamppb.Timestamp)(nil),         // 95: google.protobuf.Timestamp
+	(*v1.Tab)(nil),                        // 96: portenv.types.v1.Tab
+	(v1.TabTerminalEnd)(0),                // 97: portenv.types.v1.TabTerminalEnd
 }
 var file_portenv_daemon_v1_daemon_proto_depIdxs = []int32{
-	86, // 0: portenv.daemon.v1.MakeSavePointResponse.snapshot:type_name -> portenv.types.v1.SnapshotRef
-	86, // 1: portenv.daemon.v1.RevertToLastSavePointResponse.restored:type_name -> portenv.types.v1.SnapshotRef
-	86, // 2: portenv.daemon.v1.RevertToLastSavePointResponse.saved_before:type_name -> portenv.types.v1.SnapshotRef
+	91, // 0: portenv.daemon.v1.MakeSavePointResponse.snapshot:type_name -> portenv.types.v1.SnapshotRef
+	91, // 1: portenv.daemon.v1.RevertToLastSavePointResponse.restored:type_name -> portenv.types.v1.SnapshotRef
+	91, // 2: portenv.daemon.v1.RevertToLastSavePointResponse.saved_before:type_name -> portenv.types.v1.SnapshotRef
 	19, // 3: portenv.daemon.v1.TerminalRequest.open:type_name -> portenv.daemon.v1.TerminalOpen
 	20, // 4: portenv.daemon.v1.TerminalRequest.resize:type_name -> portenv.daemon.v1.TerminalSize
 	20, // 5: portenv.daemon.v1.TerminalOpen.size:type_name -> portenv.daemon.v1.TerminalSize
-	87, // 6: portenv.daemon.v1.GetVersionResponse.build:type_name -> portenv.types.v1.BuildInfo
+	92, // 6: portenv.daemon.v1.GetVersionResponse.build:type_name -> portenv.types.v1.BuildInfo
 	26, // 7: portenv.daemon.v1.ListBoxesResponse.boxes:type_name -> portenv.daemon.v1.BoxStatus
-	88, // 8: portenv.daemon.v1.BoxStatus.box:type_name -> portenv.types.v1.Box
-	89, // 9: portenv.daemon.v1.BoxStatus.state:type_name -> portenv.types.v1.BoxState
+	93, // 8: portenv.daemon.v1.BoxStatus.box:type_name -> portenv.types.v1.Box
+	94, // 9: portenv.daemon.v1.BoxStatus.state:type_name -> portenv.types.v1.BoxState
 	0,  // 10: portenv.daemon.v1.GetBoxStateResponse.state:type_name -> portenv.daemon.v1.SaveState
-	90, // 11: portenv.daemon.v1.GetBoxStateResponse.saved_at:type_name -> google.protobuf.Timestamp
-	90, // 12: portenv.daemon.v1.GetBoxStateResponse.opened_at:type_name -> google.protobuf.Timestamp
+	95, // 11: portenv.daemon.v1.GetBoxStateResponse.saved_at:type_name -> google.protobuf.Timestamp
+	95, // 12: portenv.daemon.v1.GetBoxStateResponse.opened_at:type_name -> google.protobuf.Timestamp
 	1,  // 13: portenv.daemon.v1.SetNetworkPathRequest.path:type_name -> portenv.daemon.v1.NetworkPath
 	35, // 14: portenv.daemon.v1.WokeResponse.boxes:type_name -> portenv.daemon.v1.WokeBox
-	82, // 15: portenv.daemon.v1.ProvideKeysRequest.keys:type_name -> portenv.daemon.v1.ProvideKeysRequest.KeysEntry
+	87, // 15: portenv.daemon.v1.ProvideKeysRequest.keys:type_name -> portenv.daemon.v1.ProvideKeysRequest.KeysEntry
 	30, // 16: portenv.daemon.v1.WatchBoxStateResponse.state:type_name -> portenv.daemon.v1.GetBoxStateResponse
-	86, // 17: portenv.daemon.v1.SaveNowResponse.snapshot:type_name -> portenv.types.v1.SnapshotRef
+	91, // 17: portenv.daemon.v1.SaveNowResponse.snapshot:type_name -> portenv.types.v1.SnapshotRef
 	52, // 18: portenv.daemon.v1.ListSavesResponse.saves:type_name -> portenv.daemon.v1.SaveEntry
-	90, // 19: portenv.daemon.v1.SaveEntry.time:type_name -> google.protobuf.Timestamp
+	95, // 19: portenv.daemon.v1.SaveEntry.time:type_name -> google.protobuf.Timestamp
 	59, // 20: portenv.daemon.v1.TakeSavedAfterQuitResponse.saved:type_name -> portenv.daemon.v1.SavedAfterQuit
-	90, // 21: portenv.daemon.v1.SavedAfterQuit.saved_at:type_name -> google.protobuf.Timestamp
-	91, // 22: portenv.daemon.v1.ListTabsResponse.tabs:type_name -> portenv.types.v1.Tab
-	91, // 23: portenv.daemon.v1.NewTabResponse.tab:type_name -> portenv.types.v1.Tab
-	91, // 24: portenv.daemon.v1.WatchTabsResponse.tabs:type_name -> portenv.types.v1.Tab
-	83, // 25: portenv.daemon.v1.CreateBoxRequest.keys:type_name -> portenv.daemon.v1.CreateBoxRequest.KeysEntry
-	84, // 26: portenv.daemon.v1.RecoverBoxRequest.keys:type_name -> portenv.daemon.v1.RecoverBoxRequest.KeysEntry
-	85, // 27: portenv.daemon.v1.CheckRecoveryKeyRequest.recovery_passwords:type_name -> portenv.daemon.v1.CheckRecoveryKeyRequest.RecoveryPasswordsEntry
+	95, // 21: portenv.daemon.v1.SavedAfterQuit.saved_at:type_name -> google.protobuf.Timestamp
+	96, // 22: portenv.daemon.v1.ListTabsResponse.tabs:type_name -> portenv.types.v1.Tab
+	96, // 23: portenv.daemon.v1.NewTabResponse.tab:type_name -> portenv.types.v1.Tab
+	96, // 24: portenv.daemon.v1.WatchTabsResponse.tabs:type_name -> portenv.types.v1.Tab
+	88, // 25: portenv.daemon.v1.CreateBoxRequest.keys:type_name -> portenv.daemon.v1.CreateBoxRequest.KeysEntry
+	89, // 26: portenv.daemon.v1.RecoverBoxRequest.keys:type_name -> portenv.daemon.v1.RecoverBoxRequest.KeysEntry
+	90, // 27: portenv.daemon.v1.CheckRecoveryKeyRequest.recovery_passwords:type_name -> portenv.daemon.v1.CheckRecoveryKeyRequest.RecoveryPasswordsEntry
 	2,  // 28: portenv.daemon.v1.GetPlacementResponse.holder:type_name -> portenv.daemon.v1.Holder
-	90, // 29: portenv.daemon.v1.GetPlacementResponse.newest_save_at:type_name -> google.protobuf.Timestamp
+	95, // 29: portenv.daemon.v1.GetPlacementResponse.newest_save_at:type_name -> google.protobuf.Timestamp
 	3,  // 30: portenv.daemon.v1.GetPlacementResponse.answers:type_name -> portenv.daemon.v1.Answers
-	22, // 31: portenv.daemon.v1.DaemonService.GetVersion:input_type -> portenv.daemon.v1.GetVersionRequest
-	24, // 32: portenv.daemon.v1.DaemonService.ListBoxes:input_type -> portenv.daemon.v1.ListBoxesRequest
-	8,  // 33: portenv.daemon.v1.DaemonService.OpenBox:input_type -> portenv.daemon.v1.OpenBoxRequest
-	10, // 34: portenv.daemon.v1.DaemonService.CloseBox:input_type -> portenv.daemon.v1.CloseBoxRequest
-	12, // 35: portenv.daemon.v1.DaemonService.MakeSavePoint:input_type -> portenv.daemon.v1.MakeSavePointRequest
-	14, // 36: portenv.daemon.v1.DaemonService.RevertToLastSavePoint:input_type -> portenv.daemon.v1.RevertToLastSavePointRequest
-	16, // 37: portenv.daemon.v1.DaemonService.MoveBox:input_type -> portenv.daemon.v1.MoveBoxRequest
-	18, // 38: portenv.daemon.v1.DaemonService.Terminal:input_type -> portenv.daemon.v1.TerminalRequest
-	4,  // 39: portenv.daemon.v1.DaemonService.CheckBox:input_type -> portenv.daemon.v1.CheckBoxRequest
-	6,  // 40: portenv.daemon.v1.DaemonService.RestartBox:input_type -> portenv.daemon.v1.RestartBoxRequest
-	27, // 41: portenv.daemon.v1.DaemonService.GetChannel:input_type -> portenv.daemon.v1.GetChannelRequest
-	29, // 42: portenv.daemon.v1.DaemonService.GetBoxState:input_type -> portenv.daemon.v1.GetBoxStateRequest
-	42, // 43: portenv.daemon.v1.DaemonService.WatchBoxState:input_type -> portenv.daemon.v1.WatchBoxStateRequest
-	31, // 44: portenv.daemon.v1.DaemonService.SetNetworkPath:input_type -> portenv.daemon.v1.SetNetworkPathRequest
-	33, // 45: portenv.daemon.v1.DaemonService.Woke:input_type -> portenv.daemon.v1.WokeRequest
-	36, // 46: portenv.daemon.v1.DaemonService.RetryPackages:input_type -> portenv.daemon.v1.RetryPackagesRequest
-	38, // 47: portenv.daemon.v1.DaemonService.ProvideKeys:input_type -> portenv.daemon.v1.ProvideKeysRequest
-	40, // 48: portenv.daemon.v1.DaemonService.Relaunch:input_type -> portenv.daemon.v1.RelaunchRequest
-	44, // 49: portenv.daemon.v1.DaemonService.ListServers:input_type -> portenv.daemon.v1.ListServersRequest
-	46, // 50: portenv.daemon.v1.DaemonService.GetKeyIDs:input_type -> portenv.daemon.v1.GetKeyIDsRequest
-	48, // 51: portenv.daemon.v1.DaemonService.SaveNow:input_type -> portenv.daemon.v1.SaveNowRequest
-	50, // 52: portenv.daemon.v1.DaemonService.ListSaves:input_type -> portenv.daemon.v1.ListSavesRequest
-	53, // 53: portenv.daemon.v1.DaemonService.Housekeep:input_type -> portenv.daemon.v1.HousekeepRequest
-	55, // 54: portenv.daemon.v1.DaemonService.LeaveUnsaved:input_type -> portenv.daemon.v1.LeaveUnsavedRequest
-	57, // 55: portenv.daemon.v1.DaemonService.TakeSavedAfterQuit:input_type -> portenv.daemon.v1.TakeSavedAfterQuitRequest
-	60, // 56: portenv.daemon.v1.DaemonService.ListTabs:input_type -> portenv.daemon.v1.ListTabsRequest
-	62, // 57: portenv.daemon.v1.DaemonService.NewTab:input_type -> portenv.daemon.v1.NewTabRequest
-	64, // 58: portenv.daemon.v1.DaemonService.CloseTab:input_type -> portenv.daemon.v1.CloseTabRequest
-	66, // 59: portenv.daemon.v1.DaemonService.RenameTab:input_type -> portenv.daemon.v1.RenameTabRequest
-	68, // 60: portenv.daemon.v1.DaemonService.SelectTab:input_type -> portenv.daemon.v1.SelectTabRequest
-	70, // 61: portenv.daemon.v1.DaemonService.WatchTabs:input_type -> portenv.daemon.v1.WatchTabsRequest
-	72, // 62: portenv.daemon.v1.DaemonService.CreateBox:input_type -> portenv.daemon.v1.CreateBoxRequest
-	74, // 63: portenv.daemon.v1.DaemonService.DiscardCreation:input_type -> portenv.daemon.v1.DiscardCreationRequest
-	76, // 64: portenv.daemon.v1.DaemonService.RecoverBox:input_type -> portenv.daemon.v1.RecoverBoxRequest
-	78, // 65: portenv.daemon.v1.DaemonService.CheckRecoveryKey:input_type -> portenv.daemon.v1.CheckRecoveryKeyRequest
-	80, // 66: portenv.daemon.v1.DaemonService.GetPlacement:input_type -> portenv.daemon.v1.GetPlacementRequest
-	23, // 67: portenv.daemon.v1.DaemonService.GetVersion:output_type -> portenv.daemon.v1.GetVersionResponse
-	25, // 68: portenv.daemon.v1.DaemonService.ListBoxes:output_type -> portenv.daemon.v1.ListBoxesResponse
-	9,  // 69: portenv.daemon.v1.DaemonService.OpenBox:output_type -> portenv.daemon.v1.OpenBoxResponse
-	11, // 70: portenv.daemon.v1.DaemonService.CloseBox:output_type -> portenv.daemon.v1.CloseBoxResponse
-	13, // 71: portenv.daemon.v1.DaemonService.MakeSavePoint:output_type -> portenv.daemon.v1.MakeSavePointResponse
-	15, // 72: portenv.daemon.v1.DaemonService.RevertToLastSavePoint:output_type -> portenv.daemon.v1.RevertToLastSavePointResponse
-	17, // 73: portenv.daemon.v1.DaemonService.MoveBox:output_type -> portenv.daemon.v1.MoveBoxResponse
-	21, // 74: portenv.daemon.v1.DaemonService.Terminal:output_type -> portenv.daemon.v1.TerminalResponse
-	5,  // 75: portenv.daemon.v1.DaemonService.CheckBox:output_type -> portenv.daemon.v1.CheckBoxResponse
-	7,  // 76: portenv.daemon.v1.DaemonService.RestartBox:output_type -> portenv.daemon.v1.RestartBoxResponse
-	28, // 77: portenv.daemon.v1.DaemonService.GetChannel:output_type -> portenv.daemon.v1.GetChannelResponse
-	30, // 78: portenv.daemon.v1.DaemonService.GetBoxState:output_type -> portenv.daemon.v1.GetBoxStateResponse
-	43, // 79: portenv.daemon.v1.DaemonService.WatchBoxState:output_type -> portenv.daemon.v1.WatchBoxStateResponse
-	32, // 80: portenv.daemon.v1.DaemonService.SetNetworkPath:output_type -> portenv.daemon.v1.SetNetworkPathResponse
-	34, // 81: portenv.daemon.v1.DaemonService.Woke:output_type -> portenv.daemon.v1.WokeResponse
-	37, // 82: portenv.daemon.v1.DaemonService.RetryPackages:output_type -> portenv.daemon.v1.RetryPackagesResponse
-	39, // 83: portenv.daemon.v1.DaemonService.ProvideKeys:output_type -> portenv.daemon.v1.ProvideKeysResponse
-	41, // 84: portenv.daemon.v1.DaemonService.Relaunch:output_type -> portenv.daemon.v1.RelaunchResponse
-	45, // 85: portenv.daemon.v1.DaemonService.ListServers:output_type -> portenv.daemon.v1.ListServersResponse
-	47, // 86: portenv.daemon.v1.DaemonService.GetKeyIDs:output_type -> portenv.daemon.v1.GetKeyIDsResponse
-	49, // 87: portenv.daemon.v1.DaemonService.SaveNow:output_type -> portenv.daemon.v1.SaveNowResponse
-	51, // 88: portenv.daemon.v1.DaemonService.ListSaves:output_type -> portenv.daemon.v1.ListSavesResponse
-	54, // 89: portenv.daemon.v1.DaemonService.Housekeep:output_type -> portenv.daemon.v1.HousekeepResponse
-	56, // 90: portenv.daemon.v1.DaemonService.LeaveUnsaved:output_type -> portenv.daemon.v1.LeaveUnsavedResponse
-	58, // 91: portenv.daemon.v1.DaemonService.TakeSavedAfterQuit:output_type -> portenv.daemon.v1.TakeSavedAfterQuitResponse
-	61, // 92: portenv.daemon.v1.DaemonService.ListTabs:output_type -> portenv.daemon.v1.ListTabsResponse
-	63, // 93: portenv.daemon.v1.DaemonService.NewTab:output_type -> portenv.daemon.v1.NewTabResponse
-	65, // 94: portenv.daemon.v1.DaemonService.CloseTab:output_type -> portenv.daemon.v1.CloseTabResponse
-	67, // 95: portenv.daemon.v1.DaemonService.RenameTab:output_type -> portenv.daemon.v1.RenameTabResponse
-	69, // 96: portenv.daemon.v1.DaemonService.SelectTab:output_type -> portenv.daemon.v1.SelectTabResponse
-	71, // 97: portenv.daemon.v1.DaemonService.WatchTabs:output_type -> portenv.daemon.v1.WatchTabsResponse
-	73, // 98: portenv.daemon.v1.DaemonService.CreateBox:output_type -> portenv.daemon.v1.CreateBoxResponse
-	75, // 99: portenv.daemon.v1.DaemonService.DiscardCreation:output_type -> portenv.daemon.v1.DiscardCreationResponse
-	77, // 100: portenv.daemon.v1.DaemonService.RecoverBox:output_type -> portenv.daemon.v1.RecoverBoxResponse
-	79, // 101: portenv.daemon.v1.DaemonService.CheckRecoveryKey:output_type -> portenv.daemon.v1.CheckRecoveryKeyResponse
-	81, // 102: portenv.daemon.v1.DaemonService.GetPlacement:output_type -> portenv.daemon.v1.GetPlacementResponse
-	67, // [67:103] is the sub-list for method output_type
-	31, // [31:67] is the sub-list for method input_type
-	31, // [31:31] is the sub-list for extension type_name
-	31, // [31:31] is the sub-list for extension extendee
-	0,  // [0:31] is the sub-list for field type_name
+	83, // 31: portenv.daemon.v1.TabTerminalRequest.open:type_name -> portenv.daemon.v1.TabTerminalOpen
+	20, // 32: portenv.daemon.v1.TabTerminalRequest.resize:type_name -> portenv.daemon.v1.TerminalSize
+	20, // 33: portenv.daemon.v1.TabTerminalOpen.size:type_name -> portenv.daemon.v1.TerminalSize
+	85, // 34: portenv.daemon.v1.TabTerminalResponse.reset:type_name -> portenv.daemon.v1.TabTerminalReset
+	20, // 35: portenv.daemon.v1.TabTerminalResponse.resized:type_name -> portenv.daemon.v1.TerminalSize
+	97, // 36: portenv.daemon.v1.TabTerminalResponse.end:type_name -> portenv.types.v1.TabTerminalEnd
+	86, // 37: portenv.daemon.v1.TabTerminalResponse.author:type_name -> portenv.daemon.v1.CommandAuthor
+	20, // 38: portenv.daemon.v1.TabTerminalReset.size:type_name -> portenv.daemon.v1.TerminalSize
+	86, // 39: portenv.daemon.v1.TabTerminalReset.authors:type_name -> portenv.daemon.v1.CommandAuthor
+	22, // 40: portenv.daemon.v1.DaemonService.GetVersion:input_type -> portenv.daemon.v1.GetVersionRequest
+	24, // 41: portenv.daemon.v1.DaemonService.ListBoxes:input_type -> portenv.daemon.v1.ListBoxesRequest
+	8,  // 42: portenv.daemon.v1.DaemonService.OpenBox:input_type -> portenv.daemon.v1.OpenBoxRequest
+	10, // 43: portenv.daemon.v1.DaemonService.CloseBox:input_type -> portenv.daemon.v1.CloseBoxRequest
+	12, // 44: portenv.daemon.v1.DaemonService.MakeSavePoint:input_type -> portenv.daemon.v1.MakeSavePointRequest
+	14, // 45: portenv.daemon.v1.DaemonService.RevertToLastSavePoint:input_type -> portenv.daemon.v1.RevertToLastSavePointRequest
+	16, // 46: portenv.daemon.v1.DaemonService.MoveBox:input_type -> portenv.daemon.v1.MoveBoxRequest
+	18, // 47: portenv.daemon.v1.DaemonService.Terminal:input_type -> portenv.daemon.v1.TerminalRequest
+	4,  // 48: portenv.daemon.v1.DaemonService.CheckBox:input_type -> portenv.daemon.v1.CheckBoxRequest
+	6,  // 49: portenv.daemon.v1.DaemonService.RestartBox:input_type -> portenv.daemon.v1.RestartBoxRequest
+	27, // 50: portenv.daemon.v1.DaemonService.GetChannel:input_type -> portenv.daemon.v1.GetChannelRequest
+	29, // 51: portenv.daemon.v1.DaemonService.GetBoxState:input_type -> portenv.daemon.v1.GetBoxStateRequest
+	42, // 52: portenv.daemon.v1.DaemonService.WatchBoxState:input_type -> portenv.daemon.v1.WatchBoxStateRequest
+	31, // 53: portenv.daemon.v1.DaemonService.SetNetworkPath:input_type -> portenv.daemon.v1.SetNetworkPathRequest
+	33, // 54: portenv.daemon.v1.DaemonService.Woke:input_type -> portenv.daemon.v1.WokeRequest
+	36, // 55: portenv.daemon.v1.DaemonService.RetryPackages:input_type -> portenv.daemon.v1.RetryPackagesRequest
+	38, // 56: portenv.daemon.v1.DaemonService.ProvideKeys:input_type -> portenv.daemon.v1.ProvideKeysRequest
+	40, // 57: portenv.daemon.v1.DaemonService.Relaunch:input_type -> portenv.daemon.v1.RelaunchRequest
+	44, // 58: portenv.daemon.v1.DaemonService.ListServers:input_type -> portenv.daemon.v1.ListServersRequest
+	46, // 59: portenv.daemon.v1.DaemonService.GetKeyIDs:input_type -> portenv.daemon.v1.GetKeyIDsRequest
+	48, // 60: portenv.daemon.v1.DaemonService.SaveNow:input_type -> portenv.daemon.v1.SaveNowRequest
+	50, // 61: portenv.daemon.v1.DaemonService.ListSaves:input_type -> portenv.daemon.v1.ListSavesRequest
+	53, // 62: portenv.daemon.v1.DaemonService.Housekeep:input_type -> portenv.daemon.v1.HousekeepRequest
+	55, // 63: portenv.daemon.v1.DaemonService.LeaveUnsaved:input_type -> portenv.daemon.v1.LeaveUnsavedRequest
+	57, // 64: portenv.daemon.v1.DaemonService.TakeSavedAfterQuit:input_type -> portenv.daemon.v1.TakeSavedAfterQuitRequest
+	60, // 65: portenv.daemon.v1.DaemonService.ListTabs:input_type -> portenv.daemon.v1.ListTabsRequest
+	62, // 66: portenv.daemon.v1.DaemonService.NewTab:input_type -> portenv.daemon.v1.NewTabRequest
+	64, // 67: portenv.daemon.v1.DaemonService.CloseTab:input_type -> portenv.daemon.v1.CloseTabRequest
+	66, // 68: portenv.daemon.v1.DaemonService.RenameTab:input_type -> portenv.daemon.v1.RenameTabRequest
+	68, // 69: portenv.daemon.v1.DaemonService.SelectTab:input_type -> portenv.daemon.v1.SelectTabRequest
+	70, // 70: portenv.daemon.v1.DaemonService.WatchTabs:input_type -> portenv.daemon.v1.WatchTabsRequest
+	72, // 71: portenv.daemon.v1.DaemonService.CreateBox:input_type -> portenv.daemon.v1.CreateBoxRequest
+	74, // 72: portenv.daemon.v1.DaemonService.DiscardCreation:input_type -> portenv.daemon.v1.DiscardCreationRequest
+	76, // 73: portenv.daemon.v1.DaemonService.RecoverBox:input_type -> portenv.daemon.v1.RecoverBoxRequest
+	78, // 74: portenv.daemon.v1.DaemonService.CheckRecoveryKey:input_type -> portenv.daemon.v1.CheckRecoveryKeyRequest
+	80, // 75: portenv.daemon.v1.DaemonService.GetPlacement:input_type -> portenv.daemon.v1.GetPlacementRequest
+	82, // 76: portenv.daemon.v1.DaemonService.TabTerminal:input_type -> portenv.daemon.v1.TabTerminalRequest
+	23, // 77: portenv.daemon.v1.DaemonService.GetVersion:output_type -> portenv.daemon.v1.GetVersionResponse
+	25, // 78: portenv.daemon.v1.DaemonService.ListBoxes:output_type -> portenv.daemon.v1.ListBoxesResponse
+	9,  // 79: portenv.daemon.v1.DaemonService.OpenBox:output_type -> portenv.daemon.v1.OpenBoxResponse
+	11, // 80: portenv.daemon.v1.DaemonService.CloseBox:output_type -> portenv.daemon.v1.CloseBoxResponse
+	13, // 81: portenv.daemon.v1.DaemonService.MakeSavePoint:output_type -> portenv.daemon.v1.MakeSavePointResponse
+	15, // 82: portenv.daemon.v1.DaemonService.RevertToLastSavePoint:output_type -> portenv.daemon.v1.RevertToLastSavePointResponse
+	17, // 83: portenv.daemon.v1.DaemonService.MoveBox:output_type -> portenv.daemon.v1.MoveBoxResponse
+	21, // 84: portenv.daemon.v1.DaemonService.Terminal:output_type -> portenv.daemon.v1.TerminalResponse
+	5,  // 85: portenv.daemon.v1.DaemonService.CheckBox:output_type -> portenv.daemon.v1.CheckBoxResponse
+	7,  // 86: portenv.daemon.v1.DaemonService.RestartBox:output_type -> portenv.daemon.v1.RestartBoxResponse
+	28, // 87: portenv.daemon.v1.DaemonService.GetChannel:output_type -> portenv.daemon.v1.GetChannelResponse
+	30, // 88: portenv.daemon.v1.DaemonService.GetBoxState:output_type -> portenv.daemon.v1.GetBoxStateResponse
+	43, // 89: portenv.daemon.v1.DaemonService.WatchBoxState:output_type -> portenv.daemon.v1.WatchBoxStateResponse
+	32, // 90: portenv.daemon.v1.DaemonService.SetNetworkPath:output_type -> portenv.daemon.v1.SetNetworkPathResponse
+	34, // 91: portenv.daemon.v1.DaemonService.Woke:output_type -> portenv.daemon.v1.WokeResponse
+	37, // 92: portenv.daemon.v1.DaemonService.RetryPackages:output_type -> portenv.daemon.v1.RetryPackagesResponse
+	39, // 93: portenv.daemon.v1.DaemonService.ProvideKeys:output_type -> portenv.daemon.v1.ProvideKeysResponse
+	41, // 94: portenv.daemon.v1.DaemonService.Relaunch:output_type -> portenv.daemon.v1.RelaunchResponse
+	45, // 95: portenv.daemon.v1.DaemonService.ListServers:output_type -> portenv.daemon.v1.ListServersResponse
+	47, // 96: portenv.daemon.v1.DaemonService.GetKeyIDs:output_type -> portenv.daemon.v1.GetKeyIDsResponse
+	49, // 97: portenv.daemon.v1.DaemonService.SaveNow:output_type -> portenv.daemon.v1.SaveNowResponse
+	51, // 98: portenv.daemon.v1.DaemonService.ListSaves:output_type -> portenv.daemon.v1.ListSavesResponse
+	54, // 99: portenv.daemon.v1.DaemonService.Housekeep:output_type -> portenv.daemon.v1.HousekeepResponse
+	56, // 100: portenv.daemon.v1.DaemonService.LeaveUnsaved:output_type -> portenv.daemon.v1.LeaveUnsavedResponse
+	58, // 101: portenv.daemon.v1.DaemonService.TakeSavedAfterQuit:output_type -> portenv.daemon.v1.TakeSavedAfterQuitResponse
+	61, // 102: portenv.daemon.v1.DaemonService.ListTabs:output_type -> portenv.daemon.v1.ListTabsResponse
+	63, // 103: portenv.daemon.v1.DaemonService.NewTab:output_type -> portenv.daemon.v1.NewTabResponse
+	65, // 104: portenv.daemon.v1.DaemonService.CloseTab:output_type -> portenv.daemon.v1.CloseTabResponse
+	67, // 105: portenv.daemon.v1.DaemonService.RenameTab:output_type -> portenv.daemon.v1.RenameTabResponse
+	69, // 106: portenv.daemon.v1.DaemonService.SelectTab:output_type -> portenv.daemon.v1.SelectTabResponse
+	71, // 107: portenv.daemon.v1.DaemonService.WatchTabs:output_type -> portenv.daemon.v1.WatchTabsResponse
+	73, // 108: portenv.daemon.v1.DaemonService.CreateBox:output_type -> portenv.daemon.v1.CreateBoxResponse
+	75, // 109: portenv.daemon.v1.DaemonService.DiscardCreation:output_type -> portenv.daemon.v1.DiscardCreationResponse
+	77, // 110: portenv.daemon.v1.DaemonService.RecoverBox:output_type -> portenv.daemon.v1.RecoverBoxResponse
+	79, // 111: portenv.daemon.v1.DaemonService.CheckRecoveryKey:output_type -> portenv.daemon.v1.CheckRecoveryKeyResponse
+	81, // 112: portenv.daemon.v1.DaemonService.GetPlacement:output_type -> portenv.daemon.v1.GetPlacementResponse
+	84, // 113: portenv.daemon.v1.DaemonService.TabTerminal:output_type -> portenv.daemon.v1.TabTerminalResponse
+	77, // [77:114] is the sub-list for method output_type
+	40, // [40:77] is the sub-list for method input_type
+	40, // [40:40] is the sub-list for extension type_name
+	40, // [40:40] is the sub-list for extension extendee
+	0,  // [0:40] is the sub-list for field type_name
 }
 
 func init() { file_portenv_daemon_v1_daemon_proto_init() }
@@ -4900,13 +5405,25 @@ func file_portenv_daemon_v1_daemon_proto_init() {
 		(*TerminalResponse_Output)(nil),
 		(*TerminalResponse_ExitCode)(nil),
 	}
+	file_portenv_daemon_v1_daemon_proto_msgTypes[78].OneofWrappers = []any{
+		(*TabTerminalRequest_Open)(nil),
+		(*TabTerminalRequest_Input)(nil),
+		(*TabTerminalRequest_Resize)(nil),
+	}
+	file_portenv_daemon_v1_daemon_proto_msgTypes[80].OneofWrappers = []any{
+		(*TabTerminalResponse_Reset_)(nil),
+		(*TabTerminalResponse_Output)(nil),
+		(*TabTerminalResponse_Resized)(nil),
+		(*TabTerminalResponse_End)(nil),
+		(*TabTerminalResponse_Author)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_portenv_daemon_v1_daemon_proto_rawDesc), len(file_portenv_daemon_v1_daemon_proto_rawDesc)),
 			NumEnums:      4,
-			NumMessages:   82,
+			NumMessages:   87,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

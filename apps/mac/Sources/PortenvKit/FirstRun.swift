@@ -309,11 +309,12 @@ public final class FirstRunFlow {
     /// tries again, for up to retryFor. Every step is safe to repeat
     /// (CreateBox is idempotent on the box ID, ADR 0019).
     private func whileServiceStarts(_ body: () async throws -> Void) async throws {
-        let deadline = ContinuousClock.now + retryFor
+        var deadline: ContinuousClock.Instant? // from when it's first found down
         while true {
             do {
                 return try await body()
-            } catch where DaemonErrorText.isServiceDown(error) && ContinuousClock.now < deadline {
+            } catch where DaemonErrorText.isServiceDown(error) && ContinuousClock.now < (deadline ?? .now + retryFor) {
+                if deadline == nil { deadline = .now + retryFor }
                 notice = DaemonErrorText.starting
                 try? await Task.sleep(for: retryEvery)
             }

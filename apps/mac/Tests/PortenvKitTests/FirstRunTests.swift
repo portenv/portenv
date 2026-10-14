@@ -418,7 +418,7 @@ struct FirstRunTests {
     @Test func firstRunWaitsForTheServiceToComeUp() async {
         let service = FakeFirstRunService()
         service.serviceDownFor = 3
-        let flow = FirstRunFlow(service: service, at: .firstBox, retryEvery: .milliseconds(5), retryFor: .seconds(60)) // room on a loaded runner
+        let flow = FirstRunFlow(service: service, at: .firstBox, retryEvery: .milliseconds(5), retryFor: .seconds(600)) // room: on CI, other suites hold the main actor for a minute
         flow.boxName = "acme-api"
         final class Said: @unchecked Sendable { var lines: Set<String> = [] }
         let said = Said()

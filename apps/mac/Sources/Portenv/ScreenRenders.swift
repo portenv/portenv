@@ -115,6 +115,12 @@ enum ScreenRenders {
                 .frame(maxWidth: .infinity, maxHeight: .infinity).background(.background), name: "move-confirmation", size: NSSize(width: 440, height: 290), in: dir)
             try snapshot(MoveConfirmationView(confirmation: MoveConfirmation(box: "acme-api", target: "ubuntu@test-server", tabs: [], now: drawn), move: {}, cancel: {})
                 .frame(maxWidth: .infinity, maxHeight: .infinity).background(.background), name: "move-confirmation-nothing-running", size: NSSize(width: 440, height: 250), in: dir)
+            // 2.9: the launch alerts for servers' host keys (R-0180).
+            let waitingKey = ServerKeyInfo(id: "srv-0123456789ab", name: "test-server", state: .unconfirmed,
+                                           fingerprint: "SHA256:uNiVztksCsDhcc0u9e8BujQXVUpKZIDTMczCvj3tD2s", keyType: "ssh-ed25519")
+            try snapshot(alert: { ServerKeyAlert.question(ServerKeyQuestion(waitingKey)) }, name: "server-key-confirm", in: dir)
+            try snapshot(alert: { ServerKeyAlert.notice(.mismatch("test-server")) }, name: "server-key-mismatch", in: dir)
+            try snapshot(alert: { ServerKeyAlert.notice(.changed("test-server")) }, name: "server-key-changed", in: dir)
             // New Box… from the box list (the new-box boards).
             let newBox = FirstRunFlow(service: Sample(), at: .firstBox, existing: ["acme-api"], fromBoxList: true)
             newBox.boxName = "site"
@@ -259,6 +265,26 @@ enum ScreenRenders {
         try snapshot(view: { NSHostingView(rootView: view.frame(width: size.width, height: size.height).environment(\.isRendering, true)
                                 .environment(\.controlActiveState, .key)) },
                      name: name, size: size, in: dir)
+    }
+
+    /// An alert as it shows: its own content, laid out by NSAlert, drawn in
+    /// an active-looking window.
+    private static func snapshot(alert make: () -> NSAlert, name: String, in dir: URL) throws {
+        var alerts: [NSAlert] = [] // kept until drawn
+        func content() -> NSView {
+            let alert = make()
+            alert.layout()
+            alerts.append(alert)
+            return alert.window.contentView ?? NSView()
+        }
+        let size = content().frame.size
+        // The alert's own background is the window's, which the cached
+        // display leaves out: drawn under it.
+        try snapshot(view: content, name: name, size: size, in: dir, background: { host in
+            var color = NSColor.windowBackgroundColor
+            host.effectiveAppearance.performAsCurrentDrawingAppearance { color = NSColor.windowBackgroundColor.usingColorSpace(.sRGB) ?? color }
+            return color
+        })
     }
 
     /// Light and dark PNGs of a view, made fresh for each appearance.

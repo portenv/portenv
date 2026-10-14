@@ -64,6 +64,14 @@ func placementServer(t *testing.T, servers ...string) *Server {
 	if err := e.PublishConfig(local.BoxConfig{ID: "box-0123456789ab", Name: "acme-api", Image: "img"}); err != nil {
 		t.Fatal(err)
 	}
+	// Confirmed: the fake ssh doesn't check host keys.
+	key := testHostKey(t)
+	for _, h := range servers {
+		if err := e.PinServerKey(h, key); err != nil {
+			t.Fatal(err)
+		}
+	}
+	e.UseForServers()
 	return New(e, slog.New(slog.NewTextHandler(io.Discard, nil)))
 }
 

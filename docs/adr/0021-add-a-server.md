@@ -1,6 +1,6 @@
 # 0021. Add a Server: pinned host keys, per-server keys in memory, and a setup that changes nothing until every check passes
 
-Date: 2026-10-13 · Status: Accepted (the reviewer, on the owner's delegation, R-0140, R-0143).
+Date: 2026-10-13 · Status: Accepted (the reviewer, on the owner's delegation, R-0140, R-0143). Amended 2026-10-14 (R-0180, R-0183): see "1a. Host keys, as built" below, which wins where it differs.
 
 ## Context
 
@@ -25,6 +25,24 @@ The rules this ADR keeps:
 - **Existing servers** (`machine.json`'s `servers`, Phase 0): the matching line in `~/.ssh/known_hosts` may **pre-fill** the fingerprint, read-only (Portenv never writes there), but the person still confirms it once, on the next contact, in the same frame. Until then, that server isn't contacted. So that a dev server's saves don't stop silently, the first launch after this change shows **one alert listing every server that needs confirming**, with a way to each one's fingerprint frame.
 - **A changed host key is a hard stop.** Nothing is sent: no command, no key, no save. The alert says the server's identity changed and why that happens (a reinstalled server, or someone in between), and it has **no "trust anyway"**. The only way past is **Settings › Servers › Forget This Server's Key**, which says the same sentence again and then sends the person back through the fingerprint frame. Workspaces on that server stay where they are, unopened, until then.
 - **Tests:** a changed key refuses every call (the open, a save, Move To, Check, the runner's channel); pre-fill never writes `~/.ssh`; a server not yet confirmed is never contacted.
+
+### 1a. Host keys, as built (amended 2026-10-14, R-0180, R-0183)
+
+Where this differs from section 1 and the tests below, this wins.
+
+- **Pinned by alias.** Portenv's `known_hosts` has one line per server, `portenv-<server id> <type> <key>`, mode 0600 in the 0700 support folder (tested). Every run also passes `-o HostKeyAlias=portenv-<server id> -o CheckHostIP=no`, so the pin holds however the address resolves (an alias, a port, a new IP). Portenv's options come first on the command line, before `PORTENV_SSH`'s and the config's: ssh keeps the first value it's given (tested).
+- **Found through ssh itself, never `ssh-keyscan`,** which ignores `~/.ssh/config` (HostName aliases, Port, ProxyJump, ProxyCommand) and so can scan the wrong host. `ssh -G` resolves the address; then `ssh -o UserKnownHostsFile=<a fresh file in <T>pv/> -o StrictHostKeyChecking=accept-new -o BatchMode=yes -o PreferredAuthentications=none -o HostKeyAlgorithms=<the order> -o HostKeyAlias=portenv-<id> -o ControlPath=none <host> true` records the key and fails to sign in; Portenv reads it from that file and deletes the file. Bounded (ADR 0012). Made-key servers do the same with `-F none` (1b). Tested through a ProxyJump alias against real `sshd`s, run as the test's user on 127.0.0.1, on the Mac and in CI's Go job (not a container).
+- **Key types:** Ed25519, then ECDSA, then RSA as `rsa-sha2-512,rsa-sha2-256`, never `ssh-rsa` (SHA-1). A host offering only a certificate is told so and refused. The stored type gives `HostKeyAlgorithms` on every run.
+- **The server list** moves to `servers.json`, made once from `machine.json`'s list, which is left in place, unread, for one release, so an older build still works.
+- **Pre-fill from `~/.ssh/known_hosts`,** read only (`ssh-keygen -F <name> -f <file>`, plain or hashed):
+  - the same key confirms the server silently; its info says "Confirmed from this Mac's SSH known hosts";
+  - a different key of that type is a changed key, with no Trust: "This server's key doesn't match the one this Mac's SSH recorded. Check with whoever runs it.";
+  - no entry: the alert offers Trust, with the fingerprint.
+- **Until it's confirmed,** a server isn't contacted, and its workspaces say "Confirm <name> to open this." Instead of one alert listing every server, a plain alert at launch (at most once per launch) asks about each server waiting: Trust or Not Now.
+- **Until Forget is in the app** (Settings › Servers or the wizard), the changed-key line names the owner's fallback: `portenv app remove-server <name>`.
+- **For the owner's scripts only:** `portenv app trust-server USER@HOST "TYPE KEY"` pins a key given by a script that set the server up (no one looks at it), and `portenv app remove-server` drops a server. Both are refused inside a workspace (the box's environment marker), so a workspace's agent can't pin a server for the owner.
+- **The ControlMaster socket** is `<T>pv/c-<the server ID's 12 hex digits>`, not `c-%C`: %C's 40 hex digits, with the 17-character suffix ssh adds while it makes the socket, run past 104 bytes (found by the real-sshd test).
+- **`ControlPersist=600`:** the shared connection outlives its last use by 10 minutes at most. While it's up, any process of this user can reach the server through the socket with no Keychain prompt, so the window stays short; 10 minutes still covers an autosave cycle without signing in again each time.
 
 ### 2. The per-server key, served by an in-memory agent
 

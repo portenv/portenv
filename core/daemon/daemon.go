@@ -583,10 +583,6 @@ func (s *Server) RevertToLastSavePoint(ctx context.Context, req *daemonv1.Revert
 func (s *Server) MoveBox(ctx context.Context, req *daemonv1.MoveBoxRequest) (*daemonv1.MoveBoxResponse, error) {
 	name, target := req.GetName(), req.GetTarget()
 	s.leaving(name)
-	mc, err := s.env.MachineConfig()
-	if err != nil {
-		return nil, err
-	}
 	if target == "this-mac" {
 		// Close it on the server it runs on, through that server's runner
 		// (save and release there): the one this Mac put it on, or the
@@ -603,8 +599,16 @@ func (s *Server) MoveBox(ctx context.Context, req *daemonv1.MoveBoxRequest) (*da
 		}
 		return &daemonv1.MoveBoxResponse{Summary: res.GetSummary()}, nil
 	}
-	if !slices.Contains(mc.Servers, target) {
+	servers, err := s.env.ServerTargets()
+	if err != nil {
+		return nil, err
+	}
+	if !slices.Contains(servers, target) {
 		return nil, status.Errorf(codes.InvalidArgument, "%s is not in this Mac's servers list", target)
+	}
+	// Its host key is confirmed, before anything here closes (R-0180).
+	if err := s.env.CheckServer(target); err != nil {
+		return nil, status.Error(codes.FailedPrecondition, err.Error())
 	}
 	c, err := s.env.LoadBox(name)
 	if err != nil {

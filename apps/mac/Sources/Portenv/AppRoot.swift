@@ -113,6 +113,9 @@ final class AppModel {
             lastBox: defaults.string(forKey: Self.lastBoxKey),
             firstRunDone: defaults.bool(forKey: Self.firstRunDoneKey)
         ))
+        // Servers waiting for their host key to be confirmed: asked about
+        // once per launch, after the window is up (ADR 0021, R-0180).
+        Task { await ServerKeyAlert.runAtLaunch() }
     }
 
     private func apply(_ decision: Launch) {

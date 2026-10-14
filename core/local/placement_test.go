@@ -48,7 +48,7 @@ func roomToAnswer(t *testing.T) {
 func TestServerForMachine(t *testing.T) {
 	roomToAnswer(t)
 	fakeServers(t, map[string][2]string{"me@one": {"one-1a2b3c", "ok"}, "me@two": {"two-4d5e6f", "ok"}})
-	e := &Env{Dir: t.TempDir(), Machine: "mac-1"}
+	e := confirmedServers(t, "me@one", "me@two")
 	ctx := context.Background()
 	host, ok := e.ServerForMachine(ctx, []string{"me@one", "me@two"}, "two-4d5e6f")
 	if !ok || host != "me@two" {
@@ -66,6 +66,7 @@ func TestServerForMachine(t *testing.T) {
 // TestServerAnswers: `portenv app ping` over SSH, within 2 s (R-0140).
 func TestServerAnswers(t *testing.T) {
 	fakeServers(t, map[string][2]string{"me@ok": {"a", "ok"}, "me@down": {"b", "fail"}, "me@hung": {"c", "hang"}})
+	confirmedServers(t, "me@ok", "me@down", "me@hung", "me@gone")
 	ctx := context.Background()
 	saved := PingDeadline
 	roomToAnswer(t)

@@ -34,6 +34,8 @@ jobs:
           cache: false
       - uses: ./.github/actions/go-cache
         with:
+          save: true
+          build-cache: true
           tools: true
       - run: make build
       - name: tmux and zsh, for the agent's tab and shell-integration tests
@@ -92,6 +94,7 @@ jobs:
           cache: false
       - uses: ./.github/actions/go-cache
         with:
+          save: true
           tools: true
       # The Makefile needs GNU Make 4 or later; macOS ships 3.81.
       - name: GNU Make 4

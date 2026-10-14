@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 #
-# Go's module and build caches, and optionally bin/ with the pinned tools,
-# restored at the start of a job and saved at its end. Used after
-# actions/setup-go (with its own cache off) in every job that builds Go.
+# Go's module cache, Go's build cache and bin/ (the pinned tools), restored at
+# the start of a job and, where this job is the one that saves them, saved at
+# its end. Used after actions/setup-go (with its own cache off) in every job
+# that builds Go.
 #
 # Why not setup-go's cache: its key is only go.sum's hash, the same for every
 # job on a platform, and whichever job finishes first saves it. A job that
@@ -10,13 +11,20 @@
 # without their modules, so the jobs that do download them from
 # proxy.golang.org and sum.golang.org every time, which failed many runs.
 #
-# Keys, and what invalidates them:
-#   go-<os>-<arch>-<job>-<hash>: the module and build caches. The hash covers
+# Why one saver per platform: GitHub keeps 10 GB of caches per repository and
+# evicts the least recently used. A module and build cache per job came to
+# about 1.2 GB each and evicted each other within one run.
+#
+# Keys, and what invalidates them (a pull request whose inputs match main's
+# hits main's entries exactly and saves nothing new):
+#   go-mod-<os>-<arch>-<hash>: the module cache. Saved only by the job that
+#     downloads everything on its platform (save: true: the go jobs on Linux,
+#     swift on macOS), restored read-only everywhere else. The hash covers
 #     every go.sum (a dependency changed), the Makefile (a tool pin changed:
 #     the tools' modules live in the same module cache) and core/go.mod (the
-#     Go version). Each job saves its own, so each has everything it uses.
-#     A miss restores the newest entry for the same job, then for any job on
-#     the same platform (restore-keys), and saves a fresh one at the end.
+#     Go version). A miss restores the newest older entry for the platform.
+#   go-build-<os>-<arch>-<hash>: the build cache, only where build-cache is
+#     true (the go jobs' -race test compile). Same hash and fallback.
 #   tools-<os>-<arch>-<hash>: bin/, the pinned tools. The hash covers every
 #     file make builds them from: the Makefile (the pins), core/go.mod (the
 #     tools are built with its Go version), scripts/install-shellcheck.sh
@@ -31,6 +39,12 @@
 name: Go caches
 description: Go's module and build caches, and bin/ with the pinned tools
 inputs:
+  save:
+    description: This job saves the module cache for its platform
+    default: "false"
+  build-cache:
+    description: Also restore and save Go's build cache
+    default: "false"
   tools:
     description: Also cache bin/ (the pinned tools), for jobs that build them
     default: "false"
@@ -43,16 +57,28 @@ runs:
       run: |
         echo "modcache=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
         echo "gocache=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
-    - name: Go module and build caches
+        echo "hash=${{ hashFiles('**/go.sum', 'Makefile', 'core/go.mod') }}" >> "$GITHUB_OUTPUT"
+    - name: Go module cache (restored and saved)
+      if: inputs.save == 'true'
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
-        path: |
-          ${{ steps.go-env.outputs.modcache }}
-          ${{ steps.go-env.outputs.gocache }}
-        key: go-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-${{ hashFiles('**/go.sum', 'Makefile', 'core/go.mod') }}
-        restore-keys: |
-          go-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-
-          go-${{ runner.os }}-${{ runner.arch }}-
+        path: ${{ steps.go-env.outputs.modcache }}
+        key: go-mod-${{ runner.os }}-${{ runner.arch }}-${{ steps.go-env.outputs.hash }}
+        restore-keys: go-mod-${{ runner.os }}-${{ runner.arch }}-
+    - name: Go module cache (restored only)
+      if: inputs.save != 'true'
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ steps.go-env.outputs.modcache }}
+        key: go-mod-${{ runner.os }}-${{ runner.arch }}-${{ steps.go-env.outputs.hash }}
+        restore-keys: go-mod-${{ runner.os }}-${{ runner.arch }}-
+    - name: Go build cache
+      if: inputs.build-cache == 'true'
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ steps.go-env.outputs.gocache }}
+        key: go-build-${{ runner.os }}-${{ runner.arch }}-${{ steps.go-env.outputs.hash }}
+        restore-keys: go-build-${{ runner.os }}-${{ runner.arch }}-
     - name: Pinned tools
       if: inputs.tools == 'true'
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0

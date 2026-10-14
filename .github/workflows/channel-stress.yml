@@ -36,11 +36,9 @@ jobs:
         run: |
           echo "version=$(git describe --tags --always)" >> "$GITHUB_OUTPUT"
           echo "commit=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
-      # The layer cache in GitHub's cache (R-0203): the restic stage and the
-      # agent stage's module download are skipped when their inputs haven't
-      # changed, so proxy.golang.org, sum.golang.org and Docker Hub's mirror
-      # are reached far less. Scoped per architecture; main's entries are
-      # read by pull requests. No provenance or SBOM here, so the loaded image
+      # The layer cache in GitHub's cache (R-0203), read only: the Images
+      # workflow writes it. The restic stage and the agent stage's module
+      # download are skipped when their inputs haven't changed. No provenance or SBOM here, so the loaded image
       # is the plain image it always was (publishing attests separately).
       - name: Build the toolbox image
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
@@ -56,7 +54,6 @@ jobs:
             VERSION=${{ steps.version.outputs.version }}
             COMMIT=${{ steps.version.outputs.commit }}
           cache-from: type=gha,scope=toolbox-node-amd64
-          cache-to: type=gha,mode=max,scope=toolbox-node-amd64
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: core/go.mod

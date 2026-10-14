@@ -111,10 +111,10 @@ test: $(TOOLS_STAMP)
 	scripts/test-workspace-word.sh
 	scripts/test-check-terminal-views.sh
 
-## fuzz: the workspace helper's control-mode decoder and line reader, briefly (R-0162; FUZZTIME=15s)
+## fuzz: the workspace helper's control-mode decoder, line reader and pane parser, briefly (R-0162, R-0142; FUZZTIME=15s)
 FUZZTIME ?= 15s
 fuzz:
-	for f in FuzzDecodeControlOutput FuzzReadControlLines; do \
+	for f in FuzzDecodeControlOutput FuzzReadControlLines FuzzPaneParser; do \
 		(cd core && go test -run '^$$' -fuzz "^$$f$$" -fuzztime $(FUZZTIME) ./agent/) || exit 1; \
 	done
 
@@ -122,6 +122,9 @@ fuzz:
 lint: $(TOOLS_STAMP) $(SHELLCHECK) spdx-check
 	test -z "$$(gofmt -l core proto/gen/go | tee /dev/stderr)"
 	for m in $(GO_MODULES); do go vet ./$$m/...; done
+	# Every module's go.sum matches what's in the module cache (pinned
+	# dependencies, R-0142).
+	for m in $(GO_MODULES); do (cd $$m && go mod verify) || exit 1; done
 	for m in $(GO_MODULES); do \
 		(cd $$m && $(BIN)/golangci-lint run --config $(CURDIR)/.golangci.yml ./...); \
 	done

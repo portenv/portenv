@@ -299,6 +299,10 @@ func (t tabs) watchEvents(ctx context.Context, sub *ctlSub, safety time.Duration
 			relist, output := false, false
 			for _, e := range sub.take() {
 				switch e.kind {
+				case ctlSessionGone:
+					// The watch ends; the app watches again, which makes the
+					// session and a new client.
+					return nil
 				case ctlOutput:
 					output = true
 				case ctlOther:

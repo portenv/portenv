@@ -10,6 +10,7 @@ import (
 	"net"
 	"os/exec"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -300,5 +301,80 @@ func TestControlClientStopsWithItsLastSubscriber(t *testing.T) {
 			t.Fatal("the control client is still attached")
 		}
 		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// When the session is gone, its client stops instead of trying again
+// forever (R-0167): subscribers get ctlSessionGone once, the hub logs it
+// once and forgets the client, and the next subscriber starts one again.
+func TestControlClientStopsWhenTheSessionIsGone(t *testing.T) {
+	tb, raw, cmdf := testTabsCmd(t)
+	ctx := context.Background()
+	if err := tb.ensure(ctx); err != nil {
+		t.Fatal(err)
+	}
+	raw("new-session", "-d", "-s", "keep") // the server outlives main
+	hub := newCtlHub(tb.tmux, cmdf)
+	hub.restartAfter = 10 * time.Millisecond
+	var mu sync.Mutex
+	var logs []string
+	hub.logf = func(f string, a ...any) { mu.Lock(); logs = append(logs, fmt.Sprintf(f, a...)); mu.Unlock() }
+	sub, stop, err := hub.subscribe(ctx, "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stop()
+	time.Sleep(200 * time.Millisecond)
+	raw("kill-session", "-t", "=main")
+	gone := false
+	for end := time.Now().Add(3 * time.Second); !gone && time.Now().Before(end); {
+		select {
+		case <-sub.kick:
+			for _, e := range sub.take() {
+				gone = gone || e.kind == ctlSessionGone
+			}
+		case <-time.After(50 * time.Millisecond):
+		}
+	}
+	if !gone {
+		t.Fatal("no ctlSessionGone after the session went")
+	}
+	time.Sleep(300 * time.Millisecond) // 30 restart intervals
+	mu.Lock()
+	got := append([]string(nil), logs...)
+	mu.Unlock()
+	if len(got) != 1 || !strings.Contains(got[0], "is gone") {
+		t.Errorf("logs after the session went: %q, want one \"is gone\"", got)
+	}
+	hub.mu.Lock()
+	clients := len(hub.clients)
+	hub.mu.Unlock()
+	if clients != 0 {
+		t.Errorf("%d clients left", clients)
+	}
+	// The next subscriber, once the session is back, starts a client again.
+	if err := tb.ensure(ctx); err != nil {
+		t.Fatal(err)
+	}
+	sub2, stop2, err := hub.subscribe(ctx, "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stop2()
+	time.Sleep(200 * time.Millisecond)
+	raw("new-window", "-d", "-t", "=main:", "-n", "again")
+	for end := time.Now().Add(3 * time.Second); ; {
+		if time.Now().After(end) {
+			t.Fatal("no event from the new client")
+		}
+		select {
+		case <-sub2.kick:
+			for _, e := range sub2.take() {
+				if e.kind == ctlWindowAdd {
+					return
+				}
+			}
+		case <-time.After(50 * time.Millisecond):
+		}
 	}
 }

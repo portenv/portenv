@@ -81,6 +81,9 @@ type ServerRecord struct {
 	ConfirmedFrom string `json:"confirmed_from,omitempty"`
 	// Scanned is the key the last scan found, waiting for Trust.
 	Scanned string `json:"scanned,omitempty"`
+	// SignIn is how Portenv signs in: "" with this Mac's own SSH setup, or
+	// SignInMadeKey.
+	SignIn string `json:"sign_in,omitempty"`
 	// WasChanged: its key changed and was forgotten; the next Trust says
 	// so first, and even this Mac's SSH known hosts don't confirm it
 	// silently. Cleared on Trust (R-0185).
@@ -326,6 +329,12 @@ func sshArgs(host string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	if r.SignIn == SignInMadeKey {
+		if err := ensureMadeKeyMaster(e, host); err != nil {
+			return nil, err
+		}
+		return madeKeyArgs(e, host, "none")
+	}
 	base := sshBase()
 	args := append([]string{base[0]}, e.pinOptions(r)...)
 	args = append(args, base[1:]...)
@@ -388,7 +397,7 @@ func (e *Env) ScanServerKey(ctx context.Context, id string) (ServerScan, error) 
 	if err != nil {
 		return ServerScan{}, err
 	}
-	resolved, err := resolveHost(ctx, r.Target)
+	resolved, err := resolveHost(ctx, r.Target, r.SignIn == SignInMadeKey)
 	if err != nil {
 		return ServerScan{}, err
 	}
@@ -453,7 +462,12 @@ func scanHostKey(ctx context.Context, r ServerRecord, name string) (string, erro
 		"-o", "ControlMaster=no",
 		"-o", "ControlPath=none",
 	}
-	args = append(append(args, base[1:]...), "--", r.Target, "true")
+	if r.SignIn == SignInMadeKey {
+		args = append(append(args, "-F", "none"), madeKeyOptions("none")...)
+	} else {
+		args = append(args, base[1:]...)
+	}
+	args = append(args, "--", r.Target, "true")
 	cmd, err := bounded.Command(ctx, sshSetup, base[0], args...)
 	if err != nil {
 		return "", err
@@ -494,9 +508,13 @@ type resolvedHost struct {
 }
 
 // resolveHost asks ssh how it reaches target (its config applied).
-func resolveHost(ctx context.Context, target string) (resolvedHost, error) {
+func resolveHost(ctx context.Context, target string, madeKey bool) (resolvedHost, error) {
 	base := sshBase()
-	cmd, err := bounded.Command(ctx, sshSetup, base[0], append(append(slices.Clone(base[1:]), "-G"), "--", target)...)
+	opts := slices.Clone(base[1:])
+	if madeKey {
+		opts = []string{"-F", "none"}
+	}
+	cmd, err := bounded.Command(ctx, sshSetup, base[0], append(append(opts, "-G"), "--", target)...)
 	if err != nil {
 		return resolvedHost{}, err
 	}
@@ -623,11 +641,14 @@ func (e *Env) TrustServerKey(id, fingerprint string) error {
 // ForgetServerKey drops the server's pinned key: it is unconfirmed again,
 // and nothing runs on it until it's confirmed.
 func (e *Env) ForgetServerKey(id string) error {
-	_, err := e.updateServer(id, func(r *ServerRecord) error {
+	r, err := e.updateServer(id, func(r *ServerRecord) error {
 		r.WasChanged = r.WasChanged || r.State == ServerKeyChanged
 		r.State, r.Key, r.ConfirmedFrom, r.Scanned = ServerUnconfirmed, "", "", ""
 		return nil
 	})
+	if err == nil && r.SignIn == SignInMadeKey {
+		dropMadeKey(id, r.Target)
+	}
 	return err
 }
 
@@ -682,7 +703,14 @@ func (e *Env) RemoveServer(server string) error {
 	if err != nil {
 		return err
 	}
-	return e.saveServers(slices.DeleteFunc(rs, func(r ServerRecord) bool { return r.ID == id }))
+	gone := rs[slices.IndexFunc(rs, func(r ServerRecord) bool { return r.ID == id })]
+	if err := e.saveServers(slices.DeleteFunc(rs, func(r ServerRecord) bool { return r.ID == id })); err != nil {
+		return err
+	}
+	if gone.SignIn == SignInMadeKey {
+		dropMadeKey(gone.ID, gone.Target)
+	}
+	return nil
 }
 
 // ServerIDByName is the ID of the server given by user@host or by the name

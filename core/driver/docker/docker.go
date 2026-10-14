@@ -68,6 +68,10 @@ type Config struct {
 	// Client overrides the Docker client; nil means one from the
 	// environment (DOCKER_HOST and friends).
 	Client *client.Client
+	// Host is the engine's address ("tcp://…", "unix://…") when Client is
+	// nil; empty means the environment's (DOCKER_HOST, Docker Desktop's
+	// socket). Tests outside this package point it at a fake engine.
+	Host string
 	// Namespace, when set, is added to container names so several simulated
 	// machines can share one engine (tests only).
 	Namespace string
@@ -100,7 +104,11 @@ func New(cfg Config) (*Driver, error) {
 	cli := cfg.Client
 	if cli == nil {
 		var err error
-		cli, err = client.New(client.FromEnv)
+		opts := []client.Opt{client.FromEnv}
+		if cfg.Host != "" {
+			opts = append(opts, client.WithHost(cfg.Host))
+		}
+		cli, err = client.New(opts...)
 		if err != nil {
 			return nil, fmt.Errorf("connect to Docker: %w", err)
 		}

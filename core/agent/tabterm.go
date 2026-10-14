@@ -586,7 +586,8 @@ func buildSeed(disp, main, alt []string, snap *paneSnapshot, authors []recordedA
 		{n[10] == 0, "\x1b[?7l"}, {n[11] == 1, "\x1b[4h"}, {n[12] == 1, "\x1b[?1h"},
 		{n[13] == 1, "\x1b="}, {n[14] == 1, "\x1b[?1000h"}, {n[15] == 1, "\x1b[?1002h"}, {n[16] == 1, "\x1b[?1003h"},
 		{n[17] == 1, "\x1b[?1006h"}, {n[18] == 0, "\x1b[?25l"}, {n[19] == 1, "\x1b[?1004h"},
-		{n[20] == 1, "\x1b[?2004h"},
+		// tmux 3.4 has no bracket_paste_flag (empty): the parser's, then.
+		{n[20] == 1 || (f[20] == "" && snap != nil && snap.bracketedPaste), "\x1b[?2004h"},
 	}
 	for _, m := range modes {
 		if m.on {

@@ -165,7 +165,7 @@ Also checked on tmux 3.4 in the image:
        - the scroll region (`#{scroll_region_upper}`/`lower`), origin mode (`#{origin_flag}`), autowrap (`#{wrap_flag}`), insert mode;
        - cursor keys and keypad (`#{keypad_cursor_flag}`, `#{keypad_flag}`), mouse modes (`#{mouse_*_flag}`);
        - the cursor position and visibility;
-       - bracketed paste (`#{bracket_paste_flag}`);
+       - bracketed paste (`#{bracket_paste_flag}` where tmux has it; tmux 3.4 doesn't, so there the helper's parser tracks it);
        - the current SGR: the pen the program left set, from the helper's parser, so the next output draws in the right colours.
 
        Each is written as the escape sequence that sets it, after the captured text.

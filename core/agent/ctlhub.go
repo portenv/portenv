@@ -157,7 +157,10 @@ type ctlClient struct {
 
 // ctlPending is a command whose reply hasn't come.
 type ctlPending struct {
-	id       uint64
+	id uint64
+	// last is the ID of the last command in its line: tmux skips the rest
+	// of a line after an error, so they get no reply.
+	last     uint64
 	snapPane string               // take this pane's parser snapshot with the reply
 	internal func(lines []string) // a reply the client handles itself
 }
@@ -388,10 +391,11 @@ func (c *ctlClient) send(line, snapPane string, internal func([]string)) (uint64
 	}
 	n := strings.Count(line, " ; ") + 1
 	var id uint64
+	last := c.nextID + uint64(n) // #nosec G115 -- a small count
 	for i := range n {
 		c.nextID++
 		id = c.nextID
-		p := ctlPending{id: id}
+		p := ctlPending{id: id, last: last}
 		if i == n-1 {
 			p.snapPane, p.internal = snapPane, internal
 		}
@@ -416,7 +420,22 @@ func (c *ctlClient) replied(e ctlEvent) {
 	}
 	p := c.pending[0]
 	c.pending = c.pending[1:]
+	// After an error, the line's later commands never run: each is
+	// answered here as failed, so the queue stays matched to tmux's replies.
+	var skipped []ctlPending
+	for e.failed && len(c.pending) > 0 && c.pending[0].id <= p.last {
+		skipped = append(skipped, c.pending[0])
+		c.pending = c.pending[1:]
+	}
 	c.wmu.Unlock()
+	c.answer(p, e)
+	for _, q := range skipped {
+		c.answer(q, ctlEvent{kind: ctlReply, failed: true, lines: []string{"not run: an earlier command in its line failed"}})
+	}
+}
+
+// answer hands a reply to whoever waits for it.
+func (c *ctlClient) answer(p ctlPending, e ctlEvent) {
 	if p.internal != nil {
 		p.internal(e.lines)
 		return

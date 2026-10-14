@@ -650,13 +650,33 @@ exec sleep 600
 }
 
 // A program that prints and exits at once: its output reaches the stream
-// before the end (R-0162). Held until the stream is open, it must come as
-// output; opened in a race with the exit, it's in the seed or the output,
-// or the tab was already gone, and every stream ends promptly.
+// before the end (R-0162), whenever tmux delivered it. tmux itself can
+// drop a pane's last output when the pane is gone before tmux writes it to
+// its control clients (seen on 3.4 and 3.7c under load; PLAN.md, open
+// questions), so a second subscriber on the same client says what tmux
+// delivered, and the stream must have all of it.
 func TestTabTerminalDeliversAnExitingProgramsOutput(t *testing.T) {
 	h := newTabTermHarness(t, "sh -c 'exec sleep 600'")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	hub, err := h.srv.ctlHub()
+	if err != nil {
+		t.Fatal(err)
+	}
+	watch, stop, err := hub.subscribe(ctx, "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stop()
+	delivered := func(pane string) bool {
+		var out []byte
+		for _, e := range watch.take() {
+			if e.kind == ctlOutput && e.pane == pane {
+				out = append(out, e.data...)
+			}
+		}
+		return bytes.Contains(out, []byte("done"))
+	}
 	ends := func(tt *tabTerm, seed []byte) (sawDone bool) {
 		t.Helper()
 		out := append([]byte(nil), seed...)
@@ -674,20 +694,29 @@ func TestTabTerminalDeliversAnExitingProgramsOutput(t *testing.T) {
 			}
 		}
 	}
+	newTab := func(cmd string) (tab, pane string) {
+		f := strings.Fields(h.raw("new-window", "-d", "-P", "-F", "#{window_id} #{pane_id}", "-t", "=main:", cmd))
+		return f[0], f[1]
+	}
 	// Held: the program waits for the stream, then prints and exits.
-	tab := strings.TrimSpace(h.raw("new-window", "-d", "-P", "-F", "#{window_id}", "-t", "=main:", "tmux wait-for go; printf done; exit 0"))
+	tab, pane := newTab("tmux wait-for go; printf done; exit 0")
 	tt := h.open(ctx, tab, "", 80, 24)
-	r := tt.next(5 * time.Second).GetReset_()
-	if r == nil {
+	if tt.next(5*time.Second).GetReset_() == nil {
 		t.Fatal("no reset")
 	}
+	watch.take()
 	h.raw("wait-for", "-S", "go")
-	if !ends(tt, nil) {
-		t.Fatal("the program's output didn't come before the end")
+	got := ends(tt, nil)
+	time.Sleep(50 * time.Millisecond)
+	if tmuxSent := delivered(pane); tmuxSent && !got {
+		t.Fatal("tmux delivered the program's output, but the stream ended without it")
+	} else if !tmuxSent {
+		t.Log("tmux dropped the exiting pane's output this time")
 	}
 	// Racing: printf done; exit 0 is the whole command.
 	for range 20 {
-		tab := strings.TrimSpace(h.raw("new-window", "-d", "-P", "-F", "#{window_id}", "-t", "=main:", "printf done; exit 0"))
+		watch.take()
+		tab, pane := newTab("printf done; exit 0")
 		tt := h.open(ctx, tab, "", 80, 24)
 		m := tt.next(5 * time.Second)
 		if m.GetEnd() == agentv1.TabTerminalEnd_TAB_TERMINAL_END_TAB_CLOSED {
@@ -697,8 +726,71 @@ func TestTabTerminalDeliversAnExitingProgramsOutput(t *testing.T) {
 		if r == nil {
 			t.Fatalf("first message %v", m)
 		}
-		if !ends(tt, r.GetSeed()) {
-			t.Fatal("the stream saw the tab, then ended without its output")
+		got := ends(tt, r.GetSeed())
+		time.Sleep(50 * time.Millisecond)
+		if delivered(pane) && !got {
+			t.Fatal("the stream saw the tab and tmux delivered its output, but the stream ended without it")
 		}
+	}
+}
+
+// tmux skips the rest of a command line after an error, without replies:
+// each skipped command is answered as failed, and later replies still
+// match their commands.
+func TestControlRepliesStayMatchedAfterAnError(t *testing.T) {
+	h := newTabTermHarness(t, "sh -c 'exec sleep 600'")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	hub, err := h.srv.ctlHub()
+	if err != nil {
+		t.Fatal(err)
+	}
+	sub, stop, err := hub.subscribe(ctx, "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stop()
+	var c *ctlClient
+	for end := time.Now().Add(5 * time.Second); c == nil; {
+		if cl := hub.client("main"); cl != nil {
+			if _, err := cl.send("display -p ready", "", nil); err == nil {
+				c = cl
+				break
+			}
+		}
+		if time.Now().After(end) {
+			t.Fatal("no client")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	last, err := c.send("display -p a ; capture-pane -p -t %9999 ; display -p c", "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, err := c.send("display -p d", "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[uint64]ctlEvent{}
+	for end := time.Now().Add(5 * time.Second); got[d].kind != ctlReply; {
+		select {
+		case <-sub.kick:
+			for _, e := range sub.take() {
+				if e.kind == ctlReply {
+					got[e.id] = e
+				}
+			}
+		case <-time.After(time.Until(end)):
+			t.Fatalf("replies %v", got)
+		}
+	}
+	if a := got[last-2]; a.failed || strings.Join(a.lines, "") != "a" {
+		t.Errorf("first: %+v", a)
+	}
+	if !got[last-1].failed || !got[last].failed {
+		t.Errorf("the failing command and the one skipped after it: %+v, %+v", got[last-1], got[last])
+	}
+	if r := got[d]; r.failed || strings.Join(r.lines, "") != "d" {
+		t.Errorf("the next line's reply: %+v", r)
 	}
 }

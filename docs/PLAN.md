@@ -1094,7 +1094,7 @@ In this order:
               - started again if it exits, with subscribers told to list afresh;
               - tmux's `set-clipboard` and `allow-passthrough` set off at every start;
               - WatchTabs follows its events (window added, closed, renamed, another session's current window, output at most once a second), with a 2 s backstop for program changes that print nothing, and polling only below tmux 3.4;
-              - the `%output`/`%extended-output` decoder and a line reader capped at 1 MB per line, each with its own fuzz target, seeded from the spike's tmux 3.4 streams (`make fuzz`, in CI on a 15 s budget);
+              - the `%output`/`%extended-output` decoder and a line reader capped at 1 MB per line, each with its own fuzz target, seeded from the spike's tmux 3.4 streams (`make fuzz`, in CI on a fixed number of runs, not a duration, which failed now and then on a slow runner);
               - tmux pinned to 3.4 in the image and checked by `test.sh`; the helper refuses older for control mode.
             - **Built (PR 2, 2026-10-14, awaiting review):** the helper's per-pane parser, `charmbracelet/x/vt` v0.1.0 on R-0142's terms. Not yet wired to a stream; PR 3 does that.
               - **Pinned:** exact, with `go mod verify` in lint. The notices tool passes with its 16 MIT and BSD modules.
@@ -1582,6 +1582,7 @@ These need an owner decision; Claude Code should add new ones here instead of gu
 - [ ] Point-in-time autosaves while the box runs: worth a file system with snapshots (for example btrfs on the Apple disk image), or are file-consistent saves plus the pre-save hook enough? (ADR 0005)
 - [ ] Before each door is built: confirm the target agents can actually reach it (for example outbound SSH from their computers for door 1).
 - [ ] Does Grok Bot read `~/.agents/skills` and can it run the install script? (The owner is testing it.)
+- [ ] tmux (3.4 and 3.7c) sometimes drops a pane's last output in control mode when the program exits at once: the pane is gone before tmux writes the queued output, about 2 times in 100 under load. The app's tab terminal then misses it, although the tab's own history is fine until the window closes. The helper delivers everything tmux sends (tested). A fix would set `remain-on-exit` on, then have the helper close a dead pane once its own control client reports it dead. A subscription to `#{pane_dead}` arrives after the pane's output. That changes when tabs close, so it needs a decision. (1.2c PR 3)
 - [ ] Before 2.5: can the target agents be woken by an incoming webhook? If not, an agent keeping `portenv events --follow` running does the job and 2.5 drops in priority (ADR 0008).
 - [x] Apple Developer Program enrolment, needed for Developer ID signing and notarization in 1.8. **Answered (2026-10-10):** Portenv is signed with the owner's existing organization team; no new enrolment is needed (see 1.8).
 - [ ] Approval timeout default (30 minutes assumed) and what happens when it expires.

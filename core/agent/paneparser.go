@@ -81,6 +81,9 @@ type paneParser struct {
 	// pen is the SGR the program left set, as parameters (vt keeps it
 	// private); a seed sets it again (R-0133 item 5).
 	pen []string
+	// bracketedPaste is whether the program asked for bracketed paste:
+	// tmux 3.4 has no format for it (bracket_paste_flag came later).
+	bracketedPaste bool
 	// tail is where the output stands between sequences, for a seed.
 	tail seqTail
 }
@@ -100,6 +103,8 @@ type paneSnapshot struct {
 	epoch      int
 	marks      []paneMark
 	pen        string
+	// bracketedPaste is the parser's, for a tmux without the format.
+	bracketedPaste bool
 	// partial is the start of a sequence or character the output hasn't
 	// finished; a seed ends with it.
 	partial []byte
@@ -132,12 +137,24 @@ func (p *paneParser) start(cols, rows int) {
 		p.mark(e, data)
 		return true
 	})
-	// The pen, which vt keeps private (tmux has no format for it), followed
-	// here before vt handles it (returning false lets it).
+	// The pen, which vt keeps private (tmux has no format for it), and
+	// bracketed paste, followed here before vt handles them (returning
+	// false lets it).
 	e.RegisterCsiHandler('m', func(params ansi.Params) bool {
 		p.sgr(params)
 		return false
 	})
+	for _, f := range []byte{'h', 'l'} {
+		on := f == 'h'
+		e.RegisterCsiHandler(ansi.Command('?', 0, f), func(params ansi.Params) bool {
+			params.ForEach(0, func(_, n int, _ bool) {
+				if n == 2004 {
+					p.bracketedPaste = on
+				}
+			})
+			return false
+		})
+	}
 	// Erase display, seen before vt handles it (returning false lets it),
 	// to count lines as tmux does.
 	e.RegisterCsiHandler('J', func(params ansi.Params) bool {
@@ -145,7 +162,7 @@ func (p *paneParser) start(cols, rows int) {
 		p.eraseDisplay(e, n)
 		return false
 	})
-	p.alt, p.pen = false, nil
+	p.alt, p.pen, p.bracketedPaste = false, nil, false
 	e.SetCallbacks(vt.Callbacks{AltScreen: func(on bool) { p.alt = on }})
 	p.emu = e
 }
@@ -227,11 +244,12 @@ func (p *paneParser) snapshot() *paneSnapshot {
 	defer p.mu.Unlock()
 	y := p.emu.CursorPosition().Y
 	return &paneSnapshot{
-		cursorLine: p.scrolled + uint64(max(y, 0)), // #nosec G115 -- non-negative
-		epoch:      p.epoch,
-		marks:      append([]paneMark(nil), p.marks...),
-		pen:        strings.Join(p.pen, ";"),
-		partial:    p.tail.pending(),
+		cursorLine:     p.scrolled + uint64(max(y, 0)), // #nosec G115 -- non-negative
+		epoch:          p.epoch,
+		marks:          append([]paneMark(nil), p.marks...),
+		pen:            strings.Join(p.pen, ";"),
+		bracketedPaste: p.bracketedPaste,
+		partial:        p.tail.pending(),
 	}
 }
 

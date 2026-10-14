@@ -65,6 +65,7 @@ const (
 	DaemonService_ScanServerKey_FullMethodName         = "/portenv.daemon.v1.DaemonService/ScanServerKey"
 	DaemonService_TrustServerKey_FullMethodName        = "/portenv.daemon.v1.DaemonService/TrustServerKey"
 	DaemonService_ForgetServerKey_FullMethodName       = "/portenv.daemon.v1.DaemonService/ForgetServerKey"
+	DaemonService_ProvideServerKey_FullMethodName      = "/portenv.daemon.v1.DaemonService/ProvideServerKey"
 )
 
 // DaemonServiceClient is the client API for DaemonService service.
@@ -199,6 +200,11 @@ type DaemonServiceClient interface {
 	TrustServerKey(ctx context.Context, in *TrustServerKeyRequest, opts ...grpc.CallOption) (*TrustServerKeyResponse, error)
 	// Drop the server's pinned key: it is unconfirmed again.
 	ForgetServerKey(ctx context.Context, in *ForgetServerKeyRequest, opts ...grpc.CallOption) (*ForgetServerKeyResponse, error)
+	// A made key's private half (2.9 1b, ADR 0021), read by the app from the
+	// Keychain and held in portenvd's memory only, like ProvideKeys: never
+	// written, never logged. It signs in once per shared connection, through
+	// an agent of portenvd's own for that one run.
+	ProvideServerKey(ctx context.Context, in *ProvideServerKeyRequest, opts ...grpc.CallOption) (*ProvideServerKeyResponse, error)
 }
 
 type daemonServiceClient struct {
@@ -633,6 +639,16 @@ func (c *daemonServiceClient) ForgetServerKey(ctx context.Context, in *ForgetSer
 	return out, nil
 }
 
+func (c *daemonServiceClient) ProvideServerKey(ctx context.Context, in *ProvideServerKeyRequest, opts ...grpc.CallOption) (*ProvideServerKeyResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ProvideServerKeyResponse)
+	err := c.cc.Invoke(ctx, DaemonService_ProvideServerKey_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DaemonServiceServer is the server API for DaemonService service.
 // All implementations must embed UnimplementedDaemonServiceServer
 // for forward compatibility.
@@ -765,6 +781,11 @@ type DaemonServiceServer interface {
 	TrustServerKey(context.Context, *TrustServerKeyRequest) (*TrustServerKeyResponse, error)
 	// Drop the server's pinned key: it is unconfirmed again.
 	ForgetServerKey(context.Context, *ForgetServerKeyRequest) (*ForgetServerKeyResponse, error)
+	// A made key's private half (2.9 1b, ADR 0021), read by the app from the
+	// Keychain and held in portenvd's memory only, like ProvideKeys: never
+	// written, never logged. It signs in once per shared connection, through
+	// an agent of portenvd's own for that one run.
+	ProvideServerKey(context.Context, *ProvideServerKeyRequest) (*ProvideServerKeyResponse, error)
 	mustEmbedUnimplementedDaemonServiceServer()
 }
 
@@ -894,6 +915,9 @@ func (UnimplementedDaemonServiceServer) TrustServerKey(context.Context, *TrustSe
 }
 func (UnimplementedDaemonServiceServer) ForgetServerKey(context.Context, *ForgetServerKeyRequest) (*ForgetServerKeyResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ForgetServerKey not implemented")
+}
+func (UnimplementedDaemonServiceServer) ProvideServerKey(context.Context, *ProvideServerKeyRequest) (*ProvideServerKeyResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ProvideServerKey not implemented")
 }
 func (UnimplementedDaemonServiceServer) mustEmbedUnimplementedDaemonServiceServer() {}
 func (UnimplementedDaemonServiceServer) testEmbeddedByValue()                       {}
@@ -1600,6 +1624,24 @@ func _DaemonService_ForgetServerKey_Handler(srv interface{}, ctx context.Context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _DaemonService_ProvideServerKey_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ProvideServerKeyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).ProvideServerKey(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_ProvideServerKey_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).ProvideServerKey(ctx, req.(*ProvideServerKeyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // DaemonService_ServiceDesc is the grpc.ServiceDesc for DaemonService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1750,6 +1792,10 @@ var DaemonService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ForgetServerKey",
 			Handler:    _DaemonService_ForgetServerKey_Handler,
+		},
+		{
+			MethodName: "ProvideServerKey",
+			Handler:    _DaemonService_ProvideServerKey_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

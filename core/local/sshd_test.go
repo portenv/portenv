@@ -4,6 +4,7 @@ package local
 
 import (
 	"context"
+	"crypto/ed25519"
 	"fmt"
 	"io"
 	"net"
@@ -11,9 +12,14 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
+
+	"golang.org/x/crypto/ssh"
+
+	"github.com/portenv/portenv/core/internal/bounded"
 )
 
 // sshdPath is OpenSSH's server, run unprivileged on 127.0.0.1 for these
@@ -83,6 +89,8 @@ func (w *sshdWorld) startSSHD(t *testing.T, name string, port int, hostKey strin
 	}
 	cmd := exec.Command(w.sshd, "-D", "-e", "-f", conf) // #nosec G204 -- the test's own sshd
 	cmd.Stderr = io.Discard
+	// Its session processes share the stderr pipe: don't wait for them.
+	cmd.WaitDelay = 2 * time.Second
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -208,9 +216,266 @@ func TestScanThroughProxyJump(t *testing.T) {
 // closeShared stops the shared connection to target, if one is up.
 func closeShared(t *testing.T, target string) {
 	t.Helper()
-	args, err := sshArgs(target)
+	// Its socket only: never a new sign-in.
+	opts, err := controlOptions(ServerID(target))
 	if err != nil {
 		t.Fatal(err)
 	}
-	_ = exec.Command(args[0], append(args[1:], "-O", "exit", "--", target)...).Run() // #nosec G204 -- the test's own ssh
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	_ = exec.CommandContext(ctx, "ssh", append(append([]string{"-F", "none"}, opts...), "-O", "exit", "--", target)...).Run() // #nosec G204 -- the test's own ssh
+}
+
+// TestAMadeKeySignsInOnceThroughItsAgent (ADR 0021, R-0180): a made-key
+// server runs with -F none, so a planted config (a Match exec, a
+// ProxyCommand) runs nothing; the key signs in once, through a run agent
+// that's gone as soon as the shared connection is up; later runs go
+// through that connection with no key at all.
+func TestAMadeKeySignsInOnceThroughItsAgent(t *testing.T) {
+	sshd := sshdPath(t)
+	w := &sshdWorld{dir: t.TempDir(), sshd: sshd}
+	t.Setenv("HOME", w.dir)
+	t.Setenv("SSH_AUTH_SOCK", "")
+	signer, priv := testSigner(t)
+	if err := os.WriteFile(filepath.Join(w.dir, "authorized_keys"), ssh.MarshalAuthorizedKey(signer.PublicKey()), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	keygen(t, filepath.Join(w.dir, "host_key"))
+	port := freePort(t)
+	w.startSSHD(t, "made", port, filepath.Join(w.dir, "host_key"))
+	marker := filepath.Join(w.dir, "match-exec-ran")
+	planted := filepath.Join(w.dir, "planted_config")
+	if err := os.WriteFile(planted, []byte(fmt.Sprintf("Match exec \"touch %s\"\n  ProxyCommand /usr/bin/false\nHost *\n  PermitLocalCommand yes\n  LocalCommand touch %s\n", marker, marker)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PORTENV_SSH", "ssh -F "+planted)
+	me, err := user.Current()
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := fmt.Sprintf("ssh://%s@127.0.0.1:%d", me.Username, port)
+	e := &Env{Dir: t.TempDir(), Machine: "mac-1"}
+	if err := os.WriteFile(filepath.Join(e.Dir, "machine.json"), []byte(`{"servers":["`+target+`"]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	e.UseForServers()
+	t.Cleanup(func() { closeShared(t, target); useForServers(nil); forgetMadeKeys() })
+	id := ServerID(target)
+	if err := e.UseMadeKey(id); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	scan, err := e.ScanServerKey(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.TrustServerKey(id, scan.Fingerprint); err != nil {
+		t.Fatal(err)
+	}
+	if err := RunRemote(ctx, QuickRemote, target, io.Discard, "true"); err == nil || !strings.Contains(err.Error(), "Open Portenv on this Mac") {
+		t.Fatalf("with no key handed over: %v", err)
+	}
+	if err := e.ProvideServerKey(id, priv); err != nil {
+		t.Fatal(err)
+	}
+	dir, _ := SocketDir()
+	before, _ := filepath.Glob(filepath.Join(dir, "a-*"))
+	var out strings.Builder
+	if err := RunRemote(ctx, QuickRemote, target, &out, "echo", "signed-in"); err != nil || !strings.Contains(out.String(), "signed-in") {
+		t.Fatalf("run: %v: %s", err, out.String())
+	}
+	if after, _ := filepath.Glob(filepath.Join(dir, "a-*")); len(after) != len(before) {
+		t.Fatalf("an agent socket outlived the sign-in: %v (before: %v)", after, before)
+	}
+	forgetMadeKeys() // the key is gone; the shared connection carries on
+	if err := RunRemote(ctx, QuickRemote, target, io.Discard, "true"); err != nil {
+		t.Fatalf("a later run through the shared connection: %v", err)
+	}
+	if _, err := os.Stat(marker); err == nil {
+		t.Fatal("the planted config ran a command")
+	}
+}
+
+// madeKeyServer is a real sshd that lets the made key in, as a made-key
+// server confirmed with its host key, its key handed over. PORTENV_SSH is
+// a wrapper that logs each ssh run's arguments to the returned file.
+func madeKeyServer(t *testing.T) (e *Env, target string, priv ed25519.PrivateKey, runs string) {
+	t.Helper()
+	w := &sshdWorld{dir: t.TempDir(), sshd: sshdPath(t)}
+	t.Setenv("HOME", w.dir)
+	t.Setenv("SSH_AUTH_SOCK", "")
+	signer, priv := testSigner(t)
+	if err := os.WriteFile(filepath.Join(w.dir, "authorized_keys"), ssh.MarshalAuthorizedKey(signer.PublicKey()), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	hostPub := keygen(t, filepath.Join(w.dir, "host_key"))
+	port := freePort(t)
+	w.startSSHD(t, "made", port, filepath.Join(w.dir, "host_key"))
+	runs = filepath.Join(w.dir, "ssh-runs")
+	wrapper := filepath.Join(w.dir, "ssh-logged")
+	if err := os.WriteFile(wrapper, []byte("#!/bin/sh\necho \"$*\" >>"+runs+"\nexec ssh \"$@\"\n"), 0o700); err != nil { // #nosec G306 -- test helper
+		t.Fatal(err)
+	}
+	t.Setenv("PORTENV_SSH", wrapper)
+	me, err := user.Current()
+	if err != nil {
+		t.Fatal(err)
+	}
+	target = fmt.Sprintf("ssh://%s@127.0.0.1:%d", me.Username, port)
+	e = &Env{Dir: t.TempDir(), Machine: "mac-1"}
+	if err := e.PinServerKey(target, hostPub); err != nil {
+		t.Fatal(err)
+	}
+	e.UseForServers()
+	t.Cleanup(func() { closeShared(t, target); useForServers(nil); forgetMadeKeys() })
+	if err := e.UseMadeKey(ServerID(target)); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.ProvideServerKey(ServerID(target), priv); err != nil {
+		t.Fatal(err)
+	}
+	return e, target, priv, runs
+}
+
+func countRuns(t *testing.T, runs, flag string) int {
+	t.Helper()
+	b, _ := os.ReadFile(runs) // #nosec G304 -- the test's own log
+	n := 0
+	for _, line := range strings.Split(string(b), "\n") {
+		if slices.Contains(strings.Fields(line), flag) {
+			n++
+		}
+	}
+	return n
+}
+
+// TestConcurrentRunsSignInOnce (R-0187): five runs at once to a made-key
+// server bring up one shared connection, and all five succeed.
+func TestConcurrentRunsSignInOnce(t *testing.T) {
+	_, target, _, runs := madeKeyServer(t)
+	// A regression fails here in seconds rather than hanging the job:
+	// sign-ins racing for one socket can leave ssh waiting forever.
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	errs := make(chan error, 5)
+	for range 5 {
+		go func() { errs <- RunRemote(ctx, QuickRemote, target, io.Discard, "true") }()
+	}
+	deadline := time.After(25 * time.Second)
+	for range 5 {
+		select {
+		case err := <-errs:
+			if err != nil {
+				t.Error(err)
+			}
+		case <-deadline:
+			killSSHTo(t, target)
+			t.Fatalf("two sign-ins ran at once: the runs didn't finish in 25 s (%d sign-ins, -M)", countRuns(t, runs, "-M"))
+		}
+	}
+	if n := countRuns(t, runs, "-M"); n != 1 {
+		t.Fatalf("two sign-ins ran at once: %d (-M), want 1", n)
+	}
+}
+
+// TestForgetDropsTheMadeKey (R-0187): Forget closes the shared connection
+// and drops the key from memory; confirmed again, a run needs the key
+// handed over again.
+func TestForgetDropsTheMadeKey(t *testing.T) {
+	e, target, priv, _ := madeKeyServer(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	if err := RunRemote(ctx, QuickRemote, target, io.Discard, "true"); err != nil {
+		t.Fatal(err)
+	}
+	id := ServerID(target)
+	if err := e.ForgetServerKey(id); err != nil {
+		t.Fatal(err)
+	}
+	scan, err := e.ScanServerKey(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.TrustServerKey(id, scan.Fingerprint); err != nil {
+		t.Fatal(err)
+	}
+	if err := RunRemote(ctx, QuickRemote, target, io.Discard, "true"); err == nil || !strings.Contains(err.Error(), "Open Portenv on this Mac") {
+		t.Fatalf("after Forget: %v", err)
+	}
+	if err := e.ProvideServerKey(id, priv); err != nil {
+		t.Fatal(err)
+	}
+	if err := RunRemote(ctx, QuickRemote, target, io.Discard, "true"); err != nil {
+		t.Fatalf("handed over again: %v", err)
+	}
+	// Remove does the same.
+	if err := e.RemoveServer(target); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := madeKeySigner(id); ok {
+		t.Fatal("the key outlived Remove")
+	}
+}
+
+// TestASilentServerTimesOut (R-0187): a server that takes the connection
+// and never answers stops the sign-in at its deadline, and the run agent
+// goes with it.
+func TestASilentServerTimesOut(t *testing.T) {
+	saved := masterSetup
+	masterSetup = 2 * time.Second
+	t.Cleanup(func() { masterSetup = saved })
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = l.Close() }()
+	go func() {
+		for {
+			c, err := l.Accept()
+			if err != nil {
+				return
+			}
+			defer func() { _ = c.Close() }() // held open, silent
+		}
+	}()
+	t.Setenv("HOME", t.TempDir())
+	_, priv := testSigner(t)
+	target := fmt.Sprintf("ssh://me@127.0.0.1:%d", l.Addr().(*net.TCPAddr).Port)
+	e := &Env{Dir: t.TempDir(), Machine: "mac-1"}
+	if err := e.PinServerKey(target, hostKey(t)); err != nil {
+		t.Fatal(err)
+	}
+	e.UseForServers()
+	t.Cleanup(func() { useForServers(nil); forgetMadeKeys() })
+	_ = e.UseMadeKey(ServerID(target))
+	_ = e.ProvideServerKey(ServerID(target), priv)
+	t.Setenv("PORTENV_SSH", "ssh")
+	dir, _ := SocketDir()
+	before, _ := filepath.Glob(filepath.Join(dir, "a-*"))
+	start := time.Now()
+	if err := RunRemote(context.Background(), QuickRemote, target, io.Discard, "true"); err == nil {
+		t.Fatal("ran on a silent server")
+	}
+	if d := time.Since(start); d > 2*time.Second+bounded.KillGrace+3*time.Second {
+		t.Fatalf("took %v", d)
+	}
+	if after, _ := filepath.Glob(filepath.Join(dir, "a-*")); len(after) != len(before) {
+		t.Fatalf("the agent outlived the timeout: %v", after)
+	}
+}
+
+// killSSHTo stops every ssh this test started for target (by its shared
+// connection's socket, which only this test's runs name).
+func killSSHTo(t *testing.T, target string) {
+	t.Helper()
+	opts, err := controlOptions(ServerID(target))
+	if err != nil {
+		return
+	}
+	for _, o := range opts {
+		if strings.HasPrefix(o, "ControlPath=") {
+			_ = exec.Command("pkill", "-f", o).Run() // #nosec G204 -- the test's own processes
+		}
+	}
 }

@@ -113,6 +113,11 @@ func ForwardLocal(ctx context.Context, host, remoteAddr string) (string, error) 
 	if err != nil {
 		return "", err
 	}
+	// The REST forward (ADR 0005) is the one run that forwards: a made-key
+	// server's ClearAllForwardings would drop its -L.
+	if i := slices.Index(base, "ClearAllForwardings=yes"); i >= 0 {
+		base[i] = "ClearAllForwardings=no"
+	}
 	run := func(extra ...string) error {
 		cmd, err := bounded.Command(ctx, sshSetup, base[0], append(append(slices.Clone(base[1:]), extra...), "--", host)...)
 		if err != nil {

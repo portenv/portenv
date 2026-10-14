@@ -33,6 +33,9 @@ public struct BoxState: Equatable, Sendable {
     public var storagePlace: String?
     /// When portenvd opened the box (the inspector's "Since").
     public var openedAt: Date?
+    /// This open stopped and started the box again to apply a security
+    /// update (R-0201): the window tells the person once.
+    public var restartedForSecurityUpdate = false
 
     public init(save: Save, savedAt: Date? = nil, location: String? = nil) {
         self.save = save
@@ -50,6 +53,7 @@ public struct BoxState: Equatable, Sendable {
             let interrupted: Bool?
             let storage_place: String?
             let opened_at: Date?
+            let restarted_for_security_update: Bool?
         }
         let d = JSONDecoder()
         d.dateDecodingStrategy = .custom { dec in
@@ -67,6 +71,7 @@ public struct BoxState: Equatable, Sendable {
         s.interrupted = w.interrupted ?? false
         s.storagePlace = (w.storage_place?.isEmpty ?? true) ? nil : w.storage_place
         s.openedAt = w.opened_at
+        s.restartedForSecurityUpdate = w.restarted_for_security_update ?? false
         return s
     }
 
@@ -104,6 +109,13 @@ public final class BoxController {
     public private(set) var busy = false
     /// The last failure, shown in a sheet; cleared by dismissError.
     public private(set) var error: String?
+    /// Something to tell the person once, in an alert with OK (the security
+    /// restart, R-0201); cleared by dismissNotice.
+    public private(set) var notice: String?
+    private var securityRestartTold = false
+    /// What the window says after portenvd restarted the workspace to apply
+    /// a security update (R-0201).
+    public static let securityRestartNotice = "Portenv restarted this workspace to apply a security update. Your files and saves are as you left them; programs that were running were stopped."
     /// The workspace is open somewhere else: the sheet that asks what to do
     /// (2.3, the move-and-lease board).
     public private(set) var leaseSheet: LeaseSheet?
@@ -641,6 +653,11 @@ public final class BoxController {
     private func apply(_ st: BoxState, pushed: Bool) async {
         let newSave = st.savedAt != state?.savedAt
         state = st
+        // Once for this window, however often the state says it again.
+        if st.restartedForSecurityUpdate && !securityRestartTold {
+            securityRestartTold = true
+            notice = Self.securityRestartNotice
+        }
         if newSave { savedAtChanged() }
         // portenvd answers again: whatever said it was away no longer holds.
         daemonGoneSince = nil
@@ -752,6 +769,8 @@ public final class BoxController {
     }
 
     public func dismissError() { error = nil }
+
+    public func dismissNotice() { notice = nil }
 
     /// What quitting needs: this box, and whether it is open on this Mac.
     public var quitFlow: QuitFlow { QuitFlow(daemon: daemon, box: box, openHere: location == .thisMac) }

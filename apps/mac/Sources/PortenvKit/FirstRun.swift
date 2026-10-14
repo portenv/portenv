@@ -32,8 +32,10 @@ public enum UsageCounting {
 }
 
 /// Where the first box's saves go (no Portenv storage before Phase 3). In
-/// 1.5 only this Mac: a server and a bucket are shown dimmed, marked LATER
-/// (the first-run-4-storage-this-mac board; R-0092, R-0132).
+/// 1.5 only this Mac: a server is shown dimmed, marked LATER until 2.9 (the
+/// first-run-4-storage-this-mac board; R-0092, R-0132). `bucket` stays as
+/// the internal storage kind (portenvd and the CLI know it); the app never
+/// offers it (R-0196).
 public enum StorageChoice: Equatable, Sendable {
     case server, bucket, thisMac
 }
@@ -178,8 +180,15 @@ public final class FirstRunFlow {
     private let existing: Set<String>
     private let memory: FirstRunMemory
 
+    /// While portenvd isn't up (or restarts), a step is tried again this
+    /// often, for this long, saying so, before it fails (R-0202).
+    private let retryEvery: Duration
+    private let retryFor: Duration
+
     public init(service: FirstRunService, at start: FirstRunStep = .welcome, existing: [String] = [], fromBoxList: Bool = false,
-                memory: FirstRunMemory = NoFirstRunMemory()) {
+                memory: FirstRunMemory = NoFirstRunMemory(), retryEvery: Duration = .seconds(1), retryFor: Duration = .seconds(10)) {
+        self.retryEvery = retryEvery
+        self.retryFor = retryFor
         self.service = service
         self.existing = Set(existing)
         self.fromBoxList = fromBoxList
@@ -282,6 +291,40 @@ public final class FirstRunFlow {
         busy = true
         defer { busy = false }
         do {
+            try await whileServiceStarts { try await self.runStep() }
+            error = nil
+            notice = nil
+            step = steps[i + 1]
+        } catch let failure as FirstRunError where failure.notBuilt {
+            refuse(notice: failure.message)
+        } catch BoxMaker.Failure.poolEmpty {
+            // The pool ran out: the recovery key sheet (ADR 0019).
+            needsRecoveryKey = true
+            refuse(notice: BoxMaker.Failure.poolEmpty.errorDescription)
+        } catch {
+            notice = nil
+            refuse(error: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
+        }
+    }
+
+    /// Runs body; while portenvd isn't there, says it's starting it and
+    /// tries again, for up to retryFor. Every step is safe to repeat
+    /// (CreateBox is idempotent on the box ID, ADR 0019).
+    private func whileServiceStarts(_ body: () async throws -> Void) async throws {
+        var deadline: ContinuousClock.Instant? // from when it's first found down
+        while true {
+            do {
+                return try await body()
+            } catch where DaemonErrorText.isServiceDown(error) && ContinuousClock.now < (deadline ?? .now + retryFor) {
+                if deadline == nil { deadline = .now + retryFor }
+                notice = DaemonErrorText.starting
+                try? await Task.sleep(for: retryEvery)
+            }
+        }
+    }
+
+    private func runStep() async throws {
+        do {
             switch step {
             case .welcome where recoveryKey == nil:
                 recoveryKey = try await service.makeRecoveryKey()
@@ -303,17 +346,6 @@ public final class FirstRunFlow {
             default:
                 break
             }
-            error = nil
-            notice = nil
-            step = steps[i + 1]
-        } catch let failure as FirstRunError where failure.notBuilt {
-            refuse(notice: failure.message)
-        } catch BoxMaker.Failure.poolEmpty {
-            // The pool ran out: the recovery key sheet (ADR 0019).
-            needsRecoveryKey = true
-            refuse(notice: BoxMaker.Failure.poolEmpty.errorDescription)
-        } catch {
-            refuse(error: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
         }
     }
 
@@ -356,7 +388,7 @@ public enum FirstRunText {
     public static let noKeyYet = "Your recovery key isn\u{2019}t ready yet."
     public static let tickSaved = "Tick \u{201C}I\u{2019}ve saved my recovery key somewhere safe\u{201D} to continue."
     public static let chooseStorage = "Choose where your saves should go."
-    public static let storageLater = "Saving to a server or a bucket comes later. Keep your saves on this Mac for now."
+    public static let storageLater = "Saving to a server comes later. Keep your saves on this Mac for now."
     public static let typeName = "Give your workspace a name."
     public static let noBackgroundService = "Portenv\u{2019}s background service isn\u{2019}t answering. It usually starts by itself in a few seconds."
     public static let poolNotStored = "Portenv couldn\u{2019}t keep what it needs from your recovery key in the Keychain. Choose Continue to try again."
@@ -365,11 +397,9 @@ public enum FirstRunText {
     public static let storageTitle = "Where should your saves go?"
     public static let storageLine = "Saves are encrypted wherever they\u{2019}re stored, on this Mac too."
     public static let storageThisMac = "Keep on this Mac for now"
-    public static let thisMacOnly = "Saves stay on this Mac only. If this Mac is lost, they\u{2019}re lost too. You can add a server or bucket later."
+    public static let thisMacOnly = "Saves stay on this Mac only. If this Mac is lost, they\u{2019}re lost too. You can add a server later."
     public static let storageServer = "My own server"
     public static let storageServerLine = "Over SSH, such as a Hetzner or DigitalOcean server."
-    public static let storageBucket = "An S3-compatible bucket"
-    public static let storageBucketLine = "AWS S3, Backblaze B2, Cloudflare R2 and others."
     public static let later = "LATER"
 
     public static let firstBoxTitle = "Make your first workspace"

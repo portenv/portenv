@@ -38,6 +38,9 @@ type fakeTabHelper struct {
 	// stops forwarding input once it passes one on: a test that checks
 	// what reached the helper must not let the end overtake it.
 	endAfterInputs int
+	// hangUp, when closed, ends the helper's stream with an error, as when
+	// its box stops under it.
+	hangUp chan struct{}
 
 	mu       sync.Mutex
 	versions int // GetVersion calls
@@ -89,8 +92,12 @@ func (f *fakeTabHelper) TabTerminal(stream agentv1.AgentService_TabTerminalServe
 			return err
 		}
 	}
-	<-f.done
-	return nil
+	select {
+	case <-f.done:
+		return nil
+	case <-f.hangUp: // nil: never
+		return status.Error(codes.Unavailable, "the workspace stopped")
+	}
 }
 
 // waitForInputs waits until endAfterInputs messages have arrived, or fails
@@ -153,6 +160,13 @@ type tabWorld struct {
 
 func servingTabTerminals(t *testing.T, who caller, a, b *fakeTabHelper) tabWorld {
 	t.Helper()
+	return servingTabTerminalsWith(t, who, a, b, nil)
+}
+
+// servingTabTerminalsWith is servingTabTerminals, handing the daemon to
+// also (when set) before it serves.
+func servingTabTerminalsWith(t *testing.T, who caller, a, b *fakeTabHelper, also func(*Server)) tabWorld {
+	t.Helper()
 	t.Setenv("PORTENV_KEYS", "file")
 	ac, bc := a.client(t), b.client(t)
 	_, c := servingWith(t, func(s *Server) {
@@ -168,6 +182,9 @@ func servingTabTerminals(t *testing.T, who caller, a, b *fakeTabHelper) tabWorld
 		}
 		s.remote["web"] = &remoteBox{host: "dev@server", agent: bc}
 		s.identify = func(net.Conn) caller { return who }
+		if also != nil {
+			also(s)
+		}
 	})
 	return tabWorld{a: a, b: b, c: c}
 }

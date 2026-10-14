@@ -80,6 +80,9 @@ type Box struct {
 	// ToolboxImage is an OCI image reference, e.g. "portenv/toolbox-node:v12".
 	ToolboxImage string
 	Resources    Resources
+	// Progress, when set, hears long steps as they start ("pulling the
+	// toolbox image"). Not stored.
+	Progress func(step string) `json:"-"`
 }
 
 // Resources are a box's start-time settings. Zero values mean no limit, or
@@ -185,5 +188,23 @@ type AgentChannel struct {
 	Token   string
 }
 
+// ErrMountsChanged: Rekey found the running box started with other mounts
+// than its spec gives now (a portenvd from before R-0201 started it with
+// every box's repositories). No key material was made or sent; the box
+// must be stopped and started again, which recreates it.
+var ErrMountsChanged = errors.New("the workspace was started with other mounts than it should have; it must restart")
+
 // ErrNoChannel: this process has no agent channel for the box's start.
+// ErrEngineUnresponsive: the container engine didn't answer a call in time
+// (EngineWait), or said it couldn't yet (still starting). Nothing about the
+// box changed.
+var ErrEngineUnresponsive = errors.New("the container engine didn't answer")
+
+// ErrEngineNotRunning: nothing answers on the engine's socket: it isn't
+// running.
+var ErrEngineNotRunning = errors.New("the container engine isn't running")
+
+// ErrPullStalled: an image download made no progress for EngineWait.
+var ErrPullStalled = errors.New("the image download stopped making progress")
+
 var ErrNoChannel = errors.New("no agent channel for this start of the workspace (restart it to open one)")

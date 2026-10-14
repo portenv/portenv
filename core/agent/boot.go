@@ -34,6 +34,11 @@ type Config struct {
 	// CapBoundingSet reads the box's capability bounding set; nil skips the
 	// isolation check (tests). DefaultConfig reads /proc/self/status.
 	CapBoundingSet func() (uint64, error)
+	// Mounts reads the box's mount table (/proc/self/mountinfo); nil skips
+	// the mount check (tests). SocketAt says whether an engine socket
+	// exists at a path.
+	Mounts   func() (string, error)
+	SocketAt func(string) bool
 }
 
 // DefaultConfig returns the box layout from docs/PLAN.md.
@@ -47,6 +52,8 @@ func DefaultConfig() Config {
 		// A container's bounding set is the box's. In a VM (Phase 1) the
 		// agent drops these itself for every process it starts instead.
 		CapBoundingSet: BoundingSet,
+		Mounts:         Mounts,
+		SocketAt:       isSocket,
 	}
 }
 
@@ -86,6 +93,20 @@ func Boot(ctx context.Context, cfg Config, run Runner, r *Readiness) error {
 	if cfg.CapBoundingSet != nil {
 		r.Step("checking isolation")
 		if err := checkIsolation(cfg.CapBoundingSet); err != nil {
+			return err
+		}
+	}
+	if cfg.Mounts != nil {
+		r.Step("checking mounts")
+		info, err := cfg.Mounts()
+		if err != nil {
+			return fmt.Errorf("read the workspace's mounts: %w", err)
+		}
+		at := cfg.SocketAt
+		if at == nil {
+			at = isSocket
+		}
+		if err := checkMounts(info, BoxID(), at); err != nil {
 			return err
 		}
 	}

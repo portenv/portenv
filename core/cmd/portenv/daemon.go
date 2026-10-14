@@ -54,6 +54,7 @@ func dialDaemon(e *local.Env) (daemonv1.DaemonServiceClient, func(), error) {
 //	portenv app remove-server USER@HOST|NAME          (the owner only: drop a server and its key; refused in a workspace)
 //	portenv app forget-server USER@HOST|NAME          (the owner only: forget its key, keep it in Move To; refused in a workspace)
 //	portenv app ping                (exit 0 when portenvd answers)
+//	portenv app daemon-build        (the running portenvd's build ID, R-0198)
 //	portenv app state BOX           (the save state and location, JSON)
 //	portenv app channel BOX         (a runner's box channel for a Mac, JSON on stdout)
 //	portenv app network up|down     (the system's network status, from the app)
@@ -117,6 +118,19 @@ func cmdApp(ctx context.Context, e *local.Env, op string, args []string) error {
 	}
 	if op == "unregister-service" {
 		return unregisterService(ctx)
+	}
+	if op == "daemon-build" {
+		c, done, err := dialDaemon(e)
+		if err != nil {
+			return err
+		}
+		defer done()
+		r, err := c.GetVersion(ctx, &daemonv1.GetVersionRequest{})
+		if err != nil {
+			return plain(err)
+		}
+		fmt.Println(r.GetBuild().GetBuildId())
+		return nil
 	}
 	if op == "ping" {
 		c, done, err := dialDaemon(e)

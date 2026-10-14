@@ -3,9 +3,18 @@
 package docker
 
 import (
+	"context"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/moby/moby/api/types/jsonstream"
+	"github.com/moby/moby/client"
+
+	"github.com/portenv/portenv/core/driver"
 )
 
 // TestPullTallyCountsEveryLayer (R-0211): the bytes a pull has fetched,
@@ -35,5 +44,58 @@ func TestPullTallyCountsEveryLayer(t *testing.T) {
 		if done != s.wantDone || all != s.wantAll {
 			t.Fatalf("step %d (%s %s): %d of %d, want %d of %d", i, s.msg.Status, s.msg.ID, done, all, s.wantDone, s.wantAll)
 		}
+	}
+}
+
+// TestAPullReportsItsProgress: a pull against an engine (a fake one here)
+// reports its bytes to whoever opens the box, layer by layer, and an
+// engine's error during the pull ends it.
+func TestAPullReportsItsProgress(t *testing.T) {
+	stream := strings.Join([]string{
+		`{"status":"Pulling fs layer","id":"bbb"}`,
+		`{"status":"Downloading","id":"bbb","progressDetail":{"current":312,"total":900}}`,
+		`{"status":"Download complete","id":"bbb"}`,
+		`{"status":"Pull complete","id":"bbb"}`,
+	}, "\n") + "\n"
+	fail := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Api-Version", "1.47")
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/json") && strings.Contains(r.URL.Path, "/images/"):
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = io.WriteString(w, `{"message":"No such image"}`)
+		case strings.HasSuffix(r.URL.Path, "/images/create"):
+			w.Header().Set("Content-Type", "application/json")
+			if fail {
+				_, _ = io.WriteString(w, `{"errorDetail":{"message":"no space left on device"},"error":"no space left on device"}`+"\n")
+				return
+			}
+			_, _ = io.WriteString(w, stream)
+		default:
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(w, `{}`)
+		}
+	}))
+	defer srv.Close()
+	cli, err := client.New(client.WithHost("tcp://"+strings.TrimPrefix(srv.URL, "http://")), client.WithAPIVersion("1.47"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, err := New(Config{StateDir: t.TempDir(), Client: cli})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var seen [][2]int64
+	ctx := driver.WithPullProgress(context.Background(), func(done, total int64) { seen = append(seen, [2]int64{done, total}) })
+	if err := d.ensureImage(ctx, "ghcr.io/portenv/toolbox-node:main"); err != nil {
+		t.Fatal(err)
+	}
+	if len(seen) == 0 || seen[len(seen)-1] != [2]int64{900, 900} || !slices.Contains(seen, [2]int64{312, 900}) {
+		t.Fatalf("progress %v", seen)
+	}
+	fail = true
+	if err := d.ensureImage(context.Background(), "ghcr.io/portenv/toolbox-node:main"); err == nil || !strings.Contains(err.Error(), "no space left on device") {
+		t.Fatalf("an engine's error during the pull: %v", err)
 	}
 }

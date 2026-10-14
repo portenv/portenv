@@ -574,7 +574,7 @@ func (s *Session) EnsureCreated(ctx context.Context, notify func(string)) error 
 	if s.Drv.Known(id) {
 		return nil
 	}
-	if _, err := s.Drv.Create(ctx, driver.Box{ID: id, Name: s.Cfg.Name, ToolboxImage: s.Cfg.Image}); err != nil {
+	if _, err := s.Drv.Create(ctx, driver.Box{ID: id, Name: s.Cfg.Name, ToolboxImage: s.Cfg.Image, Progress: notify}); err != nil {
 		return err
 	}
 	// Local development images stay as they are: their digest exists only

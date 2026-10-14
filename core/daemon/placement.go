@@ -78,6 +78,25 @@ func (s *Server) holdingServer(ctx context.Context, name string) string {
 	return host
 }
 
+// connectThere is OpenBox's Connect to it there: attach to the known server
+// that holds the box, which keeps running there.
+func (s *Server) connectThere(ctx context.Context, name string) (*daemonv1.OpenBoxResponse, error) {
+	host := s.holdingServer(ctx, name)
+	if host == "" {
+		return nil, status.Errorf(codes.FailedPrecondition, "%s isn't open on one of this Mac's servers, so it can't be reached there.", name)
+	}
+	st, err := remoteState(ctx, host, name)
+	if err != nil {
+		return nil, status.Errorf(codes.Unavailable, "%s isn't answering.", local.ServerDisplayName(host))
+	}
+	if st.GetState() == daemonv1.SaveState_SAVE_STATE_CLOSED {
+		return nil, status.Errorf(codes.FailedPrecondition, "%s is no longer open on %s.", name, local.ServerDisplayName(host))
+	}
+	s.attachRemote(name, host)
+	s.openedHere(name)
+	return &daemonv1.OpenBoxResponse{Summary: "open on " + host, Location: host}, nil
+}
+
 // GetPlacement implements daemonv1.DaemonServiceServer.
 func (s *Server) GetPlacement(ctx context.Context, req *daemonv1.GetPlacementRequest) (*daemonv1.GetPlacementResponse, error) {
 	if _, err := s.env.LoadBox(req.GetName()); err != nil {
@@ -98,9 +117,11 @@ func (s *Server) GetPlacement(ctx context.Context, req *daemonv1.GetPlacementReq
 	case host != "":
 		resp.Holder = daemonv1.Holder_HOLDER_KNOWN_SERVER
 		resp.ServerId, resp.ServerName = local.ServerID(host), local.ServerDisplayName(host)
-		resp.Answers = daemonv1.Answers_ANSWERS_NO
-		if local.ServerAnswers(ctx, host) {
-			resp.Answers = daemonv1.Answers_ANSWERS_YES
+		if req.GetProbe() {
+			resp.Answers = daemonv1.Answers_ANSWERS_NO
+			if local.ServerAnswers(ctx, host) {
+				resp.Answers = daemonv1.Answers_ANSWERS_YES
+			}
 		}
 	case held:
 		resp.Holder, resp.Answers = daemonv1.Holder_HOLDER_OTHER_MACHINE, daemonv1.Answers_ANSWERS_CANNOT_ASK

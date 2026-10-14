@@ -238,6 +238,9 @@ func (s *Server) ListBoxes(context.Context, *daemonv1.ListBoxesRequest) (*daemon
 
 // OpenBox applies the resume rules and starts the box on this Mac.
 func (s *Server) OpenBox(ctx context.Context, req *daemonv1.OpenBoxRequest) (*daemonv1.OpenBoxResponse, error) {
+	if req.GetConnectThere() {
+		return s.connectThere(ctx, req.GetName())
+	}
 	// A box this Mac moved to a server stays there until Move To brings it
 	// back: show it where it runs.
 	if host := s.location(req.GetName()); host != "" {

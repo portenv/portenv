@@ -31,7 +31,7 @@ struct MainWindow: View {
                     content: InspectorContent(box: controller, tabs: tabs),
                     yourInitial: String(NSFullUserName().prefix(1)).uppercased(),
                     moveMenu: controller.moveMenu,
-                    move: { target in Task { await controller.move(to: target) } },
+                    move: { target in Task { await controller.requestMove(to: target) } },
                     run: { action in Task { await controller.run(action) } },
                     retryPackages: { Task { await controller.retryPackages() } },
                     revert: { Task { await controller.revertToLastSavePoint() } },
@@ -47,6 +47,28 @@ struct MainWindow: View {
                 .inspectorToggle(isOpen: $inspectorOpen)
             }
             .navigationTitle(controller.box)
+            // Keep Waiting's way out (R-0178), next to "Waiting for …".
+            .toolbar {
+                if let place = controller.waitingFor {
+                    ToolbarItem(placement: .primaryAction) {
+                        Button("Stop Waiting") { controller.stopWaiting() }
+                            .help("Stop trying to open it while \(place) holds it")
+                    }
+                }
+            }
+            // The window going away ends the wait too.
+            .onDisappear { controller.stopWaiting() }
+            // 2.3: open somewhere else, and Move To's confirmation.
+            .sheet(isPresented: Binding(get: { controller.leaseSheet != nil }, set: { if !$0 { controller.cancelLeaseSheet() } })) {
+                if let sheet = controller.leaseSheet {
+                    LeaseSheetView(sheet: sheet, choose: { a in Task { await controller.choose(a) } }, cancel: { controller.cancelLeaseSheet() })
+                }
+            }
+            .sheet(isPresented: Binding(get: { controller.moveConfirmation != nil }, set: { if !$0 { controller.cancelMove() } })) {
+                if let m = controller.moveConfirmation {
+                    MoveConfirmationView(confirmation: m, move: { Task { await controller.confirmMove() } }, cancel: { controller.cancelMove() })
+                }
+            }
             // The title is the box's menu (Apple's document-menu pattern):
             // the system title is replaced by BoxTitle, the box's name and
             // sync symbol over its state line, on the toolbar itself with no

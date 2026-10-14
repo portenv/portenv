@@ -257,7 +257,7 @@ func cmdApp(ctx context.Context, e *local.Env, op string, args []string) error {
 		_, err = os.Stdout.Write(append(b, '\n'))
 		return err
 	case "placement":
-		r, err := c.GetPlacement(ctx, &daemonv1.GetPlacementRequest{Name: name})
+		r, err := c.GetPlacement(ctx, &daemonv1.GetPlacementRequest{Name: name, Probe: true})
 		if err != nil {
 			return plain(err)
 		}

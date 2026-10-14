@@ -77,6 +77,12 @@ type Config struct {
 	HomesDir string
 }
 
+// EngineWait is how long one engine call may go unanswered, and how long an
+// image download may go without progress, before it fails with
+// driver.ErrEngineUnresponsive or driver.ErrPullStalled (R-0211). A pull
+// that keeps progressing may take as long as it needs. Tests shorten it.
+var EngineWait = 30 * time.Second
+
 // Driver is the docker box driver.
 type Driver struct {
 	cfg Config
@@ -189,7 +195,7 @@ func (d *Driver) Create(ctx context.Context, box driver.Box) (driver.State, erro
 	if _, err := d.specPath(box.ID); err != nil {
 		return driver.StateUnspecified, err
 	}
-	if err := d.ensureImage(ctx, box.ToolboxImage); err != nil {
+	if err := d.ensureImage(ctx, box); err != nil {
 		return driver.StateUnspecified, err
 	}
 	s := spec{Box: box}
@@ -202,19 +208,94 @@ func (d *Driver) Create(ctx context.Context, box driver.Box) (driver.State, erro
 	return driver.StateCreated, nil
 }
 
-func (d *Driver) ensureImage(ctx context.Context, ref string) error {
-	if _, err := d.cli.ImageInspect(ctx, ref); err == nil {
+// call is the context for one engine call: it ends after EngineWait (plus
+// extra, for a call that waits on purpose, like a stop's grace period).
+func call(ctx context.Context, extra time.Duration) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(ctx, EngineWait+extra)
+}
+
+// engineErr says what kind of failure an engine call's error is: the engine
+// didn't answer in time, or couldn't be reached, is
+// driver.ErrEngineUnresponsive (kept with its detail); any other error is
+// returned as it is. parent is the caller's context: its own end isn't the
+// engine's fault.
+func engineErr(parent context.Context, what string, err error) error {
+	if err == nil {
+		return nil
+	}
+	if parent.Err() == nil && (errors.Is(err, context.DeadlineExceeded) || client.IsErrConnectionFailed(err) ||
+		cerrdefs.IsUnavailable(err) || cerrdefs.IsDeadlineExceeded(err)) {
+		return fmt.Errorf("%s: %w (%v)", what, driver.ErrEngineUnresponsive, err)
+	}
+	return fmt.Errorf("%s: %w", what, err)
+}
+
+func (d *Driver) ensureImage(ctx context.Context, box driver.Box) error {
+	ref := box.ToolboxImage
+	cctx, cancel := call(ctx, 0)
+	_, err := d.cli.ImageInspect(cctx, ref)
+	cancel()
+	if err == nil {
 		return nil
 	} else if !cerrdefs.IsNotFound(err) {
-		return fmt.Errorf("inspect image %s: %w", ref, err)
+		return engineErr(ctx, "inspect image "+ref, err)
 	}
-	resp, err := d.cli.ImagePull(ctx, ref, client.ImagePullOptions{})
+	if box.Progress != nil {
+		box.Progress("pulling the toolbox image")
+	}
+	return d.pull(ctx, ref)
+}
+
+// pull downloads ref for as long as it keeps progressing: it fails with
+// driver.ErrPullStalled once EngineWait passes with no message from the
+// engine (the request itself included).
+func (d *Driver) pull(ctx context.Context, ref string) error {
+	pctx, stop := context.WithCancelCause(ctx)
+	defer stop(nil)
+	wait := EngineWait
+	progress := make(chan struct{}, 1)
+	done, watched := make(chan struct{}), make(chan struct{})
+	defer func() { close(done); <-watched }()
+	go func() {
+		defer close(watched)
+		t := time.NewTimer(wait)
+		defer t.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-progress:
+				t.Reset(wait)
+			case <-t.C:
+				stop(driver.ErrPullStalled)
+				return
+			}
+		}
+	}()
+	stalled := func(err error) error {
+		if errors.Is(context.Cause(pctx), driver.ErrPullStalled) {
+			return fmt.Errorf("pull %s: %w", ref, driver.ErrPullStalled)
+		}
+		return engineErr(ctx, "pull "+ref, err)
+	}
+	resp, err := d.cli.ImagePull(pctx, ref, client.ImagePullOptions{})
 	if err != nil {
-		return fmt.Errorf("pull %s: %w", ref, err)
+		return stalled(err)
 	}
-	defer func() { _ = resp.Close() }()
-	if err := resp.Wait(ctx); err != nil {
-		return fmt.Errorf("pull %s: %w", ref, err)
+	for m, err := range resp.JSONMessages(pctx) {
+		if err != nil {
+			return stalled(err)
+		}
+		if m.Error != nil {
+			return fmt.Errorf("pull %s: %s", ref, m.Error.Message)
+		}
+		select {
+		case progress <- struct{}{}:
+		default:
+		}
+	}
+	if err := context.Cause(pctx); err != nil {
+		return stalled(err)
 	}
 	return nil
 }
@@ -223,15 +304,20 @@ func (d *Driver) ensureImage(ctx context.Context, ref string) error {
 // The box must not be running.
 func (d *Driver) recreate(ctx context.Context, s spec) error {
 	name := d.containerName(s.Box.ID)
-	if _, err := d.cli.ContainerRemove(ctx, name, client.ContainerRemoveOptions{}); err != nil && !cerrdefs.IsNotFound(err) {
-		return fmt.Errorf("remove old container: %w", err)
+	cctx, cancel := call(ctx, 0)
+	_, err := d.cli.ContainerRemove(cctx, name, client.ContainerRemoveOptions{})
+	cancel()
+	if err != nil && !cerrdefs.IsNotFound(err) {
+		return engineErr(ctx, "remove old container", err)
 	}
 	env := []string{agent.ChannelEnv + "=stdin", agent.BoxIDEnv + "=" + string(s.Box.ID)}
 	if s.Home.Fresh {
 		env = append(env, "PORTENV_INIT_HOME=1")
 	}
 	host := d.hostConfig(s)
-	_, err := d.cli.ContainerCreate(ctx, client.ContainerCreateOptions{
+	cctx, cancel = call(ctx, 0)
+	defer cancel()
+	_, err = d.cli.ContainerCreate(cctx, client.ContainerCreateOptions{
 		Name: name,
 		Config: &container.Config{
 			Image:        s.Box.ToolboxImage,
@@ -247,7 +333,7 @@ func (d *Driver) recreate(ctx context.Context, s spec) error {
 		HostConfig: host,
 	})
 	if err != nil {
-		return fmt.Errorf("create container: %w", err)
+		return engineErr(ctx, "create container", err)
 	}
 	return nil
 }
@@ -338,7 +424,10 @@ func (d *Driver) MountHome(ctx context.Context, id driver.BoxID, home driver.Hom
 	} else if running {
 		return errors.New("MountHome needs the box stopped") // workspace-word: ok (programming error)
 	}
-	if _, err := d.cli.VolumeInspect(ctx, home.Ref, client.VolumeInspectOptions{}); cerrdefs.IsNotFound(err) {
+	vctx, cancel := call(ctx, 0)
+	_, verr := d.cli.VolumeInspect(vctx, home.Ref, client.VolumeInspectOptions{})
+	cancel()
+	if cerrdefs.IsNotFound(verr) {
 		opts := client.VolumeCreateOptions{Name: home.Ref, Labels: map[string]string{labelBox: string(id)}}
 		if d.cfg.HomesDir != "" {
 			if !idRE.MatchString(home.Ref) {
@@ -351,11 +440,14 @@ func (d *Driver) MountHome(ctx context.Context, id driver.BoxID, home driver.Hom
 			opts.Driver = "local"
 			opts.DriverOpts = map[string]string{"type": "none", "o": "bind", "device": dir}
 		}
-		if _, err := d.cli.VolumeCreate(ctx, opts); err != nil {
-			return fmt.Errorf("create home volume: %w", err)
+		vctx, cancel := call(ctx, 0)
+		_, err := d.cli.VolumeCreate(vctx, opts)
+		cancel()
+		if err != nil {
+			return engineErr(ctx, "create home volume", err)
 		}
-	} else if err != nil {
-		return fmt.Errorf("inspect home volume: %w", err)
+	} else if verr != nil {
+		return engineErr(ctx, "inspect home volume", verr)
 	}
 	s.Home = home
 	if err := d.saveSpec(s); err != nil {
@@ -395,8 +487,11 @@ func (d *Driver) Start(ctx context.Context, id driver.BoxID) (driver.State, erro
 	}
 	d.channels[id] = sec
 	d.mu.Unlock()
-	if _, err := d.cli.ContainerStart(ctx, d.containerName(id), client.ContainerStartOptions{}); err != nil {
-		return driver.StateFailed, fmt.Errorf("start container: %w", err)
+	sctx, cancel := call(ctx, 0)
+	_, err = d.cli.ContainerStart(sctx, d.containerName(id), client.ContainerStartOptions{})
+	cancel()
+	if err != nil {
+		return driver.StateFailed, engineErr(ctx, "start container", err)
 	}
 	line, err := sec.Line()
 	if err != nil {
@@ -423,8 +518,10 @@ func (d *Driver) Stop(ctx context.Context, id driver.BoxID, timeout time.Duratio
 		timeout = defaultStop
 	}
 	secs := int(timeout.Round(time.Second) / time.Second)
-	if _, err := d.cli.ContainerStop(ctx, d.containerName(id), client.ContainerStopOptions{Timeout: &secs}); err != nil && !cerrdefs.IsNotFound(err) {
-		return driver.StateUnspecified, fmt.Errorf("stop container: %w", err)
+	sctx, cancel := call(ctx, time.Duration(secs)*time.Second)
+	defer cancel()
+	if _, err := d.cli.ContainerStop(sctx, d.containerName(id), client.ContainerStopOptions{Timeout: &secs}); err != nil && !cerrdefs.IsNotFound(err) {
+		return driver.StateUnspecified, engineErr(ctx, "stop container", err)
 	}
 	return driver.StateStopped, nil
 }
@@ -603,12 +700,14 @@ func (d *Driver) Capabilities(ctx context.Context) (driver.Capabilities, error) 
 }
 
 func (d *Driver) running(ctx context.Context, id driver.BoxID) (bool, error) {
-	insp, err := d.cli.ContainerInspect(ctx, d.containerName(id), client.ContainerInspectOptions{})
+	cctx, cancel := call(ctx, 0)
+	defer cancel()
+	insp, err := d.cli.ContainerInspect(cctx, d.containerName(id), client.ContainerInspectOptions{})
 	if cerrdefs.IsNotFound(err) {
 		return false, nil
 	}
 	if err != nil {
-		return false, fmt.Errorf("inspect container: %w", err)
+		return false, engineErr(ctx, "inspect container", err)
 	}
 	return insp.Container.State != nil && insp.Container.State.Running, nil
 }
@@ -631,9 +730,11 @@ func (d *Driver) ImageDigest(ctx context.Context, ref string) (string, error) {
 	if strings.Contains(ref, "@sha256:") {
 		return ref, nil
 	}
-	insp, err := d.cli.ImageInspect(ctx, ref)
+	cctx, cancel := call(ctx, 0)
+	defer cancel()
+	insp, err := d.cli.ImageInspect(cctx, ref)
 	if err != nil {
-		return "", fmt.Errorf("inspect image %s: %w", ref, err)
+		return "", engineErr(ctx, "inspect image "+ref, err)
 	}
 	repo := ref
 	if i := strings.LastIndex(ref, ":"); i > strings.LastIndex(ref, "/") {
@@ -737,9 +838,11 @@ func (d *Driver) AgentChannel(ctx context.Context, id driver.BoxID) (driver.Agen
 	if !ok {
 		return driver.AgentChannel{}, driver.ErrNoChannel
 	}
-	res, err := d.cli.ContainerInspect(ctx, d.containerName(id), client.ContainerInspectOptions{})
+	cctx, cancel := call(ctx, 0)
+	defer cancel()
+	res, err := d.cli.ContainerInspect(cctx, d.containerName(id), client.ContainerInspectOptions{})
 	if err != nil {
-		return driver.AgentChannel{}, err
+		return driver.AgentChannel{}, engineErr(ctx, "inspect container", err)
 	}
 	var addr string
 	if ns := res.Container.NetworkSettings; ns != nil {

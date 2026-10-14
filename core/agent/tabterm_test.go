@@ -432,7 +432,7 @@ func TestTabTerminalEndsWhenTheTabGoes(t *testing.T) {
 // A slow reader falls behind: its stream resets with skipped set, and the
 // output after it continues from the new seed (ADR 0020, decision 11).
 func TestTabTerminalSkipsAndSaysSoWhenTheReaderFallsBehind(t *testing.T) {
-	h := newTabTermHarness(t, "sh -c 'sleep 1; i=0; while [ $i -lt 200000 ]; do i=$((i+1)); echo line-$i-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx; done; sleep 600'")
+	h := newTabTermHarness(t, "sh -c 'sleep 1; i=0; while [ $i -lt 20000 ]; do i=$((i+1)); echo line-$i-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx; done; sleep 600'")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	hub, err := h.srv.ctlHub()
@@ -441,7 +441,8 @@ func TestTabTerminalSkipsAndSaysSoWhenTheReaderFallsBehind(t *testing.T) {
 	}
 	hub.subBytes = 64 << 10
 	// The reader takes the first reset, then nothing while the pane
-	// prints far more than the subscriber holds.
+	// prints far more than the subscriber holds (about 1 MB against 64 KB;
+	// not a flood the race-detected helper can't keep up with on CI).
 	tt := h.openPaused(ctx, h.firstTab(), "", 80, 24)
 	if m, err := tt.s.Recv(); err != nil || m.GetReset_() == nil || m.GetReset_().GetSkipped() {
 		t.Fatalf("first: %v, %v", m, err)

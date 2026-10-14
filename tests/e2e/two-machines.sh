@@ -128,12 +128,15 @@ probes=$(wc -l <"$root/probes.txt" | tr -d ' ')
 expect "no docker exec into the boxes but the health check and this script's $probes probes ($others)" test "$others" = "$probes"
 
 echo "== Quit Anyway: A's background save, then B opens with A's work"
-# storage_away and storage_back move the box's repository aside and back, as
-# root in a container: on Linux its files belong to restic's uid 990 in the
-# box, and on a Mac Docker's file sharing refuses chmod; a rename works on both.
+# storage_away and storage_back move the repository's config file aside and
+# back, as root in a container: on Linux its files belong to restic's uid 990
+# in the box, and on a Mac Docker's file sharing refuses chmod; a rename works
+# on both. Not the whole folder: the box mounts only its own repository folder
+# (R-0201), and a bind mount follows a renamed folder, so the box would still
+# reach it. Without its config, restic finds no repository, in the box or out.
 repo_in_container() { docker run --rm -u 0 -v "$root/storage:/s" --entrypoint mv "$image" "$@"; }
-storage_away() { repo_in_container "/s/boxes/$(box_id)" "/s/boxes/$(box_id).away"; }
-storage_back() { repo_in_container "/s/boxes/$(box_id).away" "/s/boxes/$(box_id)"; }
+storage_away() { repo_in_container "/s/boxes/$(box_id)/config" "/s/boxes/$(box_id)/config.away"; }
+storage_back() { repo_in_container "/s/boxes/$(box_id)/config.away" "/s/boxes/$(box_id)/config"; }
 out=$(A app open demo 2>&1); echo "  $out"
 in_box a 'echo "unsaved at quit" > acme-api/quit-anyway.txt'
 storage_away   # A's saves fail: the repository is gone

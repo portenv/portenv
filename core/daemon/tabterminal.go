@@ -95,6 +95,12 @@ func (s *Server) TabTerminal(stream daemonv1.DaemonService_TabTerminalServer) er
 	for {
 		r, err := at.Recv()
 		if err != nil {
+			if s.boxGen(name) != gen {
+				// portenvd is stopping, moving or restarting the box: say
+				// so, so an agent's stream ends cleanly (R-0201).
+				_ = stream.Send(&daemonv1.TabTerminalResponse{Msg: &daemonv1.TabTerminalResponse_End{End: typesv1.TabTerminalEnd_TAB_TERMINAL_END_BOX_STOPPING}})
+				return nil
+			}
 			return s.terminalEnd(name, gen, err)
 		}
 		var m daemonv1.TabTerminalResponse

@@ -20,6 +20,7 @@ import (
 	"net"
 	"net/netip"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -42,8 +43,9 @@ import (
 const (
 	labelBox   = "dev.portenv.box"
 	namePrefix = "portenv-"
-	// StorageMount is where Config.StorageDir appears inside every box.
-	StorageMount = "/run/portenv/storage"
+	// StorageMount is where local storage appears inside a box: each box's
+	// own repository folder, at Config.StorageRepo under it.
+	StorageMount = agent.StorageMount
 	defaultStop  = 10 * time.Second
 	defaultShm   = 1 << 30
 )
@@ -52,9 +54,16 @@ const (
 type Config struct {
 	// StateDir holds each box's spec. Required.
 	StateDir string
-	// StorageDir, when set, is bind-mounted at StorageMount in every box so
-	// restic inside the box can reach a local repository (Phase 0).
+	// StorageDir, when set, is the box's own repository folder on this
+	// machine (local storage), bind-mounted at StorageRepo so restic inside
+	// the box can reach it. Only the box's own: never the folder holding
+	// every box's repositories, which would let one workspace delete
+	// another's saves (R-0201).
 	StorageDir string
+	// StorageRepo is where StorageDir appears inside the box, one or two
+	// levels under StorageMount (StorageMount/<box-id> or
+	// StorageMount/boxes/<box-id>). Required with StorageDir.
+	StorageRepo string
 	// Client overrides the Docker client; nil means one from the
 	// environment (DOCKER_HOST and friends).
 	Client *client.Client
@@ -81,8 +90,8 @@ var _ driver.Driver = (*Driver)(nil)
 
 // New returns a driver connected to the Docker engine.
 func New(cfg Config) (*Driver, error) {
-	if cfg.StateDir == "" {
-		return nil, errors.New("docker driver: StateDir is required")
+	if err := cfg.check(); err != nil {
+		return nil, err
 	}
 	if err := os.MkdirAll(cfg.StateDir, 0o700); err != nil {
 		return nil, fmt.Errorf("docker driver state: %w", err)
@@ -96,6 +105,28 @@ func New(cfg Config) (*Driver, error) {
 		}
 	}
 	return &Driver{cfg: cfg, cli: cli}, nil
+}
+
+// check refuses a configuration that would mount more than a box's own.
+func (c Config) check() error {
+	if c.StateDir == "" {
+		return errors.New("docker driver: StateDir is required")
+	}
+	if c.StorageDir == "" {
+		return nil
+	}
+	rel, ok := strings.CutPrefix(c.StorageRepo, StorageMount+"/")
+	if !ok || path.Clean(c.StorageRepo) != c.StorageRepo {
+		return fmt.Errorf("docker driver: the storage repository %q isn't one workspace's folder under %s", c.StorageRepo, StorageMount)
+	}
+	parts := strings.Split(rel, "/")
+	switch {
+	case len(parts) == 1 && idRE.MatchString(parts[0]) && parts[0] != "boxes": // workspace-word: ok (a path)
+	case len(parts) == 2 && parts[0] == "boxes" && idRE.MatchString(parts[1]): // workspace-word: ok (a path)
+	default:
+		return fmt.Errorf("docker driver: the storage repository %q isn't one workspace's folder under %s", c.StorageRepo, StorageMount)
+	}
+	return nil
 }
 
 // spec is what the driver remembers about a box between calls.
@@ -248,13 +279,41 @@ func (d *Driver) hostConfig(s spec) *container.HostConfig {
 		host.Mounts = append(host.Mounts, mount.Mount{Type: mount.TypeVolume, Source: s.Home.Ref, Target: "/home"})
 	}
 	if d.cfg.StorageDir != "" {
-		host.Mounts = append(host.Mounts, mount.Mount{Type: mount.TypeBind, Source: d.cfg.StorageDir, Target: StorageMount})
+		host.Mounts = append(host.Mounts, mount.Mount{Type: mount.TypeBind, Source: d.cfg.StorageDir, Target: d.cfg.StorageRepo})
 	}
 	// restic's cache survives restarts (the root file system does not), so
 	// a same-machine resume reads almost nothing remotely. It holds only
 	// encrypted repository data and is never saved or moved.
 	host.Mounts = append(host.Mounts, mount.Mount{Type: mount.TypeVolume, Source: d.cacheVolume(s.Box.ID), Target: CacheMount})
 	return host
+}
+
+// engineSocket is whether p names a container engine's control socket,
+// which no box may ever have: it is root on the machine.
+func engineSocket(p string) bool {
+	return agent.EngineSocket(p)
+}
+
+// sameMounts is whether a running container's mounts are the ones its
+// spec gives now, in any order.
+func sameMounts(want, got []mount.Mount) bool {
+	if len(want) != len(got) {
+		return false
+	}
+	key := func(m mount.Mount) string {
+		return fmt.Sprintf("%s\x00%s\x00%s\x00%v", m.Type, m.Source, m.Target, m.ReadOnly)
+	}
+	left := map[string]int{}
+	for _, m := range want {
+		left[key(m)]++
+	}
+	for _, m := range got {
+		if left[key(m)] == 0 {
+			return false
+		}
+		left[key(m)]--
+	}
+	return true
 }
 
 // CacheMount is restic's cache inside every box (portenv-sync's, 0700).
@@ -599,6 +658,20 @@ func (d *Driver) Rekey(ctx context.Context, id driver.BoxID) error {
 		return err
 	} else if !running {
 		return fmt.Errorf("workspace %s is not running", id)
+	}
+	// Before any key material exists: a box started with other mounts (the
+	// whole storage folder, from before R-0201) must not get a new channel
+	// while it can still reach what it shouldn't.
+	s, err := d.loadSpec(id)
+	if err != nil {
+		return err
+	}
+	insp, err := d.cli.ContainerInspect(ctx, d.containerName(id), client.ContainerInspectOptions{})
+	if err != nil {
+		return fmt.Errorf("inspect the workspace's mounts: %w", err)
+	}
+	if insp.Container.HostConfig == nil || !sameMounts(d.hostConfig(s).Mounts, insp.Container.HostConfig.Mounts) {
+		return driver.ErrMountsChanged
 	}
 	sec, err := agent.NewChannelSecrets()
 	if err != nil {

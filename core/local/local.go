@@ -221,11 +221,13 @@ func KeyIDs(c BoxConfig) []string {
 }
 
 // storage resolves where the box's repository is, as restic inside the box
-// sees it, and which host directory the driver must mount for it.
+// sees it, and which host directory the driver must mount for it: the
+// box's own repository folder only, never the folder holding every box's
+// (R-0201). The repository's path inside the box is the same as before.
 func (e *Env) Storage(c BoxConfig) (repo, hostDir string, resticEnv []string, err error) {
 	switch {
 	case c.Storage == "":
-		return docker.StorageMount + "/" + c.ID, filepath.Join(e.Dir, "Repositories"), nil, nil
+		return docker.StorageMount + "/" + c.ID, filepath.Join(e.Dir, "Repositories", c.ID), nil, nil
 	case strings.HasPrefix(c.Storage, "sftp:"):
 		if c.StorageHostKey == "" {
 			return "", "", nil, errors.New("SFTP storage needs the server's host key (--storage-host-key)")
@@ -239,7 +241,7 @@ func (e *Env) Storage(c BoxConfig) (repo, hostDir string, resticEnv []string, er
 		}
 		return strings.TrimSuffix(c.Storage, "/") + "/boxes/" + c.ID, "", resticEnv, nil
 	case filepath.IsAbs(c.Storage):
-		return docker.StorageMount + "/boxes/" + c.ID, c.Storage, nil, nil
+		return docker.StorageMount + "/boxes/" + c.ID, filepath.Join(c.Storage, "boxes", c.ID), nil, nil // workspace-word: ok (a path)
 	}
 	return "", "", nil, fmt.Errorf("unsupported storage %q: use an absolute directory, sftp:USER@HOST:/PATH or s3:URL", c.Storage)
 }
@@ -263,6 +265,10 @@ func (e *Env) Open(name string) (*Session, error) {
 		return nil, err
 	}
 	repo, hostDir, resticEnv, err := e.Storage(c)
+	storageRepo := ""
+	if hostDir != "" {
+		storageRepo = repo // where the box's own folder is mounted
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -276,7 +282,7 @@ func (e *Env) Open(name string) (*Session, error) {
 		return nil, err
 	}
 	drv, err := docker.New(docker.Config{
-		StateDir: filepath.Join(e.Dir, "driver"), StorageDir: hostDir, HomesDir: mc.HomesDir,
+		StateDir: filepath.Join(e.Dir, "driver"), StorageDir: hostDir, StorageRepo: storageRepo, HomesDir: mc.HomesDir,
 		Namespace: os.Getenv("PORTENV_DOCKER_NAMESPACE"),
 	})
 	if err != nil {

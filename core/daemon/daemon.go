@@ -118,6 +118,48 @@ type openBox struct {
 	agentMu sync.RWMutex
 	// openedAt: when this portenvd opened the box (the inspector's "Since").
 	openedAt time.Time
+	// securityRestart: this open stopped and started the box again because
+	// it was left running with mounts it shouldn't have (R-0201).
+	securityRestart atomic.Bool
+}
+
+// takeOverDriver is what the take-over needs of a box's driver.
+type takeOverDriver interface {
+	AgentChannel(ctx context.Context, id driver.BoxID) (driver.AgentChannel, error)
+	Rekey(ctx context.Context, id driver.BoxID) error
+	Stop(ctx context.Context, id driver.BoxID, timeout time.Duration) (driver.State, error)
+}
+
+// takeOver handles a box left running without this process's channel
+// secrets (portenvd restarted: a crash, an update). It is re-keyed in
+// place, so it and its programs keep running (ADR 0014). If it was started
+// with other mounts than it should have (every box's repositories, from
+// before R-0201), Rekey refuses before making any key, and the box is
+// stopped here so the open starts it again with only its own: that is a
+// security restart, which the open reports to the person. Any other
+// failure also stops it, to open a new channel. Its home stays (rule 3).
+func (s *Server) takeOver(ctx context.Context, name string, d takeOverDriver, id driver.BoxID) (securityRestart bool, err error) {
+	if _, err := d.AgentChannel(ctx, id); !errors.Is(err, driver.ErrNoChannel) {
+		return false, nil
+	}
+	// Rekey refuses a box that isn't running; then it simply starts.
+	switch err := d.Rekey(ctx, id); {
+	case err == nil:
+		s.log.Info("took over the running workspace (re-keyed, not restarted)", "box", name)
+	case errors.Is(err, driver.ErrMountsChanged):
+		// By workspace ID only: no name, no path.
+		s.log.Warn("restarting the workspace to apply a security update: it could reach other workspaces' saves", "workspace", string(id))
+		securityRestart = true
+	default:
+		s.log.Info("no running box to take over, or the re-key failed: starting it", "box", name, "err", err)
+	}
+	if _, err := d.AgentChannel(ctx, id); errors.Is(err, driver.ErrNoChannel) {
+		s.leaving(name) // whatever had it open ends as for a restart
+		if _, err := d.Stop(ctx, id, 0); err != nil {
+			return false, err
+		}
+	}
+	return securityRestart, nil
 }
 
 // New returns a daemon for this machine's Portenv directory.
@@ -332,28 +374,16 @@ func (s *Server) openBox(ctx context.Context, name string, takeOver bool) (*open
 		}()
 	}
 
-	// A box left running without this process's channel secrets (portenvd
-	// restarted: a crash, an update) is taken over: re-keyed in place, so
-	// it and its programs keep running (ADR 0014). Only if that fails is it
-	// restarted to open a new channel (its home stays: rule 3).
-	if _, err := sess.Drv.AgentChannel(ctx, sess.ID()); errors.Is(err, driver.ErrNoChannel) {
-		// Rekey refuses a box that isn't running; then it simply starts.
-		if err := sess.Drv.Rekey(ctx, sess.ID()); err == nil {
-			step("took over the running workspace (re-keyed, not restarted)")
-		} else {
-			s.log.Info("no running box to take over, or the re-key failed: starting it", "box", name, "err", err)
-		}
-		if _, err := sess.Drv.AgentChannel(ctx, sess.ID()); errors.Is(err, driver.ErrNoChannel) {
-			if _, err := sess.Drv.Stop(ctx, sess.ID(), 0); err != nil {
-				return nil, none, err
-			}
-		}
+	restarted, err := s.takeOver(ctx, name, sess.Drv, sess.ID())
+	if err != nil {
+		return nil, none, err
 	}
 	if _, err := sess.Drv.Start(ctx, sess.ID()); err != nil {
 		return nil, none, err
 	}
 	step("workspace started")
 	ob := &openBox{sess: sess, openedAt: time.Now()}
+	ob.securityRestart.Store(restarted)
 	// An empty home makes the agent report FAILED; restic still runs.
 	if _, err := ob.connect(ctx, true); err != nil {
 		return nil, none, agentError(err)

@@ -386,7 +386,15 @@ func (s *Session) HostExecutor() boxsync.Executor {
 	}
 }
 
-func ControlDir() string { return fmt.Sprintf("/tmp/portenv-%d", os.Getuid()) }
+// ControlDir is SocketDir (checked), or its path unchecked when the check
+// fails: callers that make a socket there check it themselves first.
+func ControlDir() string {
+	if dir, err := SocketDir(); err == nil {
+		return dir
+	}
+	dir, _ := socketDirPath()
+	return dir
+}
 
 // restForward reaches the box's REST server (StorageREST) through the
 // storage account's SSH connection, on this server too (as 127.0.0.1), so

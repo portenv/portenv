@@ -32,8 +32,10 @@ func sshBase() []string {
 	if v := os.Getenv("PORTENV_SSH"); v != "" {
 		sshCmd = strings.Fields(v)
 	}
-	if err := os.MkdirAll(ControlDir(), 0o700); err == nil {
-		sshCmd = append(sshCmd, "-o", "ControlMaster=auto", "-o", "ControlPath="+filepath.Join(ControlDir(), "cm-%C"), "-o", "ControlPersist=600")
+	// The shared connection only in the checked folder; without it, each
+	// run connects on its own.
+	if opts, err := controlOptions(); err == nil {
+		sshCmd = append(sshCmd, opts...)
 	}
 	return sshCmd
 }

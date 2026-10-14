@@ -180,8 +180,14 @@ type ctlPending struct {
 	// last is the ID of the last command in its line: tmux skips the rest
 	// of a line after an error, so they get no reply.
 	last     uint64
-	snapPane string               // take this pane's parser snapshot with the reply
-	internal func(lines []string) // a reply the client handles itself
+	snapPane string // take this pane's parser snapshot with the reply
+	// internal handles the reply in the client; failed says it's an
+	// error's text, never data.
+	internal func(lines []string, failed bool)
+	// onReply, for lanePane, runs in that pane's lane before the reply
+	// goes out: after the pane's output from before the command ran.
+	lanePane string
+	onReply  func(failed bool)
 }
 
 // maxAuthors is how many recorded authors a pane keeps.
@@ -429,7 +435,13 @@ var errNoClient = errors.New("the tmux control client isn't running")
 // " ; ") gets its own reply, in order; the last one's comes as a ctlReply
 // with the returned ID, with a snapshot of snapPane's parser when asked.
 // internal handles the reply in the client instead.
-func (c *ctlClient) send(line, snapPane string, internal func([]string)) (uint64, error) {
+func (c *ctlClient) send(line, snapPane string, internal func(lines []string, failed bool)) (uint64, error) {
+	return c.sendWith(line, ctlPending{snapPane: snapPane, internal: internal})
+}
+
+// sendWith is send with the last command's pending entry given (its ID
+// and line are filled in).
+func (c *ctlClient) sendWith(line string, last ctlPending) (uint64, error) {
 	if strings.ContainsAny(line, "\n\r") {
 		return 0, errors.New("a control-mode command can't hold a line break")
 	}
@@ -440,13 +452,14 @@ func (c *ctlClient) send(line, snapPane string, internal func([]string)) (uint64
 	}
 	n := strings.Count(line, " ; ") + 1
 	var id uint64
-	last := c.nextID + uint64(n) // #nosec G115 -- a small count
+	lastID := c.nextID + uint64(n) // #nosec G115 -- a small count
 	for i := range n {
 		c.nextID++
 		id = c.nextID
-		p := ctlPending{id: id, last: last}
+		p := ctlPending{id: id, last: lastID}
 		if i == n-1 {
-			p.snapPane, p.internal = snapPane, internal
+			p = last
+			p.id, p.last = id, lastID
 		}
 		c.pending = append(c.pending, p)
 	}
@@ -486,10 +499,19 @@ func (c *ctlClient) replied(e ctlEvent) {
 // answer hands a reply to whoever waits for it.
 func (c *ctlClient) answer(p ctlPending, e ctlEvent) {
 	if p.internal != nil {
-		p.internal(e.lines)
+		p.internal(e.lines, e.failed)
 		return
 	}
 	e.id = p.id
+	if p.lanePane != "" {
+		c.lane(p.lanePane).push(laneItem{run: func() {
+			if p.onReply != nil {
+				p.onReply(e.failed)
+			}
+			c.broadcast(e)
+		}})
+		return
+	}
 	if p.snapPane == "" {
 		c.broadcast(e)
 		return
@@ -508,7 +530,10 @@ func (c *ctlClient) answer(p ctlPending, e ctlEvent) {
 }
 
 // paneList takes the reply to list-panes: each pane's window and size.
-func (c *ctlClient) paneList(lines []string) {
+func (c *ctlClient) paneList(lines []string, failed bool) {
+	if failed {
+		return
+	}
 	for _, l := range lines {
 		f := strings.Fields(l)
 		if len(f) != 4 {
@@ -609,6 +634,12 @@ func (c *ctlClient) feed(pane string, data []byte) ([]paneMark, []recordedAuthor
 	}
 	var started []recordedAuthor
 	for _, m := range marks {
+		// A new prompt ends a pending Enter (R-0177): it only ever
+		// names the command it started, never a later one a script runs.
+		if m.kind == markPrompt || m.kind == markInput {
+			delete(c.enter, pane)
+			continue
+		}
 		if m.kind != markCommand {
 			continue
 		}

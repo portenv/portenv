@@ -323,6 +323,7 @@ Also checked on tmux 3.4 in the image:
         - "This workspace's tmux is too old for the app's terminal."
         - "The workspace was closed."
         - and the others in `TabTerminalReasons`, each with a test.
+      - **Known limit (R-0201):** a command typed ahead, while the shell is still running the one before, gets no author chip. The next prompt ends a pending Enter (R-0177), so a typed-ahead command shows no chip, never a wrong one. Matching typed-ahead Enters to their commands in order comes later, if testers ask for it.
 13. **Agents' terminal access is unchanged in what it permits.** Agents (2.4) keep today's paths and limits: the attached `Terminal` RPC through their own viewer, `portenv screen`/`send`/`wait`, and ADR 0016's grants.
     - `TabTerminal` is opened by the app over portenvd's socket, which only the Mac's user can reach (ADR 0014). This decision gives agents nothing new.
     - Whether agents later move to `TabTerminal`, for per-author attribution of their keystrokes, is an open question (PLAN.md). It would be a separate decision, with the same grants.

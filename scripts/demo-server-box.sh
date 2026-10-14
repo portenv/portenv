@@ -5,7 +5,7 @@
 # build (portenv, portenv-runner, the SSH user portenv for this Mac's key),
 # creates a box whose storage is on the server (SFTP, with the REST server),
 # registers its storage key and REST user there, and adds portenv@HOST to
-# this Mac's Move To list (machine.json).
+# this Mac's servers with HOST-KEY pinned (ADR 0021).
 #
 #   PORTENV_SSH="ssh -i KEY -o ..." scripts/demo-server-box.sh HOST "ssh-ed25519 AAAA..." [BOX] [IMAGE]
 #
@@ -48,13 +48,9 @@ A sudo bash /tmp/portenv-setup.sh --only runner --runner-bin /tmp/portenv-runner
 pub=$(grep '^ssh-ed25519 ' "$tmp/init.txt")
 rest_user=$(sed -n 's/^rest-user //p' "$tmp/init.txt")
 A sudo bash /tmp/portenv-setup.sh --only storage-account --storage-key "'$pub'" --rest-user "'$rest_user'" >/dev/null
-python3 - "$home/machine.json" "portenv@$host" <<'PY'
-import json, os, sys
-path, target = sys.argv[1], sys.argv[2]
-cfg = json.load(open(path)) if os.path.exists(path) else {}
 # The test server's address changes at every start: keep only the current one.
-cfg["servers"] = [target]
-json.dump(cfg, open(path, "w"), indent=2)
-os.chmod(path, 0o600)
-PY
-echo "box $box: storage on $host; Move To ▸ portenv@$host is in $home/machine.json"
+"$portenv" app servers "$box" | while read -r old; do
+	[[ $old == "portenv@$host" ]] || "$portenv" app remove-server "$old"
+done
+"$portenv" app trust-server "portenv@$host" "$host_key"
+echo "box $box: storage on $host; Move To ▸ portenv@$host is in $home/servers.json"

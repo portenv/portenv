@@ -61,6 +61,9 @@ const (
 	DaemonService_RecoverBox_FullMethodName            = "/portenv.daemon.v1.DaemonService/RecoverBox"
 	DaemonService_CheckRecoveryKey_FullMethodName      = "/portenv.daemon.v1.DaemonService/CheckRecoveryKey"
 	DaemonService_GetPlacement_FullMethodName          = "/portenv.daemon.v1.DaemonService/GetPlacement"
+	DaemonService_ScanServerKey_FullMethodName         = "/portenv.daemon.v1.DaemonService/ScanServerKey"
+	DaemonService_TrustServerKey_FullMethodName        = "/portenv.daemon.v1.DaemonService/TrustServerKey"
+	DaemonService_ForgetServerKey_FullMethodName       = "/portenv.daemon.v1.DaemonService/ForgetServerKey"
 )
 
 // DaemonServiceClient is the client API for DaemonService service.
@@ -179,6 +182,16 @@ type DaemonServiceClient interface {
 	// OpenBox's refusal for a box open elsewhere carries the trailer
 	// portenv-refusal: open-elsewhere, and the app asks this then.
 	GetPlacement(ctx context.Context, in *GetPlacementRequest, opts ...grpc.CallOption) (*GetPlacementResponse, error)
+	// A server's host key (2.9, ADR 0021, R-0180), found through ssh itself
+	// and compared, read only, with this Mac's SSH known hosts: the same key
+	// confirms the server; a different one marks it changed. A server that
+	// isn't confirmed is never contacted.
+	ScanServerKey(ctx context.Context, in *ScanServerKeyRequest, opts ...grpc.CallOption) (*ScanServerKeyResponse, error)
+	// Pin the key the last scan found, given the fingerprint the person saw.
+	// A changed key can't be trusted: only Forget gets past it.
+	TrustServerKey(ctx context.Context, in *TrustServerKeyRequest, opts ...grpc.CallOption) (*TrustServerKeyResponse, error)
+	// Drop the server's pinned key: it is unconfirmed again.
+	ForgetServerKey(ctx context.Context, in *ForgetServerKeyRequest, opts ...grpc.CallOption) (*ForgetServerKeyResponse, error)
 }
 
 type daemonServiceClient struct {
@@ -570,6 +583,36 @@ func (c *daemonServiceClient) GetPlacement(ctx context.Context, in *GetPlacement
 	return out, nil
 }
 
+func (c *daemonServiceClient) ScanServerKey(ctx context.Context, in *ScanServerKeyRequest, opts ...grpc.CallOption) (*ScanServerKeyResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ScanServerKeyResponse)
+	err := c.cc.Invoke(ctx, DaemonService_ScanServerKey_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) TrustServerKey(ctx context.Context, in *TrustServerKeyRequest, opts ...grpc.CallOption) (*TrustServerKeyResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(TrustServerKeyResponse)
+	err := c.cc.Invoke(ctx, DaemonService_TrustServerKey_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) ForgetServerKey(ctx context.Context, in *ForgetServerKeyRequest, opts ...grpc.CallOption) (*ForgetServerKeyResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ForgetServerKeyResponse)
+	err := c.cc.Invoke(ctx, DaemonService_ForgetServerKey_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DaemonServiceServer is the server API for DaemonService service.
 // All implementations must embed UnimplementedDaemonServiceServer
 // for forward compatibility.
@@ -686,6 +729,16 @@ type DaemonServiceServer interface {
 	// OpenBox's refusal for a box open elsewhere carries the trailer
 	// portenv-refusal: open-elsewhere, and the app asks this then.
 	GetPlacement(context.Context, *GetPlacementRequest) (*GetPlacementResponse, error)
+	// A server's host key (2.9, ADR 0021, R-0180), found through ssh itself
+	// and compared, read only, with this Mac's SSH known hosts: the same key
+	// confirms the server; a different one marks it changed. A server that
+	// isn't confirmed is never contacted.
+	ScanServerKey(context.Context, *ScanServerKeyRequest) (*ScanServerKeyResponse, error)
+	// Pin the key the last scan found, given the fingerprint the person saw.
+	// A changed key can't be trusted: only Forget gets past it.
+	TrustServerKey(context.Context, *TrustServerKeyRequest) (*TrustServerKeyResponse, error)
+	// Drop the server's pinned key: it is unconfirmed again.
+	ForgetServerKey(context.Context, *ForgetServerKeyRequest) (*ForgetServerKeyResponse, error)
 	mustEmbedUnimplementedDaemonServiceServer()
 }
 
@@ -803,6 +856,15 @@ func (UnimplementedDaemonServiceServer) CheckRecoveryKey(context.Context, *Check
 }
 func (UnimplementedDaemonServiceServer) GetPlacement(context.Context, *GetPlacementRequest) (*GetPlacementResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetPlacement not implemented")
+}
+func (UnimplementedDaemonServiceServer) ScanServerKey(context.Context, *ScanServerKeyRequest) (*ScanServerKeyResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ScanServerKey not implemented")
+}
+func (UnimplementedDaemonServiceServer) TrustServerKey(context.Context, *TrustServerKeyRequest) (*TrustServerKeyResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method TrustServerKey not implemented")
+}
+func (UnimplementedDaemonServiceServer) ForgetServerKey(context.Context, *ForgetServerKeyRequest) (*ForgetServerKeyResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ForgetServerKey not implemented")
 }
 func (UnimplementedDaemonServiceServer) mustEmbedUnimplementedDaemonServiceServer() {}
 func (UnimplementedDaemonServiceServer) testEmbeddedByValue()                       {}
@@ -1448,6 +1510,60 @@ func _DaemonService_GetPlacement_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
+func _DaemonService_ScanServerKey_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ScanServerKeyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).ScanServerKey(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_ScanServerKey_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).ScanServerKey(ctx, req.(*ScanServerKeyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_TrustServerKey_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(TrustServerKeyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).TrustServerKey(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_TrustServerKey_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).TrustServerKey(ctx, req.(*TrustServerKeyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_ForgetServerKey_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ForgetServerKeyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).ForgetServerKey(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_ForgetServerKey_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).ForgetServerKey(ctx, req.(*ForgetServerKeyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // DaemonService_ServiceDesc is the grpc.ServiceDesc for DaemonService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1586,6 +1702,18 @@ var DaemonService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetPlacement",
 			Handler:    _DaemonService_GetPlacement_Handler,
+		},
+		{
+			MethodName: "ScanServerKey",
+			Handler:    _DaemonService_ScanServerKey_Handler,
+		},
+		{
+			MethodName: "TrustServerKey",
+			Handler:    _DaemonService_TrustServerKey_Handler,
+		},
+		{
+			MethodName: "ForgetServerKey",
+			Handler:    _DaemonService_ForgetServerKey_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

@@ -49,6 +49,8 @@ func dialDaemon(e *local.Env) (daemonv1.DaemonServiceClient, func(), error) {
 //	portenv app unregister-service  (dev builds: remove portenvd's login item; this portenv's app)
 //	portenv app move BOX this-mac|USER@HOST
 //	portenv app servers BOX         (the Move To targets, one per line)
+//	portenv app trust-server USER@HOST "TYPE BASE64"  (scripts: add a server with its known host key)
+//	portenv app remove-server USER@HOST               (scripts: drop a server and its key)
 //	portenv app ping                (exit 0 when portenvd answers)
 //	portenv app state BOX           (the save state and location, JSON)
 //	portenv app channel BOX         (a runner's box channel for a Mac, JSON on stdout)
@@ -126,16 +128,30 @@ func cmdApp(ctx context.Context, e *local.Env, op string, args []string) error {
 		fmt.Println("portenvd is running")
 		return nil
 	}
+	// For scripts that set the server up and so know its host key; the app
+	// confirms a server through ScanServerKey and TrustServerKey instead.
+	if op == "trust-server" {
+		if len(args) != 2 {
+			return usageError{Msg: `app trust-server needs USER@HOST and its host key, "TYPE BASE64"`}
+		}
+		return e.PinServerKey(args[0], args[1])
+	}
+	if op == "remove-server" {
+		if len(args) != 1 {
+			return usageError{Msg: "app remove-server needs USER@HOST"}
+		}
+		return e.RemoveServer(args[0])
+	}
 	if len(args) < 1 {
 		return usageError{Msg: "app needs a box name"}
 	}
 	name := args[0]
 	if op == "servers" {
-		mc, err := e.MachineConfig()
+		servers, err := e.ServerTargets()
 		if err != nil {
 			return err
 		}
-		for _, s := range mc.Servers {
+		for _, s := range servers {
 			fmt.Println(s)
 		}
 		return nil

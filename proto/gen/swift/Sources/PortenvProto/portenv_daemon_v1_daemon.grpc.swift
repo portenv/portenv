@@ -490,6 +490,45 @@ public enum Portenv_Daemon_V1_DaemonService: Sendable {
                 type: .unary
             )
         }
+        /// Namespace for "ScanServerKey" metadata.
+        public enum ScanServerKey: Sendable {
+            /// Request type for "ScanServerKey".
+            public typealias Input = Portenv_Daemon_V1_ScanServerKeyRequest
+            /// Response type for "ScanServerKey".
+            public typealias Output = Portenv_Daemon_V1_ScanServerKeyResponse
+            /// Descriptor for "ScanServerKey".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "ScanServerKey",
+                type: .unary
+            )
+        }
+        /// Namespace for "TrustServerKey" metadata.
+        public enum TrustServerKey: Sendable {
+            /// Request type for "TrustServerKey".
+            public typealias Input = Portenv_Daemon_V1_TrustServerKeyRequest
+            /// Response type for "TrustServerKey".
+            public typealias Output = Portenv_Daemon_V1_TrustServerKeyResponse
+            /// Descriptor for "TrustServerKey".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "TrustServerKey",
+                type: .unary
+            )
+        }
+        /// Namespace for "ForgetServerKey" metadata.
+        public enum ForgetServerKey: Sendable {
+            /// Request type for "ForgetServerKey".
+            public typealias Input = Portenv_Daemon_V1_ForgetServerKeyRequest
+            /// Response type for "ForgetServerKey".
+            public typealias Output = Portenv_Daemon_V1_ForgetServerKeyResponse
+            /// Descriptor for "ForgetServerKey".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "ForgetServerKey",
+                type: .unary
+            )
+        }
         /// Descriptors for all methods in the "portenv.daemon.v1.DaemonService" service.
         public static let descriptors: [GRPCCore.MethodDescriptor] = [
             GetVersion.descriptor,
@@ -527,7 +566,10 @@ public enum Portenv_Daemon_V1_DaemonService: Sendable {
             DiscardCreation.descriptor,
             RecoverBox.descriptor,
             CheckRecoveryKey.descriptor,
-            GetPlacement.descriptor
+            GetPlacement.descriptor,
+            ScanServerKey.descriptor,
+            TrustServerKey.descriptor,
+            ForgetServerKey.descriptor
         ]
     }
 }
@@ -1397,6 +1439,79 @@ extension Portenv_Daemon_V1_DaemonService {
             deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_GetPlacementResponse>,
             options: GRPCCore.CallOptions,
             onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_GetPlacementResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "ScanServerKey" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > A server's host key (2.9, ADR 0021, R-0180), found through ssh itself
+        /// > and compared, read only, with this Mac's SSH known hosts: the same key
+        /// > confirms the server; a different one marks it changed. A server that
+        /// > isn't confirmed is never contacted.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_ScanServerKeyRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_ScanServerKeyRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_ScanServerKeyResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func scanServerKey<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_ScanServerKeyRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_ScanServerKeyRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_ScanServerKeyResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ScanServerKeyResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "TrustServerKey" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Pin the key the last scan found, given the fingerprint the person saw.
+        /// > A changed key can't be trusted: only Forget gets past it.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_TrustServerKeyRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_TrustServerKeyRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_TrustServerKeyResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func trustServerKey<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_TrustServerKeyRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_TrustServerKeyRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_TrustServerKeyResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_TrustServerKeyResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "ForgetServerKey" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Drop the server's pinned key: it is unconfirmed again.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_ForgetServerKeyRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_ForgetServerKeyRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_ForgetServerKeyResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func forgetServerKey<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_ForgetServerKeyRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_ForgetServerKeyRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_ForgetServerKeyResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ForgetServerKeyResponse>) async throws -> Result
         ) async throws -> Result where Result: Sendable
     }
 
@@ -2657,6 +2772,112 @@ extension Portenv_Daemon_V1_DaemonService {
                 onResponse: handleResponse
             )
         }
+
+        /// Call the "ScanServerKey" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > A server's host key (2.9, ADR 0021, R-0180), found through ssh itself
+        /// > and compared, read only, with this Mac's SSH known hosts: the same key
+        /// > confirms the server; a different one marks it changed. A server that
+        /// > isn't confirmed is never contacted.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_ScanServerKeyRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_ScanServerKeyRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_ScanServerKeyResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func scanServerKey<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_ScanServerKeyRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_ScanServerKeyRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_ScanServerKeyResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ScanServerKeyResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.ScanServerKey.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
+
+        /// Call the "TrustServerKey" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Pin the key the last scan found, given the fingerprint the person saw.
+        /// > A changed key can't be trusted: only Forget gets past it.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_TrustServerKeyRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_TrustServerKeyRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_TrustServerKeyResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func trustServerKey<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_TrustServerKeyRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_TrustServerKeyRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_TrustServerKeyResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_TrustServerKeyResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.TrustServerKey.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
+
+        /// Call the "ForgetServerKey" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Drop the server's pinned key: it is unconfirmed again.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_ForgetServerKeyRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_ForgetServerKeyRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_ForgetServerKeyResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func forgetServerKey<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_ForgetServerKeyRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_ForgetServerKeyRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_ForgetServerKeyResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ForgetServerKeyResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.ForgetServerKey.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
     }
 }
 
@@ -3716,6 +3937,97 @@ extension Portenv_Daemon_V1_DaemonService.ClientProtocol {
             request: request,
             serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_GetPlacementRequest>(),
             deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_GetPlacementResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "ScanServerKey" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > A server's host key (2.9, ADR 0021, R-0180), found through ssh itself
+    /// > and compared, read only, with this Mac's SSH known hosts: the same key
+    /// > confirms the server; a different one marks it changed. A server that
+    /// > isn't confirmed is never contacted.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_ScanServerKeyRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func scanServerKey<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_ScanServerKeyRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ScanServerKeyResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.scanServerKey(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_ScanServerKeyRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_ScanServerKeyResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "TrustServerKey" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Pin the key the last scan found, given the fingerprint the person saw.
+    /// > A changed key can't be trusted: only Forget gets past it.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_TrustServerKeyRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func trustServerKey<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_TrustServerKeyRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_TrustServerKeyResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.trustServerKey(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_TrustServerKeyRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_TrustServerKeyResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "ForgetServerKey" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Drop the server's pinned key: it is unconfirmed again.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_ForgetServerKeyRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func forgetServerKey<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_ForgetServerKeyRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ForgetServerKeyResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.forgetServerKey(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_ForgetServerKeyRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_ForgetServerKeyResponse>(),
             options: options,
             onResponse: handleResponse
         )
@@ -4922,6 +5234,109 @@ extension Portenv_Daemon_V1_DaemonService.ClientProtocol {
             metadata: metadata
         )
         return try await self.getPlacement(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "ScanServerKey" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > A server's host key (2.9, ADR 0021, R-0180), found through ssh itself
+    /// > and compared, read only, with this Mac's SSH known hosts: the same key
+    /// > confirms the server; a different one marks it changed. A server that
+    /// > isn't confirmed is never contacted.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func scanServerKey<Result>(
+        _ message: Portenv_Daemon_V1_ScanServerKeyRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ScanServerKeyResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_ScanServerKeyRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.scanServerKey(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "TrustServerKey" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Pin the key the last scan found, given the fingerprint the person saw.
+    /// > A changed key can't be trusted: only Forget gets past it.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func trustServerKey<Result>(
+        _ message: Portenv_Daemon_V1_TrustServerKeyRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_TrustServerKeyResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_TrustServerKeyRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.trustServerKey(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "ForgetServerKey" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Drop the server's pinned key: it is unconfirmed again.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func forgetServerKey<Result>(
+        _ message: Portenv_Daemon_V1_ForgetServerKeyRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ForgetServerKeyResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_ForgetServerKeyRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.forgetServerKey(
             request: request,
             options: options,
             onResponse: handleResponse

@@ -80,6 +80,8 @@ func NewEnv() (*Env, error) {
 		return nil, err
 	}
 	e.Machine = id
+	// Every SSH connection is checked against this Mac's servers.
+	e.UseForServers()
 	return e, nil
 }
 

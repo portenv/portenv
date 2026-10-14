@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/portenv/portenv/core/internal/bounded"
@@ -23,22 +24,6 @@ import (
 // PortenvPath is portenv on servers: the only command the SSH user may run
 // with sudo (server/setup.sh), so it is always called by this full path.
 const PortenvPath = "/usr/local/bin/portenv"
-
-// sshBase is the ssh command (PORTENV_SSH when set) with options that reuse
-// one connection per server (ControlMaster in the private control
-// directory).
-func sshBase() []string {
-	sshCmd := []string{"ssh"}
-	if v := os.Getenv("PORTENV_SSH"); v != "" {
-		sshCmd = strings.Fields(v)
-	}
-	// The shared connection only in the checked folder; without it, each
-	// run connects on its own.
-	if opts, err := controlOptions(); err == nil {
-		sshCmd = append(sshCmd, opts...)
-	}
-	return sshCmd
-}
 
 // Limits for commands run on a server over SSH (ADR 0012). The server runs
 // restic under its own deadlines; these are the Mac's backstop.
@@ -52,11 +37,15 @@ const (
 	sshSetup = 30 * time.Second
 )
 
-// Remote is a command on an SSH host, with PORTENV_SSH as the ssh command
-// when set, stopped after limit. The host comes after "--", so it can never
-// be read as an option.
+// Remote is a command on one of this Mac's confirmed servers, with
+// PORTENV_SSH as the ssh command when set, held to the server's pinned host
+// key, stopped after limit. The host comes after "--", so it can never be
+// read as an option.
 func Remote(ctx context.Context, limit time.Duration, host string, argv ...string) (*bounded.Cmd, error) {
-	sshCmd := sshBase()
+	sshCmd, err := sshArgs(host)
+	if err != nil {
+		return nil, err
+	}
 	full := append(append(sshCmd[1:], "--", host), argv...)
 	return bounded.Command(ctx, limit, sshCmd[0], full...)
 }
@@ -85,6 +74,9 @@ func AppOn(ctx context.Context, host string, args ...string) (string, error) {
 	var out, errb strings.Builder
 	cmd.Stdout, cmd.Stderr = &out, &errb
 	if err := cmd.Run(); err != nil {
+		if kerr := noteHostKeyFailure(host, errb.String()); kerr != nil {
+			return "", kerr
+		}
 		lines := strings.Split(strings.TrimSpace(errb.String()), "\n")
 		msg := strings.TrimPrefix(lines[len(lines)-1], "portenv: ")
 		if msg == "" {
@@ -106,7 +98,10 @@ func ForwardLocal(ctx context.Context, host, remoteAddr string) (string, error) 
 		return sock, nil
 	}
 	_ = os.Remove(sock)
-	base := sshBase()
+	base, err := sshArgs(host)
+	if err != nil {
+		return "", err
+	}
 	run := func(extra ...string) error {
 		cmd, err := bounded.Command(ctx, sshSetup, base[0], append(append(slices.Clone(base[1:]), extra...), "--", host)...)
 		if err != nil {
@@ -115,6 +110,9 @@ func ForwardLocal(ctx context.Context, host, remoteAddr string) (string, error) 
 		cmd.Stdin = nil
 		out, err := cmd.CombinedOutput()
 		if err != nil {
+			if kerr := noteHostKeyFailure(host, string(out)); kerr != nil {
+				return kerr
+			}
 			return fmt.Errorf("ssh %s: %w: %s", extra[0], err, strings.TrimSpace(string(out)))
 		}
 		return nil
@@ -139,8 +137,18 @@ func RunRemote(ctx context.Context, limit time.Duration, host string, out io.Wri
 		return err
 	}
 	cmd.Stdin = nil // /dev/null
-	cmd.Stdout, cmd.Stderr = out, out
-	return cmd.Run()
+	// Both streams to out, one write at a time; stderr also kept, to tell
+	// a changed host key.
+	var errb strings.Builder
+	w := &lockedWriter{w: out}
+	cmd.Stdout, cmd.Stderr = w, io.MultiWriter(w, &errb)
+	if err := cmd.Run(); err != nil {
+		if kerr := noteHostKeyFailure(host, errb.String()); kerr != nil {
+			return kerr
+		}
+		return err
+	}
+	return nil
 }
 
 // JoinKeys is what a move sends to portenv join on the target, on SSH's
@@ -195,4 +203,16 @@ func EnrolOn(ctx context.Context, e *Env, c BoxConfig, host, joinStorage string,
 // KnownOn reports whether host has the box enrolled.
 func KnownOn(ctx context.Context, host, name string) bool {
 	return RunRemote(ctx, QuickRemote, host, io.Discard, "sudo", PortenvPath, "status", name) == nil
+}
+
+// lockedWriter lets two streams share one writer.
+type lockedWriter struct {
+	mu sync.Mutex
+	w  io.Writer
+}
+
+func (l *lockedWriter) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.w.Write(p)
 }

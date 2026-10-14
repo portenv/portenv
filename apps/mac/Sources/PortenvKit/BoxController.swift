@@ -104,6 +104,17 @@ public final class BoxController {
     public private(set) var busy = false
     /// The last failure, shown in a sheet; cleared by dismissError.
     public private(set) var error: String?
+    /// The workspace is open somewhere else: the sheet that asks what to do
+    /// (2.3, the move-and-lease board).
+    public private(set) var leaseSheet: LeaseSheet?
+    /// Move To asks first: what will stop, and where it goes.
+    public private(set) var moveConfirmation: MoveConfirmation?
+    /// Keep Waiting: the place being waited for, while the open is tried
+    /// again.
+    public private(set) var waitingFor: String?
+    /// How often Keep Waiting tries the open again.
+    public var keepWaitingEvery: Duration = .seconds(30)
+    private var waiting: Task<Void, Never>?
     /// Changes whenever the box starts again (here or on a server), so the
     /// terminal reattaches to the new start.
     public private(set) var terminalGeneration = 0
@@ -280,7 +291,7 @@ public final class BoxController {
     public func run(_ action: BoxMenuItem.Action) async {
         switch action {
         case .none: break
-        case .move(let target): await move(to: target)
+        case .move(let target): await requestMove(to: target)
         case .revertToLastSavePoint: await revertToLastSavePoint()
         case .makeSavePoint: await makeSavePoint()
         case .restartBox: await restartBox()
@@ -316,10 +327,15 @@ public final class BoxController {
     /// Opens the box (on this Mac, or shows it where it runs).
     public func open() async {
         progress = resuming ? nil : "Opening…"
+        var elsewhere = false
         await perform {
             self.servers = (try? await self.daemon.servers()) ?? []
             do {
                 try await self.daemon.open(self.box)
+            } catch let e as DaemonError where e.openElsewhere {
+                // Open somewhere else: the sheet, not an error line.
+                elsewhere = true
+                return
             } catch let e as DaemonError where e.message.contains(KeychainWait.daemonError) {
                 // portenvd never prompts: read the keys here, in front of
                 // the person, and hand them over. Cancelled: nothing opened.
@@ -336,8 +352,108 @@ public final class BoxController {
         }
         progress = nil
         progressDetail = nil
+        if elsewhere {
+            await showWhereItIsOpen()
+            return
+        }
         if location == .closed { await refresh() }
     }
+
+    // MARK: Open somewhere else, and Move To (2.3)
+
+    /// The sheet at once, naming the place; then the probe (up to 2 s)
+    /// fills it in (R-0140). Never an error line.
+    private func showWhereItIsOpen() async {
+        guard let first = try? await daemon.placement(box, probe: false) else {
+            error = "\(box) is open somewhere else."
+            return
+        }
+        leaseSheet = LeaseSheet(box: box, placement: first, now: now())
+        guard case .knownServer = first.holder else { return }
+        if let probed = try? await daemon.placement(box, probe: true), leaseSheet != nil {
+            leaseSheet = LeaseSheet(box: box, placement: probed, now: now())
+        }
+    }
+
+    /// What the person chose on the sheet.
+    public func choose(_ action: LeaseSheet.Action) async {
+        let placeName = leaseSheet?.place ?? ""
+        leaseSheet = nil
+        switch action {
+        case .connect:
+            progress = "Opening…"
+            await perform {
+                try await self.daemon.connectThere(self.box)
+                self.terminalGeneration += 1
+                await self.refresh()
+            }
+            progress = nil
+        case .moveHere:
+            await move(to: "this-mac")
+        case .moveHereTakingOver:
+            progress = "Opening…"
+            await perform {
+                try await self.daemon.open(self.box, takeOver: true)
+                self.terminalGeneration += 1
+                await self.refresh()
+            }
+            progress = nil
+        case .keepWaiting:
+            keepWaiting(for: placeName)
+        }
+    }
+
+    public func cancelLeaseSheet() { leaseSheet = nil }
+
+    /// Keep Waiting: try the open again every keepWaitingEvery until it
+    /// works (the other place let go), or until the place answers: then
+    /// the sheet comes back, now offering Connect (the board's "tells you
+    /// when it answers").
+    private func keepWaiting(for place: String) {
+        waiting?.cancel()
+        waitingFor = place
+        progress = "Waiting for \(place)\u{2026}"
+        waiting = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self else { return }
+                try? await Task.sleep(for: self.keepWaitingEvery)
+                if Task.isCancelled { return }
+                do {
+                    try await self.daemon.open(self.box)
+                    self.waitingFor = nil
+                    self.progress = nil
+                    self.terminalGeneration += 1
+                    await self.refresh()
+                    return
+                } catch let e as DaemonError where e.openElsewhere {
+                    if let p = try? await self.daemon.placement(self.box, probe: true), p.answers == .yes {
+                        self.waitingFor = nil
+                        self.progress = nil
+                        self.leaseSheet = LeaseSheet(box: self.box, placement: p, now: self.now())
+                        return
+                    }
+                    continue
+                } catch {
+                    continue
+                }
+            }
+        }
+    }
+
+    /// Move To asks first, naming every command that will stop.
+    public func requestMove(to target: String) async {
+        guard !isCurrent(target) else { return }
+        let tabs = (try? await daemon.tabs(box)) ?? []
+        moveConfirmation = MoveConfirmation(box: box, target: target, tabs: tabs, now: now())
+    }
+
+    public func confirmMove() async {
+        guard let m = moveConfirmation else { return }
+        moveConfirmation = nil
+        await move(to: m.target)
+    }
+
+    public func cancelMove() { moveConfirmation = nil }
 
     /// portenvd isn't answering while the box is open (it crashed, is being
     /// updated or relaunched): the line shows the box's real state, "Not

@@ -92,6 +92,29 @@ enum ScreenRenders {
                 .frame(maxWidth: .infinity, maxHeight: .infinity).background(.background), name: "recovery-key-sheet-nothing-to-check", size: NSSize(width: 520, height: 300), in: dir)
             try snapshot(RecoveryKeySheet(rendering: refill, newKey: vector).frame(maxWidth: .infinity, maxHeight: .infinity).background(.background), name: "recovery-key-sheet-new-key",
                          size: NSSize(width: 520, height: 460), in: dir)
+            // 2.3, the move-and-lease board's sheets, as a tester sees them.
+            let drawn = Date()
+            let server = Placement.Holder.knownServer(id: "srv-0123456789ab", name: "test-server")
+            let clock: (Date) -> String = { _ in "14:58" }
+            let sheets: [(String, LeaseSheet, CGFloat)] = [
+                ("lease-open-there", LeaseSheet(box: "acme-api", placement: Placement(holder: server, newestSaveAt: drawn.addingTimeInterval(-180), answers: .yes),
+                                                now: drawn, clock: clock), 330),
+                ("lease-checking", LeaseSheet(box: "acme-api", placement: Placement(holder: server, newestSaveAt: drawn.addingTimeInterval(-180), answers: nil),
+                                              now: drawn, clock: clock), 170),
+                ("lease-not-answering", LeaseSheet(box: "acme-api", placement: Placement(holder: server, newestSaveAt: drawn.addingTimeInterval(-26 * 60), answers: .no),
+                                                   now: drawn, clock: clock), 330),
+                ("lease-other-mac", LeaseSheet(box: "acme-api", placement: Placement(holder: .otherMachine(id: "studio-1a2b3c"), newestSaveAt: drawn.addingTimeInterval(-26 * 60), answers: .cannotAsk),
+                                               now: drawn, clock: clock), 360),
+            ]
+            for (name, sheet, height) in sheets {
+                try snapshot(LeaseSheetView(sheet: sheet, choose: { _ in }, cancel: {}).frame(maxWidth: .infinity, maxHeight: .infinity).background(.background),
+                             name: name, size: NSSize(width: 440, height: height), in: dir)
+            }
+            let tabs = [TabInfo(id: "@0", name: "claude", active: true, program: "claude", command: "claude --continue", runningSince: drawn.addingTimeInterval(-180))]
+            try snapshot(MoveConfirmationView(confirmation: MoveConfirmation(box: "acme-api", target: "ubuntu@test-server", tabs: tabs, now: drawn), move: {}, cancel: {})
+                .frame(maxWidth: .infinity, maxHeight: .infinity).background(.background), name: "move-confirmation", size: NSSize(width: 440, height: 290), in: dir)
+            try snapshot(MoveConfirmationView(confirmation: MoveConfirmation(box: "acme-api", target: "ubuntu@test-server", tabs: [], now: drawn), move: {}, cancel: {})
+                .frame(maxWidth: .infinity, maxHeight: .infinity).background(.background), name: "move-confirmation-nothing-running", size: NSSize(width: 440, height: 250), in: dir)
             // New Box… from the box list (the new-box boards).
             let newBox = FirstRunFlow(service: Sample(), at: .firstBox, existing: ["acme-api"], fromBoxList: true)
             newBox.boxName = "site"

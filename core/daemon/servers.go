@@ -17,7 +17,8 @@ import (
 // serverInfo is a record as the app sees it: by ID and name, never the
 // address.
 func serverInfo(r local.ServerRecord) *daemonv1.ServerInfo {
-	i := &daemonv1.ServerInfo{Id: r.ID, Name: local.ServerDisplayName(r.Target), FromKnownHosts: r.ConfirmedFrom == local.ConfirmedFromKnownHosts, WasChanged: r.WasChanged}
+	i := &daemonv1.ServerInfo{Id: r.ID, Name: local.ServerDisplayName(r.Target), FromKnownHosts: r.ConfirmedFrom == local.ConfirmedFromKnownHosts,
+		WasChanged: r.WasChanged, MadeKey: r.SignIn == local.SignInMadeKey}
 	switch r.State {
 	case local.ServerConfirmed:
 		i.State, i.Fingerprint = typesv1.ServerKeyState_SERVER_KEY_STATE_CONFIRMED, local.Fingerprint(r.Key)
@@ -92,4 +93,17 @@ func (s *Server) ForgetServerKey(_ context.Context, req *daemonv1.ForgetServerKe
 	}
 	s.log.Info("server key forgotten", "server", req.GetServerId())
 	return &daemonv1.ForgetServerKeyResponse{Info: info}, nil
+}
+
+// ProvideServerKey implements daemonv1.DaemonServiceServer: a made key,
+// kept in memory only. Never logged.
+func (s *Server) ProvideServerKey(_ context.Context, req *daemonv1.ProvideServerKeyRequest) (*daemonv1.ProvideServerKeyResponse, error) {
+	if _, err := s.serverInfoByID(req.GetServerId()); err != nil {
+		return nil, err
+	}
+	if err := s.env.ProvideServerKey(req.GetServerId(), req.GetKey()); err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	s.log.Info("server key provided", "server", req.GetServerId())
+	return &daemonv1.ProvideServerKeyResponse{}, nil
 }

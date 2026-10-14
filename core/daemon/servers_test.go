@@ -3,9 +3,11 @@
 package daemon
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -119,5 +121,40 @@ func TestAForgottenChangedKeySaysSo(t *testing.T) {
 	}
 	if i := r.GetInfos()[0]; i.GetState() != typesv1.ServerKeyState_SERVER_KEY_STATE_UNCONFIRMED || !i.GetWasChanged() {
 		t.Fatalf("got %v", i)
+	}
+}
+
+// TestAMadeKeyIsHeldNotWritten: ProvideServerKey keeps the key in memory:
+// nothing in the Portenv folder or the log carries it; ListServers says
+// which servers sign in with a made key.
+func TestAMadeKeyIsHeldNotWritten(t *testing.T) {
+	var logged strings.Builder
+	s := placementServer(t, "me@test-server")
+	s.log = slog.New(slog.NewTextHandler(&logged, nil))
+	id := local.ServerID("me@test-server")
+	if err := s.env.UseMadeKey(id); err != nil {
+		t.Fatal(err)
+	}
+	seed := []byte("0123456789abcdef0123456789abcdef")
+	if _, err := s.ProvideServerKey(context.Background(), &daemonv1.ProvideServerKeyRequest{ServerId: id, Key: seed}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.ProvideServerKey(context.Background(), &daemonv1.ProvideServerKeyRequest{ServerId: "srv-000000000000", Key: seed}); status.Code(err) != codes.NotFound {
+		t.Fatalf("an unknown server: %v", err)
+	}
+	r, _ := s.ListServers(context.Background(), &daemonv1.ListServersRequest{})
+	if !r.GetInfos()[0].GetMadeKey() {
+		t.Fatalf("got %v", r.GetInfos()[0])
+	}
+	_ = filepath.Walk(s.env.Dir, func(p string, fi os.FileInfo, err error) error {
+		if err == nil && !fi.IsDir() {
+			if b, _ := os.ReadFile(p); bytes.Contains(b, seed) {
+				t.Errorf("%s holds the key", p)
+			}
+		}
+		return nil
+	})
+	if strings.Contains(logged.String(), string(seed)) {
+		t.Fatal("the key was logged")
 	}
 }

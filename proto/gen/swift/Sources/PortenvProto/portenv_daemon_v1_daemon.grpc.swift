@@ -542,6 +542,19 @@ public enum Portenv_Daemon_V1_DaemonService: Sendable {
                 type: .unary
             )
         }
+        /// Namespace for "ProvideServerKey" metadata.
+        public enum ProvideServerKey: Sendable {
+            /// Request type for "ProvideServerKey".
+            public typealias Input = Portenv_Daemon_V1_ProvideServerKeyRequest
+            /// Response type for "ProvideServerKey".
+            public typealias Output = Portenv_Daemon_V1_ProvideServerKeyResponse
+            /// Descriptor for "ProvideServerKey".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "ProvideServerKey",
+                type: .unary
+            )
+        }
         /// Descriptors for all methods in the "portenv.daemon.v1.DaemonService" service.
         public static let descriptors: [GRPCCore.MethodDescriptor] = [
             GetVersion.descriptor,
@@ -583,7 +596,8 @@ public enum Portenv_Daemon_V1_DaemonService: Sendable {
             TabTerminal.descriptor,
             ScanServerKey.descriptor,
             TrustServerKey.descriptor,
-            ForgetServerKey.descriptor
+            ForgetServerKey.descriptor,
+            ProvideServerKey.descriptor
         ]
     }
 }
@@ -1553,6 +1567,32 @@ extension Portenv_Daemon_V1_DaemonService {
             deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_ForgetServerKeyResponse>,
             options: GRPCCore.CallOptions,
             onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ForgetServerKeyResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "ProvideServerKey" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > A made key's private half (2.9 1b, ADR 0021), read by the app from the
+        /// > Keychain and held in portenvd's memory only, like ProvideKeys: never
+        /// > written, never logged. It signs in once per shared connection, through
+        /// > an agent of portenvd's own for that one run.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_ProvideServerKeyRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_ProvideServerKeyRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_ProvideServerKeyResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func provideServerKey<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_ProvideServerKeyRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_ProvideServerKeyRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_ProvideServerKeyResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ProvideServerKeyResponse>) async throws -> Result
         ) async throws -> Result where Result: Sendable
     }
 
@@ -2955,6 +2995,43 @@ extension Portenv_Daemon_V1_DaemonService {
                 onResponse: handleResponse
             )
         }
+
+        /// Call the "ProvideServerKey" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > A made key's private half (2.9 1b, ADR 0021), read by the app from the
+        /// > Keychain and held in portenvd's memory only, like ProvideKeys: never
+        /// > written, never logged. It signs in once per shared connection, through
+        /// > an agent of portenvd's own for that one run.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_ProvideServerKeyRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_ProvideServerKeyRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_ProvideServerKeyResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func provideServerKey<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_ProvideServerKeyRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_ProvideServerKeyRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_ProvideServerKeyResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ProvideServerKeyResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.ProvideServerKey.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
     }
 }
 
@@ -4136,6 +4213,38 @@ extension Portenv_Daemon_V1_DaemonService.ClientProtocol {
             request: request,
             serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_ForgetServerKeyRequest>(),
             deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_ForgetServerKeyResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "ProvideServerKey" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > A made key's private half (2.9 1b, ADR 0021), read by the app from the
+    /// > Keychain and held in portenvd's memory only, like ProvideKeys: never
+    /// > written, never logged. It signs in once per shared connection, through
+    /// > an agent of portenvd's own for that one run.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_ProvideServerKeyRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func provideServerKey<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_ProvideServerKeyRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ProvideServerKeyResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.provideServerKey(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_ProvideServerKeyRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_ProvideServerKeyResponse>(),
             options: options,
             onResponse: handleResponse
         )
@@ -5481,6 +5590,42 @@ extension Portenv_Daemon_V1_DaemonService.ClientProtocol {
             metadata: metadata
         )
         return try await self.forgetServerKey(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "ProvideServerKey" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > A made key's private half (2.9 1b, ADR 0021), read by the app from the
+    /// > Keychain and held in portenvd's memory only, like ProvideKeys: never
+    /// > written, never logged. It signs in once per shared connection, through
+    /// > an agent of portenvd's own for that one run.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func provideServerKey<Result>(
+        _ message: Portenv_Daemon_V1_ProvideServerKeyRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ProvideServerKeyResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_ProvideServerKeyRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.provideServerKey(
             request: request,
             options: options,
             onResponse: handleResponse

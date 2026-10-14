@@ -98,6 +98,27 @@ func TestHostConfigKeepsIsolation(t *testing.T) {
 	}
 }
 
+// TestABoxMountsOnlyItsOwn (ADR 0021): a box gets its home volume, the
+// storage folder and restic's cache volume, and nothing else from the
+// machine: never the folder of Portenv's sockets (SSH's shared connection,
+// a made key's run agent), and no Binds.
+func TestABoxMountsOnlyItsOwn(t *testing.T) {
+	d := &Driver{cfg: Config{StateDir: t.TempDir(), StorageDir: "/srv/storage"}}
+	h := d.hostConfig(spec{Box: driver.Box{ID: "b"}, Home: driver.HomeStorage{Ref: "vol"}})
+	if len(h.Binds) != 0 || len(h.VolumesFrom) != 0 {
+		t.Fatalf("binds %v, volumes from %v", h.Binds, h.VolumesFrom)
+	}
+	want := map[string]string{"/home": "vol", StorageMount: "/srv/storage", CacheMount: d.cacheVolume("b")}
+	if len(h.Mounts) != len(want) {
+		t.Fatalf("mounts %+v", h.Mounts)
+	}
+	for _, m := range h.Mounts {
+		if want[m.Target] != m.Source {
+			t.Errorf("mount %s from %s", m.Target, m.Source)
+		}
+	}
+}
+
 // TestAgentRefusesForbiddenCapabilities starts the toolbox image the way a
 // careless engine configuration might (with CAP_SYS_PTRACE, CAP_SYS_ADMIN,
 // or privileged) and expects the agent to refuse to report ready.

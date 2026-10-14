@@ -222,11 +222,11 @@ public final class FirstRunFlow {
     }
 
     public var canContinue: Bool {
-        guard !busy else { return false }
+        // A Keychain prompt is up: a second press mustn't ask again (R-0216).
+        guard !busy, !keychainWaiting else { return false }
         switch step {
         case .welcome:
             return docker == .running
-            return true
         case .recoveryKey:
             return recoveryKey != nil && recoverySaved
         case .storage:

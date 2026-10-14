@@ -301,11 +301,25 @@ enum ScreenRenders {
     }
 
     private static func snapshot(_ view: some View, name: String, size: NSSize = NSSize(width: 720, height: 520), in dir: URL) throws {
+        // First run's screens must fit their window: content that doesn't
+        // is squeezed, and SwiftUI cuts its text short with "…" (R-0216).
+        if name.hasPrefix("first-run") { try requireFits(view, name: name, size: size) }
         // Drawn as in the key window of the active app, so the default
         // button is blue as a tester sees it (R-0153).
         try snapshot(view: { NSHostingView(rootView: view.frame(width: size.width, height: size.height).environment(\.isRendering, true)
                                 .environment(\.controlActiveState, .key)) },
                      name: name, size: size, in: dir)
+    }
+
+    /// Fails when the view, at its own height with every text wrapped, is
+    /// taller than the window: then some text would be cut short.
+    private static func requireFits(_ view: some View, name: String, size: NSSize) throws {
+        let host = NSHostingView(rootView: view.fixedSize(horizontal: false, vertical: true).frame(width: size.width)
+            .environment(\.isRendering, true))
+        let needed = host.fittingSize.height
+        if needed > size.height + 0.5 {
+            throw FirstRunError("\(name) needs \(Int(needed.rounded())) pt of height and has \(Int(size.height)): its text would be cut short")
+        }
     }
 
     /// An alert as it shows: its own content, laid out by NSAlert, drawn in

@@ -117,12 +117,15 @@ struct FirstRunView: View {
     // MARK: Steps
 
     private var welcome: some View {
-        VStack(spacing: 20) {
+        // With a notice under it, Welcome tightens so it all fits the window,
+        // never cutting the tagline short (R-0216).
+        let notice = flow.daemonGone || flow.docker?.card != nil
+        return VStack(spacing: notice ? 14 : 20) {
             // Portenv's own icon, with its own shape and shadow: no tile
             // behind it (R-0151). Dev lanes show their lettered icon.
             Image(nsImage: WelcomeArt.image)
                 .resizable()
-                .frame(width: WelcomeArt.size, height: WelcomeArt.size)
+                .frame(width: notice ? WelcomeArt.compactSize : WelcomeArt.size, height: notice ? WelcomeArt.compactSize : WelcomeArt.size)
                 .accessibilityHidden(true)
             Text(FirstRunText.welcomeTitle).font(.system(size: 30, weight: .bold))
                 .accessibilityAddTraits(.isHeader)
@@ -130,6 +133,8 @@ struct FirstRunView: View {
                 .font(.title3)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+                // Wraps in every state: never cut short when a card shows (R-0216).
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: 440)
             // portenvd didn't answer the check: say so, with Try Again
             // (R-0110). Otherwise, Docker Desktop isn't running or isn't
@@ -342,7 +347,7 @@ struct FirstRunView: View {
                     .tint(flow.primaryProminent ? Color.accentColor : Color.secondary.opacity(0.35))
                     .controlSize(.large)
                     .keyboardShortcut(.defaultAction)
-                    .disabled(flow.busy)
+                    .disabled(flow.busy || flow.keychainWaiting)
                     .accessibilityHint(flow.whyNot ?? "")
                     .reportsFrame(ControlFrames.continue)
             }
@@ -420,6 +425,8 @@ enum Announce {
 /// Welcome's picture: the application icon itself (R-0151).
 enum WelcomeArt {
     static let size: CGFloat = 112
+    /// With a Docker or service notice under it.
+    static let compactSize: CGFloat = 88
     @MainActor static var image: NSImage { PortenvIcon.image }
 }
 

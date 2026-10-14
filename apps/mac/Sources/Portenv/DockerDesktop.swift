@@ -44,10 +44,19 @@ struct DockerCardView: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
-            Image(systemName: "exclamationmark.triangle")
-                .font(.title2)
-                .foregroundStyle(.orange)
-                .accessibilityHidden(true)
+            // Starting is progress, not a warning (R-0216): a spinner. Not
+            // running and missing keep the ⚠.
+            if card.action == nil {
+                ProgressView()
+                    .controlSize(.small)
+                    .frame(width: 22, height: 22)
+                    .accessibilityHidden(true)
+            } else {
+                Image(systemName: "exclamationmark.triangle")
+                    .font(.title2)
+                    .foregroundStyle(.orange)
+                    .accessibilityHidden(true)
+            }
             VStack(alignment: .leading, spacing: 8) {
                 Text(card.title).font(.headline)
                 Text(card.line)
@@ -59,7 +68,8 @@ struct DockerCardView: View {
                             .controlSize(.large)
                     }
                     HStack(spacing: 6) {
-                        ProgressView().controlSize(.small)
+                        // Starting already spins by its title.
+                        if card.action != nil { ProgressView().controlSize(.small) }
                         Text(DockerText.checking).foregroundStyle(.secondary)
                     }
                     .accessibilityElement(children: .combine)

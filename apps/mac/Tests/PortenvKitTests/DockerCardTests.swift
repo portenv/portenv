@@ -283,3 +283,22 @@ struct DockerReadyTests {
         #expect(flow.step == .gettingReady)
     }
 }
+
+/// R-0216: while a Keychain prompt waits, Continue is off, so a second
+/// press can't ask twice.
+@MainActor
+struct KeychainContinueTests {
+    @Test func continueIsOffWhileTheKeychainWaits() async {
+        let service = FakeFirstRunService()
+        let flow = FirstRunFlow(service: service, at: .firstBox, docker: .running)
+        flow.boxName = "acme-api"
+        #expect(flow.canContinue)
+        flow.keychainWaiting = true
+        #expect(!flow.canContinue && !flow.primaryProminent)
+        await flow.next()
+        #expect(service.created.isEmpty && flow.step == .firstBox)
+        flow.keychainWaiting = false
+        await flow.next()
+        #expect(service.created.count == 1)
+    }
+}

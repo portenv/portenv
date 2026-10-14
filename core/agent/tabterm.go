@@ -46,7 +46,7 @@ const (
 const seedFormat = "#{pane_id} #{pane_width} #{pane_height} #{history_size} #{cursor_x} #{cursor_y} #{alternate_on} " +
 	"#{scroll_region_upper} #{scroll_region_lower} #{origin_flag} #{wrap_flag} #{insert_flag} #{keypad_cursor_flag} " +
 	"#{keypad_flag} #{mouse_standard_flag} #{mouse_button_flag} #{mouse_any_flag} #{mouse_sgr_flag} #{cursor_flag} " +
-	"#{focus_flag}"
+	"#{focus_flag} #{bracket_paste_flag}"
 
 // TabTerminal serves one tab's terminal. The caller is portenvd (only it
 // holds the channel's credentials), which sets the author from its own
@@ -494,7 +494,7 @@ func buildSeed(disp, main, alt []string, snap *paneSnapshot, authors []recordedA
 	}
 	// A flag tmux hasn't set (focus_flag before any focus event) is empty.
 	f := strings.Split(disp[0], " ")
-	if len(f) != 20 {
+	if len(f) != 21 {
 		return nil, [2]int{}, nil, 0, fmt.Errorf("display: %q", disp[0])
 	}
 	n := make([]int, len(f))
@@ -586,6 +586,7 @@ func buildSeed(disp, main, alt []string, snap *paneSnapshot, authors []recordedA
 		{n[10] == 0, "\x1b[?7l"}, {n[11] == 1, "\x1b[4h"}, {n[12] == 1, "\x1b[?1h"},
 		{n[13] == 1, "\x1b="}, {n[14] == 1, "\x1b[?1000h"}, {n[15] == 1, "\x1b[?1002h"}, {n[16] == 1, "\x1b[?1003h"},
 		{n[17] == 1, "\x1b[?1006h"}, {n[18] == 0, "\x1b[?25l"}, {n[19] == 1, "\x1b[?1004h"},
+		{n[20] == 1, "\x1b[?2004h"},
 	}
 	for _, m := range modes {
 		if m.on {
@@ -593,9 +594,6 @@ func buildSeed(disp, main, alt []string, snap *paneSnapshot, authors []recordedA
 		}
 	}
 	if snap != nil {
-		if snap.bracketedPaste {
-			b.WriteString("\x1b[?2004h")
-		}
 		if snap.pen != "" {
 			b.WriteString("\x1b[" + snap.pen + "m")
 		}
@@ -607,6 +605,11 @@ func buildSeed(disp, main, alt []string, snap *paneSnapshot, authors []recordedA
 		fmt.Fprintf(&b, "\x1b[%d;%dH", cy-top+1, cx+1)
 	} else {
 		fmt.Fprintf(&b, "\x1b[%d;%dH", cy+1, cx+1)
+	}
+	// Then whatever the output left unfinished, for the output after the
+	// seed to complete.
+	if snap != nil {
+		b.Write(snap.partial)
 	}
 	return []byte(b.String()), size, out, base, nil
 }

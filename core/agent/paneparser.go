@@ -81,8 +81,8 @@ type paneParser struct {
 	// pen is the SGR the program left set, as parameters (vt keeps it
 	// private); a seed sets it again (R-0133 item 5).
 	pen []string
-	// bracketedPaste is whether the program asked for bracketed paste.
-	bracketedPaste bool
+	// tail is where the output stands between sequences, for a seed.
+	tail seqTail
 }
 
 // recordedAuthor is who sent the Enter that started the command at a line.
@@ -96,11 +96,13 @@ type recordedAuthor struct {
 // paneSnapshot is a pane's parser as it stood when a seed's capture was
 // taken (the reply to the seed came; ADR 0020, decision 6).
 type paneSnapshot struct {
-	cursorLine     uint64
-	epoch          int
-	marks          []paneMark
-	pen            string
-	bracketedPaste bool
+	cursorLine uint64
+	epoch      int
+	marks      []paneMark
+	pen        string
+	// partial is the start of a sequence or character the output hasn't
+	// finished; a seed ends with it.
+	partial []byte
 }
 
 // maxPen is how many SGR parameters a pen keeps; past it the oldest go (a
@@ -130,23 +132,12 @@ func (p *paneParser) start(cols, rows int) {
 		p.mark(e, data)
 		return true
 	})
-	// The pen and bracketed paste, which vt keeps private, followed here
-	// before vt handles them (returning false lets it).
+	// The pen, which vt keeps private (tmux has no format for it), followed
+	// here before vt handles it (returning false lets it).
 	e.RegisterCsiHandler('m', func(params ansi.Params) bool {
 		p.sgr(params)
 		return false
 	})
-	for _, f := range []byte{'h', 'l'} {
-		on := f == 'h'
-		e.RegisterCsiHandler(ansi.Command('?', 0, f), func(params ansi.Params) bool {
-			params.ForEach(0, func(_, n int, _ bool) {
-				if n == 2004 {
-					p.bracketedPaste = on
-				}
-			})
-			return false
-		})
-	}
 	// Erase display, seen before vt handles it (returning false lets it),
 	// to count lines as tmux does.
 	e.RegisterCsiHandler('J', func(params ansi.Params) bool {
@@ -154,7 +145,7 @@ func (p *paneParser) start(cols, rows int) {
 		p.eraseDisplay(e, n)
 		return false
 	})
-	p.alt, p.pen, p.bracketedPaste = false, nil, false
+	p.alt, p.pen = false, nil
 	e.SetCallbacks(vt.Callbacks{AltScreen: func(on bool) { p.alt = on }})
 	p.emu = e
 }
@@ -236,11 +227,11 @@ func (p *paneParser) snapshot() *paneSnapshot {
 	defer p.mu.Unlock()
 	y := p.emu.CursorPosition().Y
 	return &paneSnapshot{
-		cursorLine:     p.scrolled + uint64(max(y, 0)), // #nosec G115 -- non-negative
-		epoch:          p.epoch,
-		marks:          append([]paneMark(nil), p.marks...),
-		pen:            strings.Join(p.pen, ";"),
-		bracketedPaste: p.bracketedPaste,
+		cursorLine: p.scrolled + uint64(max(y, 0)), // #nosec G115 -- non-negative
+		epoch:      p.epoch,
+		marks:      append([]paneMark(nil), p.marks...),
+		pen:        strings.Join(p.pen, ";"),
+		partial:    p.tail.pending(),
 	}
 }
 
@@ -252,6 +243,7 @@ func (p *paneParser) restart() {
 	defer p.mu.Unlock()
 	p.marks = nil
 	p.epoch++
+	p.tail.reset() // the output goes on from somewhere unknown
 	p.start(p.cols, p.rows)
 }
 
@@ -308,6 +300,7 @@ func (p *paneParser) feed(b []byte) (marks []paneMark, lost bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.fresh = nil
+	p.tail.feed(b)
 	step := p.chunk()
 	for len(b) > 0 {
 		n := min(len(b), step)

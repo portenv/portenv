@@ -17,6 +17,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
+	"github.com/charmbracelet/x/vt"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/test/bufconn"
@@ -384,4 +386,190 @@ func TestTabTerminalSkipsAndSaysSoWhenTheReaderFallsBehind(t *testing.T) {
 		}
 	}
 	t.Fatal("the stream never fell behind")
+}
+
+// A seed puts each mark of the parser's current epoch on its own line,
+// even among identical prompts, and leaves older epochs' marks out (they
+// can't be aligned); authors go only with a command mark it carries.
+func TestBuildSeedPutsMarksOnTheirLines(t *testing.T) {
+	disp := []string{"%1 80 3 2 2 2 0 0 2 0 1 0 0 0 0 0 0 0 1 0 0"}
+	main := []string{"$ ls", "a", "$ ls", "b", "$ "}
+	snap := &paneSnapshot{cursorLine: 104, epoch: 2, marks: []paneMark{
+		{kind: markCommand, line: 100, epoch: 2},
+		{kind: markCommand, line: 101, epoch: 1}, // before a full-screen erase
+		{kind: markCommand, line: 102, epoch: 2},
+		{kind: markPrompt, line: 104, epoch: 2},
+	}}
+	authors := []recordedAuthor{
+		{line: 100, epoch: 2, name: "Retnan"},
+		{line: 101, epoch: 1, name: "old"},
+		{line: 104, epoch: 2, name: "no command here"},
+	}
+	seed, size, got, base, err := buildSeed(disp, main, []string{""}, snap, authors)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if size != [2]int{80, 3} || base != 100 {
+		t.Fatalf("size %v base %d", size, base)
+	}
+	lines := strings.Split(string(seed), "\x1b[0m\r\n")
+	c := markSequence(paneMark{kind: markCommand})
+	for i, l := range lines {
+		want := i == 0 || i == 2
+		if strings.Contains(l, c) != want {
+			t.Errorf("seed line %d %q: command mark %v, want %v", i, l, !want, want)
+		}
+	}
+	if !strings.Contains(lines[4], markSequence(paneMark{kind: markPrompt})) {
+		t.Errorf("no prompt mark on the last line: %q", lines[4])
+	}
+	if len(got) != 1 || got[0].GetLine() != 0 || got[0].GetName() != "Retnan" {
+		t.Errorf("authors %v", got)
+	}
+}
+
+// A seed brings back what shapes the output after it: the scroll region,
+// origin mode, autowrap, the pen, bracketed paste and the cursor. A viewer
+// fed the seed and the output that follows shows what tmux shows.
+func TestTabTerminalSeedRestoresTheTerminalsState(t *testing.T) {
+	dir := t.TempDir()
+	ready, goFile := filepath.Join(dir, "ready"), filepath.Join(dir, "go")
+	script := filepath.Join(dir, "prog.sh")
+	if err := os.WriteFile(script, []byte(`printf 'first\n'
+while [ ! -e `+ready+` ]; do sleep 0.05; done
+printf '\033[2;10r\033[?6h\033[?7l\033[?2004h\033[31m'
+printf 'top'
+while [ ! -e `+goFile+` ]; do sleep 0.05; done
+printf '\033[5;1Hafter'
+printf '\033[9;1H'
+for i in 1 2 3 4; do printf 'line%s\n' $i; done
+printf '\033[3;70H0123456789ABCDEFGHIJ'
+printf '\033[1;1HEND'
+exec sleep 600
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	h := newTabTermHarness(t, "sh "+script)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	tab := h.firstTab()
+	// The pane's parser follows it from the first stream on: the pen it
+	// sets after that is known (one set before the session's control
+	// client started isn't; the app's tab watch keeps that client up).
+	first := h.open(ctx, h.firstTab(), "", 80, 24)
+	if first.next(5*time.Second).GetReset_() == nil {
+		t.Fatal("no first reset")
+	}
+	if err := os.WriteFile(ready, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	first.until(5*time.Second, "top", func(o []byte) bool { return bytes.Contains(o, []byte("top")) })
+	tt := h.open(ctx, tab, "", 80, 24)
+	r := tt.next(5 * time.Second).GetReset_()
+	if r == nil {
+		t.Fatal("no reset")
+	}
+	if !bytes.Contains(r.GetSeed(), []byte("\x1b[?2004h")) {
+		t.Error("the seed doesn't turn bracketed paste on")
+	}
+	if err := os.WriteFile(goFile, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var out []byte
+	tt.until(5*time.Second, "END", func(o []byte) bool { out = o; return bytes.Contains(o, []byte("END")) })
+	time.Sleep(100 * time.Millisecond)
+	e := vt.NewEmulator(80, 24) // nothing here asks it for a reply
+	_, _ = e.Write(r.GetSeed())
+	_, _ = e.Write(out)
+	want := strings.Split(strings.TrimRight(h.raw("capture-pane", "-p", "-t", tab), "\n"), "\n")
+	for y := range 24 {
+		var b strings.Builder
+		for x := range 80 {
+			if c := e.CellAt(x, y); c != nil && c.Content != "" {
+				b.WriteString(c.Content)
+			} else {
+				b.WriteByte(' ')
+			}
+		}
+		got := strings.TrimRight(b.String(), " ")
+		w := ""
+		if y < len(want) {
+			w = strings.TrimRight(want[y], " ")
+		}
+		if got != w {
+			t.Errorf("row %d: viewer %q, tmux %q", y, got, w)
+		}
+	}
+	// END is at the scroll region's top (origin mode), in the pen.
+	if c := e.CellAt(0, 1); c.Content != "E" || c.Style.Fg != ansi.Red {
+		t.Errorf("END's first cell %+v, want a red E", c)
+	}
+	cur := strings.Fields(h.raw("display", "-p", "-t", tab, "#{cursor_x} #{cursor_y}"))
+	if p := e.CursorPosition(); strconv.Itoa(p.X) != cur[0] || strconv.Itoa(p.Y) != cur[1] {
+		t.Errorf("viewer cursor %v, tmux %v", p, cur)
+	}
+}
+
+// A reset taken while the output stands inside an escape sequence or a
+// UTF-8 character ends with its start: the output after the seed
+// completes it, and the viewer shows what tmux shows.
+func TestTabTerminalResetMidSequence(t *testing.T) {
+	dir := t.TempDir()
+	step := func(n int) string { return filepath.Join(dir, strconv.Itoa(n)) }
+	script := filepath.Join(dir, "prog.sh")
+	if err := os.WriteFile(script, []byte(`while [ ! -e `+step(0)+` ]; do sleep 0.05; done
+printf 'a\303'
+while [ ! -e `+step(1)+` ]; do sleep 0.05; done
+printf '\251b\033[3'
+while [ ! -e `+step(2)+` ]; do sleep 0.05; done
+printf '1mRED\033[0mEND'
+exec sleep 600
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	h := newTabTermHarness(t, "sh "+script)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	tab := h.firstTab()
+	first := h.open(ctx, tab, "", 80, 24)
+	if first.next(5*time.Second).GetReset_() == nil {
+		t.Fatal("no first reset")
+	}
+	touch := func(n int) {
+		if err := os.WriteFile(step(n), nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	touch(0)
+	first.until(5*time.Second, "a", func(o []byte) bool { return bytes.Contains(o, []byte("a\303")) })
+	// Mid-character: the seed ends with é's first byte.
+	a := h.open(ctx, tab, "", 80, 24)
+	ra := a.next(5 * time.Second).GetReset_()
+	touch(1)
+	first.until(5*time.Second, "b", func(o []byte) bool { return bytes.Contains(o, []byte("\033[3")) })
+	// Mid-escape: the seed ends with ESC [ 3.
+	b := h.open(ctx, tab, "", 80, 24)
+	rb := b.next(5 * time.Second).GetReset_()
+	touch(2)
+	var outA, outB []byte
+	a.until(5*time.Second, "END", func(o []byte) bool { outA = o; return bytes.Contains(o, []byte("END")) })
+	b.until(5*time.Second, "END", func(o []byte) bool { outB = o; return bytes.Contains(o, []byte("END")) })
+	for _, v := range []struct {
+		name      string
+		seed, out []byte
+	}{{"mid-character", ra.GetSeed(), outA}, {"mid-escape", rb.GetSeed(), outB}} {
+		e := vt.NewEmulator(80, 24)
+		_, _ = e.Write(v.seed)
+		_, _ = e.Write(v.out)
+		var row strings.Builder
+		for x := range 9 {
+			row.WriteString(e.CellAt(x, 0).Content)
+		}
+		if got := row.String(); got != "aébREDEND" {
+			t.Errorf("%s: the viewer shows %q, want aébREDEND (seed ends %q)", v.name, got, tail(v.seed))
+		}
+		if c := e.CellAt(3, 0); c.Style.Fg != ansi.Red {
+			t.Errorf("%s: R is %v, want red", v.name, c.Style.Fg)
+		}
+	}
 }

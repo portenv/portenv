@@ -401,6 +401,9 @@ func TestTabTerminalInputArrivesUnchanged(t *testing.T) {
 			return
 		}
 		if time.Now().After(end) {
+			// Say what the pane was doing, if it's still there.
+			panes, err := h.tb.tmux(context.Background(), "list-panes", "-a", "-F", "#{pane_id} #{pane_dead} #{pane_current_command} #{pane_in_mode}")
+			t.Logf("panes: %q (%v)", panes, err)
 			t.Fatalf("%d of %d bytes arrived", len(got), n)
 		}
 	}

@@ -32,7 +32,8 @@ func fakeSSH(t *testing.T, hosts map[string][2]string) {
 		b.WriteString("  " + host + ") id=" + v[0] + "; ping=" + v[1] + " ;;\n")
 	}
 	b.WriteString("  *) exit 255 ;;\nesac\ncase \"$*\" in\n  *machine-id*) echo \"$id\" ;;\n")
-	b.WriteString("  *'app ping'*) case $ping in ok) echo ok ;; fail) exit 1 ;; hang) sleep 30 ;; esac ;;\n  *) exit 2 ;;\nesac\n")
+	b.WriteString("  *'app ping'*) case $ping in ok) echo ok ;; fail) exit 1 ;; hang) sleep 30 ;; esac ;;\n")
+	b.WriteString("  *'app state'*) echo '{\"state\":\"SAVE_STATE_SAVED\"}' ;;\n  *) exit 2 ;;\nesac\n")
 	fake := filepath.Join(t.TempDir(), "fake-ssh")
 	if err := os.WriteFile(fake, []byte(b.String()), 0o700); err != nil { // #nosec G306 -- test helper
 		t.Fatal(err)
@@ -126,7 +127,7 @@ func TestGetPlacement(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			s.holdElsewhere("acme-api", boxsync.Lease{Machine: tc.machine, LastSeen: time.Now()})
 			start := time.Now()
-			p, err := s.GetPlacement(ctx, &daemonv1.GetPlacementRequest{Name: "acme-api"})
+			p, err := s.GetPlacement(ctx, &daemonv1.GetPlacementRequest{Name: "acme-api", Probe: true})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -176,5 +177,50 @@ func TestMoveHereClosesTheHoldingServer(t *testing.T) {
 	s.holdElsewhere("acme-api", boxsync.Lease{Machine: "studio-1a2b3c", LastSeen: time.Now()})
 	if host := s.holdingServer(context.Background(), "acme-api"); host != "" {
 		t.Fatalf("another Mac can't be closed from here: %q", host)
+	}
+}
+
+// TestPlacementWithoutAProbeIsAtOnce: the sheet names the place at once,
+// then asks again with the probe (R-0140).
+func TestPlacementWithoutAProbeIsAtOnce(t *testing.T) {
+	fakeSSH(t, map[string][2]string{"me@hung": {"hung-333333", "hang"}})
+	s := placementServer(t, "me@hung")
+	s.env.RememberServerMachine("me@hung", "hung-333333")
+	s.holdElsewhere("acme-api", boxsync.Lease{Machine: "hung-333333", LastSeen: time.Now()})
+	start := time.Now()
+	p, err := s.GetPlacement(context.Background(), &daemonv1.GetPlacementRequest{Name: "acme-api"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d := time.Since(start); d > time.Second {
+		t.Fatalf("took %v without a probe", d)
+	}
+	if p.GetHolder() != daemonv1.Holder_HOLDER_KNOWN_SERVER || p.GetAnswers() != daemonv1.Answers_ANSWERS_UNSPECIFIED || p.GetServerName() != "hung" {
+		t.Fatalf("got %v", p)
+	}
+}
+
+// TestConnectThere: Connect to it there attaches to the known server that
+// holds it, leaving it running there; with no known server holding it,
+// it's refused and nothing opens here.
+func TestConnectThere(t *testing.T) {
+	roomToAnswer(t)
+	fakeSSH(t, map[string][2]string{"me@up": {"up-111111", "ok"}})
+	s := placementServer(t, "me@up")
+	ctx := context.Background()
+	if _, err := s.OpenBox(ctx, &daemonv1.OpenBoxRequest{Name: "acme-api", ConnectThere: true}); status.Code(err) != codes.FailedPrecondition {
+		t.Fatalf("nobody holds it: %v", err)
+	}
+	s.holdElsewhere("acme-api", boxsync.Lease{Machine: "studio-1a2b3c", LastSeen: time.Now()})
+	if _, err := s.OpenBox(ctx, &daemonv1.OpenBoxRequest{Name: "acme-api", ConnectThere: true}); status.Code(err) != codes.FailedPrecondition {
+		t.Fatalf("another Mac: %v", err)
+	}
+	s.holdElsewhere("acme-api", boxsync.Lease{Machine: "up-111111", LastSeen: time.Now()})
+	r, err := s.OpenBox(ctx, &daemonv1.OpenBoxRequest{Name: "acme-api", ConnectThere: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.GetLocation() != "me@up" || s.location("acme-api") != "me@up" {
+		t.Fatalf("connected to %q (location %q)", r.GetLocation(), s.location("acme-api"))
 	}
 }

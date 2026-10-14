@@ -322,6 +322,11 @@ public nonisolated struct Portenv_Daemon_V1_OpenBoxRequest: Sendable {
   /// save (resume rule 4).
   public var takeOver: Bool = false
 
+  /// Connect to it where it runs (the lease sheet's Connect to it there):
+  /// one of this Mac's servers holds it. Nothing stops there. Refused when
+  /// no known server holds it or it's no longer open there.
+  public var connectThere: Bool = false
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -1523,6 +1528,11 @@ public nonisolated struct Portenv_Daemon_V1_GetPlacementRequest: Sendable {
 
   public var name: String = String()
 
+  /// Ask a known server whether it answers (up to 2 s). Without it, the
+  /// answer comes at once with answers unspecified for a known server, so
+  /// the sheet can name the place before the probe ends.
+  public var probe: Bool = false
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -1715,7 +1725,7 @@ nonisolated extension Portenv_Daemon_V1_RestartBoxResponse: SwiftProtobuf.Messag
 
 nonisolated extension Portenv_Daemon_V1_OpenBoxRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".OpenBoxRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{3}take_over\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{3}take_over\0\u{3}connect_there\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1725,6 +1735,7 @@ nonisolated extension Portenv_Daemon_V1_OpenBoxRequest: SwiftProtobuf.Message, S
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularStringField(value: &self.name) }()
       case 2: try { try decoder.decodeSingularBoolField(value: &self.takeOver) }()
+      case 3: try { try decoder.decodeSingularBoolField(value: &self.connectThere) }()
       default: break
       }
     }
@@ -1737,12 +1748,16 @@ nonisolated extension Portenv_Daemon_V1_OpenBoxRequest: SwiftProtobuf.Message, S
     if self.takeOver != false {
       try visitor.visitSingularBoolField(value: self.takeOver, fieldNumber: 2)
     }
+    if self.connectThere != false {
+      try visitor.visitSingularBoolField(value: self.connectThere, fieldNumber: 3)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Portenv_Daemon_V1_OpenBoxRequest, rhs: Portenv_Daemon_V1_OpenBoxRequest) -> Bool {
     if lhs.name != rhs.name {return false}
     if lhs.takeOver != rhs.takeOver {return false}
+    if lhs.connectThere != rhs.connectThere {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -4143,7 +4158,7 @@ nonisolated extension Portenv_Daemon_V1_CheckRecoveryKeyResponse: SwiftProtobuf.
 
 nonisolated extension Portenv_Daemon_V1_GetPlacementRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".GetPlacementRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{1}probe\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -4152,6 +4167,7 @@ nonisolated extension Portenv_Daemon_V1_GetPlacementRequest: SwiftProtobuf.Messa
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularStringField(value: &self.name) }()
+      case 2: try { try decoder.decodeSingularBoolField(value: &self.probe) }()
       default: break
       }
     }
@@ -4161,11 +4177,15 @@ nonisolated extension Portenv_Daemon_V1_GetPlacementRequest: SwiftProtobuf.Messa
     if !self.name.isEmpty {
       try visitor.visitSingularStringField(value: self.name, fieldNumber: 1)
     }
+    if self.probe != false {
+      try visitor.visitSingularBoolField(value: self.probe, fieldNumber: 2)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Portenv_Daemon_V1_GetPlacementRequest, rhs: Portenv_Daemon_V1_GetPlacementRequest) -> Bool {
     if lhs.name != rhs.name {return false}
+    if lhs.probe != rhs.probe {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

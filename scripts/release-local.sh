@@ -151,6 +151,8 @@ else
 # their lines as they were.
 
 step "Building Portenv.app (gmake app, release identity)"
+# The dev-only attached terminal never reaches a release (ADR 0020).
+[[ -z ${ATTACHED_TERMINAL:-} ]] || die "ATTACHED_TERMINAL is set: it's for a dev lane's build only, never a release"
 "$make_cmd" -C "$root" app LANE=
 
 out=$HOME/Library/Caches/Portenv/release/$version-$build

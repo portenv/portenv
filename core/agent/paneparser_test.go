@@ -3,6 +3,7 @@
 package agent
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"runtime"
@@ -299,5 +300,68 @@ func TestPaneParserMarksAfterScrollingInOneChunk(t *testing.T) {
 	ms, _ := p.feed([]byte(strings.Repeat("a\r\n", 30) + "\x1b]133;A\x07$ \r\n" + strings.Repeat("b\r\n", 5) + "\x1b]133;A\x07"))
 	if len(ms) != 2 || ms[0].line != 30 || ms[1].line != 36 {
 		t.Errorf("marks %v, want A on lines 30 and 36", ms)
+	}
+}
+
+// drainGoroutines counts the parsers' reply-draining goroutines.
+func drainGoroutines() int {
+	buf := make([]byte, 1<<22)
+	buf = buf[:runtime.Stack(buf, true)]
+	return bytes.Count(buf, []byte("agent.(*paneParser).start.func1"))
+}
+
+// Each parser has one reply-draining goroutine: a panic's restart ends the
+// old one, and stop ends the last (R-0176).
+func TestPaneParserDrainGoroutinesEnd(t *testing.T) {
+	waitFor := func(want int, what string) {
+		t.Helper()
+		end := time.Now().Add(3 * time.Second)
+		for drainGoroutines() != want && time.Now().Before(end) {
+			time.Sleep(10 * time.Millisecond)
+		}
+		if n := drainGoroutines(); n != want {
+			t.Fatalf("%s: %d drain goroutines, want %d", what, n, want)
+		}
+	}
+	before := drainGoroutines()
+	var ps []*paneParser
+	for range 20 {
+		p := newPaneParser(80, 24, t.Logf)
+		p.beforeWrite = func(b []byte) {
+			if bytes.Equal(b, []byte("boom")) {
+				panic("planted")
+			}
+		}
+		for range 3 {
+			p.feed([]byte("boom"))
+		}
+		p.feed([]byte("\x1b[c hello"))
+		ps = append(ps, p)
+	}
+	waitFor(before+20, "after restarts")
+	for _, p := range ps {
+		p.restart()
+	}
+	waitFor(before+20, "after restarting each")
+	for _, p := range ps {
+		p.stop()
+	}
+	waitFor(before, "after stopping each")
+}
+
+// A full reset (RIS) or a soft reset (DECSTR) clears the pen and bracketed
+// paste (R-0178).
+func TestPaneParserResetsClearThePen(t *testing.T) {
+	for _, reset := range []string{"\x1bc", "\x1b[!p"} {
+		p := newPaneParser(80, 24, t.Logf)
+		p.feed([]byte("\x1b[?2004h\x1b[31mred"))
+		if s := p.snapshot(); s.pen != "31" || !s.bracketedPaste {
+			t.Fatalf("before %q: pen %q, bracketed paste %v", reset, s.pen, s.bracketedPaste)
+		}
+		p.feed([]byte(reset))
+		if s := p.snapshot(); s.pen != "" || s.bracketedPaste {
+			t.Errorf("after %q: pen %q, bracketed paste %v", reset, s.pen, s.bracketedPaste)
+		}
+		p.stop()
 	}
 }

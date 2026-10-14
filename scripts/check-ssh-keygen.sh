@@ -8,6 +8,9 @@
 # never names a path under ~/.ssh or $HOME: tests point HOME at a temporary
 # folder and pass files of their own. Comments and plain mentions pass.
 #
+# It reads line by line: a run whose arguments span lines (an exec.Command
+# split across several) isn't seen, so keep each ssh-keygen call on one line.
+#
 #   scripts/check-ssh-keygen.sh [folder]   (default: the repository's files)
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"

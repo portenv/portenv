@@ -70,11 +70,11 @@ func (s *Server) holdingServer(ctx context.Context, name string) string {
 	if !ok {
 		return ""
 	}
-	mc, err := s.env.MachineConfig()
+	servers, err := s.env.ServerTargets()
 	if err != nil {
 		return ""
 	}
-	host, _ := s.env.ServerForMachine(ctx, mc.Servers, l.Machine)
+	host, _ := s.env.ServerForMachine(ctx, servers, l.Machine)
 	return host
 }
 

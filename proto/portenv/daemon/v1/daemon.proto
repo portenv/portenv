@@ -128,6 +128,16 @@ service DaemonService {
   // stream's author from the connection's caller; nothing in the request
   // can, and the open has no author field.
   rpc TabTerminal(stream TabTerminalRequest) returns (stream TabTerminalResponse);
+  // A server's host key (2.9, ADR 0021, R-0180), found through ssh itself
+  // and compared, read only, with this Mac's SSH known hosts: the same key
+  // confirms the server; a different one marks it changed. A server that
+  // isn't confirmed is never contacted.
+  rpc ScanServerKey(ScanServerKeyRequest) returns (ScanServerKeyResponse);
+  // Pin the key the last scan found, given the fingerprint the person saw.
+  // A changed key can't be trusted: only Forget gets past it.
+  rpc TrustServerKey(TrustServerKeyRequest) returns (TrustServerKeyResponse);
+  // Drop the server's pinned key: it is unconfirmed again.
+  rpc ForgetServerKey(ForgetServerKeyRequest) returns (ForgetServerKeyResponse);
 }
 
 message CheckBoxRequest {
@@ -394,6 +404,9 @@ message ListServersRequest {}
 
 message ListServersResponse {
   repeated string servers = 1;
+  // Each server's host key, in the order of servers, by ID and name (never
+  // its address).
+  repeated ServerInfo infos = 2;
 }
 
 message GetKeyIDsRequest {
@@ -710,4 +723,42 @@ message CommandAuthor {
   // Empty for a person; the agent's ID from its grant (ADR 0016) otherwise.
   string agent_id = 4;
   reserved 5;
+}
+
+message ServerInfo {
+  string id = 1;
+  string name = 2;
+  portenv.types.v1.ServerKeyState state = 3;
+  // The pinned key's fingerprint (SHA256:..., as OpenSSH shows it), or the
+  // last scan's while it waits to be trusted.
+  string fingerprint = 4;
+  // Confirmed because this Mac's SSH known hosts had the same key.
+  bool from_known_hosts = 5;
+}
+
+message ScanServerKeyRequest {
+  string server_id = 1;
+}
+
+message ScanServerKeyResponse {
+  ServerInfo info = 1;
+  // ssh-ed25519, ecdsa-sha2-nistp256, ...; never a certificate.
+  string key_type = 2;
+}
+
+message TrustServerKeyRequest {
+  string server_id = 1;
+  string fingerprint = 2;
+}
+
+message TrustServerKeyResponse {
+  ServerInfo info = 1;
+}
+
+message ForgetServerKeyRequest {
+  string server_id = 1;
+}
+
+message ForgetServerKeyResponse {
+  ServerInfo info = 1;
 }

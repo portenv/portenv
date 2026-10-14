@@ -5,7 +5,8 @@
 # build (portenv, portenv-runner, the SSH user portenv for this Mac's key),
 # creates a box whose storage is on the server (SFTP, with the REST server),
 # registers its storage key and REST user there, and adds portenv@HOST to
-# this Mac's Move To list (machine.json).
+# this Mac's servers with HOST-KEY pinned (ADR 0021; machine.json too, for an
+# older build).
 #
 #   PORTENV_SSH="ssh -i KEY -o ..." scripts/demo-server-box.sh HOST "ssh-ed25519 AAAA..." [BOX] [IMAGE]
 #
@@ -57,4 +58,10 @@ cfg["servers"] = [target]
 json.dump(cfg, open(path, "w"), indent=2)
 os.chmod(path, 0o600)
 PY
+# Pinned with the key this script was given (ADR 0021); the server's old
+# addresses go.
+"$portenv" app servers "$box" | while read -r old; do
+	[[ $old == "portenv@$host" ]] || "$portenv" app remove-server "$old"
+done
+"$portenv" app trust-server "portenv@$host" "$host_key"
 echo "box $box: storage on $host; Move To ▸ portenv@$host is in $home/machine.json"

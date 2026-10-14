@@ -110,6 +110,8 @@ public final class ControlModeTabSource: TabTerminalSource {
     public let events: AsyncStream<TabTerminalEvent>
     /// Whether the last reset said output was skipped (the view's notice).
     public private(set) var lastResetSkipped = false
+    /// Why the stream gave up, when it says so (shown with Reconnect).
+    public private(set) var failure: String?
     let box: String
     private let continuation: AsyncStream<TabTerminalEvent>.Continuation
     private let transport: any TabTerminalTransport
@@ -173,7 +175,10 @@ public final class ControlModeTabSource: TabTerminalSource {
                 }
             } catch let error as TabTerminalStreamError {
                 permanent = error.permanent
-            } catch {}
+                failure = error.message
+            } catch {
+                failure = error.localizedDescription
+            }
             if closed || Task.isCancelled { return }
             conn.close()
             connection = nil

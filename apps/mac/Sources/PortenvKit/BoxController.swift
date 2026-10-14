@@ -143,6 +143,9 @@ public final class BoxController {
     public private(set) var movingTo: String?
 
     private let daemon: DaemonAPI
+    /// The window's tab terminals (ADR 0020): one stream per tab through
+    /// portenvd, when the daemon client can open them.
+    @ObservationIgnored public let tabTerminals: (any TabTerminalProvider)?
     private let keychain: KeychainReading
     private let notifier: KeychainWaitNotifying?
     private let keychainThreshold: Duration
@@ -190,6 +193,7 @@ public final class BoxController {
         // Set from the clock when a save is first recorded (savedAtChanged).
         self.savedTimeNow = .distantPast
         self.daemon = daemon
+        tabTerminals = (daemon as? any TabTerminalTransport).map { ControlModeTabProvider(box: box, transport: $0) }
         self.keychain = keychain
         self.notifier = notifier
         self.keychainThreshold = keychainThreshold

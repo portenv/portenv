@@ -257,6 +257,12 @@ func (d *Driver) recreate(ctx context.Context, s spec) error {
 // network namespaces and never relaxes seccomp or AppArmor: root in the box
 // must not be able to read another process's memory (ADR 0005, conditions).
 // TestHostConfigKeepsIsolation enforces this.
+//
+// Changing the mounts restarts every box left running across the update,
+// once: Rekey compares a running box's mounts with these and refuses on
+// any difference (driver.ErrMountsChanged), and the open then stops and
+// starts it with the security-update notice (R-0201). A change made for
+// another reason must give the notice that reason (R-0210).
 func (d *Driver) hostConfig(s spec) *container.HostConfig {
 	shm := int64(s.Box.Resources.SharedMemoryBytes) // #nosec G115 -- sizes far below MaxInt64
 	if shm == 0 {

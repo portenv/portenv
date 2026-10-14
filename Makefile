@@ -231,6 +231,7 @@ app: build $(TOOLS_STAMP)
 	# mistaken for the release app.
 	scripts/make-app-icon.sh apps/mac/Resources/Assets.xcassets/AppIcon.appiconset \
 		$(BIN)/Portenv.app/Contents/Resources/AppIcon.icns $(LANE) $(if $(LANE),$(SWIFT))
+	test -s $(BIN)/Portenv.app/Contents/Resources/AppIcon.icns || { echo "Portenv.app has no AppIcon.icns" >&2; exit 1; }
 	# portenvd's launch agent (the login item; SMAppService.agent registers it).
 	mkdir -p $(BIN)/Portenv.app/Contents/Library/LaunchAgents
 	cp apps/mac/LaunchAgents/com.portenv.portenvd.plist $(BIN)/Portenv.app/Contents/Library/LaunchAgents/

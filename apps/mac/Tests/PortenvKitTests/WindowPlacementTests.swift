@@ -51,4 +51,25 @@ struct WindowPlacementTests {
         let frame = CGRect(x: 5000, y: 5000, width: 900, height: 472)
         #expect(WindowPlacement.visible(frame, screens: []) == frame)
     }
+
+    // MARK: First run's window (R-0186)
+
+    /// The board's size, centred on the display under the pointer at launch,
+    /// never the other one, and never full screen.
+    @Test func firstRunOpensAtTheBoardsSizeOnTheLaunchDisplay() {
+        let onExternal = WindowPlacement.firstRun(pointer: CGPoint(x: 3000, y: 200), screens: [laptop, external])
+        #expect(onExternal == CGRect(x: external.midX - 360, y: external.midY - 260, width: 720, height: 520))
+        let onLaptop = WindowPlacement.firstRun(pointer: CGPoint(x: 200, y: 200), screens: [laptop, external])
+        #expect(onLaptop == CGRect(x: 375, y: 200, width: 720, height: 520))
+    }
+
+    /// The pointer on no screen: the main one. A screen smaller than the
+    /// board: the window fits it.
+    @Test func firstRunFallsBackToTheMainScreenAndFits() {
+        let lost = WindowPlacement.firstRun(pointer: CGPoint(x: -9000, y: 0), screens: [laptop, external])
+        #expect(lost?.midX == laptop.midX && lost?.width == 720)
+        let small = CGRect(x: 0, y: 0, width: 600, height: 400)
+        #expect(WindowPlacement.firstRun(pointer: .zero, screens: [small]) == small)
+        #expect(WindowPlacement.firstRun(pointer: .zero, screens: []) == nil)
+    }
 }

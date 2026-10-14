@@ -54,7 +54,7 @@ SWIFT_PROTOBUF := 1.38.1
 GRPC_SWIFT_PROTOBUF := 2.4.1
 SWIFT_PLUGINS := $(BIN)/protoc-gen-swift $(BIN)/protoc-gen-grpc-swift-2
 
-.PHONY: all build app release-local unregister-service test lint fmt proto proto-go proto-swift proto-check proto-check-go agent-linux cli-linux cli-darwin swift-test swift-env-check \
+.PHONY: all build app release-local unregister-service test fuzz lint fmt proto proto-go proto-swift proto-check proto-check-go agent-linux cli-linux cli-darwin swift-test swift-env-check \
 	secrets spdx-check check tools clean image image-test driver-test e2e
 
 all: build test lint proto-check
@@ -108,11 +108,29 @@ test: $(TOOLS_STAMP)
 	for m in $(GO_MODULES); do RESTIC=$(BIN)/restic go test -race ./$$m/...; done
 	scripts/test-scan-excerpt.sh
 	scripts/test-notarize.sh
+	scripts/test-workspace-word.sh
+	scripts/test-check-terminal-views.sh
 
-## lint: formatting, vet, golangci-lint, buf lint, workflow lint, SPDX headers
+## fuzz: the workspace helper's control-mode decoder, line reader and pane parser, briefly (R-0162, R-0142)
+# Counts of runs, not durations: with a duration, go test fails with
+# "context deadline exceeded" when the time runs out while a worker is still
+# minimizing a new input, which a slow runner hits now and then. The
+# decoders are fast; the parser runs a terminal per input.
+FUZZRUNS ?= 500000x
+FUZZRUNS_PARSER ?= 30000x
+fuzz:
+	for f in FuzzDecodeControlOutput FuzzReadControlLines; do \
+		(cd core && go test -run '^$$' -fuzz "^$$f$$" -fuzztime $(FUZZRUNS) -timeout 10m ./agent/) || exit 1; \
+	done
+	cd core && go test -run '^$$' -fuzz '^FuzzPaneParser$$' -fuzztime $(FUZZRUNS_PARSER) -timeout 10m ./agent/
+
+## lint: formatting, vet, golangci-lint, buf lint, workflow lint, SPDX headers, terminal views made only by TerminalViews, "workspace" in what people read
 lint: $(TOOLS_STAMP) $(SHELLCHECK) spdx-check
 	test -z "$$(gofmt -l core proto/gen/go | tee /dev/stderr)"
 	for m in $(GO_MODULES); do go vet ./$$m/...; done
+	# Every module's go.sum matches what's in the module cache (pinned
+	# dependencies, R-0142).
+	for m in $(GO_MODULES); do (cd $$m && go mod verify) || exit 1; done
 	for m in $(GO_MODULES); do \
 		(cd $$m && $(BIN)/golangci-lint run --config $(CURDIR)/.golangci.yml ./...); \
 	done
@@ -120,6 +138,8 @@ lint: $(TOOLS_STAMP) $(SHELLCHECK) spdx-check
 	scripts/install-shellcheck.sh --check
 	$(BIN)/actionlint -shellcheck=$(SHELLCHECK)
 	scripts/check-no-binaries.sh
+	scripts/check-terminal-views.sh
+	python3 -I scripts/check-workspace-word.py
 
 ## fmt: format Go and proto sources
 fmt: $(TOOLS_STAMP)

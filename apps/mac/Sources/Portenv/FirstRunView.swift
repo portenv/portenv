@@ -16,6 +16,9 @@ struct FirstRunView: View {
     /// Where Continue and Back are, in the window (top-left origin), for
     /// the tests that click them (PortenvAppTests). Nil in the app.
     var controlFrames: (([String: CGRect]) -> Void)?
+    /// Refills the pool when it runs out (the recovery key sheet).
+    var refill: RecoveryRefill?
+    @Environment(\.isRendering) private var isRendering
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -47,10 +50,23 @@ struct FirstRunView: View {
         }
         .coordinateSpace(name: ControlFrames.space)
         .onPreferenceChange(ControlFrames.self) { frames in controlFrames?(frames) }
+        // In front and key when it shows, so Continue is the blue default
+        // and Return reaches it (R-0153). Renders never take focus.
+        .background(BringsWindowForward(enabled: !isRendering))
+        .sheet(isPresented: $flow.needsRecoveryKey) {
+            if let refill {
+                RecoveryKeySheet(refill: refill, cancel: { flow.needsRecoveryKey = false }) {
+                    Task { await flow.recoveryKeyRefilled() }
+                }
+            }
+        }
         // Every Continue that doesn't move on is heard, even with the same
         // words as the last one, at high priority (R-0126, R-0132).
         .onChange(of: flow.refusals) { _, _ in
             if let words = flow.reason { Announce.high(words) }
+        }
+        .onChange(of: flow.keychainWaiting) { _, on in
+            if on { Announce.high("\(KeychainWait.line). \(KeychainWait.detail)") }
         }
     }
 
@@ -59,7 +75,18 @@ struct FirstRunView: View {
     /// as it applies, so Continue is never dimmed without a reason on
     /// screen (R-0132).
     @ViewBuilder private var refusal: some View {
-        if let error = flow.error {
+        if let wait = flow.waitLine {
+            // A Keychain prompt may be up, maybe behind other windows
+            // (GUIDELINES §3.1).
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                ProgressView().controlSize(.small)
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(wait)
+                    Text(KeychainWait.detail).foregroundStyle(.secondary)
+                }
+            }
+            .accessibilityElement(children: .combine)
+        } else if let error = flow.error {
             Label(error, systemImage: "exclamationmark.triangle")
                 .foregroundStyle(.red)
                 .fixedSize(horizontal: false, vertical: true)

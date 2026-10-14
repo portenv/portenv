@@ -256,6 +256,27 @@ func cmdApp(ctx context.Context, e *local.Env, op string, args []string) error {
 		}
 		_, err = os.Stdout.Write(append(b, '\n'))
 		return err
+	case "placement":
+		r, err := c.GetPlacement(ctx, &daemonv1.GetPlacementRequest{Name: name, Probe: true})
+		if err != nil {
+			return plain(err)
+		}
+		var at time.Time
+		if r.GetNewestSaveAt() != nil {
+			at = r.GetNewestSaveAt().AsTime()
+		}
+		b, err := json.Marshal(struct {
+			Holder       string    `json:"holder"`
+			ServerID     string    `json:"server_id,omitempty"`
+			ServerName   string    `json:"server_name,omitempty"`
+			Machine      string    `json:"machine,omitempty"`
+			NewestSaveAt time.Time `json:"newest_save_at,omitzero"`
+			Answers      string    `json:"answers,omitempty"`
+		}{r.GetHolder().String(), r.GetServerId(), r.GetServerName(), r.GetMachine(), at, r.GetAnswers().String()})
+		if err != nil {
+			return err
+		}
+		summary = string(b)
 	case "state":
 		r, err := c.GetBoxState(ctx, &daemonv1.GetBoxStateRequest{Name: name})
 		if err != nil {

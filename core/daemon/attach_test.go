@@ -336,7 +336,7 @@ func TestAttachSaysWhenTheProgramExitsFirst(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	err := AttachTerminal(ctx, c, openMain(), Attach{In: in, Out: out.w})
-	if err == nil || status.Convert(err).Message() != "490 bytes of input didn't reach the box's terminal: the program there ended first" {
+	if err == nil || status.Convert(err).Message() != "490 bytes of input didn't reach the workspace's terminal: the program there ended first" {
 		t.Fatalf("attach: %v, want 490 bytes reported", err)
 	}
 }
@@ -453,7 +453,7 @@ func TestAttachCtrlC(t *testing.T) {
 			intr <- struct{}{}
 		}()
 		err := AttachTerminal(context.Background(), c, openMain(), Attach{In: in, Out: out.w, Interrupt: intr})
-		if err == nil || err.Error() != "interrupted; everything read before Ctrl-C reached the box" {
+		if err == nil || err.Error() != "interrupted; everything read before Ctrl-C reached the workspace" {
 			t.Fatalf("attach: %v", err)
 		}
 	})

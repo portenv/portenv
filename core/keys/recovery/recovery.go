@@ -225,7 +225,7 @@ func Password(k Key, boxID string) (string, error) {
 		return "", errors.New("recovery key: no key")
 	}
 	if !ValidBoxID(boxID) {
-		return "", fmt.Errorf("recovery key: invalid box ID %q", boxID)
+		return "", fmt.Errorf("recovery key: invalid workspace ID %q", boxID)
 	}
 	ikm := []byte(k.Canonical())
 	defer clear(ikm)

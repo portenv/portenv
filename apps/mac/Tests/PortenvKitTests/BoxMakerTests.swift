@@ -163,7 +163,7 @@ private struct Setup {
         await #expect(throws: BoxMaker.Failure.poolEmpty) { try await s.maker.make(name: "acme-api") }
         #expect(s.creator.requests.isEmpty)
         #expect(s.keys.all.isEmpty)
-        #expect(BoxMaker.Failure.poolEmpty.errorDescription == "Enter your recovery key to keep making workspaces. Portenv doesn't keep it.")
+        #expect(BoxMaker.Failure.poolEmpty.errorDescription == "Enter your recovery key to keep making workspaces. Portenv doesn\u{2019}t keep it.")
     }
 
     /// A2: a key that doesn't read back the same is deleted, and CreateBox

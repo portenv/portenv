@@ -30,8 +30,9 @@ struct MainWindow: View {
                 InspectorView(
                     content: InspectorContent(box: controller, tabs: tabs),
                     yourInitial: String(NSFullUserName().prefix(1)).uppercased(),
-                    moveTargets: moveTargets,
-                    move: { target in Task { await controller.move(to: target) } },
+                    moveMenu: controller.moveMenu,
+                    move: { target in Task { await controller.requestMove(to: target) } },
+                    run: { action in Task { await controller.run(action) } },
                     retryPackages: { Task { await controller.retryPackages() } },
                     revert: { Task { await controller.revertToLastSavePoint() } },
                     retrySaves: { Task { await controller.refreshSaves() } }
@@ -46,6 +47,28 @@ struct MainWindow: View {
                 .inspectorToggle(isOpen: $inspectorOpen)
             }
             .navigationTitle(controller.box)
+            // Keep Waiting's way out (R-0178), next to "Waiting for …".
+            .toolbar {
+                if let place = controller.waitingFor {
+                    ToolbarItem(placement: .primaryAction) {
+                        Button("Stop Waiting") { controller.stopWaiting() }
+                            .help("Stop trying to open it while \(place) holds it")
+                    }
+                }
+            }
+            // The window going away ends the wait too.
+            .onDisappear { controller.stopWaiting() }
+            // 2.3: open somewhere else, and Move To's confirmation.
+            .sheet(isPresented: Binding(get: { controller.leaseSheet != nil }, set: { if !$0 { controller.cancelLeaseSheet() } })) {
+                if let sheet = controller.leaseSheet {
+                    LeaseSheetView(sheet: sheet, choose: { a in Task { await controller.choose(a) } }, cancel: { controller.cancelLeaseSheet() })
+                }
+            }
+            .sheet(isPresented: Binding(get: { controller.moveConfirmation != nil }, set: { if !$0 { controller.cancelMove() } })) {
+                if let m = controller.moveConfirmation {
+                    MoveConfirmationView(confirmation: m, move: { Task { await controller.confirmMove() } }, cancel: { controller.cancelMove() })
+                }
+            }
             // The title is the box's menu (Apple's document-menu pattern):
             // the system title is replaced by BoxTitle, the box's name and
             // sync symbol over its state line, on the toolbar itself with no
@@ -69,13 +92,6 @@ struct MainWindow: View {
             }
     }
 
-    /// Move To… in the inspector: every place but where the box is.
-    private var moveTargets: [(String, String)] {
-        (["this-mac"] + controller.servers)
-            .filter { !controller.isCurrent($0) }
-            .map { (ServerName.display($0), $0) }
-    }
-
     @ViewBuilder private var content: some View {
         switch controller.location {
         // Also while reopening after portenvd restarted, so Cancel is
@@ -92,13 +108,13 @@ struct MainWindow: View {
             .background(.background)
         case _ where controller.agentUnavailable && controller.isOpen:
             VStack(spacing: 10) {
-                Text("The box agent is unavailable").font(.title3)
-                Text("Nothing can be saved until the box restarts. Your unsaved changes stay in the box; restarting keeps them.")
+                Text("The workspace helper is unavailable").font(.title3)
+                Text("Nothing can be saved until the workspace restarts. Your unsaved changes stay in the workspace; restarting keeps them.")
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 420)
-                Button("Restart Box") { Task { await controller.restartBox() } }
-                    .accessibilityLabel("Restart Box: the box restarts and keeps your unsaved changes")
+                Button("Restart Workspace") { Task { await controller.restartBox() } }
+                    .accessibilityLabel("Restart Workspace: the workspace restarts and keeps your unsaved changes")
                     .keyboardShortcut(.defaultAction)
                     .disabled(controller.busy)
             }
@@ -118,9 +134,9 @@ struct MainWindow: View {
                     if let renderTerminal {
                         RenderedView(make: renderTerminal)
                     } else {
-                        BoxTerminal(box: controller.box, generation: controller.terminalGeneration) {
-                            Task { await controller.terminalEnded() }
-                        }
+                        BoxTerminal(box: controller.box, generation: controller.terminalGeneration,
+                                    onEnded: { Task { await controller.terminalEnded() } },
+                                    onLinkStatus: { controller.linkStatus = $0 })
                     }
                 }
                 .accessibilityLabel(A11y.terminal(box: controller.box))
@@ -204,8 +220,13 @@ struct BoxMenu: View {
             ))
             .disabled(!item.enabled)
         } else {
-            let button = Button(item.title) { Task { await controller.run(item.action) } }
-                .disabled(!item.enabled)
+            // A detail (the last save point's time) is the item's subtitle in
+            // the menu bar's menu.
+            let button = Button { Task { await controller.run(item.action) } } label: {
+                Text(item.title)
+                if let detail = item.detail { Text(detail) }
+            }
+            .disabled(!item.enabled)
             switch item.shortcut {
             case "⌘S": button.keyboardShortcut("s", modifiers: .command)
             case "⌥⌘R": button.keyboardShortcut("r", modifiers: [.command, .option])

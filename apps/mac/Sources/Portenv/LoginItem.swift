@@ -14,7 +14,7 @@ enum LoginItem {
     /// app LANE=X), so lanes never share a login item.
     static var service: SMAppService { SMAppService.agent(plistName: Instance.current.daemonPlistName) }
 
-    static let needsApproval = "Portenv needs to run in the background to keep your boxes saved. Open System Settings › General › Login Items and allow Portenv."
+    static let needsApproval = "Portenv needs to run in the background to keep your workspaces saved. Open System Settings › General › Login Items and allow Portenv."
 
     /// Registers the launch agent when it isn't. Returns a plain problem to
     /// show, or nil when launchd has it.

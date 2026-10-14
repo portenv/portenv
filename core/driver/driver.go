@@ -186,4 +186,4 @@ type AgentChannel struct {
 }
 
 // ErrNoChannel: this process has no agent channel for the box's start.
-var ErrNoChannel = errors.New("no agent channel for this start of the box (restart it to open one)")
+var ErrNoChannel = errors.New("no agent channel for this start of the workspace (restart it to open one)")

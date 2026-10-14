@@ -123,11 +123,11 @@ struct BoxMenuOrderTests {
 
     @Test func restartBoxOnlyWhenTheAgentIsUnavailableOrWithOption() {
         let normal = BoxMenuModel.items(open: true, busy: false, agentUnavailable: false, optionHeld: false, location: "this-mac", servers: [])
-        #expect(!titles(normal).contains("Restart Box"))
+        #expect(!titles(normal).contains("Restart Workspace"))
         let down = BoxMenuModel.items(open: true, busy: false, agentUnavailable: true, optionHeld: false, location: "this-mac", servers: [])
-        #expect(titles(down) == ["Rename…", "Move To", "—", "Revert To", "Make a Save Point", "—", "Restart Box", "Show in Finder"])
+        #expect(titles(down) == ["Rename…", "Move To", "—", "Revert To", "Make a Save Point", "—", "Restart Workspace", "Show in Finder"])
         let option = BoxMenuModel.items(open: true, busy: false, agentUnavailable: false, optionHeld: true, location: "this-mac", servers: [])
-        #expect(titles(option).contains("Restart Box"))
+        #expect(titles(option).contains("Restart Workspace"))
     }
 
     @Test func whatCantWorkYetIsDisabled() {
@@ -151,7 +151,7 @@ struct TerminalLayoutTests {
 /// §12: every control says what it is or does.
 struct AccessibilityLabelTests {
     @Test func theTitleAndTheSyncSymbol() {
-        #expect(A11y.titleLabel(box: "acme-api") == "acme-api, box menu")
+        #expect(A11y.titleLabel(box: "acme-api") == "acme-api, workspace menu")
         #expect(A11y.symbolLabel(BoxState(save: .saved)) == "Saved")
         #expect(A11y.symbolLabel(BoxState(save: .saving)) == "Saving")
         #expect(A11y.symbolLabel(BoxState(save: .offline)) == "Offline")
@@ -223,5 +223,14 @@ struct FailedPackagesTests {
         let s = BoxState.parse(#"{"state":"SAVE_STATE_SAVED","saved_at":"2026-10-08T12:58:00Z","failed_packages":["no-such-package"]}"#)
         #expect(s?.failedPackages == ["no-such-package"])
         #expect(s?.line(now: at.addingTimeInterval(3600), timeZone: TimeZone(identifier: "Europe/Paris")!, locale: Locale(identifier: "en_GB")) == "This Mac · Saved at 14:58")
+    }
+}
+
+/// The app's server names follow the same rule as portenvd's
+/// ServerDisplayName (core/local/placement.go), so a name from
+/// GetPlacement reads as it does everywhere else (R-0172).
+@Test func serverNamesMatchPortenvd() {
+    for (target, name) in [("ubuntu@test-server", "test-server"), ("this-mac", "This Mac"), ("studio", "studio"), ("a@b@c", "c")] {
+        #expect(ServerName.display(target) == name)
     }
 }

@@ -8,9 +8,14 @@ import SwiftUI
 /// in a real titled window with its unified toolbar, fed by a sample
 /// portenvd and showing the sample terminal. Drawn once per appearance,
 /// next to the main-window board in PRs. No keys, no boxes, no portenvd.
-/// The window is placed off every screen and captured by the window server
-/// (`screencapture -l`), since an in-process capture leaves out the
-/// system's materials (the toolbar's and the inspector's glass).
+/// It's captured by the window server (`screencapture -l`), since an
+/// in-process capture leaves out the system's materials (the toolbar's and
+/// the inspector's glass): on the sharpest screen, so it's drawn at that
+/// screen's scale (@2x on a Retina display), at desktop level behind every
+/// other window (the capture reads the window's own content even where it's
+/// covered), and drawn as the active window without taking focus. The
+/// traffic lights still draw inactive: they follow the app's own activity,
+/// and a render never brings the app forward.
 @MainActor
 enum MainWindowRender {
     /// The board's window: 1280 × 890 pt with the inspector open.
@@ -36,7 +41,7 @@ enum MainWindowRender {
             let follow = Task { await tabs.follow() }
             defer { follow.cancel() }
 
-            let window = NSWindow(contentRect: NSRect(origin: .zero, size: size),
+            let window = ActiveLookingWindow(contentRect: NSRect(origin: .zero, size: size),
                                   styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                                   backing: .buffered, defer: false)
             window.isReleasedWhenClosed = false
@@ -46,26 +51,51 @@ enum MainWindowRender {
             host.sceneBridgingOptions = [.toolbars, .title]
             window.contentView = host
             window.setContentSize(size)
-            // Drawn, never seen: off every screen (setFrame isn't held to a
-            // screen, as ordering in is).
-            window.orderFrontRegardless()
-            let away = NSScreen.screens.map(\.frame).reduce(NSRect.zero) { $0.union($1) }
-            window.setFrame(NSRect(origin: NSPoint(x: away.maxX + 2000, y: away.minY), size: window.frame.size), display: true)
-            defer { window.orderOut(nil) }
-            try? await Task.sleep(for: .seconds(1.5))
-
-            let file = dir.appendingPathComponent("\(name)-\(suffix).png")
-            let shot = Process()
-            shot.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
-            // -o: no window shadow; -x: no sound.
-            shot.arguments = ["-x", "-o", "-l", String(window.windowNumber), file.path]
-            try shot.run()
-            shot.waitUntilExit()
-            guard shot.terminationStatus == 0, FileManager.default.fileExists(atPath: file.path) else {
-                throw FirstRunError("screencapture failed for \(name) (Screen Recording permission?)")
-            }
+            try await WindowCapture.capture(window, to: dir.appendingPathComponent("\(name)-\(suffix).png"))
         }
     }
+}
+
+/// Captures a render's window through the window server (`screencapture
+/// -l`), which draws the system's materials an in-process capture leaves
+/// out.
+@MainActor
+enum WindowCapture {
+    static func capture(_ window: NSWindow, to file: URL) async throws {
+        // Behind everything on the sharpest screen: drawn at its scale,
+        // covered by the person's windows, never key.
+        window.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopWindow)))
+        // The sharpest screen (the built-in Retina display, say), not the
+        // one with the key window.
+        if let screen = NSScreen.screens.max(by: { $0.backingScaleFactor < $1.backingScaleFactor }) {
+            window.setFrameOrigin(NSPoint(x: screen.visibleFrame.minX, y: screen.visibleFrame.minY))
+        }
+        window.orderBack(nil)
+        defer { window.orderOut(nil) }
+        // Traffic lights and the title follow the app's activity, not the
+        // window's: AppKit's switch for drawing them active, if this macOS
+        // has it (renders only; never in the app).
+        let force = Selector(("_setForceActiveControls:"))
+        if window.responds(to: force) { window.perform(force, with: true as NSNumber) }
+        try? await Task.sleep(for: .seconds(1.5))
+
+        let shot = Process()
+        shot.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+        // -o: no window shadow; -x: no sound.
+        shot.arguments = ["-x", "-o", "-l", String(window.windowNumber), file.path]
+        try shot.run()
+        shot.waitUntilExit()
+        guard shot.terminationStatus == 0, FileManager.default.fileExists(atPath: file.path) else {
+            throw FirstRunError("screencapture failed for \(file.lastPathComponent) (Screen Recording permission?)")
+        }
+    }
+}
+
+/// A window drawn as the active one (coloured traffic lights, focus states)
+/// without being made key, so a render never takes focus.
+final class ActiveLookingWindow: NSWindow {
+    override var isKeyWindow: Bool { true }
+    override var isMainWindow: Bool { true }
 }
 
 /// An AppKit view in SwiftUI, made once (renders only).

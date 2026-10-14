@@ -21,6 +21,21 @@ enum ScreenRenders {
         func createBox(_: NewBox) async throws {}
     }
 
+    /// Renders call nothing.
+    private struct NoChecks: BoxCreating, RecoveryChecking {
+        func listings() async throws -> [BoxListing] { [] }
+        func createBox(_: CreateRequest) async throws -> Bool { false }
+        func discardCreation(boxID _: String) async throws {}
+        func checkRecoveryKey(_: [String: Data]) async throws -> RecoveryCheckResult { RecoveryCheckResult(checked: 0, opened: false) }
+    }
+
+    private struct NoSecrets: SecretStore {
+        func read(account _: String) throws -> Data? { nil }
+        func add(account _: String, data _: Data, label _: String) throws {}
+        func set(account _: String, data _: Data, label _: String) throws {}
+        func delete(account _: String) throws {}
+    }
+
     private struct Sample: FirstRunService {
         func makeRecoveryKey() async throws -> String { ["K7QF", "M2XA", "9TRD", "HV4P", "W8LC", "3NZ5"].joined(separator: "-") }
         func createBox(_: NewBox) async throws {}
@@ -57,11 +72,49 @@ enum ScreenRenders {
             Task { await making.next() }
             while !making.busy { await Task.yield() }
             try snapshot(FirstRunView(flow: making, opened: { _ in }), name: "first-run-1-welcome-making-key", in: dir)
+            // A Keychain call waiting for a prompt (GUIDELINES §3.1).
+            let waiting = await sampleFlow(at: .firstBox)
+            waiting.keychainWaiting = true
+            try snapshot(FirstRunView(flow: waiting, opened: { _ in }), name: "first-run-4-first-box-keychain-waiting", in: dir)
             // A Continue that can't move on says why, by the button (R-0126).
             let notTicked = await sampleFlow(at: .recoveryKey)
             notTicked.recoverySaved = false
             await notTicked.next()
             try snapshot(FirstRunView(flow: notTicked, opened: { _ in }), name: "first-run-2-recovery-key-not-ticked", in: dir)
+            // The recovery key sheet, when the pool runs out (ADR 0019).
+            let refill = RecoveryRefill(daemon: NoChecks(), pool: RecoveryPoolStore(store: NoSecrets()))
+            let vector = ["K7QF", "M2XA", "9TRD", "HV4P", "W8LC", "3NZ5"].joined(separator: "-")
+            try snapshot(RecoveryKeySheet(rendering: refill).frame(maxWidth: .infinity, maxHeight: .infinity).background(.background), name: "recovery-key-sheet",
+                         size: NSSize(width: 520, height: 230), in: dir)
+            try snapshot(RecoveryKeySheet(rendering: refill, typed: "K7QF-M2XA-9TRD-HV4P-W8LC-3NZ6", line: RecoveryRefill.typo)
+                .frame(maxWidth: .infinity, maxHeight: .infinity).background(.background), name: "recovery-key-sheet-typo", size: NSSize(width: 520, height: 270), in: dir)
+            try snapshot(RecoveryKeySheet(rendering: refill, typed: vector, line: RecoveryRefill.Outcome.nothingToCheck.message, offerNewKey: true)
+                .frame(maxWidth: .infinity, maxHeight: .infinity).background(.background), name: "recovery-key-sheet-nothing-to-check", size: NSSize(width: 520, height: 300), in: dir)
+            try snapshot(RecoveryKeySheet(rendering: refill, newKey: vector).frame(maxWidth: .infinity, maxHeight: .infinity).background(.background), name: "recovery-key-sheet-new-key",
+                         size: NSSize(width: 520, height: 460), in: dir)
+            // 2.3, the move-and-lease board's sheets, as a tester sees them.
+            let drawn = Date()
+            let server = Placement.Holder.knownServer(id: "srv-0123456789ab", name: "test-server")
+            let clock: (Date) -> String = { _ in "14:58" }
+            let sheets: [(String, LeaseSheet, CGFloat)] = [
+                ("lease-open-there", LeaseSheet(box: "acme-api", placement: Placement(holder: server, newestSaveAt: drawn.addingTimeInterval(-180), answers: .yes),
+                                                now: drawn, clock: clock), 330),
+                ("lease-checking", LeaseSheet(box: "acme-api", placement: Placement(holder: server, newestSaveAt: drawn.addingTimeInterval(-180), answers: nil),
+                                              now: drawn, clock: clock), 170),
+                ("lease-not-answering", LeaseSheet(box: "acme-api", placement: Placement(holder: server, newestSaveAt: drawn.addingTimeInterval(-26 * 60), answers: .no),
+                                                   now: drawn, clock: clock), 330),
+                ("lease-other-mac", LeaseSheet(box: "acme-api", placement: Placement(holder: .otherMachine(id: "studio-1a2b3c"), newestSaveAt: drawn.addingTimeInterval(-26 * 60), answers: .cannotAsk),
+                                               now: drawn, clock: clock), 360),
+            ]
+            for (name, sheet, height) in sheets {
+                try snapshot(LeaseSheetView(sheet: sheet, choose: { _ in }, cancel: {}).frame(maxWidth: .infinity, maxHeight: .infinity).background(.background),
+                             name: name, size: NSSize(width: 440, height: height), in: dir)
+            }
+            let tabs = [TabInfo(id: "@0", name: "claude", active: true, program: "claude", command: "claude --continue", runningSince: drawn.addingTimeInterval(-180))]
+            try snapshot(MoveConfirmationView(confirmation: MoveConfirmation(box: "acme-api", target: "ubuntu@test-server", tabs: tabs, now: drawn), move: {}, cancel: {})
+                .frame(maxWidth: .infinity, maxHeight: .infinity).background(.background), name: "move-confirmation", size: NSSize(width: 440, height: 290), in: dir)
+            try snapshot(MoveConfirmationView(confirmation: MoveConfirmation(box: "acme-api", target: "ubuntu@test-server", tabs: [], now: drawn), move: {}, cancel: {})
+                .frame(maxWidth: .infinity, maxHeight: .infinity).background(.background), name: "move-confirmation-nothing-running", size: NSSize(width: 440, height: 250), in: dir)
             // New Box… from the box list (the new-box boards).
             let newBox = FirstRunFlow(service: Sample(), at: .firstBox, existing: ["acme-api"], fromBoxList: true)
             newBox.boxName = "site"
@@ -94,6 +147,8 @@ enum ScreenRenders {
             // (R-0131): with the inspector open, and closed.
             try await MainWindowRender.render(to: dir, terminal: { sampleTerminal() })
             try await MainWindowRender.render(to: dir, name: "main-window-no-inspector", inspector: false, terminal: { sampleTerminal() })
+            // Portenv › Settings…, each pane (R-0137).
+            try await SettingsRender.render(to: dir)
             return 0
         } catch {
             FileHandle.standardError.write(Data("render-screens: \(error)\n".utf8))
@@ -161,22 +216,24 @@ enum ScreenRenders {
             TabInfo(id: "@1", name: "shell", active: false),
             TabInfo(id: "@2", name: "tests", active: false, program: "npm"),
         ])
-        let size = NSSize(width: 300, height: 600)
-        func inspector(_ content: InspectorContent, targets: [(String, String)]) -> some View {
-            InspectorView(content: content, yourInitial: "P", moveTargets: targets, move: { _ in },
+        // Tall enough for every section at the board's type sizes.
+        let size = NSSize(width: 300, height: 780)
+        func inspector(_ content: InspectorContent, servers: [String]) -> some View {
+            InspectorView(content: content, yourInitial: "P",
+                          moveMenu: BoxMenuModel.moveSubmenu(busy: false, location: "this-mac", servers: servers), move: { _ in },
                           retryPackages: {}, revert: {}, scrolls: false)
                 .frame(maxHeight: .infinity, alignment: .top)
                 .background(.background)
         }
         try snapshot(inspector(InspectorContent(storagePlace: "this Mac", openedAt: ago(95), savedAt: ago(2),
-                                                saves: saves, tabs: tabs), targets: []),
+                                                saves: saves, tabs: tabs), servers: []),
                      name: "inspector-this-mac", size: size, in: dir)
         try snapshot(inspector(InspectorContent(storagePlace: "this Mac", openedAt: ago(95), savedAt: ago(2),
-                                                savesLoaded: false, savesFailed: true, tabs: tabs), targets: []),
+                                                savesLoaded: false, savesFailed: true, tabs: tabs), servers: []),
                      name: "inspector-saves-failed", size: size, in: dir)
         try snapshot(inspector(InspectorContent(storagePlace: "your server", openedAt: ago(95), failedPackages: ["ripgrep"],
                                                 savedAt: ago(2), saves: saves, tabs: tabs),
-                               targets: [("test-server", "portenv@test-server")]),
+                               servers: ["portenv@test-server"]),
                      name: "inspector-saves-to-server", size: size, in: dir)
     }
 
@@ -197,7 +254,11 @@ enum ScreenRenders {
     }
 
     private static func snapshot(_ view: some View, name: String, size: NSSize = NSSize(width: 720, height: 520), in dir: URL) throws {
-        try snapshot(view: { NSHostingView(rootView: view.frame(width: size.width, height: size.height)) }, name: name, size: size, in: dir)
+        // Drawn as in the key window of the active app, so the default
+        // button is blue as a tester sees it (R-0153).
+        try snapshot(view: { NSHostingView(rootView: view.frame(width: size.width, height: size.height).environment(\.isRendering, true)
+                                .environment(\.controlActiveState, .key)) },
+                     name: name, size: size, in: dir)
     }
 
     /// Light and dark PNGs of a view, made fresh for each appearance.
@@ -206,7 +267,9 @@ enum ScreenRenders {
         for (suffix, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
             let host = make()
             host.frame = NSRect(origin: .zero, size: size)
-            let window = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+            // Drawn as the active window, so the default button is blue as
+            // a tester sees it (R-0153), without taking focus.
+            let window = ActiveLookingWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
             window.appearance = NSAppearance(named: appearance)
             window.contentView = host
             host.layoutSubtreeIfNeeded()

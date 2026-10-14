@@ -252,6 +252,60 @@ func (LeaseSource) EnumDescriptor() ([]byte, []int) {
 	return file_portenv_types_v1_types_proto_rawDescGZIP(), []int{3}
 }
 
+// How a tab's terminal ended (ADR 0020): shared by portenvd's TabTerminal
+// and the app. Kept here, not in daemon.proto, so adding it moves none of
+// the daemon's generated type indices.
+type TabTerminalEnd int32
+
+const (
+	TabTerminalEnd_TAB_TERMINAL_END_UNSPECIFIED TabTerminalEnd = 0
+	// The tab was closed (by anyone), or the tab asked for doesn't exist.
+	TabTerminalEnd_TAB_TERMINAL_END_TAB_CLOSED TabTerminalEnd = 1
+	// The box is stopping, or moving away.
+	TabTerminalEnd_TAB_TERMINAL_END_BOX_STOPPING TabTerminalEnd = 2
+)
+
+// Enum value maps for TabTerminalEnd.
+var (
+	TabTerminalEnd_name = map[int32]string{
+		0: "TAB_TERMINAL_END_UNSPECIFIED",
+		1: "TAB_TERMINAL_END_TAB_CLOSED",
+		2: "TAB_TERMINAL_END_BOX_STOPPING",
+	}
+	TabTerminalEnd_value = map[string]int32{
+		"TAB_TERMINAL_END_UNSPECIFIED":  0,
+		"TAB_TERMINAL_END_TAB_CLOSED":   1,
+		"TAB_TERMINAL_END_BOX_STOPPING": 2,
+	}
+)
+
+func (x TabTerminalEnd) Enum() *TabTerminalEnd {
+	p := new(TabTerminalEnd)
+	*p = x
+	return p
+}
+
+func (x TabTerminalEnd) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (TabTerminalEnd) Descriptor() protoreflect.EnumDescriptor {
+	return file_portenv_types_v1_types_proto_enumTypes[4].Descriptor()
+}
+
+func (TabTerminalEnd) Type() protoreflect.EnumType {
+	return &file_portenv_types_v1_types_proto_enumTypes[4]
+}
+
+func (x TabTerminalEnd) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use TabTerminalEnd.Descriptor instead.
+func (TabTerminalEnd) EnumDescriptor() ([]byte, []int) {
+	return file_portenv_types_v1_types_proto_rawDescGZIP(), []int{4}
+}
+
 // A box: a toolbox image plus a portable home. Only the home travels between
 // machines; the image is pulled or rebuilt on each one.
 type Box struct {
@@ -795,7 +849,11 @@ const file_portenv_types_v1_types_proto_rawDesc = "" +
 	"\vLeaseSource\x12\x1c\n" +
 	"\x18LEASE_SOURCE_UNSPECIFIED\x10\x00\x12\x1d\n" +
 	"\x19LEASE_SOURCE_SNAPSHOT_TAG\x10\x01\x12\x1e\n" +
-	"\x1aLEASE_SOURCE_CONTROL_PLANE\x10\x02B\xc6\x01\n" +
+	"\x1aLEASE_SOURCE_CONTROL_PLANE\x10\x02*v\n" +
+	"\x0eTabTerminalEnd\x12 \n" +
+	"\x1cTAB_TERMINAL_END_UNSPECIFIED\x10\x00\x12\x1f\n" +
+	"\x1bTAB_TERMINAL_END_TAB_CLOSED\x10\x01\x12!\n" +
+	"\x1dTAB_TERMINAL_END_BOX_STOPPING\x10\x02B\xc6\x01\n" +
 	"\x14com.portenv.types.v1B\n" +
 	"TypesProtoP\x01Z@github.com/portenv/portenv/proto/gen/go/portenv/types/v1;typesv1\xa2\x02\x03PTX\xaa\x02\x10Portenv.Types.V1\xca\x02\x10Portenv\\Types\\V1\xe2\x02\x1cPortenv\\Types\\V1\\GPBMetadata\xea\x02\x12Portenv::Types::V1b\x06proto3"
 
@@ -811,29 +869,30 @@ func file_portenv_types_v1_types_proto_rawDescGZIP() []byte {
 	return file_portenv_types_v1_types_proto_rawDescData
 }
 
-var file_portenv_types_v1_types_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
+var file_portenv_types_v1_types_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
 var file_portenv_types_v1_types_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_portenv_types_v1_types_proto_goTypes = []any{
 	(BoxState)(0),                 // 0: portenv.types.v1.BoxState
 	(Architecture)(0),             // 1: portenv.types.v1.Architecture
 	(SnapshotKind)(0),             // 2: portenv.types.v1.SnapshotKind
 	(LeaseSource)(0),              // 3: portenv.types.v1.LeaseSource
-	(*Box)(nil),                   // 4: portenv.types.v1.Box
-	(*Resources)(nil),             // 5: portenv.types.v1.Resources
-	(*SnapshotRef)(nil),           // 6: portenv.types.v1.SnapshotRef
-	(*Lease)(nil),                 // 7: portenv.types.v1.Lease
-	(*BuildInfo)(nil),             // 8: portenv.types.v1.BuildInfo
-	(*Tab)(nil),                   // 9: portenv.types.v1.Tab
-	(*timestamppb.Timestamp)(nil), // 10: google.protobuf.Timestamp
+	(TabTerminalEnd)(0),           // 4: portenv.types.v1.TabTerminalEnd
+	(*Box)(nil),                   // 5: portenv.types.v1.Box
+	(*Resources)(nil),             // 6: portenv.types.v1.Resources
+	(*SnapshotRef)(nil),           // 7: portenv.types.v1.SnapshotRef
+	(*Lease)(nil),                 // 8: portenv.types.v1.Lease
+	(*BuildInfo)(nil),             // 9: portenv.types.v1.BuildInfo
+	(*Tab)(nil),                   // 10: portenv.types.v1.Tab
+	(*timestamppb.Timestamp)(nil), // 11: google.protobuf.Timestamp
 }
 var file_portenv_types_v1_types_proto_depIdxs = []int32{
-	5,  // 0: portenv.types.v1.Box.resources:type_name -> portenv.types.v1.Resources
-	10, // 1: portenv.types.v1.SnapshotRef.time:type_name -> google.protobuf.Timestamp
+	6,  // 0: portenv.types.v1.Box.resources:type_name -> portenv.types.v1.Resources
+	11, // 1: portenv.types.v1.SnapshotRef.time:type_name -> google.protobuf.Timestamp
 	2,  // 2: portenv.types.v1.SnapshotRef.kind:type_name -> portenv.types.v1.SnapshotKind
-	10, // 3: portenv.types.v1.Lease.since:type_name -> google.protobuf.Timestamp
-	10, // 4: portenv.types.v1.Lease.last_heartbeat:type_name -> google.protobuf.Timestamp
+	11, // 3: portenv.types.v1.Lease.since:type_name -> google.protobuf.Timestamp
+	11, // 4: portenv.types.v1.Lease.last_heartbeat:type_name -> google.protobuf.Timestamp
 	3,  // 5: portenv.types.v1.Lease.source:type_name -> portenv.types.v1.LeaseSource
-	10, // 6: portenv.types.v1.Tab.running_since:type_name -> google.protobuf.Timestamp
+	11, // 6: portenv.types.v1.Tab.running_since:type_name -> google.protobuf.Timestamp
 	7,  // [7:7] is the sub-list for method output_type
 	7,  // [7:7] is the sub-list for method input_type
 	7,  // [7:7] is the sub-list for extension type_name
@@ -851,7 +910,7 @@ func file_portenv_types_v1_types_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_portenv_types_v1_types_proto_rawDesc), len(file_portenv_types_v1_types_proto_rawDesc)),
-			NumEnums:      4,
+			NumEnums:      5,
 			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   0,

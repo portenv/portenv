@@ -51,13 +51,15 @@ struct MainWindow: View {
             .toolbar {
                 if let place = controller.waitingFor {
                     ToolbarItem(placement: .primaryAction) {
-                        Button("Stop Waiting") { controller.stopWaiting() }
+                        Button(StopWaiting.title) { controller.stopWaiting() }
+                            .keyboardShortcut(StopWaiting.shortcut)
                             .help("Stop trying to open it while \(place) holds it")
                     }
                 }
             }
-            // The window going away ends the wait too.
-            .onDisappear { controller.stopWaiting() }
+            // The window closing ends the wait too; the view merely leaving
+            // the window (another state) doesn't (R-0179).
+            .background(EndsWithWindow { controller.stopWaiting() })
             // 2.3: open somewhere else, and Move To's confirmation.
             .sheet(isPresented: Binding(get: { controller.leaseSheet != nil }, set: { if !$0 { controller.cancelLeaseSheet() } })) {
                 if let sheet = controller.leaseSheet {

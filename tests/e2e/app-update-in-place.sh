@@ -23,9 +23,8 @@ failures=0
 pass() { printf 'ok    %s\n' "$1"; }
 fail() { printf 'FAIL  %s\n' "$1"; failures=$((failures + 1)); }
 
-daemon_pid() { pgrep -f "^Contents/Helpers/portenvd$" -U "$(id -u)" | while read -r p; do
-	[[ $(python3 -c 'import ctypes,sys;b=ctypes.create_string_buffer(4096);ctypes.CDLL("/usr/lib/libproc.dylib").proc_pidpath(int(sys.argv[1]),b,4096);print(b.value.decode())' "$p") == "$app/Contents/Helpers/portenvd" ]] && echo "$p"
-done; }
+# The lane's own login item's portenvd, as launchd runs it.
+daemon_pid() { launchctl print "gui/$(id -u)/com.portenv.portenvd.$inst" 2>/dev/null | awk '/^\tpid =/{print $3}'; }
 
 update_once() {
 	local n=$1
@@ -49,7 +48,7 @@ update_once() {
 	local after_pid; after_pid=$(daemon_pid || true)
 	echo "  update $n: build ${before_build:-<none>} (pid ${before_pid:-none}) -> ${got:-<none>} (pid ${after_pid:-none}); the app's is $new_build"
 	if [[ $got == "$new_build" ]]; then pass "update $n: portenvd runs the new build"; else fail "update $n: portenvd still runs ${got:-nothing}"; fi
-	if [[ -n $before_pid && $after_pid != "$before_pid" ]]; then pass "update $n: portenvd restarted"; else fail "update $n: portenvd wasn't restarted"; fi
+	if [[ -n $after_pid && $after_pid != "$before_pid" ]]; then pass "update $n: portenvd restarted"; else fail "update $n: portenvd wasn't restarted"; fi
 }
 
 update_once 1

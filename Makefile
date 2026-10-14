@@ -26,6 +26,7 @@ COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 # One build of the app and its helpers, the same in both (R-0198): the app
 # restarts a portenvd of another build after an in-place update. Made once
 # per make run, so a rebuild of the same commit (a lane's, a dev one) differs.
+BUILD_VERSION := $(shell date +%s)
 ifndef BUILD_ID
 BUILD_ID := $(shell uuidgen 2>/dev/null || od -An -N16 -tx1 /dev/urandom | tr -d ' \n')
 endif
@@ -234,9 +235,17 @@ app: build $(TOOLS_STAMP)
 	if nm -u $(BIN)/Portenv.app/Contents/MacOS/Portenv | grep -q SecKeychainSetUserInteractionAllowed; then echo "Portenv imports SecKeychainSetUserInteractionAllowed: prompts would stop working in the app" >&2; exit 1; fi
 	# Helpers, not MacOS/: on a case-insensitive disk portenv would replace Portenv.
 	mkdir -p $(BIN)/Portenv.app/Contents/Helpers && cp $(BIN)/portenv $(BIN)/portenvd $(BIN)/restic $(BIN)/Portenv.app/Contents/Helpers/
-	for f in portenv portenvd restic; do codesign --force --sign - $(BIN)/Portenv.app/Contents/Helpers/$$f; done
+	# A stable identifier and designated requirement, not the ad-hoc defaults
+	# (<name>-<hash>, and the cdhash): launchd ties portenvd's login item to
+	# the requirement, so an ad-hoc in-place rebuild is still the same program
+	# to it (R-0198). A release build is signed again with Developer ID.
+	for f in portenv portenvd restic; do codesign --force --sign - --identifier com.portenv.$$f -r='designated => identifier "com.portenv.'$$f'"' $(BIN)/Portenv.app/Contents/Helpers/$$f; done
 	cp apps/mac/Info.plist $(BIN)/Portenv.app/Contents/Info.plist
 	/usr/libexec/PlistBuddy -c "Add :PortenvBuildID string $(BUILD_ID)" $(BIN)/Portenv.app/Contents/Info.plist
+	# A new bundle version for each build (release-local.sh sets its own): launchd
+	# takes the updated portenvd's code only when the login item is registered
+	# again from a newer version (R-0198).
+	/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $(BUILD_VERSION)" $(BIN)/Portenv.app/Contents/Info.plist
 	# The app icon (R-0128); a dev lane's carries its letter, so it's never
 	# mistaken for the release app.
 	scripts/make-app-icon.sh apps/mac/Resources/Assets.xcassets/AppIcon.appiconset \

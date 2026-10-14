@@ -20,9 +20,12 @@ enum ServiceUpdates {
 /// This lane's or the release's own launch agent, never another's.
 private struct LoginItemRestarter: ServiceRestarter {
     func gentle() async { try? await SharedDaemon.client.relaunch() }
+    /// Registered afresh, so launchd takes the updated bundle's code (an
+    /// ad-hoc signed dev build's portenvd is refused, EX_CONFIG, until it
+    /// is). ensureRegistered would see "enabled" and do nothing.
     func hard() async {
         try? await LoginItem.service.unregister()
-        _ = await LoginItem.ensureRegistered()
+        try? LoginItem.service.register()
     }
 }
 

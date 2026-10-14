@@ -52,16 +52,19 @@ public final class ServiceUpdate {
     private let restarter: ServiceRestarter
     private let wait: Duration
     private let poll: Duration
+    private let fileExists: @Sendable (String) -> Bool
     private var inFlight: Task<Outcome, Never>?
 
     public init(appBuildID: String?, bundlePath: String, service: ServiceBuild, restarter: ServiceRestarter,
-                wait: Duration = .seconds(10), poll: Duration = .milliseconds(200)) {
+                wait: Duration = .seconds(10), poll: Duration = .milliseconds(200),
+                fileExists: @escaping @Sendable (String) -> Bool = { FileManager.default.fileExists(atPath: $0) }) {
         self.appBuildID = appBuildID
         self.bundlePath = bundlePath
         self.service = service
         self.restarter = restarter
         self.wait = wait
         self.poll = poll
+        self.fileExists = fileExists
     }
 
     /// The app's own build (PortenvBuildID, written by gmake app).
@@ -79,7 +82,7 @@ public final class ServiceUpdate {
         guard let app = appBuildID, !app.isEmpty else { return .current }
         guard let running = await service.running() else { return .current } // not up: launch waits for it
         if running.buildID == app { return .current }
-        guard let exe = running.executable, inside(exe) else { return .refused(Self.reinstall) }
+        guard ours(running.executable) else { return .refused(Self.reinstall) }
         updating = true
         defer { updating = false }
         // Each step gets half the wait to come back at this build.
@@ -88,6 +91,15 @@ public final class ServiceUpdate {
         await restarter.hard()
         if await cameBack(at: app, within: wait / 2) { return .restarted }
         return .refused(Self.reinstall)
+    }
+
+    /// Whether the running portenvd is this app's: run from this bundle, or
+    /// from a file that's gone (the bundle was replaced in place, as an
+    /// update does, and macOS can't name the deleted file). One run from a
+    /// copy of Portenv that's still on disk elsewhere is another app's.
+    private func ours(_ exe: String?) -> Bool {
+        guard let exe else { return true }
+        return inside(exe) || !fileExists(exe)
     }
 
     private func inside(_ exe: String) -> Bool {

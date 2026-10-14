@@ -35,8 +35,13 @@ struct ServiceUpdateTests {
     let bundle = "/Applications/Portenv.app"
     let inside = "/Applications/Portenv.app/Contents/Helpers/portenvd"
 
+    /// Files on this pretend disk: the other copies of Portenv.
+    let disk: Set<String> = ["/Users/me/Downloads/Portenv.app/Contents/Helpers/portenvd", "/Applications/Portenv.app.old/Contents/Helpers/portenvd"]
+
     private func update(_ s: FakeService, app: String? = "build-2") -> ServiceUpdate {
-        ServiceUpdate(appBuildID: app, bundlePath: bundle, service: s, restarter: s, wait: .milliseconds(300), poll: .milliseconds(10))
+        let disk = disk
+        return ServiceUpdate(appBuildID: app, bundlePath: bundle, service: s, restarter: s, wait: .milliseconds(300), poll: .milliseconds(10),
+                             fileExists: { disk.contains($0) })
     }
 
     /// Another build, from this app's bundle: restarted (Relaunch, which
@@ -59,10 +64,20 @@ struct ServiceUpdateTests {
     /// A portenvd from another copy of Portenv is never restarted: two
     /// installed copies don't fight over it.
     @Test func aForeignPathIsRefused() async {
-        for path in ["/Users/me/Downloads/Portenv.app/Contents/Helpers/portenvd", "/Applications/Portenv.app.old/Contents/Helpers/portenvd", nil] {
+        for path in ["/Users/me/Downloads/Portenv.app/Contents/Helpers/portenvd", "/Applications/Portenv.app.old/Contents/Helpers/portenvd"] {
             let s = FakeService(build: "build-1", executable: path)
             #expect(await update(s).ensureCurrent() == .refused(ServiceUpdate.reinstall))
             #expect(s.steps.isEmpty)
+        }
+    }
+
+    /// Replaced in place (an update): the old portenvd's file is gone, so
+    /// macOS names none, or a path that no longer exists. It's this app's.
+    @Test func aReplacedBundlesPortenvdIsOurs() async {
+        for path in [nil, "/private/var/folders/xy/Portenv.app/Contents/Helpers/portenvd"] {
+            let s = FakeService(build: "build-1", executable: path)
+            s.gentleBringsUp = "build-2"
+            #expect(await update(s).ensureCurrent() == .restarted)
         }
     }
 

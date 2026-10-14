@@ -5,9 +5,9 @@ package daemon
 import (
 	"bytes"
 	"context"
-	"log/slog"
 	"crypto/ed25519"
 	"crypto/rand"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -104,7 +104,6 @@ func TestTrustNeedsTheFingerprintShown(t *testing.T) {
 		t.Fatalf("an unknown server: %v", err)
 	}
 }
-
 
 // TestAMadeKeyIsHeldNotWritten: ProvideServerKey keeps the key in memory:
 // nothing in the Portenv folder or the log carries it; ListServers says

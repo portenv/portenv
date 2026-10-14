@@ -194,7 +194,7 @@ func (s *Server) Serve(ctx context.Context) error {
 
 // GetVersion implements daemonv1.DaemonServiceServer.
 func (s *Server) GetVersion(context.Context, *daemonv1.GetVersionRequest) (*daemonv1.GetVersionResponse, error) {
-	return &daemonv1.GetVersionResponse{Build: &typesv1.BuildInfo{Version: version.Version, Commit: version.Commit}}, nil
+	return &daemonv1.GetVersionResponse{Build: &typesv1.BuildInfo{Version: version.Version, Commit: version.Commit, BuildId: version.BuildID}}, nil
 }
 
 // ListBoxes lists the boxes configured on this machine.

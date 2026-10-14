@@ -9,6 +9,9 @@ import "github.com/portenv/portenv/core/internal/instance"
 var (
 	Version = "dev"
 	Commit  = "unknown"
+	// BuildID is one build of the app and its helpers (gmake app's
+	// BUILD_ID): the app restarts a portenvd of another build (R-0198).
+	BuildID = ""
 )
 
 // String returns "<version> (<commit>)", plus " [dev-X]" for a dev lane's

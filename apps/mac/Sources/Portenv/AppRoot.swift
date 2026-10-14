@@ -88,6 +88,13 @@ final class AppModel {
             try? await Task.sleep(for: .milliseconds(200))
         }
         problem = nil
+        // After an in-place update the running portenvd is still the old
+        // one: restart it here, saying so, rather than "out of date" later
+        // (R-0198).
+        if case let .refused(message) = await ServiceUpdates.shared.ensureCurrent() {
+            problem = BackgroundServiceProblem(message: message, opensLoginItems: false, offersTryAgain: true)
+            return
+        }
         do {
             boxes = try await daemon.boxes()
         } catch {
@@ -257,7 +264,9 @@ struct AppRoot: View {
 
     var body: some View {
         Group {
-            if let problem = model.problem {
+            if ServiceUpdates.shared.updating {
+                ServiceUpdatingView()
+            } else if let problem = model.problem {
                 VStack(spacing: 12) {
                     Text(problem.message).font(.title3).multilineTextAlignment(.center).frame(maxWidth: 460)
                     HStack(spacing: 12) {
@@ -314,5 +323,17 @@ struct AppRoot: View {
                                                           set: { if !$0 { model.moveError = nil } })) {
             Button("OK") { model.moveError = nil }
         }
+    }
+}
+
+/// While portenvd restarts after an update (R-0198).
+struct ServiceUpdatingView: View {
+    var body: some View {
+        VStack(spacing: 12) {
+            ProgressView().controlSize(.small)
+            Text(ServiceUpdate.updatingText).font(.title3)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityElement(children: .combine)
     }
 }

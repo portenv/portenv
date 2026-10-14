@@ -45,6 +45,9 @@ struct FirstRunView: View {
         .padding(.vertical, 48)
         .frame(minWidth: 720, minHeight: 520)
         .background(.background)
+        // The board's size, centred on the display Portenv was launched
+        // from, the first time this window shows first run (R-0186).
+        .background(FirstRunWindowPlacer())
         .onChange(of: flow.made) { _, made in
             if let made { opened(made) }
         }
@@ -183,15 +186,14 @@ struct FirstRunView: View {
     }
 
     /// The first-run-4-storage-this-mac board: this Mac, chosen; a server
-    /// and a bucket dimmed and marked LATER (R-0092, R-0132).
+    /// dimmed and marked LATER until 2.9 (R-0092, R-0132). No bucket: the
+    /// owner dropped it as too technical (R-0196).
     private var storage: some View {
         heading(FirstRunText.storageTitle, FirstRunText.storageLine) {
             VStack(spacing: 12) {
                 StorageRow(icon: "laptopcomputer", title: FirstRunText.storageThisMac, line: FirstRunText.thisMacOnly,
                            selected: flow.storage == .thisMac, later: false) { flow.storage = .thisMac }
                 StorageRow(icon: "server.rack", title: FirstRunText.storageServer, line: FirstRunText.storageServerLine,
-                           selected: false, later: true) {}
-                StorageRow(icon: "cylinder", title: FirstRunText.storageBucket, line: FirstRunText.storageBucketLine,
                            selected: false, later: true) {}
             }
             .frame(maxWidth: 600)
@@ -425,4 +427,32 @@ enum RecoveryKeyActions {
         text.font = .monospacedSystemFont(ofSize: 14, weight: .regular)
         NSPrintOperation(view: text).run()
     }
+}
+
+/// Places first run's window once: the board's size, centred on the display
+/// under the pointer when Portenv launched (WindowPlacement.firstRun).
+private struct FirstRunWindowPlacer: NSViewRepresentable {
+    func makeNSView(context _: Context) -> NSView { Placer() }
+    func updateNSView(_: NSView, context _: Context) {}
+
+    final class Placer: NSView {
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            guard let window, !FirstRunLaunch.placed.contains(ObjectIdentifier(window)) else { return }
+            FirstRunLaunch.placed.insert(ObjectIdentifier(window))
+            let screens = NSScreen.screens.map(\.visibleFrame)
+            guard let content = WindowPlacement.firstRun(pointer: FirstRunLaunch.pointer, screens: screens) else { return }
+            let frame = window.frameRect(forContentRect: NSRect(origin: .zero, size: content.size))
+            window.setFrame(NSRect(x: content.midX - frame.width / 2, y: content.midY - frame.height / 2,
+                                   width: frame.width, height: frame.height), display: true)
+        }
+    }
+}
+
+/// Where the pointer was when Portenv launched, and the windows already
+/// placed for first run.
+@MainActor
+enum FirstRunLaunch {
+    static var pointer = NSEvent.mouseLocation
+    static var placed: Set<ObjectIdentifier> = []
 }

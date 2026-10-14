@@ -18,6 +18,9 @@ public struct OverlayRows: Sendable {
         case prompt
         case commandStart
         case commandEnd(exit: Int?)
+        /// Where a reset landed after output came too fast to show in full
+        /// (ADR 0020, decision 11): the notice's row.
+        case skipped
     }
 
     public struct Mark: Sendable, Equatable {

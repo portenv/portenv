@@ -315,6 +315,14 @@ Also checked on tmux 3.4 in the image:
         - **Giving up:** after 8 attempts in a row with no reset, or a permanent refusal, it says "Disconnected", with portenvd's reason, and offers Reconnect.
         - **Permanent refusals:** a tmux too old, an unknown call, or a refused request.
         - **Typing:** nothing typed before a reset is sent, then or later.
+    - **As built (1.2c PR 6b):**
+      - **Skipped output:** after a reset with `skipped`, the source sends `.skipped`. The view pins "Output was too fast to show in full. Showing the current screen." to the row the reset landed on, where it moves with its line, and VoiceOver announces it. The next reset clears it.
+      - **Links:** a tab view sends the link under the pointer, and any ⌘-click it refuses, to the state line as `TerminalLinks.status`, never the raw link (R-0134).
+      - **The Disconnected card** shows a plain line for each refusal (`TabTerminalReasons`), never a raw status:
+        - "Portenv's background service isn't running."
+        - "This workspace's tmux is too old for the app's terminal."
+        - "The workspace was closed."
+        - and the others in `TabTerminalReasons`, each with a test.
 13. **Agents' terminal access is unchanged in what it permits.** Agents (2.4) keep today's paths and limits: the attached `Terminal` RPC through their own viewer, `portenv screen`/`send`/`wait`, and ADR 0016's grants.
     - `TabTerminal` is opened by the app over portenvd's socket, which only the Mac's user can reach (ADR 0014). This decision gives agents nothing new.
     - Whether agents later move to `TabTerminal`, for per-author attribution of their keystrokes, is an open question (PLAN.md). It would be a separate decision, with the same grants.

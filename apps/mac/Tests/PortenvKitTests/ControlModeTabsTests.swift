@@ -111,8 +111,9 @@ struct ControlModeTabsTests {
         // Typed while reconnecting: not sent, then or later.
         s.send(Array("x".utf8))
         t.play(.reset(TabTerminalSize(cols: 70, rows: 20), seed: Array("again".utf8), skipped: true))
-        await waitUntil { e.all.count == 3 }
-        #expect(e.all.last == .reset(TabTerminalSize(cols: 70, rows: 20), seed: Array("again".utf8)))
+        await waitUntil { e.all.count == 4 }
+        // Output was skipped: the reset, then the notice.
+        #expect(Array(e.all.suffix(2)) == [.reset(TabTerminalSize(cols: 70, rows: 20), seed: Array("again".utf8)), .skipped])
         #expect((s as? ControlModeTabSource)?.lastResetSkipped == true)
         #expect(!t.sent.contains(.input(Array("x".utf8))))
         #expect(!e.done)

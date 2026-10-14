@@ -49,6 +49,14 @@ public final class OverlayTracker {
         rows.add(row: row, line: ObjectIdentifier(line), kind: kind)
     }
 
+    /// Pins the skipped-output notice to the cursor's row (main screen only).
+    public func markSkipped() {
+        guard !terminal.isCurrentBufferAlternate else { return }
+        let row = cursorRow
+        guard let line = terminal.getScrollInvariantLine(row: row) else { return }
+        rows.add(row: row, line: ObjectIdentifier(line), kind: .skipped)
+    }
+
     /// Forgets every mark: the terminal starts over (a reset or re-seed).
     public func reset() { rows.removeAll() }
 

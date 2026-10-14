@@ -232,3 +232,65 @@ struct QueryReplyTests {
         #expect(s.sent.flatMap { $0 } == Array("y".utf8))
     }
 }
+
+/// Output that came too fast (ADR 0020, decision 11), and links (R-0134).
+@MainActor
+struct TabViewNoticeTests {
+    func view() -> MarkedTerminalView {
+        _ = NSApplication.shared
+        let v = MarkedTerminalView(frame: NSRect(x: 0, y: 0, width: 800, height: 480))
+        v.getTerminal().resize(cols: 80, rows: 24)
+        return v
+    }
+
+    func settle(until done: () -> Bool) async {
+        for _ in 0 ..< 200 where !done() {
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+    }
+
+    @Test func aSkippedResetSaysSoOnTheRowItLandedOn() async {
+        let v = view(), s = ScriptedTabSource(tab: "@1")
+        v.attach(s)
+        s.play(.reset(TabTerminalSize(cols: 80, rows: 24), seed: Array("line one\r\nline two\r\n$ ".utf8)))
+        s.play(.skipped)
+        await settle { !v.tracker.placed().isEmpty }
+        let placed = v.tracker.placed().filter { $0.mark.kind == .skipped }
+        #expect(placed.map(\.screenRow) == [2])
+        // Drawn off screen, as AppKit wouldn't draw a window never shown.
+        if let rep = v.bitmapImageRepForCachingDisplay(in: v.bounds) { v.cacheDisplay(in: v.bounds, to: rep) }
+        #expect(v.overlay.drawn.contains { $0.kind == .skipped })
+        // It stays with its line as more output scrolls it up.
+        s.play(.output(Array("\r\nmore\r\n".utf8)))
+        await settle { v.tracker.placed().first { $0.mark.kind == .skipped }?.screenRow == 2 && v.getTerminal().getLine(row: 4) != nil }
+        #expect(v.tracker.placed().filter { $0.mark.kind == .skipped }.map(\.screenRow) == [2])
+        // A plain reset after it starts over: no notice.
+        s.play(.reset(TabTerminalSize(cols: 80, rows: 24), seed: Array("$ ".utf8)))
+        await settle { v.tracker.placed().isEmpty }
+        #expect(v.tracker.placed().isEmpty)
+    }
+
+    @Test func theLinkUnderThePointerGoesToTheStateLine() async {
+        let v = view(), s = ScriptedTabSource(tab: "@1")
+        let window = NSWindow(contentRect: v.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentView = v
+        var statuses: [String?] = []
+        v.onLinkStatus = { statuses.append($0) }
+        v.attach(s)
+        s.play(.reset(TabTerminalSize(cols: 80, rows: 24), seed: Array("see https://example.com/docs here".utf8)))
+        await settle { v.getTerminal().getLine(row: 0)?.translateToString(trimRight: true).contains("here") == true }
+        let cell = v.bounds.width / 80, rowH = v.rowHeight
+        let over = v.convert(NSPoint(x: cell * 10.5, y: v.bounds.height - rowH / 2), to: nil)
+        let away = v.convert(NSPoint(x: cell * 60.5, y: v.bounds.height - rowH * 5.5), to: nil)
+        #expect(v.linkStatus(atWindowPoint: over) == TerminalLinks.status("https://example.com/docs"))
+        #expect(v.linkStatus(atWindowPoint: away) == nil)
+        v.showLinkStatus(v.linkStatus(atWindowPoint: over))
+        v.showLinkStatus(v.linkStatus(atWindowPoint: over)) // the same: said once
+        v.showLinkStatus(nil)
+        #expect(statuses == [TerminalLinks.status("https://example.com/docs"), nil])
+        // A refused ⌘-click says why, through the same line.
+        v.links.isPersonsClick = { _ in false }
+        v.links.request("https://example.com/docs", in: v)
+        #expect(statuses.last == TerminalLinks.status("https://example.com/docs"))
+    }
+}

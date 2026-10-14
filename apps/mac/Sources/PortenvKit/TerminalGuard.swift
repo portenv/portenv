@@ -49,6 +49,21 @@ public final class TerminalLinkOpener {
     }
 }
 
+public extension TerminalLinks {
+    /// The link under a point in a terminal view's window: what the person
+    /// would open by clicking there, or nil.
+    @MainActor
+    static func link(in view: TerminalView, atWindowPoint point: NSPoint) -> String? {
+        let t = view.getTerminal()
+        let local = view.convert(point, from: nil)
+        guard view.bounds.contains(local), t.cols > 0 else { return nil }
+        let index = view.characterIndex(for: point)
+        let cell = Position(col: index % t.cols, row: index / t.cols)
+        guard cell.row >= 0, cell.row < t.rows else { return nil }
+        return t.link(at: .screen(cell), mode: .explicitAndImplicit)
+    }
+}
+
 @MainActor
 public final class TerminalGuard: TerminalViewDelegate {
     private weak var view: LocalProcessTerminalView?
@@ -90,13 +105,7 @@ public final class TerminalGuard: TerminalViewDelegate {
     /// open by clicking there, or nil.
     public func link(atWindowPoint point: NSPoint) -> String? {
         guard let view else { return nil }
-        let t = view.getTerminal()
-        let local = view.convert(point, from: nil)
-        guard view.bounds.contains(local), t.cols > 0 else { return nil }
-        let index = view.characterIndex(for: point)
-        let cell = Position(col: index % t.cols, row: index / t.cols)
-        guard cell.row >= 0, cell.row < t.rows else { return nil }
-        return t.link(at: .screen(cell), mode: .explicitAndImplicit)
+        return TerminalLinks.link(in: view, atWindowPoint: point)
     }
 
     public nonisolated func sizeChanged(source: TerminalView, newCols: Int, newRows: Int) {

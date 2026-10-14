@@ -30,6 +30,12 @@ public final class MarkedTerminalView: TerminalView {
     public internal(set) var fitted: TabTerminalSize?
     /// Opens a ⌘-clicked link as TerminalLinks decides (R-0161).
     public let links = TerminalLinkOpener()
+    /// The state line's text for the link under the pointer, or one just
+    /// refused (TerminalLinks.status, never the raw link), or nil (R-0134).
+    public var onLinkStatus: (String?) -> Void = { _ in }
+    private var shownLinkStatus: String?
+    private var linkTracking: NSTrackingArea?
+    private let linkHover = LinkHover()
     /// The filter in front of the terminal (ADR 0020, decision 9).
     private var filter = TerminalFilter()
     private var reading: Task<Void, Never>?
@@ -37,6 +43,9 @@ public final class MarkedTerminalView: TerminalView {
     /// Called if anything replaced the view's delegate, which then gets put
     /// back (R-0161). A failure in debug builds; tests record it.
     nonisolated(unsafe) static var delegateReplaced: () -> Void = { assertionFailure("a tab view's terminalDelegate was replaced") }
+
+    /// What the view says where a reset landed after skipped output.
+    public static let skippedNotice = "Output was too fast to show in full. Showing the current screen."
 
     /// Lines of scrollback a tab keeps (ADR 0020, decision 9).
     public static let scrollbackLines = 10_000
@@ -53,6 +62,9 @@ public final class MarkedTerminalView: TerminalView {
         addSubview(cards)
         sizes.view = self
         terminalDelegate = sizes
+        links.onRefusedLink = { [weak self] status in self?.showLinkStatus(status) }
+        linkHover.view = self
+        trackLinks()
         changeScrollback(Self.scrollbackLines)
         TerminalColours.apply(to: self, for: effectiveAppearance)
     }
@@ -145,6 +157,11 @@ public final class MarkedTerminalView: TerminalView {
         case let .resized(size):
             if size.cols != t.cols || size.rows != t.rows { t.resize(cols: size.cols, rows: size.rows) }
             overlay.needsDisplay = true
+        case .skipped:
+            tracker.markSkipped()
+            overlay.needsDisplay = true
+            NSAccessibility.post(element: self, notification: .announcementRequested,
+                                 userInfo: [.announcement: Self.skippedNotice, .priority: NSAccessibilityPriorityLevel.high.rawValue])
         case let .ended(why):
             onEnded(why)
         }
@@ -193,6 +210,30 @@ public final class MarkedTerminalView: TerminalView {
     public override func bufferActivated(source: Terminal) {
         super.bufferActivated(source: source)
         overlay.needsDisplay = true
+    }
+
+    // MARK: Links (R-0134): the full destination before anyone clicks.
+
+    /// SwiftTerm's view keeps its mouse handlers to itself, so a separate
+    /// owner follows the pointer for the link status.
+    private func trackLinks() {
+        let area = NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+                                  owner: linkHover, userInfo: nil)
+        addTrackingArea(area)
+        linkTracking = area
+    }
+
+    /// What the state line says for the point: the link's full
+    /// destination, or why Portenv won't open it.
+    public func linkStatus(atWindowPoint point: NSPoint) -> String? {
+        TerminalLinks.link(in: self, atWindowPoint: point).map(TerminalLinks.status)
+    }
+
+    func showLinkStatus(_ status: String?) {
+        guard status != shownLinkStatus else { return }
+        shownLinkStatus = status
+        toolTip = status
+        onLinkStatus(status)
     }
 
     public override func setFrameSize(_ newSize: NSSize) {
@@ -257,6 +298,20 @@ public final class CardLayer: NSView {
     }
 }
 
+/// Follows the pointer over a tab view for its link status.
+final class LinkHover: NSResponder {
+    weak var view: MarkedTerminalView?
+
+    override func mouseMoved(with event: NSEvent) {
+        guard let view else { return }
+        view.showLinkStatus(view.linkStatus(atWindowPoint: event.locationInWindow))
+    }
+
+    override func mouseExited(with _: NSEvent) {
+        view?.showLinkStatus(nil)
+    }
+}
+
 /// The marks, drawn over the terminal's text. It never takes a click.
 public final class MarkOverlay: NSView {
     weak var host: MarkedTerminalView?
@@ -288,6 +343,17 @@ public final class MarkOverlay: NSView {
                                          withAttributes: attrs)
             case .commandStart:
                 break
+            case .skipped:
+                let attrs: [NSAttributedString.Key: Any] = [
+                    .font: NSFont.systemFont(ofSize: max(9, row.height * 0.7), weight: .medium),
+                    .foregroundColor: NSColor.secondaryLabelColor,
+                ]
+                let text = MarkedTerminalView.skippedNotice as NSString
+                let size = text.size(withAttributes: attrs)
+                let box = NSRect(x: row.maxX - size.width - 16, y: row.minY, width: size.width + 12, height: row.height)
+                NSColor.windowBackgroundColor.withAlphaComponent(0.9).setFill()
+                NSBezierPath(roundedRect: box, xRadius: 4, yRadius: 4).fill()
+                text.draw(at: NSPoint(x: box.minX + 6, y: row.minY + (row.height - size.height) / 2), withAttributes: attrs)
             }
             drawn.append((placed.mark.kind, row))
         }

@@ -16,13 +16,16 @@ struct MainTabTerminal: View {
     /// A new generation (the box opened or restarted) opens the stream again.
     let generation: Int
     let label: String
+    /// The state line's link text (R-0134).
+    var onLinkStatus: (String?) -> Void = { _ in }
     @State private var focused = true
 
     var body: some View {
         ZStack {
             if let source = shown.source {
                 TabTerminalPane(source: source, label: label, isFocused: $focused,
-                                onReset: { shown.reset($0) }, onEnded: { shown.ended($0) })
+                                onReset: { shown.reset($0) }, onEnded: { shown.ended($0) },
+                                onLinkStatus: onLinkStatus)
                     .padding(TerminalLayout.margin)
             }
             switch shown.connection {

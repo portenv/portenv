@@ -177,7 +177,7 @@ public final class ControlModeTabSource: TabTerminalSource {
                 permanent = error.permanent
                 failure = error.message
             } catch {
-                failure = error.localizedDescription
+                failure = TabTerminalReasons.lost
             }
             if closed || Task.isCancelled { return }
             conn.close()
@@ -206,6 +206,7 @@ public final class ControlModeTabSource: TabTerminalSource {
             live = true
             lastResetSkipped = skipped
             continuation.yield(.reset(size, seed: seed))
+            if skipped { continuation.yield(.skipped) }
         case let .output(bytes):
             if live { continuation.yield(.output(bytes)) }
         case let .resized(size):

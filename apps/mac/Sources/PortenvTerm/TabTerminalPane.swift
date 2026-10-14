@@ -70,15 +70,19 @@ public struct TabTerminalPane: NSViewRepresentable {
     @Binding public var isFocused: Bool
     public var onReset: (TabTerminalSize) -> Void
     public var onEnded: (TabTerminalEnd) -> Void
+    /// The state line's link text (MarkedTerminalView.onLinkStatus).
+    public var onLinkStatus: (String?) -> Void
 
     public init(source: any TabTerminalSource, label: String, isFocused: Binding<Bool>,
                 onReset: @escaping (TabTerminalSize) -> Void = { _ in },
-                onEnded: @escaping (TabTerminalEnd) -> Void = { _ in }) {
+                onEnded: @escaping (TabTerminalEnd) -> Void = { _ in },
+                onLinkStatus: @escaping (String?) -> Void = { _ in }) {
         self.source = source
         self.label = label
         _isFocused = isFocused
         self.onReset = onReset
         self.onEnded = onEnded
+        self.onLinkStatus = onLinkStatus
     }
 
     public func makeNSView(context _: Context) -> TabTerminalHost {
@@ -94,6 +98,7 @@ public struct TabTerminalPane: NSViewRepresentable {
     private func update(_ host: TabTerminalHost) {
         host.terminal.onReset = onReset
         host.terminal.onEnded = onEnded
+        host.terminal.onLinkStatus = onLinkStatus
         host.terminal.setAccessibilityLabel(label)
         let binding = $isFocused
         host.onFocusChange = { focused in

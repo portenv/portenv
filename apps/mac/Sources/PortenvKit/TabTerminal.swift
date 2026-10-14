@@ -44,6 +44,10 @@ public enum TabTerminalEvent: Equatable, Sendable {
     /// The tab's size changed elsewhere (another view of the tab, or another
     /// viewer): the terminal takes it, and the view shows what fits.
     case resized(TabTerminalSize)
+    /// Right after a `reset`: output came too fast to show in full, so the
+    /// reset drew the current screen. The view says so on the row the reset
+    /// landed on (ADR 0020, decision 11).
+    case skipped
     /// The stream ended; nothing follows.
     case ended(TabTerminalEnd)
 }

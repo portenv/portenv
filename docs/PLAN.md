@@ -1142,6 +1142,10 @@ In this order:
               - **Losing the stream:** "Reconnecting…" while it comes back, then "Disconnected" with Reconnect.
               - **The dev-only switch:** `gmake app LANE=X ATTACHED_TERMINAL=1` brings back the attached terminal. Each of its four release guards has a test that fails without it.
               - **Also in the helper:** a pending Enter's author ends at the next prompt (R-0177). Failed replies are never read as data, so a failed pane list ends no lane (R-0180).
+            - **Built (PR 6b, 2026-10-14, awaiting review):**
+              - **Skipped output:** the notice on the row where a skipped reset lands, which moves with its line and is announced to VoiceOver.
+              - **Links:** tab views send the link under the pointer to the state line.
+              - **Disconnected:** a plain line for each refusal, never a raw status, each mapping tested.
           - **the latency gate:** keystroke to echo no worse than the attached client by more than 5 ms at p95 locally (within ±0.25 ms at tmux, measured), and the same run on the us-west-2 tester server once it exists. Until it passes, a dev-only switch back to the attached client, which never reaches a release build;
           - tmux pinned in the image (3.4) and checked at attach;
           - #73's and #75's no-loss guarantees carried over, with tests.

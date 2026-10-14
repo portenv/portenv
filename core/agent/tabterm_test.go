@@ -35,6 +35,7 @@ type tabTermHarness struct {
 	raw func(args ...string) string
 	tb  tabs
 	srv *apiServer
+	cmd tmuxCmdFunc
 }
 
 func newTabTermHarness(t *testing.T, cmd string) *tabTermHarness {
@@ -64,7 +65,7 @@ func newTabTermHarness(t *testing.T, cmd string) *tabTermHarness {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = conn.Close() })
-	return &tabTermHarness{t: t, c: agentv1.NewAgentServiceClient(conn), raw: raw, tb: tb, srv: s}
+	return &tabTermHarness{t: t, c: agentv1.NewAgentServiceClient(conn), raw: raw, tb: tb, srv: s, cmd: cmdf}
 }
 
 func (h *tabTermHarness) firstTab() string {
@@ -223,12 +224,86 @@ func TestTabTerminalSeedsThenStreams(t *testing.T) {
 			t.Errorf("author %v on seed line %q", au, l)
 		}
 	}
-	// A command typed with no author records none.
+	// A command typed with no author records none, nor does one typed
+	// through another client (a person's own tmux attach).
 	b.input("echo three\r")
 	for _, m := range b.until(5*time.Second, "three", func(out []byte) bool { return bytes.Contains(out, []byte("three\r\n")) }) {
 		if m.GetAuthor() != nil {
 			t.Errorf("an author %v for a stream without one", m.GetAuthor())
 		}
+	}
+	h.raw("send-keys", "-t", tab, "echo four", "Enter")
+	for _, tt := range []*tabTerm{a, b} {
+		for _, m := range tt.until(5*time.Second, "four", func(out []byte) bool { return bytes.Contains(out, []byte("four\r\n")) }) {
+			if m.GetAuthor() != nil {
+				t.Errorf("an author %v for a command typed elsewhere", m.GetAuthor())
+			}
+		}
+	}
+}
+
+// Resizes from the stream and from another client (a person's own tmux
+// attach) in turn: tmux picks the window's size (window-size latest), and
+// the stream is always told the size the tab has.
+func TestTabTerminalResizesTakeTurns(t *testing.T) {
+	h := newTabTermHarness(t, "sh -c 'exec sleep 600'")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	tab := h.firstTab()
+	tt := h.open(ctx, tab, "", 80, 24)
+	r := tt.next(5 * time.Second).GetReset_()
+	if r == nil || r.GetSize().GetCols() != 80 || r.GetSize().GetRows() != 24 {
+		t.Fatalf("reset size %v", r.GetSize())
+	}
+	told := fmt.Sprintf("%dx%d", r.GetSize().GetCols(), r.GetSize().GetRows())
+	other := h.cmd(ctx, "-C", "attach-session", "-t", "=main")
+	in, err := other.StdinPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := other.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = in.Close(); _ = other.Wait() })
+	agrees := func(step int) {
+		t.Helper()
+		time.Sleep(200 * time.Millisecond)
+		for end := time.Now().Add(5 * time.Second); ; {
+			actual := strings.TrimSpace(h.raw("display", "-p", "-t", tab, "#{window_width}x#{window_height}"))
+			if actual == told {
+				return
+			}
+			if time.Now().After(end) {
+				t.Fatalf("step %d: the tab is %s, the stream was told %s", step, actual, told)
+			}
+			select {
+			case m := <-tt.events:
+				if s := m.GetResized(); s != nil {
+					told = fmt.Sprintf("%dx%d", s.GetCols(), s.GetRows())
+				}
+			case <-time.After(50 * time.Millisecond):
+			}
+		}
+	}
+	for i, s := range [][2]uint32{{100, 30}, {90, 20}, {110, 35}, {70, 22}} {
+		if i%2 == 0 {
+			if _, err := fmt.Fprintf(in, "refresh-client -C %s:%dx%d\n", tab, s[0], s[1]); err != nil {
+				t.Fatal(err)
+			}
+		} else if err := tt.s.Send(&agentv1.TabTerminalRequest{Msg: &agentv1.TabTerminalRequest_Resize{Resize: &agentv1.TerminalSize{Cols: s[0], Rows: s[1]}}}); err != nil {
+			t.Fatal(err)
+		}
+		agrees(i)
+	}
+	// With the other client gone, the stream's size is the tab's.
+	_ = in.Close()
+	_ = other.Wait()
+	if err := tt.s.Send(&agentv1.TabTerminalRequest{Msg: &agentv1.TabTerminalRequest_Resize{Resize: &agentv1.TerminalSize{Cols: 120, Rows: 40}}}); err != nil {
+		t.Fatal(err)
+	}
+	agrees(4)
+	if told != "120x40" {
+		t.Errorf("the stream asked for 120x40; the tab is %s", told)
 	}
 }
 

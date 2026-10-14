@@ -75,24 +75,34 @@ type ctlSub struct {
 	kick     chan struct{}
 }
 
+// keepsThroughOverflow is what a subscriber that fell behind still gets:
+// replies (a stream waits for its own) and the client's comings and goings,
+// which a stream must act on after its reset. Each is small and rare.
+func keepsThroughOverflow(k ctlKind) bool {
+	switch k {
+	case ctlReply, ctlReady, ctlRestart, ctlSessionGone, ctlExit:
+		return true
+	}
+	return false
+}
+
 func (s *ctlSub) push(e ctlEvent) {
 	s.mu.Lock()
 	switch {
 	case s.overflow:
-		// Dropped until it's taken; a reply is kept, though: a stream waits
-		// for its own, and it's small.
-		if e.kind == ctlReply {
+		// Dropped until it's taken, except what keepsThroughOverflow.
+		if keepsThroughOverflow(e.kind) {
 			s.q = append(s.q, e)
 		}
 	case len(s.q) >= ctlSubCap || s.qBytes+len(e.data) > s.maxBytes:
 		var keep []ctlEvent
 		for _, q := range s.q {
-			if q.kind == ctlReply {
+			if keepsThroughOverflow(q.kind) {
 				keep = append(keep, q)
 			}
 		}
 		s.q, s.qBytes, s.overflow = keep, 0, true
-		if e.kind == ctlReply {
+		if keepsThroughOverflow(e.kind) {
 			s.q = append(s.q, e)
 		}
 	default:
@@ -115,7 +125,7 @@ func (s *ctlSub) take() []ctlEvent {
 	s.q, s.qBytes = nil, 0
 	if s.overflow {
 		s.overflow = false
-		return append([]ctlEvent{{kind: ctlOverflow}}, q...) // q holds only replies
+		return append([]ctlEvent{{kind: ctlOverflow}}, q...) // q holds only what's kept
 	}
 	return q
 }

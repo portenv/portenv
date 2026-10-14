@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net"
 	"os/exec"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -150,6 +151,22 @@ func TestSlowSubscriberGetsOverflow(t *testing.T) {
 	s.push(ctlEvent{kind: ctlWindowAdd})
 	if es := s.take(); len(es) != 1 || es[0].kind != ctlWindowAdd {
 		t.Fatalf("after overflow: %+v", es)
+	}
+	// Past the cap, replies and the client's restarts still come, in order:
+	// a stream acts on them after its reset.
+	s.push(ctlEvent{kind: ctlReply, id: 1})
+	for i := 0; i < ctlSubCap+10; i++ {
+		s.push(ctlEvent{kind: ctlOutput})
+	}
+	s.push(ctlEvent{kind: ctlRestart})
+	s.push(ctlEvent{kind: ctlOutput})
+	s.push(ctlEvent{kind: ctlReply, id: 2})
+	var kinds []ctlKind
+	for _, e := range s.take() {
+		kinds = append(kinds, e.kind)
+	}
+	if want := []ctlKind{ctlOverflow, ctlReply, ctlRestart, ctlReply}; !slices.Equal(kinds, want) {
+		t.Fatalf("after falling behind: %v, want %v", kinds, want)
 	}
 }
 

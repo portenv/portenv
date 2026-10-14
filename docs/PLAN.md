@@ -1103,9 +1103,15 @@ In this order:
               - **Bounded:** the size is capped and the scrollback emptied after every chunk.
               - **Fuzzed:** `FuzzPaneParser`.
               - **Line counts:** each mark's line is counted from the pane's own output. A test checks against tmux 3.4 through scrolling, long output, the alternate screen and identical prompts.
-              - **Epochs:** a full-screen erase or a width change starts an epoch. Across one, tmux's count can differ: it counts written spaces on an erase, and reflows on a width change. The seed aligns each epoch on its own.
+              - **Epochs:** a full-screen erase or a width change starts an epoch. Across one, tmux's count can differ: it counts written spaces on an erase, and reflows on a width change. The seed replays only the current epoch's marks (PR 3).
               - **Session gone:** the control client stops when its session is gone (R-0167), instead of restarting every 5 s.
           - the `TabTerminal` stream in the agent and portenvd;
+            - **Built (PR 3, 2026-10-14, awaiting review):** `TabTerminal` in the helper (ADR 0020, decision 6, "As built").
+              - **The reset:** history, screen, alternate screen, modes, pen and cursor, with current-epoch marks and their authors on their lines. It finishes any escape or UTF-8 character the output left unfinished.
+              - **Then:** output, input and resizes until the tab closes.
+              - **Falling behind:** a new reset marked `skipped`.
+              - **Tests:** on real tmux, for nothing lost or repeated across ten reopenings, 64 KB of every byte value arriving unchanged from copy mode, authors, resizes taking turns with another client, a gone tab, falling behind, and resets mid-sequence. The driver test checks that `work` can't open a tab terminal over the channel or the local socket (R-0175). Another test checks that the parser's drain goroutine ends (R-0176).
+              - **Known limitation:** marks from before a full-screen erase or a width change aren't replayed.
           - the app's per-tab terminal (`TabTerminalSource`, `MarkedTerminalView`) in place of today's attached terminal;
             - **Built (PR 5, 2026-10-13, awaiting review):** the tab view's guards, ahead of the live provider:
               - the default-deny filter in front of what it's fed (`TerminalFilter`, ADR 0020 decision 9), with a table test per rule and fuzzing over random bytes and the spike's mutated tmux streams;

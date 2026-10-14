@@ -17,7 +17,8 @@ import (
 // serverInfo is a record as the app sees it: by ID and name, never the
 // address.
 func serverInfo(r local.ServerRecord) *daemonv1.ServerInfo {
-	i := &daemonv1.ServerInfo{Id: r.ID, Name: local.ServerDisplayName(r.Target), FromKnownHosts: r.ConfirmedFrom == local.ConfirmedFromKnownHosts, MadeKey: r.SignIn == local.SignInMadeKey}
+	i := &daemonv1.ServerInfo{Id: r.ID, Name: local.ServerDisplayName(r.Target), FromKnownHosts: r.ConfirmedFrom == local.ConfirmedFromKnownHosts,
+		WasChanged: r.WasChanged, MadeKey: r.SignIn == local.SignInMadeKey}
 	switch r.State {
 	case local.ServerConfirmed:
 		i.State, i.Fingerprint = typesv1.ServerKeyState_SERVER_KEY_STATE_CONFIRMED, local.Fingerprint(r.Key)

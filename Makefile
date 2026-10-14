@@ -110,6 +110,7 @@ test: $(TOOLS_STAMP)
 	scripts/test-notarize.sh
 	scripts/test-workspace-word.sh
 	scripts/test-check-terminal-views.sh
+	scripts/test-check-ssh-keygen.sh
 
 ## fuzz: the workspace helper's control-mode decoder, line reader and pane parser, briefly (R-0162, R-0142)
 # Counts of runs, not durations: with a duration, go test fails with
@@ -124,7 +125,7 @@ fuzz:
 	done
 	cd core && go test -run '^$$' -fuzz '^FuzzPaneParser$$' -fuzztime $(FUZZRUNS_PARSER) -timeout 10m ./agent/
 
-## lint: formatting, vet, golangci-lint, buf lint, workflow lint, SPDX headers, terminal views made only by TerminalViews, "workspace" in what people read
+## lint: formatting, vet, golangci-lint, buf lint, workflow lint, SPDX headers, terminal views made only by TerminalViews, ssh-keygen only on files of its own, "workspace" in what people read
 lint: $(TOOLS_STAMP) $(SHELLCHECK) spdx-check
 	test -z "$$(gofmt -l core proto/gen/go | tee /dev/stderr)"
 	for m in $(GO_MODULES); do go vet ./$$m/...; done
@@ -139,6 +140,7 @@ lint: $(TOOLS_STAMP) $(SHELLCHECK) spdx-check
 	$(BIN)/actionlint -shellcheck=$(SHELLCHECK)
 	scripts/check-no-binaries.sh
 	scripts/check-terminal-views.sh
+	scripts/check-ssh-keygen.sh
 	python3 -I scripts/check-workspace-word.py
 
 ## fmt: format Go and proto sources

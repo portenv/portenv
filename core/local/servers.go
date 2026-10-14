@@ -84,6 +84,10 @@ type ServerRecord struct {
 	// SignIn is how Portenv signs in: "" with this Mac's own SSH setup, or
 	// SignInMadeKey.
 	SignIn string `json:"sign_in,omitempty"`
+	// WasChanged: its key changed and was forgotten; the next Trust says
+	// so first, and even this Mac's SSH known hosts don't confirm it
+	// silently. Cleared on Trust (R-0185).
+	WasChanged bool `json:"was_changed,omitempty"`
 }
 
 // ServerScan is what ScanServerKey found, for the person to confirm.
@@ -247,8 +251,8 @@ func checkServerKey(r ServerRecord) error {
 
 func keyChangedError(name string) error {
 	// Until the app can forget a key (Settings › Servers, or the wizard),
-	// the owner's way past it is the CLI (R-0183).
-	return fmt.Errorf("%s's key has changed since it was confirmed, so Portenv won't connect to it. Check with whoever runs it; to start again, run portenv app remove-server %s.", name, name) //nolint:staticcheck // shown as is
+	// the owner's way past it is the CLI (R-0183, R-0185).
+	return fmt.Errorf("%s's key has changed since it was confirmed, so Portenv won't connect to it. Check with whoever runs it; to start again, run portenv app forget-server %s.", name, name) //nolint:staticcheck // shown as is
 }
 
 func keyType(key string) string { t, _, _ := strings.Cut(key, " "); return t }
@@ -354,15 +358,24 @@ func noteHostKeyFailure(host, stderr string) error {
 	if e == nil {
 		return keyChangedError(name)
 	}
-	if r, err := e.ServerRecord(host); err == nil {
-		_, _ = e.updateServer(r.ID, func(r *ServerRecord) error {
-			if r.State == ServerConfirmed {
-				r.State = ServerKeyChanged
-			}
-			return nil
-		})
-	}
+	_ = e.MarkServerKeyChanged(host)
 	return keyChangedError(name)
+}
+
+// MarkServerKeyChanged records that a confirmed server answered with
+// another key: nothing runs on it until it's forgotten and confirmed again.
+func (e *Env) MarkServerKeyChanged(target string) error {
+	r, err := e.ServerRecord(target)
+	if err != nil {
+		return err
+	}
+	_, err = e.updateServer(r.ID, func(r *ServerRecord) error {
+		if r.State == ServerConfirmed {
+			r.State = ServerKeyChanged
+		}
+		return nil
+	})
+	return err
 }
 
 // ScanServerKey finds the server's host key through ssh itself (its own
@@ -401,6 +414,10 @@ func (e *Env) ScanServerKey(ctx context.Context, id string) (ServerScan, error) 
 		case ServerUnconfirmed:
 			switch kh {
 			case KnownHostsMatch:
+				if r.WasChanged {
+					r.Scanned = key // asked, with the fingerprint
+					break
+				}
 				r.State, r.Key, r.ConfirmedFrom, r.Scanned = ServerConfirmed, key, ConfirmedFromKnownHosts, ""
 			case KnownHostsMismatch:
 				r.State, r.Scanned = ServerKeyChanged, ""
@@ -615,7 +632,7 @@ func (e *Env) TrustServerKey(id, fingerprint string) error {
 		case r.Scanned == "" || Fingerprint(r.Scanned) != fingerprint:
 			return fmt.Errorf("%s's key isn't the one shown. Check it again", name)
 		}
-		r.State, r.Key, r.ConfirmedFrom, r.Scanned = ServerConfirmed, r.Scanned, ConfirmedByPerson, ""
+		r.State, r.Key, r.ConfirmedFrom, r.Scanned, r.WasChanged = ServerConfirmed, r.Scanned, ConfirmedByPerson, "", false
 		return nil
 	})
 	return err
@@ -625,6 +642,7 @@ func (e *Env) TrustServerKey(id, fingerprint string) error {
 // and nothing runs on it until it's confirmed.
 func (e *Env) ForgetServerKey(id string) error {
 	r, err := e.updateServer(id, func(r *ServerRecord) error {
+		r.WasChanged = r.WasChanged || r.State == ServerKeyChanged
 		r.State, r.Key, r.ConfirmedFrom, r.Scanned = ServerUnconfirmed, "", "", ""
 		return nil
 	})
@@ -681,29 +699,45 @@ func (e *Env) RemoveServer(server string) error {
 	if err != nil {
 		return err
 	}
-	match := func(r ServerRecord) bool { return r.Target == server }
-	if !slices.ContainsFunc(rs, match) {
-		match = func(r ServerRecord) bool { return ServerDisplayName(r.Target) == server }
-		if n := len(slices.DeleteFunc(slices.Clone(rs), func(r ServerRecord) bool { return !match(r) })); n != 1 {
-			if n == 0 {
-				return fmt.Errorf("%s isn't one of this Mac's servers", server)
-			}
-			return fmt.Errorf("more than one server is named %s; give its user@host", server)
-		}
-	}
-	var gone []ServerRecord
-	for _, r := range rs {
-		if match(r) {
-			gone = append(gone, r)
-		}
-	}
-	if err := e.saveServers(slices.DeleteFunc(rs, match)); err != nil {
+	id, err := findServer(rs, server)
+	if err != nil {
 		return err
 	}
-	for _, r := range gone {
-		if r.SignIn == SignInMadeKey {
-			dropMadeKey(r.ID, r.Target)
-		}
+	gone := rs[slices.IndexFunc(rs, func(r ServerRecord) bool { return r.ID == id })]
+	if err := e.saveServers(slices.DeleteFunc(rs, func(r ServerRecord) bool { return r.ID == id })); err != nil {
+		return err
+	}
+	if gone.SignIn == SignInMadeKey {
+		dropMadeKey(gone.ID, gone.Target)
 	}
 	return nil
+}
+
+// ServerIDByName is the ID of the server given by user@host or by the name
+// it shows by.
+func (e *Env) ServerIDByName(server string) (string, error) {
+	rs, err := e.ServerRecords()
+	if err != nil {
+		return "", err
+	}
+	return findServer(rs, server)
+}
+
+func findServer(rs []ServerRecord, server string) (string, error) {
+	if i := slices.IndexFunc(rs, func(r ServerRecord) bool { return r.Target == server }); i >= 0 {
+		return rs[i].ID, nil
+	}
+	var ids []string
+	for _, r := range rs {
+		if ServerDisplayName(r.Target) == server {
+			ids = append(ids, r.ID)
+		}
+	}
+	switch len(ids) {
+	case 0:
+		return "", fmt.Errorf("%s isn't one of this Mac's servers", server)
+	case 1:
+		return ids[0], nil
+	}
+	return "", fmt.Errorf("more than one server is named %s; give its user@host", server)
 }

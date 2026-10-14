@@ -124,6 +124,9 @@ enum ScreenRenders {
             let waitingKey = ServerKeyInfo(id: "srv-0123456789ab", name: "test-server", state: .unconfirmed,
                                            fingerprint: "SHA256:uNiVztksCsDhcc0u9e8BujQXVUpKZIDTMczCvj3tD2s", keyType: "ssh-ed25519")
             try snapshot(alert: { ServerKeyAlert.question(ServerKeyQuestion(waitingKey)) }, name: "server-key-confirm", in: dir)
+            let forgotten = ServerKeyInfo(id: "srv-0123456789ab", name: "test-server", state: .unconfirmed,
+                                          fingerprint: "SHA256:uNiVztksCsDhcc0u9e8BujQXVUpKZIDTMczCvj3tD2s", keyType: "ssh-ed25519", wasChanged: true)
+            try snapshot(alert: { ServerKeyAlert.question(ServerKeyQuestion(forgotten)) }, name: "server-key-confirm-after-change", in: dir)
             try snapshot(alert: { ServerKeyAlert.notice(.mismatch("test-server")) }, name: "server-key-mismatch", in: dir)
             try snapshot(alert: { ServerKeyAlert.notice(.changed("test-server")) }, name: "server-key-changed", in: dir)
             // New Box… from the box list (the new-box boards).

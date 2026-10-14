@@ -1808,6 +1808,10 @@ public nonisolated struct Portenv_Daemon_V1_ServerInfo: Sendable {
   /// Confirmed because this Mac's SSH known hosts had the same key.
   public var fromKnownHosts: Bool = false
 
+  /// Its key changed and was forgotten: the next confirmation says so
+  /// first. Cleared on Trust (R-0185).
+  public var wasChanged: Bool = false
+
   /// It signs in with a key Portenv made for it: the app hands that key
   /// over (ProvideServerKey).
   public var madeKey: Bool = false
@@ -4960,7 +4964,7 @@ nonisolated extension Portenv_Daemon_V1_CommandAuthor: SwiftProtobuf.Message, Sw
 
 nonisolated extension Portenv_Daemon_V1_ServerInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ServerInfo"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}name\0\u{1}state\0\u{1}fingerprint\0\u{3}from_known_hosts\0\u{4}\u{2}made_key\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}name\0\u{1}state\0\u{1}fingerprint\0\u{3}from_known_hosts\0\u{3}was_changed\0\u{3}made_key\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -4973,6 +4977,7 @@ nonisolated extension Portenv_Daemon_V1_ServerInfo: SwiftProtobuf.Message, Swift
       case 3: try { try decoder.decodeSingularEnumField(value: &self.state) }()
       case 4: try { try decoder.decodeSingularStringField(value: &self.fingerprint) }()
       case 5: try { try decoder.decodeSingularBoolField(value: &self.fromKnownHosts) }()
+      case 6: try { try decoder.decodeSingularBoolField(value: &self.wasChanged) }()
       case 7: try { try decoder.decodeSingularBoolField(value: &self.madeKey) }()
       default: break
       }
@@ -4995,6 +5000,9 @@ nonisolated extension Portenv_Daemon_V1_ServerInfo: SwiftProtobuf.Message, Swift
     if self.fromKnownHosts != false {
       try visitor.visitSingularBoolField(value: self.fromKnownHosts, fieldNumber: 5)
     }
+    if self.wasChanged != false {
+      try visitor.visitSingularBoolField(value: self.wasChanged, fieldNumber: 6)
+    }
     if self.madeKey != false {
       try visitor.visitSingularBoolField(value: self.madeKey, fieldNumber: 7)
     }
@@ -5007,6 +5015,7 @@ nonisolated extension Portenv_Daemon_V1_ServerInfo: SwiftProtobuf.Message, Swift
     if lhs.state != rhs.state {return false}
     if lhs.fingerprint != rhs.fingerprint {return false}
     if lhs.fromKnownHosts != rhs.fromKnownHosts {return false}
+    if lhs.wasChanged != rhs.wasChanged {return false}
     if lhs.madeKey != rhs.madeKey {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true

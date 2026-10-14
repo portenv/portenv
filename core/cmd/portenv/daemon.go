@@ -52,6 +52,7 @@ func dialDaemon(e *local.Env) (daemonv1.DaemonServiceClient, func(), error) {
 //	portenv app servers BOX         (the Move To targets, one per line)
 //	portenv app trust-server USER@HOST "TYPE BASE64"  (the owner's scripts only: add a server with its known host key; refused in a workspace)
 //	portenv app remove-server USER@HOST|NAME          (the owner only: drop a server and its key; refused in a workspace)
+//	portenv app forget-server USER@HOST|NAME          (the owner only: forget its key, keep it in Move To; refused in a workspace)
 //	portenv app ping                (exit 0 when portenvd answers)
 //	portenv app state BOX           (the save state and location, JSON)
 //	portenv app channel BOX         (a runner's box channel for a Mac, JSON on stdout)
@@ -134,7 +135,7 @@ func cmdApp(ctx context.Context, e *local.Env, op string, args []string) error {
 	// TrustServerKey instead. It pins a key nobody looked at, so it's never
 	// run from inside a workspace, where an agent could pin a server for the
 	// owner (R-0183).
-	if (op == "trust-server" || op == "remove-server") && insideWorkspace() {
+	if (op == "trust-server" || op == "remove-server" || op == "forget-server") && insideWorkspace() {
 		return fmt.Errorf("app %s is for this Mac's owner, not from inside a workspace", op)
 	}
 	if op == "trust-server" {
@@ -142,6 +143,18 @@ func cmdApp(ctx context.Context, e *local.Env, op string, args []string) error {
 			return usageError{Msg: `app trust-server needs USER@HOST and its host key, "TYPE BASE64"`}
 		}
 		return e.PinServerKey(args[0], args[1])
+	}
+	// Until the app can forget a key (Settings › Servers, or the wizard):
+	// unconfirmed, still in Move To, asked about at the next launch.
+	if op == "forget-server" {
+		if len(args) != 1 {
+			return usageError{Msg: "app forget-server needs USER@HOST or the server's name"}
+		}
+		id, err := e.ServerIDByName(args[0])
+		if err != nil {
+			return err
+		}
+		return e.ForgetServerKey(id)
 	}
 	if op == "remove-server" {
 		if len(args) != 1 {

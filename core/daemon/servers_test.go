@@ -105,6 +105,25 @@ func TestTrustNeedsTheFingerprintShown(t *testing.T) {
 	}
 }
 
+// TestAForgottenChangedKeySaysSo: ListServers carries was_changed, for the
+// alert's opening line (R-0185).
+func TestAForgottenChangedKeySaysSo(t *testing.T) {
+	s := placementServer(t, "me@test-server")
+	if err := s.env.MarkServerKeyChanged("me@test-server"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.ForgetServerKey(context.Background(), &daemonv1.ForgetServerKeyRequest{ServerId: local.ServerID("me@test-server")}); err != nil {
+		t.Fatal(err)
+	}
+	r, err := s.ListServers(context.Background(), &daemonv1.ListServersRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if i := r.GetInfos()[0]; i.GetState() != typesv1.ServerKeyState_SERVER_KEY_STATE_UNCONFIRMED || !i.GetWasChanged() {
+		t.Fatalf("got %v", i)
+	}
+}
+
 // TestAMadeKeyIsHeldNotWritten: ProvideServerKey keeps the key in memory:
 // nothing in the Portenv folder or the log carries it; ListServers says
 // which servers sign in with a made key.

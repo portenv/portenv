@@ -381,7 +381,8 @@ extension DaemonClient: ServerKeys {
         case .changed: .changed
         default: .unconfirmed
         }
-        return ServerKeyInfo(id: i.id, name: i.name, state: state, fingerprint: i.fingerprint, fromKnownHosts: i.fromKnownHosts, keyType: keyType, madeKey: i.madeKey)
+        return ServerKeyInfo(id: i.id, name: i.name, state: state, fingerprint: i.fingerprint, fromKnownHosts: i.fromKnownHosts, keyType: keyType,
+                             wasChanged: i.wasChanged, madeKey: i.madeKey)
     }
 }
 

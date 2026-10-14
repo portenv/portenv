@@ -2,6 +2,8 @@
 
 Date: 2026-10-11 · Status: Accepted (the reviewer, on the owner's delegation, R-0095, 2026-10-11). Decisions 1 to 5 below were taken in R-0087.
 
+Superseded in part (2026-10-14): no bring-your-own bucket is offered (R-0196).
+
 ## Context
 
 First run (1.5) has to make keys, a recovery key and the first box from the app. Until now only `portenv init` made boxes: the CLI makes a random repository key, puts it in the Keychain, writes `boxes/<name>.json`, and the repository is created by `restic init` on the box's first open. There was no recovery key at all.

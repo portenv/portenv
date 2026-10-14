@@ -33,12 +33,19 @@ type fakeTabHelper struct {
 	agentv1.UnimplementedAgentServiceServer
 	boxID  string
 	script []*agentv1.TabTerminalResponse
+	// endAfterInputs holds the script's end until this many input and
+	// resize messages have arrived. Nothing follows an end, so the relay
+	// stops forwarding input once it passes one on: a test that checks
+	// what reached the helper must not let the end overtake it.
+	endAfterInputs int
 
 	mu       sync.Mutex
 	versions int // GetVersion calls
 	opens    []*agentv1.TabTerminalOpen
 	inputs   []*agentv1.TabTerminalRequest
 	done     chan struct{}
+	// arrived is signalled after each input or resize is recorded.
+	arrived chan struct{}
 }
 
 func (f *fakeTabHelper) GetVersion(context.Context, *agentv1.GetVersionRequest) (*agentv1.GetVersionResponse, error) {
@@ -66,15 +73,43 @@ func (f *fakeTabHelper) TabTerminal(stream agentv1.AgentService_TabTerminalServe
 			f.mu.Lock()
 			f.inputs = append(f.inputs, r)
 			f.mu.Unlock()
+			select {
+			case f.arrived <- struct{}{}:
+			default:
+			}
 		}
 	}()
 	for _, m := range f.script {
+		if _, isEnd := m.GetMsg().(*agentv1.TabTerminalResponse_End); isEnd {
+			if err := f.waitForInputs(stream.Context()); err != nil {
+				return err
+			}
+		}
 		if err := stream.Send(m); err != nil {
 			return err
 		}
 	}
 	<-f.done
 	return nil
+}
+
+// waitForInputs waits until endAfterInputs messages have arrived, or fails
+// after 5 s so a test that never sends them says so.
+func (f *fakeTabHelper) waitForInputs(ctx context.Context) error {
+	timeout := time.After(5 * time.Second)
+	for {
+		if _, in := f.seen(); len(in) >= f.endAfterInputs {
+			return nil
+		}
+		select {
+		case <-f.arrived:
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-timeout:
+			_, in := f.seen()
+			return status.Errorf(codes.DeadlineExceeded, "the helper got %d of %d messages before its end", len(in), f.endAfterInputs)
+		}
+	}
 }
 
 func (f *fakeTabHelper) seen() ([]*agentv1.TabTerminalOpen, []*agentv1.TabTerminalRequest) {
@@ -92,6 +127,7 @@ func (f *fakeTabHelper) contacted() int {
 func (f *fakeTabHelper) client(t *testing.T) agentv1.AgentServiceClient {
 	t.Helper()
 	f.done = make(chan struct{})
+	f.arrived = make(chan struct{}, 1)
 	lis := bufconn.Listen(1 << 20)
 	srv := grpc.NewServer()
 	agentv1.RegisterAgentServiceServer(srv, f)
@@ -273,8 +309,10 @@ func TestTabTerminalRelaysBothWays(t *testing.T) {
 		&agentv1.TabTerminalResponse{Msg: &agentv1.TabTerminalResponse_Author{Author: &agentv1.CommandAuthor{Line: 4, Name: "Retnan"}}},
 		&agentv1.TabTerminalResponse{Msg: &agentv1.TabTerminalResponse_End{End: agentv1.TabTerminalEnd_TAB_TERMINAL_END_TAB_CLOSED}},
 	)
-	w := servingTabTerminals(t, ownerCaller(), &fakeTabHelper{boxID: "box-a", script: script}, &fakeTabHelper{boxID: "box-b"})
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	// The end waits for the three messages below: in a real tab, the
+	// program reads them before the tab closes.
+	w := servingTabTerminals(t, ownerCaller(), &fakeTabHelper{boxID: "box-a", script: script, endAfterInputs: 3}, &fakeTabHelper{boxID: "box-b"})
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	st := openTab(ctx, t, w.c, &daemonv1.TabTerminalOpen{Box: "acme-api", Session: "main", Tab: "@0"})
 	for _, b := range []string{"ls", "\r"} {
@@ -318,19 +356,10 @@ func TestTabTerminalRelaysBothWays(t *testing.T) {
 		}
 	}
 
-	deadline := time.Now().Add(3 * time.Second)
-	for {
-		_, in := w.a.seen()
-		if len(in) == 3 {
-			if string(in[0].GetInput()) != "ls" || string(in[1].GetInput()) != "\r" || in[2].GetResize().GetCols() != 120 {
-				t.Fatalf("the helper got %v", in)
-			}
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("the helper got %d messages, want 3", len(in))
-		}
-		time.Sleep(10 * time.Millisecond)
+	// The end came after all three arrived, so they're all recorded now.
+	_, in := w.a.seen()
+	if len(in) != 3 || string(in[0].GetInput()) != "ls" || string(in[1].GetInput()) != "\r" || in[2].GetResize().GetCols() != 120 {
+		t.Fatalf("the helper got %v, want ls, \\r, then a resize to 120 columns", in)
 	}
 }
 

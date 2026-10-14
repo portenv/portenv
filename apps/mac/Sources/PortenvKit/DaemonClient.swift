@@ -284,7 +284,8 @@ extension DaemonClient: BoxCreating, RecoveryChecking {
 
 extension TabInfo {
     init(_ t: Portenv_Types_V1_Tab) {
-        self.init(id: t.id, name: t.name, active: t.active, program: t.program)
+        self.init(id: t.id, name: t.name, active: t.active, program: t.program,
+                  command: t.command, runningSince: t.hasRunningSince ? t.runningSince.date : nil)
     }
 }
 

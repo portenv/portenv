@@ -1644,9 +1644,13 @@ type TabTerminalOpen struct {
 	// A tab ID, "@N".
 	Tab  string        `protobuf:"bytes,2,opt,name=tab,proto3" json:"tab,omitempty"`
 	Size *TerminalSize `protobuf:"bytes,3,opt,name=size,proto3" json:"size,omitempty"`
-	// Who types here, for attribution. Set by portenvd from its caller
-	// (the app over its socket, or an agent's grant), never by a client.
-	Author        string `protobuf:"bytes,4,opt,name=author,proto3" json:"author,omitempty"`
+	// Who types here, for attribution, as people read it (the owner's first
+	// name, "Grok Bot"). Set by portenvd from its caller (the app over its
+	// socket, or an agent's grant), never by a client. Empty: no author is
+	// recorded for this stream's commands.
+	Author string `protobuf:"bytes,4,opt,name=author,proto3" json:"author,omitempty"`
+	// The author's agent ID (ADR 0016), set by portenvd; empty for a person.
+	AuthorAgentId string `protobuf:"bytes,5,opt,name=author_agent_id,json=authorAgentId,proto3" json:"author_agent_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1705,6 +1709,13 @@ func (x *TabTerminalOpen) GetSize() *TerminalSize {
 func (x *TabTerminalOpen) GetAuthor() string {
 	if x != nil {
 		return x.Author
+	}
+	return ""
+}
+
+func (x *TabTerminalOpen) GetAuthorAgentId() string {
+	if x != nil {
+		return x.AuthorAgentId
 	}
 	return ""
 }
@@ -1855,7 +1866,11 @@ type TabTerminalReset struct {
 	// Every command still in the seed that has a recorded author. Their
 	// line values are the post-reflow lines at the time of the reset,
 	// numbered the same way as this seed's marks.
-	Authors       []*CommandAuthor `protobuf:"bytes,3,rep,name=authors,proto3" json:"authors,omitempty"`
+	Authors []*CommandAuthor `protobuf:"bytes,3,rep,name=authors,proto3" json:"authors,omitempty"`
+	// Output was skipped since the last reset (the helper or its reader fell
+	// too far behind; ADR 0020, decision 11): the app tells the person and
+	// marks the block that was running as skipped, never complete.
+	Skipped       bool `protobuf:"varint,4,opt,name=skipped,proto3" json:"skipped,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1911,6 +1926,13 @@ func (x *TabTerminalReset) GetAuthors() []*CommandAuthor {
 	return nil
 }
 
+func (x *TabTerminalReset) GetSkipped() bool {
+	if x != nil {
+		return x.Skipped
+	}
+	return false
+}
+
 // Who sent the Enter that started a command. Response-only: no request
 // carries it. The workspace helper records it from the stream the Enter
 // came through, whose identity portenvd set when the stream opened (ADR
@@ -1931,7 +1953,8 @@ type CommandAuthor struct {
 	// The command's OSC 133;C line, counted from the tab's first line ever,
 	// the same counting as the seed's marks (R-0133 item 6).
 	Line uint64 `protobuf:"varint,1,opt,name=line,proto3" json:"line,omitempty"`
-	// As people read it: "You", "Grok Bot".
+	// The author's own name, as people read it: the owner's first name, or
+	// "Grok Bot". Never "You": is_you is what makes the app say "You".
 	Name string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
 	// Set by portenvd for each recipient: true when the author is the caller
 	// receiving this stream. Never set by the helper or any client.
@@ -2084,23 +2107,25 @@ const file_portenv_agent_v1_agent_proto_rawDesc = "" +
 	"\x04open\x18\x01 \x01(\v2!.portenv.agent.v1.TabTerminalOpenH\x00R\x04open\x12\x16\n" +
 	"\x05input\x18\x02 \x01(\fH\x00R\x05input\x128\n" +
 	"\x06resize\x18\x03 \x01(\v2\x1e.portenv.agent.v1.TerminalSizeH\x00R\x06resizeB\x05\n" +
-	"\x03msg\"\x89\x01\n" +
+	"\x03msg\"\xb1\x01\n" +
 	"\x0fTabTerminalOpen\x12\x18\n" +
 	"\asession\x18\x01 \x01(\tR\asession\x12\x10\n" +
 	"\x03tab\x18\x02 \x01(\tR\x03tab\x122\n" +
 	"\x04size\x18\x03 \x01(\v2\x1e.portenv.agent.v1.TerminalSizeR\x04size\x12\x16\n" +
-	"\x06author\x18\x04 \x01(\tR\x06author\"\x9f\x02\n" +
+	"\x06author\x18\x04 \x01(\tR\x06author\x12&\n" +
+	"\x0fauthor_agent_id\x18\x05 \x01(\tR\rauthorAgentId\"\x9f\x02\n" +
 	"\x13TabTerminalResponse\x12:\n" +
 	"\x05reset\x18\x01 \x01(\v2\".portenv.agent.v1.TabTerminalResetH\x00R\x05reset\x12\x18\n" +
 	"\x06output\x18\x02 \x01(\fH\x00R\x06output\x12:\n" +
 	"\aresized\x18\x03 \x01(\v2\x1e.portenv.agent.v1.TerminalSizeH\x00R\aresized\x124\n" +
 	"\x03end\x18\x04 \x01(\x0e2 .portenv.agent.v1.TabTerminalEndH\x00R\x03end\x129\n" +
 	"\x06author\x18\x05 \x01(\v2\x1f.portenv.agent.v1.CommandAuthorH\x00R\x06authorB\x05\n" +
-	"\x03msg\"\x95\x01\n" +
+	"\x03msg\"\xaf\x01\n" +
 	"\x10TabTerminalReset\x122\n" +
 	"\x04size\x18\x01 \x01(\v2\x1e.portenv.agent.v1.TerminalSizeR\x04size\x12\x12\n" +
 	"\x04seed\x18\x02 \x01(\fR\x04seed\x129\n" +
-	"\aauthors\x18\x03 \x03(\v2\x1f.portenv.agent.v1.CommandAuthorR\aauthors\"o\n" +
+	"\aauthors\x18\x03 \x03(\v2\x1f.portenv.agent.v1.CommandAuthorR\aauthors\x12\x18\n" +
+	"\askipped\x18\x04 \x01(\bR\askipped\"o\n" +
 	"\rCommandAuthor\x12\x12\n" +
 	"\x04line\x18\x01 \x01(\x04R\x04line\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x15\n" +

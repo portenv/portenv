@@ -46,7 +46,7 @@ jobs:
           sudo mkdir -p /run/sshd
       - run: make test
       - name: Fuzz the helper's control-mode decoder (short budget)
-        run: make fuzz FUZZTIME=15s
+        run: make fuzz
       - name: Lint
         if: matrix.arch == 'amd64'
         run: make lint

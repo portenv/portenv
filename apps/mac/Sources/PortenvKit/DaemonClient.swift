@@ -25,9 +25,26 @@ public final class DaemonClient: DaemonAPI, Sendable {
 
     deinit { grpc.beginGracefulShutdown() }
 
+    /// What the app does when a call hits a portenvd that doesn't know it
+    /// (R-0198): bring up the current one (ServiceUpdate); nil in tests.
+    public static let outOfDate = OutOfDateHook()
+
     /// Runs one call, turning gRPC's errors into a DaemonError with
-    /// portenvd's own plain message.
+    /// portenvd's own plain message. A call an older portenvd doesn't know
+    /// brings up the current one and is tried once more.
     private func call<T: Sendable>(_ body: () async throws -> T) async throws -> T {
+        do {
+            return try await callOnce(body)
+        } catch let e as DaemonError where e.message == DaemonError.outOfDate {
+            guard let fix = Self.outOfDate.fix else { throw e }
+            switch await fix() {
+            case .restarted: return try await callOnce(body)
+            case .current, .refused: throw DaemonError(ServiceUpdate.reinstall)
+            }
+        }
+    }
+
+    private func callOnce<T: Sendable>(_ body: () async throws -> T) async throws -> T {
         do {
             return try await body()
         } catch let e as RPCError {
@@ -382,5 +399,41 @@ extension DaemonClient: ServerKeys {
         default: .unconfirmed
         }
         return ServerKeyInfo(id: i.id, name: i.name, state: state, fingerprint: i.fingerprint, fromKnownHosts: i.fromKnownHosts, keyType: keyType, wasChanged: i.wasChanged)
+    }
+}
+
+/// Holds the app's out-of-date fix (DaemonClient.outOfDate).
+public final class OutOfDateHook: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _fix: (@Sendable () async -> ServiceUpdate.Outcome)?
+    public var fix: (@Sendable () async -> ServiceUpdate.Outcome)? {
+        get { lock.withLock { _fix } }
+        set { lock.withLock { _fix = newValue } }
+    }
+}
+
+/// The running portenvd, for ServiceUpdate: its build ID (GetVersion) and
+/// the executable behind its socket.
+public struct DaemonServiceBuild: ServiceBuild {
+    let socket: URL
+    let client: DaemonClient
+    /// The client reconnects by itself when portenvd restarts.
+    public init(client: DaemonClient, socket: URL = Binaries.socket) {
+        self.client = client
+        self.socket = socket
+    }
+
+    public func running() async -> RunningService? {
+        guard let id = try? await client.buildID() else { return nil }
+        return RunningService(buildID: id, executable: DaemonPeer.executable(socket: socket))
+    }
+}
+
+extension DaemonClient {
+    /// portenvd's build ID; empty for one older than build IDs.
+    public func buildID() async throws -> String {
+        var options = CallOptions.defaults
+        options.timeout = .seconds(2)
+        return try await callOnce { try await api.getVersion(.init(), options: options).build.buildID }
     }
 }

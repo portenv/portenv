@@ -89,6 +89,8 @@ func (w *sshdWorld) startSSHD(t *testing.T, name string, port int, hostKey strin
 	}
 	cmd := exec.Command(w.sshd, "-D", "-e", "-f", conf) // #nosec G204 -- the test's own sshd
 	cmd.Stderr = io.Discard
+	// Its session processes share the stderr pipe: don't wait for them.
+	cmd.WaitDelay = 2 * time.Second
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -219,7 +221,9 @@ func closeShared(t *testing.T, target string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_ = exec.Command("ssh", append(append([]string{"-F", "none"}, opts...), "-O", "exit", "--", target)...).Run() // #nosec G204 -- the test's own ssh
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	_ = exec.CommandContext(ctx, "ssh", append(append([]string{"-F", "none"}, opts...), "-O", "exit", "--", target)...).Run() // #nosec G204 -- the test's own ssh
 }
 
 // TestAMadeKeySignsInOnceThroughItsAgent (ADR 0021, R-0180): a made-key
@@ -350,19 +354,28 @@ func countRuns(t *testing.T, runs, flag string) int {
 // server bring up one shared connection, and all five succeed.
 func TestConcurrentRunsSignInOnce(t *testing.T) {
 	_, target, _, runs := madeKeyServer(t)
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	// A regression fails here in seconds rather than hanging the job:
+	// sign-ins racing for one socket can leave ssh waiting forever.
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	errs := make(chan error, 5)
 	for range 5 {
 		go func() { errs <- RunRemote(ctx, QuickRemote, target, io.Discard, "true") }()
 	}
+	deadline := time.After(25 * time.Second)
 	for range 5 {
-		if err := <-errs; err != nil {
-			t.Error(err)
+		select {
+		case err := <-errs:
+			if err != nil {
+				t.Error(err)
+			}
+		case <-deadline:
+			killSSHTo(t, target)
+			t.Fatalf("two sign-ins ran at once: the runs didn't finish in 25 s (%d sign-ins, -M)", countRuns(t, runs, "-M"))
 		}
 	}
 	if n := countRuns(t, runs, "-M"); n != 1 {
-		t.Fatalf("%d sign-ins (-M), want 1", n)
+		t.Fatalf("two sign-ins ran at once: %d (-M), want 1", n)
 	}
 }
 
@@ -449,5 +462,20 @@ func TestASilentServerTimesOut(t *testing.T) {
 	}
 	if after, _ := filepath.Glob(filepath.Join(dir, "a-*")); len(after) != len(before) {
 		t.Fatalf("the agent outlived the timeout: %v", after)
+	}
+}
+
+// killSSHTo stops every ssh this test started for target (by its shared
+// connection's socket, which only this test's runs name).
+func killSSHTo(t *testing.T, target string) {
+	t.Helper()
+	opts, err := controlOptions(ServerID(target))
+	if err != nil {
+		return
+	}
+	for _, o := range opts {
+		if strings.HasPrefix(o, "ControlPath=") {
+			_ = exec.Command("pkill", "-f", o).Run() // #nosec G204 -- the test's own processes
+		}
 	}
 }

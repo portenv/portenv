@@ -8,12 +8,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -890,43 +890,72 @@ func TestTabTerminalFloodStallsNoOtherTab(t *testing.T) {
 	}
 }
 
-// laneGoroutines counts the pane lanes running.
-func laneGoroutines() int {
-	buf := make([]byte, 1<<22)
-	buf = buf[:runtime.Stack(buf, true)]
-	return bytes.Count(buf, []byte("agent.(*ctlClient).runLane("))
-}
-
-// Lanes end with their panes, layout seen or not (R-0179): after 50 tabs
-// open and close, half of them exiting at once, the session's goroutines
-// are back where they started.
+// Lanes end with their panes, layout seen or not (R-0179), and a live
+// pane's lane is never ended: after 50 tabs open and close, half of them
+// exiting at once, this session's client has only the first tab's lane
+// left, the same one, and every other lane it had has stopped. (Counted on
+// the client itself: goroutines of earlier tests' clients, still stopping,
+// would skew a count over the whole process.)
 func TestPaneLanesEndWithTheirPanes(t *testing.T) {
 	h := newTabTermHarness(t, "sh -c 'exec sleep 600'")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	tt := h.open(ctx, h.firstTab(), "", 80, 24)
+	tab := h.firstTab()
+	tt := h.open(ctx, tab, "", 80, 24)
 	if tt.next(5*time.Second).GetReset_() == nil {
 		t.Fatal("no reset")
 	}
-	time.Sleep(200 * time.Millisecond)
-	lanes, all := laneGoroutines(), runtime.NumGoroutine()
+	hub, err := h.srv.ctlHub()
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := hub.client("main")
+	lanes := func() map[string]*paneLane {
+		c.lmu.Lock()
+		defer c.lmu.Unlock()
+		return maps.Clone(c.lanes)
+	}
+	pane := strings.TrimSpace(h.raw("display", "-p", "-t", tab, "#{pane_id}"))
+	live := lanes()[pane]
+	if live == nil {
+		t.Fatalf("no lane for the first tab's pane %s: %v", pane, lanes())
+	}
+	seen := map[*paneLane]bool{}
 	for i := range 50 {
 		if i%2 == 0 {
 			h.raw("new-window", "-d", "-t", "=main:", "echo gone-at-once")
-			continue
+		} else {
+			w := strings.TrimSpace(h.raw("new-window", "-d", "-P", "-F", "#{window_id}", "-t", "=main:", "sh -c 'echo here; exec sleep 600'"))
+			time.Sleep(20 * time.Millisecond)
+			h.raw("kill-window", "-t", w)
 		}
-		w := strings.TrimSpace(h.raw("new-window", "-d", "-P", "-F", "#{window_id}", "-t", "=main:", "sh -c 'echo here; exec sleep 600'"))
-		time.Sleep(20 * time.Millisecond)
-		h.raw("kill-window", "-t", w)
+		for _, l := range lanes() {
+			seen[l] = true
+		}
 	}
-	end := time.Now().Add(5 * time.Second)
-	for (laneGoroutines() != lanes || runtime.NumGoroutine() > all) && time.Now().Before(end) {
+	want := map[string]*paneLane{pane: live}
+	for end := time.Now().Add(5 * time.Second); !maps.Equal(lanes(), want) && time.Now().Before(end); {
 		time.Sleep(50 * time.Millisecond)
 	}
-	if n := laneGoroutines(); n != lanes {
-		t.Errorf("%d lanes after 50 tabs came and went, from %d", n, lanes)
+	if got := lanes(); !maps.Equal(got, want) {
+		t.Errorf("lanes %v after 50 tabs came and went, want only the first tab's %v", got, want)
 	}
-	if n := runtime.NumGoroutine(); n > all {
-		t.Errorf("%d goroutines after 50 tabs came and went, from %d", n, all)
+	if len(seen) < 2 {
+		t.Errorf("only %d lanes seen while tabs came and went", len(seen))
+	}
+	for l := range seen {
+		if l == live {
+			continue
+		}
+		select {
+		case <-l.done:
+		case <-time.After(5 * time.Second):
+			t.Errorf("the lane of gone pane %s is still running", l.pane)
+		}
+	}
+	select {
+	case <-live.done:
+		t.Error("the live tab's lane stopped")
+	default:
 	}
 }

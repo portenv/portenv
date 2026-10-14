@@ -344,3 +344,30 @@ func hashedLine(t *testing.T, name, key string) string {
 	}
 	return strings.TrimSpace(string(b))
 }
+
+// TestServerFilesArePrivate (R-0183): servers.json and Portenv's
+// known_hosts are 0600, in a 0700 folder.
+func TestServerFilesArePrivate(t *testing.T) {
+	t.Setenv("PORTENV_HOME", filepath.Join(t.TempDir(), "Portenv"))
+	e, err := NewEnv()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { useForServers(nil) })
+	if err := e.PinServerKey("me@test-server", hostKey(t)); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"servers.json", "known_hosts"} {
+		fi, err := os.Stat(filepath.Join(e.Dir, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if fi.Mode().Perm() != 0o600 {
+			t.Fatalf("%s is %o", name, fi.Mode().Perm())
+		}
+	}
+	fi, _ := os.Stat(e.Dir)
+	if fi.Mode().Perm() != 0o700 {
+		t.Fatalf("the folder is %o", fi.Mode().Perm())
+	}
+}

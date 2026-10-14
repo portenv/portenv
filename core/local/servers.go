@@ -243,7 +243,9 @@ func checkServerKey(r ServerRecord) error {
 }
 
 func keyChangedError(name string) error {
-	return fmt.Errorf("%s's key has changed since it was confirmed, so Portenv won't connect to it. Check with whoever runs it.", name) //nolint:staticcheck // shown as is
+	// Until the app can forget a key (Settings › Servers, or the wizard),
+	// the owner's way past it is the CLI (R-0183).
+	return fmt.Errorf("%s's key has changed since it was confirmed, so Portenv won't connect to it. Check with whoever runs it; to start again, run portenv app remove-server %s.", name, name) //nolint:staticcheck // shown as is
 }
 
 func keyType(key string) string { t, _, _ := strings.Cut(key, " "); return t }
@@ -655,14 +657,26 @@ func (e *Env) PinServerKey(target, key string) error {
 	return e.saveServers(rs)
 }
 
-// RemoveServer drops target from this Mac's servers, with its pinned key:
-// for scripts whose test server comes back at a new address.
-func (e *Env) RemoveServer(target string) error {
+// RemoveServer drops a server from this Mac's servers, with its pinned
+// key, by user@host or by the name it shows by: for scripts whose test
+// server comes back at a new address, and, until the app can forget a key,
+// the owner's way past a changed one.
+func (e *Env) RemoveServer(server string) error {
 	serversMu.Lock()
 	defer serversMu.Unlock()
 	rs, err := e.loadServers()
 	if err != nil {
 		return err
 	}
-	return e.saveServers(slices.DeleteFunc(rs, func(r ServerRecord) bool { return r.Target == target }))
+	match := func(r ServerRecord) bool { return r.Target == server }
+	if !slices.ContainsFunc(rs, match) {
+		match = func(r ServerRecord) bool { return ServerDisplayName(r.Target) == server }
+		if n := len(slices.DeleteFunc(slices.Clone(rs), func(r ServerRecord) bool { return !match(r) })); n != 1 {
+			if n == 0 {
+				return fmt.Errorf("%s isn't one of this Mac's servers", server)
+			}
+			return fmt.Errorf("more than one server is named %s; give its user@host", server)
+		}
+	}
+	return e.saveServers(slices.DeleteFunc(rs, match))
 }

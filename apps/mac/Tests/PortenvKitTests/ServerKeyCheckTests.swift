@@ -87,6 +87,8 @@ struct ServerKeyCheckTests {
         var told: [ServerKeyNotice] = []
         await ServerKeyCheck(keys: keys).run(ask: { _ in Issue.record("asked"); return true }, tell: { told.append($0) })
         #expect(told.first?.title == "test-server’s key has changed")
+        // Until the app can forget a key, the owner's way past it (R-0183).
+        #expect(told.first?.detail.contains("portenv app remove-server test-server") == true)
         #expect(keys.calls == ["list"])
     }
 

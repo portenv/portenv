@@ -20,6 +20,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 
+	"github.com/portenv/portenv/core/agent"
 	"github.com/portenv/portenv/core/daemon"
 	"github.com/portenv/portenv/core/internal/bounded"
 	"github.com/portenv/portenv/core/local"
@@ -49,8 +50,8 @@ func dialDaemon(e *local.Env) (daemonv1.DaemonServiceClient, func(), error) {
 //	portenv app unregister-service  (dev builds: remove portenvd's login item; this portenv's app)
 //	portenv app move BOX this-mac|USER@HOST
 //	portenv app servers BOX         (the Move To targets, one per line)
-//	portenv app trust-server USER@HOST "TYPE BASE64"  (scripts: add a server with its known host key)
-//	portenv app remove-server USER@HOST               (scripts: drop a server and its key)
+//	portenv app trust-server USER@HOST "TYPE BASE64"  (the owner's scripts only: add a server with its known host key; refused in a workspace)
+//	portenv app remove-server USER@HOST|NAME          (the owner only: drop a server and its key; refused in a workspace)
 //	portenv app ping                (exit 0 when portenvd answers)
 //	portenv app state BOX           (the save state and location, JSON)
 //	portenv app channel BOX         (a runner's box channel for a Mac, JSON on stdout)
@@ -128,8 +129,14 @@ func cmdApp(ctx context.Context, e *local.Env, op string, args []string) error {
 		fmt.Println("portenvd is running")
 		return nil
 	}
-	// For scripts that set the server up and so know its host key; the app
-	// confirms a server through ScanServerKey and TrustServerKey instead.
+	// For the owner's scripts that set the server up and so know its host
+	// key; the app confirms a server through ScanServerKey and
+	// TrustServerKey instead. It pins a key nobody looked at, so it's never
+	// run from inside a workspace, where an agent could pin a server for the
+	// owner (R-0183).
+	if (op == "trust-server" || op == "remove-server") && insideWorkspace() {
+		return fmt.Errorf("app %s is for this Mac's owner, not from inside a workspace", op)
+	}
 	if op == "trust-server" {
 		if len(args) != 2 {
 			return usageError{Msg: `app trust-server needs USER@HOST and its host key, "TYPE BASE64"`}
@@ -456,4 +463,14 @@ func unregisterService(ctx context.Context) error {
 	}
 	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
 	return cmd.Run()
+}
+
+// insideWorkspace: this runs in a box, which the driver marks with its ID
+// (agent.BoxIDEnv), or next to the box agent's socket.
+func insideWorkspace() bool {
+	if os.Getenv(agent.BoxIDEnv) != "" {
+		return true
+	}
+	_, err := os.Stat(filepath.Dir(agent.DefaultSocket))
+	return err == nil
 }

@@ -82,7 +82,7 @@ public struct ServerKeyNotice: Equatable, Sendable {
     /// It answered with a key other than the one confirmed.
     public static func changed(_ name: String) -> ServerKeyNotice {
         ServerKeyNotice(title: "\(name)’s key has changed",
-                        detail: "Portenv won’t connect to it. This happens when a server is reinstalled, or when someone is in between. Check with whoever runs it.")
+                        detail: "Portenv won’t connect to it. This happens when a server is reinstalled, or when someone is in between. Check with whoever runs it. To start again, run portenv app remove-server \(name) in Terminal.")
     }
 }
 

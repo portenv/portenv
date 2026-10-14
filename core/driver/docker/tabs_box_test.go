@@ -196,6 +196,42 @@ func TestTabsInABox(t *testing.T) {
 	if got := len(l.GetTabs()); got != 3 {
 		t.Errorf("the box has %d tabs after the app's terminal ended, want 3", got)
 	}
+
+	// A tab terminal through the channel starts with the tab's reset.
+	tt, err := c.TabTerminal(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.Send(&agentv1.TabTerminalRequest{Msg: &agentv1.TabTerminalRequest_Open{Open: &agentv1.TabTerminalOpen{
+		Session: "main", Tab: l.GetTabs()[0].GetId(), Author: "Test", Size: &agentv1.TerminalSize{Cols: 80, Rows: 24},
+	}}}); err != nil {
+		t.Fatal(err)
+	}
+	if m, err := tt.Recv(); err != nil || m.GetReset_() == nil {
+		t.Fatalf("TabTerminal in a box: %v, %v", m, err)
+	}
+	_ = tt.CloseSend()
+	// A program of work's can't open one (R-0175): not over the channel
+	// without its token, nor on the helper's local socket.
+	got := sh("work", "curl -sk --http2 -m 20 -o /dev/null -D - -X POST "+
+		"-H 'content-type: application/grpc' -H 'te: trailers' --data-binary '' "+
+		"https://127.0.0.1:7700/portenv.agent.v1.AgentService/TabTerminal | tr -d '\\r' | grep -i '^grpc-status:' || echo none")
+	if got != "grpc-status: 16" {
+		t.Errorf("work opening TabTerminal over the channel without the token: %q, want grpc-status: 16 (unauthenticated)", got)
+	}
+	got = sh("work", `python3 -c "
+import socket
+s = socket.socket(socket.AF_UNIX)
+try:
+    s.connect('/run/portenv/agent.sock'); print('OPEN')
+except PermissionError:
+    print('DENIED')
+except OSError as e:
+    print('ERROR', e)
+"`)
+	if got != "DENIED" {
+		t.Errorf("work connecting to the helper's local socket: %s, want DENIED", got)
+	}
 }
 
 // onlyWork: every non-empty line is "work".

@@ -31,6 +31,9 @@ public final class DaemonClient: DaemonAPI, Sendable {
         do {
             return try await body()
         } catch let e as RPCError {
+            if e.metadata[stringValues: "portenv-refusal"].contains("open-elsewhere") {
+                throw DaemonError(e.message, openElsewhere: true)
+            }
             throw DaemonError.fromRPC(message: e.message, unimplemented: e.code == .unimplemented, unavailable: e.code == .unavailable)
         }
     }
@@ -56,8 +59,37 @@ public final class DaemonClient: DaemonAPI, Sendable {
         try await call { try await api.listServers(.init()).servers }
     }
 
-    public func open(_ box: String) async throws {
-        _ = try await call { try await api.openBox(Self.named(box, Portenv_Daemon_V1_OpenBoxRequest.self)) }
+    public func open(_ box: String) async throws { try await open(box, takeOver: false) }
+
+    public func open(_ box: String, takeOver: Bool) async throws {
+        var req = Self.named(box, Portenv_Daemon_V1_OpenBoxRequest.self)
+        req.takeOver = takeOver
+        _ = try await call { try await api.openBox(req) }
+    }
+
+    public func connectThere(_ box: String) async throws {
+        var req = Self.named(box, Portenv_Daemon_V1_OpenBoxRequest.self)
+        req.connectThere = true
+        _ = try await call { try await api.openBox(req) }
+    }
+
+    public func placement(_ box: String, probe: Bool) async throws -> Placement {
+        var req = Portenv_Daemon_V1_GetPlacementRequest()
+        req.name = box
+        req.probe = probe
+        let r = try await call { try await api.getPlacement(req) }
+        let holder: Placement.Holder = switch r.holder {
+        case .knownServer: .knownServer(id: r.serverID, name: r.serverName)
+        case .otherMachine: .otherMachine(id: r.machine)
+        default: .none
+        }
+        let answers: Placement.Answers? = switch r.answers {
+        case .yes: .yes
+        case .no: .no
+        case .cannotAsk: .cannotAsk
+        default: nil
+        }
+        return Placement(holder: holder, newestSaveAt: r.hasNewestSaveAt ? r.newestSaveAt.date : nil, answers: answers)
     }
 
     public func close(_ box: String) async throws {
@@ -284,7 +316,8 @@ extension DaemonClient: BoxCreating, RecoveryChecking {
 
 extension TabInfo {
     init(_ t: Portenv_Types_V1_Tab) {
-        self.init(id: t.id, name: t.name, active: t.active, program: t.program)
+        self.init(id: t.id, name: t.name, active: t.active, program: t.program,
+                  command: t.command, runningSince: t.hasRunningSince ? t.runningSince.date : nil)
     }
 }
 

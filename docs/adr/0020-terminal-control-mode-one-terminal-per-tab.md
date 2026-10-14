@@ -172,7 +172,7 @@ Also checked on tmux 3.4 in the image:
        - the scroll region (`#{scroll_region_upper}`/`lower`), origin mode (`#{origin_flag}`), autowrap (`#{wrap_flag}`), insert mode;
        - cursor keys and keypad (`#{keypad_cursor_flag}`, `#{keypad_flag}`), mouse modes (`#{mouse_*_flag}`);
        - the cursor position and visibility;
-       - bracketed paste, which the helper's parser tracks (tmux 3.4 has no format for it);
+       - bracketed paste (`#{bracket_paste_flag}` where tmux has it; tmux 3.4 doesn't, so there the helper's parser tracks it);
        - the current SGR: the pen the program left set, from the helper's parser, so the next output draws in the right colours.
 
        Each is written as the escape sequence that sets it, after the captured text.
@@ -195,6 +195,27 @@ Also checked on tmux 3.4 in the image:
      - **What's dropped:** a mark whose line has left the history (trimmed) or was cleared.
      - **The rule:** a replayed mark is never on the wrong line, and a missing one costs only a block header in old history.
      - **The test:** identical prompts (`$ ` twenty times, same text, which a text match can't tell apart). Every replayed mark lands on its own line.
+   - **As built (1.2c PR 3):** `core/agent/tabterm.go`.
+     - **Order:** the helper asks for the tab's pane, then sends one command list: the size, if the view gave one, then the state read and both captures. It drops the pane's output until the last reply, whose parser snapshot is taken as the reply is read. Output after it follows the seed, and a test reopens a printing counter ten times to check nothing is lost or repeated.
+     - **Mark lines:** the parser's line of the cursor at the snapshot is matched to the capture's cursor line. That gives every mark's line in the seed without `history_size`.
+     - **Epochs:** only the current epoch's marks are replayed. Older epochs (before a full-screen erase or a width change) can't be aligned, so their marks are left out rather than risk a wrong line. Their commands lose their block headers in old history.
+     - **Unfinished sequences:** the helper follows where the output stands between sequences. A seed taken mid-escape or mid-UTF-8 ends with that sequence's start, so the output after it completes it.
+     - **The pen:** the parser knows the pen only from output it has seen. A pen set before the session's control client started is unknown, and the next output may draw in the default colour until the program sets one. The app's tab watch keeps the control client up while the app is open.
+     - **Authors:** an Enter sent through a stream with an author records it for the pane. The next command mark (C) on that pane takes it, and the author is sent just before the output chunk holding the mark. A command typed through any other client gets none.
+     - **Input:** `copy-mode -q` then `send-keys -H` in 512-byte pieces, in order. A failed piece ends the stream, saying how many bytes weren't delivered.
+     - **Falling behind:** a stream more than 4 MB or 4096 events behind, or a pane tmux paused, gets a new `reset` with `skipped` set.
+     - **Restarts:** the control client broadcasts `ctlReady` when it first takes commands and `ctlRestart` after each later start. A stream that opens or resets before then waits for it.
+     - **Floods (R-0178):** the tmux reader never waits on a parser or a stream.
+       - It hands each pane's events to that pane's own queue, which holds at most 4 MB of output (`core/agent/panelane.go`).
+       - Past that limit, the waiting output is dropped and the pane's parser starts afresh. Its tab terminals then reset with `skipped`, from a capture taken after the drop.
+       - Each tab terminal takes only its own pane's output, so another tab's flood never fills its queue.
+       - **The memory bound:** 4 MB per pane, so 20 flooding tabs could hold 80 MB in the helper. If PR 7's latency gate shows no gain above 1 MB, the cap drops to 1 MB.
+       - **Lanes end with their panes:** after each window closes, the helper lists the session's panes and ends the lanes of panes that are gone, whether or not their layouts were seen.
+       - Tests:
+         - a 200,000-line flood to a reader that stops reading;
+         - another tab's output keeps arriving less than 1 s apart while a pane floods;
+         - the control client never restarts during it.
+     - **Resets:** a full reset (RIS) or a soft reset (DECSTR) clears the parser's pen and bracketed paste, so a seed after `reset` sets neither again.
    - **The app's side:** after a reconnect (portenvd or the agent restarting, a move, the Mac waking), the app opens the stream again and draws the new `reset`. The tab's history is the box's, so nothing depends on what the app had kept.
 7. **The app's per-tab terminal interface** (`apps/mac/Sources/PortenvKit/TabTerminal.swift`, in this PR, so split view can build on it now). See "The interface" below.
 8. **The CLI stays a plain attach.** `portenv attach` and `portenv open --tab` keep the `Terminal` RPC and #41's per-viewer grouped sessions, for a person in Terminal, Ghostty or a tiling terminal; their shells get the same OSC 133 marks directly. Agents' terminal access (2.4) is unchanged.

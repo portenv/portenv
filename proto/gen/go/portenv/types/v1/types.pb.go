@@ -701,7 +701,15 @@ type Tab struct {
 	Active bool `protobuf:"varint,3,opt,name=active,proto3" json:"active,omitempty"`
 	// The program running in the tab's foreground, or empty when it's just
 	// the shell (closing the tab asks first when it isn't empty).
-	Program       string `protobuf:"bytes,4,opt,name=program,proto3" json:"program,omitempty"`
+	Program string `protobuf:"bytes,4,opt,name=program,proto3" json:"program,omitempty"`
+	// The foreground command's whole command line, as one line (at most 160
+	// characters), for the Move confirmation (2.3): shown on this Mac only.
+	// It can hold secrets (mysql -p…, TOKEN=… ./deploy), so it's never
+	// logged, never in Send Feedback or a crash report (R-0140). Empty when
+	// the tab is just the shell.
+	Command string `protobuf:"bytes,5,opt,name=command,proto3" json:"command,omitempty"`
+	// When that command started.
+	RunningSince  *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=running_since,json=runningSince,proto3" json:"running_since,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -764,6 +772,20 @@ func (x *Tab) GetProgram() string {
 	return ""
 }
 
+func (x *Tab) GetCommand() string {
+	if x != nil {
+		return x.Command
+	}
+	return ""
+}
+
+func (x *Tab) GetRunningSince() *timestamppb.Timestamp {
+	if x != nil {
+		return x.RunningSince
+	}
+	return nil
+}
+
 var File_portenv_types_v1_types_proto protoreflect.FileDescriptor
 
 const file_portenv_types_v1_types_proto_rawDesc = "" +
@@ -798,12 +820,14 @@ const file_portenv_types_v1_types_proto_rawDesc = "" +
 	"\x06source\x18\x05 \x01(\x0e2\x1d.portenv.types.v1.LeaseSourceR\x06source\"=\n" +
 	"\tBuildInfo\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12\x16\n" +
-	"\x06commit\x18\x02 \x01(\tR\x06commit\"[\n" +
+	"\x06commit\x18\x02 \x01(\tR\x06commit\"\xb6\x01\n" +
 	"\x03Tab\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x16\n" +
 	"\x06active\x18\x03 \x01(\bR\x06active\x12\x18\n" +
-	"\aprogram\x18\x04 \x01(\tR\aprogram*\xb0\x01\n" +
+	"\aprogram\x18\x04 \x01(\tR\aprogram\x12\x18\n" +
+	"\acommand\x18\x05 \x01(\tR\acommand\x12?\n" +
+	"\rrunning_since\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\frunningSince*\xb0\x01\n" +
 	"\bBoxState\x12\x19\n" +
 	"\x15BOX_STATE_UNSPECIFIED\x10\x00\x12\x15\n" +
 	"\x11BOX_STATE_CREATED\x10\x01\x12\x16\n" +
@@ -868,11 +892,12 @@ var file_portenv_types_v1_types_proto_depIdxs = []int32{
 	11, // 3: portenv.types.v1.Lease.since:type_name -> google.protobuf.Timestamp
 	11, // 4: portenv.types.v1.Lease.last_heartbeat:type_name -> google.protobuf.Timestamp
 	3,  // 5: portenv.types.v1.Lease.source:type_name -> portenv.types.v1.LeaseSource
-	6,  // [6:6] is the sub-list for method output_type
-	6,  // [6:6] is the sub-list for method input_type
-	6,  // [6:6] is the sub-list for extension type_name
-	6,  // [6:6] is the sub-list for extension extendee
-	0,  // [0:6] is the sub-list for field type_name
+	11, // 6: portenv.types.v1.Tab.running_since:type_name -> google.protobuf.Timestamp
+	7,  // [7:7] is the sub-list for method output_type
+	7,  // [7:7] is the sub-list for method input_type
+	7,  // [7:7] is the sub-list for extension type_name
+	7,  // [7:7] is the sub-list for extension extendee
+	0,  // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_portenv_types_v1_types_proto_init() }

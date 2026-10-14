@@ -155,6 +155,10 @@ message OpenBoxRequest {
   // explicit choice). That machine's unsaved work is kept as a separate
   // save (resume rule 4).
   bool take_over = 2;
+  // Connect to it where it runs (the lease sheet's Connect to it there):
+  // one of this Mac's servers holds it. Nothing stops there. Refused when
+  // no known server holds it or it's no longer open there.
+  bool connect_there = 3;
 }
 
 message OpenBoxResponse {
@@ -589,6 +593,10 @@ message CheckRecoveryKeyResponse {
 
 message GetPlacementRequest {
   string name = 1;
+  // Ask a known server whether it answers (up to 2 s). Without it, the
+  // answer comes at once with answers unspecified for a known server, so
+  // the sheet can name the place before the probe ends.
+  bool probe = 2;
 }
 
 // Who holds a box open.

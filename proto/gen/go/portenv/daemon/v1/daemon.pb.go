@@ -477,7 +477,11 @@ type OpenBoxRequest struct {
 	// Take the lease from the machine that holds it (only on the user's
 	// explicit choice). That machine's unsaved work is kept as a separate
 	// save (resume rule 4).
-	TakeOver      bool `protobuf:"varint,2,opt,name=take_over,json=takeOver,proto3" json:"take_over,omitempty"`
+	TakeOver bool `protobuf:"varint,2,opt,name=take_over,json=takeOver,proto3" json:"take_over,omitempty"`
+	// Connect to it where it runs (the lease sheet's Connect to it there):
+	// one of this Mac's servers holds it. Nothing stops there. Refused when
+	// no known server holds it or it's no longer open there.
+	ConnectThere  bool `protobuf:"varint,3,opt,name=connect_there,json=connectThere,proto3" json:"connect_there,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -522,6 +526,13 @@ func (x *OpenBoxRequest) GetName() string {
 func (x *OpenBoxRequest) GetTakeOver() bool {
 	if x != nil {
 		return x.TakeOver
+	}
+	return false
+}
+
+func (x *OpenBoxRequest) GetConnectThere() bool {
+	if x != nil {
+		return x.ConnectThere
 	}
 	return false
 }
@@ -4206,8 +4217,12 @@ func (x *CheckRecoveryKeyResponse) GetOpened() bool {
 }
 
 type GetPlacementRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// Ask a known server whether it answers (up to 2 s). Without it, the
+	// answer comes at once with answers unspecified for a known server, so
+	// the sheet can name the place before the probe ends.
+	Probe         bool `protobuf:"varint,2,opt,name=probe,proto3" json:"probe,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4247,6 +4262,13 @@ func (x *GetPlacementRequest) GetName() string {
 		return x.Name
 	}
 	return ""
+}
+
+func (x *GetPlacementRequest) GetProbe() bool {
+	if x != nil {
+		return x.Probe
+	}
+	return false
 }
 
 type GetPlacementResponse struct {
@@ -4797,10 +4819,11 @@ const file_portenv_daemon_v1_daemon_proto_rawDesc = "" +
 	"\x04name\x18\x01 \x01(\tR\x04name\"B\n" +
 	"\x12RestartBoxResponse\x12\x18\n" +
 	"\asummary\x18\x01 \x01(\tR\asummary\x12\x12\n" +
-	"\x04rule\x18\x02 \x01(\x05R\x04rule\"A\n" +
+	"\x04rule\x18\x02 \x01(\x05R\x04rule\"f\n" +
 	"\x0eOpenBoxRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1b\n" +
-	"\ttake_over\x18\x02 \x01(\bR\btakeOver\"[\n" +
+	"\ttake_over\x18\x02 \x01(\bR\btakeOver\x12#\n" +
+	"\rconnect_there\x18\x03 \x01(\bR\fconnectThere\"[\n" +
 	"\x0fOpenBoxResponse\x12\x18\n" +
 	"\asummary\x18\x01 \x01(\tR\asummary\x12\x12\n" +
 	"\x04rule\x18\x02 \x01(\x05R\x04rule\x12\x1a\n" +
@@ -5009,9 +5032,10 @@ const file_portenv_daemon_v1_daemon_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\fR\x05value:\x028\x01\"L\n" +
 	"\x18CheckRecoveryKeyResponse\x12\x18\n" +
 	"\achecked\x18\x01 \x01(\x05R\achecked\x12\x16\n" +
-	"\x06opened\x18\x02 \x01(\bR\x06opened\")\n" +
+	"\x06opened\x18\x02 \x01(\bR\x06opened\"?\n" +
 	"\x13GetPlacementRequest\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\"\xa7\x02\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
+	"\x05probe\x18\x02 \x01(\bR\x05probe\"\xa7\x02\n" +
 	"\x14GetPlacementResponse\x121\n" +
 	"\x06holder\x18\x01 \x01(\x0e2\x19.portenv.daemon.v1.HolderR\x06holder\x12\x1b\n" +
 	"\tserver_id\x18\x06 \x01(\tR\bserverId\x12\x1f\n" +

@@ -1094,9 +1094,28 @@ In this order:
               - started again if it exits, with subscribers told to list afresh;
               - tmux's `set-clipboard` and `allow-passthrough` set off at every start;
               - WatchTabs follows its events (window added, closed, renamed, another session's current window, output at most once a second), with a 2 s backstop for program changes that print nothing, and polling only below tmux 3.4;
-              - the `%output`/`%extended-output` decoder and a line reader capped at 1 MB per line, each with its own fuzz target, seeded from the spike's tmux 3.4 streams (`make fuzz`, in CI on a 15 s budget);
+              - the `%output`/`%extended-output` decoder and a line reader capped at 1 MB per line, each with its own fuzz target, seeded from the spike's tmux 3.4 streams (`make fuzz`, in CI on a fixed number of runs, not a duration, which failed now and then on a slow runner);
               - tmux pinned to 3.4 in the image and checked by `test.sh`; the helper refuses older for control mode.
+            - **Built (PR 2, 2026-10-14, awaiting review):** the helper's per-pane parser, `charmbracelet/x/vt` v0.1.0 on R-0142's terms. Not yet wired to a stream; PR 3 does that.
+              - **Pinned:** exact, with `go mod verify` in lint. The notices tool passes with its 16 MIT and BSD modules.
+              - **Read-only:** replies are drained and dropped, so a query never blocks it.
+              - **Panics:** each pane's parser runs under `recover`, resets that pane only, and logs once.
+              - **Bounded:** the size is capped and the scrollback emptied after every chunk.
+              - **Fuzzed:** `FuzzPaneParser`.
+              - **Line counts:** each mark's line is counted from the pane's own output. A test checks against tmux 3.4 through scrolling, long output, the alternate screen and identical prompts.
+              - **Epochs:** a full-screen erase or a width change starts an epoch. Across one, tmux's count can differ: it counts written spaces on an erase, and reflows on a width change. The seed replays only the current epoch's marks (PR 3).
+              - **Session gone:** the control client stops when its session is gone (R-0167), instead of restarting every 5 s.
           - the `TabTerminal` stream in the agent and portenvd;
+            - **Built (PR 3, 2026-10-14, awaiting review):** `TabTerminal` in the helper (ADR 0020, decision 6, "As built").
+              - **The reset:** history, screen, alternate screen, modes, pen and cursor, with current-epoch marks and their authors on their lines. It finishes any escape or UTF-8 character the output left unfinished.
+              - **Then:** output, input and resizes until the tab closes.
+              - **Falling behind:** a new reset marked `skipped`.
+              - **Tests:** on real tmux, for nothing lost or repeated across ten reopenings, 64 KB of every byte value arriving unchanged from copy mode, authors, resizes taking turns with another client, a gone tab, falling behind, and resets mid-sequence. The driver test checks that `work` can't open a tab terminal over the channel or the local socket (R-0175). Another test checks that the parser's drain goroutine ends (R-0176).
+              - **Known limitation:** marks from before a full-screen erase or a width change aren't replayed.
+            - **Built (the flood PR, 2026-10-14, awaiting review; R-0178):** the tmux reader never waits on a parser or a stream.
+              - **Lanes:** each pane's output goes through its own queue, capped at 4 MB. Past the cap, that pane's waiting output is dropped and its streams reseed with `skipped`.
+              - **Its own pane only:** a tab terminal takes only its pane's output.
+              - **Tests:** a 200,000-line flood under `-race`, another tab staying live, no client restart, and resets clearing the pen and bracketed paste.
             - **Built in portenvd (PR 4, 2026-10-14, awaiting review):** `DaemonService.TabTerminal` relays to the helper's, on this Mac or over a server's forward.
               - **Author:** from the connection's caller, fixed at accept (`caller.go`); the app's open has no author field (4 is reserved), and nothing in a request can set one.
               - **Scope:** a caller limited to one workspace is refused any other before a helper is contacted.
@@ -1416,8 +1435,8 @@ The title menu's Move To, as found at the Mac on 2026-10-10:
 
 The lease sheet (the board `move-and-lease`; R-0136, R-0140, R-0168), in three PRs:
 - **A1, `portenvd` (built):** OpenBox's refusal for a workspace open elsewhere carries the trailer `portenv-refusal: open-elsewhere`, and `GetPlacement` gives the facts: the holder (one of this Mac's servers, by an ID and the name it shows by, never its address; or another machine), its machine ID, the newest save's time, and whether it answers. A server is found from the lease's machine ID by asking each of this Mac's servers `portenv machine-id` once (remembered in `state/server-machines.json`); it answers if `portenv app ping` over SSH succeeds within 2 s. Another Mac can't be asked. "Move it to this Mac" from a known server closes it there (saved and released) and opens it here. The sheet never waits for the probe: it shows at once with "Checking whether <place> answers…".
-- **A2:** each tab's running command and how long it has run, for the Move confirmation: shown on this Mac only, one line, never logged or sent.
-- **B, the app's three sheets.** Defaults: Connect on the lease sheet, Move on the confirmation. When the place doesn't answer, Move to This Mac is the default only for a known server whose ping failed and whose newest save is under an hour old; a holder that can't be asked never makes it the default: Keep Waiting is, and Move to This Mac says "Another Mac may still be working in it. Anything it hasn't saved yet stays there, and is kept as a separate save when it next saves." (R-0168). "Look without changing anything" is hidden until 1.4's Browse Saves.
+- **A2 (built):** each tab's running command and when it started, for the Move confirmation: read by the box helper from `/proc` (`Tab.command`, one line, at most 160 characters; `Tab.running_since`), shown on this Mac only, never logged; the app's tab description leaves the command out (tested with a planted `-pSECRET`).
+- **B, the app's three sheets (built).** OpenBox's refusal opens the sheet at once, naming the place (`GetPlacement` without the probe), and the probe fills it in; Connect to it there is OpenBox's `connect_there`; Move it to this Mac is MoveBox; Move to This Mac takes over (rule 4); Keep Waiting tries the open again every 30 s and brings the sheet back, offering Connect, when the server answers. Move To asks first, with every running command. Defaults: Connect on the lease sheet, Move on the confirmation. When the place doesn't answer, Move to This Mac is the default only for a known server whose ping failed and whose newest save is under an hour old; a holder that can't be asked never makes it the default: Keep Waiting is, and Move to This Mac says "Another Mac may still be working in it. Anything it hasn't saved yet stays there, and is kept as a separate save when it next saves." (R-0168). "Look without changing anything" is hidden until 1.4's Browse Saves.
 
 **2.4 Stand-in agents over SSH and the CLI** (no control plane, no lanes)
 
@@ -1572,6 +1591,7 @@ These need an owner decision; Claude Code should add new ones here instead of gu
 - [ ] Point-in-time autosaves while the box runs: worth a file system with snapshots (for example btrfs on the Apple disk image), or are file-consistent saves plus the pre-save hook enough? (ADR 0005)
 - [ ] Before each door is built: confirm the target agents can actually reach it (for example outbound SSH from their computers for door 1).
 - [ ] Does Grok Bot read `~/.agents/skills` and can it run the install script? (The owner is testing it.)
+- [ ] tmux (3.4 and 3.7c) sometimes drops a pane's last output in control mode when the program exits at once: the pane is gone before tmux writes the queued output, about 2 times in 100 under load. The app's tab terminal then misses it, although the tab's own history is fine until the window closes. The helper delivers everything tmux sends (tested). A fix would set `remain-on-exit` on, then have the helper close a dead pane once its own control client reports it dead. A subscription to `#{pane_dead}` arrives after the pane's output. That changes when tabs close, so it needs a decision. (1.2c PR 3)
 - [ ] Before 2.5: can the target agents be woken by an incoming webhook? If not, an agent keeping `portenv events --follow` running does the job and 2.5 drops in priority (ADR 0008).
 - [x] Apple Developer Program enrolment, needed for Developer ID signing and notarization in 1.8. **Answered (2026-10-10):** Portenv is signed with the owner's existing organization team; no new enrolment is needed (see 1.8).
 - [ ] Approval timeout default (30 minutes assumed) and what happens when it expires.

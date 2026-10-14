@@ -62,7 +62,30 @@ final class FakeDaemon: DaemonAPI, @unchecked Sendable {
     var boxNames: [String] = ["acme-api"]
     func boxes() async throws -> [String] { try await record(["app", "boxes"]); return boxNames }
     func servers() async throws -> [String] { try await record(["app", "servers"]); return ["portenv@server-a"] }
-    func open(_ box: String) async throws { try await record(["app", "open", box]) }
+    /// While set, open answers as portenvd does for a workspace open
+    /// somewhere else, and placement gives this (answers withheld without
+    /// the probe).
+    var openElsewhere: Placement? {
+        get { lock.withLock { _openElsewhere } }
+        set { lock.withLock { _openElsewhere = newValue } }
+    }
+    private var _openElsewhere: Placement?
+    /// Runs at each placement call, with whether it probes.
+    var onPlacement: (@Sendable (Bool) async -> Void)?
+
+    func open(_ box: String) async throws {
+        try await record(["app", "open", box])
+        if openElsewhere != nil { throw DaemonError("open elsewhere", openElsewhere: true) }
+    }
+    func open(_ box: String, takeOver: Bool) async throws { try await record(["app", "open", box] + (takeOver ? ["--take-over"] : [])) }
+    func connectThere(_ box: String) async throws { try await record(["app", "open", box, "--connect-there"]) }
+    func placement(_ box: String, probe: Bool) async throws -> Placement {
+        try await record(["app", "placement", box] + (probe ? ["--probe"] : []))
+        await onPlacement?(probe)
+        guard let p = openElsewhere else { return Placement(holder: .none, newestSaveAt: nil, answers: nil) }
+        if case .knownServer = p.holder, !probe { return Placement(holder: p.holder, newestSaveAt: p.newestSaveAt, answers: nil) }
+        return p
+    }
     func close(_ box: String) async throws { try await record(["app", "close", box]) }
     func makeSavePoint(_ box: String) async throws { try await record(["app", "point", box]) }
     func revert(_ box: String) async throws -> Date? { try await record(["app", "revert", box]); return revertedTo }

@@ -439,9 +439,28 @@ public nonisolated struct Portenv_Types_V1_Tab: Sendable {
   /// the shell (closing the tab asks first when it isn't empty).
   public var program: String = String()
 
+  /// The foreground command's whole command line, as one line (at most 160
+  /// characters), for the Move confirmation (2.3): shown on this Mac only.
+  /// It can hold secrets (mysql -p…, TOKEN=… ./deploy), so it's never
+  /// logged, never in Send Feedback or a crash report (R-0140). Empty when
+  /// the tab is just the shell.
+  public var command: String = String()
+
+  /// When that command started.
+  public var runningSince: SwiftProtobuf.Google_Protobuf_Timestamp {
+    get {_runningSince ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
+    set {_runningSince = newValue}
+  }
+  /// Returns true if `runningSince` has been explicitly set.
+  public var hasRunningSince: Bool {self._runningSince != nil}
+  /// Clears the value of `runningSince`. Subsequent reads from it will return its default value.
+  public mutating func clearRunningSince() {self._runningSince = nil}
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
+
+  fileprivate var _runningSince: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
 }
 
 // MARK: - Code below here is support for the SwiftProtobuf runtime.
@@ -717,7 +736,7 @@ nonisolated extension Portenv_Types_V1_BuildInfo: SwiftProtobuf.Message, SwiftPr
 
 nonisolated extension Portenv_Types_V1_Tab: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Tab"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}name\0\u{1}active\0\u{1}program\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}name\0\u{1}active\0\u{1}program\0\u{1}command\0\u{3}running_since\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -729,12 +748,18 @@ nonisolated extension Portenv_Types_V1_Tab: SwiftProtobuf.Message, SwiftProtobuf
       case 2: try { try decoder.decodeSingularStringField(value: &self.name) }()
       case 3: try { try decoder.decodeSingularBoolField(value: &self.active) }()
       case 4: try { try decoder.decodeSingularStringField(value: &self.program) }()
+      case 5: try { try decoder.decodeSingularStringField(value: &self.command) }()
+      case 6: try { try decoder.decodeSingularMessageField(value: &self._runningSince) }()
       default: break
       }
     }
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
     if !self.id.isEmpty {
       try visitor.visitSingularStringField(value: self.id, fieldNumber: 1)
     }
@@ -747,6 +772,12 @@ nonisolated extension Portenv_Types_V1_Tab: SwiftProtobuf.Message, SwiftProtobuf
     if !self.program.isEmpty {
       try visitor.visitSingularStringField(value: self.program, fieldNumber: 4)
     }
+    if !self.command.isEmpty {
+      try visitor.visitSingularStringField(value: self.command, fieldNumber: 5)
+    }
+    try { if let v = self._runningSince {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 6)
+    } }()
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -755,6 +786,8 @@ nonisolated extension Portenv_Types_V1_Tab: SwiftProtobuf.Message, SwiftProtobuf
     if lhs.name != rhs.name {return false}
     if lhs.active != rhs.active {return false}
     if lhs.program != rhs.program {return false}
+    if lhs.command != rhs.command {return false}
+    if lhs._runningSince != rhs._runningSince {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

@@ -61,6 +61,7 @@ const (
 	DaemonService_RecoverBox_FullMethodName            = "/portenv.daemon.v1.DaemonService/RecoverBox"
 	DaemonService_CheckRecoveryKey_FullMethodName      = "/portenv.daemon.v1.DaemonService/CheckRecoveryKey"
 	DaemonService_GetPlacement_FullMethodName          = "/portenv.daemon.v1.DaemonService/GetPlacement"
+	DaemonService_TabTerminal_FullMethodName           = "/portenv.daemon.v1.DaemonService/TabTerminal"
 	DaemonService_ScanServerKey_FullMethodName         = "/portenv.daemon.v1.DaemonService/ScanServerKey"
 	DaemonService_TrustServerKey_FullMethodName        = "/portenv.daemon.v1.DaemonService/TrustServerKey"
 	DaemonService_ForgetServerKey_FullMethodName       = "/portenv.daemon.v1.DaemonService/ForgetServerKey"
@@ -182,6 +183,12 @@ type DaemonServiceClient interface {
 	// OpenBox's refusal for a box open elsewhere carries the trailer
 	// portenv-refusal: open-elsewhere, and the app asks this then.
 	GetPlacement(ctx context.Context, in *GetPlacementRequest, opts ...grpc.CallOption) (*GetPlacementResponse, error)
+	// One tab's terminal (ADR 0020), relayed to the workspace helper's
+	// TabTerminal as Terminal is: same socket, same box routing, on this Mac
+	// or on a server. The first message must be open. portenvd sets the
+	// stream's author from the connection's caller; nothing in the request
+	// can, and the open has no author field.
+	TabTerminal(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[TabTerminalRequest, TabTerminalResponse], error)
 	// A server's host key (2.9, ADR 0021, R-0180), found through ssh itself
 	// and compared, read only, with this Mac's SSH known hosts: the same key
 	// confirms the server; a different one marks it changed. A server that
@@ -583,6 +590,19 @@ func (c *daemonServiceClient) GetPlacement(ctx context.Context, in *GetPlacement
 	return out, nil
 }
 
+func (c *daemonServiceClient) TabTerminal(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[TabTerminalRequest, TabTerminalResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &DaemonService_ServiceDesc.Streams[3], DaemonService_TabTerminal_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[TabTerminalRequest, TabTerminalResponse]{ClientStream: stream}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type DaemonService_TabTerminalClient = grpc.BidiStreamingClient[TabTerminalRequest, TabTerminalResponse]
+
 func (c *daemonServiceClient) ScanServerKey(ctx context.Context, in *ScanServerKeyRequest, opts ...grpc.CallOption) (*ScanServerKeyResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ScanServerKeyResponse)
@@ -729,6 +749,12 @@ type DaemonServiceServer interface {
 	// OpenBox's refusal for a box open elsewhere carries the trailer
 	// portenv-refusal: open-elsewhere, and the app asks this then.
 	GetPlacement(context.Context, *GetPlacementRequest) (*GetPlacementResponse, error)
+	// One tab's terminal (ADR 0020), relayed to the workspace helper's
+	// TabTerminal as Terminal is: same socket, same box routing, on this Mac
+	// or on a server. The first message must be open. portenvd sets the
+	// stream's author from the connection's caller; nothing in the request
+	// can, and the open has no author field.
+	TabTerminal(grpc.BidiStreamingServer[TabTerminalRequest, TabTerminalResponse]) error
 	// A server's host key (2.9, ADR 0021, R-0180), found through ssh itself
 	// and compared, read only, with this Mac's SSH known hosts: the same key
 	// confirms the server; a different one marks it changed. A server that
@@ -856,6 +882,9 @@ func (UnimplementedDaemonServiceServer) CheckRecoveryKey(context.Context, *Check
 }
 func (UnimplementedDaemonServiceServer) GetPlacement(context.Context, *GetPlacementRequest) (*GetPlacementResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetPlacement not implemented")
+}
+func (UnimplementedDaemonServiceServer) TabTerminal(grpc.BidiStreamingServer[TabTerminalRequest, TabTerminalResponse]) error {
+	return status.Error(codes.Unimplemented, "method TabTerminal not implemented")
 }
 func (UnimplementedDaemonServiceServer) ScanServerKey(context.Context, *ScanServerKeyRequest) (*ScanServerKeyResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ScanServerKey not implemented")
@@ -1510,6 +1539,13 @@ func _DaemonService_GetPlacement_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
+func _DaemonService_TabTerminal_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(DaemonServiceServer).TabTerminal(&grpc.GenericServerStream[TabTerminalRequest, TabTerminalResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type DaemonService_TabTerminalServer = grpc.BidiStreamingServer[TabTerminalRequest, TabTerminalResponse]
+
 func _DaemonService_ScanServerKey_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ScanServerKeyRequest)
 	if err := dec(in); err != nil {
@@ -1732,6 +1768,12 @@ var DaemonService_ServiceDesc = grpc.ServiceDesc{
 			StreamName:    "WatchTabs",
 			Handler:       _DaemonService_WatchTabs_Handler,
 			ServerStreams: true,
+		},
+		{
+			StreamName:    "TabTerminal",
+			Handler:       _DaemonService_TabTerminal_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
 		},
 	},
 	Metadata: "portenv/daemon/v1/daemon.proto",

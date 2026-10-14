@@ -61,11 +61,15 @@ struct LeaseFlowTests {
         await c.choose(.keepWaiting)
         #expect(c.leaseSheet == nil)
         #expect(c.waitingFor == "studio-1a2b3c")
-        try await Task.sleep(for: .milliseconds(80))
-        daemon.openElsewhere = nil // the other Mac let go
-        for _ in 0..<50 where c.waitingFor != nil { try await Task.sleep(for: .milliseconds(20)) }
+        // At least one more try while it's still held, then the other Mac
+        // lets go and the next try opens it.
+        for _ in 0..<500 where daemon.calls.filter({ $0 == ["app", "open", "acme-api"] }).count < 2 {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        #expect(c.waitingFor == "studio-1a2b3c")
+        daemon.openElsewhere = nil
+        for _ in 0..<500 where c.waitingFor != nil { try await Task.sleep(for: .milliseconds(20)) }
         #expect(c.waitingFor == nil)
-        #expect(daemon.calls.filter { $0 == ["app", "open", "acme-api"] }.count >= 3)
 
         let taker = FakeDaemon()
         taker.openElsewhere = Placement(holder: .otherMachine(id: "studio-1a2b3c"), newestSaveAt: Date(), answers: .cannotAsk)
@@ -106,9 +110,10 @@ struct LeaseFlowTests {
     /// Move To asks first, naming what runs; Move goes, Cancel doesn't.
     @Test func moveToAsksFirst() async {
         let daemon = FakeDaemon()
+        let drawn = Date(timeIntervalSince1970: 1_791_900_000)
         daemon.setTabs([TabInfo(id: "@0", name: "claude", active: true, program: "claude", command: "claude --continue",
-                                runningSince: Date().addingTimeInterval(-180))])
-        let c = BoxController(box: "acme-api", daemon: daemon)
+                                runningSince: drawn.addingTimeInterval(-180))])
+        let c = BoxController(box: "acme-api", daemon: daemon, now: { drawn })
         await c.run(.move("ubuntu@test-server"))
         #expect(c.moveConfirmation?.running == ["claude --continue in the claude tab \u{00B7} 3 min"])
         #expect(!daemon.calls.contains { $0.count > 1 && $0[1] == "move" })

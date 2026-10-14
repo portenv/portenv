@@ -124,9 +124,9 @@ func TestAnUnansweredEngineCallFailsInEngineWait(t *testing.T) {
 	}
 }
 
-// An engine that can't be reached at all (not running, or starting) is
-// ErrEngineUnresponsive too.
-func TestAnUnreachableEngineIsUnresponsive(t *testing.T) {
+// An engine nothing answers for isn't running; Docker Desktop's own
+// "still starting" deadline is ErrEngineUnresponsive.
+func TestAnUnreachableEngineIsNotRunning(t *testing.T) {
 	shortEngineWait(t, 300*time.Millisecond)
 	l, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -135,8 +135,16 @@ func TestAnUnreachableEngineIsUnresponsive(t *testing.T) {
 	addr := l.Addr().String()
 	_ = l.Close()
 	d := driverAt(t, "tcp://"+addr)
-	if err := d.ensureImage(context.Background(), driver.Box{ToolboxImage: "img:1"}); !errors.Is(err, driver.ErrEngineUnresponsive) {
+	if err := d.ensureImage(context.Background(), driver.Box{ToolboxImage: "img:1"}); !errors.Is(err, driver.ErrEngineNotRunning) {
 		t.Fatalf("got %v", err)
+	}
+	starting := fakeDriver(t, &fakeEngine{inspectImage: func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`{"message":"dialing 192.168.65.7:2376: context deadline exceeded"}`))
+	}})
+	if err := starting.ensureImage(context.Background(), driver.Box{ToolboxImage: "img:1"}); !errors.Is(err, driver.ErrEngineUnresponsive) {
+		t.Fatalf("Docker Desktop still starting: %v", err)
 	}
 }
 

@@ -196,9 +196,13 @@ var ErrMountsChanged = errors.New("the workspace was started with other mounts t
 
 // ErrNoChannel: this process has no agent channel for the box's start.
 // ErrEngineUnresponsive: the container engine didn't answer a call in time
-// (EngineWait), or couldn't be reached: it isn't running, or is still
-// starting. Nothing about the box changed.
+// (EngineWait), or said it couldn't yet (still starting). Nothing about the
+// box changed.
 var ErrEngineUnresponsive = errors.New("the container engine didn't answer")
+
+// ErrEngineNotRunning: nothing answers on the engine's socket: it isn't
+// running.
+var ErrEngineNotRunning = errors.New("the container engine isn't running")
 
 // ErrPullStalled: an image download made no progress for EngineWait.
 var ErrPullStalled = errors.New("the image download stopped making progress")

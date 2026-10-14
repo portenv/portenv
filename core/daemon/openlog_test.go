@@ -5,6 +5,7 @@ package daemon
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -39,7 +40,7 @@ func TestNoPathsInLogLines(t *testing.T) {
 
 // openWithEngine opens a workspace against a fake container engine whose
 // image inspect and pull behave as given, and returns the error and the log.
-func openWithEngine(t *testing.T, inspect, pull http.HandlerFunc) (error, string) {
+func openWithEngine(t *testing.T, inspect, pull http.HandlerFunc) (string, error) {
 	t.Helper()
 	old := docker.EngineWait
 	docker.EngineWait = 300 * time.Millisecond
@@ -74,7 +75,7 @@ func openWithEngine(t *testing.T, inspect, pull http.HandlerFunc) (error, string
 	if strings.Contains(out, s.env.Dir) || strings.Contains(out, "/Users/") {
 		t.Errorf("the log has a path: %s", out)
 	}
-	return err, out
+	return out, err
 }
 
 func hangHandler(_ http.ResponseWriter, r *http.Request) { <-r.Context().Done() }
@@ -83,7 +84,7 @@ func hangHandler(_ http.ResponseWriter, r *http.Request) { <-r.Context().Done() 
 // line, and the log says so by workspace ID: on entry, and the failure.
 func TestAnOpenTheEngineDoesntAnswerFailsPlainlyAndIsLogged(t *testing.T) {
 	start := time.Now()
-	err, out := openWithEngine(t, hangHandler, hangHandler)
+	out, err := openWithEngine(t, hangHandler, hangHandler)
 	if st, _ := status.FromError(err); st.Code() != codes.Unavailable || st.Message() != EngineUnresponsive {
 		t.Fatalf("got %v, want %q", err, EngineUnresponsive)
 	}
@@ -110,7 +111,7 @@ func TestAStalledDownloadFailsPlainlyAndIsLogged(t *testing.T) {
 		w.(http.Flusher).Flush()
 		<-r.Context().Done()
 	}
-	err, out := openWithEngine(t, notFound, stall)
+	out, err := openWithEngine(t, notFound, stall)
 	if st, _ := status.FromError(err); st.Code() != codes.Unavailable || st.Message() != PullStalled {
 		t.Fatalf("got %v, want %q", err, PullStalled)
 	}
@@ -118,5 +119,31 @@ func TestAStalledDownloadFailsPlainlyAndIsLogged(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("the log lacks %q:\n%s", want, out)
 		}
+	}
+}
+
+// An engine nothing answers for (Docker Desktop not running) is its own
+// plain line.
+func TestAnOpenWithNoEngineSaysStartIt(t *testing.T) {
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := l.Addr().String()
+	_ = l.Close()
+	t.Setenv("DOCKER_HOST", "tcp://"+addr)
+	t.Setenv("DOCKER_API_VERSION", "1.47")
+	s, logs := loggingServer(t)
+	c := local.BoxConfig{ID: "box-0123abcd", Name: "acme-api", Image: "ghcr.io/portenv/toolbox-node:main"}
+	if err := s.env.SaveBox(c); err != nil {
+		t.Fatal(err)
+	}
+	_ = s.env.Provided.Put(c.ID, testRepoKey(c.ID))
+	_, err = s.OpenBox(context.Background(), &daemonv1.OpenBoxRequest{Name: c.Name})
+	if st, _ := status.FromError(err); st.Code() != codes.Unavailable || st.Message() != EngineNotRunning {
+		t.Fatalf("got %v, want %q", err, EngineNotRunning)
+	}
+	if !strings.Contains(logs.String(), `msg="open failed" box_id=box-0123abcd`) {
+		t.Errorf("no failure in the log:\n%s", logs.String())
 	}
 }

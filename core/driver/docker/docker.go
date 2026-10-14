@@ -214,18 +214,26 @@ func call(ctx context.Context, extra time.Duration) (context.Context, context.Ca
 	return context.WithTimeout(ctx, EngineWait+extra)
 }
 
-// engineErr says what kind of failure an engine call's error is: the engine
-// didn't answer in time, or couldn't be reached, is
-// driver.ErrEngineUnresponsive (kept with its detail); any other error is
-// returned as it is. parent is the caller's context: its own end isn't the
-// engine's fault.
+// engineErr says what kind of failure an engine call's error is: an engine
+// nothing answers for is driver.ErrEngineNotRunning; one that didn't answer
+// in time, or is still starting, is driver.ErrEngineUnresponsive (each kept
+// with its detail); any other error is returned as it is. parent is the
+// caller's context: its own end isn't the engine's fault.
 func engineErr(parent context.Context, what string, err error) error {
 	if err == nil {
 		return nil
 	}
-	if parent.Err() == nil && (errors.Is(err, context.DeadlineExceeded) || client.IsErrConnectionFailed(err) ||
-		cerrdefs.IsUnavailable(err) || cerrdefs.IsDeadlineExceeded(err)) {
-		return fmt.Errorf("%s: %w (%v)", what, driver.ErrEngineUnresponsive, err)
+	if parent.Err() != nil {
+		return fmt.Errorf("%s: %w", what, err)
+	}
+	if client.IsErrConnectionFailed(err) {
+		return fmt.Errorf("%s: %w: %w", what, driver.ErrEngineNotRunning, err)
+	}
+	// Docker Desktop still starting answers with its own deadline
+	// ("dialing …: context deadline exceeded"), not a code.
+	if errors.Is(err, context.DeadlineExceeded) || cerrdefs.IsUnavailable(err) || cerrdefs.IsDeadlineExceeded(err) ||
+		strings.Contains(err.Error(), "deadline exceeded") {
+		return fmt.Errorf("%s: %w: %w", what, driver.ErrEngineUnresponsive, err)
 	}
 	return fmt.Errorf("%s: %w", what, err)
 }

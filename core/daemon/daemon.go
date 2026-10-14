@@ -921,11 +921,13 @@ func (s *Server) boxID(name string) string {
 	return c.ID
 }
 
-// The lines the app shows when the container engine doesn't answer, or a
-// download stops (R-0211). The detail goes to the log.
+// The lines the app shows when the container engine isn't running, doesn't
+// answer, or a download stops (R-0211), worded as the app's own engine lines
+// (DaemonErrorText), which pass them through. The detail goes to the log.
 const (
-	EngineUnresponsive = "Docker didn't answer, so the workspace didn't open. If Docker Desktop is still starting, wait for it, then open the workspace again."
-	PullStalled        = "The workspace's image stopped downloading, so it didn't open. Check the network and Docker Desktop, then open the workspace again."
+	EngineNotRunning   = "Portenv uses Docker Desktop to run workspaces on this Mac. Start Docker Desktop, then open the workspace again."
+	EngineUnresponsive = "Docker Desktop is still starting, or isn't answering. Wait a moment, then open the workspace again."
+	PullStalled        = "Portenv couldn't get the workspace image: the download stopped. Check this Mac is online, then open the workspace again."
 )
 
 // plainOpenError turns the engine's failures into their plain lines; every
@@ -934,6 +936,8 @@ func plainOpenError(err error) error {
 	switch {
 	case errors.Is(err, driver.ErrPullStalled):
 		return status.Error(codes.Unavailable, PullStalled)
+	case errors.Is(err, driver.ErrEngineNotRunning):
+		return status.Error(codes.Unavailable, EngineNotRunning)
 	case errors.Is(err, driver.ErrEngineUnresponsive):
 		return status.Error(codes.Unavailable, EngineUnresponsive)
 	}

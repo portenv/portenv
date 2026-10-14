@@ -44,3 +44,29 @@ func TestTrustServerIsOwnerOnly(t *testing.T) {
 		t.Fatalf("left %v", ts)
 	}
 }
+
+// TestForgetServerIsOwnerOnly (R-0185): forget-server keeps the server in
+// Move To, unconfirmed; it's refused inside a workspace.
+func TestForgetServerIsOwnerOnly(t *testing.T) {
+	e := &local.Env{Dir: t.TempDir(), Machine: "mac-1"}
+	if err := e.PinServerKey("me@test-server", testKey); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(agent.BoxIDEnv, "box-0123456789ab")
+	if err := cmdApp(context.Background(), e, "forget-server", []string{"test-server"}); err == nil || !strings.Contains(err.Error(), "workspace") {
+		t.Fatalf("inside a workspace: %v", err)
+	}
+	if r, _ := e.ServerRecord("me@test-server"); r.State != local.ServerConfirmed {
+		t.Fatalf("forgotten from a workspace: %+v", r)
+	}
+	t.Setenv(agent.BoxIDEnv, "")
+	if err := cmdApp(context.Background(), e, "forget-server", []string{"test-server"}); err != nil {
+		t.Fatal(err)
+	}
+	if r, _ := e.ServerRecord("me@test-server"); r.State != local.ServerUnconfirmed {
+		t.Fatalf("after forget-server: %+v", r)
+	}
+	if ts, _ := e.ServerTargets(); len(ts) != 1 {
+		t.Fatalf("dropped from Move To: %v", ts)
+	}
+}

@@ -88,7 +88,7 @@ struct ServerKeyCheckTests {
         await ServerKeyCheck(keys: keys).run(ask: { _ in Issue.record("asked"); return true }, tell: { told.append($0) })
         #expect(told.first?.title == "test-server’s key has changed")
         // Until the app can forget a key, the owner's way past it (R-0183).
-        #expect(told.first?.detail.contains("portenv app remove-server test-server") == true)
+        #expect(told.first?.detail.contains("portenv app forget-server test-server") == true)
         #expect(keys.calls == ["list"])
     }
 
@@ -114,5 +114,23 @@ struct ServerKeyCheckTests {
         await check.run(ask: { _ in asked += 1; return false }, tell: { _ in })
         await check.run(ask: { _ in asked += 1; return false }, tell: { _ in })
         #expect(asked == 1)
+    }
+
+    /// A key that changed and was forgotten (R-0185): the question opens
+    /// with that, and Trust still sends exactly the fingerprint shown.
+    @Test func aForgottenChangedKeySaysSoFirst() async {
+        let keys = FakeServerKeys(listed: [ServerKeyInfo(id: "srv-0123456789ab", name: "test-server", state: .unconfirmed, fingerprint: "", wasChanged: true)],
+                                  scans: ["srv-0123456789ab": ServerKeyInfo(id: "srv-0123456789ab", name: "test-server", state: .unconfirmed, fingerprint: fp, keyType: "ssh-ed25519", wasChanged: true)])
+        var asked: [ServerKeyQuestion] = []
+        await ServerKeyCheck(keys: keys).run(ask: { asked.append($0); return true }, tell: { _ in Issue.record("told") })
+        #expect(asked.first?.detail.hasPrefix("This server’s key changed since you last confirmed it. Check the fingerprint with whoever runs it.") == true)
+        #expect(asked.first?.fingerprint == fp)
+        #expect(keys.calls.last == "trust srv-0123456789ab \(fp)")
+    }
+
+    /// Without the mark, no such line.
+    @Test func aFirstConfirmationHasNoChangedLine() {
+        let q = ServerKeyQuestion(ServerKeyInfo(id: "srv-0123456789ab", name: "test-server", state: .unconfirmed, fingerprint: fp, keyType: "ssh-ed25519"))
+        #expect(!q.detail.contains("changed"))
     }
 }

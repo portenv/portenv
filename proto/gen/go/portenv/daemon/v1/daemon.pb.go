@@ -4839,8 +4839,11 @@ type ServerInfo struct {
 	Fingerprint string `protobuf:"bytes,4,opt,name=fingerprint,proto3" json:"fingerprint,omitempty"`
 	// Confirmed because this Mac's SSH known hosts had the same key.
 	FromKnownHosts bool `protobuf:"varint,5,opt,name=from_known_hosts,json=fromKnownHosts,proto3" json:"from_known_hosts,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Its key changed and was forgotten: the next confirmation says so
+	// first. Cleared on Trust (R-0185).
+	WasChanged    bool `protobuf:"varint,6,opt,name=was_changed,json=wasChanged,proto3" json:"was_changed,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ServerInfo) Reset() {
@@ -4904,6 +4907,13 @@ func (x *ServerInfo) GetFingerprint() string {
 func (x *ServerInfo) GetFromKnownHosts() bool {
 	if x != nil {
 		return x.FromKnownHosts
+	}
+	return false
+}
+
+func (x *ServerInfo) GetWasChanged() bool {
+	if x != nil {
+		return x.WasChanged
 	}
 	return false
 }
@@ -5455,14 +5465,16 @@ const file_portenv_daemon_v1_daemon_proto_rawDesc = "" +
 	"\x04line\x18\x01 \x01(\x04R\x04line\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x15\n" +
 	"\x06is_you\x18\x03 \x01(\bR\x05isYou\x12\x19\n" +
-	"\bagent_id\x18\x04 \x01(\tR\aagentIdJ\x04\b\x05\x10\x06\"\xb4\x01\n" +
+	"\bagent_id\x18\x04 \x01(\tR\aagentIdJ\x04\b\x05\x10\x06\"\xd5\x01\n" +
 	"\n" +
 	"ServerInfo\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x126\n" +
 	"\x05state\x18\x03 \x01(\x0e2 .portenv.types.v1.ServerKeyStateR\x05state\x12 \n" +
 	"\vfingerprint\x18\x04 \x01(\tR\vfingerprint\x12(\n" +
-	"\x10from_known_hosts\x18\x05 \x01(\bR\x0efromKnownHosts\"3\n" +
+	"\x10from_known_hosts\x18\x05 \x01(\bR\x0efromKnownHosts\x12\x1f\n" +
+	"\vwas_changed\x18\x06 \x01(\bR\n" +
+	"wasChanged\"3\n" +
 	"\x14ScanServerKeyRequest\x12\x1b\n" +
 	"\tserver_id\x18\x01 \x01(\tR\bserverId\"e\n" +
 	"\x15ScanServerKeyResponse\x121\n" +

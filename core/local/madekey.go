@@ -116,6 +116,37 @@ func madeKeyArgs(e *Env, host, agentSock string) ([]string, error) {
 	return append(args, opts...), nil
 }
 
+// masterSetup bounds a made key's sign-in (-M -N -f): the sshSetup
+// deadline (a variable for the silent-server test).
+var masterSetup = sshSetup
+
+// masterLocks hold one sign-in per server at a time (R-0187), so runs that
+// start together bring up one shared connection.
+var masterLocks sync.Map
+
+func masterLock(id string) *sync.Mutex {
+	m, _ := masterLocks.LoadOrStore(id, &sync.Mutex{})
+	return m.(*sync.Mutex)
+}
+
+// dropMadeKey forgets a server's made key and closes its shared
+// connection, so nothing reaches it without the key again (R-0187).
+func dropMadeKey(id, target string) {
+	madeKeys.Lock()
+	delete(madeKeys.m, id)
+	madeKeys.Unlock()
+	opts, err := controlOptions(id)
+	if err != nil {
+		return
+	}
+	cmd, err := bounded.Command(context.Background(), sshSetup, sshBase()[0], append(append([]string{"-F", "none"}, opts...), "-O", "exit", "--", target)...)
+	if err != nil {
+		return
+	}
+	cmd.Stdin = nil
+	_ = cmd.Run() // none up is fine
+}
+
 // ensureMadeKeyMaster brings up the shared connection to a made-key server
 // if it isn't up: a run agent serves the key while the connection signs in,
 // and is closed as soon as it's up. Later runs go through it with no key.
@@ -124,12 +155,15 @@ func ensureMadeKeyMaster(e *Env, host string) error {
 	if err != nil {
 		return err
 	}
+	lock := masterLock(r.ID)
+	lock.Lock()
+	defer lock.Unlock()
 	check, err := madeKeyArgs(e, host, "none")
 	if err != nil {
 		return err
 	}
 	run := func(args []string, extra ...string) (string, error) {
-		cmd, err := bounded.Command(context.Background(), sshSetup, args[0], append(append(slices.Clone(args[1:]), extra...), "--", host)...)
+		cmd, err := bounded.Command(context.Background(), masterSetup, args[0], append(append(slices.Clone(args[1:]), extra...), "--", host)...)
 		if err != nil {
 			return "", err
 		}

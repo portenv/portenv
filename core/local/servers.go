@@ -624,10 +624,13 @@ func (e *Env) TrustServerKey(id, fingerprint string) error {
 // ForgetServerKey drops the server's pinned key: it is unconfirmed again,
 // and nothing runs on it until it's confirmed.
 func (e *Env) ForgetServerKey(id string) error {
-	_, err := e.updateServer(id, func(r *ServerRecord) error {
+	r, err := e.updateServer(id, func(r *ServerRecord) error {
 		r.State, r.Key, r.ConfirmedFrom, r.Scanned = ServerUnconfirmed, "", "", ""
 		return nil
 	})
+	if err == nil {
+		dropMadeKey(id, r.Target)
+	}
 	return err
 }
 
@@ -688,5 +691,17 @@ func (e *Env) RemoveServer(server string) error {
 			return fmt.Errorf("more than one server is named %s; give its user@host", server)
 		}
 	}
-	return e.saveServers(slices.DeleteFunc(rs, match))
+	var gone []ServerRecord
+	for _, r := range rs {
+		if match(r) {
+			gone = append(gone, r)
+		}
+	}
+	if err := e.saveServers(slices.DeleteFunc(rs, match)); err != nil {
+		return err
+	}
+	for _, r := range gone {
+		dropMadeKey(r.ID, r.Target)
+	}
+	return nil
 }

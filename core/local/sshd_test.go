@@ -4,6 +4,7 @@ package local
 
 import (
 	"context"
+	"crypto/ed25519"
 	"fmt"
 	"io"
 	"net"
@@ -11,11 +12,14 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"golang.org/x/crypto/ssh"
+
+	"github.com/portenv/portenv/core/internal/bounded"
 )
 
 // sshdPath is OpenSSH's server, run unprivileged on 127.0.0.1 for these
@@ -286,5 +290,164 @@ func TestAMadeKeySignsInOnceThroughItsAgent(t *testing.T) {
 	}
 	if _, err := os.Stat(marker); err == nil {
 		t.Fatal("the planted config ran a command")
+	}
+}
+
+// madeKeyServer is a real sshd that lets the made key in, as a made-key
+// server confirmed with its host key, its key handed over. PORTENV_SSH is
+// a wrapper that logs each ssh run's arguments to the returned file.
+func madeKeyServer(t *testing.T) (e *Env, target string, priv ed25519.PrivateKey, runs string) {
+	t.Helper()
+	w := &sshdWorld{dir: t.TempDir(), sshd: sshdPath(t)}
+	t.Setenv("HOME", w.dir)
+	t.Setenv("SSH_AUTH_SOCK", "")
+	signer, priv := testSigner(t)
+	if err := os.WriteFile(filepath.Join(w.dir, "authorized_keys"), ssh.MarshalAuthorizedKey(signer.PublicKey()), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	hostPub := keygen(t, filepath.Join(w.dir, "host_key"))
+	port := freePort(t)
+	w.startSSHD(t, "made", port, filepath.Join(w.dir, "host_key"))
+	runs = filepath.Join(w.dir, "ssh-runs")
+	wrapper := filepath.Join(w.dir, "ssh-logged")
+	if err := os.WriteFile(wrapper, []byte("#!/bin/sh\necho \"$*\" >>"+runs+"\nexec ssh \"$@\"\n"), 0o700); err != nil { // #nosec G306 -- test helper
+		t.Fatal(err)
+	}
+	t.Setenv("PORTENV_SSH", wrapper)
+	me, err := user.Current()
+	if err != nil {
+		t.Fatal(err)
+	}
+	target = fmt.Sprintf("ssh://%s@127.0.0.1:%d", me.Username, port)
+	e = &Env{Dir: t.TempDir(), Machine: "mac-1"}
+	if err := e.PinServerKey(target, hostPub); err != nil {
+		t.Fatal(err)
+	}
+	e.UseForServers()
+	t.Cleanup(func() { closeShared(t, target); useForServers(nil); forgetMadeKeys() })
+	if err := e.UseMadeKey(ServerID(target)); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.ProvideServerKey(ServerID(target), priv); err != nil {
+		t.Fatal(err)
+	}
+	return e, target, priv, runs
+}
+
+func countRuns(t *testing.T, runs, flag string) int {
+	t.Helper()
+	b, _ := os.ReadFile(runs) // #nosec G304 -- the test's own log
+	n := 0
+	for _, line := range strings.Split(string(b), "\n") {
+		if slices.Contains(strings.Fields(line), flag) {
+			n++
+		}
+	}
+	return n
+}
+
+// TestConcurrentRunsSignInOnce (R-0187): five runs at once to a made-key
+// server bring up one shared connection, and all five succeed.
+func TestConcurrentRunsSignInOnce(t *testing.T) {
+	_, target, _, runs := madeKeyServer(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	errs := make(chan error, 5)
+	for range 5 {
+		go func() { errs <- RunRemote(ctx, QuickRemote, target, io.Discard, "true") }()
+	}
+	for range 5 {
+		if err := <-errs; err != nil {
+			t.Error(err)
+		}
+	}
+	if n := countRuns(t, runs, "-M"); n != 1 {
+		t.Fatalf("%d sign-ins (-M), want 1", n)
+	}
+}
+
+// TestForgetDropsTheMadeKey (R-0187): Forget closes the shared connection
+// and drops the key from memory; confirmed again, a run needs the key
+// handed over again.
+func TestForgetDropsTheMadeKey(t *testing.T) {
+	e, target, priv, _ := madeKeyServer(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	if err := RunRemote(ctx, QuickRemote, target, io.Discard, "true"); err != nil {
+		t.Fatal(err)
+	}
+	id := ServerID(target)
+	if err := e.ForgetServerKey(id); err != nil {
+		t.Fatal(err)
+	}
+	scan, err := e.ScanServerKey(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.TrustServerKey(id, scan.Fingerprint); err != nil {
+		t.Fatal(err)
+	}
+	if err := RunRemote(ctx, QuickRemote, target, io.Discard, "true"); err == nil || !strings.Contains(err.Error(), "Open Portenv on this Mac") {
+		t.Fatalf("after Forget: %v", err)
+	}
+	if err := e.ProvideServerKey(id, priv); err != nil {
+		t.Fatal(err)
+	}
+	if err := RunRemote(ctx, QuickRemote, target, io.Discard, "true"); err != nil {
+		t.Fatalf("handed over again: %v", err)
+	}
+	// Remove does the same.
+	if err := e.RemoveServer(target); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := madeKeySigner(id); ok {
+		t.Fatal("the key outlived Remove")
+	}
+}
+
+// TestASilentServerTimesOut (R-0187): a server that takes the connection
+// and never answers stops the sign-in at its deadline, and the run agent
+// goes with it.
+func TestASilentServerTimesOut(t *testing.T) {
+	saved := masterSetup
+	masterSetup = 2 * time.Second
+	t.Cleanup(func() { masterSetup = saved })
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = l.Close() }()
+	go func() {
+		for {
+			c, err := l.Accept()
+			if err != nil {
+				return
+			}
+			defer func() { _ = c.Close() }() // held open, silent
+		}
+	}()
+	t.Setenv("HOME", t.TempDir())
+	_, priv := testSigner(t)
+	target := fmt.Sprintf("ssh://me@127.0.0.1:%d", l.Addr().(*net.TCPAddr).Port)
+	e := &Env{Dir: t.TempDir(), Machine: "mac-1"}
+	if err := e.PinServerKey(target, hostKey(t)); err != nil {
+		t.Fatal(err)
+	}
+	e.UseForServers()
+	t.Cleanup(func() { useForServers(nil); forgetMadeKeys() })
+	_ = e.UseMadeKey(ServerID(target))
+	_ = e.ProvideServerKey(ServerID(target), priv)
+	t.Setenv("PORTENV_SSH", "ssh")
+	dir, _ := SocketDir()
+	before, _ := filepath.Glob(filepath.Join(dir, "a-*"))
+	start := time.Now()
+	if err := RunRemote(context.Background(), QuickRemote, target, io.Discard, "true"); err == nil {
+		t.Fatal("ran on a silent server")
+	}
+	if d := time.Since(start); d > 2*time.Second+bounded.KillGrace+3*time.Second {
+		t.Fatalf("took %v", d)
+	}
+	if after, _ := filepath.Glob(filepath.Join(dir, "a-*")); len(after) != len(before) {
+		t.Fatalf("the agent outlived the timeout: %v", after)
 	}
 }

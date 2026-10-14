@@ -410,6 +410,7 @@ func (t *tabStream) resetOnce(ctx context.Context, skipped bool) error {
 		return t.closed() // the tab is gone
 	}
 	t.pane = pane
+	t.sub.only(pane)
 	size := ""
 	if t.size != [2]int{} {
 		s := clampSizeOf(t.size)

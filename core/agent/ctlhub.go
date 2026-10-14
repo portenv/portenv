@@ -73,6 +73,16 @@ type ctlSub struct {
 	maxBytes int // ctlSubBytes, or less in a test
 	overflow bool
 	kick     chan struct{}
+	// pane, when set, is the only pane whose output it takes: a tab
+	// terminal never queues (or falls behind on) another tab's flood.
+	pane string
+}
+
+// only sets the one pane whose output the subscriber takes ("" for all).
+func (s *ctlSub) only(pane string) {
+	s.mu.Lock()
+	s.pane = pane
+	s.mu.Unlock()
 }
 
 // keepsThroughOverflow is what a subscriber that fell behind still gets:
@@ -88,6 +98,10 @@ func keepsThroughOverflow(k ctlKind) bool {
 
 func (s *ctlSub) push(e ctlEvent) {
 	s.mu.Lock()
+	if s.pane != "" && e.kind == ctlOutput && e.pane != s.pane {
+		s.mu.Unlock()
+		return
+	}
 	switch {
 	case s.overflow:
 		// Dropped until it's taken, except what keepsThroughOverflow.
@@ -153,6 +167,11 @@ type ctlClient struct {
 	enter   map[string]recordedAuthor
 	authors map[string][]recordedAuthor
 	logf    func(string, ...any)
+
+	// Each pane's lane (panelane.go), and how much output one may hold.
+	lmu     sync.Mutex
+	lanes   map[string]*paneLane
+	laneMax int
 }
 
 // ctlPending is a command whose reply hasn't come.
@@ -187,11 +206,12 @@ type ctlHub struct {
 	restartAfter, restartMax time.Duration
 	logf                     func(format string, args ...any)
 	subBytes                 int // each subscriber's ctlSubBytes
+	laneBytes                int // each pane lane's paneLaneBytes
 }
 
 func newCtlHub(run tmuxFunc, cmd tmuxCmdFunc) *ctlHub {
 	return &ctlHub{clients: map[string]*ctlClient{}, run: run, cmd: cmd,
-		restartAfter: 100 * time.Millisecond, restartMax: 5 * time.Second, logf: log.Printf, subBytes: ctlSubBytes}
+		restartAfter: 100 * time.Millisecond, restartMax: 5 * time.Second, logf: log.Printf, subBytes: ctlSubBytes, laneBytes: paneLaneBytes}
 }
 
 // subscribe follows a session (which must exist, tabs.ensure) and returns
@@ -206,7 +226,8 @@ func (h *ctlHub) subscribe(ctx context.Context, session string) (*ctlSub, func()
 	c := h.clients[session]
 	if c == nil {
 		cctx, cancel := context.WithCancel(context.Background())
-		c = &ctlClient{subs: map[*ctlSub]bool{}, cancel: cancel, done: make(chan struct{}), logf: h.logf}
+		c = &ctlClient{subs: map[*ctlSub]bool{}, cancel: cancel, done: make(chan struct{}), logf: h.logf,
+			lanes: map[string]*paneLane{}, laneMax: h.laneBytes}
 		h.clients[session] = c
 		go h.serve(cctx, session, c)
 	}
@@ -307,7 +328,7 @@ func (h *ctlHub) once(ctx context.Context, session string, c *ctlClient, restart
 				h.logf("portenv-agent: tmux control client for %s: %v; dropped", session, err)
 				overflowed = true
 			}
-			c.restartParsers()
+			c.dropAll()
 			c.broadcast(ctlEvent{kind: ctlOverflow})
 			return
 		}
@@ -333,21 +354,44 @@ func (h *ctlHub) once(ctx context.Context, session string, c *ctlClient, restart
 			}
 			return
 		}
+		// A pane's events go through its lane, in order; the rest go out
+		// at once. Nothing here waits on a parser or a stream (R-0178).
 		e := parseControlLine(line)
 		switch e.kind {
 		case ctlOther:
 			return
 		case ctlOutput:
-			e.marks, e.authors, e.lost = c.feed(e.pane, e.data)
+			c.lane(e.pane).push(laneItem{output: true, size: len(e.data), run: func() {
+				e.marks, e.authors, e.lost = c.feed(e.pane, e.data)
+				c.broadcast(e)
+			}})
+			return
 		case ctlLayout:
-			c.layout(e)
+			if c.layout(e) {
+				c.lane(e.pane).push(laneItem{run: func() {
+					c.resizeParser(e.pane)
+					c.broadcast(e)
+				}})
+				return
+			}
 		case ctlPause:
 			// Output was skipped: let it come again, and start the pane's
 			// parser afresh (its screen no longer matches).
 			_, _ = c.send("refresh-client -A '"+e.pane+":continue'", "", nil)
-			c.restartParser(e.pane)
+			c.lane(e.pane).push(laneItem{run: func() {
+				c.restartParser(e.pane)
+				c.broadcast(e)
+			}})
+			return
 		case ctlWindowClose:
-			c.closeWindow(e.window)
+			// After the pane's last output.
+			if pane := c.windowPane(e.window); pane != "" {
+				c.lane(pane).push(laneItem{last: true, run: func() {
+					c.closeWindow(e.window)
+					c.broadcast(e)
+				}})
+				return
+			}
 		}
 		c.broadcast(e)
 	})
@@ -365,6 +409,7 @@ func (c *ctlClient) reset(stdin io.Writer) {
 	c.wmu.Lock()
 	c.stdin, c.pending = stdin, nil
 	c.wmu.Unlock()
+	c.stopLanes()
 	c.pmu.Lock()
 	for _, p := range c.parsers {
 		p.stop()
@@ -441,15 +486,21 @@ func (c *ctlClient) answer(p ctlPending, e ctlEvent) {
 		return
 	}
 	e.id = p.id
-	if p.snapPane != "" {
+	if p.snapPane == "" {
+		c.broadcast(e)
+		return
+	}
+	// The snapshot after the pane's output before the reply: in its lane.
+	c.lane(p.snapPane).push(laneItem{run: func() {
 		c.pmu.Lock()
-		if pp := c.parsers[p.snapPane]; pp != nil {
-			e.snap = pp.snapshot()
-		}
+		pp := c.parsers[p.snapPane]
 		e.authors = append([]recordedAuthor(nil), c.authors[p.snapPane]...)
 		c.pmu.Unlock()
-	}
-	c.broadcast(e)
+		if pp != nil {
+			e.snap = pp.snapshot()
+		}
+		c.broadcast(e)
+	}})
 }
 
 // paneList takes the reply to list-panes: each pane's window and size.
@@ -461,22 +512,42 @@ func (c *ctlClient) paneList(lines []string) {
 		}
 		cols, _ := strconv.Atoi(f[2])
 		rows, _ := strconv.Atoi(f[3])
-		c.layout(ctlEvent{window: f[0], pane: f[1], cols: cols, rows: rows})
+		if c.layout(ctlEvent{window: f[0], pane: f[1], cols: cols, rows: rows}) {
+			pane := f[1]
+			c.lane(pane).push(laneItem{run: func() { c.resizeParser(pane) }})
+		}
 	}
 }
 
-// layout records a pane's window and size, and resizes its parser.
-func (c *ctlClient) layout(e ctlEvent) {
+// layout records a pane's window and size; the pane's lane resizes its
+// parser (resizeParser), after the output before it. It reports whether
+// the layout is a pane's.
+func (c *ctlClient) layout(e ctlEvent) bool {
 	if e.pane == "" || e.cols <= 0 || e.rows <= 0 {
-		return
+		return false
 	}
 	c.pmu.Lock()
 	defer c.pmu.Unlock()
 	c.windows[e.window] = e.pane
 	c.sizes[e.pane] = [2]int{e.cols, e.rows}
-	if p := c.parsers[e.pane]; p != nil {
-		p.resize(e.cols, e.rows)
+	return true
+}
+
+// resizeParser sets a pane's parser to the size its layout last gave.
+func (c *ctlClient) resizeParser(pane string) {
+	c.pmu.Lock()
+	p, size := c.parsers[pane], c.sizes[pane]
+	c.pmu.Unlock()
+	if p != nil && size != [2]int{} {
+		p.resize(size[0], size[1])
 	}
+}
+
+// windowPane is a window's pane, if its layout was seen.
+func (c *ctlClient) windowPane(window string) string {
+	c.pmu.Lock()
+	defer c.pmu.Unlock()
+	return c.windows[window]
 }
 
 // closeWindow drops a closed window's pane: its parser, size and authors.
@@ -501,8 +572,9 @@ func (c *ctlClient) closeWindow(window string) {
 // the pane's size if known) and records who started each command: the
 // author of the latest Enter in that pane, if any (ADR 0020, decision 4).
 func (c *ctlClient) feed(pane string, data []byte) ([]paneMark, []recordedAuthor, bool) {
+	// Only the pane's lane parses it: the lock is for the maps, not held
+	// while parsing.
 	c.pmu.Lock()
-	defer c.pmu.Unlock()
 	p := c.parsers[pane]
 	if p == nil {
 		size, ok := c.sizes[pane]
@@ -512,7 +584,10 @@ func (c *ctlClient) feed(pane string, data []byte) ([]paneMark, []recordedAuthor
 		p = newPaneParser(size[0], size[1], c.logf)
 		c.parsers[pane] = p
 	}
+	c.pmu.Unlock()
 	marks, lost := p.feed(data)
+	c.pmu.Lock()
+	defer c.pmu.Unlock()
 	if lost {
 		delete(c.authors, pane)
 		delete(c.enter, pane)
@@ -559,16 +634,6 @@ func (c *ctlClient) restartParser(pane string) {
 	}
 	delete(c.authors, pane)
 	delete(c.enter, pane)
-}
-
-// restartParsers starts every pane's parser afresh (a line was dropped).
-func (c *ctlClient) restartParsers() {
-	c.pmu.Lock()
-	defer c.pmu.Unlock()
-	for _, p := range c.parsers {
-		p.restart()
-	}
-	c.authors, c.enter = map[string][]recordedAuthor{}, map[string]recordedAuthor{}
 }
 
 // client returns a session's running client, if any.

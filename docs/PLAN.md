@@ -1112,6 +1112,10 @@ In this order:
               - **Falling behind:** a new reset marked `skipped`.
               - **Tests:** on real tmux, for nothing lost or repeated across ten reopenings, 64 KB of every byte value arriving unchanged from copy mode, authors, resizes taking turns with another client, a gone tab, falling behind, and resets mid-sequence. The driver test checks that `work` can't open a tab terminal over the channel or the local socket (R-0175). Another test checks that the parser's drain goroutine ends (R-0176).
               - **Known limitation:** marks from before a full-screen erase or a width change aren't replayed.
+            - **Built (the flood PR, 2026-10-14, awaiting review; R-0178):** the tmux reader never waits on a parser or a stream.
+              - **Lanes:** each pane's output goes through its own queue, capped at 4 MB. Past the cap, that pane's waiting output is dropped and its streams reseed with `skipped`.
+              - **Its own pane only:** a tab terminal takes only its pane's output.
+              - **Tests:** a 200,000-line flood under `-race`, another tab staying live, no client restart, and resets clearing the pen and bracketed paste.
           - the app's per-tab terminal (`TabTerminalSource`, `MarkedTerminalView`) in place of today's attached terminal;
             - **Built (PR 5, 2026-10-13, awaiting review):** the tab view's guards, ahead of the live provider:
               - the default-deny filter in front of what it's fed (`TerminalFilter`, ADR 0020 decision 9), with a table test per rule and fuzzing over random bytes and the spike's mutated tmux streams;

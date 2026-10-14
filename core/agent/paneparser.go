@@ -144,6 +144,10 @@ func (p *paneParser) start(cols, rows int) {
 		p.sgr(params)
 		return false
 	})
+	// A full reset (RIS) and a soft reset (DECSTR) clear both (R-0178).
+	clear := func() { p.pen, p.bracketedPaste = nil, false }
+	e.RegisterEscHandler('c', func() bool { clear(); return false })
+	e.RegisterCsiHandler(ansi.Command(0, '!', 'p'), func(ansi.Params) bool { clear(); return false })
 	for _, f := range []byte{'h', 'l'} {
 		on := f == 'h'
 		e.RegisterCsiHandler(ansi.Command('?', 0, f), func(params ansi.Params) bool {

@@ -10,6 +10,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -432,7 +433,7 @@ func TestTabTerminalEndsWhenTheTabGoes(t *testing.T) {
 // A slow reader falls behind: its stream resets with skipped set, and the
 // output after it continues from the new seed (ADR 0020, decision 11).
 func TestTabTerminalSkipsAndSaysSoWhenTheReaderFallsBehind(t *testing.T) {
-	h := newTabTermHarness(t, "sh -c 'sleep 1; i=0; while [ $i -lt 20000 ]; do i=$((i+1)); echo line-$i-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx; done; sleep 600'")
+	h := newTabTermHarness(t, "sh -c 'sleep 1; i=0; while [ $i -lt 200000 ]; do i=$((i+1)); echo line-$i-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx; done; sleep 600'")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	hub, err := h.srv.ctlHub()
@@ -441,8 +442,7 @@ func TestTabTerminalSkipsAndSaysSoWhenTheReaderFallsBehind(t *testing.T) {
 	}
 	hub.subBytes = 64 << 10
 	// The reader takes the first reset, then nothing while the pane
-	// prints far more than the subscriber holds (about 1 MB against 64 KB;
-	// not a flood the race-detected helper can't keep up with on CI).
+	// prints far more than the subscriber holds (10 MB against 64 KB).
 	tt := h.openPaused(ctx, h.firstTab(), "", 80, 24)
 	if m, err := tt.s.Recv(); err != nil || m.GetReset_() == nil || m.GetReset_().GetSkipped() {
 		t.Fatalf("first: %v, %v", m, err)
@@ -793,5 +793,98 @@ func TestControlRepliesStayMatchedAfterAnError(t *testing.T) {
 	}
 	if r := got[d]; r.failed || strings.Join(r.lines, "") != "d" {
 		t.Errorf("the next line's reply: %+v", r)
+	}
+}
+
+// After `reset`, a seed sets neither the old pen nor bracketed paste
+// (R-0178).
+func TestTabTerminalSeedAfterReset(t *testing.T) {
+	if _, err := exec.LookPath("reset"); err != nil {
+		t.Skip("no reset command")
+	}
+	dir := t.TempDir()
+	ready := filepath.Join(dir, "ready")
+	h := newTabTermHarness(t, `sh -c 'while [ ! -e `+ready+` ]; do sleep 0.05; done; printf "\033[?2004h\033[31m"; TERM=xterm reset; echo after-reset; exec sleep 600'`)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	tab := h.firstTab()
+	first := h.open(ctx, tab, "", 80, 24)
+	if first.next(5*time.Second).GetReset_() == nil {
+		t.Fatal("no first reset")
+	}
+	if err := os.WriteFile(ready, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	first.until(10*time.Second, "after-reset", func(o []byte) bool { return bytes.Contains(o, []byte("after-reset")) })
+	r := h.open(ctx, tab, "", 80, 24).next(5 * time.Second).GetReset_()
+	if r == nil {
+		t.Fatal("no reset")
+	}
+	// The state comes after the screen's text, which keeps what was
+	// drawn in red before the reset.
+	seed := r.GetSeed()
+	state := seed[bytes.LastIndex(seed, []byte("\x1b[0m")):]
+	if bytes.Contains(state, []byte("\x1b[?2004h")) || bytes.Contains(state, []byte("31")) {
+		t.Errorf("the seed after reset sets the old state: %q", state)
+	}
+}
+
+// One tab's flood stalls no other tab, and never gets the control client
+// dropped (R-0178): while a pane prints 200,000 lines to a stream that
+// reads them, another tab's stream keeps getting its output, never 1 s
+// apart, and the client never restarts.
+func TestTabTerminalFloodStallsNoOtherTab(t *testing.T) {
+	h := newTabTermHarness(t, "sh -c 'while :; do echo tick; sleep 0.1; done'")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	hub, err := h.srv.ctlHub()
+	if err != nil {
+		t.Fatal(err)
+	}
+	watch, stop, err := hub.subscribe(ctx, "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stop()
+	quiet := h.firstTab()
+	b := h.open(ctx, quiet, "", 80, 24)
+	if b.next(5*time.Second).GetReset_() == nil {
+		t.Fatal("no reset")
+	}
+	flood := strings.TrimSpace(h.raw("new-window", "-d", "-P", "-F", "#{window_id}", "-t", "=main:",
+		"sh -c 'i=0; while [ $i -lt 200000 ]; do i=$((i+1)); echo line-$i-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx; done; echo flood-done; exec sleep 600'"))
+	a := h.open(ctx, flood, "", 80, 24)
+	go func() { // a stream that reads everything
+		for range a.events {
+		}
+	}()
+	watch.take()
+	start, last := time.Now(), time.Now()
+	var worst time.Duration
+	for !strings.Contains(h.raw("capture-pane", "-p", "-t", flood), "flood-done") {
+		select {
+		case m := <-b.events:
+			if m == nil {
+				t.Fatal("the quiet tab's stream ended")
+			}
+			if len(m.GetOutput()) > 0 || m.GetReset_() != nil {
+				worst = max(worst, time.Since(last))
+				last = time.Now()
+			}
+		case <-time.After(100 * time.Millisecond):
+		}
+		if time.Since(start) > 3*time.Minute {
+			t.Fatal("the flood didn't finish")
+		}
+	}
+	worst = max(worst, time.Since(last))
+	t.Logf("the flood took %s; the quiet tab's longest wait %s", time.Since(start).Round(time.Millisecond), worst)
+	if worst > time.Second {
+		t.Errorf("the quiet tab waited %s for output during the flood", worst)
+	}
+	for _, e := range watch.take() {
+		if e.kind == ctlRestart || e.kind == ctlReady || e.kind == ctlExit {
+			t.Errorf("the control client restarted during the flood (%v)", e.kind)
+		}
 	}
 }

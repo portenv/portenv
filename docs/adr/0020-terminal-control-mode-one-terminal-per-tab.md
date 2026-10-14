@@ -198,6 +198,15 @@ Also checked on tmux 3.4 in the image:
      - **Input:** `copy-mode -q` then `send-keys -H` in 512-byte pieces, in order. A failed piece ends the stream, saying how many bytes weren't delivered.
      - **Falling behind:** a stream more than 4 MB or 4096 events behind, or a pane tmux paused, gets a new `reset` with `skipped` set.
      - **Restarts:** the control client broadcasts `ctlReady` when it first takes commands and `ctlRestart` after each later start. A stream that opens or resets before then waits for it.
+     - **Floods (R-0178):** the tmux reader never waits on a parser or a stream.
+       - It hands each pane's events to that pane's own queue, which holds at most 4 MB of output (`core/agent/panelane.go`).
+       - Past that limit, the waiting output is dropped and the pane's parser starts afresh. Its tab terminals then reset with `skipped`, from a capture taken after the drop.
+       - Each tab terminal takes only its own pane's output, so another tab's flood never fills its queue.
+       - Tests:
+         - a 200,000-line flood to a reader that stops reading;
+         - another tab's output keeps arriving less than 1 s apart while a pane floods;
+         - the control client never restarts during it.
+     - **Resets:** a full reset (RIS) or a soft reset (DECSTR) clears the parser's pen and bracketed paste, so a seed after `reset` sets neither again.
    - **The app's side:** after a reconnect (portenvd or the agent restarting, a move, the Mac waking), the app opens the stream again and draws the new `reset`. The tab's history is the box's, so nothing depends on what the app had kept.
 7. **The app's per-tab terminal interface** (`apps/mac/Sources/PortenvKit/TabTerminal.swift`, in this PR, so split view can build on it now). See "The interface" below.
 8. **The CLI stays a plain attach.** `portenv attach` and `portenv open --tab` keep the `Terminal` RPC and #41's per-viewer grouped sessions, for a person in Terminal, Ghostty or a tiling terminal; their shells get the same OSC 133 marks directly. Agents' terminal access (2.4) is unchanged.

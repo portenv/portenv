@@ -348,3 +348,20 @@ func TestPaneParserDrainGoroutinesEnd(t *testing.T) {
 	}
 	waitFor(before, "after stopping each")
 }
+
+// A full reset (RIS) or a soft reset (DECSTR) clears the pen and bracketed
+// paste (R-0178).
+func TestPaneParserResetsClearThePen(t *testing.T) {
+	for _, reset := range []string{"\x1bc", "\x1b[!p"} {
+		p := newPaneParser(80, 24, t.Logf)
+		p.feed([]byte("\x1b[?2004h\x1b[31mred"))
+		if s := p.snapshot(); s.pen != "31" || !s.bracketedPaste {
+			t.Fatalf("before %q: pen %q, bracketed paste %v", reset, s.pen, s.bracketedPaste)
+		}
+		p.feed([]byte(reset))
+		if s := p.snapshot(); s.pen != "" || s.bracketedPaste {
+			t.Errorf("after %q: pen %q, bracketed paste %v", reset, s.pen, s.bracketedPaste)
+		}
+		p.stop()
+	}
+}

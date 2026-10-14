@@ -55,6 +55,8 @@ The guarantee that root in the box cannot read the repository password holds onl
 | A box mounts its home, its own repository folder and restic's cache, nothing else: never the folder holding other boxes' repositories, never a container engine's socket (R-0201) | Another box's repository could be deleted from inside; an engine socket is root on the machine | `TestABoxMountsOnlyItsOwn`; the agent's mount check at start refuses either, in plain words (`TestTheHelperRefusesOtherWorkspacesSaves`, `TestTheHelperRefusesAnEngineSocket`); `TestABoxSeesOnlyItsOwnRepository` on a real engine; a box left running with the old mount is never re-keyed, and is restarted on its next open, which tells the person once (`TestTakeOverRefusesAnOldMountBeforeReKeying`) |
 | In a VM, every process the agent starts for users and agents runs with these capabilities dropped from its bounding set | A VM's root holds every capability by default | Phase 1, milestone 1.3: the agent drops them itself, and the isolation probe must pass inside the VM |
 
+The mount follows the folder: a running box keeps reaching its own repository if that folder is moved or renamed on the host, until the box restarts. A deleted folder still fails its saves (R-0206).
+
 "Docker inside the box" (a start-time setting, off by default) usually needs `CAP_SYS_ADMIN` or a privileged box. It must either be built without granting any of these capabilities to the box, or warn plainly that turning it on weakens this protection. That design is a Phase 1 question (docs/PLAN.md, Open questions).
 
 ## Constraint 2: what "consistent" means here

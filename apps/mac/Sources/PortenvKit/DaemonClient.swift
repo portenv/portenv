@@ -489,3 +489,28 @@ extension TabTerminalStreamError {
         }
     }
 }
+
+extension DaemonClient: ServerKeys {
+    public func serverKeys() async throws -> [ServerKeyInfo] {
+        try await call { try await api.listServers(.init()).infos.map { Self.info($0) } }
+    }
+
+    public func scanServerKey(_ id: String) async throws -> ServerKeyInfo {
+        let r = try await call { try await api.scanServerKey(.with { $0.serverID = id }) }
+        return Self.info(r.info, keyType: r.keyType)
+    }
+
+    public func trustServerKey(_ id: String, fingerprint: String) async throws -> ServerKeyInfo {
+        let r = try await call { try await api.trustServerKey(.with { $0.serverID = id; $0.fingerprint = fingerprint }) }
+        return Self.info(r.info)
+    }
+
+    private static func info(_ i: Portenv_Daemon_V1_ServerInfo, keyType: String = "") -> ServerKeyInfo {
+        let state: ServerKeyInfo.State = switch i.state {
+        case .confirmed: .confirmed
+        case .changed: .changed
+        default: .unconfirmed
+        }
+        return ServerKeyInfo(id: i.id, name: i.name, state: state, fingerprint: i.fingerprint, fromKnownHosts: i.fromKnownHosts, keyType: keyType)
+    }
+}

@@ -263,6 +263,56 @@ public nonisolated enum Portenv_Types_V1_TabTerminalEnd: SwiftProtobuf.Enum, Swi
 
 }
 
+/// Where a server's host key stands.
+public nonisolated enum Portenv_Types_V1_ServerKeyState: SwiftProtobuf.Enum, Swift.CaseIterable {
+  public typealias RawValue = Int
+  case unspecified // = 0
+
+  /// No key pinned yet: nothing runs on it ("Confirm NAME to open this").
+  case unconfirmed // = 1
+
+  /// Its key is pinned and checked on every connection.
+  case confirmed // = 2
+
+  /// It answered with another key, or this Mac's SSH recorded another one:
+  /// nothing runs on it, and there's no trusting it anyway.
+  case changed // = 3
+  case UNRECOGNIZED(Int)
+
+  public init() {
+    self = .unspecified
+  }
+
+  public init?(rawValue: Int) {
+    switch rawValue {
+    case 0: self = .unspecified
+    case 1: self = .unconfirmed
+    case 2: self = .confirmed
+    case 3: self = .changed
+    default: self = .UNRECOGNIZED(rawValue)
+    }
+  }
+
+  public var rawValue: Int {
+    switch self {
+    case .unspecified: return 0
+    case .unconfirmed: return 1
+    case .confirmed: return 2
+    case .changed: return 3
+    case .UNRECOGNIZED(let i): return i
+    }
+  }
+
+  // The compiler won't synthesize support with the UNRECOGNIZED case.
+  public static let allCases: [Portenv_Types_V1_ServerKeyState] = [
+    .unspecified,
+    .unconfirmed,
+    .confirmed,
+    .changed,
+  ]
+
+}
+
 /// A box: a toolbox image plus a portable home. Only the home travels between
 /// machines; the image is pulled or rebuilt on each one.
 public nonisolated struct Portenv_Types_V1_Box: Sendable {
@@ -485,6 +535,10 @@ nonisolated extension Portenv_Types_V1_LeaseSource: SwiftProtobuf._ProtoNameProv
 
 nonisolated extension Portenv_Types_V1_TabTerminalEnd: SwiftProtobuf._ProtoNameProviding {
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0TAB_TERMINAL_END_UNSPECIFIED\0\u{1}TAB_TERMINAL_END_TAB_CLOSED\0\u{1}TAB_TERMINAL_END_BOX_STOPPING\0")
+}
+
+nonisolated extension Portenv_Types_V1_ServerKeyState: SwiftProtobuf._ProtoNameProviding {
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0SERVER_KEY_STATE_UNSPECIFIED\0\u{1}SERVER_KEY_STATE_UNCONFIRMED\0\u{1}SERVER_KEY_STATE_CONFIRMED\0\u{1}SERVER_KEY_STATE_CHANGED\0")
 }
 
 nonisolated extension Portenv_Types_V1_Box: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {

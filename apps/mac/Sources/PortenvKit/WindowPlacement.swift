@@ -25,4 +25,18 @@ public enum WindowPlacement {
         let height = min(frame.height, main.height)
         return CGRect(x: main.midX - width / 2, y: main.midY - height / 2, width: width, height: height)
     }
+
+    /// First run's window: the board's size (R-0186), centred on the
+    /// display the app was launched from, the one under the pointer then
+    /// (R-0196's note: it once opened full screen on the other display).
+    /// Shrunk to fit a small screen. `screens` are visible frames, the
+    /// main screen first, which is used when the pointer is on none.
+    public static let firstRunSize = CGSize(width: 720, height: 520)
+
+    public static func firstRun(pointer: CGPoint, screens: [CGRect], size: CGSize = firstRunSize) -> CGRect? {
+        guard let screen = screens.first(where: { $0.contains(pointer) }) ?? screens.first else { return nil }
+        let width = min(size.width, screen.width)
+        let height = min(size.height, screen.height)
+        return CGRect(x: (screen.midX - width / 2).rounded(), y: (screen.midY - height / 2).rounded(), width: width, height: height)
+    }
 }

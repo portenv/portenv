@@ -79,6 +79,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var relaunchingForUpdate = false
 
     func applicationWillFinishLaunching(_: Notification) {
+        // The display Portenv was launched from: first run opens there.
+        FirstRunLaunch.pointer = NSEvent.mouseLocation
         // Portenv's tab bar is the only tabs: no native window tabs.
         WindowCloseHook.turnOffNativeTabs()
     }

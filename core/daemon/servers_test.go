@@ -17,6 +17,7 @@ import (
 
 	"github.com/portenv/portenv/core/local"
 	daemonv1 "github.com/portenv/portenv/proto/gen/go/portenv/daemon/v1"
+	typesv1 "github.com/portenv/portenv/proto/gen/go/portenv/types/v1"
 )
 
 // testHostKey is a fresh Ed25519 host key, "type base64".
@@ -49,10 +50,10 @@ func TestListServersSaysWhereEachKeyStands(t *testing.T) {
 		t.Fatalf("got %v", r)
 	}
 	one, two := infos[0], infos[1]
-	if one.GetId() != local.ServerID("me@one") || one.GetName() != "one" || one.GetState() != daemonv1.ServerKeyState_SERVER_KEY_STATE_CONFIRMED || !strings.HasPrefix(one.GetFingerprint(), "SHA256:") {
+	if one.GetId() != local.ServerID("me@one") || one.GetName() != "one" || one.GetState() != typesv1.ServerKeyState_SERVER_KEY_STATE_CONFIRMED || !strings.HasPrefix(one.GetFingerprint(), "SHA256:") {
 		t.Fatalf("one: %v", one)
 	}
-	if two.GetState() != daemonv1.ServerKeyState_SERVER_KEY_STATE_UNCONFIRMED || two.GetFingerprint() != "" {
+	if two.GetState() != typesv1.ServerKeyState_SERVER_KEY_STATE_UNCONFIRMED || two.GetFingerprint() != "" {
 		t.Fatalf("two: %v", two)
 	}
 	for _, i := range infos {

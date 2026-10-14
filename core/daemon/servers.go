@@ -11,6 +11,7 @@ import (
 
 	"github.com/portenv/portenv/core/local"
 	daemonv1 "github.com/portenv/portenv/proto/gen/go/portenv/daemon/v1"
+	typesv1 "github.com/portenv/portenv/proto/gen/go/portenv/types/v1"
 )
 
 // ListServers implements daemonv1.DaemonServiceServer: the Move To targets,
@@ -34,11 +35,11 @@ func serverInfo(r local.ServerRecord) *daemonv1.ServerInfo {
 	i := &daemonv1.ServerInfo{Id: r.ID, Name: local.ServerDisplayName(r.Target), FromKnownHosts: r.ConfirmedFrom == local.ConfirmedFromKnownHosts}
 	switch r.State {
 	case local.ServerConfirmed:
-		i.State, i.Fingerprint = daemonv1.ServerKeyState_SERVER_KEY_STATE_CONFIRMED, local.Fingerprint(r.Key)
+		i.State, i.Fingerprint = typesv1.ServerKeyState_SERVER_KEY_STATE_CONFIRMED, local.Fingerprint(r.Key)
 	case local.ServerKeyChanged:
-		i.State = daemonv1.ServerKeyState_SERVER_KEY_STATE_CHANGED
+		i.State = typesv1.ServerKeyState_SERVER_KEY_STATE_CHANGED
 	default:
-		i.State = daemonv1.ServerKeyState_SERVER_KEY_STATE_UNCONFIRMED
+		i.State = typesv1.ServerKeyState_SERVER_KEY_STATE_UNCONFIRMED
 		if r.Scanned != "" {
 			i.Fingerprint = local.Fingerprint(r.Scanned)
 		}

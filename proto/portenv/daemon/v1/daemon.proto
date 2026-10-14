@@ -403,56 +403,6 @@ message ListServersResponse {
   repeated ServerInfo infos = 2;
 }
 
-// Where a server's host key stands.
-enum ServerKeyState {
-  SERVER_KEY_STATE_UNSPECIFIED = 0;
-  // No key pinned yet: nothing runs on it ("Confirm NAME to open this").
-  SERVER_KEY_STATE_UNCONFIRMED = 1;
-  // Its key is pinned and checked on every connection.
-  SERVER_KEY_STATE_CONFIRMED = 2;
-  // It answered with another key, or this Mac's SSH recorded another one:
-  // nothing runs on it, and there's no trusting it anyway.
-  SERVER_KEY_STATE_CHANGED = 3;
-}
-
-message ServerInfo {
-  string id = 1;
-  string name = 2;
-  ServerKeyState state = 3;
-  // The pinned key's fingerprint (SHA256:..., as OpenSSH shows it), or the
-  // last scan's while it waits to be trusted.
-  string fingerprint = 4;
-  // Confirmed because this Mac's SSH known hosts had the same key.
-  bool from_known_hosts = 5;
-}
-
-message ScanServerKeyRequest {
-  string server_id = 1;
-}
-
-message ScanServerKeyResponse {
-  ServerInfo info = 1;
-  // ssh-ed25519, ecdsa-sha2-nistp256, ...; never a certificate.
-  string key_type = 2;
-}
-
-message TrustServerKeyRequest {
-  string server_id = 1;
-  string fingerprint = 2;
-}
-
-message TrustServerKeyResponse {
-  ServerInfo info = 1;
-}
-
-message ForgetServerKeyRequest {
-  string server_id = 1;
-}
-
-message ForgetServerKeyResponse {
-  ServerInfo info = 1;
-}
-
 message GetKeyIDsRequest {
   string name = 1;
 }
@@ -694,4 +644,42 @@ message GetPlacementResponse {
   // The newest save, which carries the lease.
   google.protobuf.Timestamp newest_save_at = 4;
   Answers answers = 5;
+}
+
+message ServerInfo {
+  string id = 1;
+  string name = 2;
+  portenv.types.v1.ServerKeyState state = 3;
+  // The pinned key's fingerprint (SHA256:..., as OpenSSH shows it), or the
+  // last scan's while it waits to be trusted.
+  string fingerprint = 4;
+  // Confirmed because this Mac's SSH known hosts had the same key.
+  bool from_known_hosts = 5;
+}
+
+message ScanServerKeyRequest {
+  string server_id = 1;
+}
+
+message ScanServerKeyResponse {
+  ServerInfo info = 1;
+  // ssh-ed25519, ecdsa-sha2-nistp256, ...; never a certificate.
+  string key_type = 2;
+}
+
+message TrustServerKeyRequest {
+  string server_id = 1;
+  string fingerprint = 2;
+}
+
+message TrustServerKeyResponse {
+  ServerInfo info = 1;
+}
+
+message ForgetServerKeyRequest {
+  string server_id = 1;
+}
+
+message ForgetServerKeyResponse {
+  ServerInfo info = 1;
 }

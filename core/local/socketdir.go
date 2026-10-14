@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 )
 
@@ -54,12 +55,16 @@ func ensurePrivateDir(dir string) error {
 // minutes.
 const ControlPersist = "600"
 
-// controlOptions are the ssh options for the shared connection, in the
-// checked folder.
-func controlOptions() ([]string, error) {
+// controlOptions are the ssh options for the shared connection to the
+// server with this ID, in the checked folder. The socket is named by the
+// ID's 12 hex digits, not ssh's %C: its 40, with the 17-character suffix ssh
+// adds while it makes the socket, are too long for a Mac's 104-byte socket
+// path.
+func controlOptions(serverID string) ([]string, error) {
 	dir, err := SocketDir()
 	if err != nil {
 		return nil, err
 	}
-	return []string{"-o", "ControlMaster=auto", "-o", "ControlPath=" + filepath.Join(dir, "c-%C"), "-o", "ControlPersist=" + ControlPersist}, nil
+	sock := filepath.Join(dir, "c-"+strings.TrimPrefix(serverID, "srv-"))
+	return []string{"-o", "ControlMaster=auto", "-o", "ControlPath=" + sock, "-o", "ControlPersist=" + ControlPersist}, nil
 }

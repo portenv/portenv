@@ -28,9 +28,10 @@ func TestSocketsLiveInThePerUserTempFolder(t *testing.T) {
 	if strings.HasPrefix(dir, "/tmp/") || !strings.HasPrefix(dir, "/var/folders/") || filepath.Base(dir) != "pv" {
 		t.Fatalf("socket folder %q", dir)
 	}
-	// The longest names: the ControlMaster's (%C is 40 hex digits), a
-	// forward's, and 1b's per-run agent socket.
-	for _, name := range []string{"c-" + strings.Repeat("f", 40), "fwd-" + strings.Repeat("f", 12) + ".sock", "a-" + strings.Repeat("f", 8)} {
+	// The longest names: the ControlMaster's while ssh makes it (its name
+	// and ssh's own 17-character temporary suffix), a forward's, and 1b's
+	// per-run agent socket.
+	for _, name := range []string{"c-" + strings.Repeat("f", 12) + ".kSIfOcFScmxn55lr", "fwd-" + strings.Repeat("f", 12) + ".sock", "a-" + strings.Repeat("f", 8)} {
 		if p := filepath.Join(dir, name); len(p)+1 > sunPathMax {
 			t.Fatalf("%s is %d bytes, over macOS's %d", p, len(p)+1, sunPathMax)
 		}
@@ -71,15 +72,17 @@ func TestTheSocketFolderIsChecked(t *testing.T) {
 	}
 }
 
-// TestSSHUsesTheCheckedFolder: the ControlMaster socket is c-%C in it.
+// TestSSHUsesTheCheckedFolder: the ControlMaster socket is c-<the server
+// ID's hex> in it: %C's 40 hex digits and ssh's temporary suffix don't fit
+// a Mac's socket path.
 func TestSSHUsesTheCheckedFolder(t *testing.T) {
-	args, err := controlOptions()
+	args, err := controlOptions(ServerID("me@test-server"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	joined := strings.Join(args, " ")
 	dir, _ := SocketDir()
-	if !strings.Contains(joined, "ControlPath="+filepath.Join(dir, "c-%C")) || !strings.Contains(joined, "ControlPersist=600") {
+	if !strings.Contains(joined, "ControlPath="+filepath.Join(dir, "c-"+strings.TrimPrefix(ServerID("me@test-server"), "srv-"))) || !strings.Contains(joined, "ControlPersist=600") {
 		t.Fatalf("options %q", joined)
 	}
 }

@@ -325,7 +325,7 @@ func sshArgs(host string) ([]string, error) {
 	args = append(args, base[1:]...)
 	// The shared connection only in the checked folder; without it, each
 	// run connects on its own.
-	if opts, err := controlOptions(); err == nil {
+	if opts, err := controlOptions(r.ID); err == nil {
 		args = append(args, opts...)
 	}
 	return args, nil
@@ -540,9 +540,12 @@ func knownHostsSays(ctx context.Context, h resolvedHost, key string) (string, er
 			continue
 		}
 		for _, n := range h.names {
-			ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-			out, err := exec.CommandContext(ctx, "ssh-keygen", "-F", n, "-f", f).Output() // #nosec G204 -- read-only lookup in the person's known hosts
-			cancel()
+			cmd, err := bounded.Command(ctx, 10*time.Second, "ssh-keygen", "-F", n, "-f", f)
+			if err != nil {
+				return "", err
+			}
+			cmd.Stdin = nil
+			out, err := cmd.Output()
 			var exit *exec.ExitError
 			if errors.As(err, &exit) && exit.ExitCode() == 1 {
 				continue // not there

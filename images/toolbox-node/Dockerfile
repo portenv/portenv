@@ -34,12 +34,15 @@ WORKDIR /src
 COPY go.work ./
 COPY core/go.mod core/go.sum core/
 COPY proto/gen/go/go.mod proto/gen/go/go.sum proto/gen/go/
-RUN --mount=type=cache,target=/go/pkg/mod cd core && go mod download
+# Downloaded into this layer, not a cache mount, so CI's layer cache (type=gha)
+# keeps the modules while go.mod and go.sum are unchanged; go.sum still checks
+# every one. Only the built agent leaves this stage.
+RUN cd core && go mod download
 COPY core core
 COPY proto/gen/go proto/gen/go
 # The agent refuses to run any restic but this exact build (ADR 0005).
 COPY --from=restic /out/restic /tmp/restic
-RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
+RUN --mount=type=cache,target=/root/.cache/go-build \
     restic_sha256="$(sha256sum /tmp/restic | cut -d' ' -f1)" \
  && CGO_ENABLED=0 GOOS=linux GOARCH=$TARGETARCH go build -trimpath \
       -ldflags "-s -w -X github.com/portenv/portenv/core/internal/version.Version=$VERSION -X github.com/portenv/portenv/core/internal/version.Commit=$COMMIT -X github.com/portenv/portenv/core/agent.ResticSHA256=$restic_sha256" \

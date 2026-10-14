@@ -1,0 +1,61 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Go's module and build caches, and optionally bin/ with the pinned tools,
+# restored at the start of a job and saved at its end. Used after
+# actions/setup-go (with its own cache off) in every job that builds Go.
+#
+# Why not setup-go's cache: its key is only go.sum's hash, the same for every
+# job on a platform, and whichever job finishes first saves it. A job that
+# never builds the pinned tools (buf, golangci-lint, restic…) saves a cache
+# without their modules, so the jobs that do download them from
+# proxy.golang.org and sum.golang.org every time, which failed many runs.
+#
+# Keys, and what invalidates them:
+#   go-<os>-<arch>-<job>-<hash>: the module and build caches. The hash covers
+#     every go.sum (a dependency changed), the Makefile (a tool pin changed:
+#     the tools' modules live in the same module cache) and core/go.mod (the
+#     Go version). Each job saves its own, so each has everything it uses.
+#     A miss restores the newest entry for the same job, then for any job on
+#     the same platform (restore-keys), and saves a fresh one at the end.
+#   tools-<os>-<arch>-<hash>: bin/, the pinned tools. The hash covers every
+#     file make builds them from: the Makefile (the pins), core/go.mod (the
+#     tools are built with its Go version), scripts/install-shellcheck.sh
+#     (shellcheck's pin) and tools/swift-protoc's Package.swift and
+#     Package.resolved (the Swift plugins, on macOS). It must: restored files
+#     are newer than the checkout, so make never rebuilds a cached tool.
+#
+# Nothing here weakens verification: modules restored from the cache are
+# still checked against go.sum, `go mod verify` still runs in lint, and
+# GONOSUMDB, GOPRIVATE, GOINSECURE, GOSUMDB=off and GOFLAGS=-insecure are
+# never set.
+name: Go caches
+description: Go's module and build caches, and bin/ with the pinned tools
+inputs:
+  tools:
+    description: Also cache bin/ (the pinned tools), for jobs that build them
+    default: "false"
+runs:
+  using: composite
+  steps:
+    - name: Where Go keeps its caches
+      id: go-env
+      shell: bash
+      run: |
+        echo "modcache=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
+        echo "gocache=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
+    - name: Go module and build caches
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: |
+          ${{ steps.go-env.outputs.modcache }}
+          ${{ steps.go-env.outputs.gocache }}
+        key: go-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-${{ hashFiles('**/go.sum', 'Makefile', 'core/go.mod') }}
+        restore-keys: |
+          go-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-
+          go-${{ runner.os }}-${{ runner.arch }}-
+    - name: Pinned tools
+      if: inputs.tools == 'true'
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: bin
+        key: tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Makefile', 'core/go.mod', 'scripts/install-shellcheck.sh', 'tools/swift-protoc/Package.swift', 'tools/swift-protoc/Package.resolved') }}

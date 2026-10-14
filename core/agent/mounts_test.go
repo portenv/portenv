@@ -3,6 +3,7 @@
 package agent
 
 import (
+	"context"
 	"strings"
 	"testing"
 )
@@ -76,6 +77,7 @@ func TestTheHelperRefusesAnEngineSocket(t *testing.T) {
 		"containerd":                   {baseMounts + line("/containerd/containerd.sock", "/run/containerd/containerd.sock"), nil},
 		"podman":                       {baseMounts + line("/podman/podman.sock", "/home/work/podman.sock"), nil},
 		"inside a mounted folder":      {baseMounts + line("/var/run", "/hostrun"), map[string]bool{"/hostrun/docker.sock": true}},
+		"inside a folder with a space": {baseMounts + line("/var/run", `/host\040run`), map[string]bool{"/host run/docker.sock": true}},
 		"at the usual path, unmounted": {baseMounts, map[string]bool{"/var/run/docker.sock": true}},
 	} {
 		has := func(p string) bool { return c.sockets[p] }
@@ -111,3 +113,32 @@ func TestMountinfoUnescapes(t *testing.T) {
 }
 
 func noSockets(string) bool { return false }
+
+// TestBootChecksMountsFirst: a box with another workspace's saves mounted
+// stops at the mount check, before any user or home is touched, and the
+// reason is what readiness reports.
+func TestBootChecksMountsFirst(t *testing.T) {
+	t.Setenv(BoxIDEnv, "box-0123456789ab")
+	cfg := testConfig(t)
+	cfg.Mounts = func() (string, error) { return baseMounts + line("/Repositories", StorageMount), nil }
+	cfg.SocketAt = noSockets
+	run := &fakeRunner{uid: "1000"}
+	r := NewReadiness()
+	err := Boot(context.Background(), cfg, run, r)
+	if err == nil || !strings.Contains(err.Error(), "other workspaces") {
+		t.Fatalf("boot: %v, want the mount refusal", err)
+	}
+	if len(run.calls) != 0 {
+		t.Fatalf("ran %v before refusing", run.calls)
+	}
+	cfg.Mounts = func() (string, error) {
+		return baseMounts + line("/Repositories/box-0123456789ab", StorageMount+"/box-0123456789ab"), nil
+	}
+	cfg.InitHome = true // brand new: the start goes on past the checks
+	if err := Boot(context.Background(), cfg, run, NewReadiness()); err != nil && strings.Contains(err.Error(), "refusing to start") {
+		t.Fatalf("boot with its own repository: %v", err)
+	}
+	if !run.ran("id -u work") {
+		t.Fatal("with its own repository, the start didn't go on to the user")
+	}
+}

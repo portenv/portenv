@@ -249,6 +249,7 @@ func (s *Server) boxState(ctx context.Context, name string, withPackages bool) (
 	if !ob.openedAt.IsZero() {
 		r.OpenedAt = timestamppb.New(ob.openedAt)
 	}
+	addOpenNotices(r, ob)
 	// Packages that couldn't be installed, for the inspector (never the
 	// state line). A quick question to the agent; no answer, nothing shown.
 	if a := ob.client(); a != nil && withPackages {
@@ -259,6 +260,12 @@ func (s *Server) boxState(ctx context.Context, name string, withPackages bool) (
 		cancel()
 	}
 	return r, nil
+}
+
+// addOpenNotices adds what the app tells the person once about this open:
+// that it restarted the box for a security update (R-0201).
+func addOpenNotices(r *daemonv1.GetBoxStateResponse, ob *openBox) {
+	r.RestartedForSecurityUpdate = ob.securityRestart.Load()
 }
 
 // notOpenState is the state of a box this portenvd hasn't opened: closed,

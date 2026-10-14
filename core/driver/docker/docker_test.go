@@ -171,6 +171,11 @@ func TestNoStorageWithoutItsRepository(t *testing.T) {
 	if err := (Config{StateDir: t.TempDir()}).check(); err != nil {
 		t.Errorf("no storage (SFTP, S3): %v", err)
 	}
+	// New refuses it too, so no driver is ever made that mounts the whole
+	// folder.
+	if _, err := New(Config{StateDir: t.TempDir(), StorageDir: "/srv/storage", StorageRepo: StorageMount}); err == nil {
+		t.Error("New made a driver mounting the whole storage folder")
+	}
 }
 
 // TestMountsCompare: the take-over's comparison of a running container's

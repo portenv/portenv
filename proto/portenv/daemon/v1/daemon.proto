@@ -27,6 +27,12 @@ service DaemonService {
   rpc MoveBox(MoveBoxRequest) returns (MoveBoxResponse);
   // Attaches a terminal to the box's tmux session through the box agent.
   rpc Terminal(stream TerminalRequest) returns (stream TerminalResponse);
+  // One tab's terminal (ADR 0020), relayed to the workspace helper's
+  // TabTerminal as Terminal is: same socket, same box routing, on this Mac
+  // or on a server. The first message must be open. portenvd sets the
+  // stream's author from the connection's caller; nothing in the request
+  // can, and the open has no author field.
+  rpc TabTerminal(stream TabTerminalRequest) returns (stream TabTerminalResponse);
   // Reports whether the box agent answers on its channel.
   rpc CheckBox(CheckBoxRequest) returns (CheckBoxResponse);
   // Restarts the box (for example after its agent became unavailable) and
@@ -228,6 +234,80 @@ message TerminalResponse {
     bytes output = 1;
     int32 exit_code = 2;
   }
+}
+
+message TabTerminalRequest {
+  oneof msg {
+    TabTerminalOpen open = 1;
+    // Keystrokes, pastes, clicks and IME input, as the app's terminal
+    // produced them (never the emulator's replies; ADR 0020, decision 4).
+    bytes input = 2;
+    // The size this view can show, in cells.
+    TerminalSize resize = 3;
+  }
+}
+
+message TabTerminalOpen {
+  // The tmux session, for example "main".
+  string session = 1;
+  // A tab ID, "@N".
+  string tab = 2;
+  TerminalSize size = 3;
+  // The helper's TabTerminalOpen has author at 4. Here it's reserved, so
+  // no client can send one, and a stray field 4 is never copied through:
+  // portenvd builds the helper's open from the fields below and its caller.
+  reserved 4;
+  reserved "author";
+  string box = 5;
+}
+
+message TabTerminalResponse {
+  oneof msg {
+    // Always first, and again after the helper's control client restarts
+    // or output had to be skipped.
+    TabTerminalReset reset = 1;
+    // The tab's own output, in order.
+    bytes output = 2;
+    // The tab's size changed elsewhere (another viewer).
+    TerminalSize resized = 3;
+    // Nothing follows.
+    TabTerminalEnd end = 4;
+    // Who ran a command, for its block's attribution chip.
+    CommandAuthor author = 5;
+  }
+}
+
+message TabTerminalReset {
+  TerminalSize size = 1;
+  // The tab's history and screen, cursor and modes, with its OSC 133
+  // marks replayed on their lines.
+  bytes seed = 2;
+  // Every command still in the seed that has a recorded author.
+  repeated CommandAuthor authors = 3;
+}
+
+enum TabTerminalEnd {
+  TAB_TERMINAL_END_UNSPECIFIED = 0;
+  // The tab was closed (by anyone), or the tab asked for doesn't exist.
+  TAB_TERMINAL_END_TAB_CLOSED = 1;
+  // The box is stopping, or moving away.
+  TAB_TERMINAL_END_BOX_STOPPING = 2;
+}
+
+// Who sent the Enter that started a command: the helper's CommandAuthor
+// (agent.v1), as portenvd hands it to one recipient. Response-only, and
+// never inside output bytes. A command with no recorded author has none.
+message CommandAuthor {
+  // The command's OSC 133;C line, counted from the tab's first line ever.
+  uint64 line = 1;
+  // As people read it: "You", "Grok Bot".
+  string name = 2;
+  // True when the author is the caller receiving this stream. Set by
+  // portenvd for each recipient; whatever the helper sent is replaced.
+  bool is_you = 3;
+  // Empty for a person; the agent's ID from its grant (ADR 0016) otherwise.
+  string agent_id = 4;
+  reserved 5;
 }
 
 message GetVersionRequest {}

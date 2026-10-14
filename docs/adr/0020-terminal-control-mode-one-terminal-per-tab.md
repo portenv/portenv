@@ -123,6 +123,12 @@ Also checked on tmux 3.4 in the image:
    - The author never travels inside output bytes.
    - `GetVersionResponse` carries `box_id` (R-0172, R-0173). The driver passes the box ID as `PORTENV_BOX_ID` when it makes the container, not in the secrets line, which older helpers refuse when it has a field they don't know.
 
+   **As built (1.2c PR 4):** `DaemonService.TabTerminal` in `proto/portenv/daemon/v1/daemon.proto`.
+   - Its `TabTerminalOpen` has no author: field 4, the helper's `author`, is reserved, and portenvd builds the helper's open field by field, so a stray field 4 is never copied through.
+   - The author is the caller fixed when the connection was accepted: `app` on the owner-only socket, `agent:<id>` for an agent's grant once one can reach portenvd (2.4). These labels stay inside portenvd and the helper; the app sees `CommandAuthor`, whose `is_you` portenvd sets for each recipient.
+   - A caller limited to one workspace is refused any other before a helper is contacted (R-0162).
+   - The helper must answer `GetVersion` with the box ID portenvd reached it for. Another box, or none, is refused before anything is relayed (R-0172, R-0173). None is refused here because `TabTerminal` and `box_id` arrived in the same helper.
+
    - **Opening a tab that's gone** ends promptly with `TAB_CLOSED`: within one control-client round trip, and never by waiting for a timeout.
    - **Tab events** (`WatchTabs`, `portenv.types.v1.Tab`) gain what split view's pane header needs. The stream itself stays bytes only.
      - **`waiting`:** the question text from ADR 0017's detector, empty and `secret` for a password prompt. It feeds "asking you", the answer card and the badge.

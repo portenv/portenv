@@ -1097,6 +1097,11 @@ In this order:
               - the `%output`/`%extended-output` decoder and a line reader capped at 1 MB per line, each with its own fuzz target, seeded from the spike's tmux 3.4 streams (`make fuzz`, in CI on a 15 s budget);
               - tmux pinned to 3.4 in the image and checked by `test.sh`; the helper refuses older for control mode.
           - the `TabTerminal` stream in the agent and portenvd;
+            - **Built in portenvd (PR 4, 2026-10-14, awaiting review):** `DaemonService.TabTerminal` relays to the helper's, on this Mac or over a server's forward.
+              - **Author:** from the connection's caller, fixed at accept (`caller.go`); the app's open has no author field (4 is reserved), and nothing in a request can set one.
+              - **Scope:** a caller limited to one workspace is refused any other before a helper is contacted.
+              - **Box ID:** the helper must answer `GetVersion` as the box it was reached for; another box or none is refused before anything is relayed.
+              - **Authors:** `is_you` is set by portenvd for each recipient.
           - the app's per-tab terminal (`TabTerminalSource`, `MarkedTerminalView`) in place of today's attached terminal;
             - **Built (PR 5, 2026-10-13, awaiting review):** the tab view's guards, ahead of the live provider:
               - the default-deny filter in front of what it's fed (`TerminalFilter`, ADR 0020 decision 9), with a table test per rule and fuzzing over random bytes and the spike's mutated tmux streams;

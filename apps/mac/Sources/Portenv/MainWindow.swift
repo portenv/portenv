@@ -92,6 +92,13 @@ struct MainWindow: View {
             } message: {
                 Text(controller.error ?? "")
             }
+            // Told once (R-0201): portenvd restarted the workspace to apply
+            // a security update.
+            .alert("Workspace Restarted", isPresented: Binding(get: { controller.notice != nil }, set: { if !$0 { controller.dismissNotice() } })) {
+                Button("OK") { controller.dismissNotice() }
+            } message: {
+                Text(controller.notice ?? "")
+            }
     }
 
     @ViewBuilder private var content: some View {

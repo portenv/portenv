@@ -343,6 +343,10 @@ message GetBoxStateResponse {
   string storage_place = 7;
   // When this portenvd opened the box (the inspector's "Since <time>").
   google.protobuf.Timestamp opened_at = 8;
+  // This open stopped and started the box again to apply a security update
+  // (it was left running with mounts it shouldn't have; R-0201). The app
+  // tells the person once. Only for the open that did it.
+  bool restarted_for_security_update = 9;
 }
 
 enum NetworkPath {

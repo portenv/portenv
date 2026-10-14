@@ -18,6 +18,12 @@ final class FakeFirstRunService: FirstRunService, @unchecked Sendable {
     private var _keysMade = 0
     var keysMade: Int { lock.withLock { _keysMade } }
     var failure: String?
+    /// The first this many createBox calls find portenvd down (R-0202).
+    var serviceDownFor = 0
+    private var _creates = 0
+    var creates: Int { lock.withLock { _creates } }
+    /// Runs before each createBox (to look at the flow mid-call).
+    var onCreate: (@Sendable () async -> Void)?
     /// Fails as "not built yet" (a notice, not an error).
     var notBuilt: String?
 
@@ -30,6 +36,9 @@ final class FakeFirstRunService: FirstRunService, @unchecked Sendable {
 
     func createBox(_ box: NewBox) async throws {
         if let failure { throw FirstRunError(failure) }
+        await onCreate?()
+        let n = lock.withLock { _creates += 1; return _creates }
+        if n <= serviceDownFor { throw DaemonError(DaemonErrorText.starting, unavailable: true) }
         lock.withLock { _created.append(box) }
     }
 }
@@ -415,5 +424,35 @@ struct FirstRunTests {
             #expect(flow2.notice == "Not ready yet.")
             #expect(flow2.refusals == n)
         }
+    }
+
+    /// portenvd isn't up yet (or restarts): first run says it's starting it
+    /// and tries again, rather than failing on the first refused
+    /// connection; never a socket path (R-0202).
+    @Test func firstRunWaitsForTheServiceToComeUp() async {
+        let service = FakeFirstRunService()
+        service.serviceDownFor = 3
+        let flow = FirstRunFlow(service: service, at: .firstBox, retryEvery: .milliseconds(5), retryFor: .seconds(600)) // room: on CI, other suites hold the main actor for a minute
+        flow.boxName = "acme-api"
+        final class Said: @unchecked Sendable { var lines: Set<String> = [] }
+        let said = Said()
+        service.onCreate = { @MainActor in if let n = flow.notice { said.lines.insert(n) } }
+        await flow.next()
+        #expect(flow.step == .gettingReady)
+        #expect(service.creates == 4)
+        #expect(flow.error == nil)
+        #expect(said.lines.contains(DaemonErrorText.starting))
+    }
+
+    /// One that never comes up: the plain line, as an error, once the wait
+    /// is over.
+    @Test func aServiceThatNeverComesUpSaysSoPlainly() async {
+        let service = FakeFirstRunService()
+        service.serviceDownFor = 1_000
+        let flow = FirstRunFlow(service: service, at: .firstBox, retryEvery: .milliseconds(5), retryFor: .milliseconds(100))
+        flow.boxName = "acme-api"
+        await flow.next()
+        #expect(flow.step == .firstBox)
+        #expect(flow.error == DaemonErrorText.starting)
     }
 }

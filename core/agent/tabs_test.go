@@ -25,6 +25,14 @@ import (
 // Portenv's own options must still win.
 func testTabs(t *testing.T) (tabs, func(args ...string) string) {
 	t.Helper()
+	tb, raw, _ := testTabsCmd(t)
+	return tb, raw
+}
+
+// testTabsCmd is testTabs plus a builder for long-running clients (control
+// mode) on the same private server.
+func testTabsCmd(t *testing.T) (tabs, func(args ...string) string, tmuxCmdFunc) {
+	t.Helper()
 	if _, err := exec.LookPath("tmux"); err != nil {
 		if os.Getenv("CI") != "" {
 			t.Fatal("tmux is required in CI")
@@ -56,7 +64,12 @@ func testTabs(t *testing.T) (tabs, func(args ...string) string) {
 		}
 		return strings.TrimSpace(out)
 	}
-	return tabs{tmux: run, session: "main"}, raw
+	cmdf := func(ctx context.Context, args ...string) *exec.Cmd {
+		cmd := exec.CommandContext(ctx, "tmux", append([]string{"-L", sock, "-f", conf}, args...)...) // #nosec G204 -- test
+		cmd.Env = append(os.Environ(), "LANG=C.UTF-8")
+		return cmd
+	}
+	return tabs{tmux: run, session: "main"}, raw, cmdf
 }
 
 func names(ts []*typesv1.Tab) string {

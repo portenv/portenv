@@ -183,7 +183,8 @@ struct FirstRunWiringTests {
         let empty = FirstRunFlow(service: Wired().service, at: .firstBox)
         empty.boxName = "site"
         await empty.next()
-        #expect(empty.error == BoxMaker.Failure.poolEmpty.errorDescription)
+        #expect(empty.needsRecoveryKey)
+        #expect(empty.reason == BoxMaker.Failure.poolEmpty.errorDescription)
     }
 
     /// GUIDELINES §3.1: a Keychain call that takes longer than the
@@ -211,5 +212,46 @@ struct FirstRunWiringTests {
         w.service.keychainWaiting?(false)
         try? await Task.sleep(for: .milliseconds(50))
         #expect(flow.waitLine == nil)
+    }
+}
+
+@MainActor
+struct FirstRunRefillTests {
+    /// An empty pool asks for the recovery key (the sheet), and once it's
+    /// refilled the same Create Workspace goes on.
+    @Test func anEmptyPoolOpensTheSheetThenCarriesOn() async throws {
+        let keys = FakeSecretStore()
+        let creator = FakeCreator(keys: keys)
+        let pool = RecoveryPoolStore(store: FakeSecretStore())
+        let maker = BoxMaker(daemon: creator, repositoryKeys: keys, pool: pool, randomBytes: countingBytes(from: 50), lock: AsyncLock())
+        let flow = FirstRunFlow(service: KeyedFirstRunService(maker: maker, pool: pool), at: .firstBox, fromBoxList: true)
+        flow.boxName = "acme-api"
+        await flow.next()
+        #expect(flow.needsRecoveryKey)
+        #expect(flow.step == .firstBox)
+        var key = vectorKey
+        try pool.fill(from: &key, randomBytes: countingBytes())
+        await flow.recoveryKeyRefilled()
+        #expect(!flow.needsRecoveryKey)
+        #expect(flow.made == "acme-api")
+    }
+
+    /// R-0155's nit: a fill that fails after a newer key replaced the held
+    /// one wipes the old key instead of keeping it.
+    @Test func aFailedFillAfterANewKeyWipesTheOldOne() async throws {
+        let store = BlockingSecretStore()
+        let pool = RecoveryPoolStore(store: store)
+        let service = KeyedFirstRunService(maker: BoxMaker(daemon: FakeCreator(keys: FakeSecretStore()), repositoryKeys: FakeSecretStore(), pool: pool, lock: AsyncLock()),
+                                           pool: pool, randomBytes: countingBytes(from: 7))
+        _ = try await service.makeRecoveryKey()
+        store.inner.failWrites = [RecoveryPool.account: -25308]
+        let fill = Task { try await service.recoveryKeySaved() }
+        await withCheckedContinuation { c in DispatchQueue.global().async { store.entered.wait(); c.resume() } }
+        _ = try await service.makeRecoveryKey() // a newer key while the write waits
+        let before = service.wipedKeys
+        store.release.signal()
+        await #expect(throws: FirstRunError.self) { try await fill.value }
+        #expect(service.wipedKeys == before + 1)
+        #expect(service.holdsKey) // the newer key, for the retry
     }
 }

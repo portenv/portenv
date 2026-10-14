@@ -85,6 +85,57 @@ func (ReadinessState) EnumDescriptor() ([]byte, []int) {
 	return file_portenv_agent_v1_agent_proto_rawDescGZIP(), []int{0}
 }
 
+type TabTerminalEnd int32
+
+const (
+	TabTerminalEnd_TAB_TERMINAL_END_UNSPECIFIED TabTerminalEnd = 0
+	// The tab was closed (by anyone), or the tab asked for doesn't exist.
+	TabTerminalEnd_TAB_TERMINAL_END_TAB_CLOSED TabTerminalEnd = 1
+	// The box is stopping, or moving away.
+	TabTerminalEnd_TAB_TERMINAL_END_BOX_STOPPING TabTerminalEnd = 2
+)
+
+// Enum value maps for TabTerminalEnd.
+var (
+	TabTerminalEnd_name = map[int32]string{
+		0: "TAB_TERMINAL_END_UNSPECIFIED",
+		1: "TAB_TERMINAL_END_TAB_CLOSED",
+		2: "TAB_TERMINAL_END_BOX_STOPPING",
+	}
+	TabTerminalEnd_value = map[string]int32{
+		"TAB_TERMINAL_END_UNSPECIFIED":  0,
+		"TAB_TERMINAL_END_TAB_CLOSED":   1,
+		"TAB_TERMINAL_END_BOX_STOPPING": 2,
+	}
+)
+
+func (x TabTerminalEnd) Enum() *TabTerminalEnd {
+	p := new(TabTerminalEnd)
+	*p = x
+	return p
+}
+
+func (x TabTerminalEnd) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (TabTerminalEnd) Descriptor() protoreflect.EnumDescriptor {
+	return file_portenv_agent_v1_agent_proto_enumTypes[1].Descriptor()
+}
+
+func (TabTerminalEnd) Type() protoreflect.EnumType {
+	return &file_portenv_agent_v1_agent_proto_enumTypes[1]
+}
+
+func (x TabTerminalEnd) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use TabTerminalEnd.Descriptor instead.
+func (TabTerminalEnd) EnumDescriptor() ([]byte, []int) {
+	return file_portenv_agent_v1_agent_proto_rawDescGZIP(), []int{1}
+}
+
 type RunResticRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// restic's arguments, without the binary name.
@@ -651,8 +702,16 @@ func (*GetVersionRequest) Descriptor() ([]byte, []int) {
 }
 
 type GetVersionResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Build         *v1.BuildInfo          `protobuf:"bytes,1,opt,name=build,proto3" json:"build,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Build *v1.BuildInfo          `protobuf:"bytes,1,opt,name=build,proto3" json:"build,omitempty"`
+	// The box this helper runs in, as the driver told it when the box
+	// started (R-0172, R-0173). portenvd refuses a channel that answers as
+	// another box, which catches a misrouted channel (a stale forward, a
+	// reused port). It's the helper's own claim, not proof of identity: that
+	// stays with the channel's per-box TLS certificate and token, and
+	// portenvd checks both. Empty only from a helper older than this field,
+	// or one whose driver didn't pass it.
+	BoxId         string `protobuf:"bytes,2,opt,name=box_id,json=boxId,proto3" json:"box_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -692,6 +751,13 @@ func (x *GetVersionResponse) GetBuild() *v1.BuildInfo {
 		return x.Build
 	}
 	return nil
+}
+
+func (x *GetVersionResponse) GetBoxId() string {
+	if x != nil {
+		return x.BoxId
+	}
+	return ""
 }
 
 type GetReadinessRequest struct {
@@ -1469,6 +1535,471 @@ func (x *WatchTabsResponse) GetTabs() []*v1.Tab {
 	return nil
 }
 
+type TabTerminalRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Msg:
+	//
+	//	*TabTerminalRequest_Open
+	//	*TabTerminalRequest_Input
+	//	*TabTerminalRequest_Resize
+	Msg           isTabTerminalRequest_Msg `protobuf_oneof:"msg"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TabTerminalRequest) Reset() {
+	*x = TabTerminalRequest{}
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TabTerminalRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TabTerminalRequest) ProtoMessage() {}
+
+func (x *TabTerminalRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TabTerminalRequest.ProtoReflect.Descriptor instead.
+func (*TabTerminalRequest) Descriptor() ([]byte, []int) {
+	return file_portenv_agent_v1_agent_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *TabTerminalRequest) GetMsg() isTabTerminalRequest_Msg {
+	if x != nil {
+		return x.Msg
+	}
+	return nil
+}
+
+func (x *TabTerminalRequest) GetOpen() *TabTerminalOpen {
+	if x != nil {
+		if x, ok := x.Msg.(*TabTerminalRequest_Open); ok {
+			return x.Open
+		}
+	}
+	return nil
+}
+
+func (x *TabTerminalRequest) GetInput() []byte {
+	if x != nil {
+		if x, ok := x.Msg.(*TabTerminalRequest_Input); ok {
+			return x.Input
+		}
+	}
+	return nil
+}
+
+func (x *TabTerminalRequest) GetResize() *TerminalSize {
+	if x != nil {
+		if x, ok := x.Msg.(*TabTerminalRequest_Resize); ok {
+			return x.Resize
+		}
+	}
+	return nil
+}
+
+type isTabTerminalRequest_Msg interface {
+	isTabTerminalRequest_Msg()
+}
+
+type TabTerminalRequest_Open struct {
+	Open *TabTerminalOpen `protobuf:"bytes,1,opt,name=open,proto3,oneof"`
+}
+
+type TabTerminalRequest_Input struct {
+	// Keystrokes, pastes, clicks and IME input, as the app's terminal
+	// produced them (never the emulator's replies; ADR 0020, decision 4).
+	Input []byte `protobuf:"bytes,2,opt,name=input,proto3,oneof"`
+}
+
+type TabTerminalRequest_Resize struct {
+	// The size this view can show, in cells. The tab takes the latest size
+	// asked for, from any viewer.
+	Resize *TerminalSize `protobuf:"bytes,3,opt,name=resize,proto3,oneof"`
+}
+
+func (*TabTerminalRequest_Open) isTabTerminalRequest_Msg() {}
+
+func (*TabTerminalRequest_Input) isTabTerminalRequest_Msg() {}
+
+func (*TabTerminalRequest_Resize) isTabTerminalRequest_Msg() {}
+
+type TabTerminalOpen struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The tmux session, for example "main".
+	Session string `protobuf:"bytes,1,opt,name=session,proto3" json:"session,omitempty"`
+	// A tab ID, "@N".
+	Tab  string        `protobuf:"bytes,2,opt,name=tab,proto3" json:"tab,omitempty"`
+	Size *TerminalSize `protobuf:"bytes,3,opt,name=size,proto3" json:"size,omitempty"`
+	// Who types here, for attribution. Set by portenvd from its caller
+	// (the app over its socket, or an agent's grant), never by a client.
+	Author        string `protobuf:"bytes,4,opt,name=author,proto3" json:"author,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TabTerminalOpen) Reset() {
+	*x = TabTerminalOpen{}
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TabTerminalOpen) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TabTerminalOpen) ProtoMessage() {}
+
+func (x *TabTerminalOpen) ProtoReflect() protoreflect.Message {
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TabTerminalOpen.ProtoReflect.Descriptor instead.
+func (*TabTerminalOpen) Descriptor() ([]byte, []int) {
+	return file_portenv_agent_v1_agent_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *TabTerminalOpen) GetSession() string {
+	if x != nil {
+		return x.Session
+	}
+	return ""
+}
+
+func (x *TabTerminalOpen) GetTab() string {
+	if x != nil {
+		return x.Tab
+	}
+	return ""
+}
+
+func (x *TabTerminalOpen) GetSize() *TerminalSize {
+	if x != nil {
+		return x.Size
+	}
+	return nil
+}
+
+func (x *TabTerminalOpen) GetAuthor() string {
+	if x != nil {
+		return x.Author
+	}
+	return ""
+}
+
+type TabTerminalResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Msg:
+	//
+	//	*TabTerminalResponse_Reset_
+	//	*TabTerminalResponse_Output
+	//	*TabTerminalResponse_Resized
+	//	*TabTerminalResponse_End
+	//	*TabTerminalResponse_Author
+	Msg           isTabTerminalResponse_Msg `protobuf_oneof:"msg"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TabTerminalResponse) Reset() {
+	*x = TabTerminalResponse{}
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TabTerminalResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TabTerminalResponse) ProtoMessage() {}
+
+func (x *TabTerminalResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TabTerminalResponse.ProtoReflect.Descriptor instead.
+func (*TabTerminalResponse) Descriptor() ([]byte, []int) {
+	return file_portenv_agent_v1_agent_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *TabTerminalResponse) GetMsg() isTabTerminalResponse_Msg {
+	if x != nil {
+		return x.Msg
+	}
+	return nil
+}
+
+func (x *TabTerminalResponse) GetReset_() *TabTerminalReset {
+	if x != nil {
+		if x, ok := x.Msg.(*TabTerminalResponse_Reset_); ok {
+			return x.Reset_
+		}
+	}
+	return nil
+}
+
+func (x *TabTerminalResponse) GetOutput() []byte {
+	if x != nil {
+		if x, ok := x.Msg.(*TabTerminalResponse_Output); ok {
+			return x.Output
+		}
+	}
+	return nil
+}
+
+func (x *TabTerminalResponse) GetResized() *TerminalSize {
+	if x != nil {
+		if x, ok := x.Msg.(*TabTerminalResponse_Resized); ok {
+			return x.Resized
+		}
+	}
+	return nil
+}
+
+func (x *TabTerminalResponse) GetEnd() TabTerminalEnd {
+	if x != nil {
+		if x, ok := x.Msg.(*TabTerminalResponse_End); ok {
+			return x.End
+		}
+	}
+	return TabTerminalEnd_TAB_TERMINAL_END_UNSPECIFIED
+}
+
+func (x *TabTerminalResponse) GetAuthor() *CommandAuthor {
+	if x != nil {
+		if x, ok := x.Msg.(*TabTerminalResponse_Author); ok {
+			return x.Author
+		}
+	}
+	return nil
+}
+
+type isTabTerminalResponse_Msg interface {
+	isTabTerminalResponse_Msg()
+}
+
+type TabTerminalResponse_Reset_ struct {
+	// Always first, and again after the helper's control client restarts
+	// or output had to be skipped (ADR 0020, decisions 6 and 11).
+	Reset_ *TabTerminalReset `protobuf:"bytes,1,opt,name=reset,proto3,oneof"`
+}
+
+type TabTerminalResponse_Output struct {
+	// The tab's own output, in order.
+	Output []byte `protobuf:"bytes,2,opt,name=output,proto3,oneof"`
+}
+
+type TabTerminalResponse_Resized struct {
+	// The tab's size changed elsewhere (another viewer).
+	Resized *TerminalSize `protobuf:"bytes,3,opt,name=resized,proto3,oneof"`
+}
+
+type TabTerminalResponse_End struct {
+	// Nothing follows.
+	End TabTerminalEnd `protobuf:"varint,4,opt,name=end,proto3,enum=portenv.agent.v1.TabTerminalEnd,oneof"`
+}
+
+type TabTerminalResponse_Author struct {
+	// Who ran a command, for its block's attribution chip. Sent before the
+	// output chunk in which the command's OSC 133;C mark completes.
+	Author *CommandAuthor `protobuf:"bytes,5,opt,name=author,proto3,oneof"`
+}
+
+func (*TabTerminalResponse_Reset_) isTabTerminalResponse_Msg() {}
+
+func (*TabTerminalResponse_Output) isTabTerminalResponse_Msg() {}
+
+func (*TabTerminalResponse_Resized) isTabTerminalResponse_Msg() {}
+
+func (*TabTerminalResponse_End) isTabTerminalResponse_Msg() {}
+
+func (*TabTerminalResponse_Author) isTabTerminalResponse_Msg() {}
+
+type TabTerminalReset struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Size  *TerminalSize          `protobuf:"bytes,1,opt,name=size,proto3" json:"size,omitempty"`
+	// The tab's history and screen, cursor and modes, with the OSC 133
+	// marks the helper knows replayed on their lines (ADR 0020, decision 6).
+	Seed []byte `protobuf:"bytes,2,opt,name=seed,proto3" json:"seed,omitempty"`
+	// Every command still in the seed that has a recorded author. Their
+	// line values are the post-reflow lines at the time of the reset,
+	// numbered the same way as this seed's marks.
+	Authors       []*CommandAuthor `protobuf:"bytes,3,rep,name=authors,proto3" json:"authors,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TabTerminalReset) Reset() {
+	*x = TabTerminalReset{}
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TabTerminalReset) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TabTerminalReset) ProtoMessage() {}
+
+func (x *TabTerminalReset) ProtoReflect() protoreflect.Message {
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TabTerminalReset.ProtoReflect.Descriptor instead.
+func (*TabTerminalReset) Descriptor() ([]byte, []int) {
+	return file_portenv_agent_v1_agent_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *TabTerminalReset) GetSize() *TerminalSize {
+	if x != nil {
+		return x.Size
+	}
+	return nil
+}
+
+func (x *TabTerminalReset) GetSeed() []byte {
+	if x != nil {
+		return x.Seed
+	}
+	return nil
+}
+
+func (x *TabTerminalReset) GetAuthors() []*CommandAuthor {
+	if x != nil {
+		return x.Authors
+	}
+	return nil
+}
+
+// Who sent the Enter that started a command. Response-only: no request
+// carries it. The workspace helper records it from the stream the Enter
+// came through, whose identity portenvd set when the stream opened (ADR
+// 0020, R-0133 item 4). The author never travels inside output bytes, not
+// even as a private OSC: a workspace program can write any OSC and forge
+// it, so it's only ever this separate message, and the app's filter keeps
+// dropping unknown OSCs. A command with no recorded author (typed through
+// a plain attach, or started by a program itself) gets no CommandAuthor at
+// all; there is no "unknown" value.
+//
+// The app attaches each author to its mark when the chunk that completes
+// that mark arrives. After that it follows the mark in the app's own row
+// tracker across reflows, so the helper never resends authors after a
+// resize. An author whose line has no mark completing in the next output
+// chunk is dropped by the app: no chip, never a guess.
+type CommandAuthor struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The command's OSC 133;C line, counted from the tab's first line ever,
+	// the same counting as the seed's marks (R-0133 item 6).
+	Line uint64 `protobuf:"varint,1,opt,name=line,proto3" json:"line,omitempty"`
+	// As people read it: "You", "Grok Bot".
+	Name string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	// Set by portenvd for each recipient: true when the author is the caller
+	// receiving this stream. Never set by the helper or any client.
+	IsYou bool `protobuf:"varint,3,opt,name=is_you,json=isYou,proto3" json:"is_you,omitempty"`
+	// Empty for a person; the agent's ID from its grant (ADR 0016) otherwise.
+	AgentId       string `protobuf:"bytes,4,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CommandAuthor) Reset() {
+	*x = CommandAuthor{}
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CommandAuthor) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CommandAuthor) ProtoMessage() {}
+
+func (x *CommandAuthor) ProtoReflect() protoreflect.Message {
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CommandAuthor.ProtoReflect.Descriptor instead.
+func (*CommandAuthor) Descriptor() ([]byte, []int) {
+	return file_portenv_agent_v1_agent_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *CommandAuthor) GetLine() uint64 {
+	if x != nil {
+		return x.Line
+	}
+	return 0
+}
+
+func (x *CommandAuthor) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *CommandAuthor) GetIsYou() bool {
+	if x != nil {
+		return x.IsYou
+	}
+	return false
+}
+
+func (x *CommandAuthor) GetAgentId() string {
+	if x != nil {
+		return x.AgentId
+	}
+	return ""
+}
+
 var File_portenv_agent_v1_agent_proto protoreflect.FileDescriptor
 
 const file_portenv_agent_v1_agent_proto_rawDesc = "" +
@@ -1505,9 +2036,10 @@ const file_portenv_agent_v1_agent_proto_rawDesc = "" +
 	"\x06output\x18\x01 \x01(\fH\x00R\x06output\x12\x1d\n" +
 	"\texit_code\x18\x02 \x01(\x05H\x00R\bexitCodeB\x05\n" +
 	"\x03msg\"\x13\n" +
-	"\x11GetVersionRequest\"G\n" +
+	"\x11GetVersionRequest\"^\n" +
 	"\x12GetVersionResponse\x121\n" +
-	"\x05build\x18\x01 \x01(\v2\x1b.portenv.types.v1.BuildInfoR\x05build\"\x15\n" +
+	"\x05build\x18\x01 \x01(\v2\x1b.portenv.types.v1.BuildInfoR\x05build\x12\x15\n" +
+	"\x06box_id\x18\x02 \x01(\tR\x05boxId\"\x15\n" +
 	"\x13GetReadinessRequest\"\xb6\x01\n" +
 	"\x14GetReadinessResponse\x126\n" +
 	"\x05state\x18\x01 \x01(\x0e2 .portenv.agent.v1.ReadinessStateR\x05state\x12\x16\n" +
@@ -1547,12 +2079,42 @@ const file_portenv_agent_v1_agent_proto_rawDesc = "" +
 	"\asession\x18\x01 \x01(\tR\asession\x12\x16\n" +
 	"\x06viewer\x18\x02 \x01(\tR\x06viewer\">\n" +
 	"\x11WatchTabsResponse\x12)\n" +
-	"\x04tabs\x18\x01 \x03(\v2\x15.portenv.types.v1.TabR\x04tabs*\x86\x01\n" +
+	"\x04tabs\x18\x01 \x03(\v2\x15.portenv.types.v1.TabR\x04tabs\"\xa6\x01\n" +
+	"\x12TabTerminalRequest\x127\n" +
+	"\x04open\x18\x01 \x01(\v2!.portenv.agent.v1.TabTerminalOpenH\x00R\x04open\x12\x16\n" +
+	"\x05input\x18\x02 \x01(\fH\x00R\x05input\x128\n" +
+	"\x06resize\x18\x03 \x01(\v2\x1e.portenv.agent.v1.TerminalSizeH\x00R\x06resizeB\x05\n" +
+	"\x03msg\"\x89\x01\n" +
+	"\x0fTabTerminalOpen\x12\x18\n" +
+	"\asession\x18\x01 \x01(\tR\asession\x12\x10\n" +
+	"\x03tab\x18\x02 \x01(\tR\x03tab\x122\n" +
+	"\x04size\x18\x03 \x01(\v2\x1e.portenv.agent.v1.TerminalSizeR\x04size\x12\x16\n" +
+	"\x06author\x18\x04 \x01(\tR\x06author\"\x9f\x02\n" +
+	"\x13TabTerminalResponse\x12:\n" +
+	"\x05reset\x18\x01 \x01(\v2\".portenv.agent.v1.TabTerminalResetH\x00R\x05reset\x12\x18\n" +
+	"\x06output\x18\x02 \x01(\fH\x00R\x06output\x12:\n" +
+	"\aresized\x18\x03 \x01(\v2\x1e.portenv.agent.v1.TerminalSizeH\x00R\aresized\x124\n" +
+	"\x03end\x18\x04 \x01(\x0e2 .portenv.agent.v1.TabTerminalEndH\x00R\x03end\x129\n" +
+	"\x06author\x18\x05 \x01(\v2\x1f.portenv.agent.v1.CommandAuthorH\x00R\x06authorB\x05\n" +
+	"\x03msg\"\x95\x01\n" +
+	"\x10TabTerminalReset\x122\n" +
+	"\x04size\x18\x01 \x01(\v2\x1e.portenv.agent.v1.TerminalSizeR\x04size\x12\x12\n" +
+	"\x04seed\x18\x02 \x01(\fR\x04seed\x129\n" +
+	"\aauthors\x18\x03 \x03(\v2\x1f.portenv.agent.v1.CommandAuthorR\aauthors\"o\n" +
+	"\rCommandAuthor\x12\x12\n" +
+	"\x04line\x18\x01 \x01(\x04R\x04line\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x15\n" +
+	"\x06is_you\x18\x03 \x01(\bR\x05isYou\x12\x19\n" +
+	"\bagent_id\x18\x04 \x01(\tR\aagentIdJ\x04\b\x05\x10\x06*\x86\x01\n" +
 	"\x0eReadinessState\x12\x1f\n" +
 	"\x1bREADINESS_STATE_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18READINESS_STATE_STARTING\x10\x01\x12\x19\n" +
 	"\x15READINESS_STATE_READY\x10\x02\x12\x1a\n" +
-	"\x16READINESS_STATE_FAILED\x10\x032\xa8\b\n" +
+	"\x16READINESS_STATE_FAILED\x10\x03*v\n" +
+	"\x0eTabTerminalEnd\x12 \n" +
+	"\x1cTAB_TERMINAL_END_UNSPECIFIED\x10\x00\x12\x1f\n" +
+	"\x1bTAB_TERMINAL_END_TAB_CLOSED\x10\x01\x12!\n" +
+	"\x1dTAB_TERMINAL_END_BOX_STOPPING\x10\x022\x88\t\n" +
 	"\fAgentService\x12W\n" +
 	"\n" +
 	"GetVersion\x12#.portenv.agent.v1.GetVersionRequest\x1a$.portenv.agent.v1.GetVersionResponse\x12]\n" +
@@ -1566,7 +2128,8 @@ const file_portenv_agent_v1_agent_proto_rawDesc = "" +
 	"\bCloseTab\x12!.portenv.agent.v1.CloseTabRequest\x1a\".portenv.agent.v1.CloseTabResponse\x12T\n" +
 	"\tRenameTab\x12\".portenv.agent.v1.RenameTabRequest\x1a#.portenv.agent.v1.RenameTabResponse\x12T\n" +
 	"\tSelectTab\x12\".portenv.agent.v1.SelectTabRequest\x1a#.portenv.agent.v1.SelectTabResponse\x12V\n" +
-	"\tWatchTabs\x12\".portenv.agent.v1.WatchTabsRequest\x1a#.portenv.agent.v1.WatchTabsResponse0\x01B\xc6\x01\n" +
+	"\tWatchTabs\x12\".portenv.agent.v1.WatchTabsRequest\x1a#.portenv.agent.v1.WatchTabsResponse0\x01\x12^\n" +
+	"\vTabTerminal\x12$.portenv.agent.v1.TabTerminalRequest\x1a%.portenv.agent.v1.TabTerminalResponse(\x010\x01B\xc6\x01\n" +
 	"\x14com.portenv.agent.v1B\n" +
 	"AgentProtoP\x01Z@github.com/portenv/portenv/proto/gen/go/portenv/agent/v1;agentv1\xa2\x02\x03PAX\xaa\x02\x10Portenv.Agent.V1\xca\x02\x10Portenv\\Agent\\V1\xe2\x02\x1cPortenv\\Agent\\V1\\GPBMetadata\xea\x02\x12Portenv::Agent::V1b\x06proto3"
 
@@ -1582,77 +2145,94 @@ func file_portenv_agent_v1_agent_proto_rawDescGZIP() []byte {
 	return file_portenv_agent_v1_agent_proto_rawDescData
 }
 
-var file_portenv_agent_v1_agent_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_portenv_agent_v1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 26)
+var file_portenv_agent_v1_agent_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_portenv_agent_v1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 31)
 var file_portenv_agent_v1_agent_proto_goTypes = []any{
 	(ReadinessState)(0),           // 0: portenv.agent.v1.ReadinessState
-	(*RunResticRequest)(nil),      // 1: portenv.agent.v1.RunResticRequest
-	(*RunResticResponse)(nil),     // 2: portenv.agent.v1.RunResticResponse
-	(*GetPathInfoRequest)(nil),    // 3: portenv.agent.v1.GetPathInfoRequest
-	(*GetPathInfoResponse)(nil),   // 4: portenv.agent.v1.GetPathInfoResponse
-	(*TerminalRequest)(nil),       // 5: portenv.agent.v1.TerminalRequest
-	(*TerminalOpen)(nil),          // 6: portenv.agent.v1.TerminalOpen
-	(*TerminalSize)(nil),          // 7: portenv.agent.v1.TerminalSize
-	(*TerminalResponse)(nil),      // 8: portenv.agent.v1.TerminalResponse
-	(*GetVersionRequest)(nil),     // 9: portenv.agent.v1.GetVersionRequest
-	(*GetVersionResponse)(nil),    // 10: portenv.agent.v1.GetVersionResponse
-	(*GetReadinessRequest)(nil),   // 11: portenv.agent.v1.GetReadinessRequest
-	(*GetReadinessResponse)(nil),  // 12: portenv.agent.v1.GetReadinessResponse
-	(*RetryPackagesRequest)(nil),  // 13: portenv.agent.v1.RetryPackagesRequest
-	(*RetryPackagesResponse)(nil), // 14: portenv.agent.v1.RetryPackagesResponse
-	(*ListTabsRequest)(nil),       // 15: portenv.agent.v1.ListTabsRequest
-	(*ListTabsResponse)(nil),      // 16: portenv.agent.v1.ListTabsResponse
-	(*NewTabRequest)(nil),         // 17: portenv.agent.v1.NewTabRequest
-	(*NewTabResponse)(nil),        // 18: portenv.agent.v1.NewTabResponse
-	(*CloseTabRequest)(nil),       // 19: portenv.agent.v1.CloseTabRequest
-	(*CloseTabResponse)(nil),      // 20: portenv.agent.v1.CloseTabResponse
-	(*RenameTabRequest)(nil),      // 21: portenv.agent.v1.RenameTabRequest
-	(*RenameTabResponse)(nil),     // 22: portenv.agent.v1.RenameTabResponse
-	(*SelectTabRequest)(nil),      // 23: portenv.agent.v1.SelectTabRequest
-	(*SelectTabResponse)(nil),     // 24: portenv.agent.v1.SelectTabResponse
-	(*WatchTabsRequest)(nil),      // 25: portenv.agent.v1.WatchTabsRequest
-	(*WatchTabsResponse)(nil),     // 26: portenv.agent.v1.WatchTabsResponse
-	(*v1.BuildInfo)(nil),          // 27: portenv.types.v1.BuildInfo
-	(*v1.Tab)(nil),                // 28: portenv.types.v1.Tab
+	(TabTerminalEnd)(0),           // 1: portenv.agent.v1.TabTerminalEnd
+	(*RunResticRequest)(nil),      // 2: portenv.agent.v1.RunResticRequest
+	(*RunResticResponse)(nil),     // 3: portenv.agent.v1.RunResticResponse
+	(*GetPathInfoRequest)(nil),    // 4: portenv.agent.v1.GetPathInfoRequest
+	(*GetPathInfoResponse)(nil),   // 5: portenv.agent.v1.GetPathInfoResponse
+	(*TerminalRequest)(nil),       // 6: portenv.agent.v1.TerminalRequest
+	(*TerminalOpen)(nil),          // 7: portenv.agent.v1.TerminalOpen
+	(*TerminalSize)(nil),          // 8: portenv.agent.v1.TerminalSize
+	(*TerminalResponse)(nil),      // 9: portenv.agent.v1.TerminalResponse
+	(*GetVersionRequest)(nil),     // 10: portenv.agent.v1.GetVersionRequest
+	(*GetVersionResponse)(nil),    // 11: portenv.agent.v1.GetVersionResponse
+	(*GetReadinessRequest)(nil),   // 12: portenv.agent.v1.GetReadinessRequest
+	(*GetReadinessResponse)(nil),  // 13: portenv.agent.v1.GetReadinessResponse
+	(*RetryPackagesRequest)(nil),  // 14: portenv.agent.v1.RetryPackagesRequest
+	(*RetryPackagesResponse)(nil), // 15: portenv.agent.v1.RetryPackagesResponse
+	(*ListTabsRequest)(nil),       // 16: portenv.agent.v1.ListTabsRequest
+	(*ListTabsResponse)(nil),      // 17: portenv.agent.v1.ListTabsResponse
+	(*NewTabRequest)(nil),         // 18: portenv.agent.v1.NewTabRequest
+	(*NewTabResponse)(nil),        // 19: portenv.agent.v1.NewTabResponse
+	(*CloseTabRequest)(nil),       // 20: portenv.agent.v1.CloseTabRequest
+	(*CloseTabResponse)(nil),      // 21: portenv.agent.v1.CloseTabResponse
+	(*RenameTabRequest)(nil),      // 22: portenv.agent.v1.RenameTabRequest
+	(*RenameTabResponse)(nil),     // 23: portenv.agent.v1.RenameTabResponse
+	(*SelectTabRequest)(nil),      // 24: portenv.agent.v1.SelectTabRequest
+	(*SelectTabResponse)(nil),     // 25: portenv.agent.v1.SelectTabResponse
+	(*WatchTabsRequest)(nil),      // 26: portenv.agent.v1.WatchTabsRequest
+	(*WatchTabsResponse)(nil),     // 27: portenv.agent.v1.WatchTabsResponse
+	(*TabTerminalRequest)(nil),    // 28: portenv.agent.v1.TabTerminalRequest
+	(*TabTerminalOpen)(nil),       // 29: portenv.agent.v1.TabTerminalOpen
+	(*TabTerminalResponse)(nil),   // 30: portenv.agent.v1.TabTerminalResponse
+	(*TabTerminalReset)(nil),      // 31: portenv.agent.v1.TabTerminalReset
+	(*CommandAuthor)(nil),         // 32: portenv.agent.v1.CommandAuthor
+	(*v1.BuildInfo)(nil),          // 33: portenv.types.v1.BuildInfo
+	(*v1.Tab)(nil),                // 34: portenv.types.v1.Tab
 }
 var file_portenv_agent_v1_agent_proto_depIdxs = []int32{
-	6,  // 0: portenv.agent.v1.TerminalRequest.open:type_name -> portenv.agent.v1.TerminalOpen
-	7,  // 1: portenv.agent.v1.TerminalRequest.resize:type_name -> portenv.agent.v1.TerminalSize
-	7,  // 2: portenv.agent.v1.TerminalOpen.size:type_name -> portenv.agent.v1.TerminalSize
-	27, // 3: portenv.agent.v1.GetVersionResponse.build:type_name -> portenv.types.v1.BuildInfo
+	7,  // 0: portenv.agent.v1.TerminalRequest.open:type_name -> portenv.agent.v1.TerminalOpen
+	8,  // 1: portenv.agent.v1.TerminalRequest.resize:type_name -> portenv.agent.v1.TerminalSize
+	8,  // 2: portenv.agent.v1.TerminalOpen.size:type_name -> portenv.agent.v1.TerminalSize
+	33, // 3: portenv.agent.v1.GetVersionResponse.build:type_name -> portenv.types.v1.BuildInfo
 	0,  // 4: portenv.agent.v1.GetReadinessResponse.state:type_name -> portenv.agent.v1.ReadinessState
-	28, // 5: portenv.agent.v1.ListTabsResponse.tabs:type_name -> portenv.types.v1.Tab
-	28, // 6: portenv.agent.v1.NewTabResponse.tab:type_name -> portenv.types.v1.Tab
-	28, // 7: portenv.agent.v1.WatchTabsResponse.tabs:type_name -> portenv.types.v1.Tab
-	9,  // 8: portenv.agent.v1.AgentService.GetVersion:input_type -> portenv.agent.v1.GetVersionRequest
-	11, // 9: portenv.agent.v1.AgentService.GetReadiness:input_type -> portenv.agent.v1.GetReadinessRequest
-	13, // 10: portenv.agent.v1.AgentService.RetryPackages:input_type -> portenv.agent.v1.RetryPackagesRequest
-	1,  // 11: portenv.agent.v1.AgentService.RunRestic:input_type -> portenv.agent.v1.RunResticRequest
-	3,  // 12: portenv.agent.v1.AgentService.GetPathInfo:input_type -> portenv.agent.v1.GetPathInfoRequest
-	5,  // 13: portenv.agent.v1.AgentService.Terminal:input_type -> portenv.agent.v1.TerminalRequest
-	15, // 14: portenv.agent.v1.AgentService.ListTabs:input_type -> portenv.agent.v1.ListTabsRequest
-	17, // 15: portenv.agent.v1.AgentService.NewTab:input_type -> portenv.agent.v1.NewTabRequest
-	19, // 16: portenv.agent.v1.AgentService.CloseTab:input_type -> portenv.agent.v1.CloseTabRequest
-	21, // 17: portenv.agent.v1.AgentService.RenameTab:input_type -> portenv.agent.v1.RenameTabRequest
-	23, // 18: portenv.agent.v1.AgentService.SelectTab:input_type -> portenv.agent.v1.SelectTabRequest
-	25, // 19: portenv.agent.v1.AgentService.WatchTabs:input_type -> portenv.agent.v1.WatchTabsRequest
-	10, // 20: portenv.agent.v1.AgentService.GetVersion:output_type -> portenv.agent.v1.GetVersionResponse
-	12, // 21: portenv.agent.v1.AgentService.GetReadiness:output_type -> portenv.agent.v1.GetReadinessResponse
-	14, // 22: portenv.agent.v1.AgentService.RetryPackages:output_type -> portenv.agent.v1.RetryPackagesResponse
-	2,  // 23: portenv.agent.v1.AgentService.RunRestic:output_type -> portenv.agent.v1.RunResticResponse
-	4,  // 24: portenv.agent.v1.AgentService.GetPathInfo:output_type -> portenv.agent.v1.GetPathInfoResponse
-	8,  // 25: portenv.agent.v1.AgentService.Terminal:output_type -> portenv.agent.v1.TerminalResponse
-	16, // 26: portenv.agent.v1.AgentService.ListTabs:output_type -> portenv.agent.v1.ListTabsResponse
-	18, // 27: portenv.agent.v1.AgentService.NewTab:output_type -> portenv.agent.v1.NewTabResponse
-	20, // 28: portenv.agent.v1.AgentService.CloseTab:output_type -> portenv.agent.v1.CloseTabResponse
-	22, // 29: portenv.agent.v1.AgentService.RenameTab:output_type -> portenv.agent.v1.RenameTabResponse
-	24, // 30: portenv.agent.v1.AgentService.SelectTab:output_type -> portenv.agent.v1.SelectTabResponse
-	26, // 31: portenv.agent.v1.AgentService.WatchTabs:output_type -> portenv.agent.v1.WatchTabsResponse
-	20, // [20:32] is the sub-list for method output_type
-	8,  // [8:20] is the sub-list for method input_type
-	8,  // [8:8] is the sub-list for extension type_name
-	8,  // [8:8] is the sub-list for extension extendee
-	0,  // [0:8] is the sub-list for field type_name
+	34, // 5: portenv.agent.v1.ListTabsResponse.tabs:type_name -> portenv.types.v1.Tab
+	34, // 6: portenv.agent.v1.NewTabResponse.tab:type_name -> portenv.types.v1.Tab
+	34, // 7: portenv.agent.v1.WatchTabsResponse.tabs:type_name -> portenv.types.v1.Tab
+	29, // 8: portenv.agent.v1.TabTerminalRequest.open:type_name -> portenv.agent.v1.TabTerminalOpen
+	8,  // 9: portenv.agent.v1.TabTerminalRequest.resize:type_name -> portenv.agent.v1.TerminalSize
+	8,  // 10: portenv.agent.v1.TabTerminalOpen.size:type_name -> portenv.agent.v1.TerminalSize
+	31, // 11: portenv.agent.v1.TabTerminalResponse.reset:type_name -> portenv.agent.v1.TabTerminalReset
+	8,  // 12: portenv.agent.v1.TabTerminalResponse.resized:type_name -> portenv.agent.v1.TerminalSize
+	1,  // 13: portenv.agent.v1.TabTerminalResponse.end:type_name -> portenv.agent.v1.TabTerminalEnd
+	32, // 14: portenv.agent.v1.TabTerminalResponse.author:type_name -> portenv.agent.v1.CommandAuthor
+	8,  // 15: portenv.agent.v1.TabTerminalReset.size:type_name -> portenv.agent.v1.TerminalSize
+	32, // 16: portenv.agent.v1.TabTerminalReset.authors:type_name -> portenv.agent.v1.CommandAuthor
+	10, // 17: portenv.agent.v1.AgentService.GetVersion:input_type -> portenv.agent.v1.GetVersionRequest
+	12, // 18: portenv.agent.v1.AgentService.GetReadiness:input_type -> portenv.agent.v1.GetReadinessRequest
+	14, // 19: portenv.agent.v1.AgentService.RetryPackages:input_type -> portenv.agent.v1.RetryPackagesRequest
+	2,  // 20: portenv.agent.v1.AgentService.RunRestic:input_type -> portenv.agent.v1.RunResticRequest
+	4,  // 21: portenv.agent.v1.AgentService.GetPathInfo:input_type -> portenv.agent.v1.GetPathInfoRequest
+	6,  // 22: portenv.agent.v1.AgentService.Terminal:input_type -> portenv.agent.v1.TerminalRequest
+	16, // 23: portenv.agent.v1.AgentService.ListTabs:input_type -> portenv.agent.v1.ListTabsRequest
+	18, // 24: portenv.agent.v1.AgentService.NewTab:input_type -> portenv.agent.v1.NewTabRequest
+	20, // 25: portenv.agent.v1.AgentService.CloseTab:input_type -> portenv.agent.v1.CloseTabRequest
+	22, // 26: portenv.agent.v1.AgentService.RenameTab:input_type -> portenv.agent.v1.RenameTabRequest
+	24, // 27: portenv.agent.v1.AgentService.SelectTab:input_type -> portenv.agent.v1.SelectTabRequest
+	26, // 28: portenv.agent.v1.AgentService.WatchTabs:input_type -> portenv.agent.v1.WatchTabsRequest
+	28, // 29: portenv.agent.v1.AgentService.TabTerminal:input_type -> portenv.agent.v1.TabTerminalRequest
+	11, // 30: portenv.agent.v1.AgentService.GetVersion:output_type -> portenv.agent.v1.GetVersionResponse
+	13, // 31: portenv.agent.v1.AgentService.GetReadiness:output_type -> portenv.agent.v1.GetReadinessResponse
+	15, // 32: portenv.agent.v1.AgentService.RetryPackages:output_type -> portenv.agent.v1.RetryPackagesResponse
+	3,  // 33: portenv.agent.v1.AgentService.RunRestic:output_type -> portenv.agent.v1.RunResticResponse
+	5,  // 34: portenv.agent.v1.AgentService.GetPathInfo:output_type -> portenv.agent.v1.GetPathInfoResponse
+	9,  // 35: portenv.agent.v1.AgentService.Terminal:output_type -> portenv.agent.v1.TerminalResponse
+	17, // 36: portenv.agent.v1.AgentService.ListTabs:output_type -> portenv.agent.v1.ListTabsResponse
+	19, // 37: portenv.agent.v1.AgentService.NewTab:output_type -> portenv.agent.v1.NewTabResponse
+	21, // 38: portenv.agent.v1.AgentService.CloseTab:output_type -> portenv.agent.v1.CloseTabResponse
+	23, // 39: portenv.agent.v1.AgentService.RenameTab:output_type -> portenv.agent.v1.RenameTabResponse
+	25, // 40: portenv.agent.v1.AgentService.SelectTab:output_type -> portenv.agent.v1.SelectTabResponse
+	27, // 41: portenv.agent.v1.AgentService.WatchTabs:output_type -> portenv.agent.v1.WatchTabsResponse
+	30, // 42: portenv.agent.v1.AgentService.TabTerminal:output_type -> portenv.agent.v1.TabTerminalResponse
+	30, // [30:43] is the sub-list for method output_type
+	17, // [17:30] is the sub-list for method input_type
+	17, // [17:17] is the sub-list for extension type_name
+	17, // [17:17] is the sub-list for extension extendee
+	0,  // [0:17] is the sub-list for field type_name
 }
 
 func init() { file_portenv_agent_v1_agent_proto_init() }
@@ -1669,13 +2249,25 @@ func file_portenv_agent_v1_agent_proto_init() {
 		(*TerminalResponse_Output)(nil),
 		(*TerminalResponse_ExitCode)(nil),
 	}
+	file_portenv_agent_v1_agent_proto_msgTypes[26].OneofWrappers = []any{
+		(*TabTerminalRequest_Open)(nil),
+		(*TabTerminalRequest_Input)(nil),
+		(*TabTerminalRequest_Resize)(nil),
+	}
+	file_portenv_agent_v1_agent_proto_msgTypes[28].OneofWrappers = []any{
+		(*TabTerminalResponse_Reset_)(nil),
+		(*TabTerminalResponse_Output)(nil),
+		(*TabTerminalResponse_Resized)(nil),
+		(*TabTerminalResponse_End)(nil),
+		(*TabTerminalResponse_Author)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_portenv_agent_v1_agent_proto_rawDesc), len(file_portenv_agent_v1_agent_proto_rawDesc)),
-			NumEnums:      1,
-			NumMessages:   26,
+			NumEnums:      2,
+			NumMessages:   31,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

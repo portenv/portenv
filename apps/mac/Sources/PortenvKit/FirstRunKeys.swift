@@ -14,6 +14,9 @@ public final class KeyedFirstRunService: FirstRunService, @unchecked Sendable {
     private var filled = false
     /// A fill is writing the pool (with the lock released).
     private var filling = false
+    private var _wipedKeys = 0
+    /// Keys wiped because a newer one replaced them (for tests).
+    var wipedKeys: Int { lock.withLock { _wipedKeys } }
     private let maker: BoxMaker
     private let pool: RecoveryPoolStore
     private let randomBytes: @Sendable (Int) throws -> [UInt8]
@@ -68,9 +71,17 @@ public final class KeyedFirstRunService: FirstRunService, @unchecked Sendable {
                 try pool.fill(from: &attempt)
             }
         } catch {
-            lock.withLock {
+            let replaced: Bool = lock.withLock {
                 filling = false
-                if held == nil { held = key } // kept for the retry
+                guard held == nil else { return true }
+                held = key // kept for the retry
+                return false
+            }
+            // A newer key replaced it meanwhile: this one is never used
+            // (R-0155).
+            if replaced {
+                key.wipe()
+                lock.withLock { _wipedKeys += 1 }
             }
             throw FirstRunError(FirstRunText.poolNotStored)
         }

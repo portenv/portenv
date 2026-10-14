@@ -73,6 +73,9 @@ type Server struct {
 	mu     sync.Mutex
 	open   map[string]*openBox   // by box name
 	remote map[string]*remoteBox // boxes this Mac opened on a server
+	// elsewhere: the lease another machine held on a box when OpenBox was
+	// last refused (GetPlacement).
+	elsewhere map[string]boxsync.Lease
 	// gen counts each box's moves, closes and restarts by this daemon, so
 	// a terminal that ends because of one is not reported as a failure.
 	gen map[string]uint64
@@ -215,7 +218,8 @@ func (s *Server) ListBoxes(context.Context, *daemonv1.ListBoxesRequest) (*daemon
 			state = typesv1.BoxState_BOX_STATE_RUNNING
 		}
 		s.mu.Unlock()
-		resp.Boxes = append(resp.Boxes, &daemonv1.BoxStatus{Box: &typesv1.Box{Id: c.ID, Name: c.Name, ToolboxImage: c.Image}, State: state})
+		resp.Boxes = append(resp.Boxes, &daemonv1.BoxStatus{Box: &typesv1.Box{Id: c.ID, Name: c.Name, ToolboxImage: c.Image}, State: state,
+			CarriesRecoveryKey: c.Recovery})
 	}
 	// Boxes CreateBox hasn't finished: shown, never opened (ADR 0019).
 	creating, err := s.env.Creations()
@@ -269,10 +273,11 @@ func (s *Server) OpenBox(ctx context.Context, req *daemonv1.OpenBoxRequest) (*da
 	if err != nil {
 		var held *boxsync.LeaseHeldError
 		if errors.As(err, &held) {
-			return nil, status.Error(codes.FailedPrecondition, err.Error())
+			return nil, s.refuseOpenElsewhere(ctx, req.GetName(), held)
 		}
 		return nil, err
 	}
+	s.openedHere(req.GetName())
 	ob.offline.Store(res.Offline)
 	s.mu.Lock()
 	s.open[req.GetName()] = ob
@@ -580,8 +585,9 @@ func (s *Server) MoveBox(ctx context.Context, req *daemonv1.MoveBoxRequest) (*da
 	}
 	if target == "this-mac" {
 		// Close it on the server it runs on, through that server's runner
-		// (save and release there).
-		if host := s.location(name); host != "" {
+		// (save and release there): the one this Mac put it on, or the
+		// known server another refusal named (2.3, Move it to this Mac).
+		if host := s.holdingServer(ctx, name); host != "" {
 			if _, err := local.AppOn(ctx, host, "close", name); err != nil && !strings.Contains(err.Error(), "is not open") {
 				return nil, status.Error(codes.FailedPrecondition, err.Error())
 			}

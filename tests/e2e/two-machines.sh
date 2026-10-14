@@ -161,6 +161,14 @@ out=$(A app leave-unsaved demo 2>&1); echo "  $out"
 out=$(B app open demo 2>&1) && rc=0 || rc=$?; echo "  B: $out"
 expect "B is refused while A holds unsaved work" test "$rc" -ne 0
 expect "  by A's lease (it names A)" grep -q "workspace is open on $(cat "$root/a/machine-id")" <<<"$out"
+# The lease sheet's facts (2.3): B sees A by its machine ID, which it
+# can't ask (A is another Mac, not one of B's servers), never by guessing.
+out=$(B app placement demo 2>&1) || true; echo "  B placement: $out"
+expect "  placement: another machine, A, that B can't ask" python3 -c "
+import json,sys; p=json.loads(sys.argv[1])
+assert p['holder']=='HOLDER_OTHER_MACHINE' and p['machine']==sys.argv[2] and p['answers']=='ANSWERS_CANNOT_ASK', p
+" "$out" "$(tr -d '\n' < "$root/a/machine-id")"
+expect "  portenv machine-id prints A's" test "$(PORTENV_HOME=$root/a $portenv machine-id)" = "$(tr -d '\n' < "$root/a/machine-id")"
 # A recovers: opening takes the box back, Restart Box brings its agent back
 # and keeps the home (rule 3), and the close saves and releases.
 A app open demo >/dev/null 2>&1 || true

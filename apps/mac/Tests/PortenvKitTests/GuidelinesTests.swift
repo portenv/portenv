@@ -225,3 +225,12 @@ struct FailedPackagesTests {
         #expect(s?.line(now: at.addingTimeInterval(3600), timeZone: TimeZone(identifier: "Europe/Paris")!, locale: Locale(identifier: "en_GB")) == "This Mac · Saved at 14:58")
     }
 }
+
+/// The app's server names follow the same rule as portenvd's
+/// ServerDisplayName (core/local/placement.go), so a name from
+/// GetPlacement reads as it does everywhere else (R-0172).
+@Test func serverNamesMatchPortenvd() {
+    for (target, name) in [("ubuntu@test-server", "test-server"), ("this-mac", "This Mac"), ("studio", "studio"), ("a@b@c", "c")] {
+        #expect(ServerName.display(target) == name)
+    }
+}

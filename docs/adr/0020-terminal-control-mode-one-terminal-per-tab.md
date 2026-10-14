@@ -118,6 +118,11 @@ Also checked on tmux 3.4 in the image:
 
    The existing `Terminal` RPC stays for `portenv attach` (decision 8).
 
+   **As built (1.2c PR 3a):** `proto/portenv/agent/v1/agent.proto` is the source of truth.
+   - `TabTerminalResponse` also carries `CommandAuthor author = 5`, and `TabTerminalReset` carries `repeated CommandAuthor authors = 3`. Who ran each command is agreed with lane D for the blocks' attribution chip.
+   - The author never travels inside output bytes.
+   - `GetVersionResponse` carries `box_id` (R-0172, R-0173). The driver passes the box ID as `PORTENV_BOX_ID` when it makes the container, not in the secrets line, which older helpers refuse when it has a field they don't know.
+
    - **Opening a tab that's gone** ends promptly with `TAB_CLOSED`: within one control-client round trip, and never by waiting for a timeout.
    - **Tab events** (`WatchTabs`, `portenv.types.v1.Tab`) gain what split view's pane header needs. The stream itself stays bytes only.
      - **`waiting`:** the question text from ADR 0017's detector, empty and `secret` for a password prompt. It feeds "asking you", the answer card and the badge.
@@ -208,6 +213,10 @@ Also checked on tmux 3.4 in the image:
        - **OSC 8 is shown as a link,** and opened only as R-0134 says: http or https only, on the person's own click, after the full URL shows as a tooltip and in the state line.
        - **Everything else is dropped:** 0, 1 and 2 (titles; the app owns tab names), 7, 52 (the clipboard), 1337 (iTerm2's File= and SetUserVar), 4, 10 and 11, and any other number.
      - **DCS, APC, PM and SOS strings are dropped whole,** sixel and kitty graphics included.
+     - **Agreement with SwiftTerm (R-0167):**
+       - OSC payloads are printable ASCII only. Any other byte, such as a raw 0x9C, which ends an OSC in SwiftTerm, drops the OSC, and the byte is read afresh.
+       - Text is strict UTF-8: overlongs, surrogates, anything past U+10FFFF and C1 controls written as UTF-8 become U+FFFD.
+       - Counts are clamped when re-emitted: REP, ICH, DCH, ECH, IL, DL, SU and SD to 4,096, and every other parameter to 65,535.
      - **Limits:**
        - one sequence is at most 4 KB (an OSC 8 URL at most 2 KB), after which the sequence is dropped and parsing resumes at the next byte that can start one;
        - scrollback is 10,000 lines per tab;
@@ -222,6 +231,10 @@ Also checked on tmux 3.4 in the image:
 
      It runs in CI on a fixed seed and nightly on random ones.
    - **No reply reaches the pane** (decision 4, item 1), and **paste is cleaned** (decision 4, item 3).
+   - **The delegate (R-0161, R-0167):** a tab view's delegate is its own relay. SwiftTerm's `terminalDelegate` can't be overridden, so:
+     - `check-terminal-views.sh` fails on any assignment to it outside `TerminalViews.swift` and `MarkedTerminalView.swift`;
+     - at runtime, the view checks and restores it before every byte is fed, and in the relay's link, title and clipboard paths.
+   - **No other way in for text:** the view refuses dropped text and Services, so text that isn't typed comes only through cleaned paste.
    - **One factory (R-0134):** every terminal view the app creates comes from `TerminalViews`, which installs `TerminalGuard` today and this filter and the reply drop for `MarkedTerminalView`. `scripts/check-terminal-views.sh`, in lint, fails on a terminal view constructed anywhere else.
    - **The second line:** tmux's `allow-passthrough off` and `set-clipboard off`.
      - **It isn't complete.** On tmux 3.4, `tmux set-buffer -w` still reaches a client as OSC 52 with `set-clipboard off`; copy mode's copies don't. Checked in the image (#94). With control mode, that OSC 52 is in the pane's own output, and the filter drops it.

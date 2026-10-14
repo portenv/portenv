@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -81,6 +82,11 @@ func TestTabsInABox(t *testing.T) {
 	}
 	defer func() { _ = conn.Close() }()
 	c := agentv1.NewAgentServiceClient(conn)
+	// The helper answers as this box (R-0172, R-0173): the driver passed
+	// its ID when it made the container.
+	if v, err := c.GetVersion(ctx, &agentv1.GetVersionRequest{}); err != nil || v.GetBoxId() != string(id) {
+		t.Fatalf("GetVersion: box_id %q (%v), want %q", v.GetBoxId(), err, id)
+	}
 	names := func(ts []*typesv1.Tab) string {
 		var n []string
 		for _, x := range ts {
@@ -163,8 +169,15 @@ func TestTabsInABox(t *testing.T) {
 		}
 		out.Write(r.GetOutput())
 	}
-	if got := sh("work", "tmux list-clients -F '#{session_name}'"); got != "main-viewer-app" {
-		t.Fatalf("the app's terminal is attached to %q, want main-viewer-app", got)
+	// The helper's control-mode client (ADR 0020), there for the watch, is
+	// a client of the box's own session; the app's terminal is the only
+	// other one, on its viewer session.
+	clients := sh("work", "tmux list-clients -F '#{client_control_mode} #{session_name}'")
+	if got := strings.Join(slices.DeleteFunc(strings.Split(clients, "\n"), func(l string) bool { return !strings.HasPrefix(l, "0 ") }), ","); got != "0 main-viewer-app" {
+		t.Fatalf("the app's terminal is attached to %q, want 0 main-viewer-app (all clients: %q)", got, clients)
+	}
+	if !strings.Contains(clients, "1 main") {
+		t.Errorf("no control-mode client on the box's session while the watch runs (clients: %q)", clients)
 	}
 	_ = term.CloseSend()
 	for range 50 {

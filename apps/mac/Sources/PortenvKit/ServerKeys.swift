@@ -17,14 +17,17 @@ public struct ServerKeyInfo: Equatable, Sendable {
     public let fromKnownHosts: Bool
     /// ssh-ed25519, ecdsa-sha2-nistp256, ssh-rsa…: from a scan only.
     public let keyType: String
+    /// It signs in with a key Portenv made for it.
+    public let madeKey: Bool
 
-    public init(id: String, name: String, state: State, fingerprint: String, fromKnownHosts: Bool = false, keyType: String = "") {
+    public init(id: String, name: String, state: State, fingerprint: String, fromKnownHosts: Bool = false, keyType: String = "", madeKey: Bool = false) {
         self.id = id
         self.name = name
         self.state = state
         self.fingerprint = fingerprint
         self.fromKnownHosts = fromKnownHosts
         self.keyType = keyType
+        self.madeKey = madeKey
     }
 }
 

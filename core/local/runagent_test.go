@@ -50,6 +50,7 @@ func TestTheRunAgentServesOnlyItsKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { _ = a.Close() }) // also when a check below fails
 	dir, _ := SocketDir()
 	if filepath.Dir(a.sock) != dir || !regexp.MustCompile(`^a-[0-9a-f]{8}$`).MatchString(filepath.Base(a.sock)) {
 		t.Fatalf("socket %s", a.sock)

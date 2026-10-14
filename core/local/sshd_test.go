@@ -271,13 +271,14 @@ func TestAMadeKeySignsInOnceThroughItsAgent(t *testing.T) {
 	if err := e.ProvideServerKey(id, priv); err != nil {
 		t.Fatal(err)
 	}
+	dir, _ := SocketDir()
+	before, _ := filepath.Glob(filepath.Join(dir, "a-*"))
 	var out strings.Builder
 	if err := RunRemote(ctx, QuickRemote, target, &out, "echo", "signed-in"); err != nil || !strings.Contains(out.String(), "signed-in") {
 		t.Fatalf("run: %v: %s", err, out.String())
 	}
-	dir, _ := SocketDir()
-	if left, _ := filepath.Glob(filepath.Join(dir, "a-*")); len(left) != 0 {
-		t.Fatalf("an agent socket outlived the sign-in: %v", left)
+	if after, _ := filepath.Glob(filepath.Join(dir, "a-*")); len(after) != len(before) {
+		t.Fatalf("an agent socket outlived the sign-in: %v (before: %v)", after, before)
 	}
 	forgetMadeKeys() // the key is gone; the shared connection carries on
 	if err := RunRemote(ctx, QuickRemote, target, io.Discard, "true"); err != nil {

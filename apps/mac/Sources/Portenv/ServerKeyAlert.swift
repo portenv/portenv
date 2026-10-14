@@ -52,6 +52,10 @@ enum ServerKeyAlert {
     }
 
     @MainActor static func runAtLaunch() async {
+        // Made keys first, so a server that signs in with one is ready.
+        if let daemon = SharedDaemon.client as? ServerKeys & ServerKeyHandover {
+            await ServerSignInKey.handOver(to: daemon, store: ServerSignInKey.store)
+        }
         await check.run(
             ask: { q in question(q).runModal() == .alertFirstButtonReturn },
             tell: { n in _ = notice(n).runModal() }

@@ -62,6 +62,16 @@ The board's "Sign in with": **A key on this Mac** (the person's existing key or 
 - **"No SSH yet? Copy an install command…"** (PLAN.md's alternative path): a one-line command for the provider's web console or user-data that only adds this server's public key to the user's `authorized_keys`. It installs nothing; Check and Set Up still run from the wizard, so nothing installs before every check passes.
 - **"Someone is setting one up for me"** (R-0140, R-0141): the same key, made at once, its public half shown with Copy and "Send this to the person setting up your server. It's safe to share."; **Done** saves a Settings › Servers entry, "Waiting for an address". Opening it later ("The invitation arrived") asks for name, address and user, says "Signs in with: the key you sent on <date>", and continues at the fingerprint frame. "A key on this Mac" isn't offered there: testers may not have one, and it would share one key across everything they reach.
 
+### 2a. The per-server key, as built (2.9 1b)
+
+Where this differs from section 2, this wins.
+
+- **The key:** CryptoKit's Ed25519; the Keychain holds its 32-byte seed (service `dev.portenv.server-key`, a lane's own suffix; account the server ID; label `Portenv server key portenv-<id>`; never synchronised, this-device-only, with ADR 0019's caveat). Its public half is `ssh-ed25519 … portenv-<id>`. At launch the app reads the seeds of the servers that sign in with one and hands them to `portenvd` (`ProvideServerKey`), which holds them in memory only (tested: nothing in Portenv's folder or the log carries one). Without it, a run says "Portenv needs <name>'s key from the Keychain. Open Portenv on this Mac to allow it."
+- **The run agent** (`<T>pv/a-<8 hex>`, 0600) serves that key only, signs for nothing else, refuses add, remove, remove-all and lock, and is closed (socket gone) as soon as the shared connection it signed in is up. Later runs go through that connection with no key at all.
+- **`IdentityFile` names the key's public half,** `<T>pv/a-<8 hex>.pub`, beside the agent's socket and removed with it, instead of `none`: with `IdentitiesOnly=yes`, ssh offers an agent's key only when an `IdentityFile` names it (found by the real-sshd test). The private half is never on disk. Runs through the shared connection pass `IdentityFile=none` and `IdentityAgent=none`.
+- **A made-key server's command line:** the ssh binary only from `PORTENV_SSH` (its options, a later `-F` among them, would win over `-F none`), then `-F none`, the pins, `ProxyCommand=none`, `KnownHostsCommand=none`, `PermitLocalCommand=no`, `IdentitiesOnly=yes`, `IdentityFile`, `IdentityAgent`, `ForwardAgent=no`, `ClearAllForwardings=yes` (`no` only for the REST forward, ADR 0005) and `ControlMaster`/`ControlPath`. Scanning it uses `-F none` too. Tested against a real `sshd` with a planted config (`Match exec`, `ProxyCommand`, `LocalCommand`): nothing in it runs.
+- **Nothing a workspace mounts is there:** the driver's test checks a box mounts its home volume, the storage folder and its cache volume, and nothing else; the socket folder is outside the person's home and Application Support (tested).
+
 ### 3. Check never changes the server
 
 One read-only probe, run over SSH as the given user, bounded (ADR 0012), with each line answering one question:

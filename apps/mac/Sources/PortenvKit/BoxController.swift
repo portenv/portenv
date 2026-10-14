@@ -188,14 +188,18 @@ public final class BoxController {
     /// A secondary line under a progress line (the Keychain wait's hint).
     public private(set) var progressDetail: String?
     private var cancelKeychain: (@MainActor () -> Void)?
+    /// Brings this window forward before a read that may prompt (R-0214).
+    private let bringForward: @Sendable () -> Void
 
     public init(box: String, daemon: DaemonAPI, keychain: KeychainReading = SystemKeychain(),
                 notifier: KeychainWaitNotifying? = nil, keychainThreshold: Duration = KeychainWait.threshold,
                 ensureDaemon: (@Sendable () async -> String?)? = nil, followRetry: Duration = .seconds(1),
                 daemonDeadline: Duration = .seconds(30), savesRetry: Duration = .seconds(5),
                 now: @escaping @Sendable () -> Date = { Date() },
-                sleep: @escaping @Sendable (Duration) async -> Void = { try? await Task.sleep(for: $0) }) {
+                sleep: @escaping @Sendable (Duration) async -> Void = { try? await Task.sleep(for: $0) },
+                bringForward: @escaping @Sendable () -> Void = { KeychainWait.front.bringForward() }) {
         self.box = box
+        self.bringForward = bringForward
         self.savesRetry = savesRetry
         self.now = now
         self.sleep = sleep
@@ -607,6 +611,8 @@ public final class BoxController {
     /// might be answering. Returns false when cancelled.
     private func approveKeys() async throws -> Bool {
         let ids = try await daemon.keyIDs(box)
+        // Its prompt comes up over this window (R-0214).
+        bringForward()
         let reader = keychain
         let once = Once<Result<[String: Data], Error>?>()
         let result = await withCheckedContinuation { (done: CheckedContinuation<Result<[String: Data], Error>?, Never>) in

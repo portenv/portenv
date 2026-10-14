@@ -63,11 +63,16 @@ enum ScreenRenders {
             }
             // Welcome while Docker Desktop isn't running, or isn't
             // installed (R-0098's boards).
-            for (status, suffix) in [(DockerStatus.notRunning, "not-running"), (.missing, "missing")] {
+            for (status, suffix) in [(DockerStatus.notRunning, "not-running"), (.missing, "missing"), (.starting, "starting")] {
                 let flow = FirstRunFlow(service: Sample(), docker: status)
                 try snapshot(FirstRunView(flow: flow, opened: { _ in }, followsDocker: false),
                              name: "first-run-1-welcome-docker-\(suffix)", in: dir)
             }
+            // The first workspace waits for Docker Desktop to be ready (R-0211).
+            let firstBoxStarting = FirstRunFlow(service: Sample(), at: .firstBox, docker: .starting)
+            firstBoxStarting.boxName = "acme-api"
+            try snapshot(FirstRunView(flow: firstBoxStarting, opened: { _ in }, followsDocker: false),
+                         name: "first-run-4-first-box-docker-starting", in: dir)
             // Welcome when portenvd doesn't answer the check (R-0110).
             let gone = FirstRunFlow(service: Sample(), docker: nil)
             await gone.checkDocker { nil }

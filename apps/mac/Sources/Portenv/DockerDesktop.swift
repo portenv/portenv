@@ -10,7 +10,8 @@ import SwiftUI
 enum DockerDesktop {
     static func status() async -> DockerStatus? {
         let engine = await SharedDaemon.client.engineRunning()
-        return DockerStatus.from(engine: engine, desktopInstalled: installedApp != nil)
+        let open = !NSRunningApplication.runningApplications(withBundleIdentifier: DockerText.bundleID).isEmpty
+        return DockerStatus.from(engine: engine, desktopInstalled: installedApp != nil, desktopRunning: open)
     }
 
     /// Docker Desktop's app, unless it's missing or in the Trash.
@@ -19,8 +20,10 @@ enum DockerDesktop {
         return DockerStatus.installed(at: app) ? app : nil
     }
 
-    static func perform(_ action: DockerCard.Action) {
+    static func perform(_ action: DockerCard.Action?) {
         switch action {
+        case nil:
+            return
         case .openDockerDesktop:
             guard let app = installedApp else {
                 NSWorkspace.shared.open(DockerText.download)
@@ -51,8 +54,10 @@ struct DockerCardView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: 12) {
-                    Button(card.button, action: act)
-                        .controlSize(.large)
+                    if let button = card.button {
+                        Button(button, action: act)
+                            .controlSize(.large)
+                    }
                     HStack(spacing: 6) {
                         ProgressView().controlSize(.small)
                         Text(DockerText.checking).foregroundStyle(.secondary)

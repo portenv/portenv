@@ -246,3 +246,40 @@ actor Answers<T: Sendable> {
     }
     func add(_ item: T) { all.append(item) }
 }
+
+/// Ready, not just running (R-0211): Docker Desktop starting, and the check
+/// before the first workspace.
+@MainActor
+struct DockerReadyTests {
+    /// Docker Desktop opened but its engine not ready yet (R-0211): "starting",
+    /// with no button, until the short ping answers; never a failure.
+    @Test func startingIsItsOwnOutcome() {
+        #expect(DockerStatus.from(engine: false, desktopInstalled: true, desktopRunning: true) == .starting)
+        #expect(DockerStatus.from(engine: true, desktopInstalled: true, desktopRunning: true) == .running)
+        #expect(DockerStatus.from(engine: false, desktopInstalled: true, desktopRunning: false) == .notRunning)
+        let card = DockerStatus.starting.card
+        #expect(card?.title == "Docker Desktop is starting\u{2026}")
+        #expect(card?.button == nil && card?.action == nil)
+        #expect(DockerStatus.announcement(from: .notRunning, to: .starting) == card?.title)
+    }
+
+    /// Before "Make your first workspace" too (R-0211): Create waits for
+    /// Docker to be ready, saying why, and the check runs on that step.
+    @Test func theFirstWorkspaceWaitsForDocker() async {
+        for (status, can) in [(nil, false), (DockerStatus.starting, false), (.notRunning, false), (.missing, false), (.running, true)] {
+            let flow = FirstRunFlow(service: FakeFirstRunService(), at: .firstBox, docker: status)
+            flow.boxName = "acme-api"
+            #expect(flow.canContinue == can, "\(String(describing: status))")
+            if !can {
+                #expect(flow.whyNot == (status?.card?.title ?? DockerText.checkingFirst), "\(String(describing: status))")
+            }
+        }
+        let flow = FirstRunFlow(service: FakeFirstRunService(), at: .firstBox, docker: nil)
+        flow.boxName = "acme-api"
+        var answers: [DockerStatus?] = [.starting, .starting, .running]
+        await flow.followDocker(check: { answers.removeFirst() }, sleep: { _ in })
+        #expect(flow.docker == .running && answers.isEmpty)
+        await flow.next()
+        #expect(flow.step == .gettingReady)
+    }
+}

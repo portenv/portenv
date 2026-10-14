@@ -232,7 +232,8 @@ public final class FirstRunFlow {
         case .storage:
             return storage == .thisMac
         case .firstBox:
-            return !boxName.isEmpty && nameProblem == nil
+            // Docker Desktop ready before making the first workspace (R-0211).
+            return docker == .running && !boxName.isEmpty && nameProblem == nil
         case .gettingReady:
             return false
         }
@@ -252,11 +253,12 @@ public final class FirstRunFlow {
         case .storage:
             return storage == nil ? FirstRunText.chooseStorage : FirstRunText.storageLater
         case .firstBox:
+            if docker != .running { return docker?.card?.title ?? DockerText.checkingFirst }
             return nameProblem ?? FirstRunText.typeName
         }
     }
 
-    /// "Waiting for Keychain access" while a Keychain call waits, else nil.
+    /// KeychainWait.line while a Keychain call waits, else nil.
     public var waitLine: String? { keychainWaiting ? KeychainWait.line : nil }
 
     /// What's said under Continue: an error, a notice, or why Continue
@@ -333,9 +335,10 @@ public final class FirstRunFlow {
     public func followDocker(every interval: Duration = DockerText.interval,
                              check: @escaping @MainActor () async -> DockerStatus?,
                              sleep: @escaping @MainActor (Duration) async -> Void = { try? await Task.sleep(for: $0) }) async {
-        while step == .welcome && !Task.isCancelled {
+        let checked: Set<FirstRunStep> = [.welcome, .firstBox] // R-0098, R-0211
+        while checked.contains(step) && !Task.isCancelled {
             await checkDocker(check)
-            if docker == .running || step != .welcome { return }
+            if docker == .running || !checked.contains(step) { return }
             await sleep(interval)
         }
     }

@@ -135,22 +135,7 @@ struct FirstRunView: View {
             // (R-0110). Otherwise, Docker Desktop isn't running or isn't
             // installed (R-0098): a card until it answers, checked again
             // every 2 s.
-            if flow.daemonGone {
-                VStack(spacing: 10) {
-                    Text(FirstRunText.serviceNotAnswering)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Button(InspectorText.tryAgain) {
-                        Task { await flow.checkDocker { await DockerDesktop.status() } }
-                    }
-                    .disabled(flow.checkingDocker)
-                }
-                .frame(maxWidth: 440)
-            } else if let card = flow.docker?.card {
-                DockerCardView(card: card) { DockerDesktop.perform(card.action) }
-                    .frame(maxWidth: 460)
-            }
+            dockerNotice
             // Continue waits for Docker; dimmed as well as disabled (R-0049).
             Button(FirstRunText.welcomeButton) { Task { await flow.next() } }
                 .buttonStyle(.borderedProminent)
@@ -267,7 +252,36 @@ struct FirstRunView: View {
                     .font(.callout)
                     .foregroundStyle(look.showsError ? Color.red : Color.secondary)
                     .accessibilityHidden(true)
+                // Docker Desktop ready before the first workspace (R-0211).
+                dockerNotice
+                    .padding(.top, 12)
             }
+        }
+        .task {
+            guard followsDocker else { return }
+            await flow.followDocker(check: { await DockerDesktop.status() })
+        }
+    }
+
+    /// portenvd didn't answer the Docker check: say so, with Try Again
+    /// (R-0110). Otherwise, Docker Desktop isn't ready: a card until it
+    /// is, checked again every 2 s (R-0098, R-0211).
+    @ViewBuilder private var dockerNotice: some View {
+        if flow.daemonGone {
+            VStack(spacing: 10) {
+                Text(FirstRunText.serviceNotAnswering)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button(InspectorText.tryAgain) {
+                    Task { await flow.checkDocker { await DockerDesktop.status() } }
+                }
+                .disabled(flow.checkingDocker)
+            }
+            .frame(maxWidth: 440)
+        } else if let card = flow.docker?.card {
+            DockerCardView(card: card) { DockerDesktop.perform(card.action) }
+                .frame(maxWidth: 460)
         }
     }
 

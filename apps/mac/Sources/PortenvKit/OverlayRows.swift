@@ -24,6 +24,9 @@ public struct OverlayRows: Sendable {
         public fileprivate(set) var row: Int
         public let line: ObjectIdentifier
         public let kind: Kind
+        /// When the mark arrived, for a block's times; nil for marks
+        /// replayed in a seed, whose times the app never saw.
+        public let at: Date?
     }
 
     /// Where a mark shows: its row on screen (0 is the top visible row).
@@ -39,10 +42,10 @@ public struct OverlayRows: Sendable {
 
     public init() {}
 
-    public mutating func add(row: Int, line: ObjectIdentifier, kind: Kind) {
+    public mutating func add(row: Int, line: ObjectIdentifier, kind: Kind, at: Date? = nil) {
         // One mark of each kind per line: a redrawn prompt doesn't stack.
         marks.removeAll { $0.line == line && $0.kind == kind }
-        marks.append(Mark(row: row, line: line, kind: kind))
+        marks.append(Mark(row: row, line: line, kind: kind, at: at))
     }
 
     public mutating func removeAll() { marks.removeAll() }

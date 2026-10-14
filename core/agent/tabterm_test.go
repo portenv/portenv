@@ -925,9 +925,14 @@ func TestPaneLanesEndWithTheirPanes(t *testing.T) {
 		if i%2 == 0 {
 			h.raw("new-window", "-d", "-t", "=main:", "echo gone-at-once")
 		} else {
-			w := strings.TrimSpace(h.raw("new-window", "-d", "-P", "-F", "#{window_id}", "-t", "=main:", "sh -c 'echo here; exec sleep 600'"))
-			time.Sleep(20 * time.Millisecond)
-			h.raw("kill-window", "-t", w)
+			// This one's lane is seen before its window is killed.
+			f := strings.Fields(h.raw("new-window", "-d", "-P", "-F", "#{window_id} #{pane_id}", "-t", "=main:", "sh -c 'echo here; exec sleep 600'"))
+			for end := time.Now().Add(5 * time.Second); lanes()[f[1]] == nil; time.Sleep(5 * time.Millisecond) {
+				if time.Now().After(end) {
+					t.Fatalf("no lane for %s's pane %s", f[0], f[1])
+				}
+			}
+			h.raw("kill-window", "-t", f[0])
 		}
 		for _, l := range lanes() {
 			seen[l] = true
@@ -939,9 +944,6 @@ func TestPaneLanesEndWithTheirPanes(t *testing.T) {
 	}
 	if got := lanes(); !maps.Equal(got, want) {
 		t.Errorf("lanes %v after 50 tabs came and went, want only the first tab's %v", got, want)
-	}
-	if len(seen) < 2 {
-		t.Errorf("only %d lanes seen while tabs came and went", len(seen))
 	}
 	for l := range seen {
 		if l == live {

@@ -14,6 +14,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"golang.org/x/crypto/ssh"
 )
 
 // sshdPath is OpenSSH's server, run unprivileged on 127.0.0.1 for these
@@ -208,9 +210,80 @@ func TestScanThroughProxyJump(t *testing.T) {
 // closeShared stops the shared connection to target, if one is up.
 func closeShared(t *testing.T, target string) {
 	t.Helper()
-	args, err := sshArgs(target)
+	// Its socket only: never a new sign-in.
+	opts, err := controlOptions(ServerID(target))
 	if err != nil {
 		t.Fatal(err)
 	}
-	_ = exec.Command(args[0], append(args[1:], "-O", "exit", "--", target)...).Run() // #nosec G204 -- the test's own ssh
+	_ = exec.Command("ssh", append(append([]string{"-F", "none"}, opts...), "-O", "exit", "--", target)...).Run() // #nosec G204 -- the test's own ssh
+}
+
+// TestAMadeKeySignsInOnceThroughItsAgent (ADR 0021, R-0180): a made-key
+// server runs with -F none, so a planted config (a Match exec, a
+// ProxyCommand) runs nothing; the key signs in once, through a run agent
+// that's gone as soon as the shared connection is up; later runs go
+// through that connection with no key at all.
+func TestAMadeKeySignsInOnceThroughItsAgent(t *testing.T) {
+	sshd := sshdPath(t)
+	w := &sshdWorld{dir: t.TempDir(), sshd: sshd}
+	t.Setenv("HOME", w.dir)
+	t.Setenv("SSH_AUTH_SOCK", "")
+	signer, priv := testSigner(t)
+	if err := os.WriteFile(filepath.Join(w.dir, "authorized_keys"), ssh.MarshalAuthorizedKey(signer.PublicKey()), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	keygen(t, filepath.Join(w.dir, "host_key"))
+	port := freePort(t)
+	w.startSSHD(t, "made", port, filepath.Join(w.dir, "host_key"))
+	marker := filepath.Join(w.dir, "match-exec-ran")
+	planted := filepath.Join(w.dir, "planted_config")
+	if err := os.WriteFile(planted, []byte(fmt.Sprintf("Match exec \"touch %s\"\n  ProxyCommand /usr/bin/false\nHost *\n  PermitLocalCommand yes\n  LocalCommand touch %s\n", marker, marker)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PORTENV_SSH", "ssh -F "+planted)
+	me, err := user.Current()
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := fmt.Sprintf("ssh://%s@127.0.0.1:%d", me.Username, port)
+	e := &Env{Dir: t.TempDir(), Machine: "mac-1"}
+	if err := os.WriteFile(filepath.Join(e.Dir, "machine.json"), []byte(`{"servers":["`+target+`"]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	e.UseForServers()
+	t.Cleanup(func() { closeShared(t, target); useForServers(nil); forgetMadeKeys() })
+	id := ServerID(target)
+	if err := e.UseMadeKey(id); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	scan, err := e.ScanServerKey(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.TrustServerKey(id, scan.Fingerprint); err != nil {
+		t.Fatal(err)
+	}
+	if err := RunRemote(ctx, QuickRemote, target, io.Discard, "true"); err == nil || !strings.Contains(err.Error(), "Open Portenv on this Mac") {
+		t.Fatalf("with no key handed over: %v", err)
+	}
+	if err := e.ProvideServerKey(id, priv); err != nil {
+		t.Fatal(err)
+	}
+	var out strings.Builder
+	if err := RunRemote(ctx, QuickRemote, target, &out, "echo", "signed-in"); err != nil || !strings.Contains(out.String(), "signed-in") {
+		t.Fatalf("run: %v: %s", err, out.String())
+	}
+	dir, _ := SocketDir()
+	if left, _ := filepath.Glob(filepath.Join(dir, "a-*")); len(left) != 0 {
+		t.Fatalf("an agent socket outlived the sign-in: %v", left)
+	}
+	forgetMadeKeys() // the key is gone; the shared connection carries on
+	if err := RunRemote(ctx, QuickRemote, target, io.Discard, "true"); err != nil {
+		t.Fatalf("a later run through the shared connection: %v", err)
+	}
+	if _, err := os.Stat(marker); err == nil {
+		t.Fatal("the planted config ran a command")
+	}
 }

@@ -81,6 +81,9 @@ type ServerRecord struct {
 	ConfirmedFrom string `json:"confirmed_from,omitempty"`
 	// Scanned is the key the last scan found, waiting for Trust.
 	Scanned string `json:"scanned,omitempty"`
+	// SignIn is how Portenv signs in: "" with this Mac's own SSH setup, or
+	// SignInMadeKey.
+	SignIn string `json:"sign_in,omitempty"`
 }
 
 // ServerScan is what ScanServerKey found, for the person to confirm.
@@ -322,6 +325,12 @@ func sshArgs(host string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	if r.SignIn == SignInMadeKey {
+		if err := ensureMadeKeyMaster(e, host); err != nil {
+			return nil, err
+		}
+		return madeKeyArgs(e, host, "none")
+	}
 	base := sshBase()
 	args := append([]string{base[0]}, e.pinOptions(r)...)
 	args = append(args, base[1:]...)
@@ -375,7 +384,7 @@ func (e *Env) ScanServerKey(ctx context.Context, id string) (ServerScan, error) 
 	if err != nil {
 		return ServerScan{}, err
 	}
-	resolved, err := resolveHost(ctx, r.Target)
+	resolved, err := resolveHost(ctx, r.Target, r.SignIn == SignInMadeKey)
 	if err != nil {
 		return ServerScan{}, err
 	}
@@ -436,7 +445,12 @@ func scanHostKey(ctx context.Context, r ServerRecord, name string) (string, erro
 		"-o", "ControlMaster=no",
 		"-o", "ControlPath=none",
 	}
-	args = append(append(args, base[1:]...), "--", r.Target, "true")
+	if r.SignIn == SignInMadeKey {
+		args = append(append(args, "-F", "none"), madeKeyOptions("none")...)
+	} else {
+		args = append(args, base[1:]...)
+	}
+	args = append(args, "--", r.Target, "true")
 	cmd, err := bounded.Command(ctx, sshSetup, base[0], args...)
 	if err != nil {
 		return "", err
@@ -477,9 +491,13 @@ type resolvedHost struct {
 }
 
 // resolveHost asks ssh how it reaches target (its config applied).
-func resolveHost(ctx context.Context, target string) (resolvedHost, error) {
+func resolveHost(ctx context.Context, target string, madeKey bool) (resolvedHost, error) {
 	base := sshBase()
-	cmd, err := bounded.Command(ctx, sshSetup, base[0], append(append(slices.Clone(base[1:]), "-G"), "--", target)...)
+	opts := slices.Clone(base[1:])
+	if madeKey {
+		opts = []string{"-F", "none"}
+	}
+	cmd, err := bounded.Command(ctx, sshSetup, base[0], append(append(opts, "-G"), "--", target)...)
 	if err != nil {
 		return resolvedHost{}, err
 	}

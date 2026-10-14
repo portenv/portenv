@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -148,11 +149,11 @@ Host *
 // key stops it.
 func TestScanThroughProxyJump(t *testing.T) {
 	w, jumpKey, targetKey := newSSHDWorld(t)
-	user := os.Getenv("USER")
-	if user == "" {
-		t.Skip("no USER")
+	me, err := user.Current() // never skipped for want of $USER: on CI it must run
+	if err != nil {
+		t.Fatal(err)
 	}
-	target := user + "@target-alias"
+	target := me.Username + "@target-alias"
 	e := &Env{Dir: t.TempDir(), Machine: "mac-1"}
 	if err := os.WriteFile(filepath.Join(e.Dir, "machine.json"), []byte(`{"servers":["`+target+`"]}`), 0o600); err != nil {
 		t.Fatal(err)
@@ -163,6 +164,7 @@ func TestScanThroughProxyJump(t *testing.T) {
 	defer cancel()
 	id := ServerID(target)
 	scan, err := e.ScanServerKey(ctx, id)
+	t.Logf("real sshd: jump on %d, target on %d", w.jumpPort, w.targetPort)
 	if err != nil {
 		t.Fatal(err)
 	}

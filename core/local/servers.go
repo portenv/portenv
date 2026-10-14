@@ -322,7 +322,7 @@ func sshArgs(host string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	base := sshCommand()
+	base := sshBase()
 	args := append([]string{base[0]}, e.pinOptions(r)...)
 	args = append(args, base[1:]...)
 	// The shared connection only in the checked folder; without it, each
@@ -331,14 +331,6 @@ func sshArgs(host string) ([]string, error) {
 		args = append(args, opts...)
 	}
 	return args, nil
-}
-
-// sshCommand is ssh, or PORTENV_SSH when set.
-func sshCommand() []string {
-	if v := os.Getenv("PORTENV_SSH"); v != "" {
-		return strings.Fields(v)
-	}
-	return []string{"ssh"}
 }
 
 // noteHostKeyFailure turns ssh's changed-key failure into a hard stop: the
@@ -430,7 +422,7 @@ func scanHostKey(ctx context.Context, r ServerRecord, name string) (string, erro
 	file := f.Name()
 	_ = f.Close()
 	defer func() { _ = os.Remove(file) }()
-	base := sshCommand()
+	base := sshBase()
 	args := []string{
 		"-o", "UserKnownHostsFile=" + file,
 		"-o", "GlobalKnownHostsFile=/dev/null",
@@ -486,7 +478,7 @@ type resolvedHost struct {
 
 // resolveHost asks ssh how it reaches target (its config applied).
 func resolveHost(ctx context.Context, target string) (resolvedHost, error) {
-	base := sshCommand()
+	base := sshBase()
 	cmd, err := bounded.Command(ctx, sshSetup, base[0], append(append(slices.Clone(base[1:]), "-G"), "--", target)...)
 	if err != nil {
 		return resolvedHost{}, err

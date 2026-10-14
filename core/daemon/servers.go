@@ -14,21 +14,6 @@ import (
 	typesv1 "github.com/portenv/portenv/proto/gen/go/portenv/types/v1"
 )
 
-// ListServers implements daemonv1.DaemonServiceServer: the Move To targets,
-// and where each one's host key stands.
-func (s *Server) ListServers(context.Context, *daemonv1.ListServersRequest) (*daemonv1.ListServersResponse, error) {
-	rs, err := s.env.ServerRecords()
-	if err != nil {
-		return nil, err
-	}
-	res := &daemonv1.ListServersResponse{}
-	for _, r := range rs {
-		res.Servers = append(res.Servers, r.Target)
-		res.Infos = append(res.Infos, serverInfo(r))
-	}
-	return res, nil
-}
-
 // serverInfo is a record as the app sees it: by ID and name, never the
 // address.
 func serverInfo(r local.ServerRecord) *daemonv1.ServerInfo {

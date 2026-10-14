@@ -25,6 +25,17 @@ import (
 // with sudo (server/setup.sh), so it is always called by this full path.
 const PortenvPath = "/usr/local/bin/portenv"
 
+// sshBase is the ssh command (PORTENV_SSH when set). sshArgs puts the
+// host-key pins in front of its options and the shared connection's after
+// them.
+func sshBase() []string {
+	sshCmd := []string{"ssh"}
+	if v := os.Getenv("PORTENV_SSH"); v != "" {
+		sshCmd = strings.Fields(v)
+	}
+	return sshCmd
+}
+
 // Limits for commands run on a server over SSH (ADR 0012). The server runs
 // restic under its own deadlines; these are the Mac's backstop.
 const (

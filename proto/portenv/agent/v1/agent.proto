@@ -226,9 +226,13 @@ message TabTerminalOpen {
   // A tab ID, "@N".
   string tab = 2;
   TerminalSize size = 3;
-  // Who types here, for attribution. Set by portenvd from its caller
-  // (the app over its socket, or an agent's grant), never by a client.
+  // Who types here, for attribution, as people read it (the owner's first
+  // name, "Grok Bot"). Set by portenvd from its caller (the app over its
+  // socket, or an agent's grant), never by a client. Empty: no author is
+  // recorded for this stream's commands.
   string author = 4;
+  // The author's agent ID (ADR 0016), set by portenvd; empty for a person.
+  string author_agent_id = 5;
 }
 
 message TabTerminalResponse {
@@ -257,6 +261,10 @@ message TabTerminalReset {
   // line values are the post-reflow lines at the time of the reset,
   // numbered the same way as this seed's marks.
   repeated CommandAuthor authors = 3;
+  // Output was skipped since the last reset (the helper or its reader fell
+  // too far behind; ADR 0020, decision 11): the app tells the person and
+  // marks the block that was running as skipped, never complete.
+  bool skipped = 4;
 }
 
 enum TabTerminalEnd {
@@ -286,7 +294,8 @@ message CommandAuthor {
   // The command's OSC 133;C line, counted from the tab's first line ever,
   // the same counting as the seed's marks (R-0133 item 6).
   uint64 line = 1;
-  // As people read it: "You", "Grok Bot".
+  // The author's own name, as people read it: the owner's first name, or
+  // "Grok Bot". Never "You": is_you is what makes the app say "You".
   string name = 2;
   // Set by portenvd for each recipient: true when the author is the caller
   // receiving this stream. Never set by the helper or any client.

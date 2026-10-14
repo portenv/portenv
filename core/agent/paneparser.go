@@ -78,7 +78,34 @@ type paneParser struct {
 	resets int
 	// beforeWrite, in tests only, runs before each write (to make one panic).
 	beforeWrite func([]byte)
+	// pen is the SGR the program left set, as parameters (vt keeps it
+	// private); a seed sets it again (R-0133 item 5).
+	pen []string
+	// bracketedPaste is whether the program asked for bracketed paste.
+	bracketedPaste bool
 }
+
+// recordedAuthor is who sent the Enter that started the command at a line.
+type recordedAuthor struct {
+	line    uint64
+	epoch   int
+	name    string
+	agentID string
+}
+
+// paneSnapshot is a pane's parser as it stood when a seed's capture was
+// taken (the reply to the seed came; ADR 0020, decision 6).
+type paneSnapshot struct {
+	cursorLine     uint64
+	epoch          int
+	marks          []paneMark
+	pen            string
+	bracketedPaste bool
+}
+
+// maxPen is how many SGR parameters a pen keeps; past it the oldest go (a
+// program setting thousands without a reset is a pathological case).
+const maxPen = 64
 
 func newPaneParser(cols, rows int, logf func(string, ...any)) *paneParser {
 	p := &paneParser{logf: logf}
@@ -103,6 +130,23 @@ func (p *paneParser) start(cols, rows int) {
 		p.mark(e, data)
 		return true
 	})
+	// The pen and bracketed paste, which vt keeps private, followed here
+	// before vt handles them (returning false lets it).
+	e.RegisterCsiHandler('m', func(params ansi.Params) bool {
+		p.sgr(params)
+		return false
+	})
+	for _, f := range []byte{'h', 'l'} {
+		on := f == 'h'
+		e.RegisterCsiHandler(ansi.Command('?', 0, f), func(params ansi.Params) bool {
+			params.ForEach(0, func(_, n int, _ bool) {
+				if n == 2004 {
+					p.bracketedPaste = on
+				}
+			})
+			return false
+		})
+	}
 	// Erase display, seen before vt handles it (returning false lets it),
 	// to count lines as tmux does.
 	e.RegisterCsiHandler('J', func(params ansi.Params) bool {
@@ -110,7 +154,7 @@ func (p *paneParser) start(cols, rows int) {
 		p.eraseDisplay(e, n)
 		return false
 	})
-	p.alt = false
+	p.alt, p.pen, p.bracketedPaste = false, nil, false
 	e.SetCallbacks(vt.Callbacks{AltScreen: func(on bool) { p.alt = on }})
 	p.emu = e
 }
@@ -138,6 +182,77 @@ func (p *paneParser) eraseDisplay(e *vt.Emulator, n int) {
 		e.ClearScrollback()
 	}
 	p.epoch++
+}
+
+// sgr follows the pen: a reset (0, or no parameter) empties it; a colour
+// (38, 48, 58) keeps its own sub-parameters together.
+func (p *paneParser) sgr(params ansi.Params) {
+	var ps []int
+	var colon []bool
+	params.ForEach(0, func(_, n int, more bool) {
+		ps = append(ps, n)
+		colon = append(colon, more)
+	})
+	if len(ps) == 0 {
+		p.pen = nil
+		return
+	}
+	for i := 0; i < len(ps); i++ {
+		n := ps[i]
+		if n == 0 && (i == 0 || !colon[i-1]) {
+			p.pen = nil
+			continue
+		}
+		item := strconv.Itoa(n)
+		if (n == 38 || n == 48 || n == 58) && i+1 < len(ps) {
+			if colon[i] { // 38:2:r:g:b and the like: one item up to the last colon
+				for i+1 < len(ps) && colon[i] {
+					i++
+					item += ":" + strconv.Itoa(ps[i])
+				}
+			} else if ps[i+1] == 5 && i+2 < len(ps) {
+				item += ";5;" + strconv.Itoa(ps[i+2])
+				i += 2
+			} else if ps[i+1] == 2 && i+4 < len(ps) {
+				item += fmt.Sprintf(";2;%d;%d;%d", ps[i+2], ps[i+3], ps[i+4])
+				i += 4
+			}
+		} else {
+			for i+1 < len(ps) && colon[i] {
+				i++
+				item += ":" + strconv.Itoa(ps[i])
+			}
+		}
+		p.pen = append(p.pen, item)
+	}
+	if over := len(p.pen) - maxPen; over > 0 {
+		p.pen = append(p.pen[:0], p.pen[over:]...)
+	}
+}
+
+// snapshot is the parser as it stands, for a seed.
+func (p *paneParser) snapshot() *paneSnapshot {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	y := p.emu.CursorPosition().Y
+	return &paneSnapshot{
+		cursorLine:     p.scrolled + uint64(max(y, 0)), // #nosec G115 -- non-negative
+		epoch:          p.epoch,
+		marks:          append([]paneMark(nil), p.marks...),
+		pen:            strings.Join(p.pen, ";"),
+		bracketedPaste: p.bracketedPaste,
+	}
+}
+
+// restart starts the parser afresh after output was skipped (a pause): its
+// screen no longer matches the pane's, so marks are dropped and an epoch
+// starts.
+func (p *paneParser) restart() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.marks = nil
+	p.epoch++
+	p.start(p.cols, p.rows)
 }
 
 // stop ends the parser when its pane goes.

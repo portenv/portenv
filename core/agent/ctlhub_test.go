@@ -140,7 +140,7 @@ func TestReadControlLinesCapsLength(t *testing.T) {
 }
 
 func TestSlowSubscriberGetsOverflow(t *testing.T) {
-	s := &ctlSub{kick: make(chan struct{}, 1)}
+	s := &ctlSub{kick: make(chan struct{}, 1), maxBytes: ctlSubBytes}
 	for i := 0; i < ctlSubCap+10; i++ {
 		s.push(ctlEvent{kind: ctlOutput})
 	}

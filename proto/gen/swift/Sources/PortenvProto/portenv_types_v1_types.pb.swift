@@ -511,6 +511,11 @@ public nonisolated struct Portenv_Types_V1_BuildInfo: Sendable {
   /// Git commit the binary was built from.
   public var commit: String = String()
 
+  /// One build of the app and its helpers (gmake app): different for every
+  /// build, a lane's or a dev build of the same commit too. The app restarts
+  /// a portenvd whose build_id isn't its own (R-0198).
+  public var buildID: String = String()
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -806,7 +811,7 @@ nonisolated extension Portenv_Types_V1_Lease: SwiftProtobuf.Message, SwiftProtob
 
 nonisolated extension Portenv_Types_V1_BuildInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".BuildInfo"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}version\0\u{1}commit\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}version\0\u{1}commit\0\u{3}build_id\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -816,6 +821,7 @@ nonisolated extension Portenv_Types_V1_BuildInfo: SwiftProtobuf.Message, SwiftPr
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularStringField(value: &self.version) }()
       case 2: try { try decoder.decodeSingularStringField(value: &self.commit) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.buildID) }()
       default: break
       }
     }
@@ -828,12 +834,16 @@ nonisolated extension Portenv_Types_V1_BuildInfo: SwiftProtobuf.Message, SwiftPr
     if !self.commit.isEmpty {
       try visitor.visitSingularStringField(value: self.commit, fieldNumber: 2)
     }
+    if !self.buildID.isEmpty {
+      try visitor.visitSingularStringField(value: self.buildID, fieldNumber: 3)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Portenv_Types_V1_BuildInfo, rhs: Portenv_Types_V1_BuildInfo) -> Bool {
     if lhs.version != rhs.version {return false}
     if lhs.commit != rhs.commit {return false}
+    if lhs.buildID != rhs.buildID {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

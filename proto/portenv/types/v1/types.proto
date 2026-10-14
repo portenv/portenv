@@ -111,6 +111,10 @@ message BuildInfo {
   string version = 1;
   // Git commit the binary was built from.
   string commit = 2;
+  // One build of the app and its helpers (gmake app): different for every
+  // build, a lane's or a dev build of the same commit too. The app restarts
+  // a portenvd whose build_id isn't its own (R-0198).
+  string build_id = 3;
 }
 
 // A tab in the box's terminal: one tmux window in the box's session

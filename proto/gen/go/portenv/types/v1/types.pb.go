@@ -752,7 +752,11 @@ type BuildInfo struct {
 	// Semantic version, or "dev" for local builds.
 	Version string `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
 	// Git commit the binary was built from.
-	Commit        string `protobuf:"bytes,2,opt,name=commit,proto3" json:"commit,omitempty"`
+	Commit string `protobuf:"bytes,2,opt,name=commit,proto3" json:"commit,omitempty"`
+	// One build of the app and its helpers (gmake app): different for every
+	// build, a lane's or a dev build of the same commit too. The app restarts
+	// a portenvd whose build_id isn't its own (R-0198).
+	BuildId       string `protobuf:"bytes,3,opt,name=build_id,json=buildId,proto3" json:"build_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -797,6 +801,13 @@ func (x *BuildInfo) GetVersion() string {
 func (x *BuildInfo) GetCommit() string {
 	if x != nil {
 		return x.Commit
+	}
+	return ""
+}
+
+func (x *BuildInfo) GetBuildId() string {
+	if x != nil {
+		return x.BuildId
 	}
 	return ""
 }
@@ -929,10 +940,11 @@ const file_portenv_types_v1_types_proto_rawDesc = "" +
 	"machine_id\x18\x02 \x01(\tR\tmachineId\x120\n" +
 	"\x05since\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x05since\x12A\n" +
 	"\x0elast_heartbeat\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\rlastHeartbeat\x125\n" +
-	"\x06source\x18\x05 \x01(\x0e2\x1d.portenv.types.v1.LeaseSourceR\x06source\"=\n" +
+	"\x06source\x18\x05 \x01(\x0e2\x1d.portenv.types.v1.LeaseSourceR\x06source\"X\n" +
 	"\tBuildInfo\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12\x16\n" +
-	"\x06commit\x18\x02 \x01(\tR\x06commit\"\xb6\x01\n" +
+	"\x06commit\x18\x02 \x01(\tR\x06commit\x12\x19\n" +
+	"\bbuild_id\x18\x03 \x01(\tR\abuildId\"\xb6\x01\n" +
 	"\x03Tab\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x16\n" +

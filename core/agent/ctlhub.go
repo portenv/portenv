@@ -177,6 +177,19 @@ func (h *ctlHub) serve(ctx context.Context, session string, c *ctlClient) {
 		if ctx.Err() != nil {
 			return
 		}
+		// The session is gone (its last tab closed, or the server ended):
+		// stop instead of trying again every few seconds for good (R-0167).
+		// Its subscribers are told; the next one starts a client again.
+		if _, herr := h.run(ctx, "has-session", "-t", "="+session); herr != nil && ctx.Err() == nil {
+			h.logf("portenv-agent: tmux session %s is gone; its control client stops", session)
+			h.mu.Lock()
+			if h.clients[session] == c {
+				delete(h.clients, session)
+			}
+			h.mu.Unlock()
+			c.broadcast(ctlEvent{kind: ctlSessionGone})
+			return
+		}
 		if time.Since(began) > 10*time.Second {
 			wait = h.restartAfter
 		}

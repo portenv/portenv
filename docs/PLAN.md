@@ -1096,6 +1096,15 @@ In this order:
               - WatchTabs follows its events (window added, closed, renamed, another session's current window, output at most once a second), with a 2 s backstop for program changes that print nothing, and polling only below tmux 3.4;
               - the `%output`/`%extended-output` decoder and a line reader capped at 1 MB per line, each with its own fuzz target, seeded from the spike's tmux 3.4 streams (`make fuzz`, in CI on a 15 s budget);
               - tmux pinned to 3.4 in the image and checked by `test.sh`; the helper refuses older for control mode.
+            - **Built (PR 2, 2026-10-14, awaiting review):** the helper's per-pane parser, `charmbracelet/x/vt` v0.1.0 on R-0142's terms. Not yet wired to a stream; PR 3 does that.
+              - **Pinned:** exact, with `go mod verify` in lint. The notices tool passes with its 16 MIT and BSD modules.
+              - **Read-only:** replies are drained and dropped, so a query never blocks it.
+              - **Panics:** each pane's parser runs under `recover`, resets that pane only, and logs once.
+              - **Bounded:** the size is capped and the scrollback emptied after every chunk.
+              - **Fuzzed:** `FuzzPaneParser`.
+              - **Line counts:** each mark's line is counted from the pane's own output. A test checks against tmux 3.4 through scrolling, long output, the alternate screen and identical prompts.
+              - **Epochs:** a full-screen erase or a width change starts an epoch. Across one, tmux's count can differ: it counts written spaces on an erase, and reflows on a width change. The seed aligns each epoch on its own.
+              - **Session gone:** the control client stops when its session is gone (R-0167), instead of restarting every 5 s.
           - the `TabTerminal` stream in the agent and portenvd;
           - the app's per-tab terminal (`TabTerminalSource`, `MarkedTerminalView`) in place of today's attached terminal;
             - **Built (PR 5, 2026-10-13, awaiting review):** the tab view's guards, ahead of the live provider:

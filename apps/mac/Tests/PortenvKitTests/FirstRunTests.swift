@@ -72,8 +72,8 @@ struct FirstRunTests {
     }
 
     /// Storage (the first-run-4-storage-this-mac board, R-0132): this Mac
-    /// is already chosen, and it's the only choice; a server or a bucket
-    /// comes later and can't go on.
+    /// is already chosen, and it's the only choice; a server comes later and
+    /// can't go on, and there's no bucket at all (R-0196).
     @Test func storageIsThisMacForNow() {
         let flow = FirstRunFlow(service: FakeFirstRunService(), at: .storage)
         #expect(flow.storage == .thisMac)
@@ -84,8 +84,22 @@ struct FirstRunTests {
         flow.storage = nil
         #expect(flow.whyNot == FirstRunText.chooseStorage)
         #expect(FirstRunText.storageThisMac == "Keep on this Mac for now")
-        #expect(FirstRunText.thisMacOnly == "Saves stay on this Mac only. If this Mac is lost, they\u{2019}re lost too. You can add a server or bucket later.")
+        #expect(FirstRunText.thisMacOnly == "Saves stay on this Mac only. If this Mac is lost, they\u{2019}re lost too. You can add a server later.")
+        #expect(FirstRunText.storageLater == "Saving to a server comes later. Keep your saves on this Mac for now.")
         #expect(FirstRunText.later == "LATER")
+    }
+
+    /// The owner dropped "bring your own bucket" as too technical (R-0196):
+    /// no word of first run mentions one, and no row offers Portenv storage
+    /// either (R-0197: no upsell during first run).
+    @Test func storageOffersNoBucketAndNoUpsell() {
+        let words = [FirstRunText.storageTitle, FirstRunText.storageLine, FirstRunText.storageThisMac,
+                     FirstRunText.thisMacOnly, FirstRunText.storageServer, FirstRunText.storageServerLine,
+                     FirstRunText.storageLater, FirstRunText.chooseStorage]
+        for w in words {
+            #expect(!w.lowercased().contains("bucket") && !w.contains("S3"), "a bucket in: \(w)")
+            #expect(!w.contains("Portenv storage"), "an upsell in: \(w)")
+        }
     }
 
     /// The first box's name follows the CLI's rule (local.NameRE) and can't
@@ -185,8 +199,8 @@ struct FirstRunTests {
                    FirstRunText.recoveryTitle, FirstRunText.recoveryLine, FirstRunText.recoverySavedCheck,
                    FirstRunText.noKeyYet, FirstRunText.tickSaved, FirstRunText.chooseStorage, FirstRunText.storageLater,
                    FirstRunText.typeName, FirstRunText.replacedKey, FirstRunText.makingKey, FirstRunText.storageLine,
-                   FirstRunText.storageServerLine, FirstRunText.storageBucketLine,
-                   FirstRunText.storageTitle, FirstRunText.storageServer, FirstRunText.storageBucket,
+                   FirstRunText.storageServerLine,
+                   FirstRunText.storageTitle, FirstRunText.storageServer,
                    FirstRunText.storageThisMac, FirstRunText.thisMacOnly, FirstRunText.firstBoxTitle,
                    FirstRunText.firstBoxLine, FirstRunText.gettingReadyTitle, FirstRunText.countMeIn,
                    FirstRunText.neverCounted, FirstRunText.turnOff, FirstRunText.whatsCounted,

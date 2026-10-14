@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -81,6 +82,11 @@ func TestTabsInABox(t *testing.T) {
 	}
 	defer func() { _ = conn.Close() }()
 	c := agentv1.NewAgentServiceClient(conn)
+	// The helper answers as this box (R-0172, R-0173): the driver passed
+	// its ID when it made the container.
+	if v, err := c.GetVersion(ctx, &agentv1.GetVersionRequest{}); err != nil || v.GetBoxId() != string(id) {
+		t.Fatalf("GetVersion: box_id %q (%v), want %q", v.GetBoxId(), err, id)
+	}
 	names := func(ts []*typesv1.Tab) string {
 		var n []string
 		for _, x := range ts {
@@ -163,8 +169,15 @@ func TestTabsInABox(t *testing.T) {
 		}
 		out.Write(r.GetOutput())
 	}
-	if got := sh("work", "tmux list-clients -F '#{session_name}'"); got != "main-viewer-app" {
-		t.Fatalf("the app's terminal is attached to %q, want main-viewer-app", got)
+	// The helper's control-mode client (ADR 0020), there for the watch, is
+	// a client of the box's own session; the app's terminal is the only
+	// other one, on its viewer session.
+	clients := sh("work", "tmux list-clients -F '#{client_control_mode} #{session_name}'")
+	if got := strings.Join(slices.DeleteFunc(strings.Split(clients, "\n"), func(l string) bool { return !strings.HasPrefix(l, "0 ") }), ","); got != "0 main-viewer-app" {
+		t.Fatalf("the app's terminal is attached to %q, want 0 main-viewer-app (all clients: %q)", got, clients)
+	}
+	if !strings.Contains(clients, "1 main") {
+		t.Errorf("no control-mode client on the box's session while the watch runs (clients: %q)", clients)
 	}
 	_ = term.CloseSend()
 	for range 50 {
@@ -182,6 +195,42 @@ func TestTabsInABox(t *testing.T) {
 	}
 	if got := len(l.GetTabs()); got != 3 {
 		t.Errorf("the box has %d tabs after the app's terminal ended, want 3", got)
+	}
+
+	// A tab terminal through the channel starts with the tab's reset.
+	tt, err := c.TabTerminal(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.Send(&agentv1.TabTerminalRequest{Msg: &agentv1.TabTerminalRequest_Open{Open: &agentv1.TabTerminalOpen{
+		Session: "main", Tab: l.GetTabs()[0].GetId(), Author: "Test", Size: &agentv1.TerminalSize{Cols: 80, Rows: 24},
+	}}}); err != nil {
+		t.Fatal(err)
+	}
+	if m, err := tt.Recv(); err != nil || m.GetReset_() == nil {
+		t.Fatalf("TabTerminal in a box: %v, %v", m, err)
+	}
+	_ = tt.CloseSend()
+	// A program of work's can't open one (R-0175): not over the channel
+	// without its token, nor on the helper's local socket.
+	got := sh("work", "curl -sk --http2 -m 20 -o /dev/null -D - -X POST "+
+		"-H 'content-type: application/grpc' -H 'te: trailers' --data-binary '' "+
+		"https://127.0.0.1:7700/portenv.agent.v1.AgentService/TabTerminal | tr -d '\\r' | grep -i '^grpc-status:' || echo none")
+	if got != "grpc-status: 16" {
+		t.Errorf("work opening TabTerminal over the channel without the token: %q, want grpc-status: 16 (unauthenticated)", got)
+	}
+	got = sh("work", `python3 -c "
+import socket
+s = socket.socket(socket.AF_UNIX)
+try:
+    s.connect('/run/portenv/agent.sock'); print('OPEN')
+except PermissionError:
+    print('DENIED')
+except OSError as e:
+    print('ERROR', e)
+"`)
+	if got != "DENIED" {
+		t.Errorf("work connecting to the helper's local socket: %s, want DENIED", got)
 	}
 }
 

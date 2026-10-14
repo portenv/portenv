@@ -51,7 +51,7 @@ struct PortenvApp: App {
             CommandGroup(replacing: .saveItem) {}
             // The title menu's box actions, also in the menu bar, once a box
             // is open.
-            CommandMenu("Box") {
+            CommandMenu("Workspace") {
                 if let controller = model.controller {
                     BoxMenu(controller: controller)
                 }
@@ -60,6 +60,11 @@ struct PortenvApp: App {
             InspectorToggle(box: model.controller?.box)
             FindCommands()
             FeedbackCommands()
+            // Portenv › Settings… (⌘,): the toolbar window (R-0137).
+            CommandGroup(replacing: .appSettings) {
+                Button("Settings\u{2026}") { SettingsWindow.show() }
+                    .keyboardShortcut(",", modifiers: .command)
+            }
         }
     }
 }
@@ -75,6 +80,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var relaunchingForUpdate = false
 
     func applicationWillFinishLaunching(_: Notification) {
+        // The display Portenv was launched from: first run opens there.
+        FirstRunLaunch.pointer = NSEvent.mouseLocation
         // Portenv's tab bar is the only tabs: no native window tabs.
         WindowCloseHook.turnOffNativeTabs()
     }
@@ -147,7 +154,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The alert when the box couldn't be saved before quitting.
     nonisolated static func ask(_ message: String) async -> QuitChoice {
         await ask(message,
-                  informative: "Try again, or quit now: the box stays as it is and is saved first thing the next time Portenv opens.",
+                  informative: "Try again, or quit now: the workspace stays as it is and is saved first thing the next time Portenv opens.",
                   anyway: "Quit Anyway")
     }
 

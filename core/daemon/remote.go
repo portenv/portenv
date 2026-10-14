@@ -177,7 +177,7 @@ func (s *Server) dropRemoteAgent(name string) {
 }
 
 func agentUnavailable(err error) error {
-	return status.Error(codes.Unavailable, "the box agent is unavailable ("+err.Error()+"); restart the box")
+	return status.Error(codes.Unavailable, "the workspace helper is unavailable ("+err.Error()+"); restart the workspace")
 }
 
 // GetChannel returns the channel of a box open here, for the owner of this
@@ -249,6 +249,7 @@ func (s *Server) boxState(ctx context.Context, name string, withPackages bool) (
 	if !ob.openedAt.IsZero() {
 		r.OpenedAt = timestamppb.New(ob.openedAt)
 	}
+	addOpenNotices(r, ob)
 	// Packages that couldn't be installed, for the inspector (never the
 	// state line). A quick question to the agent; no answer, nothing shown.
 	// It also notices a channel that dropped, so the state says the agent
@@ -279,6 +280,12 @@ func (ob *openBox) noteReadiness(err error) {
 		return
 	}
 	_ = ob.noteErr(err)
+}
+
+// addOpenNotices adds what the app tells the person once about this open:
+// that it restarted the box for a security update (R-0201).
+func addOpenNotices(r *daemonv1.GetBoxStateResponse, ob *openBox) {
+	r.RestartedForSecurityUpdate = ob.securityRestart.Load()
 }
 
 // notOpenState is the state of a box this portenvd hasn't opened: closed,
@@ -334,6 +341,24 @@ func (s *Server) RetryPackages(ctx context.Context, req *daemonv1.RetryPackagesR
 // errNotRemote: the box is not open on a server.
 var errNotRemote = errors.New("not remote")
 
+// helperUnavailable reports whether a message from a server's runner says
+// the box's helper (its agent) is unavailable. The server's portenv is
+// installed separately and may be older, so every wording it has used
+// counts: "box agent" before the rename, "workspace agent" briefly, and
+// "workspace helper" now (R-0132).
+func helperUnavailable(msg string) bool {
+	for _, said := range []string{
+		"the box agent is unavailable", // workspace-word: ok (an older server's wording, matched)
+		"the workspace agent is unavailable",
+		"the workspace helper is unavailable",
+	} {
+		if strings.Contains(msg, said) {
+			return true
+		}
+	}
+	return false
+}
+
 // onServer runs a box action through the server's runner when the box runs
 // there, returning the runner's summary.
 func (s *Server) onServer(ctx context.Context, name string, action string) (string, error) {
@@ -343,7 +368,7 @@ func (s *Server) onServer(ctx context.Context, name string, action string) (stri
 	}
 	out, err := local.AppOn(ctx, host, action, name)
 	if err != nil {
-		if strings.Contains(err.Error(), "the box agent is unavailable") {
+		if helperUnavailable(err.Error()) {
 			s.dropRemoteAgent(name)
 			return "", status.Error(codes.Unavailable, err.Error())
 		}

@@ -16,7 +16,7 @@ public protocol KeychainReading: Sendable {
 /// The person couldn't or didn't approve a Keychain read.
 public struct KeychainError: Error, LocalizedError, Equatable {
     public let status: OSStatus
-    public var errorDescription: String? { "The Keychain didn't give Portenv the box's keys (\(status))." }
+    public var errorDescription: String? { "The Keychain didn't give Portenv the workspace's keys (\(status))." }
 }
 
 /// The macOS Keychain, read with the system's approval prompt allowed.

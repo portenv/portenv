@@ -85,7 +85,7 @@ struct DaemonRestartTests {
         let c = BoxController(box: "acme-api", daemon: cli, keychain: BlockingKeychain(blocks: false), ensureDaemon: { nil })
         await c.open()
         cli.state = #"{"state":"SAVE_STATE_NOT_SAVED","saved_at":"\#(savedAt)","interrupted":true}"#
-        cli.failing["open"] = "the box failed to start"
+        cli.failing["open"] = "the workspace failed to start"
         await c.refresh()
         await c.refresh()
         await c.refresh()

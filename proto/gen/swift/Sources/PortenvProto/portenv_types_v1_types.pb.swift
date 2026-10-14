@@ -218,6 +218,101 @@ public nonisolated enum Portenv_Types_V1_LeaseSource: SwiftProtobuf.Enum, Swift.
 
 }
 
+/// How a tab's terminal ended (ADR 0020): shared by portenvd's TabTerminal
+/// and the app. Kept here, not in daemon.proto, so adding it moves none of
+/// the daemon's generated type indices.
+public nonisolated enum Portenv_Types_V1_TabTerminalEnd: SwiftProtobuf.Enum, Swift.CaseIterable {
+  public typealias RawValue = Int
+  case unspecified // = 0
+
+  /// The tab was closed (by anyone), or the tab asked for doesn't exist.
+  case tabClosed // = 1
+
+  /// The box is stopping, or moving away.
+  case boxStopping // = 2
+  case UNRECOGNIZED(Int)
+
+  public init() {
+    self = .unspecified
+  }
+
+  public init?(rawValue: Int) {
+    switch rawValue {
+    case 0: self = .unspecified
+    case 1: self = .tabClosed
+    case 2: self = .boxStopping
+    default: self = .UNRECOGNIZED(rawValue)
+    }
+  }
+
+  public var rawValue: Int {
+    switch self {
+    case .unspecified: return 0
+    case .tabClosed: return 1
+    case .boxStopping: return 2
+    case .UNRECOGNIZED(let i): return i
+    }
+  }
+
+  // The compiler won't synthesize support with the UNRECOGNIZED case.
+  public static let allCases: [Portenv_Types_V1_TabTerminalEnd] = [
+    .unspecified,
+    .tabClosed,
+    .boxStopping,
+  ]
+
+}
+
+/// Where a server's host key stands.
+public nonisolated enum Portenv_Types_V1_ServerKeyState: SwiftProtobuf.Enum, Swift.CaseIterable {
+  public typealias RawValue = Int
+  case unspecified // = 0
+
+  /// No key pinned yet: nothing runs on it ("Confirm NAME to open this").
+  case unconfirmed // = 1
+
+  /// Its key is pinned and checked on every connection.
+  case confirmed // = 2
+
+  /// It answered with another key, or this Mac's SSH recorded another one:
+  /// nothing runs on it, and there's no trusting it anyway.
+  case changed // = 3
+  case UNRECOGNIZED(Int)
+
+  public init() {
+    self = .unspecified
+  }
+
+  public init?(rawValue: Int) {
+    switch rawValue {
+    case 0: self = .unspecified
+    case 1: self = .unconfirmed
+    case 2: self = .confirmed
+    case 3: self = .changed
+    default: self = .UNRECOGNIZED(rawValue)
+    }
+  }
+
+  public var rawValue: Int {
+    switch self {
+    case .unspecified: return 0
+    case .unconfirmed: return 1
+    case .confirmed: return 2
+    case .changed: return 3
+    case .UNRECOGNIZED(let i): return i
+    }
+  }
+
+  // The compiler won't synthesize support with the UNRECOGNIZED case.
+  public static let allCases: [Portenv_Types_V1_ServerKeyState] = [
+    .unspecified,
+    .unconfirmed,
+    .confirmed,
+    .changed,
+  ]
+
+}
+
 /// A box: a toolbox image plus a portable home. Only the home travels between
 /// machines; the image is pulled or rebuilt on each one.
 public nonisolated struct Portenv_Types_V1_Box: Sendable {
@@ -369,6 +464,11 @@ public nonisolated struct Portenv_Types_V1_BuildInfo: Sendable {
   /// Git commit the binary was built from.
   public var commit: String = String()
 
+  /// One build of the app and its helpers (gmake app): different for every
+  /// build, a lane's or a dev build of the same commit too. The app restarts
+  /// a portenvd whose build_id isn't its own (R-0198).
+  public var buildID: String = String()
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -394,9 +494,28 @@ public nonisolated struct Portenv_Types_V1_Tab: Sendable {
   /// the shell (closing the tab asks first when it isn't empty).
   public var program: String = String()
 
+  /// The foreground command's whole command line, as one line (at most 160
+  /// characters), for the Move confirmation (2.3): shown on this Mac only.
+  /// It can hold secrets (mysql -p…, TOKEN=… ./deploy), so it's never
+  /// logged, never in Send Feedback or a crash report (R-0140). Empty when
+  /// the tab is just the shell.
+  public var command: String = String()
+
+  /// When that command started.
+  public var runningSince: SwiftProtobuf.Google_Protobuf_Timestamp {
+    get {_runningSince ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
+    set {_runningSince = newValue}
+  }
+  /// Returns true if `runningSince` has been explicitly set.
+  public var hasRunningSince: Bool {self._runningSince != nil}
+  /// Clears the value of `runningSince`. Subsequent reads from it will return its default value.
+  public mutating func clearRunningSince() {self._runningSince = nil}
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
+
+  fileprivate var _runningSince: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
 }
 
 // MARK: - Code below here is support for the SwiftProtobuf runtime.
@@ -417,6 +536,14 @@ nonisolated extension Portenv_Types_V1_SnapshotKind: SwiftProtobuf._ProtoNamePro
 
 nonisolated extension Portenv_Types_V1_LeaseSource: SwiftProtobuf._ProtoNameProviding {
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0LEASE_SOURCE_UNSPECIFIED\0\u{1}LEASE_SOURCE_SNAPSHOT_TAG\0\u{1}LEASE_SOURCE_CONTROL_PLANE\0")
+}
+
+nonisolated extension Portenv_Types_V1_TabTerminalEnd: SwiftProtobuf._ProtoNameProviding {
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0TAB_TERMINAL_END_UNSPECIFIED\0\u{1}TAB_TERMINAL_END_TAB_CLOSED\0\u{1}TAB_TERMINAL_END_BOX_STOPPING\0")
+}
+
+nonisolated extension Portenv_Types_V1_ServerKeyState: SwiftProtobuf._ProtoNameProviding {
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0SERVER_KEY_STATE_UNSPECIFIED\0\u{1}SERVER_KEY_STATE_UNCONFIRMED\0\u{1}SERVER_KEY_STATE_CONFIRMED\0\u{1}SERVER_KEY_STATE_CHANGED\0")
 }
 
 nonisolated extension Portenv_Types_V1_Box: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
@@ -633,7 +760,7 @@ nonisolated extension Portenv_Types_V1_Lease: SwiftProtobuf.Message, SwiftProtob
 
 nonisolated extension Portenv_Types_V1_BuildInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".BuildInfo"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}version\0\u{1}commit\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}version\0\u{1}commit\0\u{3}build_id\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -643,6 +770,7 @@ nonisolated extension Portenv_Types_V1_BuildInfo: SwiftProtobuf.Message, SwiftPr
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularStringField(value: &self.version) }()
       case 2: try { try decoder.decodeSingularStringField(value: &self.commit) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.buildID) }()
       default: break
       }
     }
@@ -655,12 +783,16 @@ nonisolated extension Portenv_Types_V1_BuildInfo: SwiftProtobuf.Message, SwiftPr
     if !self.commit.isEmpty {
       try visitor.visitSingularStringField(value: self.commit, fieldNumber: 2)
     }
+    if !self.buildID.isEmpty {
+      try visitor.visitSingularStringField(value: self.buildID, fieldNumber: 3)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Portenv_Types_V1_BuildInfo, rhs: Portenv_Types_V1_BuildInfo) -> Bool {
     if lhs.version != rhs.version {return false}
     if lhs.commit != rhs.commit {return false}
+    if lhs.buildID != rhs.buildID {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -668,7 +800,7 @@ nonisolated extension Portenv_Types_V1_BuildInfo: SwiftProtobuf.Message, SwiftPr
 
 nonisolated extension Portenv_Types_V1_Tab: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Tab"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}name\0\u{1}active\0\u{1}program\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}name\0\u{1}active\0\u{1}program\0\u{1}command\0\u{3}running_since\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -680,12 +812,18 @@ nonisolated extension Portenv_Types_V1_Tab: SwiftProtobuf.Message, SwiftProtobuf
       case 2: try { try decoder.decodeSingularStringField(value: &self.name) }()
       case 3: try { try decoder.decodeSingularBoolField(value: &self.active) }()
       case 4: try { try decoder.decodeSingularStringField(value: &self.program) }()
+      case 5: try { try decoder.decodeSingularStringField(value: &self.command) }()
+      case 6: try { try decoder.decodeSingularMessageField(value: &self._runningSince) }()
       default: break
       }
     }
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
     if !self.id.isEmpty {
       try visitor.visitSingularStringField(value: self.id, fieldNumber: 1)
     }
@@ -698,6 +836,12 @@ nonisolated extension Portenv_Types_V1_Tab: SwiftProtobuf.Message, SwiftProtobuf
     if !self.program.isEmpty {
       try visitor.visitSingularStringField(value: self.program, fieldNumber: 4)
     }
+    if !self.command.isEmpty {
+      try visitor.visitSingularStringField(value: self.command, fieldNumber: 5)
+    }
+    try { if let v = self._runningSince {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 6)
+    } }()
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -706,6 +850,8 @@ nonisolated extension Portenv_Types_V1_Tab: SwiftProtobuf.Message, SwiftProtobuf
     if lhs.name != rhs.name {return false}
     if lhs.active != rhs.active {return false}
     if lhs.program != rhs.program {return false}
+    if lhs.command != rhs.command {return false}
+    if lhs._runningSince != rhs._runningSince {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

@@ -269,19 +269,6 @@ public enum Portenv_Daemon_V1_DaemonService: Sendable {
                 type: .unary
             )
         }
-        /// Namespace for "GetEngine" metadata.
-        public enum GetEngine: Sendable {
-            /// Request type for "GetEngine".
-            public typealias Input = Portenv_Daemon_V1_GetEngineRequest
-            /// Response type for "GetEngine".
-            public typealias Output = Portenv_Daemon_V1_GetEngineResponse
-            /// Descriptor for "GetEngine".
-            public static let descriptor = GRPCCore.MethodDescriptor(
-                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
-                method: "GetEngine",
-                type: .unary
-            )
-        }
         /// Namespace for "GetKeyIDs" metadata.
         public enum GetKeyIDs: Sendable {
             /// Request type for "GetKeyIDs".
@@ -477,6 +464,110 @@ public enum Portenv_Daemon_V1_DaemonService: Sendable {
                 type: .unary
             )
         }
+        /// Namespace for "CheckRecoveryKey" metadata.
+        public enum CheckRecoveryKey: Sendable {
+            /// Request type for "CheckRecoveryKey".
+            public typealias Input = Portenv_Daemon_V1_CheckRecoveryKeyRequest
+            /// Response type for "CheckRecoveryKey".
+            public typealias Output = Portenv_Daemon_V1_CheckRecoveryKeyResponse
+            /// Descriptor for "CheckRecoveryKey".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "CheckRecoveryKey",
+                type: .unary
+            )
+        }
+        /// Namespace for "GetPlacement" metadata.
+        public enum GetPlacement: Sendable {
+            /// Request type for "GetPlacement".
+            public typealias Input = Portenv_Daemon_V1_GetPlacementRequest
+            /// Response type for "GetPlacement".
+            public typealias Output = Portenv_Daemon_V1_GetPlacementResponse
+            /// Descriptor for "GetPlacement".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "GetPlacement",
+                type: .unary
+            )
+        }
+        /// Namespace for "TabTerminal" metadata.
+        public enum TabTerminal: Sendable {
+            /// Request type for "TabTerminal".
+            public typealias Input = Portenv_Daemon_V1_TabTerminalRequest
+            /// Response type for "TabTerminal".
+            public typealias Output = Portenv_Daemon_V1_TabTerminalResponse
+            /// Descriptor for "TabTerminal".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "TabTerminal",
+                type: .bidirectionalStreaming
+            )
+        }
+        /// Namespace for "ScanServerKey" metadata.
+        public enum ScanServerKey: Sendable {
+            /// Request type for "ScanServerKey".
+            public typealias Input = Portenv_Daemon_V1_ScanServerKeyRequest
+            /// Response type for "ScanServerKey".
+            public typealias Output = Portenv_Daemon_V1_ScanServerKeyResponse
+            /// Descriptor for "ScanServerKey".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "ScanServerKey",
+                type: .unary
+            )
+        }
+        /// Namespace for "TrustServerKey" metadata.
+        public enum TrustServerKey: Sendable {
+            /// Request type for "TrustServerKey".
+            public typealias Input = Portenv_Daemon_V1_TrustServerKeyRequest
+            /// Response type for "TrustServerKey".
+            public typealias Output = Portenv_Daemon_V1_TrustServerKeyResponse
+            /// Descriptor for "TrustServerKey".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "TrustServerKey",
+                type: .unary
+            )
+        }
+        /// Namespace for "ForgetServerKey" metadata.
+        public enum ForgetServerKey: Sendable {
+            /// Request type for "ForgetServerKey".
+            public typealias Input = Portenv_Daemon_V1_ForgetServerKeyRequest
+            /// Response type for "ForgetServerKey".
+            public typealias Output = Portenv_Daemon_V1_ForgetServerKeyResponse
+            /// Descriptor for "ForgetServerKey".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "ForgetServerKey",
+                type: .unary
+            )
+        }
+        /// Namespace for "ProvideServerKey" metadata.
+        public enum ProvideServerKey: Sendable {
+            /// Request type for "ProvideServerKey".
+            public typealias Input = Portenv_Daemon_V1_ProvideServerKeyRequest
+            /// Response type for "ProvideServerKey".
+            public typealias Output = Portenv_Daemon_V1_ProvideServerKeyResponse
+            /// Descriptor for "ProvideServerKey".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "ProvideServerKey",
+                type: .unary
+            )
+        }
+        /// Namespace for "GetEngine" metadata.
+        public enum GetEngine: Sendable {
+            /// Request type for "GetEngine".
+            public typealias Input = Portenv_Daemon_V1_GetEngineRequest
+            /// Response type for "GetEngine".
+            public typealias Output = Portenv_Daemon_V1_GetEngineResponse
+            /// Descriptor for "GetEngine".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "GetEngine",
+                type: .unary
+            )
+        }
         /// Descriptors for all methods in the "portenv.daemon.v1.DaemonService" service.
         public static let descriptors: [GRPCCore.MethodDescriptor] = [
             GetVersion.descriptor,
@@ -498,7 +589,6 @@ public enum Portenv_Daemon_V1_DaemonService: Sendable {
             ProvideKeys.descriptor,
             Relaunch.descriptor,
             ListServers.descriptor,
-            GetEngine.descriptor,
             GetKeyIDs.descriptor,
             SaveNow.descriptor,
             ListSaves.descriptor,
@@ -513,7 +603,15 @@ public enum Portenv_Daemon_V1_DaemonService: Sendable {
             WatchTabs.descriptor,
             CreateBox.descriptor,
             DiscardCreation.descriptor,
-            RecoverBox.descriptor
+            RecoverBox.descriptor,
+            CheckRecoveryKey.descriptor,
+            GetPlacement.descriptor,
+            TabTerminal.descriptor,
+            ScanServerKey.descriptor,
+            TrustServerKey.descriptor,
+            ForgetServerKey.descriptor,
+            ProvideServerKey.descriptor,
+            GetEngine.descriptor
         ]
     }
 }
@@ -983,32 +1081,6 @@ extension Portenv_Daemon_V1_DaemonService {
             onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ListServersResponse>) async throws -> Result
         ) async throws -> Result where Result: Sendable
 
-        /// Call the "GetEngine" method.
-        ///
-        /// > Source IDL Documentation:
-        /// >
-        /// > Whether this Mac's box engine answers (Docker Desktop is running), for
-        /// > Welcome's Docker card and the state line (R-0098). It only asks the
-        /// > engine: it never starts anything. portenvd gives the engine 1.5 s;
-        /// > the app waits 3 s for the answer.
-        ///
-        /// - Parameters:
-        ///   - request: A request containing a single `Portenv_Daemon_V1_GetEngineRequest` message.
-        ///   - serializer: A serializer for `Portenv_Daemon_V1_GetEngineRequest` messages.
-        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_GetEngineResponse` messages.
-        ///   - options: Options to apply to this RPC.
-        ///   - handleResponse: A closure which handles the response and returns its result to
-        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
-        ///       already finished.
-        /// - Returns: The result of `handleResponse`.
-        func getEngine<Result>(
-            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_GetEngineRequest>,
-            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_GetEngineRequest>,
-            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_GetEngineResponse>,
-            options: GRPCCore.CallOptions,
-            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_GetEngineResponse>) async throws -> Result
-        ) async throws -> Result where Result: Sendable
-
         /// Call the "GetKeyIDs" method.
         ///
         /// > Source IDL Documentation:
@@ -1356,6 +1428,211 @@ extension Portenv_Daemon_V1_DaemonService {
             deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_RecoverBoxResponse>,
             options: GRPCCore.CallOptions,
             onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_RecoverBoxResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "CheckRecoveryKey" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Checks a typed recovery key before the app refills its pool from it
+        /// > (ADR 0019): the recovery-derived passwords, one per box ID, are tried
+        /// > against the boxes here that carry a recovery key. Read-only. Never
+        /// > logged.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_CheckRecoveryKeyRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_CheckRecoveryKeyRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_CheckRecoveryKeyResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func checkRecoveryKey<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_CheckRecoveryKeyRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_CheckRecoveryKeyRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_CheckRecoveryKeyResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_CheckRecoveryKeyResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "GetPlacement" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Where a box is open when it isn't this Mac (2.3, the lease sheet): the
+        /// > place, its newest save, and whether it answers. A known server is asked
+        /// > with `portenv app ping`, within 2 s; another machine can't be asked.
+        /// > OpenBox's refusal for a box open elsewhere carries the trailer
+        /// > portenv-refusal: open-elsewhere, and the app asks this then.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_GetPlacementRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_GetPlacementRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_GetPlacementResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func getPlacement<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_GetPlacementRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_GetPlacementRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_GetPlacementResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_GetPlacementResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "TabTerminal" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > One tab's terminal (ADR 0020), relayed to the workspace helper's
+        /// > TabTerminal as Terminal is: same socket, same box routing, on this Mac
+        /// > or on a server. The first message must be open. portenvd sets the
+        /// > stream's author from the connection's caller; nothing in the request
+        /// > can, and the open has no author field.
+        ///
+        /// - Parameters:
+        ///   - request: A streaming request producing `Portenv_Daemon_V1_TabTerminalRequest` messages.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_TabTerminalRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_TabTerminalResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func tabTerminal<Result>(
+            request: GRPCCore.StreamingClientRequest<Portenv_Daemon_V1_TabTerminalRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_TabTerminalRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_TabTerminalResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.StreamingClientResponse<Portenv_Daemon_V1_TabTerminalResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "ScanServerKey" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > A server's host key (2.9, ADR 0021, R-0180), found through ssh itself
+        /// > and compared, read only, with this Mac's SSH known hosts: the same key
+        /// > confirms the server; a different one marks it changed. A server that
+        /// > isn't confirmed is never contacted.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_ScanServerKeyRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_ScanServerKeyRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_ScanServerKeyResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func scanServerKey<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_ScanServerKeyRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_ScanServerKeyRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_ScanServerKeyResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ScanServerKeyResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "TrustServerKey" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Pin the key the last scan found, given the fingerprint the person saw.
+        /// > A changed key can't be trusted: only Forget gets past it.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_TrustServerKeyRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_TrustServerKeyRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_TrustServerKeyResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func trustServerKey<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_TrustServerKeyRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_TrustServerKeyRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_TrustServerKeyResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_TrustServerKeyResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "ForgetServerKey" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Drop the server's pinned key: it is unconfirmed again.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_ForgetServerKeyRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_ForgetServerKeyRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_ForgetServerKeyResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func forgetServerKey<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_ForgetServerKeyRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_ForgetServerKeyRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_ForgetServerKeyResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ForgetServerKeyResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "ProvideServerKey" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > A made key's private half (2.9 1b, ADR 0021), read by the app from the
+        /// > Keychain and held in portenvd's memory only, like ProvideKeys: never
+        /// > written, never logged. It signs in once per shared connection, through
+        /// > an agent of portenvd's own for that one run.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_ProvideServerKeyRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_ProvideServerKeyRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_ProvideServerKeyResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func provideServerKey<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_ProvideServerKeyRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_ProvideServerKeyRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_ProvideServerKeyResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ProvideServerKeyResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "GetEngine" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Whether this Mac's box engine answers (Docker Desktop is running), for
+        /// > Welcome's Docker card and the state line (R-0098). It only asks the
+        /// > engine: it never starts anything. portenvd gives the engine 1.5 s;
+        /// > the app waits 3 s for the answer.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_GetEngineRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_GetEngineRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_GetEngineResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func getEngine<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_GetEngineRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_GetEngineRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_GetEngineResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_GetEngineResponse>) async throws -> Result
         ) async throws -> Result where Result: Sendable
     }
 
@@ -2030,43 +2307,6 @@ extension Portenv_Daemon_V1_DaemonService {
             )
         }
 
-        /// Call the "GetEngine" method.
-        ///
-        /// > Source IDL Documentation:
-        /// >
-        /// > Whether this Mac's box engine answers (Docker Desktop is running), for
-        /// > Welcome's Docker card and the state line (R-0098). It only asks the
-        /// > engine: it never starts anything. portenvd gives the engine 1.5 s;
-        /// > the app waits 3 s for the answer.
-        ///
-        /// - Parameters:
-        ///   - request: A request containing a single `Portenv_Daemon_V1_GetEngineRequest` message.
-        ///   - serializer: A serializer for `Portenv_Daemon_V1_GetEngineRequest` messages.
-        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_GetEngineResponse` messages.
-        ///   - options: Options to apply to this RPC.
-        ///   - handleResponse: A closure which handles the response and returns its result to
-        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
-        ///       already finished.
-        /// - Returns: The result of `handleResponse`.
-        public func getEngine<Result>(
-            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_GetEngineRequest>,
-            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_GetEngineRequest>,
-            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_GetEngineResponse>,
-            options: GRPCCore.CallOptions = .defaults,
-            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_GetEngineResponse>) async throws -> Result = { response in
-                try response.message
-            }
-        ) async throws -> Result where Result: Sendable {
-            try await self.client.unary(
-                request: request,
-                descriptor: Portenv_Daemon_V1_DaemonService.Method.GetEngine.descriptor,
-                serializer: serializer,
-                deserializer: deserializer,
-                options: options,
-                onResponse: handleResponse
-            )
-        }
-
         /// Call the "GetKeyIDs" method.
         ///
         /// > Source IDL Documentation:
@@ -2572,6 +2812,297 @@ extension Portenv_Daemon_V1_DaemonService {
             try await self.client.unary(
                 request: request,
                 descriptor: Portenv_Daemon_V1_DaemonService.Method.RecoverBox.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
+
+        /// Call the "CheckRecoveryKey" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Checks a typed recovery key before the app refills its pool from it
+        /// > (ADR 0019): the recovery-derived passwords, one per box ID, are tried
+        /// > against the boxes here that carry a recovery key. Read-only. Never
+        /// > logged.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_CheckRecoveryKeyRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_CheckRecoveryKeyRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_CheckRecoveryKeyResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func checkRecoveryKey<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_CheckRecoveryKeyRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_CheckRecoveryKeyRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_CheckRecoveryKeyResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_CheckRecoveryKeyResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.CheckRecoveryKey.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
+
+        /// Call the "GetPlacement" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Where a box is open when it isn't this Mac (2.3, the lease sheet): the
+        /// > place, its newest save, and whether it answers. A known server is asked
+        /// > with `portenv app ping`, within 2 s; another machine can't be asked.
+        /// > OpenBox's refusal for a box open elsewhere carries the trailer
+        /// > portenv-refusal: open-elsewhere, and the app asks this then.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_GetPlacementRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_GetPlacementRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_GetPlacementResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func getPlacement<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_GetPlacementRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_GetPlacementRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_GetPlacementResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_GetPlacementResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.GetPlacement.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
+
+        /// Call the "TabTerminal" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > One tab's terminal (ADR 0020), relayed to the workspace helper's
+        /// > TabTerminal as Terminal is: same socket, same box routing, on this Mac
+        /// > or on a server. The first message must be open. portenvd sets the
+        /// > stream's author from the connection's caller; nothing in the request
+        /// > can, and the open has no author field.
+        ///
+        /// - Parameters:
+        ///   - request: A streaming request producing `Portenv_Daemon_V1_TabTerminalRequest` messages.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_TabTerminalRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_TabTerminalResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func tabTerminal<Result>(
+            request: GRPCCore.StreamingClientRequest<Portenv_Daemon_V1_TabTerminalRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_TabTerminalRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_TabTerminalResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.StreamingClientResponse<Portenv_Daemon_V1_TabTerminalResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.bidirectionalStreaming(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.TabTerminal.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
+
+        /// Call the "ScanServerKey" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > A server's host key (2.9, ADR 0021, R-0180), found through ssh itself
+        /// > and compared, read only, with this Mac's SSH known hosts: the same key
+        /// > confirms the server; a different one marks it changed. A server that
+        /// > isn't confirmed is never contacted.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_ScanServerKeyRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_ScanServerKeyRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_ScanServerKeyResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func scanServerKey<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_ScanServerKeyRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_ScanServerKeyRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_ScanServerKeyResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ScanServerKeyResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.ScanServerKey.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
+
+        /// Call the "TrustServerKey" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Pin the key the last scan found, given the fingerprint the person saw.
+        /// > A changed key can't be trusted: only Forget gets past it.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_TrustServerKeyRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_TrustServerKeyRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_TrustServerKeyResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func trustServerKey<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_TrustServerKeyRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_TrustServerKeyRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_TrustServerKeyResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_TrustServerKeyResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.TrustServerKey.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
+
+        /// Call the "ForgetServerKey" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Drop the server's pinned key: it is unconfirmed again.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_ForgetServerKeyRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_ForgetServerKeyRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_ForgetServerKeyResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func forgetServerKey<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_ForgetServerKeyRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_ForgetServerKeyRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_ForgetServerKeyResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ForgetServerKeyResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.ForgetServerKey.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
+
+        /// Call the "ProvideServerKey" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > A made key's private half (2.9 1b, ADR 0021), read by the app from the
+        /// > Keychain and held in portenvd's memory only, like ProvideKeys: never
+        /// > written, never logged. It signs in once per shared connection, through
+        /// > an agent of portenvd's own for that one run.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_ProvideServerKeyRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_ProvideServerKeyRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_ProvideServerKeyResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func provideServerKey<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_ProvideServerKeyRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_ProvideServerKeyRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_ProvideServerKeyResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ProvideServerKeyResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.ProvideServerKey.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
+
+        /// Call the "GetEngine" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Whether this Mac's box engine answers (Docker Desktop is running), for
+        /// > Welcome's Docker card and the state line (R-0098). It only asks the
+        /// > engine: it never starts anything. portenvd gives the engine 1.5 s;
+        /// > the app waits 3 s for the answer.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_GetEngineRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_GetEngineRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_GetEngineResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func getEngine<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_GetEngineRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_GetEngineRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_GetEngineResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_GetEngineResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.GetEngine.descriptor,
                 serializer: serializer,
                 deserializer: deserializer,
                 options: options,
@@ -3140,38 +3671,6 @@ extension Portenv_Daemon_V1_DaemonService.ClientProtocol {
         )
     }
 
-    /// Call the "GetEngine" method.
-    ///
-    /// > Source IDL Documentation:
-    /// >
-    /// > Whether this Mac's box engine answers (Docker Desktop is running), for
-    /// > Welcome's Docker card and the state line (R-0098). It only asks the
-    /// > engine: it never starts anything. portenvd gives the engine 1.5 s;
-    /// > the app waits 3 s for the answer.
-    ///
-    /// - Parameters:
-    ///   - request: A request containing a single `Portenv_Daemon_V1_GetEngineRequest` message.
-    ///   - options: Options to apply to this RPC.
-    ///   - handleResponse: A closure which handles the response and returns its result to
-    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
-    ///       already finished.
-    /// - Returns: The result of `handleResponse`.
-    public func getEngine<Result>(
-        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_GetEngineRequest>,
-        options: GRPCCore.CallOptions = .defaults,
-        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_GetEngineResponse>) async throws -> Result = { response in
-            try response.message
-        }
-    ) async throws -> Result where Result: Sendable {
-        try await self.getEngine(
-            request: request,
-            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_GetEngineRequest>(),
-            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_GetEngineResponse>(),
-            options: options,
-            onResponse: handleResponse
-        )
-    }
-
     /// Call the "GetKeyIDs" method.
     ///
     /// > Source IDL Documentation:
@@ -3604,6 +4103,257 @@ extension Portenv_Daemon_V1_DaemonService.ClientProtocol {
             request: request,
             serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_RecoverBoxRequest>(),
             deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_RecoverBoxResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "CheckRecoveryKey" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Checks a typed recovery key before the app refills its pool from it
+    /// > (ADR 0019): the recovery-derived passwords, one per box ID, are tried
+    /// > against the boxes here that carry a recovery key. Read-only. Never
+    /// > logged.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_CheckRecoveryKeyRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func checkRecoveryKey<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_CheckRecoveryKeyRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_CheckRecoveryKeyResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.checkRecoveryKey(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_CheckRecoveryKeyRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_CheckRecoveryKeyResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "GetPlacement" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Where a box is open when it isn't this Mac (2.3, the lease sheet): the
+    /// > place, its newest save, and whether it answers. A known server is asked
+    /// > with `portenv app ping`, within 2 s; another machine can't be asked.
+    /// > OpenBox's refusal for a box open elsewhere carries the trailer
+    /// > portenv-refusal: open-elsewhere, and the app asks this then.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_GetPlacementRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func getPlacement<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_GetPlacementRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_GetPlacementResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.getPlacement(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_GetPlacementRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_GetPlacementResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "TabTerminal" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > One tab's terminal (ADR 0020), relayed to the workspace helper's
+    /// > TabTerminal as Terminal is: same socket, same box routing, on this Mac
+    /// > or on a server. The first message must be open. portenvd sets the
+    /// > stream's author from the connection's caller; nothing in the request
+    /// > can, and the open has no author field.
+    ///
+    /// - Parameters:
+    ///   - request: A streaming request producing `Portenv_Daemon_V1_TabTerminalRequest` messages.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func tabTerminal<Result>(
+        request: GRPCCore.StreamingClientRequest<Portenv_Daemon_V1_TabTerminalRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.StreamingClientResponse<Portenv_Daemon_V1_TabTerminalResponse>) async throws -> Result
+    ) async throws -> Result where Result: Sendable {
+        try await self.tabTerminal(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_TabTerminalRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_TabTerminalResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "ScanServerKey" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > A server's host key (2.9, ADR 0021, R-0180), found through ssh itself
+    /// > and compared, read only, with this Mac's SSH known hosts: the same key
+    /// > confirms the server; a different one marks it changed. A server that
+    /// > isn't confirmed is never contacted.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_ScanServerKeyRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func scanServerKey<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_ScanServerKeyRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ScanServerKeyResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.scanServerKey(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_ScanServerKeyRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_ScanServerKeyResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "TrustServerKey" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Pin the key the last scan found, given the fingerprint the person saw.
+    /// > A changed key can't be trusted: only Forget gets past it.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_TrustServerKeyRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func trustServerKey<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_TrustServerKeyRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_TrustServerKeyResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.trustServerKey(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_TrustServerKeyRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_TrustServerKeyResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "ForgetServerKey" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Drop the server's pinned key: it is unconfirmed again.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_ForgetServerKeyRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func forgetServerKey<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_ForgetServerKeyRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ForgetServerKeyResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.forgetServerKey(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_ForgetServerKeyRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_ForgetServerKeyResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "ProvideServerKey" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > A made key's private half (2.9 1b, ADR 0021), read by the app from the
+    /// > Keychain and held in portenvd's memory only, like ProvideKeys: never
+    /// > written, never logged. It signs in once per shared connection, through
+    /// > an agent of portenvd's own for that one run.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_ProvideServerKeyRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func provideServerKey<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_ProvideServerKeyRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ProvideServerKeyResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.provideServerKey(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_ProvideServerKeyRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_ProvideServerKeyResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "GetEngine" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Whether this Mac's box engine answers (Docker Desktop is running), for
+    /// > Welcome's Docker card and the state line (R-0098). It only asks the
+    /// > engine: it never starts anything. portenvd gives the engine 1.5 s;
+    /// > the app waits 3 s for the answer.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_GetEngineRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func getEngine<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_GetEngineRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_GetEngineResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.getEngine(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_GetEngineRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_GetEngineResponse>(),
             options: options,
             onResponse: handleResponse
         )
@@ -4246,42 +4996,6 @@ extension Portenv_Daemon_V1_DaemonService.ClientProtocol {
         )
     }
 
-    /// Call the "GetEngine" method.
-    ///
-    /// > Source IDL Documentation:
-    /// >
-    /// > Whether this Mac's box engine answers (Docker Desktop is running), for
-    /// > Welcome's Docker card and the state line (R-0098). It only asks the
-    /// > engine: it never starts anything. portenvd gives the engine 1.5 s;
-    /// > the app waits 3 s for the answer.
-    ///
-    /// - Parameters:
-    ///   - message: request message to send.
-    ///   - metadata: Additional metadata to send, defaults to empty.
-    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
-    ///   - handleResponse: A closure which handles the response and returns its result to
-    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
-    ///       already finished.
-    /// - Returns: The result of `handleResponse`.
-    public func getEngine<Result>(
-        _ message: Portenv_Daemon_V1_GetEngineRequest,
-        metadata: GRPCCore.Metadata = [:],
-        options: GRPCCore.CallOptions = .defaults,
-        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_GetEngineResponse>) async throws -> Result = { response in
-            try response.message
-        }
-    ) async throws -> Result where Result: Sendable {
-        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_GetEngineRequest>(
-            message: message,
-            metadata: metadata
-        )
-        return try await self.getEngine(
-            request: request,
-            options: options,
-            onResponse: handleResponse
-        )
-    }
-
     /// Call the "GetKeyIDs" method.
     ///
     /// > Source IDL Documentation:
@@ -4773,6 +5487,290 @@ extension Portenv_Daemon_V1_DaemonService.ClientProtocol {
             metadata: metadata
         )
         return try await self.recoverBox(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "CheckRecoveryKey" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Checks a typed recovery key before the app refills its pool from it
+    /// > (ADR 0019): the recovery-derived passwords, one per box ID, are tried
+    /// > against the boxes here that carry a recovery key. Read-only. Never
+    /// > logged.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func checkRecoveryKey<Result>(
+        _ message: Portenv_Daemon_V1_CheckRecoveryKeyRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_CheckRecoveryKeyResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_CheckRecoveryKeyRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.checkRecoveryKey(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "GetPlacement" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Where a box is open when it isn't this Mac (2.3, the lease sheet): the
+    /// > place, its newest save, and whether it answers. A known server is asked
+    /// > with `portenv app ping`, within 2 s; another machine can't be asked.
+    /// > OpenBox's refusal for a box open elsewhere carries the trailer
+    /// > portenv-refusal: open-elsewhere, and the app asks this then.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func getPlacement<Result>(
+        _ message: Portenv_Daemon_V1_GetPlacementRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_GetPlacementResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_GetPlacementRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.getPlacement(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "TabTerminal" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > One tab's terminal (ADR 0020), relayed to the workspace helper's
+    /// > TabTerminal as Terminal is: same socket, same box routing, on this Mac
+    /// > or on a server. The first message must be open. portenvd sets the
+    /// > stream's author from the connection's caller; nothing in the request
+    /// > can, and the open has no author field.
+    ///
+    /// - Parameters:
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - producer: A closure producing request messages to send to the server. Returning
+    ///       from the closure closes the request stream.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func tabTerminal<Result>(
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        requestProducer producer: @Sendable @escaping (GRPCCore.RPCWriter<Portenv_Daemon_V1_TabTerminalRequest>) async throws -> Void,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.StreamingClientResponse<Portenv_Daemon_V1_TabTerminalResponse>) async throws -> Result
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.StreamingClientRequest<Portenv_Daemon_V1_TabTerminalRequest>(
+            metadata: metadata,
+            producer: producer
+        )
+        return try await self.tabTerminal(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "ScanServerKey" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > A server's host key (2.9, ADR 0021, R-0180), found through ssh itself
+    /// > and compared, read only, with this Mac's SSH known hosts: the same key
+    /// > confirms the server; a different one marks it changed. A server that
+    /// > isn't confirmed is never contacted.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func scanServerKey<Result>(
+        _ message: Portenv_Daemon_V1_ScanServerKeyRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ScanServerKeyResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_ScanServerKeyRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.scanServerKey(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "TrustServerKey" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Pin the key the last scan found, given the fingerprint the person saw.
+    /// > A changed key can't be trusted: only Forget gets past it.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func trustServerKey<Result>(
+        _ message: Portenv_Daemon_V1_TrustServerKeyRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_TrustServerKeyResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_TrustServerKeyRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.trustServerKey(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "ForgetServerKey" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Drop the server's pinned key: it is unconfirmed again.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func forgetServerKey<Result>(
+        _ message: Portenv_Daemon_V1_ForgetServerKeyRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ForgetServerKeyResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_ForgetServerKeyRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.forgetServerKey(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "ProvideServerKey" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > A made key's private half (2.9 1b, ADR 0021), read by the app from the
+    /// > Keychain and held in portenvd's memory only, like ProvideKeys: never
+    /// > written, never logged. It signs in once per shared connection, through
+    /// > an agent of portenvd's own for that one run.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func provideServerKey<Result>(
+        _ message: Portenv_Daemon_V1_ProvideServerKeyRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ProvideServerKeyResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_ProvideServerKeyRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.provideServerKey(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "GetEngine" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Whether this Mac's box engine answers (Docker Desktop is running), for
+    /// > Welcome's Docker card and the state line (R-0098). It only asks the
+    /// > engine: it never starts anything. portenvd gives the engine 1.5 s;
+    /// > the app waits 3 s for the answer.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func getEngine<Result>(
+        _ message: Portenv_Daemon_V1_GetEngineRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_GetEngineResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_GetEngineRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.getEngine(
             request: request,
             options: options,
             onResponse: handleResponse

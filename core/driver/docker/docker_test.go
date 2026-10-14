@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/client"
 
 	"github.com/portenv/portenv/core/driver"
@@ -59,7 +60,7 @@ func TestBoxIDsAreValidated(t *testing.T) {
 }
 
 func TestHostConfigKeepsIsolation(t *testing.T) {
-	d := &Driver{cfg: Config{StateDir: t.TempDir(), StorageDir: "/srv/storage"}}
+	d := &Driver{cfg: Config{StateDir: t.TempDir(), StorageDir: "/srv/storage/b", StorageRepo: StorageMount + "/b"}}
 	for _, s := range []spec{
 		{Box: driver.Box{ID: "b"}},
 		{Box: driver.Box{ID: "b", Resources: driver.Resources{CPUMillis: 2000, MemoryBytes: 4 << 30, SharedMemoryBytes: 2 << 30}},
@@ -94,6 +95,110 @@ func TestHostConfigKeepsIsolation(t *testing.T) {
 			if strings.Contains(o, "unconfined") {
 				t.Errorf("box relaxes security: %s", o)
 			}
+		}
+	}
+}
+
+// TestABoxMountsOnlyItsOwn (ADR 0021, R-0201): a box gets exactly its home
+// volume, its own repository's folder and restic's cache volume. Never the
+// folder of every box's repositories (a sibling could be deleted from
+// inside), never an engine socket (root on the machine), never the folder
+// of Portenv's sockets, and no Binds. Both local storages: this Mac's
+// Repositories folder and a drive's boxes folder.
+func TestABoxMountsOnlyItsOwn(t *testing.T) {
+	for _, c := range []struct{ name, dir, repo string }{
+		{"this Mac", "/Users/x/Library/Application Support/Portenv/Repositories/box-0123456789ab", StorageMount + "/box-0123456789ab"},
+		{"a drive", "/Volumes/Backup/portenv/boxes/box-0123456789ab", StorageMount + "/boxes/box-0123456789ab"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			d := &Driver{cfg: Config{StateDir: t.TempDir(), StorageDir: c.dir, StorageRepo: c.repo}}
+			h := d.hostConfig(spec{Box: driver.Box{ID: "box-0123456789ab"}, Home: driver.HomeStorage{Ref: "vol"}})
+			if len(h.Binds) != 0 || len(h.VolumesFrom) != 0 {
+				t.Fatalf("binds %v, volumes from %v", h.Binds, h.VolumesFrom)
+			}
+			want := map[string]mount.Mount{
+				"/home":    {Type: mount.TypeVolume, Source: "vol", Target: "/home"},
+				c.repo:     {Type: mount.TypeBind, Source: c.dir, Target: c.repo},
+				CacheMount: {Type: mount.TypeVolume, Source: d.cacheVolume("box-0123456789ab"), Target: CacheMount},
+			}
+			if len(h.Mounts) != len(want) {
+				t.Fatalf("mounts %+v, want exactly home, its own repository and the cache", h.Mounts)
+			}
+			for _, m := range h.Mounts {
+				w, ok := want[m.Target]
+				if !ok || m.Type != w.Type || m.Source != w.Source || m.ReadOnly {
+					t.Errorf("mount %s %s from %s", m.Type, m.Target, m.Source)
+				}
+				if engineSocket(m.Source) || engineSocket(m.Target) {
+					t.Errorf("an engine socket is mounted: %s at %s", m.Source, m.Target)
+				}
+				if m.Target == StorageMount || m.Target == StorageMount+"/boxes" {
+					t.Errorf("the folder of every box's repositories is mounted at %s", m.Target)
+				}
+			}
+		})
+	}
+}
+
+// TestEngineSocketsAreRecognised: the names the mounts test refuses.
+func TestEngineSocketsAreRecognised(t *testing.T) {
+	for _, p := range []string{"/var/run/docker.sock", "/run/docker.sock", "/Users/x/.docker/run/docker.sock", "/run/containerd/containerd.sock", "/run/podman/podman.sock", "/run/user/1000/podman/podman.sock"} {
+		if !engineSocket(p) {
+			t.Errorf("%s not recognised", p)
+		}
+	}
+	for _, p := range []string{"/home", "/run/portenv/storage/box-1", "/var/cache/portenv-sync", "docker.socket.md"} {
+		if engineSocket(p) {
+			t.Errorf("%s taken for an engine socket", p)
+		}
+	}
+}
+
+// TestNoStorageWithoutItsRepository (R-0201): a driver given a storage
+// folder must be told the one repository inside it it mounts, under
+// StorageMount; otherwise it refuses, so the whole folder can't come back.
+func TestNoStorageWithoutItsRepository(t *testing.T) {
+	for _, repo := range []string{"", StorageMount, StorageMount + "/boxes", "/home/work", StorageMount + "/../x", StorageMount + "/a/b/c"} {
+		if err := (Config{StateDir: t.TempDir(), StorageDir: "/srv/storage/box-1", StorageRepo: repo}).check(); err == nil {
+			t.Errorf("storage repository %q accepted", repo)
+		}
+	}
+	for _, repo := range []string{StorageMount + "/box-1", StorageMount + "/boxes/box-1"} {
+		if err := (Config{StateDir: t.TempDir(), StorageDir: "/srv/storage/box-1", StorageRepo: repo}).check(); err != nil {
+			t.Errorf("storage repository %q refused: %v", repo, err)
+		}
+	}
+	if err := (Config{StateDir: t.TempDir()}).check(); err != nil {
+		t.Errorf("no storage (SFTP, S3): %v", err)
+	}
+	// New refuses it too, so no driver is ever made that mounts the whole
+	// folder.
+	if _, err := New(Config{StateDir: t.TempDir(), StorageDir: "/srv/storage", StorageRepo: StorageMount}); err == nil {
+		t.Error("New made a driver mounting the whole storage folder")
+	}
+}
+
+// TestMountsCompare: the take-over's comparison of a running container's
+// mounts with what its spec gives now. Order doesn't matter; anything
+// else does.
+func TestMountsCompare(t *testing.T) {
+	home := mount.Mount{Type: mount.TypeVolume, Source: "vol", Target: "/home"}
+	own := mount.Mount{Type: mount.TypeBind, Source: "/r/box-1", Target: StorageMount + "/box-1"}
+	cache := mount.Mount{Type: mount.TypeVolume, Source: "portenv-cache-box-1", Target: CacheMount}
+	old := mount.Mount{Type: mount.TypeBind, Source: "/r", Target: StorageMount}
+	now := []mount.Mount{home, own, cache}
+	if !sameMounts(now, []mount.Mount{cache, home, own}) {
+		t.Error("the same mounts in another order differ")
+	}
+	for name, ran := range map[string][]mount.Mount{
+		"the old whole-folder mount": {home, old, cache},
+		"one more":                   {home, own, cache, old},
+		"one fewer":                  {home, own},
+		"read-only":                  {home, {Type: own.Type, Source: own.Source, Target: own.Target, ReadOnly: true}, cache},
+		"none":                       nil,
+	} {
+		if sameMounts(now, ran) {
+			t.Errorf("%s: taken for the same", name)
 		}
 	}
 }

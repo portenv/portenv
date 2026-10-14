@@ -220,7 +220,7 @@ struct LaunchWaitTests {
         #expect(LaunchWait.applies(.open("made-with-cli"), fallback: welcome, current: welcome, firstRunStep: .welcome))
         #expect(!LaunchWait.applies(.firstRun(.welcome), fallback: welcome, current: welcome, firstRunStep: .welcome))
         // Moved on from Welcome to a later step: refresh only.
-        #expect(!LaunchWait.applies(.open("made-with-cli"), fallback: welcome, current: welcome, firstRunStep: .protection))
+        #expect(!LaunchWait.applies(.open("made-with-cli"), fallback: welcome, current: welcome, firstRunStep: .recoveryKey))
         // No fallback shown: the decision applies.
         #expect(LaunchWait.applies(.open("acme-api"), fallback: nil, current: nil, firstRunStep: nil))
     }

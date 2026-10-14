@@ -59,6 +59,8 @@ type Server struct {
 	// peerUID reads a connection's peer uid (nil: the system's; tests set
 	// another before Serve).
 	peerUID func(fd int) (int, error)
+	// identify is a connection's caller (nil: the owner; tests set another).
+	identify func(net.Conn) caller
 
 	// The background saves after Quit Anyway: they run until bgCtx ends
 	// (portenvd stopping). sleep and closeForQuit are the clock and the
@@ -71,6 +73,9 @@ type Server struct {
 	mu     sync.Mutex
 	open   map[string]*openBox   // by box name
 	remote map[string]*remoteBox // boxes this Mac opened on a server
+	// elsewhere: the lease another machine held on a box when OpenBox was
+	// last refused (GetPlacement).
+	elsewhere map[string]boxsync.Lease
 	// gen counts each box's moves, closes and restarts by this daemon, so
 	// a terminal that ends because of one is not reported as a failure.
 	gen map[string]uint64
@@ -115,12 +120,58 @@ type openBox struct {
 	agentMu sync.RWMutex
 	// openedAt: when this portenvd opened the box (the inspector's "Since").
 	openedAt time.Time
+	// securityRestart: this open stopped and started the box again because
+	// it was left running with mounts it shouldn't have (R-0201).
+	securityRestart atomic.Bool
+}
+
+// takeOverDriver is what the take-over needs of a box's driver.
+type takeOverDriver interface {
+	AgentChannel(ctx context.Context, id driver.BoxID) (driver.AgentChannel, error)
+	Rekey(ctx context.Context, id driver.BoxID) error
+	Stop(ctx context.Context, id driver.BoxID, timeout time.Duration) (driver.State, error)
+}
+
+// takeOver handles a box left running without this process's channel
+// secrets (portenvd restarted: a crash, an update). It is re-keyed in
+// place, so it and its programs keep running (ADR 0014). If it was started
+// with other mounts than it should have (every box's repositories, from
+// before R-0201), Rekey refuses before making any key, and the box is
+// stopped here so the open starts it again with only its own: that is a
+// security restart, which the open reports to the person. Any other
+// failure also stops it, to open a new channel. Its home stays (rule 3).
+func (s *Server) takeOver(ctx context.Context, name string, d takeOverDriver, id driver.BoxID) (securityRestart bool, err error) {
+	if _, err := d.AgentChannel(ctx, id); !errors.Is(err, driver.ErrNoChannel) {
+		return false, nil
+	}
+	// Rekey refuses a box that isn't running; then it simply starts.
+	switch err := d.Rekey(ctx, id); {
+	case err == nil:
+		s.log.Info("took over the running workspace (re-keyed, not restarted)", "box", name)
+	case errors.Is(err, driver.ErrMountsChanged):
+		// By workspace ID only: no name, no path.
+		s.log.Warn("restarting the workspace to apply a security update: it could reach other workspaces' saves", "workspace", string(id))
+		securityRestart = true
+	default:
+		s.log.Info("no running box to take over, or the re-key failed: starting it", "box", name, "err", err)
+	}
+	if _, err := d.AgentChannel(ctx, id); errors.Is(err, driver.ErrNoChannel) {
+		s.leaving(name) // whatever had it open ends as for a restart
+		if _, err := d.Stop(ctx, id, 0); err != nil {
+			return false, err
+		}
+	}
+	return securityRestart, nil
 }
 
 // New returns a daemon for this machine's Portenv directory.
 func New(env *local.Env, log *slog.Logger) *Server {
 	if env != nil && env.Provided == nil {
 		env.Provided = keys.NewMemory()
+	}
+	if env != nil {
+		// What portenvd and the runner say is read in the app.
+		env.AppWords = true
 	}
 	bg, cancel := context.WithCancel(context.Background())
 	return &Server{env: env, log: log, open: map[string]*openBox{}, remote: map[string]*remoteBox{}, gen: map[string]uint64{},
@@ -178,7 +229,8 @@ func (s *Server) Serve(ctx context.Context) error {
 	if peer == nil {
 		peer = socketPeerUID
 	}
-	err = srv.Serve(ownerOnly{Listener: lis, peerUID: peer})
+	ownerName() // read once, at start
+	err = srv.Serve(ownerOnly{Listener: lis, peerUID: peer, identify: s.identify})
 	if errors.Is(err, grpc.ErrServerStopped) {
 		return nil
 	}
@@ -187,7 +239,7 @@ func (s *Server) Serve(ctx context.Context) error {
 
 // GetVersion implements daemonv1.DaemonServiceServer.
 func (s *Server) GetVersion(context.Context, *daemonv1.GetVersionRequest) (*daemonv1.GetVersionResponse, error) {
-	return &daemonv1.GetVersionResponse{Build: &typesv1.BuildInfo{Version: version.Version, Commit: version.Commit}}, nil
+	return &daemonv1.GetVersionResponse{Build: &typesv1.BuildInfo{Version: version.Version, Commit: version.Commit, BuildId: version.BuildID}}, nil
 }
 
 // engineTimeout bounds GetEngine: Welcome asks every 2 s.
@@ -207,7 +259,7 @@ func (s *Server) GetEngine(ctx context.Context, _ *daemonv1.GetEngineRequest) (*
 
 // ListBoxes lists the boxes configured on this machine.
 func (s *Server) ListBoxes(context.Context, *daemonv1.ListBoxesRequest) (*daemonv1.ListBoxesResponse, error) {
-	entries, err := os.ReadDir(filepath.Join(s.env.Dir, "boxes"))
+	entries, err := os.ReadDir(filepath.Join(s.env.Dir, "boxes")) // workspace-word: ok (a path)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return nil, err
 	}
@@ -227,7 +279,8 @@ func (s *Server) ListBoxes(context.Context, *daemonv1.ListBoxesRequest) (*daemon
 			state = typesv1.BoxState_BOX_STATE_RUNNING
 		}
 		s.mu.Unlock()
-		resp.Boxes = append(resp.Boxes, &daemonv1.BoxStatus{Box: &typesv1.Box{Id: c.ID, Name: c.Name, ToolboxImage: c.Image}, State: state})
+		resp.Boxes = append(resp.Boxes, &daemonv1.BoxStatus{Box: &typesv1.Box{Id: c.ID, Name: c.Name, ToolboxImage: c.Image}, State: state,
+			CarriesRecoveryKey: c.Recovery})
 	}
 	// Boxes CreateBox hasn't finished: shown, never opened (ADR 0019).
 	creating, err := s.env.Creations()
@@ -248,6 +301,9 @@ func (s *Server) ListBoxes(context.Context, *daemonv1.ListBoxesRequest) (*daemon
 
 // OpenBox applies the resume rules and starts the box on this Mac.
 func (s *Server) OpenBox(ctx context.Context, req *daemonv1.OpenBoxRequest) (*daemonv1.OpenBoxResponse, error) {
+	if req.GetConnectThere() {
+		return s.connectThere(ctx, req.GetName())
+	}
 	// A box this Mac moved to a server stays there until Move To brings it
 	// back: show it where it runs.
 	if host := s.location(req.GetName()); host != "" {
@@ -281,10 +337,11 @@ func (s *Server) OpenBox(ctx context.Context, req *daemonv1.OpenBoxRequest) (*da
 	if err != nil {
 		var held *boxsync.LeaseHeldError
 		if errors.As(err, &held) {
-			return nil, status.Error(codes.FailedPrecondition, err.Error())
+			return nil, s.refuseOpenElsewhere(ctx, req.GetName(), held)
 		}
 		return nil, err
 	}
+	s.openedHere(req.GetName())
 	ob.offline.Store(res.Offline)
 	s.mu.Lock()
 	s.open[req.GetName()] = ob
@@ -335,33 +392,21 @@ func (s *Server) openBox(ctx context.Context, name string, takeOver bool) (*open
 		}()
 	}
 
-	// A box left running without this process's channel secrets (portenvd
-	// restarted: a crash, an update) is taken over: re-keyed in place, so
-	// it and its programs keep running (ADR 0014). Only if that fails is it
-	// restarted to open a new channel (its home stays: rule 3).
-	if _, err := sess.Drv.AgentChannel(ctx, sess.ID()); errors.Is(err, driver.ErrNoChannel) {
-		// Rekey refuses a box that isn't running; then it simply starts.
-		if err := sess.Drv.Rekey(ctx, sess.ID()); err == nil {
-			step("took over the running box (re-keyed, not restarted)")
-		} else {
-			s.log.Info("no running box to take over, or the re-key failed: starting it", "box", name, "err", err)
-		}
-		if _, err := sess.Drv.AgentChannel(ctx, sess.ID()); errors.Is(err, driver.ErrNoChannel) {
-			if _, err := sess.Drv.Stop(ctx, sess.ID(), 0); err != nil {
-				return nil, none, err
-			}
-		}
+	restarted, err := s.takeOver(ctx, name, sess.Drv, sess.ID())
+	if err != nil {
+		return nil, none, err
 	}
 	if _, err := sess.Drv.Start(ctx, sess.ID()); err != nil {
 		return nil, none, err
 	}
-	step("box started")
+	step("workspace started")
 	ob := &openBox{sess: sess, openedAt: time.Now()}
+	ob.securityRestart.Store(restarted)
 	// An empty home makes the agent report FAILED; restic still runs.
 	if _, err := ob.connect(ctx, true); err != nil {
 		return nil, none, agentError(err)
 	}
-	step("agent answers")
+	step("workspace helper answers")
 	// One sync engine for the whole open: its executor follows the box's
 	// current channel, which changes when the box restarts below.
 	if ob.sb, err = sess.SyncWith(boxsync.ChannelExecutor{Client: func() agentv1.AgentServiceClient { return ob.agent }}); err != nil {
@@ -399,9 +444,9 @@ func (s *Server) openBox(ctx context.Context, name string, takeOver bool) (*open
 	if state, err := ob.connect(ctx, false); err != nil {
 		return nil, none, err
 	} else if state != agentv1.ReadinessState_READINESS_STATE_READY {
-		return nil, none, errors.New("the box failed to start")
+		return nil, none, errors.New("the workspace failed to start")
 	}
-	step("box ready")
+	step("workspace ready")
 	return ob, res, nil
 }
 
@@ -424,7 +469,7 @@ func (ob *openBox) connect(ctx context.Context, allowFailed bool) (agentv1.Readi
 	wait := 50 * time.Millisecond
 	for time.Now().Before(deadline) {
 		r, err := ob.agent.GetReadiness(ctx, &agentv1.GetReadinessRequest{})
-		if err != nil && strings.Contains(err.Error(), "the certificate is not this box's") {
+		if err != nil && strings.Contains(err.Error(), "the certificate is not this box's") { // workspace-word: ok (matches the agent's internal error)
 			return 0, err // something else answers on the agent's port: never retry into it
 		}
 		if err == nil {
@@ -435,7 +480,7 @@ func (ob *openBox) connect(ctx context.Context, allowFailed bool) (agentv1.Readi
 				if allowFailed {
 					return r.GetState(), nil
 				}
-				return r.GetState(), fmt.Errorf("the box failed to start: %s", r.GetDetail())
+				return r.GetState(), fmt.Errorf("the workspace failed to start: %s", r.GetDetail())
 			}
 		}
 		select {
@@ -448,7 +493,7 @@ func (ob *openBox) connect(ctx context.Context, allowFailed bool) (agentv1.Readi
 		// the box was ready.
 		wait = min(2*wait, 100*time.Millisecond)
 	}
-	return 0, errors.New("the box did not finish starting within 15 minutes")
+	return 0, errors.New("the workspace did not finish starting within 15 minutes")
 }
 
 // client is the box's current agent client, or nil (safe outside mu).
@@ -586,14 +631,11 @@ func (s *Server) RevertToLastSavePoint(ctx context.Context, req *daemonv1.Revert
 func (s *Server) MoveBox(ctx context.Context, req *daemonv1.MoveBoxRequest) (*daemonv1.MoveBoxResponse, error) {
 	name, target := req.GetName(), req.GetTarget()
 	s.leaving(name)
-	mc, err := s.env.MachineConfig()
-	if err != nil {
-		return nil, err
-	}
 	if target == "this-mac" {
 		// Close it on the server it runs on, through that server's runner
-		// (save and release there).
-		if host := s.location(name); host != "" {
+		// (save and release there): the one this Mac put it on, or the
+		// known server another refusal named (2.3, Move it to this Mac).
+		if host := s.holdingServer(ctx, name); host != "" {
 			if _, err := local.AppOn(ctx, host, "close", name); err != nil && !strings.Contains(err.Error(), "is not open") {
 				return nil, status.Error(codes.FailedPrecondition, err.Error())
 			}
@@ -605,8 +647,16 @@ func (s *Server) MoveBox(ctx context.Context, req *daemonv1.MoveBoxRequest) (*da
 		}
 		return &daemonv1.MoveBoxResponse{Summary: res.GetSummary()}, nil
 	}
-	if !slices.Contains(mc.Servers, target) {
+	servers, err := s.env.ServerTargets()
+	if err != nil {
+		return nil, err
+	}
+	if !slices.Contains(servers, target) {
 		return nil, status.Errorf(codes.InvalidArgument, "%s is not in this Mac's servers list", target)
+	}
+	// Its host key is confirmed, before anything here closes (R-0180).
+	if err := s.env.CheckServer(target); err != nil {
+		return nil, status.Error(codes.FailedPrecondition, err.Error())
 	}
 	c, err := s.env.LoadBox(name)
 	if err != nil {
@@ -772,7 +822,7 @@ func agentError(err error) error {
 		return nil
 	}
 	msg := err.Error()
-	if status.Code(err) == codes.Unavailable || strings.Contains(msg, "the certificate is not this box's") {
+	if status.Code(err) == codes.Unavailable || strings.Contains(msg, "the certificate is not this box's") { // workspace-word: ok (matches the agent's internal error)
 		return status.Error(codes.Unavailable, AgentUnavailable)
 	}
 	return err
@@ -780,7 +830,7 @@ func agentError(err error) error {
 
 // AgentUnavailable is what portenvd says when the box agent's channel is
 // down (Unavailable): portenvd itself is fine.
-const AgentUnavailable = "the box agent is unavailable (its channel is down or failed verification); restart the box"
+const AgentUnavailable = "the workspace helper is unavailable (its channel is down or failed verification); restart the workspace"
 
 // CheckBox reports whether the box agent answers on its channel.
 func (s *Server) CheckBox(ctx context.Context, req *daemonv1.CheckBoxRequest) (*daemonv1.CheckBoxResponse, error) {
@@ -797,14 +847,14 @@ func (s *Server) CheckBox(ctx context.Context, req *daemonv1.CheckBoxRequest) (*
 		// but still running: its channel's secrets are gone.
 		if sess, err2 := s.env.Open(name); err2 == nil && sess.Drv.Known(sess.ID()) {
 			if st, err3 := sess.Drv.Stats(ctx, sess.ID()); err3 == nil && st.State == driver.StateRunning {
-				return &daemonv1.CheckBoxResponse{Detail: "the box agent is unavailable (the box runs without a channel); restart the box"}, nil
+				return &daemonv1.CheckBoxResponse{Detail: "the workspace helper is unavailable (the workspace runs without a channel); restart the workspace"}, nil
 			}
 		}
 		return nil, err
 	}
 	if ob.agent == nil {
 		ob.agentDown.Store(true)
-		return &daemonv1.CheckBoxResponse{Detail: "the box agent is unavailable"}, nil
+		return &daemonv1.CheckBoxResponse{Detail: "the workspace helper is unavailable"}, nil
 	}
 	cctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()

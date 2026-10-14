@@ -7,6 +7,8 @@ package agent
 import "errors"
 
 // errNoTabs: tabs exist only inside a box.
-var errNoTabs = errors.New("tabs exist only inside a box (Linux)")
+var errNoTabs = errors.New("tabs exist only inside a box (Linux)") // workspace-word: ok (developer stub, not on a Mac)
 
 func tmuxAs(Config) (tmuxFunc, error) { return nil, errNoTabs }
+
+func tmuxCmdAs(Config) (tmuxCmdFunc, error) { return nil, errNoTabs }

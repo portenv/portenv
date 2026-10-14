@@ -34,6 +34,11 @@ type Config struct {
 	// CapBoundingSet reads the box's capability bounding set; nil skips the
 	// isolation check (tests). DefaultConfig reads /proc/self/status.
 	CapBoundingSet func() (uint64, error)
+	// Mounts reads the box's mount table (/proc/self/mountinfo); nil skips
+	// the mount check (tests). SocketAt says whether an engine socket
+	// exists at a path.
+	Mounts   func() (string, error)
+	SocketAt func(string) bool
 }
 
 // DefaultConfig returns the box layout from docs/PLAN.md.
@@ -47,6 +52,8 @@ func DefaultConfig() Config {
 		// A container's bounding set is the box's. In a VM (Phase 1) the
 		// agent drops these itself for every process it starts instead.
 		CapBoundingSet: BoundingSet,
+		Mounts:         Mounts,
+		SocketAt:       isSocket,
 	}
 }
 
@@ -89,6 +96,20 @@ func Boot(ctx context.Context, cfg Config, run Runner, r *Readiness) error {
 			return err
 		}
 	}
+	if cfg.Mounts != nil {
+		r.Step("checking mounts")
+		info, err := cfg.Mounts()
+		if err != nil {
+			return fmt.Errorf("read the workspace's mounts: %w", err)
+		}
+		at := cfg.SocketAt
+		if at == nil {
+			at = isSocket
+		}
+		if err := checkMounts(info, BoxID(), at); err != nil {
+			return err
+		}
+	}
 	r.Step("checking user " + cfg.User)
 	if err := ensureUser(ctx, cfg, run); err != nil {
 		return err
@@ -128,7 +149,7 @@ func ensureHome(ctx context.Context, cfg Config, run Runner) error {
 	}
 	// No home, or an empty one.
 	if !cfg.InitHome {
-		return fmt.Errorf("%w: %s (set PORTENV_INIT_HOME=1 only for a brand-new box)", ErrNoHome, home)
+		return fmt.Errorf("%w: %s (set PORTENV_INIT_HOME=1 only for a brand-new box)", ErrNoHome, home) // workspace-word: ok (developer setting)
 	}
 	if err := os.MkdirAll(home, 0o700); err != nil {
 		return fmt.Errorf("create home: %w", err)

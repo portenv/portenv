@@ -99,7 +99,7 @@ echo "== take over and rule 4"
 expect "A autosaves" A app save demo
 in_box a 'echo "unsaved on A" > acme-api/offline.txt'
 out=$(B app open demo --take-over 2>&1); echo "  $out"
-# The success line, not "box is open on …" (the lease error) (#58).
+# The success line, not "workspace is open on …" (the lease error) (#58).
 expect "B takes over" grep -qE "^open on [^ ]+ \(resume rule [0-9]" <<<"$out"
 in_box b 'echo "from B again" >> acme-api/README.md'
 expect "B closes" B app close demo
@@ -128,12 +128,15 @@ probes=$(wc -l <"$root/probes.txt" | tr -d ' ')
 expect "no docker exec into the boxes but the health check and this script's $probes probes ($others)" test "$others" = "$probes"
 
 echo "== Quit Anyway: A's background save, then B opens with A's work"
-# storage_away and storage_back move the box's repository aside and back, as
-# root in a container: on Linux its files belong to restic's uid 990 in the
-# box, and on a Mac Docker's file sharing refuses chmod; a rename works on both.
+# storage_away and storage_back move the repository's config file aside and
+# back, as root in a container: on Linux its files belong to restic's uid 990
+# in the box, and on a Mac Docker's file sharing refuses chmod; a rename works
+# on both. Not the whole folder: the box mounts only its own repository folder
+# (R-0201), and a bind mount follows a renamed folder, so the box would still
+# reach it. Without its config, restic finds no repository, in the box or out.
 repo_in_container() { docker run --rm -u 0 -v "$root/storage:/s" --entrypoint mv "$image" "$@"; }
-storage_away() { repo_in_container "/s/boxes/$(box_id)" "/s/boxes/$(box_id).away"; }
-storage_back() { repo_in_container "/s/boxes/$(box_id).away" "/s/boxes/$(box_id)"; }
+storage_away() { repo_in_container "/s/boxes/$(box_id)/config" "/s/boxes/$(box_id)/config.away"; }
+storage_back() { repo_in_container "/s/boxes/$(box_id)/config.away" "/s/boxes/$(box_id)/config"; }
 out=$(A app open demo 2>&1); echo "  $out"
 in_box a 'echo "unsaved at quit" > acme-api/quit-anyway.txt'
 storage_away   # A's saves fail: the repository is gone
@@ -160,7 +163,15 @@ expect "A's close fails without its box agent" bash -c "! PORTENV_HOME=$root/a $
 out=$(A app leave-unsaved demo 2>&1); echo "  $out"
 out=$(B app open demo 2>&1) && rc=0 || rc=$?; echo "  B: $out"
 expect "B is refused while A holds unsaved work" test "$rc" -ne 0
-expect "  by A's lease (it names A)" grep -q "box is open on $(cat "$root/a/machine-id")" <<<"$out"
+expect "  by A's lease (it names A)" grep -q "workspace is open on $(cat "$root/a/machine-id")" <<<"$out"
+# The lease sheet's facts (2.3): B sees A by its machine ID, which it
+# can't ask (A is another Mac, not one of B's servers), never by guessing.
+out=$(B app placement demo 2>&1) || true; echo "  B placement: $out"
+expect "  placement: another machine, A, that B can't ask" python3 -c "
+import json,sys; p=json.loads(sys.argv[1])
+assert p['holder']=='HOLDER_OTHER_MACHINE' and p['machine']==sys.argv[2] and p['answers']=='ANSWERS_CANNOT_ASK', p
+" "$out" "$(tr -d '\n' < "$root/a/machine-id")"
+expect "  portenv machine-id prints A's" test "$(PORTENV_HOME=$root/a $portenv machine-id)" = "$(tr -d '\n' < "$root/a/machine-id")"
 # A recovers: opening takes the box back, Restart Box brings its agent back
 # and keeps the home (rule 3), and the close saves and releases.
 A app open demo >/dev/null 2>&1 || true

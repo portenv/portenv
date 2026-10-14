@@ -38,7 +38,7 @@ struct QuitFlowTests {
     /// first thing; the app quits even if portenvd doesn't answer.
     @Test func quitAnywayLeavesTheBoxUnsavedWithTheMarker() async {
         let cli = FakeDaemon()
-        cli.failing["close"] = "the box agent is unavailable"
+        cli.failing["close"] = "the workspace helper is unavailable"
         let answers = ScriptedAnswers([.quitAnyway])
         #expect(await QuitFlow(daemon: cli, box: "acme-api", openHere: true).run { answers.ask($0) })
         #expect(cli.calls.last == ["app", "leave-unsaved", "acme-api"], "\(cli.calls)")
@@ -60,7 +60,7 @@ struct QuitFlowTests {
 
     @Test func aFailedSaveAsksWithTheGuidelineText() async {
         let cli = FakeDaemon()
-        cli.failing["close"] = "the box agent is unavailable"
+        cli.failing["close"] = "the workspace helper is unavailable"
         let answers = ScriptedAnswers([.cancel])
         let quit = await QuitFlow(daemon: cli, box: "acme-api", openHere: true).run { answers.ask($0) }
         #expect(!quit, "Cancel stays")
@@ -69,7 +69,7 @@ struct QuitFlowTests {
 
     @Test func tryAgainClosesAgainThenQuits() async {
         let cli = FakeDaemon()
-        cli.failing["close"] = "the box agent is unavailable"
+        cli.failing["close"] = "the workspace helper is unavailable"
         let answers = ScriptedAnswers([.tryAgain, .tryAgain])
         let flow = QuitFlow(daemon: cli, box: "acme-api", openHere: true)
         let task = Task { await flow.run { m in
@@ -83,7 +83,7 @@ struct QuitFlowTests {
 
     @Test func quitAnywayQuitsWithoutClosing() async {
         let cli = FakeDaemon()
-        cli.failing["close"] = "the box agent is unavailable"
+        cli.failing["close"] = "the workspace helper is unavailable"
         let answers = ScriptedAnswers([.quitAnyway])
         let quit = await QuitFlow(daemon: cli, box: "acme-api", openHere: true).run { answers.ask($0) }
         #expect(quit)

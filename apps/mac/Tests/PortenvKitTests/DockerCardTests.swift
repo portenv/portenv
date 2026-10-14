@@ -47,7 +47,7 @@ struct DockerCardTests {
             let flow = FirstRunFlow(service: FakeFirstRunService(), docker: status)
             #expect(flow.canContinue == can, "\(String(describing: status))")
             await flow.next()
-            #expect(flow.step == (can ? .protection : .welcome), "\(String(describing: status))")
+            #expect(flow.step == (can ? .recoveryKey : .welcome), "\(String(describing: status))")
         }
     }
 
@@ -79,10 +79,10 @@ struct DockerCardTests {
                 #expect(flow.docker == .notRunning)
                 #expect(flow.daemonGone)
                 flow.docker = .running
-                await flow.next() // Welcome → Protection
+                await flow.next() // Welcome → Recovery key
             }
         })
-        #expect(flow.step == .protection)
+        #expect(flow.step == .recoveryKey)
         #expect(await answers.taken == 3)
     }
 

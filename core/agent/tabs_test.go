@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -24,6 +25,14 @@ import (
 // config that lets programs rename windows, as a user's ~/.tmux.conf may:
 // Portenv's own options must still win.
 func testTabs(t *testing.T) (tabs, func(args ...string) string) {
+	t.Helper()
+	tb, raw, _ := testTabsCmd(t)
+	return tb, raw
+}
+
+// testTabsCmd is testTabs plus a builder for long-running clients (control
+// mode) on the same private server.
+func testTabsCmd(t *testing.T) (tabs, func(args ...string) string, tmuxCmdFunc) {
 	t.Helper()
 	if _, err := exec.LookPath("tmux"); err != nil {
 		if os.Getenv("CI") != "" {
@@ -56,7 +65,12 @@ func testTabs(t *testing.T) (tabs, func(args ...string) string) {
 		}
 		return strings.TrimSpace(out)
 	}
-	return tabs{tmux: run, session: "main"}, raw
+	cmdf := func(ctx context.Context, args ...string) *exec.Cmd {
+		cmd := exec.CommandContext(ctx, "tmux", append([]string{"-L", sock, "-f", conf}, args...)...) // #nosec G204 -- test
+		cmd.Env = append(os.Environ(), "LANG=C.UTF-8")
+		return cmd
+	}
+	return tabs{tmux: run, session: "main"}, raw, cmdf
 }
 
 func names(ts []*typesv1.Tab) string {
@@ -367,5 +381,36 @@ func TestWatchTabsSeesEveryWindow(t *testing.T) {
 	case s := <-got:
 		t.Fatalf("an update with no change: %q", s)
 	case <-time.After(300 * time.Millisecond):
+	}
+}
+
+// TestTabsSayTheWholeCommand (Linux, where the agent runs): the command
+// line in front of a tab's terminal, and when it started, for the Move
+// confirmation (2.3). A planted -pSECRET is in it: it reaches the app, and
+// the agent's log must never see it.
+func TestTabsSayTheWholeCommand(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("reads /proc: Linux only, as the agent")
+	}
+	tb, raw := testTabs(t)
+	ts := mustList(t, tb)
+	if c := ts[0].GetCommand(); c != "" {
+		t.Fatalf("an idle shell reports command %q", c)
+	}
+	start := time.Now()
+	raw("send-keys", "-t", ts[0].GetId(), "sh -c 'sleep 30; true' sh -u root -pSECRET", "Enter")
+	var tab *typesv1.Tab
+	for range 100 {
+		if tab = mustList(t, tb)[0]; strings.Contains(tab.GetCommand(), "-pSECRET") {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if got := tab.GetCommand(); got != "sh -c sleep 30; true sh -u root -pSECRET" {
+		t.Fatalf("command %q", got)
+	}
+	since := tab.GetRunningSince().AsTime()
+	if since.Before(start.Add(-5*time.Second)) || since.After(time.Now().Add(5*time.Second)) {
+		t.Fatalf("running since %v, started about %v", since, start)
 	}
 }

@@ -65,11 +65,6 @@ service DaemonService {
   rpc Relaunch(RelaunchRequest) returns (RelaunchResponse);
   // The servers a box can move to (Move To), as user@host.
   rpc ListServers(ListServersRequest) returns (ListServersResponse);
-  // Whether this Mac's box engine answers (Docker Desktop is running), for
-  // Welcome's Docker card and the state line (R-0098). It only asks the
-  // engine: it never starts anything. portenvd gives the engine 1.5 s;
-  // the app waits 3 s for the answer.
-  rpc GetEngine(GetEngineRequest) returns (GetEngineResponse);
   // The Keychain items the app reads for a box (service
   // dev.portenv.repository): its repository key, and its storage keys.
   rpc GetKeyIDs(GetKeyIDsRequest) returns (GetKeyIDsResponse);
@@ -116,6 +111,43 @@ service DaemonService {
   // repository key, checks it, and writes the box's config. Idempotent on
   // box_id. Never logged.
   rpc RecoverBox(RecoverBoxRequest) returns (RecoverBoxResponse);
+  // Checks a typed recovery key before the app refills its pool from it
+  // (ADR 0019): the recovery-derived passwords, one per box ID, are tried
+  // against the boxes here that carry a recovery key. Read-only. Never
+  // logged.
+  rpc CheckRecoveryKey(CheckRecoveryKeyRequest) returns (CheckRecoveryKeyResponse);
+  // Where a box is open when it isn't this Mac (2.3, the lease sheet): the
+  // place, its newest save, and whether it answers. A known server is asked
+  // with `portenv app ping`, within 2 s; another machine can't be asked.
+  // OpenBox's refusal for a box open elsewhere carries the trailer
+  // portenv-refusal: open-elsewhere, and the app asks this then.
+  rpc GetPlacement(GetPlacementRequest) returns (GetPlacementResponse);
+  // One tab's terminal (ADR 0020), relayed to the workspace helper's
+  // TabTerminal as Terminal is: same socket, same box routing, on this Mac
+  // or on a server. The first message must be open. portenvd sets the
+  // stream's author from the connection's caller; nothing in the request
+  // can, and the open has no author field.
+  rpc TabTerminal(stream TabTerminalRequest) returns (stream TabTerminalResponse);
+  // A server's host key (2.9, ADR 0021, R-0180), found through ssh itself
+  // and compared, read only, with this Mac's SSH known hosts: the same key
+  // confirms the server; a different one marks it changed. A server that
+  // isn't confirmed is never contacted.
+  rpc ScanServerKey(ScanServerKeyRequest) returns (ScanServerKeyResponse);
+  // Pin the key the last scan found, given the fingerprint the person saw.
+  // A changed key can't be trusted: only Forget gets past it.
+  rpc TrustServerKey(TrustServerKeyRequest) returns (TrustServerKeyResponse);
+  // Drop the server's pinned key: it is unconfirmed again.
+  rpc ForgetServerKey(ForgetServerKeyRequest) returns (ForgetServerKeyResponse);
+  // A made key's private half (2.9 1b, ADR 0021), read by the app from the
+  // Keychain and held in portenvd's memory only, like ProvideKeys: never
+  // written, never logged. It signs in once per shared connection, through
+  // an agent of portenvd's own for that one run.
+  rpc ProvideServerKey(ProvideServerKeyRequest) returns (ProvideServerKeyResponse);
+  // Whether this Mac's box engine answers (Docker Desktop is running), for
+  // Welcome's Docker card and the state line (R-0098). It only asks the
+  // engine: it never starts anything. portenvd gives the engine 1.5 s;
+  // the app waits 3 s for the answer.
+  rpc GetEngine(GetEngineRequest) returns (GetEngineResponse);
 }
 
 message CheckBoxRequest {
@@ -143,6 +175,10 @@ message OpenBoxRequest {
   // explicit choice). That machine's unsaved work is kept as a separate
   // save (resume rule 4).
   bool take_over = 2;
+  // Connect to it where it runs (the lease sheet's Connect to it there):
+  // one of this Mac's servers holds it. Nothing stops there. Refused when
+  // no known server holds it or it's no longer open there.
+  bool connect_there = 3;
 }
 
 message OpenBoxResponse {
@@ -244,6 +280,9 @@ message BoxStatus {
   // finishes it (CreateBox again, the same box_id) or discards it
   // (DiscardCreation).
   bool creating = 3;
+  // The box's repository also has the recovery-derived key (ADR 0019), so
+  // a typed recovery key can be checked against it. Not a secret.
+  bool carries_recovery_key = 4;
 }
 
 message GetChannelRequest {
@@ -309,6 +348,10 @@ message GetBoxStateResponse {
   string storage_place = 7;
   // When this portenvd opened the box (the inspector's "Since <time>").
   google.protobuf.Timestamp opened_at = 8;
+  // This open stopped and started the box again to apply a security update
+  // (it was left running with mounts it shouldn't have; R-0201). The app
+  // tells the person once. Only for the open that did it.
+  bool restarted_for_security_update = 9;
 }
 
 enum NetworkPath {
@@ -375,13 +418,9 @@ message ListServersRequest {}
 
 message ListServersResponse {
   repeated string servers = 1;
-}
-
-message GetEngineRequest {}
-
-message GetEngineResponse {
-  // The engine answered.
-  bool running = 1;
+  // Each server's host key, in the order of servers, by ID and name (never
+  // its address).
+  repeated ServerInfo infos = 2;
 }
 
 message GetKeyIDsRequest {
@@ -563,4 +602,198 @@ message RecoverBoxResponse {
   string box_id = 1;
   // An earlier call had finished it.
   bool already_recovered = 2;
+}
+
+message CheckRecoveryKeyRequest {
+  // Box ID to its recovery-derived restic password (64 hex characters),
+  // never the recovery key itself. At most 64, and at most as many as
+  // the boxes here with carries_recovery_key: more is InvalidArgument.
+  map<string, bytes> recovery_passwords = 1;
+}
+
+message CheckRecoveryKeyResponse {
+  // How many boxes here carry a recovery key and could be checked.
+  int32 checked = 1;
+  // The key opened one of them.
+  bool opened = 2;
+}
+
+message GetPlacementRequest {
+  string name = 1;
+  // Ask a known server whether it answers (up to 2 s). Without it, the
+  // answer comes at once with answers unspecified for a known server, so
+  // the sheet can name the place before the probe ends.
+  bool probe = 2;
+}
+
+// Who holds a box open.
+enum Holder {
+  HOLDER_UNSPECIFIED = 0;
+  // Nobody, or this Mac: OpenBox opens it here.
+  HOLDER_NONE = 1;
+  // One of this Mac's servers (server_id, server_name).
+  HOLDER_KNOWN_SERVER = 2;
+  // A machine this Mac can't reach: another Mac, or a server it doesn't
+  // know (machine is its machine ID).
+  HOLDER_OTHER_MACHINE = 3;
+}
+
+// Whether the holder answers.
+enum Answers {
+  ANSWERS_UNSPECIFIED = 0;
+  ANSWERS_YES = 1;
+  // A known server whose portenv app ping failed or took over 2 s.
+  ANSWERS_NO = 2;
+  // Another machine: Portenv can't ask it. Never a reason to take over by
+  // default (R-0168).
+  ANSWERS_CANNOT_ASK = 3;
+}
+
+message GetPlacementResponse {
+  // Servers show by name, never by address (GUIDELINES §2, R-0172): the
+  // address stays in portenvd.
+  reserved 2;
+  reserved "server";
+  Holder holder = 1;
+  // For HOLDER_KNOWN_SERVER: a stable ID for the server (it doesn't carry
+  // the address) and the name it shows by.
+  string server_id = 6;
+  string server_name = 7;
+  // The holder's machine ID, as the lease names it.
+  string machine = 3;
+  // The newest save, which carries the lease.
+  google.protobuf.Timestamp newest_save_at = 4;
+  Answers answers = 5;
+}
+
+message TabTerminalRequest {
+  oneof msg {
+    TabTerminalOpen open = 1;
+    // Keystrokes, pastes, clicks and IME input, as the app's terminal
+    // produced them (never the emulator's replies; ADR 0020, decision 4).
+    bytes input = 2;
+    // The size this view can show, in cells.
+    TerminalSize resize = 3;
+  }
+}
+
+message TabTerminalOpen {
+  // The tmux session, for example "main".
+  string session = 1;
+  // A tab ID, "@N".
+  string tab = 2;
+  TerminalSize size = 3;
+  // The helper's TabTerminalOpen has author at 4. Here it's reserved, so
+  // no client can send one, and a stray field 4 is never copied through:
+  // portenvd builds the helper's open from the fields below and its caller.
+  reserved 4;
+  reserved "author";
+  string box = 5;
+}
+
+message TabTerminalResponse {
+  oneof msg {
+    // Always first, and again after the helper's control client restarts
+    // or output had to be skipped.
+    TabTerminalReset reset = 1;
+    // The tab's own output, in order.
+    bytes output = 2;
+    // The tab's size changed elsewhere (another viewer).
+    TerminalSize resized = 3;
+    // Nothing follows.
+    portenv.types.v1.TabTerminalEnd end = 4;
+    // Who ran a command, for its block's attribution chip.
+    CommandAuthor author = 5;
+  }
+}
+
+message TabTerminalReset {
+  TerminalSize size = 1;
+  // The tab's history and screen, cursor and modes, with its OSC 133
+  // marks replayed on their lines.
+  bytes seed = 2;
+  // Every command still in the seed that has a recorded author.
+  repeated CommandAuthor authors = 3;
+  // Output was skipped since the last reset (the helper or its reader fell
+  // too far behind; ADR 0020, decision 11): the app tells the person and
+  // marks the block that was running as skipped, never complete.
+  bool skipped = 4;
+}
+
+// Who sent the Enter that started a command: the helper's CommandAuthor
+// (agent.v1), as portenvd hands it to one recipient. Response-only, and
+// never inside output bytes. A command with no recorded author has none.
+message CommandAuthor {
+  // The command's OSC 133;C line, counted from the tab's first line ever.
+  uint64 line = 1;
+  // The author's own name, as people read it: the owner's first name, or
+  // "Grok Bot". Never "You": is_you is what makes the app say "You".
+  // portenvd drops an author whose name is over 64 characters or has
+  // control or bidi characters; it never repairs one.
+  string name = 2;
+  // True when the author is the caller receiving this stream. Set by
+  // portenvd for each recipient; whatever the helper sent is replaced.
+  bool is_you = 3;
+  // Empty for a person; the agent's ID from its grant (ADR 0016) otherwise.
+  string agent_id = 4;
+  reserved 5;
+}
+
+message ServerInfo {
+  string id = 1;
+  string name = 2;
+  portenv.types.v1.ServerKeyState state = 3;
+  // The pinned key's fingerprint (SHA256:..., as OpenSSH shows it), or the
+  // last scan's while it waits to be trusted.
+  string fingerprint = 4;
+  // Confirmed because this Mac's SSH known hosts had the same key.
+  bool from_known_hosts = 5;
+  // Its key changed and was forgotten: the next confirmation says so
+  // first. Cleared on Trust (R-0185).
+  bool was_changed = 6;
+  // It signs in with a key Portenv made for it: the app hands that key
+  // over (ProvideServerKey).
+  bool made_key = 7;
+}
+
+message ScanServerKeyRequest {
+  string server_id = 1;
+}
+
+message ScanServerKeyResponse {
+  ServerInfo info = 1;
+  // ssh-ed25519, ecdsa-sha2-nistp256, ...; never a certificate.
+  string key_type = 2;
+}
+
+message TrustServerKeyRequest {
+  string server_id = 1;
+  string fingerprint = 2;
+}
+
+message TrustServerKeyResponse {
+  ServerInfo info = 1;
+}
+
+message ForgetServerKeyRequest {
+  string server_id = 1;
+}
+
+message ForgetServerKeyResponse {
+  ServerInfo info = 1;
+}
+
+message ProvideServerKeyRequest {
+  string server_id = 1;
+  // The Ed25519 private key's 32-byte seed.
+  bytes key = 2;
+}
+
+message ProvideServerKeyResponse {}
+
+message GetEngineRequest {}
+
+message GetEngineResponse {
+  // The engine answered.
+  bool running = 1;
 }

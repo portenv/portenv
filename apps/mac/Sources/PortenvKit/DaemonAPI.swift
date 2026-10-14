@@ -15,6 +15,13 @@ public protocol DaemonAPI: Sendable {
     /// The servers a box can move to (user@host).
     func servers() async throws -> [String]
     func open(_ box: String) async throws
+    /// Opens it here; takeOver: from a place that doesn't answer (rule 4).
+    func open(_ box: String, takeOver: Bool) async throws
+    /// Connect to it there: on the known server that holds it.
+    func connectThere(_ box: String) async throws
+    /// Where the workspace is open when it isn't this Mac (GetPlacement):
+    /// at once without the probe, then with it (up to 2 s).
+    func placement(_ box: String, probe: Bool) async throws -> Placement
     func close(_ box: String) async throws
     func makeSavePoint(_ box: String) async throws
     /// Reverts to the last save point and returns its time.
@@ -60,6 +67,17 @@ public protocol DaemonAPI: Sendable {
     func watchTabs(_ box: String) -> AsyncThrowingStream<[TabInfo], Error>
 }
 
+public extension DaemonAPI {
+    // Defaults for the conformers that don't need them (renders, the
+    // unreachable stand-in): an older portenvd.
+    func placement(_: String, probe _: Bool) async throws -> Placement { throw DaemonError(DaemonError.outOfDate) }
+    func open(_ box: String, takeOver: Bool) async throws {
+        guard takeOver else { return try await open(box) }
+        throw DaemonError(DaemonError.outOfDate)
+    }
+    func connectThere(_: String) async throws { throw DaemonError(DaemonError.outOfDate) }
+}
+
 /// A box saved in the background after Quit Anyway.
 public struct SavedAfterQuit: Equatable, Sendable {
     public let box: String
@@ -75,9 +93,14 @@ public struct DaemonError: Error, LocalizedError, Equatable {
     public let message: String
     /// portenvd isn't there (not running, or it went away).
     public let unavailable: Bool
-    public init(_ message: String, unavailable: Bool = false) {
+    /// OpenBox refused because the workspace is open somewhere else
+    /// (portenvd's trailer portenv-refusal: open-elsewhere): the lease
+    /// sheet, never an error line.
+    public let openElsewhere: Bool
+    public init(_ message: String, unavailable: Bool = false, openElsewhere: Bool = false) {
         self.message = message
         self.unavailable = unavailable
+        self.openElsewhere = openElsewhere
     }
     public var errorDescription: String? { message }
 

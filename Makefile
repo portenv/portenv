@@ -23,9 +23,16 @@ AGENT_ARCHES := arm64 amd64
 
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
+# One build of the app and its helpers, the same in both (R-0198): the app
+# restarts a portenvd of another build after an in-place update. Made once
+# per make run, so a rebuild of the same commit (a lane's, a dev one) differs.
+ifndef BUILD_ID
+BUILD_ID := $(shell uuidgen 2>/dev/null || od -An -N16 -tx1 /dev/urandom | tr -d ' \n')
+endif
 LDFLAGS := -s -w \
 	-X github.com/portenv/portenv/core/internal/version.Version=$(VERSION) \
-	-X github.com/portenv/portenv/core/internal/version.Commit=$(COMMIT)
+	-X github.com/portenv/portenv/core/internal/version.Commit=$(COMMIT) \
+	-X github.com/portenv/portenv/core/internal/version.BuildID=$(BUILD_ID)
 
 # Pinned developer tools. Each is installed with its own module graph
 # (go install pkg@version), so their dependencies never conflict.
@@ -38,6 +45,12 @@ TOOLS := \
 	github.com/zricethezav/gitleaks/v8@v8.30.1 \
 	github.com/restic/restic/cmd/restic@v0.19.1
 TOOLS_STAMP := $(BIN)/.tools-stamp
+# The Go every tool is built with: core/go.mod's, the version CI installs
+# (setup-go's go-version-file, with GOTOOLCHAIN=local). Named exactly, so
+# restic, which ships in Portenv.app, gets this Go's patch release whatever go
+# is first on PATH (R-0110, R-0119), and a tool that needs a newer Go stops
+# with Go's own "requires go >= …" instead of switching to it.
+TOOLS_GO := $(shell sed -n 's/^go //p' core/go.mod)
 # shellcheck, which actionlint runs on workflow scripts: the version on CI's
 # runner image, pinned so the Mac and CI agree (scripts/install-shellcheck.sh).
 SHELLCHECK := $(BIN)/shellcheck
@@ -48,7 +61,7 @@ SWIFT_PROTOBUF := 1.38.1
 GRPC_SWIFT_PROTOBUF := 2.4.1
 SWIFT_PLUGINS := $(BIN)/protoc-gen-swift $(BIN)/protoc-gen-grpc-swift-2
 
-.PHONY: all build app release-local unregister-service test lint fmt proto proto-go proto-swift proto-check proto-check-go agent-linux cli-linux cli-darwin swift-test swift-env-check \
+.PHONY: all build app release-local unregister-service test fuzz lint fmt proto proto-go proto-swift proto-check proto-check-go agent-linux cli-linux cli-darwin swift-test swift-env-check \
 	secrets spdx-check check tools clean image image-test driver-test e2e
 
 all: build test lint proto-check
@@ -58,7 +71,8 @@ tools: $(TOOLS_STAMP)
 $(TOOLS_STAMP): Makefile
 	# -trimpath: restic ships inside Portenv.app, and no build may carry
 	# the paths of the machine that built it.
-	for t in $(TOOLS); do GOWORK=off GOBIN=$(BIN) go install -trimpath $$t; done
+	$(if $(TOOLS_GO),,$(error core/go.mod has no go line for the tools' toolchain))
+	for t in $(TOOLS); do GOTOOLCHAIN=go$(TOOLS_GO) GOWORK=off GOBIN=$(BIN) go install -trimpath $$t; done
 	touch $@
 
 $(SHELLCHECK): scripts/install-shellcheck.sh
@@ -101,11 +115,30 @@ test: $(TOOLS_STAMP)
 	for m in $(GO_MODULES); do RESTIC=$(BIN)/restic go test -race ./$$m/...; done
 	scripts/test-scan-excerpt.sh
 	scripts/test-notarize.sh
+	scripts/test-workspace-word.sh
+	scripts/test-check-terminal-views.sh
+	scripts/test-check-ssh-keygen.sh
 
-## lint: formatting, vet, golangci-lint, buf lint, workflow lint, SPDX headers
+## fuzz: the workspace helper's control-mode decoder, line reader and pane parser, briefly (R-0162, R-0142)
+# Counts of runs, not durations: with a duration, go test fails with
+# "context deadline exceeded" when the time runs out while a worker is still
+# minimizing a new input, which a slow runner hits now and then. The
+# decoders are fast; the parser runs a terminal per input.
+FUZZRUNS ?= 500000x
+FUZZRUNS_PARSER ?= 30000x
+fuzz:
+	for f in FuzzDecodeControlOutput FuzzReadControlLines; do \
+		(cd core && go test -run '^$$' -fuzz "^$$f$$" -fuzztime $(FUZZRUNS) -timeout 10m ./agent/) || exit 1; \
+	done
+	cd core && go test -run '^$$' -fuzz '^FuzzPaneParser$$' -fuzztime $(FUZZRUNS_PARSER) -timeout 10m ./agent/
+
+## lint: formatting, vet, golangci-lint, buf lint, workflow lint, SPDX headers, terminal views made only by TerminalViews, ssh-keygen only on files of its own, "workspace" in what people read
 lint: $(TOOLS_STAMP) $(SHELLCHECK) spdx-check
 	test -z "$$(gofmt -l core proto/gen/go | tee /dev/stderr)"
 	for m in $(GO_MODULES); do go vet ./$$m/...; done
+	# Every module's go.sum matches what's in the module cache (pinned
+	# dependencies, R-0142).
+	for m in $(GO_MODULES); do (cd $$m && go mod verify) || exit 1; done
 	for m in $(GO_MODULES); do \
 		(cd $$m && $(BIN)/golangci-lint run --config $(CURDIR)/.golangci.yml ./...); \
 	done
@@ -113,6 +146,9 @@ lint: $(TOOLS_STAMP) $(SHELLCHECK) spdx-check
 	scripts/install-shellcheck.sh --check
 	$(BIN)/actionlint -shellcheck=$(SHELLCHECK)
 	scripts/check-no-binaries.sh
+	scripts/check-terminal-views.sh
+	scripts/check-ssh-keygen.sh
+	python3 -I scripts/check-workspace-word.py
 
 ## fmt: format Go and proto sources
 fmt: $(TOOLS_STAMP)
@@ -171,6 +207,10 @@ ifneq ($(LANE),)
 ifeq ($(filter A B C D E F G H I J K L M N O P Q R S T U V W X Y Z,$(LANE)),)
 $(error LANE=$(LANE): a dev lane is one capital letter, for example LANE=B)
 endif
+# One letter only: LANE="B C" would pass the filter above (R-0132).
+ifneq ($(words $(LANE)),1)
+$(error LANE=$(LANE): a dev lane is one capital letter, for example LANE=B)
+endif
 INSTANCE := dev-$(LANE)
 APP_BUILD := $(HOME)/Library/Caches/Portenv/app-build-$(INSTANCE)
 # Go binaries carry their lane (core/internal/instance): a release binary
@@ -196,6 +236,12 @@ app: build $(TOOLS_STAMP)
 	mkdir -p $(BIN)/Portenv.app/Contents/Helpers && cp $(BIN)/portenv $(BIN)/portenvd $(BIN)/restic $(BIN)/Portenv.app/Contents/Helpers/
 	for f in portenv portenvd restic; do codesign --force --sign - $(BIN)/Portenv.app/Contents/Helpers/$$f; done
 	cp apps/mac/Info.plist $(BIN)/Portenv.app/Contents/Info.plist
+	/usr/libexec/PlistBuddy -c "Add :PortenvBuildID string $(BUILD_ID)" $(BIN)/Portenv.app/Contents/Info.plist
+	# The app icon (R-0128); a dev lane's carries its letter, so it's never
+	# mistaken for the release app.
+	scripts/make-app-icon.sh apps/mac/Resources/Assets.xcassets/AppIcon.appiconset \
+		$(BIN)/Portenv.app/Contents/Resources/AppIcon.icns $(LANE) $(if $(LANE),$(SWIFT))
+	test -s $(BIN)/Portenv.app/Contents/Resources/AppIcon.icns || { echo "Portenv.app has no AppIcon.icns" >&2; exit 1; }
 	# portenvd's launch agent (the login item; SMAppService.agent registers it).
 	mkdir -p $(BIN)/Portenv.app/Contents/Library/LaunchAgents
 	cp apps/mac/LaunchAgents/com.portenv.portenvd.plist $(BIN)/Portenv.app/Contents/Library/LaunchAgents/

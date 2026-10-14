@@ -12,5 +12,5 @@ import (
 
 // RunRestic is only supported inside a Linux box.
 func RunRestic(context.Context, []string, io.Reader, io.Writer, io.Writer) (int, error) {
-	return 0, errors.New("portenv-agent restic runs only inside a Linux box")
+	return 0, errors.New("portenv-agent restic runs only inside a Linux box") // workspace-word: ok (developer stub, not on a Mac)
 }

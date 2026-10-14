@@ -13,7 +13,7 @@ struct MoveOfferView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top, spacing: 14) {
-                Image(nsImage: NSApp.applicationIconImage)
+                Image(nsImage: PortenvIcon.image)
                     .resizable()
                     .frame(width: 56, height: 56)
                     .accessibilityHidden(true)

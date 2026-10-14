@@ -86,7 +86,20 @@ final class AppModel {
             },
             report: { [weak self] report in self?.waiting(report) },
             sleep: { try? await Task.sleep(for: $0) },
-            boxes: { [daemon] in try await daemon.boxes() },
+            boxes: { [daemon] in
+                // After an in-place update the running portenvd is still the
+                // old one: restart it here, saying so, rather than "out of
+                // date" later (R-0198).
+                if case let .refused(message) = await ServiceUpdates.shared.ensureCurrent() { throw DaemonError(message) }
+                let listed = try await daemon.boxes()
+                // A workspace made outside first run (portenv init) ends it too (R-0133).
+                DefaultsFirstRunMemory().forgetIfWorkspacesExist(listed)
+                // Pool entries for workspaces that exist go, and a workspace left
+                // half made is finished or discarded (ADR 0019, A3).
+                guard let creating = daemon as? BoxCreating else { return listed }
+                _ = await BoxMaker(daemon: creating).tidyAtLaunch()
+                return (try? await daemon.boxes()) ?? listed
+            },
             decide: { [weak self] listed in self?.answered(listed) }
         )
         switch outcome {
@@ -115,6 +128,9 @@ final class AppModel {
                                          firstRunStep: firstRun?.step)
         fallbackShown = nil
         if applies { apply(decision) }
+        // Servers waiting for their host key to be confirmed: asked about
+        // once per launch, after the window is up (ADR 0021, R-0180).
+        Task { await ServerKeyAlert.runAtLaunch() }
     }
 
     /// The screen shown while portenvd wasn't answering, if any.
@@ -163,8 +179,7 @@ final class AppModel {
             launch = fallback
             fallbackShown = fallback
             if case .firstRun = fallback {
-                firstRun = FirstRunFlow(service: AppFirstRunService(), at: .welcome, existing: [],
-                                        docker: nil, serviceGone: true)
+                firstRun = makeFlow(at: .welcome, fromBoxList: false, memory: DefaultsFirstRunMemory(), serviceGone: true)
             }
         }
     }
@@ -173,9 +188,9 @@ final class AppModel {
         launch = decision
         switch decision {
         case let .firstRun(step):
-            // Welcome waits for Docker Desktop's first answer (R-0098).
-            firstRun = FirstRunFlow(service: AppFirstRunService(), at: step, existing: boxes,
-                                    docker: step == .welcome ? nil : .running)
+            // Docker Desktop is checked before Welcome's Continue and before
+            // making the first workspace (R-0098, R-0211).
+            firstRun = makeFlow(at: step, fromBoxList: false, memory: DefaultsFirstRunMemory())
         case let .open(box):
             Task { await open(box) }
         case .boxList:
@@ -270,10 +285,32 @@ final class AppModel {
         launch = .boxList(notice: nil)
     }
 
+    /// A first-run flow with real keys, its Keychain waits said in the
+    /// window.
+    /// The recovery key sheet's refill, when portenvd can check keys.
+    var refill: RecoveryRefill? {
+        (daemon as? (BoxCreating & RecoveryChecking)).map { RecoveryRefill(daemon: $0) }
+    }
+
+    /// A first run, or New Box…; Docker Desktop's status is unknown until
+    /// its first check answers (R-0098). serviceGone: reached after the
+    /// launch's own two misses (R-0121).
+    private func makeFlow(at step: FirstRunStep, fromBoxList: Bool, memory: FirstRunMemory, serviceGone: Bool = false) -> FirstRunFlow {
+        guard let creating = daemon as? BoxCreating else {
+            return FirstRunFlow(service: UnavailableFirstRunService(), at: step, existing: boxes, fromBoxList: fromBoxList, memory: memory,
+                                docker: nil, serviceGone: serviceGone)
+        }
+        let service = KeyedFirstRunService(maker: BoxMaker(daemon: creating))
+        let flow = FirstRunFlow(service: service, at: step, existing: boxes, fromBoxList: fromBoxList, memory: memory,
+                                docker: nil, serviceGone: serviceGone)
+        service.keychainWaiting = { [weak flow] on in Task { @MainActor in flow?.keychainWaiting = on } }
+        return flow
+    }
+
     /// The box list's New Box…: first run's first-box step, titled "New
     /// box", with Cancel back to the list.
     func newBox() {
-        firstRun = FirstRunFlow(service: AppFirstRunService(), at: .firstBox, existing: boxes, fromBoxList: true)
+        firstRun = makeFlow(at: .firstBox, fromBoxList: true, memory: NoFirstRunMemory())
         launch = .firstRun(.firstBox)
     }
 
@@ -284,19 +321,12 @@ final class AppModel {
     }
 }
 
-/// Keys, the recovery key and creating a box from the app aren't built yet:
-/// they're data-loss paths and wait for their ADR and tests (PLAN.md 1.5,
-/// Open questions). Until then first run says so plainly, as a notice:
-/// dev builds name the CLI workaround; a release build never sends anyone
-/// to Terminal (GUIDELINES §10).
-struct AppFirstRunService: FirstRunService {
-    /// Lane and other dev builds have their own bundle identifier.
-    static var isDevBuild: Bool { Bundle.main.bundleIdentifier != AppMover.bundleID }
-    static let notYetDev = "Dev build: making keys and boxes from the app isn’t built yet. Make a box with portenv init, then open Portenv again."
-    static let notYet = "Making keys and boxes from the app isn’t ready yet."
-    private var message: String { Self.isDevBuild ? Self.notYetDev : Self.notYet }
-    func makeRecoveryKey() async throws -> String { throw FirstRunError(message, notBuilt: true) }
-    func createBox(_: NewBox) async throws { throw FirstRunError(message, notBuilt: true) }
+/// First run's keys and workspaces (ADR 0019): the recovery key and pool
+/// from KeyedFirstRunService, the workspace through BoxMaker and portenvd's
+/// CreateBox. Without a connection to portenvd at all, it says so plainly.
+struct UnavailableFirstRunService: FirstRunService {
+    func makeRecoveryKey() async throws -> String { throw FirstRunError(FirstRunText.noBackgroundService) }
+    func createBox(_: NewBox) async throws { throw FirstRunError(FirstRunText.noBackgroundService) }
 }
 
 /// The window's content, from the model's decision.
@@ -305,7 +335,9 @@ struct AppRoot: View {
 
     var body: some View {
         Group {
-            if let problem = model.problem {
+            if ServiceUpdates.shared.updating {
+                ServiceUpdatingView()
+            } else if let problem = model.problem {
                 VStack(spacing: 12) {
                     Text(problem.message).font(.title3).multilineTextAlignment(.center).frame(maxWidth: 460)
                     HStack(spacing: 12) {
@@ -339,7 +371,7 @@ struct AppRoot: View {
                 case .firstRun:
                     if let flow = model.firstRun {
                         FirstRunView(flow: flow, opened: { box in Task { await model.open(box) } },
-                                     cancel: flow.fromBoxList ? { model.cancelNewBox() } : nil)
+                                     cancel: flow.fromBoxList ? { model.cancelNewBox() } : nil, refill: model.refill)
                     }
                 case let .boxList(notice):
                     BoxListView(boxes: model.boxes, notice: notice,
@@ -368,5 +400,17 @@ struct AppRoot: View {
                                                           set: { if !$0 { model.moveError = nil } })) {
             Button("OK") { model.moveError = nil }
         }
+    }
+}
+
+/// While portenvd restarts after an update (R-0198).
+struct ServiceUpdatingView: View {
+    var body: some View {
+        VStack(spacing: 12) {
+            ProgressView().controlSize(.small)
+            Text(ServiceUpdate.updatingText).font(.title3)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityElement(children: .combine)
     }
 }

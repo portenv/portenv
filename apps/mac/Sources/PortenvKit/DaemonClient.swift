@@ -25,13 +25,34 @@ public final class DaemonClient: DaemonAPI, Sendable {
 
     deinit { grpc.beginGracefulShutdown() }
 
+    /// What the app does when a call hits a portenvd that doesn't know it
+    /// (R-0198): bring up the current one (ServiceUpdate); nil in tests.
+    public static let outOfDate = OutOfDateHook()
+
     /// Runs one call, turning gRPC's errors into a DaemonError with
-    /// portenvd's own plain message.
+    /// portenvd's own plain message. A call an older portenvd doesn't know
+    /// brings up the current one and is tried once more.
     private func call<T: Sendable>(_ body: () async throws -> T) async throws -> T {
+        do {
+            return try await callOnce(body)
+        } catch let e as DaemonError where e.message == DaemonError.outOfDate {
+            guard let fix = Self.outOfDate.fix else { throw e }
+            switch await fix() {
+            case .restarted: return try await callOnce(body)
+            case .current, .refused: throw DaemonError(ServiceUpdate.reinstall)
+            }
+        }
+    }
+
+    private func callOnce<T: Sendable>(_ body: () async throws -> T) async throws -> T {
         do {
             return try await body()
         } catch let e as RPCError {
-            throw DaemonError.fromRPC(message: e.message, unimplemented: e.code == .unimplemented, unavailable: e.code == .unavailable)
+            if e.metadata[stringValues: "portenv-refusal"].contains("open-elsewhere") {
+                throw DaemonError(e.message, openElsewhere: true)
+            }
+            throw DaemonError.fromRPC(message: DaemonErrorText.plain(code: e.code, message: e.message), unimplemented: e.code == .unimplemented,
+                                      unavailable: e.code == .unavailable || DaemonErrorText.isTransport(e.message))
         }
     }
 
@@ -54,15 +75,45 @@ public final class DaemonClient: DaemonAPI, Sendable {
     }
 
     public func boxes() async throws -> [String] {
-        try await call { try await api.listBoxes(.init()).boxes.map(\.box.name) }
+        // A box CreateBox hasn't finished is never opened (ADR 0019).
+        try await call { try await api.listBoxes(.init()).boxes.filter { !$0.creating }.map(\.box.name) }
     }
 
     public func servers() async throws -> [String] {
         try await call { try await api.listServers(.init()).servers }
     }
 
-    public func open(_ box: String) async throws {
-        _ = try await call { try await api.openBox(Self.named(box, Portenv_Daemon_V1_OpenBoxRequest.self)) }
+    public func open(_ box: String) async throws { try await open(box, takeOver: false) }
+
+    public func open(_ box: String, takeOver: Bool) async throws {
+        var req = Self.named(box, Portenv_Daemon_V1_OpenBoxRequest.self)
+        req.takeOver = takeOver
+        _ = try await call { try await api.openBox(req) }
+    }
+
+    public func connectThere(_ box: String) async throws {
+        var req = Self.named(box, Portenv_Daemon_V1_OpenBoxRequest.self)
+        req.connectThere = true
+        _ = try await call { try await api.openBox(req) }
+    }
+
+    public func placement(_ box: String, probe: Bool) async throws -> Placement {
+        var req = Portenv_Daemon_V1_GetPlacementRequest()
+        req.name = box
+        req.probe = probe
+        let r = try await call { try await api.getPlacement(req) }
+        let holder: Placement.Holder = switch r.holder {
+        case .knownServer: .knownServer(id: r.serverID, name: r.serverName)
+        case .otherMachine: .otherMachine(id: r.machine)
+        default: .none
+        }
+        let answers: Placement.Answers? = switch r.answers {
+        case .yes: .yes
+        case .no: .no
+        case .cannotAsk: .cannotAsk
+        default: nil
+        }
+        return Placement(holder: holder, newestSaveAt: r.hasNewestSaveAt ? r.newestSaveAt.date : nil, answers: answers)
     }
 
     public func close(_ box: String) async throws {
@@ -232,9 +283,65 @@ public final class DaemonClient: DaemonAPI, Sendable {
     }
 }
 
+extension DaemonClient: BoxCreating, RecoveryChecking {
+    public func listings() async throws -> [BoxListing] {
+        try await call {
+            try await api.listBoxes(.init()).boxes.map { BoxListing(name: $0.box.name, id: $0.box.id, creating: $0.creating, hasRecoveryKey: $0.carriesRecoveryKey) }
+        }
+    }
+
+    public func createBox(_ r: CreateRequest) async throws -> Bool {
+        var req = Portenv_Daemon_V1_CreateBoxRequest()
+        req.name = r.name
+        req.boxID = r.boxID
+        req.storage = r.storage
+        req.keys = r.keys
+        req.recoveryPassword = r.recoveryPassword
+        return try await creating { try await api.createBox(req).alreadyCreated }
+    }
+
+    public func checkRecoveryKey(_ passwords: [String: Data]) async throws -> RecoveryCheckResult {
+        var req = Portenv_Daemon_V1_CheckRecoveryKeyRequest()
+        req.recoveryPasswords = passwords
+        let r = try await creating { try await api.checkRecoveryKey(req) }
+        return RecoveryCheckResult(checked: Int(r.checked), opened: r.opened)
+    }
+
+    public func discardCreation(boxID: String) async throws {
+        _ = try await creating { try await api.discardCreation(.with { $0.boxID = boxID }) }
+    }
+
+    /// CreateBox's and DiscardCreation's errors, by what the app does.
+    private func creating<T: Sendable>(_ body: () async throws -> T) async throws -> T {
+        do {
+            return try await body()
+        } catch let e as RPCError {
+            // The app only makes this-Mac boxes, which every portenvd with
+            // CreateBox makes: Unimplemented is an older portenvd.
+            let message = e.code == .unimplemented ? DaemonError.outOfDate : DaemonErrorText.plain(code: e.code, message: e.message)
+            throw CreateBoxError(kind: CreateBoxError.Kind(grpcCode: Self.grpcCode(e.code)), message: message)
+        } catch {
+            throw CreateBoxError(kind: .daemonGone, message: DaemonErrorText.starting)
+        }
+    }
+
+    static func grpcCode(_ c: RPCError.Code) -> Int {
+        switch c {
+        case .invalidArgument: 3
+        case .deadlineExceeded: 4
+        case .alreadyExists: 6
+        case .failedPrecondition: 9
+        case .unimplemented: 12
+        case .unavailable: 14
+        default: 13
+        }
+    }
+}
+
 extension TabInfo {
     init(_ t: Portenv_Types_V1_Tab) {
-        self.init(id: t.id, name: t.name, active: t.active, program: t.program)
+        self.init(id: t.id, name: t.name, active: t.active, program: t.program,
+                  command: t.command, runningSince: t.hasRunningSince ? t.runningSince.date : nil)
     }
 }
 
@@ -274,5 +381,74 @@ extension BoxState {
         interrupted = r.interrupted
         storagePlace = r.storagePlace.isEmpty ? nil : r.storagePlace
         openedAt = r.hasOpenedAt ? r.openedAt.date : nil
+        restartedForSecurityUpdate = r.restartedForSecurityUpdate
+    }
+}
+
+extension DaemonClient: ServerKeys {
+    public func serverKeys() async throws -> [ServerKeyInfo] {
+        try await call { try await api.listServers(.init()).infos.map { Self.info($0) } }
+    }
+
+    public func scanServerKey(_ id: String) async throws -> ServerKeyInfo {
+        let r = try await call { try await api.scanServerKey(.with { $0.serverID = id }) }
+        return Self.info(r.info, keyType: r.keyType)
+    }
+
+    public func trustServerKey(_ id: String, fingerprint: String) async throws -> ServerKeyInfo {
+        let r = try await call { try await api.trustServerKey(.with { $0.serverID = id; $0.fingerprint = fingerprint }) }
+        return Self.info(r.info)
+    }
+
+    private static func info(_ i: Portenv_Daemon_V1_ServerInfo, keyType: String = "") -> ServerKeyInfo {
+        let state: ServerKeyInfo.State = switch i.state {
+        case .confirmed: .confirmed
+        case .changed: .changed
+        default: .unconfirmed
+        }
+        return ServerKeyInfo(id: i.id, name: i.name, state: state, fingerprint: i.fingerprint, fromKnownHosts: i.fromKnownHosts, keyType: keyType,
+                             wasChanged: i.wasChanged, madeKey: i.madeKey)
+    }
+}
+
+extension DaemonClient: ServerKeyHandover {
+    public func provideServerKey(_ id: String, seed: Data) async throws {
+        _ = try await call { try await api.provideServerKey(.with { $0.serverID = id; $0.key = seed }) }
+    }
+}
+
+/// Holds the app's out-of-date fix (DaemonClient.outOfDate).
+public final class OutOfDateHook: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _fix: (@Sendable () async -> ServiceUpdate.Outcome)?
+    public var fix: (@Sendable () async -> ServiceUpdate.Outcome)? {
+        get { lock.withLock { _fix } }
+        set { lock.withLock { _fix = newValue } }
+    }
+}
+
+/// The running portenvd, for ServiceUpdate: its build ID (GetVersion) and
+/// the executable behind its socket.
+public struct DaemonServiceBuild: ServiceBuild {
+    let socket: URL
+    let client: DaemonClient
+    /// The client reconnects by itself when portenvd restarts.
+    public init(client: DaemonClient, socket: URL = Binaries.socket) {
+        self.client = client
+        self.socket = socket
+    }
+
+    public func running() async -> RunningService? {
+        guard let id = try? await client.buildID() else { return nil }
+        return RunningService(buildID: id, executable: DaemonPeer.executable(socket: socket))
+    }
+}
+
+extension DaemonClient {
+    /// portenvd's build ID; empty for one older than build IDs.
+    public func buildID() async throws -> String {
+        var options = CallOptions.defaults
+        options.timeout = .seconds(2)
+        return try await callOnce { try await api.getVersion(.init(), options: options).build.buildID }
     }
 }

@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net"
 	"regexp"
+	"sync"
 	"time"
 
 	"google.golang.org/grpc"
@@ -28,6 +29,14 @@ const (
 	ChannelPort = 7700
 	// ChannelEnv set to "stdin" tells init that the secrets come on stdin.
 	ChannelEnv = "PORTENV_CHANNEL"
+	// BoxIDEnv is the box's ID, set by the driver when it makes the
+	// container (R-0172, R-0173). It's an environment variable rather than
+	// part of the secrets line because helpers in older images refuse a
+	// secrets line with a field they don't know (DisallowUnknownFields), so
+	// a new field there would stop older boxes from starting; an unknown
+	// variable is ignored. A container is made afresh for every start, so
+	// it never goes stale.
+	BoxIDEnv = "PORTENV_BOX_ID"
 )
 
 // The API process runs as portenv-agent from a copy of the agent with file
@@ -51,11 +60,39 @@ type apiServer struct {
 	keys *channelKeys
 	// tmux runs tmux as the main user (tmuxAs; a fake in tests).
 	tmux func(Config) (tmuxFunc, error)
+	// tmuxCmd builds a long-running tmux client as the main user
+	// (tmuxCmdAs), for the control-mode clients.
+	tmuxCmd func(Config) (tmuxCmdFunc, error)
+
+	hubMu sync.Mutex
+	hub   *ctlHub
+}
+
+// ctlHub returns the server's control-mode clients, made on first use.
+func (s *apiServer) ctlHub() (*ctlHub, error) {
+	s.hubMu.Lock()
+	defer s.hubMu.Unlock()
+	if s.hub != nil {
+		return s.hub, nil
+	}
+	if s.tmuxCmd == nil {
+		return nil, errors.New("no control-mode client here")
+	}
+	run, err := s.tmux(s.cfg)
+	if err != nil {
+		return nil, err
+	}
+	cmd, err := s.tmuxCmd(s.cfg)
+	if err != nil {
+		return nil, err
+	}
+	s.hub = newCtlHub(run, cmd)
+	return s.hub, nil
 }
 
 // newChannelServer serves the API with the channel's current secrets.
 func newChannelServer(cfg Config, keys *channelKeys) *grpc.Server {
-	s := &apiServer{cfg: cfg, keys: keys, tmux: tmuxAs}
+	s := &apiServer{cfg: cfg, keys: keys, tmux: tmuxAs, tmuxCmd: tmuxCmdAs}
 	srv := grpc.NewServer(
 		grpc.Creds(credentials.NewTLS(keys.tlsConfig())),
 		grpc.UnaryInterceptor(func(ctx context.Context, req any, _ *grpc.UnaryServerInfo, h grpc.UnaryHandler) (any, error) {

@@ -20,6 +20,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 
+	"github.com/portenv/portenv/core/agent"
 	"github.com/portenv/portenv/core/daemon"
 	"github.com/portenv/portenv/core/internal/bounded"
 	"github.com/portenv/portenv/core/local"
@@ -49,7 +50,11 @@ func dialDaemon(e *local.Env) (daemonv1.DaemonServiceClient, func(), error) {
 //	portenv app unregister-service  (dev builds: remove portenvd's login item; this portenv's app)
 //	portenv app move BOX this-mac|USER@HOST
 //	portenv app servers BOX         (the Move To targets, one per line)
+//	portenv app trust-server USER@HOST "TYPE BASE64"  (the owner's scripts only: add a server with its known host key; refused in a workspace)
+//	portenv app remove-server USER@HOST|NAME          (the owner only: drop a server and its key; refused in a workspace)
+//	portenv app forget-server USER@HOST|NAME          (the owner only: forget its key, keep it in Move To; refused in a workspace)
 //	portenv app ping                (exit 0 when portenvd answers)
+//	portenv app daemon-build        (the running portenvd's build ID, R-0198)
 //	portenv app state BOX           (the save state and location, JSON)
 //	portenv app channel BOX         (a runner's box channel for a Mac, JSON on stdout)
 //	portenv app network up|down     (the system's network status, from the app)
@@ -114,6 +119,19 @@ func cmdApp(ctx context.Context, e *local.Env, op string, args []string) error {
 	if op == "unregister-service" {
 		return unregisterService(ctx)
 	}
+	if op == "daemon-build" {
+		c, done, err := dialDaemon(e)
+		if err != nil {
+			return err
+		}
+		defer done()
+		r, err := c.GetVersion(ctx, &daemonv1.GetVersionRequest{})
+		if err != nil {
+			return plain(err)
+		}
+		fmt.Println(r.GetBuild().GetBuildId())
+		return nil
+	}
 	if op == "ping" {
 		c, done, err := dialDaemon(e)
 		if err != nil {
@@ -126,16 +144,48 @@ func cmdApp(ctx context.Context, e *local.Env, op string, args []string) error {
 		fmt.Println("portenvd is running")
 		return nil
 	}
+	// For the owner's scripts that set the server up and so know its host
+	// key; the app confirms a server through ScanServerKey and
+	// TrustServerKey instead. It pins a key nobody looked at, so it's never
+	// run from inside a workspace, where an agent could pin a server for the
+	// owner (R-0183).
+	if (op == "trust-server" || op == "remove-server" || op == "forget-server") && insideWorkspace() {
+		return fmt.Errorf("app %s is for this Mac's owner, not from inside a workspace", op)
+	}
+	if op == "trust-server" {
+		if len(args) != 2 {
+			return usageError{Msg: `app trust-server needs USER@HOST and its host key, "TYPE BASE64"`}
+		}
+		return e.PinServerKey(args[0], args[1])
+	}
+	// Until the app can forget a key (Settings › Servers, or the wizard):
+	// unconfirmed, still in Move To, asked about at the next launch.
+	if op == "forget-server" {
+		if len(args) != 1 {
+			return usageError{Msg: "app forget-server needs USER@HOST or the server's name"}
+		}
+		id, err := e.ServerIDByName(args[0])
+		if err != nil {
+			return err
+		}
+		return e.ForgetServerKey(id)
+	}
+	if op == "remove-server" {
+		if len(args) != 1 {
+			return usageError{Msg: "app remove-server needs USER@HOST"}
+		}
+		return e.RemoveServer(args[0])
+	}
 	if len(args) < 1 {
 		return usageError{Msg: "app needs a box name"}
 	}
 	name := args[0]
 	if op == "servers" {
-		mc, err := e.MachineConfig()
+		servers, err := e.ServerTargets()
 		if err != nil {
 			return err
 		}
-		for _, s := range mc.Servers {
+		for _, s := range servers {
 			fmt.Println(s)
 		}
 		return nil
@@ -256,6 +306,27 @@ func cmdApp(ctx context.Context, e *local.Env, op string, args []string) error {
 		}
 		_, err = os.Stdout.Write(append(b, '\n'))
 		return err
+	case "placement":
+		r, err := c.GetPlacement(ctx, &daemonv1.GetPlacementRequest{Name: name, Probe: true})
+		if err != nil {
+			return plain(err)
+		}
+		var at time.Time
+		if r.GetNewestSaveAt() != nil {
+			at = r.GetNewestSaveAt().AsTime()
+		}
+		b, err := json.Marshal(struct {
+			Holder       string    `json:"holder"`
+			ServerID     string    `json:"server_id,omitempty"`
+			ServerName   string    `json:"server_name,omitempty"`
+			Machine      string    `json:"machine,omitempty"`
+			NewestSaveAt time.Time `json:"newest_save_at,omitzero"`
+			Answers      string    `json:"answers,omitempty"`
+		}{r.GetHolder().String(), r.GetServerId(), r.GetServerName(), r.GetMachine(), at, r.GetAnswers().String()})
+		if err != nil {
+			return err
+		}
+		summary = string(b)
 	case "state":
 		r, err := c.GetBoxState(ctx, &daemonv1.GetBoxStateRequest{Name: name})
 		if err != nil {
@@ -419,4 +490,14 @@ func unregisterService(ctx context.Context) error {
 	}
 	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
 	return cmd.Run()
+}
+
+// insideWorkspace: this runs in a box, which the driver marks with its ID
+// (agent.BoxIDEnv), or next to the box agent's socket.
+func insideWorkspace() bool {
+	if os.Getenv(agent.BoxIDEnv) != "" {
+		return true
+	}
+	_, err := os.Stat(filepath.Dir(agent.DefaultSocket))
+	return err == nil
 }

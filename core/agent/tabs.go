@@ -6,6 +6,7 @@ import (
 	"context"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -14,6 +15,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	typesv1 "github.com/portenv/portenv/proto/gen/go/portenv/types/v1"
 )
@@ -36,6 +38,16 @@ type tabs struct {
 	// session's windows (view), so its current tab is its own: one viewer
 	// choosing a tab never moves another's.
 	viewer string
+	// procRoot is /proc, where a tab's running command is read ("" means
+	// /proc; tests point it elsewhere).
+	procRoot string
+}
+
+func (t tabs) proc() string {
+	if t.procRoot != "" {
+		return t.procRoot
+	}
+	return "/proc"
 }
 
 // viewerRE is a viewer's name: short, lower case, plain.
@@ -64,10 +76,23 @@ var tmuxOwned = []string{
 	";", "set-option", "-g", "automatic-rename", "off",
 }
 
+// tmuxSealed are tmux options chained after new-session that keep tmux from
+// reaching the Mac through the app's terminal (R-0133): copy mode's copies
+// never set the terminal's clipboard (OSC 52), and a program's escape
+// sequences are never passed through. They're the second line: a program in
+// the workspace runs as the same user as tmux and could set them back, and
+// tmux 3.4 sends `tmux set-buffer -w` to the client as OSC 52 even with
+// set-clipboard off. The app's terminal drops every clipboard request
+// (TerminalGuard); that's the boundary.
+var tmuxSealed = []string{
+	";", "set-option", "-g", "set-clipboard", "off",
+	";", "set-option", "-g", "allow-passthrough", "off",
+}
+
 // windowIDRE is a tmux window ID, the only form of tab ID accepted.
 var windowIDRE = regexp.MustCompile(`^@[0-9]{1,9}$`)
 
-// tabsPoll is how often a watch looks at the session's windows.
+// tabsPoll is how often the fallback watch looks at the session's windows.
 var tabsPoll = 300 * time.Millisecond
 
 // checkTabName: 1 to 32 characters, no control characters, no surrounding
@@ -103,7 +128,7 @@ func (t tabs) ensure(ctx context.Context) error {
 		return status.Error(codes.InvalidArgument, "viewer names are 1 to 16 lower-case letters, digits or -")
 	}
 	base := append([]string{"new-session", "-d", "-s", t.session, "-n", firstTabName}, tmuxHidden...)
-	if err := t.create(ctx, t.session, append(base, tmuxOwned...)); err != nil {
+	if err := t.create(ctx, t.session, append(append(base, tmuxOwned...), tmuxSealed...)); err != nil {
 		return err
 	}
 	if t.viewer == "" {
@@ -144,21 +169,34 @@ func (t tabs) list(ctx context.Context) ([]*typesv1.Tab, error) {
 	if err := t.ensure(ctx); err != nil {
 		return nil, err
 	}
-	out, err := t.tmux(ctx, "list-windows", "-t", t.target(), "-F", "#{window_id}\t#{window_active}\t#{pane_current_command}\t#{window_name}")
+	out, err := t.tmux(ctx, "list-windows", "-t", t.target(), "-F", "#{window_id}\t#{window_active}\t#{pane_current_command}\t#{pane_pid}\t#{window_name}")
 	if err != nil {
 		return nil, status.Errorf(codes.Unavailable, "list tabs: %v", err)
 	}
 	var ts []*typesv1.Tab
 	for _, line := range strings.Split(strings.TrimRight(out, "\n"), "\n") {
-		f := strings.SplitN(line, "\t", 4)
-		if len(f) != 4 || !windowIDRE.MatchString(f[0]) {
+		f := strings.SplitN(line, "\t", 5)
+		if len(f) != 5 || !windowIDRE.MatchString(f[0]) {
 			continue
 		}
 		program := f[2]
 		if shells[program] {
 			program = ""
 		}
-		ts = append(ts, &typesv1.Tab{Id: f[0], Name: f[3], Active: f[1] == "1", Program: program})
+		tab := &typesv1.Tab{Id: f[0], Name: f[4], Active: f[1] == "1", Program: program}
+		// The whole command line, for the Move confirmation: to the app
+		// only, never logged (2.3, R-0140). Read whatever the program's
+		// name: a script run with sh is a command still running, though
+		// tmux names it after its shell.
+		if pid, err := strconv.Atoi(f[3]); err == nil {
+			if cmd, since, ok := foregroundCommand(t.proc(), pid, userHZ); ok {
+				tab.Command = cmd
+				if !since.IsZero() {
+					tab.RunningSince = timestamppb.New(since)
+				}
+			}
+		}
+		ts = append(ts, tab)
 	}
 	return ts, nil
 }
@@ -173,7 +211,7 @@ func (t tabs) find(ctx context.Context, id string) ([]*typesv1.Tab, error) {
 		return nil, err
 	}
 	if !slices.ContainsFunc(ts, func(x *typesv1.Tab) bool { return x.GetId() == id }) {
-		return nil, status.Errorf(codes.NotFound, "no tab %s in this box", id)
+		return nil, status.Errorf(codes.NotFound, "no tab %s in this workspace", id)
 	}
 	return ts, nil
 }
@@ -204,7 +242,7 @@ func (t tabs) close(ctx context.Context, id string) error {
 		return err
 	}
 	if len(ts) == 1 {
-		return status.Error(codes.FailedPrecondition, "a box keeps at least one tab")
+		return status.Error(codes.FailedPrecondition, "a workspace keeps at least one tab")
 	}
 	if _, err := t.tmux(ctx, "kill-window", "-t", id); err != nil {
 		return status.Errorf(codes.Unavailable, "close tab: %v", err)
@@ -237,8 +275,89 @@ func (t tabs) selectTab(ctx context.Context, id string) error {
 	return nil
 }
 
+// tabsSafety is how often an event-driven watch lists the tabs anyway: a
+// tab's foreground program can change without any control-mode event.
+var tabsSafety = 2 * time.Second
+
+// outputRelist is the least time between lists caused by output (a new
+// program in a tab usually prints), so busy output doesn't mean busy tmux.
+var outputRelist = time.Second
+
+// watchEvents sends the tabs at once, then again when control-mode events
+// say they may have changed (ADR 0020, decision 2): a window added, closed
+// or renamed, another session's current window, output (at most once per
+// outputRelist), a dropped line or a restarted client; and every safety as
+// a backstop for program changes that print nothing.
+func (t tabs) watchEvents(ctx context.Context, sub *ctlSub, safety time.Duration, send func([]*typesv1.Tab) error) error {
+	var last []*typesv1.Tab
+	sendIfChanged := func(first bool) error {
+		ts, err := t.list(ctx)
+		if err != nil {
+			if ctx.Err() != nil {
+				return nil
+			}
+			return err
+		}
+		if first || !sameTabs(ts, last) {
+			if err := send(ts); err != nil {
+				return err
+			}
+			last = ts
+		}
+		return nil
+	}
+	if err := sendIfChanged(true); err != nil {
+		return err
+	}
+	tick := time.NewTicker(safety)
+	defer tick.Stop()
+	var outputDue <-chan time.Time
+	lastOutputList := time.Time{}
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-tick.C:
+		case <-outputDue:
+			outputDue = nil
+		case <-sub.kick:
+			relist, output := false, false
+			for _, e := range sub.take() {
+				switch e.kind {
+				case ctlSessionGone:
+					// The watch ends; the app watches again, which makes the
+					// session and a new client.
+					return nil
+				case ctlOutput:
+					output = true
+				case ctlOther, ctlReply:
+				default:
+					relist = true
+				}
+			}
+			if !relist {
+				if !output || outputDue != nil {
+					continue
+				}
+				if wait := outputRelist - time.Since(lastOutputList); wait > 0 {
+					outputDue = time.After(wait)
+					continue
+				}
+			}
+		}
+		lastOutputList = time.Now()
+		if err := sendIfChanged(false); err != nil {
+			return err
+		}
+		if ctx.Err() != nil {
+			return nil
+		}
+	}
+}
+
 // watch sends the tabs at once and again whenever they change, until ctx
-// ends or send fails.
+// ends or send fails, by listing them every interval: the fallback when
+// control mode can't be used (a tmux older than minTmux).
 func (t tabs) watch(ctx context.Context, every time.Duration, send func([]*typesv1.Tab) error) error {
 	var last []*typesv1.Tab
 	for first := true; ; first = false {

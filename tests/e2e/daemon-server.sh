@@ -40,7 +40,7 @@ cleanup() {
 trap cleanup EXIT
 
 mkdir -p "$root/mac"
-printf '{"servers": ["%s"]}\n' "$target" > "$root/mac/machine.json"
+"$portenv" app trust-server "$target" "$host_key" # the server's own SSH host key, pinned (ADR 0021)
 "$portenv" init "$box" --image "$image" --storage "sftp:portenv-storage@${target#*@}:/storage" --storage-host-key "$host_key" --storage-rest 127.0.0.1:7422 > "$root/init.txt"
 pub=$(grep '^ssh-ed25519 ' "$root/init.txt")
 rest_user=$(sed -n 's/^rest-user //p' "$root/init.txt")
@@ -65,7 +65,7 @@ echo "  on this Mac: ${sum:-(none read)}"
 t0=$(python3 -c 'import time; print(time.time())')
 out=$("$portenv" app move "$box" "$target" 2>&1) || true; echo "  $out"
 t1=$(python3 -c 'import time; print(time.time())')
-# Exactly MoveBox's success line: "box is open on $target since …" (a
+# Exactly MoveBox's success line: "workspace is open on $target since …" (a
 # lease error) must not pass (#58).
 expect "Move To ▸ $target ($(python3 -c "print(round($t1 - $t0, 1))") s)" grep -qxF "open on $target" <<<"$out"
 on_server() { R sudo docker exec -u work -w /home/work "portenv-$(box_id)" bash -lc "'$*'"; }

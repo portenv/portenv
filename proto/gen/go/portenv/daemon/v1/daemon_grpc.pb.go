@@ -44,7 +44,6 @@ const (
 	DaemonService_ProvideKeys_FullMethodName           = "/portenv.daemon.v1.DaemonService/ProvideKeys"
 	DaemonService_Relaunch_FullMethodName              = "/portenv.daemon.v1.DaemonService/Relaunch"
 	DaemonService_ListServers_FullMethodName           = "/portenv.daemon.v1.DaemonService/ListServers"
-	DaemonService_GetEngine_FullMethodName             = "/portenv.daemon.v1.DaemonService/GetEngine"
 	DaemonService_GetKeyIDs_FullMethodName             = "/portenv.daemon.v1.DaemonService/GetKeyIDs"
 	DaemonService_SaveNow_FullMethodName               = "/portenv.daemon.v1.DaemonService/SaveNow"
 	DaemonService_ListSaves_FullMethodName             = "/portenv.daemon.v1.DaemonService/ListSaves"
@@ -60,6 +59,14 @@ const (
 	DaemonService_CreateBox_FullMethodName             = "/portenv.daemon.v1.DaemonService/CreateBox"
 	DaemonService_DiscardCreation_FullMethodName       = "/portenv.daemon.v1.DaemonService/DiscardCreation"
 	DaemonService_RecoverBox_FullMethodName            = "/portenv.daemon.v1.DaemonService/RecoverBox"
+	DaemonService_CheckRecoveryKey_FullMethodName      = "/portenv.daemon.v1.DaemonService/CheckRecoveryKey"
+	DaemonService_GetPlacement_FullMethodName          = "/portenv.daemon.v1.DaemonService/GetPlacement"
+	DaemonService_TabTerminal_FullMethodName           = "/portenv.daemon.v1.DaemonService/TabTerminal"
+	DaemonService_ScanServerKey_FullMethodName         = "/portenv.daemon.v1.DaemonService/ScanServerKey"
+	DaemonService_TrustServerKey_FullMethodName        = "/portenv.daemon.v1.DaemonService/TrustServerKey"
+	DaemonService_ForgetServerKey_FullMethodName       = "/portenv.daemon.v1.DaemonService/ForgetServerKey"
+	DaemonService_ProvideServerKey_FullMethodName      = "/portenv.daemon.v1.DaemonService/ProvideServerKey"
+	DaemonService_GetEngine_FullMethodName             = "/portenv.daemon.v1.DaemonService/GetEngine"
 )
 
 // DaemonServiceClient is the client API for DaemonService service.
@@ -121,11 +128,6 @@ type DaemonServiceClient interface {
 	Relaunch(ctx context.Context, in *RelaunchRequest, opts ...grpc.CallOption) (*RelaunchResponse, error)
 	// The servers a box can move to (Move To), as user@host.
 	ListServers(ctx context.Context, in *ListServersRequest, opts ...grpc.CallOption) (*ListServersResponse, error)
-	// Whether this Mac's box engine answers (Docker Desktop is running), for
-	// Welcome's Docker card and the state line (R-0098). It only asks the
-	// engine: it never starts anything. portenvd gives the engine 1.5 s;
-	// the app waits 3 s for the answer.
-	GetEngine(ctx context.Context, in *GetEngineRequest, opts ...grpc.CallOption) (*GetEngineResponse, error)
 	// The Keychain items the app reads for a box (service
 	// dev.portenv.repository): its repository key, and its storage keys.
 	GetKeyIDs(ctx context.Context, in *GetKeyIDsRequest, opts ...grpc.CallOption) (*GetKeyIDsResponse, error)
@@ -172,6 +174,43 @@ type DaemonServiceClient interface {
 	// repository key, checks it, and writes the box's config. Idempotent on
 	// box_id. Never logged.
 	RecoverBox(ctx context.Context, in *RecoverBoxRequest, opts ...grpc.CallOption) (*RecoverBoxResponse, error)
+	// Checks a typed recovery key before the app refills its pool from it
+	// (ADR 0019): the recovery-derived passwords, one per box ID, are tried
+	// against the boxes here that carry a recovery key. Read-only. Never
+	// logged.
+	CheckRecoveryKey(ctx context.Context, in *CheckRecoveryKeyRequest, opts ...grpc.CallOption) (*CheckRecoveryKeyResponse, error)
+	// Where a box is open when it isn't this Mac (2.3, the lease sheet): the
+	// place, its newest save, and whether it answers. A known server is asked
+	// with `portenv app ping`, within 2 s; another machine can't be asked.
+	// OpenBox's refusal for a box open elsewhere carries the trailer
+	// portenv-refusal: open-elsewhere, and the app asks this then.
+	GetPlacement(ctx context.Context, in *GetPlacementRequest, opts ...grpc.CallOption) (*GetPlacementResponse, error)
+	// One tab's terminal (ADR 0020), relayed to the workspace helper's
+	// TabTerminal as Terminal is: same socket, same box routing, on this Mac
+	// or on a server. The first message must be open. portenvd sets the
+	// stream's author from the connection's caller; nothing in the request
+	// can, and the open has no author field.
+	TabTerminal(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[TabTerminalRequest, TabTerminalResponse], error)
+	// A server's host key (2.9, ADR 0021, R-0180), found through ssh itself
+	// and compared, read only, with this Mac's SSH known hosts: the same key
+	// confirms the server; a different one marks it changed. A server that
+	// isn't confirmed is never contacted.
+	ScanServerKey(ctx context.Context, in *ScanServerKeyRequest, opts ...grpc.CallOption) (*ScanServerKeyResponse, error)
+	// Pin the key the last scan found, given the fingerprint the person saw.
+	// A changed key can't be trusted: only Forget gets past it.
+	TrustServerKey(ctx context.Context, in *TrustServerKeyRequest, opts ...grpc.CallOption) (*TrustServerKeyResponse, error)
+	// Drop the server's pinned key: it is unconfirmed again.
+	ForgetServerKey(ctx context.Context, in *ForgetServerKeyRequest, opts ...grpc.CallOption) (*ForgetServerKeyResponse, error)
+	// A made key's private half (2.9 1b, ADR 0021), read by the app from the
+	// Keychain and held in portenvd's memory only, like ProvideKeys: never
+	// written, never logged. It signs in once per shared connection, through
+	// an agent of portenvd's own for that one run.
+	ProvideServerKey(ctx context.Context, in *ProvideServerKeyRequest, opts ...grpc.CallOption) (*ProvideServerKeyResponse, error)
+	// Whether this Mac's box engine answers (Docker Desktop is running), for
+	// Welcome's Docker card and the state line (R-0098). It only asks the
+	// engine: it never starts anything. portenvd gives the engine 1.5 s;
+	// the app waits 3 s for the answer.
+	GetEngine(ctx context.Context, in *GetEngineRequest, opts ...grpc.CallOption) (*GetEngineResponse, error)
 }
 
 type daemonServiceClient struct {
@@ -384,16 +423,6 @@ func (c *daemonServiceClient) ListServers(ctx context.Context, in *ListServersRe
 	return out, nil
 }
 
-func (c *daemonServiceClient) GetEngine(ctx context.Context, in *GetEngineRequest, opts ...grpc.CallOption) (*GetEngineResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(GetEngineResponse)
-	err := c.cc.Invoke(ctx, DaemonService_GetEngine_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func (c *daemonServiceClient) GetKeyIDs(ctx context.Context, in *GetKeyIDsRequest, opts ...grpc.CallOption) (*GetKeyIDsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetKeyIDsResponse)
@@ -553,6 +582,89 @@ func (c *daemonServiceClient) RecoverBox(ctx context.Context, in *RecoverBoxRequ
 	return out, nil
 }
 
+func (c *daemonServiceClient) CheckRecoveryKey(ctx context.Context, in *CheckRecoveryKeyRequest, opts ...grpc.CallOption) (*CheckRecoveryKeyResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CheckRecoveryKeyResponse)
+	err := c.cc.Invoke(ctx, DaemonService_CheckRecoveryKey_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) GetPlacement(ctx context.Context, in *GetPlacementRequest, opts ...grpc.CallOption) (*GetPlacementResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetPlacementResponse)
+	err := c.cc.Invoke(ctx, DaemonService_GetPlacement_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) TabTerminal(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[TabTerminalRequest, TabTerminalResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &DaemonService_ServiceDesc.Streams[3], DaemonService_TabTerminal_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[TabTerminalRequest, TabTerminalResponse]{ClientStream: stream}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type DaemonService_TabTerminalClient = grpc.BidiStreamingClient[TabTerminalRequest, TabTerminalResponse]
+
+func (c *daemonServiceClient) ScanServerKey(ctx context.Context, in *ScanServerKeyRequest, opts ...grpc.CallOption) (*ScanServerKeyResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ScanServerKeyResponse)
+	err := c.cc.Invoke(ctx, DaemonService_ScanServerKey_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) TrustServerKey(ctx context.Context, in *TrustServerKeyRequest, opts ...grpc.CallOption) (*TrustServerKeyResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(TrustServerKeyResponse)
+	err := c.cc.Invoke(ctx, DaemonService_TrustServerKey_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) ForgetServerKey(ctx context.Context, in *ForgetServerKeyRequest, opts ...grpc.CallOption) (*ForgetServerKeyResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ForgetServerKeyResponse)
+	err := c.cc.Invoke(ctx, DaemonService_ForgetServerKey_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) ProvideServerKey(ctx context.Context, in *ProvideServerKeyRequest, opts ...grpc.CallOption) (*ProvideServerKeyResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ProvideServerKeyResponse)
+	err := c.cc.Invoke(ctx, DaemonService_ProvideServerKey_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) GetEngine(ctx context.Context, in *GetEngineRequest, opts ...grpc.CallOption) (*GetEngineResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetEngineResponse)
+	err := c.cc.Invoke(ctx, DaemonService_GetEngine_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DaemonServiceServer is the server API for DaemonService service.
 // All implementations must embed UnimplementedDaemonServiceServer
 // for forward compatibility.
@@ -612,11 +724,6 @@ type DaemonServiceServer interface {
 	Relaunch(context.Context, *RelaunchRequest) (*RelaunchResponse, error)
 	// The servers a box can move to (Move To), as user@host.
 	ListServers(context.Context, *ListServersRequest) (*ListServersResponse, error)
-	// Whether this Mac's box engine answers (Docker Desktop is running), for
-	// Welcome's Docker card and the state line (R-0098). It only asks the
-	// engine: it never starts anything. portenvd gives the engine 1.5 s;
-	// the app waits 3 s for the answer.
-	GetEngine(context.Context, *GetEngineRequest) (*GetEngineResponse, error)
 	// The Keychain items the app reads for a box (service
 	// dev.portenv.repository): its repository key, and its storage keys.
 	GetKeyIDs(context.Context, *GetKeyIDsRequest) (*GetKeyIDsResponse, error)
@@ -663,6 +770,43 @@ type DaemonServiceServer interface {
 	// repository key, checks it, and writes the box's config. Idempotent on
 	// box_id. Never logged.
 	RecoverBox(context.Context, *RecoverBoxRequest) (*RecoverBoxResponse, error)
+	// Checks a typed recovery key before the app refills its pool from it
+	// (ADR 0019): the recovery-derived passwords, one per box ID, are tried
+	// against the boxes here that carry a recovery key. Read-only. Never
+	// logged.
+	CheckRecoveryKey(context.Context, *CheckRecoveryKeyRequest) (*CheckRecoveryKeyResponse, error)
+	// Where a box is open when it isn't this Mac (2.3, the lease sheet): the
+	// place, its newest save, and whether it answers. A known server is asked
+	// with `portenv app ping`, within 2 s; another machine can't be asked.
+	// OpenBox's refusal for a box open elsewhere carries the trailer
+	// portenv-refusal: open-elsewhere, and the app asks this then.
+	GetPlacement(context.Context, *GetPlacementRequest) (*GetPlacementResponse, error)
+	// One tab's terminal (ADR 0020), relayed to the workspace helper's
+	// TabTerminal as Terminal is: same socket, same box routing, on this Mac
+	// or on a server. The first message must be open. portenvd sets the
+	// stream's author from the connection's caller; nothing in the request
+	// can, and the open has no author field.
+	TabTerminal(grpc.BidiStreamingServer[TabTerminalRequest, TabTerminalResponse]) error
+	// A server's host key (2.9, ADR 0021, R-0180), found through ssh itself
+	// and compared, read only, with this Mac's SSH known hosts: the same key
+	// confirms the server; a different one marks it changed. A server that
+	// isn't confirmed is never contacted.
+	ScanServerKey(context.Context, *ScanServerKeyRequest) (*ScanServerKeyResponse, error)
+	// Pin the key the last scan found, given the fingerprint the person saw.
+	// A changed key can't be trusted: only Forget gets past it.
+	TrustServerKey(context.Context, *TrustServerKeyRequest) (*TrustServerKeyResponse, error)
+	// Drop the server's pinned key: it is unconfirmed again.
+	ForgetServerKey(context.Context, *ForgetServerKeyRequest) (*ForgetServerKeyResponse, error)
+	// A made key's private half (2.9 1b, ADR 0021), read by the app from the
+	// Keychain and held in portenvd's memory only, like ProvideKeys: never
+	// written, never logged. It signs in once per shared connection, through
+	// an agent of portenvd's own for that one run.
+	ProvideServerKey(context.Context, *ProvideServerKeyRequest) (*ProvideServerKeyResponse, error)
+	// Whether this Mac's box engine answers (Docker Desktop is running), for
+	// Welcome's Docker card and the state line (R-0098). It only asks the
+	// engine: it never starts anything. portenvd gives the engine 1.5 s;
+	// the app waits 3 s for the answer.
+	GetEngine(context.Context, *GetEngineRequest) (*GetEngineResponse, error)
 	mustEmbedUnimplementedDaemonServiceServer()
 }
 
@@ -730,9 +874,6 @@ func (UnimplementedDaemonServiceServer) Relaunch(context.Context, *RelaunchReque
 func (UnimplementedDaemonServiceServer) ListServers(context.Context, *ListServersRequest) (*ListServersResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListServers not implemented")
 }
-func (UnimplementedDaemonServiceServer) GetEngine(context.Context, *GetEngineRequest) (*GetEngineResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method GetEngine not implemented")
-}
 func (UnimplementedDaemonServiceServer) GetKeyIDs(context.Context, *GetKeyIDsRequest) (*GetKeyIDsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetKeyIDs not implemented")
 }
@@ -777,6 +918,30 @@ func (UnimplementedDaemonServiceServer) DiscardCreation(context.Context, *Discar
 }
 func (UnimplementedDaemonServiceServer) RecoverBox(context.Context, *RecoverBoxRequest) (*RecoverBoxResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method RecoverBox not implemented")
+}
+func (UnimplementedDaemonServiceServer) CheckRecoveryKey(context.Context, *CheckRecoveryKeyRequest) (*CheckRecoveryKeyResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CheckRecoveryKey not implemented")
+}
+func (UnimplementedDaemonServiceServer) GetPlacement(context.Context, *GetPlacementRequest) (*GetPlacementResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetPlacement not implemented")
+}
+func (UnimplementedDaemonServiceServer) TabTerminal(grpc.BidiStreamingServer[TabTerminalRequest, TabTerminalResponse]) error {
+	return status.Error(codes.Unimplemented, "method TabTerminal not implemented")
+}
+func (UnimplementedDaemonServiceServer) ScanServerKey(context.Context, *ScanServerKeyRequest) (*ScanServerKeyResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ScanServerKey not implemented")
+}
+func (UnimplementedDaemonServiceServer) TrustServerKey(context.Context, *TrustServerKeyRequest) (*TrustServerKeyResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method TrustServerKey not implemented")
+}
+func (UnimplementedDaemonServiceServer) ForgetServerKey(context.Context, *ForgetServerKeyRequest) (*ForgetServerKeyResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ForgetServerKey not implemented")
+}
+func (UnimplementedDaemonServiceServer) ProvideServerKey(context.Context, *ProvideServerKeyRequest) (*ProvideServerKeyResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ProvideServerKey not implemented")
+}
+func (UnimplementedDaemonServiceServer) GetEngine(context.Context, *GetEngineRequest) (*GetEngineResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetEngine not implemented")
 }
 func (UnimplementedDaemonServiceServer) mustEmbedUnimplementedDaemonServiceServer() {}
 func (UnimplementedDaemonServiceServer) testEmbeddedByValue()                       {}
@@ -1123,24 +1288,6 @@ func _DaemonService_ListServers_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
-func _DaemonService_GetEngine_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetEngineRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(DaemonServiceServer).GetEngine(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: DaemonService_GetEngine_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DaemonServiceServer).GetEngine(ctx, req.(*GetEngineRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 func _DaemonService_GetKeyIDs_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetKeyIDsRequest)
 	if err := dec(in); err != nil {
@@ -1404,6 +1551,139 @@ func _DaemonService_RecoverBox_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _DaemonService_CheckRecoveryKey_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CheckRecoveryKeyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).CheckRecoveryKey(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_CheckRecoveryKey_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).CheckRecoveryKey(ctx, req.(*CheckRecoveryKeyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_GetPlacement_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetPlacementRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).GetPlacement(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_GetPlacement_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).GetPlacement(ctx, req.(*GetPlacementRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_TabTerminal_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(DaemonServiceServer).TabTerminal(&grpc.GenericServerStream[TabTerminalRequest, TabTerminalResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type DaemonService_TabTerminalServer = grpc.BidiStreamingServer[TabTerminalRequest, TabTerminalResponse]
+
+func _DaemonService_ScanServerKey_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ScanServerKeyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).ScanServerKey(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_ScanServerKey_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).ScanServerKey(ctx, req.(*ScanServerKeyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_TrustServerKey_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(TrustServerKeyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).TrustServerKey(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_TrustServerKey_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).TrustServerKey(ctx, req.(*TrustServerKeyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_ForgetServerKey_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ForgetServerKeyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).ForgetServerKey(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_ForgetServerKey_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).ForgetServerKey(ctx, req.(*ForgetServerKeyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_ProvideServerKey_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ProvideServerKeyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).ProvideServerKey(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_ProvideServerKey_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).ProvideServerKey(ctx, req.(*ProvideServerKeyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_GetEngine_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetEngineRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).GetEngine(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_GetEngine_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).GetEngine(ctx, req.(*GetEngineRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // DaemonService_ServiceDesc is the grpc.ServiceDesc for DaemonService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1480,10 +1760,6 @@ var DaemonService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _DaemonService_ListServers_Handler,
 		},
 		{
-			MethodName: "GetEngine",
-			Handler:    _DaemonService_GetEngine_Handler,
-		},
-		{
 			MethodName: "GetKeyIDs",
 			Handler:    _DaemonService_GetKeyIDs_Handler,
 		},
@@ -1539,6 +1815,34 @@ var DaemonService_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "RecoverBox",
 			Handler:    _DaemonService_RecoverBox_Handler,
 		},
+		{
+			MethodName: "CheckRecoveryKey",
+			Handler:    _DaemonService_CheckRecoveryKey_Handler,
+		},
+		{
+			MethodName: "GetPlacement",
+			Handler:    _DaemonService_GetPlacement_Handler,
+		},
+		{
+			MethodName: "ScanServerKey",
+			Handler:    _DaemonService_ScanServerKey_Handler,
+		},
+		{
+			MethodName: "TrustServerKey",
+			Handler:    _DaemonService_TrustServerKey_Handler,
+		},
+		{
+			MethodName: "ForgetServerKey",
+			Handler:    _DaemonService_ForgetServerKey_Handler,
+		},
+		{
+			MethodName: "ProvideServerKey",
+			Handler:    _DaemonService_ProvideServerKey_Handler,
+		},
+		{
+			MethodName: "GetEngine",
+			Handler:    _DaemonService_GetEngine_Handler,
+		},
 	},
 	Streams: []grpc.StreamDesc{
 		{
@@ -1556,6 +1860,12 @@ var DaemonService_ServiceDesc = grpc.ServiceDesc{
 			StreamName:    "WatchTabs",
 			Handler:       _DaemonService_WatchTabs_Handler,
 			ServerStreams: true,
+		},
+		{
+			StreamName:    "TabTerminal",
+			Handler:       _DaemonService_TabTerminal_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
 		},
 	},
 	Metadata: "portenv/daemon/v1/daemon.proto",

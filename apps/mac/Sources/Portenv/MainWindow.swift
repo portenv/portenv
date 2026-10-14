@@ -11,10 +11,14 @@ struct MainWindow: View {
     @Bindable var tabs: TabsController
     /// The inspector's open state, remembered for this box's window (§6).
     @AppStorage private var inspectorOpen: Bool
+    /// Renders only (ScreenRenders): a sample terminal in place of
+    /// `portenv attach`.
+    private let renderTerminal: (() -> NSView)?
 
-    init(controller: BoxController, tabs: TabsController) {
+    init(controller: BoxController, tabs: TabsController, renderTerminal: (() -> NSView)? = nil) {
         self.controller = controller
         self.tabs = tabs
+        self.renderTerminal = renderTerminal
         _inspectorOpen = AppStorage(wrappedValue: false, InspectorToggle.key(controller.box))
     }
 
@@ -26,8 +30,9 @@ struct MainWindow: View {
                 InspectorView(
                     content: InspectorContent(box: controller, tabs: tabs),
                     yourInitial: String(NSFullUserName().prefix(1)).uppercased(),
-                    moveTargets: moveTargets,
-                    move: { target in Task { await controller.move(to: target) } },
+                    moveMenu: controller.moveMenu,
+                    move: { target in Task { await controller.requestMove(to: target) } },
+                    run: { action in Task { await controller.run(action) } },
                     retryPackages: { Task { await controller.retryPackages() } },
                     revert: { Task { await controller.revertToLastSavePoint() } },
                     retrySaves: { Task { await controller.refreshSaves() } }
@@ -42,17 +47,40 @@ struct MainWindow: View {
                 .inspectorToggle(isOpen: $inspectorOpen)
             }
             .navigationTitle(controller.box)
+            // Keep Waiting's way out (R-0178), next to "Waiting for …".
+            .toolbar {
+                if let place = controller.waitingFor {
+                    ToolbarItem(placement: .primaryAction) {
+                        Button(StopWaiting.title) { controller.stopWaiting() }
+                            .keyboardShortcut(StopWaiting.shortcut)
+                            .help("Stop trying to open it while \(place) holds it")
+                    }
+                }
+            }
+            // The window closing ends the wait too; the view merely leaving
+            // the window (another state) doesn't (R-0179).
+            .background(EndsWithWindow { controller.stopWaiting() })
+            // 2.3: open somewhere else, and Move To's confirmation.
+            .sheet(isPresented: Binding(get: { controller.leaseSheet != nil }, set: { if !$0 { controller.cancelLeaseSheet() } })) {
+                if let sheet = controller.leaseSheet {
+                    LeaseSheetView(sheet: sheet, choose: { a in Task { await controller.choose(a) } }, cancel: { controller.cancelLeaseSheet() })
+                }
+            }
+            .sheet(isPresented: Binding(get: { controller.moveConfirmation != nil }, set: { if !$0 { controller.cancelMove() } })) {
+                if let m = controller.moveConfirmation {
+                    MoveConfirmationView(confirmation: m, move: { Task { await controller.confirmMove() } }, cancel: { controller.cancelMove() })
+                }
+            }
             // The title is the box's menu (Apple's document-menu pattern):
-            // the system title is replaced by BoxTitle, the box's name over
-            // its state line, next to the sync symbol.
+            // the system title is replaced by BoxTitle, the box's name and
+            // sync symbol over its state line, on the toolbar itself with no
+            // capsule behind it (the main-window board).
             .toolbar(removing: .title)
             .toolbar {
                 ToolbarItem(placement: .navigation) {
-                    SyncSymbol(controller: controller)
-                }
-                ToolbarItem(placement: .navigation) {
                     BoxTitle(controller: controller)
                 }
+                .sharedBackgroundVisibility(.hidden)
             }
             // Busy disables the window, except Cancel while the Keychain asks.
             .disabled(controller.busy && !controller.waitingForKeychain)
@@ -64,13 +92,13 @@ struct MainWindow: View {
             } message: {
                 Text(controller.error ?? "")
             }
-    }
-
-    /// Move To… in the inspector: every place but where the box is.
-    private var moveTargets: [(String, String)] {
-        (["this-mac"] + controller.servers)
-            .filter { !controller.isCurrent($0) }
-            .map { (ServerName.display($0), $0) }
+            // Told once (R-0201): portenvd restarted the workspace to apply
+            // a security update.
+            .alert("Workspace Restarted", isPresented: Binding(get: { controller.notice != nil }, set: { if !$0 { controller.dismissNotice() } })) {
+                Button("OK") { controller.dismissNotice() }
+            } message: {
+                Text(controller.notice ?? "")
+            }
     }
 
     @ViewBuilder private var content: some View {
@@ -103,13 +131,13 @@ struct MainWindow: View {
             .background(.background)
         case _ where controller.agentUnavailable && controller.isOpen:
             VStack(spacing: 10) {
-                Text("The box agent is unavailable").font(.title3)
-                Text("Nothing can be saved until the box restarts. Your unsaved changes stay in the box; restarting keeps them.")
+                Text("The workspace helper is unavailable").font(.title3)
+                Text("Nothing can be saved until the workspace restarts. Your unsaved changes stay in the workspace; restarting keeps them.")
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 420)
-                Button("Restart Box") { Task { await controller.restartBox() } }
-                    .accessibilityLabel("Restart Box: the box restarts and keeps your unsaved changes")
+                Button("Restart Workspace") { Task { await controller.restartBox() } }
+                    .accessibilityLabel("Restart Workspace: the workspace restarts and keeps your unsaved changes")
                     .keyboardShortcut(.defaultAction)
                     .disabled(controller.busy)
             }
@@ -125,8 +153,14 @@ struct MainWindow: View {
                     // Follows the tabs while the box is open here or on a
                     // server; watches again after a restart or a move.
                     .task { await tabs.follow() }
-                BoxTerminal(box: controller.box, generation: controller.terminalGeneration) {
-                    Task { await controller.terminalEnded() }
+                Group {
+                    if let renderTerminal {
+                        RenderedView(make: renderTerminal)
+                    } else {
+                        BoxTerminal(box: controller.box, generation: controller.terminalGeneration,
+                                    onEnded: { Task { await controller.terminalEnded() } },
+                                    onLinkStatus: { controller.linkStatus = $0 })
+                    }
                 }
                 .accessibilityLabel(A11y.terminal(box: controller.box))
             }
@@ -209,8 +243,13 @@ struct BoxMenu: View {
             ))
             .disabled(!item.enabled)
         } else {
-            let button = Button(item.title) { Task { await controller.run(item.action) } }
-                .disabled(!item.enabled)
+            // A detail (the last save point's time) is the item's subtitle in
+            // the menu bar's menu.
+            let button = Button { Task { await controller.run(item.action) } } label: {
+                Text(item.title)
+                if let detail = item.detail { Text(detail) }
+            }
+            .disabled(!item.enabled)
             switch item.shortcut {
             case "⌘S": button.keyboardShortcut("s", modifiers: .command)
             case "⌥⌘R": button.keyboardShortcut("r", modifiers: [.command, .option])

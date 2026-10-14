@@ -66,7 +66,7 @@ func checkIsolation(read func() (uint64, error)) error {
 		return fmt.Errorf("read capability bounding set: %w", err)
 	}
 	if bad := forbiddenIn(set); len(bad) > 0 {
-		return fmt.Errorf("the box was started with %s; refusing to run because restic's password would be readable (ADR 0005)", strings.Join(bad, ", "))
+		return fmt.Errorf("the workspace was started with %s; refusing to run because restic's password would be readable (ADR 0005)", strings.Join(bad, ", "))
 	}
 	return nil
 }

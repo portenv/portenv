@@ -151,7 +151,13 @@ struct MainWindow: View {
                 .accessibilityLabel(A11y.terminal(box: controller.box))
             }
         case .closed:
-            placeholder(controller.busy ? controller.subtitle : "\(controller.box) is closed", "")
+            if controller.busy {
+                placeholder(controller.subtitle, "")
+            } else {
+                ClosedWorkspace(box: controller.box, failure: controller.openFailure) {
+                    Task { await controller.open() }
+                }
+            }
         }
     }
 
@@ -272,5 +278,33 @@ struct SyncSymbol: View {
             .help(look.line)
             .accessibilityLabel(A11y.symbolLabel(controller.state))
         }
+    }
+}
+
+/// A closed workspace's window (R-0211): its name, why it isn't open when
+/// an open failed (portenvd's plain line), and Open, or Try Again after a
+/// failure, as the default button (Return).
+struct ClosedWorkspace: View {
+    let box: String
+    let failure: String?
+    let open: () -> Void
+
+    var body: some View {
+        VStack(spacing: 10) {
+            Text(ClosedText.title(box)).font(.title3)
+            if let failure {
+                Text(failure)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 420)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Button(failure == nil ? ClosedText.open : ClosedText.tryAgain, action: open)
+                .keyboardShortcut(.defaultAction)
+                .accessibilityLabel(ClosedText.buttonLabel(box, failed: failure != nil))
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(.background)
+        .accessibilityElement(children: .contain)
     }
 }

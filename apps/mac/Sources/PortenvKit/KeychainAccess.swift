@@ -82,6 +82,8 @@ public enum KeychainWait {
     public static let detail = "Check for a password prompt. It may be behind other windows."
     /// The error portenvd returns when a key needs the person's approval.
     public static let daemonError = "Keychain needs your approval. Open Portenv on this Mac to allow it."
+    /// The closed window's line after Cancel during the wait (R-0211).
+    public static let cancelled = "Opening stopped while Portenv waited for Keychain access."
     /// How long a read may take before the window says it's waiting.
     public static let threshold: Duration = .seconds(2)
 }

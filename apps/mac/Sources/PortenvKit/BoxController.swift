@@ -303,6 +303,7 @@ public final class BoxController {
     public func run(_ action: BoxMenuItem.Action) async {
         switch action {
         case .none: break
+        case .open: await open()
         case .move(let target): await requestMove(to: target)
         case .revertToLastSavePoint: await revertToLastSavePoint()
         case .makeSavePoint: await makeSavePoint()
@@ -336,12 +337,18 @@ public final class BoxController {
         }
     }
 
+    /// Why the last open failed, in portenvd's plain words (DaemonErrorText):
+    /// the closed window shows it with Try Again, instead of an alert alone
+    /// or a silent "is closed" (R-0211). Cleared when an open starts.
+    public private(set) var openFailure: String?
+
     /// Opens the box (on this Mac, or shows it where it runs).
     public func open() async {
         stopWaiting() // a new open ends Keep Waiting (R-0178)
+        openFailure = nil
         progress = resuming ? nil : "Opening…"
         var elsewhere = false
-        await perform {
+        await perform(failure: { [weak self] in self?.openFailure = $0 }) {
             self.servers = (try? await self.daemon.servers()) ?? []
             do {
                 try await self.daemon.open(self.box)
@@ -354,6 +361,7 @@ public final class BoxController {
                 // the person, and hand them over. Cancelled: nothing opened.
                 guard try await self.approveKeys() else {
                     self.location = .closed
+                    self.openFailure = KeychainWait.cancelled
                     return
                 }
                 try await self.daemon.open(self.box)
@@ -378,7 +386,7 @@ public final class BoxController {
     /// fills it in (R-0140). Never an error line.
     private func showWhereItIsOpen(retried: Bool = false) async {
         guard let first = try? await daemon.placement(box, probe: false) else {
-            error = "\(box) is open somewhere else."
+            openFailure = "\(box) is open somewhere else."
             return
         }
         // The other place let go meanwhile: open it once more (R-0178).
@@ -402,7 +410,7 @@ public final class BoxController {
     /// sheet as usual (never a second retry).
     private func openOnceMore(retried: Bool) async {
         guard !retried else {
-            error = "\(box) is open somewhere else."
+            openFailure = "\(box) is open somewhere else."
             return
         }
         var elsewhere = false
@@ -494,7 +502,8 @@ public final class BoxController {
                     if Task.isCancelled { return }
                     self.waitingFor = nil
                     self.progress = nil
-                    self.error = error.localizedDescription
+                    // A failed open: in the window, with Try Again (R-0211).
+                    self.openFailure = error.localizedDescription
                     return
                 }
             }
@@ -807,14 +816,16 @@ public final class BoxController {
         await refresh()
     }
 
-    private func perform(_ action: @escaping @MainActor () async throws -> Void) async {
+    /// Runs an action while busy. A failure goes to `failure` when given
+    /// (an open's failure stays in the window), otherwise to the alert.
+    private func perform(failure: ((String) -> Void)? = nil, _ action: @escaping @MainActor () async throws -> Void) async {
         guard !busy else { return }
         busy = true
         defer { busy = false }
         do {
             try await action()
         } catch {
-            self.error = error.localizedDescription
+            if let failure { failure(error.localizedDescription) } else { self.error = error.localizedDescription }
         }
     }
 }

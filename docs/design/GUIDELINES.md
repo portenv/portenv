@@ -84,6 +84,8 @@ Rules:
 
 The title menu and the menu bar's **Workspace** menu contain the same items, in the same order:
 
+While the workspace is closed, **Open** comes first, then a divider (R-0211). The closed window says "<name> is closed" with Open as its default button; after a failed open it shows portenvd's plain line and Try Again instead, never only an alert.
+
 1. Rename…
 2. Move To ▸ (This Mac, then servers by name, then "Add a Server…"; current location shows a **checkmark**, the others stay enabled; the current location is not disabled)
 3. Duplicate for a Task… (when it exists)

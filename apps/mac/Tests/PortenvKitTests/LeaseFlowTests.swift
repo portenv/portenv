@@ -133,7 +133,9 @@ struct LeaseFlowTests {
         daemon.failing["open"] = "test-server was removed from this Mac."
         for _ in 0..<500 where c.waitingFor != nil { try await Task.sleep(for: .milliseconds(20)) }
         #expect(c.waitingFor == nil)
-        #expect(c.error == "test-server was removed from this Mac.")
+        // A failed open stays in the window, with Try Again (R-0211).
+        #expect(c.openFailure == "test-server was removed from this Mac.")
+        #expect(c.error == nil)
     }
 
     /// R-0178: the place let go by the time GetPlacement answers (nobody

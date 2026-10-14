@@ -648,3 +648,57 @@ exec sleep 600
 		}
 	}
 }
+
+// A program that prints and exits at once: its output reaches the stream
+// before the end (R-0162). Held until the stream is open, it must come as
+// output; opened in a race with the exit, it's in the seed or the output,
+// or the tab was already gone, and every stream ends promptly.
+func TestTabTerminalDeliversAnExitingProgramsOutput(t *testing.T) {
+	h := newTabTermHarness(t, "sh -c 'exec sleep 600'")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ends := func(tt *tabTerm, seed []byte) (sawDone bool) {
+		t.Helper()
+		out := append([]byte(nil), seed...)
+		for {
+			m := tt.next(5 * time.Second)
+			if m == nil {
+				t.Fatal("the stream ended without saying why")
+			}
+			out = append(out, m.GetOutput()...)
+			if e := m.GetEnd(); e != agentv1.TabTerminalEnd_TAB_TERMINAL_END_UNSPECIFIED {
+				if e != agentv1.TabTerminalEnd_TAB_TERMINAL_END_TAB_CLOSED {
+					t.Fatalf("end %v", e)
+				}
+				return bytes.Contains(out, []byte("done"))
+			}
+		}
+	}
+	// Held: the program waits for the stream, then prints and exits.
+	tab := strings.TrimSpace(h.raw("new-window", "-d", "-P", "-F", "#{window_id}", "-t", "=main:", "tmux wait-for go; printf done; exit 0"))
+	tt := h.open(ctx, tab, "", 80, 24)
+	r := tt.next(5 * time.Second).GetReset_()
+	if r == nil {
+		t.Fatal("no reset")
+	}
+	h.raw("wait-for", "-S", "go")
+	if !ends(tt, nil) {
+		t.Fatal("the program's output didn't come before the end")
+	}
+	// Racing: printf done; exit 0 is the whole command.
+	for range 20 {
+		tab := strings.TrimSpace(h.raw("new-window", "-d", "-P", "-F", "#{window_id}", "-t", "=main:", "printf done; exit 0"))
+		tt := h.open(ctx, tab, "", 80, 24)
+		m := tt.next(5 * time.Second)
+		if m.GetEnd() == agentv1.TabTerminalEnd_TAB_TERMINAL_END_TAB_CLOSED {
+			continue // gone before the stream looked
+		}
+		r := m.GetReset_()
+		if r == nil {
+			t.Fatalf("first message %v", m)
+		}
+		if !ends(tt, r.GetSeed()) {
+			t.Fatal("the stream saw the tab, then ended without its output")
+		}
+	}
+}

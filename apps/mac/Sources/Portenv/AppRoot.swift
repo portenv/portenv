@@ -265,11 +265,7 @@ struct AppRoot: View {
     var body: some View {
         Group {
             if ServiceUpdates.shared.updating {
-                VStack(spacing: 12) {
-                    ProgressView().controlSize(.small)
-                    Text(ServiceUpdate.updatingText).font(.title3)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                ServiceUpdatingView()
             } else if let problem = model.problem {
                 VStack(spacing: 12) {
                     Text(problem.message).font(.title3).multilineTextAlignment(.center).frame(maxWidth: 460)
@@ -327,5 +323,17 @@ struct AppRoot: View {
                                                           set: { if !$0 { model.moveError = nil } })) {
             Button("OK") { model.moveError = nil }
         }
+    }
+}
+
+/// While portenvd restarts after an update (R-0198).
+struct ServiceUpdatingView: View {
+    var body: some View {
+        VStack(spacing: 12) {
+            ProgressView().controlSize(.small)
+            Text(ServiceUpdate.updatingText).font(.title3)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityElement(children: .combine)
     }
 }

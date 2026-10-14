@@ -178,8 +178,15 @@ public final class FirstRunFlow {
     private let existing: Set<String>
     private let memory: FirstRunMemory
 
+    /// While portenvd isn't up (or restarts), a step is tried again this
+    /// often, for this long, saying so, before it fails (R-0202).
+    private let retryEvery: Duration
+    private let retryFor: Duration
+
     public init(service: FirstRunService, at start: FirstRunStep = .welcome, existing: [String] = [], fromBoxList: Bool = false,
-                memory: FirstRunMemory = NoFirstRunMemory()) {
+                memory: FirstRunMemory = NoFirstRunMemory(), retryEvery: Duration = .seconds(1), retryFor: Duration = .seconds(10)) {
+        self.retryEvery = retryEvery
+        self.retryFor = retryFor
         self.service = service
         self.existing = Set(existing)
         self.fromBoxList = fromBoxList
@@ -282,6 +289,39 @@ public final class FirstRunFlow {
         busy = true
         defer { busy = false }
         do {
+            try await whileServiceStarts { try await self.runStep() }
+            error = nil
+            notice = nil
+            step = steps[i + 1]
+        } catch let failure as FirstRunError where failure.notBuilt {
+            refuse(notice: failure.message)
+        } catch BoxMaker.Failure.poolEmpty {
+            // The pool ran out: the recovery key sheet (ADR 0019).
+            needsRecoveryKey = true
+            refuse(notice: BoxMaker.Failure.poolEmpty.errorDescription)
+        } catch {
+            notice = nil
+            refuse(error: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
+        }
+    }
+
+    /// Runs body; while portenvd isn't there, says it's starting it and
+    /// tries again, for up to retryFor. Every step is safe to repeat
+    /// (CreateBox is idempotent on the box ID, ADR 0019).
+    private func whileServiceStarts(_ body: () async throws -> Void) async throws {
+        let deadline = ContinuousClock.now + retryFor
+        while true {
+            do {
+                return try await body()
+            } catch where DaemonErrorText.isServiceDown(error) && ContinuousClock.now < deadline {
+                notice = DaemonErrorText.starting
+                try? await Task.sleep(for: retryEvery)
+            }
+        }
+    }
+
+    private func runStep() async throws {
+        do {
             switch step {
             case .welcome where recoveryKey == nil:
                 recoveryKey = try await service.makeRecoveryKey()
@@ -303,17 +343,6 @@ public final class FirstRunFlow {
             default:
                 break
             }
-            error = nil
-            notice = nil
-            step = steps[i + 1]
-        } catch let failure as FirstRunError where failure.notBuilt {
-            refuse(notice: failure.message)
-        } catch BoxMaker.Failure.poolEmpty {
-            // The pool ran out: the recovery key sheet (ADR 0019).
-            needsRecoveryKey = true
-            refuse(notice: BoxMaker.Failure.poolEmpty.errorDescription)
-        } catch {
-            refuse(error: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
         }
     }
 

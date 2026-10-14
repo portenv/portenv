@@ -129,6 +129,8 @@ enum ScreenRenders {
             try snapshot(alert: { ServerKeyAlert.question(ServerKeyQuestion(forgotten)) }, name: "server-key-confirm-after-change", in: dir)
             try snapshot(alert: { ServerKeyAlert.notice(.mismatch("test-server")) }, name: "server-key-mismatch", in: dir)
             try snapshot(alert: { ServerKeyAlert.notice(.changed("test-server")) }, name: "server-key-changed", in: dir)
+            // After an in-place update, while portenvd restarts (R-0198).
+            try snapshot(ServiceUpdatingView().background(.background), name: "service-updating", size: NSSize(width: 720, height: 520), in: dir)
             // New Box… from the box list (the new-box boards).
             let newBox = FirstRunFlow(service: Sample(), at: .firstBox, existing: ["acme-api"], fromBoxList: true)
             newBox.boxName = "site"

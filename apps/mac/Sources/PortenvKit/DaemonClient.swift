@@ -51,7 +51,8 @@ public final class DaemonClient: DaemonAPI, Sendable {
             if e.metadata[stringValues: "portenv-refusal"].contains("open-elsewhere") {
                 throw DaemonError(e.message, openElsewhere: true)
             }
-            throw DaemonError.fromRPC(message: e.message, unimplemented: e.code == .unimplemented, unavailable: e.code == .unavailable)
+            throw DaemonError.fromRPC(message: DaemonErrorText.plain(code: e.code, message: e.message), unimplemented: e.code == .unimplemented,
+                                      unavailable: e.code == .unavailable || DaemonErrorText.isTransport(e.message))
         }
     }
 
@@ -311,10 +312,10 @@ extension DaemonClient: BoxCreating, RecoveryChecking {
         } catch let e as RPCError {
             // The app only makes this-Mac boxes, which every portenvd with
             // CreateBox makes: Unimplemented is an older portenvd.
-            let message = e.code == .unimplemented ? DaemonError.outOfDate : e.message
+            let message = e.code == .unimplemented ? DaemonError.outOfDate : DaemonErrorText.plain(code: e.code, message: e.message)
             throw CreateBoxError(kind: CreateBoxError.Kind(grpcCode: Self.grpcCode(e.code)), message: message)
         } catch {
-            throw CreateBoxError(kind: .daemonGone, message: "Portenv’s background service isn’t answering.")
+            throw CreateBoxError(kind: .daemonGone, message: DaemonErrorText.starting)
         }
     }
 

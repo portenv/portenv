@@ -127,6 +127,8 @@ struct KeychainWaitTests {
         #expect(!actions.contains("provide-keys"), "nothing handed over after Cancel")
         #expect(actions.filter { $0 == "open" }.count == 1, "no second open after Cancel")
         #expect(c.location == .closed && !c.busy && !c.waitingForKeychain && c.error == nil)
+        // Never a silent "closed": the window says why (R-0211).
+        #expect(c.openFailure == KeychainWait.cancelled)
         kc.release() // the prompt is answered later: its result is dropped
     }
 

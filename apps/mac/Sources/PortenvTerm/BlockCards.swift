@@ -411,8 +411,11 @@ struct BlockHeader: View {
             .accessibilityValue(BlockText.expandedState(open: open))
             .onKeyPress(.return) { toggle(); return .handled }
             if pinned {
+                // Set 12 pt apart from the status's time (R-0219): the row's
+                // 8 pt and 4 more.
                 Button(action: top) { Text("\u{2191} Top of block") }
                     .buttonStyle(.link)
+                    .padding(.leading, 4)
                     .accessibilityLabel("Top of block")
             }
         }

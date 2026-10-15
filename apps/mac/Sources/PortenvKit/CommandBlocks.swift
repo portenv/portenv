@@ -164,3 +164,46 @@ public enum BlockText {
         return f.string(from: NSNumber(value: x)) ?? String(x)
     }
 }
+
+/// A block's actions (the command-blocks board, R-0139, R-0171): Copy
+/// Output, Copy Command and Run Again.
+public enum BlockCopy {
+    /// The output to copy: every line, and first, when the block outgrew
+    /// the scrollback, a line saying so rather than copying less silently.
+    public static func output(lines: [String], trimmed: Int, locale: Locale = SettingsText.appLocale()) -> String {
+        let body = lines.joined(separator: "\n")
+        guard trimmed > 0 else { return body }
+        return trimmedNote(trimmed, locale: locale) + "\n" + body
+    }
+
+    /// "Output trimmed: the first 1,204 lines are past the scrollback."
+    public static func trimmedNote(_ n: Int, locale: Locale = SettingsText.appLocale()) -> String {
+        n == 1
+            ? "Output trimmed: the first line is past the scrollback."
+            : "Output trimmed: the first \(BlockText.number(Double(n), digits: 0, locale: locale)) lines are past the scrollback."
+    }
+
+    /// What Run Again types: the command, without control characters, and
+    /// Return. Nil when there's no command to run (it left the scrollback).
+    public static func runAgainInput(_ command: String) -> [UInt8]? {
+        let clean = String(String.UnicodeScalarView(command.unicodeScalars.filter { $0.value >= 0x20 && $0.value != 0x7F }))
+            .trimmingCharacters(in: .whitespaces)
+        guard !clean.isEmpty else { return nil }
+        return Array((clean + "\r").utf8)
+    }
+
+    /// Run Again asks first unless portenvd recorded that the person at this
+    /// Mac ran the command: an agent's command, or one with no recorded
+    /// author, never runs again on one click (R-0139).
+    public static func asksBeforeRunningAgain(authorIsYou: Bool?) -> Bool { authorIsYou != true }
+
+    /// The question: "Run “npm test” again?" with who ran it, if known.
+    public static func runAgainQuestion(command: String, author: String?) -> (title: String, message: String) {
+        let who = author.map { "\($0) ran it." } ?? "Portenv doesn\u{2019}t know who ran it."
+        return ("Run \u{201C}\(command)\u{201D} again?", "\(who) It runs in this tab as you.")
+    }
+
+    public static let copyOutput = "Copy Output"
+    public static let copyCommand = "Copy Command"
+    public static let runAgain = "Run Again"
+}

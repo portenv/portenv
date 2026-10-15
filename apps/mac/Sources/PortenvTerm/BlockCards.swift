@@ -25,7 +25,9 @@ public final class BlockReader {
         let tracker = view.tracker!
         tracker.refresh()
         let marks = tracker.rows.marks
-        return CommandBlocks.blocks(marks: marks, cursorRow: tracker.cursorRow) { [self] promptRow in
+        // Trimmed marks keep the start of a block that outgrew the
+        // scrollback (its command is gone with its prompt line).
+        return CommandBlocks.blocks(marks: tracker.rows.trimmed + marks, cursorRow: tracker.cursorRow) { [self] promptRow in
             command(promptRow: promptRow, marks: marks)
         }
     }

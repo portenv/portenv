@@ -574,6 +574,8 @@ A developer adds their own server from the app in a few minutes; an open-source 
 
 ADR 0021 (accepted, R-0143) settles how: Portenv’s own pinned `known_hosts` and key type (confirmed once, a changed key a hard stop), a key just for the server served by a per-run in-memory agent, a Check that never changes the server, sudo without a password only, password-login hardening off by default and proven before it stays, and Remove a Server that never deletes saves without a separate choice. The boards are `add-a-server` (with "Someone is setting one up for me", R-0141) and `settings` (Servers, R-0137).
 
+2.9 PR 2a (R-0207): `portenvd`'s `CheckServer`, a read-only probe (ADR 0021 section 3a), tested against a real sshd for writing nothing. Next: 2b, the server binaries and their checksums in the app.
+
 Built so far (2.9 PR 1a, R-0180): sockets in the checked per-user temp folder (`<T>pv/`, ControlPersist 600 s); this Mac's servers in `servers.json`, migrated once from `machine.json` (left in place, unread, for one release); each server's host key found through ssh itself (`ssh -G`, then a no-login connection with `accept-new` into a file of its own), compared read-only with `~/.ssh/known_hosts`, and pinned in Portenv's own `known_hosts` by `HostKeyAlias=portenv-<id>` with its type; an unconfirmed server is never contacted ("Confirm <name> to open this."), and a changed key stops every call until Forget. `portenvd`'s `ScanServerKey`, `TrustServerKey` and `ForgetServerKey`, and `ListServers`' infos; `portenv app trust-server` for scripts that know the key. Tested against a fake ssh and against real `sshd`s through a ProxyJump alias. The app asks about each server waiting, once per launch (Trust / Not Now). Until Forget is in the app, `portenv app forget-server <name>` (owner-only) is the way past a changed key; the next confirmation says the key changed (R-0185). 1b: a key Portenv makes for a server (Ed25519, its seed in the Keychain's `dev.portenv.server-key`), handed to `portenvd` in memory at launch, signs in once per shared connection through a per-run agent of `portenvd`'s own, with `-F none` and every option explicit (ADR 0021, section 2a). Making the key from the app comes with the wizard.
 
 1. Where is it: name, address, SSH user. Pick an existing key, or let Portenv generate a dedicated key and show the public key to paste into the provider's panel. Alternative path: Copy install command, a one-liner for the provider's web console or the server's user-data field.
@@ -1595,6 +1597,8 @@ Behaviour the app relies on is tested through the path the app uses: `portenvd` 
 ## Open questions
 
 These need an owner decision; Claude Code should add new ones here instead of guessing.
+
+- [ ] Debian 12 for Add a Server: ADR 0021 lists it, but `server/setup.sh` installs on Ubuntu only (Docker's Ubuntu repository, `dpkg`), so Check accepts Ubuntu 22.04 and 24.04 for now (2.9 PR 2a). Support Debian 12 in `setup.sh`, or drop it from the ADR?
 
 - [x] Default protection mode for new users: Only you (current default) or recoverable? **Answered (the reviewer, on the owner's delegation, R-0087, 2026-10-11):** Only you, with the recovery key required at first run (ADR 0019).
 - [ ] Phase 2: install the runner as a service from the start, or plain SSH first? The plan assumes the runner.

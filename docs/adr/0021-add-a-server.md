@@ -86,13 +86,25 @@ One read-only probe, run over SSH as the given user, bounded (ADR 0012), with ea
 
 Check writes nothing on the server: no package, file, user or setting. The probe is a fixed script sent on stdin, reviewed with this ADR, and a test runs it against a server whose file system is compared before and after. Each failure says what to do in one line (GUIDELINES §10), for example "Portenv downloads the workspace toolbox from ghcr.io over HTTPS. Allow outgoing HTTPS (port 443) in your provider's firewall, then choose Check Again." **Nothing installs until every check passes.**
 
+### 3a. Check, as built (2.9 PR 2a, R-0207)
+
+Where this differs from section 3, this wins.
+
+- **The probe** is `core/local/check.sh`, embedded in portenvd and sent on stdin to `LC_ALL=C bash --noprofile --norc -s`, so a server's dotfiles can't change its output. Its answers are `key=value` lines between markers carrying a random value for this run; portenvd reads only those, ignores unknown keys and any line over 256 bytes, and caps the whole output at 64 KB. A failure's line is Portenv's own words, never the server's: no raw output reaches an error.
+- **Systems:** Ubuntu 22.04 or 24.04, arm64 or amd64, which is what `server/setup.sh` installs on. Debian 12 waits for `setup.sh` to support it (PLAN.md's open questions).
+- **sudo** is asked with `sudo -n -l true`: whether it may run, without running it, since a run can leave a file (Ubuntu's `~/.sudo_as_admin_successful`).
+- **Outgoing HTTPS** is checked as a TCP connection to port 443 of `ghcr.io` and `download.docker.com` (bash's `/dev/tcp`, 5 s each), so the probe needs no `curl`. `download.docker.com` is only information when Docker is already there.
+- **Minimums:** 2 GB of memory and 15 GB free on `/`, as `setup.sh`'s preflight.
+- **Tested** against a real `sshd` on 127.0.0.1: `/etc`, `/usr/local`, `/opt` and the account's home are the same before and after; on CI's Ubuntu runner every line passes but those a runner can't meet.
+- **`portenvd`'s `CheckServer`** runs it on a confirmed server only.
+
 ### 4. Set up
 
 - **What it does:** uploads `portenv` and `portenv-runner` for the server's architecture (the release's own), checked against SHA-256 checksums from **a manifest inside the signed app bundle**, never fetched alongside the binaries, then runs `server/setup.sh` with sudo, which already: installs Docker Engine from Docker's repository, makes the encrypted volume for workspace homes, the SFTP-only storage account for saves and the loopback-only REST server, and opens no port. Then it starts a test workspace, checks its terminal and its save, and removes it.
 - **Everything Portenv adds is named `portenv-*`** and sits beside what's there.
 - **sudo after Set Up:** setup needs root or full `sudo -n` once. Day to day, Portenv runs only `sudo -n /usr/local/bin/portenv …` on the server (2.1's rule), never a shell; Portenv doesn't edit the person's own sudoers.
 - **The test workspace** checks a terminal and a save; it adds the port relay check once 1.6 ships (PLAN.md's step 5).
-- **`portenvd` owns the job,** not the window: closing the wizard doesn't stop it; it reports through a notification when it ends, and Settings › Servers shows it meanwhile. Stop Setup stops after the step running, and says what's left on the server.
+- **`portenvd` owns the job,** not the window: closing the wizard doesn't stop it; it reports through a notification when it ends, and Settings › Servers shows it meanwhile. When the app isn't running as it ends, the result shows at the next launch, once, as a notification posted then, and stays in Settings › Servers (R-0207). Stop Setup stops after the step running, and says what's left on the server.
 - **No new ports**, checked after Set Up by the same probe (listening sockets before and after).
 
 ### 5. "Turn off password logins": offered, never forced

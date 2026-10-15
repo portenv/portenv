@@ -489,6 +489,11 @@ func fsState(t *testing.T, roots ...string) map[string]string {
 			if err != nil {
 				return nil // unreadable: the probe can't write there either
 			}
+			// Services' own logs and run state change by themselves (a
+			// Homebrew service on a dev Mac writes /opt/homebrew/var/log).
+			if fi.IsDir() && (strings.HasSuffix(p, "/var/log") || strings.HasSuffix(p, "/var/run")) {
+				return filepath.SkipDir
+			}
 			st[p] = fmt.Sprintf("%v %d %d", fi.Mode(), fi.Size(), fi.ModTime().UnixNano())
 			return nil
 		})

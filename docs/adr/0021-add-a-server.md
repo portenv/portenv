@@ -76,7 +76,7 @@ Where this differs from section 2, this wins.
 
 One read-only probe, run over SSH as the given user, bounded (ADR 0012), with each line answering one question:
 
-- the OS and version (Ubuntu 22.04 or 24.04, Debian 12) and the architecture (arm64 or amd64);
+- the OS and version (Ubuntu 22.04 or 24.04 for now; Debian when a tester asks, R-0212) and the architecture (arm64 or amd64);
 - memory and free disk against the minimums;
 - **sudo:** the user is root, or `sudo -n true` succeeds. Portenv **never asks for or stores a sudo password**; without passwordless sudo, Check says so with the fix (add the user to sudoers with `NOPASSWD`, or use root) and stops;
 - the clock is within 2 minutes of the Mac's (certificates, restic's lock times);
@@ -91,7 +91,7 @@ Check writes nothing on the server: no package, file, user or setting. The probe
 Where this differs from section 3, this wins.
 
 - **The probe** is `core/local/check.sh`, embedded in portenvd and sent on stdin to `LC_ALL=C bash --noprofile --norc -s`, so a server's dotfiles can't change its output. Its answers are `key=value` lines between markers carrying a random value for this run; portenvd reads only those, ignores unknown keys and any line over 256 bytes, and caps the whole output at 64 KB. A failure's line is Portenv's own words, never the server's: no raw output reaches an error.
-- **Systems:** Ubuntu 22.04 or 24.04, arm64 or amd64, which is what `server/setup.sh` installs on. Debian 12 waits for `setup.sh` to support it (PLAN.md's open questions).
+- **Systems:** Ubuntu 22.04 or 24.04, arm64 or amd64, which is what `server/setup.sh` installs on. Ubuntu 22.04 and 24.04 for now; Debian when a tester asks (R-0212). Check's failure line names the supported list.
 - **sudo** is asked with `sudo -n -l true`: whether it may run, without running it, since a run can leave a file (Ubuntu's `~/.sudo_as_admin_successful`).
 - **Outgoing HTTPS** is checked as a TCP connection to port 443 of `ghcr.io` and `download.docker.com` (bash's `/dev/tcp`, 5 s each), so the probe needs no `curl`. `download.docker.com` is only information when Docker is already there.
 - **Minimums:** 2 GB of memory and 15 GB free on `/`, as `setup.sh`'s preflight.

@@ -579,7 +579,7 @@ ADR 0021 (accepted, R-0143) settles how: Portenv’s own pinned `known_hosts` an
 Built so far (2.9 PR 1a, R-0180): sockets in the checked per-user temp folder (`<T>pv/`, ControlPersist 600 s); this Mac's servers in `servers.json`, migrated once from `machine.json` (left in place, unread, for one release); each server's host key found through ssh itself (`ssh -G`, then a no-login connection with `accept-new` into a file of its own), compared read-only with `~/.ssh/known_hosts`, and pinned in Portenv's own `known_hosts` by `HostKeyAlias=portenv-<id>` with its type; an unconfirmed server is never contacted ("Confirm <name> to open this."), and a changed key stops every call until Forget. `portenvd`'s `ScanServerKey`, `TrustServerKey` and `ForgetServerKey`, and `ListServers`' infos; `portenv app trust-server` for scripts that know the key. Tested against a fake ssh and against real `sshd`s through a ProxyJump alias. The app asks about each server waiting, once per launch (Trust / Not Now). Until Forget is in the app, `portenv app forget-server <name>` (owner-only) is the way past a changed key; the next confirmation says the key changed (R-0185). 1b: a key Portenv makes for a server (Ed25519, its seed in the Keychain's `dev.portenv.server-key`), handed to `portenvd` in memory at launch, signs in once per shared connection through a per-run agent of `portenvd`'s own, with `-F none` and every option explicit (ADR 0021, section 2a). Making the key from the app comes with the wizard.
 
 1. Where is it: name, address, SSH user. Pick an existing key, or let Portenv generate a dedicated key and show the public key to paste into the provider's panel. Alternative path: Copy install command, a one-liner for the provider's web console or the server's user-data field.
-2. Preflight checklist, each failure with a plain fix: supported OS (Ubuntu 22.04 and 24.04, Debian 12), CPU architecture, memory and disk, sudo, outbound access to Portenv, the registry and the snapshot storage, clock sync, KVM availability (recorded for later microVM support).
+2. Preflight checklist, each failure with a plain fix: supported OS (Ubuntu 22.04 and 24.04 for now; Debian when a tester asks, R-0212), CPU architecture, memory and disk, sudo, outbound access to Portenv, the registry and the snapshot storage, clock sync, KVM availability (recorded for later microVM support).
 3. Install: Docker Engine from Docker's official repository if missing, the runner as a systemd service under its own user, an encrypted volume for box homes. Everything Portenv creates is namespaced (`portenv-*`) and coexists with the developer's own containers. Optional hardening (disable password logins, firewall) is offered, never forced.
 4. Register: the runner gets its own identity, scoped to that server.
 5. Toolbox and test: pull the toolbox image (or build it), start a throwaway box, check a terminal and a port relay, remove it.
@@ -749,7 +749,7 @@ Docker Desktop and OrbStack carry commercial-use license terms, so they are opti
 
 **Minimum requirements**
 
-Mac app: macOS 26. Local boxes need Apple silicon (the `apple` driver), or the Docker fallback. The app doesn't launch on older macOS, so older Macs can't use Portenv for now (see Open questions). Servers: Ubuntu 22.04/24.04 or Debian 12, arm64 or amd64.
+Mac app: macOS 26. Local boxes need Apple silicon (the `apple` driver), or the Docker fallback. The app doesn't launch on older macOS, so older Macs can't use Portenv for now (see Open questions). Servers: Ubuntu 22.04/24.04 for now (Debian when a tester asks, R-0212), arm64 or amd64.
 
 ## Tech stack and repository layout
 
@@ -1598,7 +1598,7 @@ Behaviour the app relies on is tested through the path the app uses: `portenvd` 
 
 These need an owner decision; Claude Code should add new ones here instead of guessing.
 
-- [ ] Debian 12 for Add a Server: ADR 0021 lists it, but `server/setup.sh` installs on Ubuntu only (Docker's Ubuntu repository, `dpkg`), so Check accepts Ubuntu 22.04 and 24.04 for now (2.9 PR 2a). Support Debian 12 in `setup.sh`, or drop it from the ADR?
+- [x] Debian 12 for Add a Server: ADR 0021 lists it, but `server/setup.sh` installs on Ubuntu only (Docker's Ubuntu repository, `dpkg`), so Check accepts Ubuntu 22.04 and 24.04 for now (2.9 PR 2a). Support Debian 12 in `setup.sh`, or drop it from the ADR? **Answered (the reviewer, on the owner's delegation, R-0212, 2026-10-14):** dropped for the tester build: Ubuntu 22.04 and 24.04 for now, Debian when a tester asks; Check's failure line names the supported list.
 
 - [x] Default protection mode for new users: Only you (current default) or recoverable? **Answered (the reviewer, on the owner's delegation, R-0087, 2026-10-11):** Only you, with the recovery key required at first run (ADR 0019).
 - [ ] Phase 2: install the runner as a service from the start, or plain SSH first? The plan assumes the runner.

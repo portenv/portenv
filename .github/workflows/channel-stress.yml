@@ -36,7 +36,7 @@ jobs:
         run: |
           echo "version=$(git describe --tags --always)" >> "$GITHUB_OUTPUT"
           echo "commit=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
-      # The layer cache in GitHub's cache (R-0203), read only: the Images
+      # The builder stages' layer cache (R-0203), read only: the Images
       # workflow writes it. The restic stage and the agent stage's module
       # download are skipped when their inputs haven't changed. No provenance or SBOM here, so the loaded image
       # is the plain image it always was (publishing attests separately).
@@ -53,7 +53,7 @@ jobs:
           build-args: |
             VERSION=${{ steps.version.outputs.version }}
             COMMIT=${{ steps.version.outputs.commit }}
-          cache-from: type=gha,scope=toolbox-node-amd64
+          cache-from: type=gha,scope=toolbox-node-builders-amd64
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: core/go.mod

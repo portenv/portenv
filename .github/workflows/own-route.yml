@@ -35,7 +35,7 @@ jobs:
       - name: Build the CLI, agent and tools locally
         run: make build tools
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-      # The layer cache in GitHub's cache (R-0203), read only: the Images
+      # The builder stages' layer cache (R-0203), read only: the Images
       # workflow writes it. The restic stage and the agent stage's module
       # download are skipped when their inputs haven't changed. No provenance or SBOM here, so the loaded image
       # is the plain image it always was (publishing attests separately).
@@ -49,6 +49,6 @@ jobs:
           load: true
           provenance: false
           sbom: false
-          cache-from: type=gha,scope=toolbox-node-amd64
+          cache-from: type=gha,scope=toolbox-node-builders-amd64
       - name: Own-route journey with hosted endpoints blocked
         run: tests/e2e/own-route.sh toolbox-node:own-route

@@ -135,7 +135,9 @@ public final class MarkedTerminalView: TerminalView {
             filter = TerminalFilter()
             tracker.reset()
             if size.cols != t.cols || size.rows != t.rows { t.resize(cols: size.cols, rows: size.rows) }
+            tracker.seeding = true
             ingest(seed)
+            tracker.seeding = false
             onReset(size)
             // The tab was at another size (another viewer, or this view
             // changed while disconnected): ask for this view's own.

@@ -163,6 +163,12 @@ enum ScreenRenders {
             // (R-0131): with the inspector open, and closed.
             try await MainWindowRender.render(to: dir, terminal: { sampleTerminal() })
             try await MainWindowRender.render(to: dir, name: "main-window-no-inspector", inspector: false, terminal: { sampleTerminal() })
+            // Command blocks, folded by default and opened (R-0139, R-0174).
+            try BlockRenders.render(to: dir) { view, name, size in
+                for (suffix, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] where name.hasSuffix(suffix) {
+                    try snapshotOne(view, name: String(name.dropLast(suffix.count + 1)), suffix: suffix, size: size, appearance: appearance, in: dir)
+                }
+            }
             // Portenv › Settings…, each pane (R-0137).
             try await SettingsRender.render(to: dir)
             return 0
@@ -330,5 +336,22 @@ enum ScreenRenders {
             }
             try png.write(to: dir.appendingPathComponent("\(name)-\(suffix).png"))
         }
+    }
+
+    /// One appearance of a SwiftUI view (renders whose content depends on
+    /// the appearance, as the blocks' terminal palette does).
+    private static func snapshotOne(_ view: AnyView, name: String, suffix: String, size: NSSize,
+                                    appearance: NSAppearance.Name, in dir: URL) throws {
+        let host = NSHostingView(rootView: view.frame(width: size.width, height: size.height))
+        host.frame = NSRect(origin: .zero, size: size)
+        let window = ActiveLookingWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        window.appearance = NSAppearance(named: appearance)
+        window.contentView = host
+        host.layoutSubtreeIfNeeded()
+        RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+        guard let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { throw FirstRunError("no bitmap for \(name)") }
+        host.cacheDisplay(in: host.bounds, to: rep)
+        guard let png = rep.representation(using: .png, properties: [:]) else { throw FirstRunError("no PNG for \(name)") }
+        try png.write(to: dir.appendingPathComponent("\(name)-\(suffix).png"))
     }
 }

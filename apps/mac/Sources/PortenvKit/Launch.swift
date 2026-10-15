@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
+import Foundation
+
 /// What the app shows when it starts (PLAN.md 1.5). Never a window for a box
 /// that doesn't exist: with no box, first run; with a box that isn't here,
 /// the box list, saying so.
@@ -36,5 +38,147 @@ public enum LaunchDecision {
     /// GUIDELINES §10: what happened, then what to do next.
     public static func missing(_ box: String) -> String {
         "There’s no workspace called “\(box)” on this Mac. Choose one of your workspaces, or make a new one."
+    }
+}
+
+/// The launch's wait for portenvd (R-0121): never a spinner without end.
+/// portenvd is asked every 200 ms; each 2 s without an answer is a missed
+/// check. The login item's status is read at each missed check: waiting for
+/// approval is said as such and the wait goes on; launchd refusing the item
+/// ends the wait. Otherwise two missed checks in a row (about 4 s, as on
+/// Welcome) say the service isn't answering, and the checks go on.
+public enum LaunchWait {
+    /// What the window says while there's no answer.
+    public enum Report: Equatable, Sendable {
+        case problem(BackgroundServiceProblem)
+        case notAnswering
+    }
+
+    public enum Outcome: Equatable, Sendable {
+        case answered
+        case refused(BackgroundServiceProblem)
+        case cancelled
+    }
+
+    public static let pollEvery: Duration = .milliseconds(200)
+    /// One check: 2 s of asking.
+    public static let pingsPerCheck = 10
+    public static let missesBeforeNotice = 2
+    /// The spinner's words for VoiceOver.
+    public static let starting = "Starting Portenv\u{2026}"
+
+    /// Waits until ping answers, reporting each change in what the window
+    /// should say.
+    @MainActor
+    public static func untilAnswered(ping: () async -> Bool,
+                                     problem: () -> BackgroundServiceProblem?,
+                                     report: (Report) -> Void,
+                                     sleep: (Duration) async -> Void) async -> Outcome {
+        var misses = 0
+        var last: Report?
+        // The first ask, then the login item's status at once (R-0125):
+        // approval is said and a refusal ends the wait without waiting 2 s.
+        if Task.isCancelled { return .cancelled }
+        if await ping() { return .answered }
+        // A wait replaced while it asked says nothing (R-0133).
+        if Task.isCancelled { return .cancelled }
+        if let p = problem() {
+            if p.endsWait { return .refused(p) }
+            report(.problem(p))
+            last = .problem(p)
+        }
+        await sleep(pollEvery)
+        var first = true
+        while true {
+            // The first check already made its first ask.
+            for _ in 0 ..< (first ? pingsPerCheck - 1 : pingsPerCheck) {
+                if Task.isCancelled { return .cancelled }
+                if await ping() { return .answered }
+                await sleep(pollEvery)
+            }
+            first = false
+            if Task.isCancelled { return .cancelled }
+            misses += 1
+            let now: Report?
+            if let p = problem() {
+                if p.endsWait { return .refused(p) }
+                now = .problem(p)
+            } else {
+                now = misses >= missesBeforeNotice ? .notAnswering : nil
+            }
+            if let now, now != last {
+                report(now)
+                last = now
+            }
+        }
+    }
+
+    public enum RunOutcome: Equatable, Sendable {
+        case decided
+        case refused(BackgroundServiceProblem)
+        case failed(String)
+        case cancelled
+    }
+
+    /// The whole launch wait: untilAnswered, then the list of workspaces,
+    /// then decide. A cancelled wait (Try Again started another, or the
+    /// window closed) never decides, even if its answer was in flight
+    /// (R-0125).
+    @MainActor
+    public static func run(ping: () async -> Bool,
+                           problem: () -> BackgroundServiceProblem?,
+                           report: (Report) -> Void,
+                           sleep: (Duration) async -> Void,
+                           boxes: () async throws -> [String],
+                           decide: ([String]) -> Void) async -> RunOutcome {
+        switch await untilAnswered(ping: ping, problem: problem, report: report, sleep: sleep) {
+        case .answered: break
+        // A replaced wait never sets the problem (R-0132).
+        case let .refused(p): return Task.isCancelled ? .cancelled : .refused(p)
+        case .cancelled: return .cancelled
+        }
+        guard !Task.isCancelled else { return .cancelled }
+        let listed: [String]
+        do {
+            listed = try await boxes()
+        } catch {
+            guard !Task.isCancelled else { return .cancelled }
+            return .failed((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
+        }
+        guard !Task.isCancelled else { return .cancelled }
+        decide(listed)
+        return .decided
+    }
+
+    /// Whether portenvd's answer replaces what shows (R-0125). Only while
+    /// the fallback still shows and the person hasn't moved on from it
+    /// (Welcome past its first step, New Workspace…, the list without the
+    /// notice); otherwise the answer only refreshes the list of workspaces.
+    /// Welcome deciding Welcome keeps the one showing.
+    public static func applies(_ decision: Launch, fallback: Launch?, current: Launch?, firstRunStep: FirstRunStep?) -> Bool {
+        guard let fallback else { return true }
+        guard current == fallback else { return false }
+        if case .firstRun = fallback, firstRunStep != .welcome { return false }
+        return decision != current
+    }
+
+    /// What shows while portenvd isn't answering: Welcome on a Mac with no
+    /// earlier run; with one recorded, the (empty) list with the notice.
+    public static func fallback(lastBox: String?, firstRunDone: Bool) -> Launch {
+        lastBox != nil || firstRunDone ? .boxList(notice: FirstRunText.serviceNotAnswering) : .firstRun(.welcome)
+    }
+}
+
+/// The app's windows showing the launch (R-0132): the launch wait stops
+/// only when the last one closes, never when a second window does.
+public struct LaunchWindows: Sendable {
+    public private(set) var open = 0
+    public init() {}
+    public mutating func appeared() { open += 1 }
+    /// A window closed; true when it was the last.
+    public mutating func disappeared() -> Bool {
+        guard open > 0 else { return false }
+        open -= 1
+        return open == 0
     }
 }

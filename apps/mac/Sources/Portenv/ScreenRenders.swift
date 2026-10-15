@@ -166,7 +166,9 @@ enum ScreenRenders {
             // A closed workspace's window: Open, and a failed open with Try
             // Again (R-0211).
             try snapshot(ClosedWorkspace(box: "acme-api", failure: nil) {}, name: "closed", size: NSSize(width: 720, height: 360), in: dir)
-            try snapshot(ClosedWorkspace(box: "acme-api", failure: "The workspace failed to start: Docker Desktop isn\u{2019}t running.") {},
+            // portenvd's engine line as it sends it (core/daemon/testdata/
+            // engine-lines.txt), shown as is (R-0218).
+            try snapshot(ClosedWorkspace(box: "acme-api", failure: "Portenv uses Docker Desktop to run workspaces on this Mac. Start Docker Desktop, then click Try Again.") {},
                          name: "closed-open-failed", size: NSSize(width: 720, height: 360), in: dir)
             // Command blocks, folded by default and opened (R-0139, R-0174).
             try BlockRenders.render(to: dir) { view, name, size in

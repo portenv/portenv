@@ -924,10 +924,13 @@ func (s *Server) boxID(name string) string {
 // The lines the app shows when the container engine isn't running, doesn't
 // answer, or a download stops (R-0211), worded as the app's own engine lines
 // (DaemonErrorText), which pass them through. The detail goes to the log.
+// testdata/engine-lines.txt holds the same three: the Go test checks these
+// against it, and the app's test runs each through DaemonErrorText
+// unchanged (R-0214).
 const (
-	EngineNotRunning   = "Portenv uses Docker Desktop to run workspaces on this Mac. Start Docker Desktop, then open the workspace again."
-	EngineUnresponsive = "Docker Desktop is still starting, or isn't answering. Wait a moment, then open the workspace again."
-	PullStalled        = "Portenv couldn't get the workspace image: the download stopped. Check this Mac is online, then open the workspace again."
+	EngineNotRunning   = "Portenv uses Docker Desktop to run workspaces on this Mac. Start Docker Desktop, then click Try Again."
+	EngineUnresponsive = "Docker Desktop is still starting, or isn’t answering. Wait a moment, then click Try Again."
+	PullStalled        = "Portenv couldn’t get the workspace image: the download stopped. Check this Mac is online, then click Try Again."
 )
 
 // plainOpenError turns the engine's failures into their plain lines; every

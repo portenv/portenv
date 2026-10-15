@@ -115,4 +115,22 @@ struct BlockReaderTests {
         #expect(readShown < .milliseconds(16))
         #expect(listing < .milliseconds(16))
     }
+
+    /// Find over a 10,000-line block reads plain text from the buffer:
+    /// timed, and it finds rows a folded block hides.
+    @Test func findOverAFullScrollbackIsTimed() {
+        let v = view(cols: 120, rows: 40)
+        var out = Self.prompt("npm run build")
+        for i in 1 ... 10_000 { out += "transforming (\(i)) src/module-\(i).ts\r\n" }
+        out += Self.end(0) + Self.prompt("ls")
+        v.ingest(Array(out.utf8))
+        let reader = BlockReader(view: v)
+        let blocks = reader.blocks()
+        var found: [BlockFind.Match] = []
+        let took = ContinuousClock().measure { found = BlockFind.matches("module-5000.ts", in: blocks) { reader.text($0) } }
+        print("BLOCK-TIMES find(10000 rows)=\(took)")
+        #expect(found.count == 1)
+        #expect(found.first?.block == blocks.first?.id)
+    }
 }
+

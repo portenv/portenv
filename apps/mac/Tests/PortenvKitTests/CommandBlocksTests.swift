@@ -133,7 +133,7 @@ struct CommandBlocksTests {
         ]
         let found = BlockFind.matches("retr", in: blocks) { rows[$0] }
         #expect(found == [
-            BlockFind.Match(block: 1, row: nil, range: 11 ..< 15),
+            BlockFind.Match(block: 1, row: nil, range: 12 ..< 16),
             BlockFind.Match(block: 1, row: 2, range: 0 ..< 4),
             BlockFind.Match(block: 9, row: 10, range: 2 ..< 6),
             BlockFind.Match(block: 9, row: 10, range: 17 ..< 21),

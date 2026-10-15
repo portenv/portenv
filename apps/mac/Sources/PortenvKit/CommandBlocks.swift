@@ -236,25 +236,37 @@ public enum BlockFind {
     }
 
     public static func matches(_ query: String, in blocks: [CommandBlock], row text: (Int) -> String?) -> [Match] {
-        let q = query.lowercased()
-        guard !q.isEmpty else { return [] }
         var out: [Match] = []
-        func scan(_ line: String, block: Int, row: Int?) {
-            let lower = line.lowercased()
-            guard lower.count == line.count else {
-                // A character whose lower case is longer: compare as is.
-                for r in ranges(of: query, in: line) { out.append(Match(block: block, row: row, range: r)) }
-                return
-            }
-            for r in ranges(of: q, in: lower) { out.append(Match(block: block, row: row, range: r)) }
-        }
         for b in blocks {
-            scan(b.command, block: b.id, row: nil)
-            if let rows = b.output {
-                for r in rows { if let t = text(r) { scan(t, block: b.id, row: r) } }
-            }
+            out += matches(query, inCommandOf: b)
+            if let rows = b.output { out += matches(query, block: b.id, rows: rows, row: text) }
         }
         return out
+    }
+
+    /// The matches in a block's command.
+    public static func matches(_ query: String, inCommandOf block: CommandBlock) -> [Match] {
+        scan(query, block.command).map { Match(block: block.id, row: nil, range: $0) }
+    }
+
+    /// The matches in some of a block's rows: the app searches a long block
+    /// in chunks of `chunkRows`, letting the window draw between them.
+    public static func matches(_ query: String, block: Int, rows: ClosedRange<Int>, row text: (Int) -> String?) -> [Match] {
+        var out: [Match] = []
+        for r in rows { if let t = text(r) { out += scan(query, t).map { Match(block: block, row: r, range: $0) } } }
+        return out
+    }
+
+    /// Rows searched between two chances for the window to draw.
+    public static let chunkRows = 250
+
+    static func scan(_ query: String, _ line: String) -> [Range<Int>] {
+        let q = query.lowercased()
+        guard !q.isEmpty else { return [] }
+        let lower = line.lowercased()
+        // A character whose lower case is longer: compare as is.
+        guard lower.count == line.count else { return ranges(of: query, in: line) }
+        return ranges(of: q, in: lower)
     }
 
     static func ranges(of needle: String, in hay: String) -> [Range<Int>] {

@@ -149,6 +149,7 @@ public struct BlocksView: View {
     @State private var query: String
     @State private var found: [BlockFind.Match] = []
     @State private var current: Int?
+    @State private var searching: Task<Void, Never>?
     /// Where each block sits in the list's visible area, for the header that
     /// stays at the top.
     @State private var frames: [Int: CGRect] = [:]
@@ -292,9 +293,32 @@ public struct BlocksView: View {
         .overlay(alignment: .bottom) { Divider() }
     }
 
+    /// Searches 150 ms after the last keystroke, in chunks of rows with a
+    /// yield between them, so a long scrollback never holds the main thread
+    /// (R-0174); a new keystroke cancels the search under way.
     func search(_ q: String) {
-        found = BlockFind.matches(q, in: blocks) { reader.text($0) }
-        current = found.isEmpty ? nil : 0
+        searching?.cancel()
+        guard !q.isEmpty else { found = []; current = nil; return }
+        let blocks = blocks, reader = reader
+        searching = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(150))
+            var out: [BlockFind.Match] = []
+            for b in blocks {
+                if Task.isCancelled { return }
+                out += BlockFind.matches(q, inCommandOf: b)
+                guard let rows = b.output else { continue }
+                var lo = rows.lowerBound
+                while lo <= rows.upperBound {
+                    let hi = min(lo + BlockFind.chunkRows - 1, rows.upperBound)
+                    out += BlockFind.matches(q, block: b.id, rows: lo ... hi) { reader.text($0) }
+                    lo = hi + 1
+                    await Task.yield()
+                    if Task.isCancelled { return }
+                }
+            }
+            found = out
+            current = out.isEmpty ? nil : 0
+        }
     }
 
     func step(_ by: Int) {
@@ -303,6 +327,7 @@ public struct BlocksView: View {
     }
 
     func closeFind() {
+        searching?.cancel()
         finding = false
         query = ""
         found = []

@@ -128,9 +128,17 @@ struct BlockReaderTests {
         let blocks = reader.blocks()
         var found: [BlockFind.Match] = []
         let took = ContinuousClock().measure { found = BlockFind.matches("module-5000.ts", in: blocks) { reader.text($0) } }
-        print("BLOCK-TIMES find(10000 rows)=\(took)")
+        // The app searches in chunks with a yield between them: one chunk
+        // is what holds the main thread at a time.
+        let rows = blocks[0].output!
+        let chunk = ContinuousClock().measure {
+            _ = BlockFind.matches("module-5000.ts", block: blocks[0].id,
+                                  rows: rows.lowerBound ... rows.lowerBound + BlockFind.chunkRows - 1) { reader.text($0) }
+        }
+        print("BLOCK-TIMES find(10000 rows)=\(took) findChunk(\(BlockFind.chunkRows) rows)=\(chunk)")
         #expect(found.count == 1)
         #expect(found.first?.block == blocks.first?.id)
+        #expect(chunk < .milliseconds(16))
     }
 }
 

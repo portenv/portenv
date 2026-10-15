@@ -375,6 +375,7 @@ extension BoxState {
         interrupted = r.interrupted
         storagePlace = r.storagePlace.isEmpty ? nil : r.storagePlace
         openedAt = r.hasOpenedAt ? r.openedAt.date : nil
+        restartedForSecurityUpdate = r.restartedForSecurityUpdate
     }
 }
 

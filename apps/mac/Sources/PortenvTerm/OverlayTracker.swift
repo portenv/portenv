@@ -11,6 +11,14 @@ import SwiftTerm
 public final class OverlayTracker {
     public private(set) var rows = OverlayRows()
     private let terminal: Terminal
+    /// While a seed is drawn, its replayed marks get no time: when those
+    /// commands ran isn't known here.
+    public var seeding = false
+    /// Where each prompt's typed command starts: the column of its B mark,
+    /// by the prompt line's identity.
+    public private(set) var inputColumn: [ObjectIdentifier: Int] = [:]
+    /// The clock marks are stamped with (tests replace it).
+    public var now: () -> Date = { Date() }
 
     public init(terminal: Terminal) {
         self.terminal = terminal
@@ -38,6 +46,11 @@ public final class OverlayTracker {
         let kind: OverlayRows.Kind
         switch payload.first {
         case "A": kind = .prompt
+        case "B":
+            if let line = terminal.getScrollInvariantLine(row: cursorRow) {
+                inputColumn[ObjectIdentifier(line)] = terminal.getCursorLocation().x
+            }
+            return
         case "C": kind = .commandStart
         case "D":
             let code = payload.split(separator: ";").dropFirst().first.flatMap { Int($0) }
@@ -46,11 +59,14 @@ public final class OverlayTracker {
         }
         let row = cursorRow
         guard let line = terminal.getScrollInvariantLine(row: row) else { return }
-        rows.add(row: row, line: ObjectIdentifier(line), kind: kind)
+        rows.add(row: row, line: ObjectIdentifier(line), kind: kind, at: seeding ? nil : now())
     }
 
     /// Forgets every mark: the terminal starts over (a reset or re-seed).
-    public func reset() { rows.removeAll() }
+    public func reset() {
+        rows.removeAll()
+        inputColumn.removeAll()
+    }
 
     /// Brings the marks up to date with the buffer (trimming, reflow).
     public func refresh() {
@@ -62,6 +78,10 @@ public final class OverlayTracker {
         rows.resolve(valid: first ... last) { r in
             self.terminal.getScrollInvariantLine(row: r).map(ObjectIdentifier.init)
         }
+        // Only lines that still hold a prompt keep their column: a trimmed
+        // line's identity can be reused by a new one.
+        let prompts = Set(rows.marks.filter { $0.kind == .prompt }.map(\.line))
+        inputColumn = inputColumn.filter { prompts.contains($0.key) }
     }
 
     /// The marks on screen now, with their screen rows. None while a

@@ -778,6 +778,11 @@ public nonisolated struct Portenv_Daemon_V1_GetBoxStateResponse: Sendable {
   /// Clears the value of `openedAt`. Subsequent reads from it will return its default value.
   public mutating func clearOpenedAt() {self._openedAt = nil}
 
+  /// This open stopped and started the box again to apply a security update
+  /// (it was left running with mounts it shouldn't have; R-0201). The app
+  /// tells the person once. Only for the open that did it.
+  public var restartedForSecurityUpdate: Bool = false
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -2954,7 +2959,7 @@ nonisolated extension Portenv_Daemon_V1_GetBoxStateRequest: SwiftProtobuf.Messag
 
 nonisolated extension Portenv_Daemon_V1_GetBoxStateResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".GetBoxStateResponse"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}state\0\u{3}saved_at\0\u{1}location\0\u{3}failed_packages\0\u{3}packages_error\0\u{1}interrupted\0\u{3}storage_place\0\u{3}opened_at\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}state\0\u{3}saved_at\0\u{1}location\0\u{3}failed_packages\0\u{3}packages_error\0\u{1}interrupted\0\u{3}storage_place\0\u{3}opened_at\0\u{3}restarted_for_security_update\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -2970,6 +2975,7 @@ nonisolated extension Portenv_Daemon_V1_GetBoxStateResponse: SwiftProtobuf.Messa
       case 6: try { try decoder.decodeSingularBoolField(value: &self.interrupted) }()
       case 7: try { try decoder.decodeSingularStringField(value: &self.storagePlace) }()
       case 8: try { try decoder.decodeSingularMessageField(value: &self._openedAt) }()
+      case 9: try { try decoder.decodeSingularBoolField(value: &self.restartedForSecurityUpdate) }()
       default: break
       }
     }
@@ -3004,6 +3010,9 @@ nonisolated extension Portenv_Daemon_V1_GetBoxStateResponse: SwiftProtobuf.Messa
     try { if let v = self._openedAt {
       try visitor.visitSingularMessageField(value: v, fieldNumber: 8)
     } }()
+    if self.restartedForSecurityUpdate != false {
+      try visitor.visitSingularBoolField(value: self.restartedForSecurityUpdate, fieldNumber: 9)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -3016,6 +3025,7 @@ nonisolated extension Portenv_Daemon_V1_GetBoxStateResponse: SwiftProtobuf.Messa
     if lhs.interrupted != rhs.interrupted {return false}
     if lhs.storagePlace != rhs.storagePlace {return false}
     if lhs._openedAt != rhs._openedAt {return false}
+    if lhs.restartedForSecurityUpdate != rhs.restartedForSecurityUpdate {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

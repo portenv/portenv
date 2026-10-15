@@ -20,6 +20,7 @@ import (
 	"net"
 	"net/netip"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -42,8 +43,9 @@ import (
 const (
 	labelBox   = "dev.portenv.box"
 	namePrefix = "portenv-"
-	// StorageMount is where Config.StorageDir appears inside every box.
-	StorageMount = "/run/portenv/storage"
+	// StorageMount is where local storage appears inside a box: each box's
+	// own repository folder, at Config.StorageRepo under it.
+	StorageMount = agent.StorageMount
 	defaultStop  = 10 * time.Second
 	defaultShm   = 1 << 30
 )
@@ -52,9 +54,16 @@ const (
 type Config struct {
 	// StateDir holds each box's spec. Required.
 	StateDir string
-	// StorageDir, when set, is bind-mounted at StorageMount in every box so
-	// restic inside the box can reach a local repository (Phase 0).
+	// StorageDir, when set, is the box's own repository folder on this
+	// machine (local storage), bind-mounted at StorageRepo so restic inside
+	// the box can reach it. Only the box's own: never the folder holding
+	// every box's repositories, which would let one workspace delete
+	// another's saves (R-0201).
 	StorageDir string
+	// StorageRepo is where StorageDir appears inside the box, one or two
+	// levels under StorageMount (StorageMount/<box-id> or
+	// StorageMount/boxes/<box-id>). Required with StorageDir.
+	StorageRepo string
 	// Client overrides the Docker client; nil means one from the
 	// environment (DOCKER_HOST and friends).
 	Client *client.Client
@@ -67,6 +76,12 @@ type Config struct {
 	// is used (on a Mac, inside Docker's disk on a FileVault-encrypted drive).
 	HomesDir string
 }
+
+// EngineWait is how long one engine call may go unanswered, and how long an
+// image download may go without progress, before it fails with
+// driver.ErrEngineUnresponsive or driver.ErrPullStalled (R-0211). A pull
+// that keeps progressing may take as long as it needs. Tests shorten it.
+var EngineWait = 30 * time.Second
 
 // Driver is the docker box driver.
 type Driver struct {
@@ -81,8 +96,8 @@ var _ driver.Driver = (*Driver)(nil)
 
 // New returns a driver connected to the Docker engine.
 func New(cfg Config) (*Driver, error) {
-	if cfg.StateDir == "" {
-		return nil, errors.New("docker driver: StateDir is required")
+	if err := cfg.check(); err != nil {
+		return nil, err
 	}
 	if err := os.MkdirAll(cfg.StateDir, 0o700); err != nil {
 		return nil, fmt.Errorf("docker driver state: %w", err)
@@ -96,6 +111,28 @@ func New(cfg Config) (*Driver, error) {
 		}
 	}
 	return &Driver{cfg: cfg, cli: cli}, nil
+}
+
+// check refuses a configuration that would mount more than a box's own.
+func (c Config) check() error {
+	if c.StateDir == "" {
+		return errors.New("docker driver: StateDir is required")
+	}
+	if c.StorageDir == "" {
+		return nil
+	}
+	rel, ok := strings.CutPrefix(c.StorageRepo, StorageMount+"/")
+	if !ok || path.Clean(c.StorageRepo) != c.StorageRepo {
+		return fmt.Errorf("docker driver: the storage repository %q isn't one workspace's folder under %s", c.StorageRepo, StorageMount)
+	}
+	parts := strings.Split(rel, "/")
+	switch {
+	case len(parts) == 1 && idRE.MatchString(parts[0]) && parts[0] != "boxes": // workspace-word: ok (a path)
+	case len(parts) == 2 && parts[0] == "boxes" && idRE.MatchString(parts[1]): // workspace-word: ok (a path)
+	default:
+		return fmt.Errorf("docker driver: the storage repository %q isn't one workspace's folder under %s", c.StorageRepo, StorageMount)
+	}
+	return nil
 }
 
 // spec is what the driver remembers about a box between calls.
@@ -158,7 +195,7 @@ func (d *Driver) Create(ctx context.Context, box driver.Box) (driver.State, erro
 	if _, err := d.specPath(box.ID); err != nil {
 		return driver.StateUnspecified, err
 	}
-	if err := d.ensureImage(ctx, box.ToolboxImage); err != nil {
+	if err := d.ensureImage(ctx, box); err != nil {
 		return driver.StateUnspecified, err
 	}
 	s := spec{Box: box}
@@ -171,19 +208,102 @@ func (d *Driver) Create(ctx context.Context, box driver.Box) (driver.State, erro
 	return driver.StateCreated, nil
 }
 
-func (d *Driver) ensureImage(ctx context.Context, ref string) error {
-	if _, err := d.cli.ImageInspect(ctx, ref); err == nil {
+// call is the context for one engine call: it ends after EngineWait (plus
+// extra, for a call that waits on purpose, like a stop's grace period).
+func call(ctx context.Context, extra time.Duration) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(ctx, EngineWait+extra)
+}
+
+// engineErr says what kind of failure an engine call's error is: an engine
+// nothing answers for is driver.ErrEngineNotRunning; one that didn't answer
+// in time, or is still starting, is driver.ErrEngineUnresponsive (each kept
+// with its detail); any other error is returned as it is. parent is the
+// caller's context: its own end isn't the engine's fault.
+func engineErr(parent context.Context, what string, err error) error {
+	if err == nil {
+		return nil
+	}
+	if parent.Err() != nil {
+		return fmt.Errorf("%s: %w", what, err)
+	}
+	if client.IsErrConnectionFailed(err) {
+		return fmt.Errorf("%s: %w: %w", what, driver.ErrEngineNotRunning, err)
+	}
+	// Docker Desktop still starting answers with its own deadline
+	// ("dialing …: context deadline exceeded"), not a code.
+	if errors.Is(err, context.DeadlineExceeded) || cerrdefs.IsUnavailable(err) || cerrdefs.IsDeadlineExceeded(err) ||
+		strings.Contains(err.Error(), "deadline exceeded") {
+		return fmt.Errorf("%s: %w: %w", what, driver.ErrEngineUnresponsive, err)
+	}
+	return fmt.Errorf("%s: %w", what, err)
+}
+
+func (d *Driver) ensureImage(ctx context.Context, box driver.Box) error {
+	ref := box.ToolboxImage
+	cctx, cancel := call(ctx, 0)
+	_, err := d.cli.ImageInspect(cctx, ref)
+	cancel()
+	if err == nil {
 		return nil
 	} else if !cerrdefs.IsNotFound(err) {
-		return fmt.Errorf("inspect image %s: %w", ref, err)
+		return engineErr(ctx, "inspect image "+ref, err)
 	}
-	resp, err := d.cli.ImagePull(ctx, ref, client.ImagePullOptions{})
+	if box.Progress != nil {
+		box.Progress("pulling the toolbox image")
+	}
+	return d.pull(ctx, ref)
+}
+
+// pull downloads ref for as long as it keeps progressing: it fails with
+// driver.ErrPullStalled once EngineWait passes with no message from the
+// engine (the request itself included).
+func (d *Driver) pull(ctx context.Context, ref string) error {
+	pctx, stop := context.WithCancelCause(ctx)
+	defer stop(nil)
+	wait := EngineWait
+	progress := make(chan struct{}, 1)
+	done, watched := make(chan struct{}), make(chan struct{})
+	defer func() { close(done); <-watched }()
+	go func() {
+		defer close(watched)
+		t := time.NewTimer(wait)
+		defer t.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-progress:
+				t.Reset(wait)
+			case <-t.C:
+				stop(driver.ErrPullStalled)
+				return
+			}
+		}
+	}()
+	stalled := func(err error) error {
+		if errors.Is(context.Cause(pctx), driver.ErrPullStalled) {
+			return fmt.Errorf("pull %s: %w", ref, driver.ErrPullStalled)
+		}
+		return engineErr(ctx, "pull "+ref, err)
+	}
+	resp, err := d.cli.ImagePull(pctx, ref, client.ImagePullOptions{})
 	if err != nil {
-		return fmt.Errorf("pull %s: %w", ref, err)
+		return stalled(err)
 	}
-	defer func() { _ = resp.Close() }()
-	if err := resp.Wait(ctx); err != nil {
-		return fmt.Errorf("pull %s: %w", ref, err)
+	for m, err := range resp.JSONMessages(pctx) {
+		if err != nil {
+			return stalled(err)
+		}
+		if m.Error != nil {
+			return fmt.Errorf("pull %s: %s", ref, m.Error.Message)
+		}
+		select {
+		case progress <- struct{}{}:
+		default:
+		}
+	}
+	if err := context.Cause(pctx); err != nil {
+		return stalled(err)
 	}
 	return nil
 }
@@ -192,15 +312,20 @@ func (d *Driver) ensureImage(ctx context.Context, ref string) error {
 // The box must not be running.
 func (d *Driver) recreate(ctx context.Context, s spec) error {
 	name := d.containerName(s.Box.ID)
-	if _, err := d.cli.ContainerRemove(ctx, name, client.ContainerRemoveOptions{}); err != nil && !cerrdefs.IsNotFound(err) {
-		return fmt.Errorf("remove old container: %w", err)
+	cctx, cancel := call(ctx, 0)
+	_, err := d.cli.ContainerRemove(cctx, name, client.ContainerRemoveOptions{})
+	cancel()
+	if err != nil && !cerrdefs.IsNotFound(err) {
+		return engineErr(ctx, "remove old container", err)
 	}
 	env := []string{agent.ChannelEnv + "=stdin", agent.BoxIDEnv + "=" + string(s.Box.ID)}
 	if s.Home.Fresh {
 		env = append(env, "PORTENV_INIT_HOME=1")
 	}
 	host := d.hostConfig(s)
-	_, err := d.cli.ContainerCreate(ctx, client.ContainerCreateOptions{
+	cctx, cancel = call(ctx, 0)
+	defer cancel()
+	_, err = d.cli.ContainerCreate(cctx, client.ContainerCreateOptions{
 		Name: name,
 		Config: &container.Config{
 			Image:        s.Box.ToolboxImage,
@@ -216,7 +341,7 @@ func (d *Driver) recreate(ctx context.Context, s spec) error {
 		HostConfig: host,
 	})
 	if err != nil {
-		return fmt.Errorf("create container: %w", err)
+		return engineErr(ctx, "create container", err)
 	}
 	return nil
 }
@@ -226,6 +351,12 @@ func (d *Driver) recreate(ctx context.Context, s spec) error {
 // network namespaces and never relaxes seccomp or AppArmor: root in the box
 // must not be able to read another process's memory (ADR 0005, conditions).
 // TestHostConfigKeepsIsolation enforces this.
+//
+// Changing the mounts restarts every box left running across the update,
+// once: Rekey compares a running box's mounts with these and refuses on
+// any difference (driver.ErrMountsChanged), and the open then stops and
+// starts it with the security-update notice (R-0201). A change made for
+// another reason must give the notice that reason (R-0210).
 func (d *Driver) hostConfig(s spec) *container.HostConfig {
 	shm := int64(s.Box.Resources.SharedMemoryBytes) // #nosec G115 -- sizes far below MaxInt64
 	if shm == 0 {
@@ -248,13 +379,41 @@ func (d *Driver) hostConfig(s spec) *container.HostConfig {
 		host.Mounts = append(host.Mounts, mount.Mount{Type: mount.TypeVolume, Source: s.Home.Ref, Target: "/home"})
 	}
 	if d.cfg.StorageDir != "" {
-		host.Mounts = append(host.Mounts, mount.Mount{Type: mount.TypeBind, Source: d.cfg.StorageDir, Target: StorageMount})
+		host.Mounts = append(host.Mounts, mount.Mount{Type: mount.TypeBind, Source: d.cfg.StorageDir, Target: d.cfg.StorageRepo})
 	}
 	// restic's cache survives restarts (the root file system does not), so
 	// a same-machine resume reads almost nothing remotely. It holds only
 	// encrypted repository data and is never saved or moved.
 	host.Mounts = append(host.Mounts, mount.Mount{Type: mount.TypeVolume, Source: d.cacheVolume(s.Box.ID), Target: CacheMount})
 	return host
+}
+
+// engineSocket is whether p names a container engine's control socket,
+// which no box may ever have: it is root on the machine.
+func engineSocket(p string) bool {
+	return agent.EngineSocket(p)
+}
+
+// sameMounts is whether a running container's mounts are the ones its
+// spec gives now, in any order.
+func sameMounts(want, got []mount.Mount) bool {
+	if len(want) != len(got) {
+		return false
+	}
+	key := func(m mount.Mount) string {
+		return fmt.Sprintf("%s\x00%s\x00%s\x00%v", m.Type, m.Source, m.Target, m.ReadOnly)
+	}
+	left := map[string]int{}
+	for _, m := range want {
+		left[key(m)]++
+	}
+	for _, m := range got {
+		if left[key(m)] == 0 {
+			return false
+		}
+		left[key(m)]--
+	}
+	return true
 }
 
 // CacheMount is restic's cache inside every box (portenv-sync's, 0700).
@@ -279,7 +438,10 @@ func (d *Driver) MountHome(ctx context.Context, id driver.BoxID, home driver.Hom
 	} else if running {
 		return errors.New("MountHome needs the box stopped") // workspace-word: ok (programming error)
 	}
-	if _, err := d.cli.VolumeInspect(ctx, home.Ref, client.VolumeInspectOptions{}); cerrdefs.IsNotFound(err) {
+	vctx, cancel := call(ctx, 0)
+	_, verr := d.cli.VolumeInspect(vctx, home.Ref, client.VolumeInspectOptions{})
+	cancel()
+	if cerrdefs.IsNotFound(verr) {
 		opts := client.VolumeCreateOptions{Name: home.Ref, Labels: map[string]string{labelBox: string(id)}}
 		if d.cfg.HomesDir != "" {
 			if !idRE.MatchString(home.Ref) {
@@ -292,11 +454,14 @@ func (d *Driver) MountHome(ctx context.Context, id driver.BoxID, home driver.Hom
 			opts.Driver = "local"
 			opts.DriverOpts = map[string]string{"type": "none", "o": "bind", "device": dir}
 		}
-		if _, err := d.cli.VolumeCreate(ctx, opts); err != nil {
-			return fmt.Errorf("create home volume: %w", err)
+		vctx, cancel := call(ctx, 0)
+		_, err := d.cli.VolumeCreate(vctx, opts)
+		cancel()
+		if err != nil {
+			return engineErr(ctx, "create home volume", err)
 		}
-	} else if err != nil {
-		return fmt.Errorf("inspect home volume: %w", err)
+	} else if verr != nil {
+		return engineErr(ctx, "inspect home volume", verr)
 	}
 	s.Home = home
 	if err := d.saveSpec(s); err != nil {
@@ -336,8 +501,11 @@ func (d *Driver) Start(ctx context.Context, id driver.BoxID) (driver.State, erro
 	}
 	d.channels[id] = sec
 	d.mu.Unlock()
-	if _, err := d.cli.ContainerStart(ctx, d.containerName(id), client.ContainerStartOptions{}); err != nil {
-		return driver.StateFailed, fmt.Errorf("start container: %w", err)
+	sctx, cancel := call(ctx, 0)
+	_, err = d.cli.ContainerStart(sctx, d.containerName(id), client.ContainerStartOptions{})
+	cancel()
+	if err != nil {
+		return driver.StateFailed, engineErr(ctx, "start container", err)
 	}
 	line, err := sec.Line()
 	if err != nil {
@@ -364,8 +532,10 @@ func (d *Driver) Stop(ctx context.Context, id driver.BoxID, timeout time.Duratio
 		timeout = defaultStop
 	}
 	secs := int(timeout.Round(time.Second) / time.Second)
-	if _, err := d.cli.ContainerStop(ctx, d.containerName(id), client.ContainerStopOptions{Timeout: &secs}); err != nil && !cerrdefs.IsNotFound(err) {
-		return driver.StateUnspecified, fmt.Errorf("stop container: %w", err)
+	sctx, cancel := call(ctx, time.Duration(secs)*time.Second)
+	defer cancel()
+	if _, err := d.cli.ContainerStop(sctx, d.containerName(id), client.ContainerStopOptions{Timeout: &secs}); err != nil && !cerrdefs.IsNotFound(err) {
+		return driver.StateUnspecified, engineErr(ctx, "stop container", err)
 	}
 	return driver.StateStopped, nil
 }
@@ -544,12 +714,14 @@ func (d *Driver) Capabilities(ctx context.Context) (driver.Capabilities, error) 
 }
 
 func (d *Driver) running(ctx context.Context, id driver.BoxID) (bool, error) {
-	insp, err := d.cli.ContainerInspect(ctx, d.containerName(id), client.ContainerInspectOptions{})
+	cctx, cancel := call(ctx, 0)
+	defer cancel()
+	insp, err := d.cli.ContainerInspect(cctx, d.containerName(id), client.ContainerInspectOptions{})
 	if cerrdefs.IsNotFound(err) {
 		return false, nil
 	}
 	if err != nil {
-		return false, fmt.Errorf("inspect container: %w", err)
+		return false, engineErr(ctx, "inspect container", err)
 	}
 	return insp.Container.State != nil && insp.Container.State.Running, nil
 }
@@ -572,9 +744,11 @@ func (d *Driver) ImageDigest(ctx context.Context, ref string) (string, error) {
 	if strings.Contains(ref, "@sha256:") {
 		return ref, nil
 	}
-	insp, err := d.cli.ImageInspect(ctx, ref)
+	cctx, cancel := call(ctx, 0)
+	defer cancel()
+	insp, err := d.cli.ImageInspect(cctx, ref)
 	if err != nil {
-		return "", fmt.Errorf("inspect image %s: %w", ref, err)
+		return "", engineErr(ctx, "inspect image "+ref, err)
 	}
 	repo := ref
 	if i := strings.LastIndex(ref, ":"); i > strings.LastIndex(ref, "/") {
@@ -599,6 +773,20 @@ func (d *Driver) Rekey(ctx context.Context, id driver.BoxID) error {
 		return err
 	} else if !running {
 		return fmt.Errorf("workspace %s is not running", id)
+	}
+	// Before any key material exists: a box started with other mounts (the
+	// whole storage folder, from before R-0201) must not get a new channel
+	// while it can still reach what it shouldn't.
+	s, err := d.loadSpec(id)
+	if err != nil {
+		return err
+	}
+	insp, err := d.cli.ContainerInspect(ctx, d.containerName(id), client.ContainerInspectOptions{})
+	if err != nil {
+		return fmt.Errorf("inspect the workspace's mounts: %w", err)
+	}
+	if insp.Container.HostConfig == nil || !sameMounts(d.hostConfig(s).Mounts, insp.Container.HostConfig.Mounts) {
+		return driver.ErrMountsChanged
 	}
 	sec, err := agent.NewChannelSecrets()
 	if err != nil {
@@ -664,9 +852,11 @@ func (d *Driver) AgentChannel(ctx context.Context, id driver.BoxID) (driver.Agen
 	if !ok {
 		return driver.AgentChannel{}, driver.ErrNoChannel
 	}
-	res, err := d.cli.ContainerInspect(ctx, d.containerName(id), client.ContainerInspectOptions{})
+	cctx, cancel := call(ctx, 0)
+	defer cancel()
+	res, err := d.cli.ContainerInspect(cctx, d.containerName(id), client.ContainerInspectOptions{})
 	if err != nil {
-		return driver.AgentChannel{}, err
+		return driver.AgentChannel{}, engineErr(ctx, "inspect container", err)
 	}
 	var addr string
 	if ns := res.Container.NetworkSettings; ns != nil {

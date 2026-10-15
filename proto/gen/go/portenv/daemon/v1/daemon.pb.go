@@ -1681,9 +1681,13 @@ type GetBoxStateResponse struct {
 	// a path, a user or a credential. Empty when not known here.
 	StoragePlace string `protobuf:"bytes,7,opt,name=storage_place,json=storagePlace,proto3" json:"storage_place,omitempty"`
 	// When this portenvd opened the box (the inspector's "Since <time>").
-	OpenedAt      *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=opened_at,json=openedAt,proto3" json:"opened_at,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	OpenedAt *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=opened_at,json=openedAt,proto3" json:"opened_at,omitempty"`
+	// This open stopped and started the box again to apply a security update
+	// (it was left running with mounts it shouldn't have; R-0201). The app
+	// tells the person once. Only for the open that did it.
+	RestartedForSecurityUpdate bool `protobuf:"varint,9,opt,name=restarted_for_security_update,json=restartedForSecurityUpdate,proto3" json:"restarted_for_security_update,omitempty"`
+	unknownFields              protoimpl.UnknownFields
+	sizeCache                  protoimpl.SizeCache
 }
 
 func (x *GetBoxStateResponse) Reset() {
@@ -1770,6 +1774,13 @@ func (x *GetBoxStateResponse) GetOpenedAt() *timestamppb.Timestamp {
 		return x.OpenedAt
 	}
 	return nil
+}
+
+func (x *GetBoxStateResponse) GetRestartedForSecurityUpdate() bool {
+	if x != nil {
+		return x.RestartedForSecurityUpdate
+	}
+	return false
 }
 
 type SetNetworkPathRequest struct {
@@ -5550,7 +5561,7 @@ const file_portenv_daemon_v1_daemon_proto_rawDesc = "" +
 	"\bcert_pem\x18\x02 \x01(\fR\acertPem\x12\x14\n" +
 	"\x05token\x18\x03 \x01(\tR\x05token\"(\n" +
 	"\x12GetBoxStateRequest\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\"\xec\x02\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\"\xaf\x03\n" +
 	"\x13GetBoxStateResponse\x122\n" +
 	"\x05state\x18\x01 \x01(\x0e2\x1c.portenv.daemon.v1.SaveStateR\x05state\x125\n" +
 	"\bsaved_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\asavedAt\x12\x1a\n" +
@@ -5559,7 +5570,8 @@ const file_portenv_daemon_v1_daemon_proto_rawDesc = "" +
 	"\x0epackages_error\x18\x05 \x01(\tR\rpackagesError\x12 \n" +
 	"\vinterrupted\x18\x06 \x01(\bR\vinterrupted\x12#\n" +
 	"\rstorage_place\x18\a \x01(\tR\fstoragePlace\x127\n" +
-	"\topened_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\bopenedAt\"n\n" +
+	"\topened_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\bopenedAt\x12A\n" +
+	"\x1drestarted_for_security_update\x18\t \x01(\bR\x1arestartedForSecurityUpdate\"n\n" +
 	"\x15SetNetworkPathRequest\x122\n" +
 	"\x04path\x18\x01 \x01(\x0e2\x1e.portenv.daemon.v1.NetworkPathR\x04path\x12!\n" +
 	"\freporter_pid\x18\x02 \x01(\x05R\vreporterPid\"\x18\n" +

@@ -143,6 +143,11 @@ service DaemonService {
   // written, never logged. It signs in once per shared connection, through
   // an agent of portenvd's own for that one run.
   rpc ProvideServerKey(ProvideServerKeyRequest) returns (ProvideServerKeyResponse);
+  // Add a Server's Check (2.9, ADR 0021 §3): a read-only probe over the
+  // server's pinned SSH connection, one line per question; each failure
+  // says what to do, in Portenv's words, never the server's. It changes
+  // nothing on the server.
+  rpc CheckServer(CheckServerRequest) returns (CheckServerResponse);
   // Whether this Mac's box engine answers (Docker Desktop is running), for
   // Welcome's Docker card and the state line (R-0098). It only asks the
   // engine: it never starts anything. portenvd gives the engine 1.5 s;
@@ -790,6 +795,26 @@ message ProvideServerKeyRequest {
 }
 
 message ProvideServerKeyResponse {}
+
+message CheckServerRequest {
+  string server_id = 1;
+}
+
+message CheckLine {
+  string id = 1;
+  string title = 2;
+  portenv.types.v1.CheckState state = 3;
+  // What Portenv found, in its own words.
+  string detail = 4;
+  // For a failure: what to do, one plain line.
+  string fix = 5;
+}
+
+message CheckServerResponse {
+  repeated CheckLine lines = 1;
+  // No line failed: Set Up may install.
+  bool passed = 2;
+}
 
 message GetEngineRequest {}
 

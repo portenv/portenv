@@ -555,6 +555,19 @@ public enum Portenv_Daemon_V1_DaemonService: Sendable {
                 type: .unary
             )
         }
+        /// Namespace for "CheckServer" metadata.
+        public enum CheckServer: Sendable {
+            /// Request type for "CheckServer".
+            public typealias Input = Portenv_Daemon_V1_CheckServerRequest
+            /// Response type for "CheckServer".
+            public typealias Output = Portenv_Daemon_V1_CheckServerResponse
+            /// Descriptor for "CheckServer".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "CheckServer",
+                type: .unary
+            )
+        }
         /// Namespace for "GetEngine" metadata.
         public enum GetEngine: Sendable {
             /// Request type for "GetEngine".
@@ -611,6 +624,7 @@ public enum Portenv_Daemon_V1_DaemonService: Sendable {
             TrustServerKey.descriptor,
             ForgetServerKey.descriptor,
             ProvideServerKey.descriptor,
+            CheckServer.descriptor,
             GetEngine.descriptor
         ]
     }
@@ -1607,6 +1621,32 @@ extension Portenv_Daemon_V1_DaemonService {
             deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_ProvideServerKeyResponse>,
             options: GRPCCore.CallOptions,
             onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ProvideServerKeyResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "CheckServer" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Add a Server's Check (2.9, ADR 0021 §3): a read-only probe over the
+        /// > server's pinned SSH connection, one line per question; each failure
+        /// > says what to do, in Portenv's words, never the server's. It changes
+        /// > nothing on the server.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_CheckServerRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_CheckServerRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_CheckServerResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func checkServer<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_CheckServerRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_CheckServerRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_CheckServerResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_CheckServerResponse>) async throws -> Result
         ) async throws -> Result where Result: Sendable
 
         /// Call the "GetEngine" method.
@@ -3073,6 +3113,43 @@ extension Portenv_Daemon_V1_DaemonService {
             )
         }
 
+        /// Call the "CheckServer" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Add a Server's Check (2.9, ADR 0021 §3): a read-only probe over the
+        /// > server's pinned SSH connection, one line per question; each failure
+        /// > says what to do, in Portenv's words, never the server's. It changes
+        /// > nothing on the server.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_CheckServerRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_CheckServerRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_CheckServerResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func checkServer<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_CheckServerRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_CheckServerRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_CheckServerResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_CheckServerResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.CheckServer.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
+
         /// Call the "GetEngine" method.
         ///
         /// > Source IDL Documentation:
@@ -4322,6 +4399,38 @@ extension Portenv_Daemon_V1_DaemonService.ClientProtocol {
             request: request,
             serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_ProvideServerKeyRequest>(),
             deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_ProvideServerKeyResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "CheckServer" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Add a Server's Check (2.9, ADR 0021 §3): a read-only probe over the
+    /// > server's pinned SSH connection, one line per question; each failure
+    /// > says what to do, in Portenv's words, never the server's. It changes
+    /// > nothing on the server.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_CheckServerRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func checkServer<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_CheckServerRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_CheckServerResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.checkServer(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_CheckServerRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_CheckServerResponse>(),
             options: options,
             onResponse: handleResponse
         )
@@ -5735,6 +5844,42 @@ extension Portenv_Daemon_V1_DaemonService.ClientProtocol {
             metadata: metadata
         )
         return try await self.provideServerKey(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "CheckServer" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Add a Server's Check (2.9, ADR 0021 §3): a read-only probe over the
+    /// > server's pinned SSH connection, one line per question; each failure
+    /// > says what to do, in Portenv's words, never the server's. It changes
+    /// > nothing on the server.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func checkServer<Result>(
+        _ message: Portenv_Daemon_V1_CheckServerRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_CheckServerResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_CheckServerRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.checkServer(
             request: request,
             options: options,
             onResponse: handleResponse

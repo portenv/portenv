@@ -161,3 +161,13 @@ enum ServerKeyState {
   // nothing runs on it, and there's no trusting it anyway.
   SERVER_KEY_STATE_CHANGED = 3;
 }
+
+// One line of Add a Server's Check (ADR 0021 §3).
+enum CheckState {
+  CHECK_STATE_UNSPECIFIED = 0;
+  CHECK_STATE_PASSED = 1;
+  // Says what to do in fix. Nothing installs until no line fails.
+  CHECK_STATE_FAILED = 2;
+  // Recorded, never a failure (KVM, an existing install).
+  CHECK_STATE_INFO = 3;
+}

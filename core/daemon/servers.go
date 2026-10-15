@@ -107,3 +107,47 @@ func (s *Server) ProvideServerKey(_ context.Context, req *daemonv1.ProvideServer
 	s.log.Info("server key provided", "server", req.GetServerId())
 	return &daemonv1.ProvideServerKeyResponse{}, nil
 }
+
+// CheckServer implements daemonv1.DaemonServiceServer (ADR 0021 §3).
+func (s *Server) CheckServer(ctx context.Context, req *daemonv1.CheckServerRequest) (*daemonv1.CheckServerResponse, error) {
+	target, err := s.serverTarget(req.GetServerId())
+	if err != nil {
+		return nil, err
+	}
+	lines, err := local.CheckServer(ctx, target)
+	if err != nil {
+		return nil, status.Error(codes.FailedPrecondition, err.Error())
+	}
+	res := &daemonv1.CheckServerResponse{Passed: local.AllChecksPassed(lines)}
+	for _, l := range lines {
+		res.Lines = append(res.Lines, &daemonv1.CheckLine{Id: l.ID, Title: l.Title, State: checkState(l.State), Detail: l.Detail, Fix: l.Fix})
+	}
+	s.log.Info("server checked", "server", req.GetServerId(), "passed", res.Passed)
+	return res, nil
+}
+
+// serverTarget is the user@host for one of this Mac's servers.
+func (s *Server) serverTarget(id string) (string, error) {
+	rs, err := s.env.ServerRecords()
+	if err != nil {
+		return "", err
+	}
+	for _, r := range rs {
+		if r.ID == id {
+			return r.Target, nil
+		}
+	}
+	return "", serverError(local.ErrNoSuchServer)
+}
+
+func checkState(s local.CheckState) typesv1.CheckState {
+	switch s {
+	case local.CheckPassed:
+		return typesv1.CheckState_CHECK_STATE_PASSED
+	case local.CheckFailed:
+		return typesv1.CheckState_CHECK_STATE_FAILED
+	case local.CheckInfo:
+		return typesv1.CheckState_CHECK_STATE_INFO
+	}
+	return typesv1.CheckState_CHECK_STATE_UNSPECIFIED
+}

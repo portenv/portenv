@@ -158,3 +158,25 @@ func TestAMadeKeyIsHeldNotWritten(t *testing.T) {
 		t.Fatal("the key was logged")
 	}
 }
+
+// TestCheckServerIsRefusedBeforeConfirming: Check runs only on a confirmed
+// server (ADR 0021); an unknown one is NotFound.
+func TestCheckServerIsRefusedBeforeConfirming(t *testing.T) {
+	s := placementServer(t, "me@test-server")
+	id := local.ServerID("me@test-server")
+	if err := s.env.ForgetServerKey(id); err != nil {
+		t.Fatal(err)
+	}
+	_, err := s.CheckServer(context.Background(), &daemonv1.CheckServerRequest{ServerId: id})
+	if status.Code(err) != codes.FailedPrecondition || status.Convert(err).Message() != "Confirm test-server to open this." {
+		t.Fatalf("unconfirmed: %v", err)
+	}
+	if _, err := s.CheckServer(context.Background(), &daemonv1.CheckServerRequest{ServerId: "srv-000000000000"}); status.Code(err) != codes.NotFound {
+		t.Fatalf("unknown: %v", err)
+	}
+	// local's states map to the proto's.
+	if checkState(local.CheckPassed) != typesv1.CheckState_CHECK_STATE_PASSED || checkState(local.CheckFailed) != typesv1.CheckState_CHECK_STATE_FAILED ||
+		checkState(local.CheckInfo) != typesv1.CheckState_CHECK_STATE_INFO {
+		t.Fatal("the states' numbers differ")
+	}
+}

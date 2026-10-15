@@ -72,7 +72,7 @@ The title shows the workspace name, a sync symbol and a chevron; the line under 
 | Open on a server | `checkmark.circle` | `Test server · Saved at 15:42` |
 | Workspace helper unavailable | `exclamationmark.triangle` | `This Mac · Not saved since 14:58` (and Restart Workspace offered) |
 | Just reverted | `checkmark.circle` | `Reverted to 14:31 · your changes were kept` for 5 s, then the normal line |
-| Waiting for Keychain access | `lock` | `Waiting for Keychain access`, with "Check for a password prompt. It may be behind other windows." under it and a Cancel button; shown when a Keychain read hasn't returned after 2 s, with a notification when the window isn't in front |
+| Waiting for Keychain access | `lock` | `Waiting for you to allow access to Portenv's keys…`, with "Allow it in the password or Touch ID prompt." under it (R-0214; the window that asked comes to the front first, so the prompt shows over it) and a Cancel button; shown when a Keychain read hasn't returned after 2 s, with a notification when the window isn't in front |
 | Portenv quit before saving it | `exclamationmark.triangle` | `This Mac · Not saved since 15:54 · Portenv quit before saving` until the save made on opening completes |
 
 Rules:

@@ -7,6 +7,9 @@ import Foundation
 public protocol DaemonAPI: Sendable {
     /// Whether portenvd answers.
     func ping() async -> Bool
+    /// Whether this Mac's box engine answers (Docker Desktop is running);
+    /// nil when portenvd doesn't answer (R-0098).
+    func engineRunning() async -> Bool?
     /// The boxes on this Mac, by name (ListBoxes).
     func boxes() async throws -> [String]
     /// The servers a box can move to (user@host).

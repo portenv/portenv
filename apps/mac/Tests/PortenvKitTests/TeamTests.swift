@@ -184,3 +184,23 @@ struct TeamControllerTests {
         #expect(team.selection == .allTabs && team.selectedAgent == nil)
     }
 }
+
+@MainActor
+struct TeamTabsTests {
+    /// The tab bar shows what the sidebar selects: every tab, yours, or one
+    /// agent's (R-0241).
+    @Test func tabsFollowTheSelection() async {
+        let daemon = FakeDaemon()
+        let tabs = TabsController(box: "acme", daemon: daemon)
+        daemon.setTabs([
+            TabInfo(id: "@1", name: "shell", active: true),
+            TabInfo(id: "builder:@1", name: "main session", active: false, agentID: "builder", paneIDs: ["%1", "%4"]),
+            TabInfo(id: "reviewer:@1", name: "review", active: false, agentID: "reviewer"),
+        ])
+        await tabs.load()
+        #expect(tabs.shown(for: .allTabs).map(\.id) == ["@1", "builder:@1", "reviewer:@1"])
+        #expect(tabs.shown(for: .you).map(\.id) == ["@1"])
+        #expect(tabs.shown(for: .agent("builder")).map(\.paneIDs) == [["%1", "%4"]])
+        #expect(tabs.shown(for: .agent("nobody")).isEmpty)
+    }
+}

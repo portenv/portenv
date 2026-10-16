@@ -97,7 +97,7 @@ func TestTheHelperChecksBoardLinesAgain(t *testing.T) {
 		"message over 8 KB":    boardMsg(strings.Repeat("x", 8<<10+1)),
 		"empty message":        boardMsg(""),
 		"escape sequence":      boardMsg("hi \x1b[31mred"),
-		"bidi override":        boardMsg("abc‮dcb"),
+		"bidi override":        boardMsg("abc\u202Edcb"),
 		"invalid UTF-8":        boardMsg("bad \xff"),
 		"detail over 32 KB":    boardDecision("ok", strings.Repeat("x", 32<<10+1)),
 		"summary over 200":     boardDecision(strings.Repeat("s", 201), ""),

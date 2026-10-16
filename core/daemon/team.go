@@ -16,6 +16,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -649,6 +650,11 @@ func (e *teamEngine) startAgent(ctx context.Context, name, agentID string) (*dae
 	h, err := e.helper(ctx, name)
 	if err != nil {
 		return nil, err
+	}
+	// The project is the team's before each start (ADR 0022 §2): init
+	// checks it again every time, and refuses with a plain line.
+	if _, err := h.PrepareTeamProject(ctx, &agentv1.PrepareTeamProjectRequest{ProjectDir: "/home/work/" + name}); err != nil {
+		return nil, errors.New(status.Convert(err).Message())
 	}
 	b.states[agentID] = typesv1.AgentState_AGENT_STATE_STARTING
 	r, err := h.StartTeamAgent(ctx, &agentv1.StartTeamAgentRequest{

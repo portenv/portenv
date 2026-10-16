@@ -26,15 +26,17 @@ import (
 type fakeTeamHelper struct {
 	agentv1.AgentServiceClient
 
-	mu        sync.Mutex
-	board     []*agentv1.AppendBoardRequest
-	panes     []*agentv1.AgentPaneActionRequest
-	started   []*agentv1.StartTeamAgentRequest
-	stopped   []string
-	nextPane  int
-	handoffs  []*agentv1.HandoffFilesRequest
-	delivered []*agentv1.DeliverRoutineRequest
-	busy      bool
+	mu         sync.Mutex
+	board      []*agentv1.AppendBoardRequest
+	panes      []*agentv1.AgentPaneActionRequest
+	started    []*agentv1.StartTeamAgentRequest
+	stopped    []string
+	nextPane   int
+	handoffs   []*agentv1.HandoffFilesRequest
+	delivered  []*agentv1.DeliverRoutineRequest
+	busy       bool
+	prepared   []string
+	prepareErr string
 }
 
 func (f *fakeTeamHelper) AppendBoard(_ context.Context, in *agentv1.AppendBoardRequest, _ ...grpc.CallOption) (*agentv1.AppendBoardResponse, error) {
@@ -977,5 +979,40 @@ func TestTheRunnerTablesPatterns(t *testing.T) {
 	}
 	if runnerIdlePattern([]string{"bash"}) != "" || runnerIdlePattern(nil) != "" {
 		t.Error("an unknown runner has a pattern")
+	}
+}
+
+func (f *fakeTeamHelper) PrepareTeamProject(_ context.Context, in *agentv1.PrepareTeamProjectRequest, _ ...grpc.CallOption) (*agentv1.PrepareTeamProjectResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.prepared = append(f.prepared, in.GetProjectDir())
+	if f.prepareErr != "" {
+		return nil, status.Error(codes.FailedPrecondition, f.prepareErr)
+	}
+	return &agentv1.PrepareTeamProjectResponse{}, nil
+}
+
+// ADR 0022 §2: the project is opened to the team before its first agent
+// starts, and a refusal (open dotfiles, no ACLs) stops the start.
+func TestTheProjectIsPreparedBeforeAgentsStart(t *testing.T) {
+	e, h, _ := newTestEngine(t, defaultTeam()...)
+	approveFirstStart(t, e)
+	ctx := context.Background()
+	h.prepareErr = "~/.ssh can be read by others in this workspace."
+	if _, err := e.startAgent(ctx, "w", "lead"); err == nil || !strings.Contains(err.Error(), ".ssh") {
+		t.Fatalf("start = %v, want the helper's line", err)
+	}
+	if len(h.started) != 0 {
+		t.Fatal("an agent started over an unprepared project")
+	}
+	h.prepareErr = ""
+	if _, err := e.startAgent(ctx, "w", "lead"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.startAgent(ctx, "w", "builder"); err != nil {
+		t.Fatal(err)
+	}
+	if got := h.prepared; len(got) < 2 || got[len(got)-1] != "/home/work/w" {
+		t.Errorf("prepared %v", got)
 	}
 }

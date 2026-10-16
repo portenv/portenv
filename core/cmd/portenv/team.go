@@ -294,6 +294,10 @@ func sendTeamCall(ctx context.Context, sock string, call *agentv1.TeamCallsRespo
 	if _, err := conn.Write(append(b, '\n')); err != nil {
 		return nil, fmt.Errorf("can't reach Portenv in this workspace: %w", err)
 	}
+	// The whole call is sent: say so, so the helper answers at once.
+	if uc, ok := conn.(*net.UnixConn); ok {
+		_ = uc.CloseWrite()
+	}
 	line, err := bufio.NewReaderSize(conn, 64<<10).ReadBytes('\n')
 	if err != nil && !errors.Is(err, io.EOF) {
 		return nil, fmt.Errorf("no answer from Portenv: %w", err)

@@ -12,9 +12,11 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 )
 
 // Agent users (ADR 0022 §1): each team agent is a user of the workspace,
@@ -114,6 +116,9 @@ func (t *TeamUsers) Ensure(ctx context.Context, id string) (AgentUser, error) {
 	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	if err := checkRealDir(t.Cfg.HomeRoot); err != nil {
+		return AgentUser{}, err
+	}
 	if t.restoreErr != nil {
 		return AgentUser{}, fmt.Errorf("agent users weren't restored when the workspace started: %w", t.restoreErr)
 	}
@@ -215,16 +220,19 @@ func (t *TeamUsers) Restore(ctx context.Context) {
 }
 
 func (t *TeamUsers) restore(ctx context.Context) error {
+	if err := checkRealDir(t.Cfg.HomeRoot); err != nil {
+		return err
+	}
 	store, err := t.load()
 	if err != nil {
 		return err
 	}
 	if t.RunDir != "" {
-		if err := os.MkdirAll(t.RunDir, 0o755); err != nil { // #nosec G301 -- each agent's folder inside is closed (§1)
-			return fmt.Errorf("make %s: %w", t.RunDir, err)
+		if err := os.MkdirAll(filepath.Dir(t.RunDir), 0o755); err != nil { // #nosec G301 -- /run
+			return fmt.Errorf("make %s: %w", filepath.Dir(t.RunDir), err)
 		}
-		if err := os.Chmod(t.RunDir, 0o755); err != nil { // #nosec G302 -- a directory others pass through
-			return fmt.Errorf("set %s's mode: %w", t.RunDir, err)
+		if err := secureDir(t.RunDir, 0o755); err != nil {
+			return err
 		}
 	}
 	// A workspace without a team gets nothing in /home: no team folder
@@ -288,8 +296,8 @@ func (t *TeamUsers) load() (*teamUsersFile, error) {
 func (t *TeamUsers) save(f *teamUsersFile) error {
 	path := t.storePath()
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil { // #nosec G301 -- root's; agents may read the map
-		return fmt.Errorf("make %s: %w", dir, err)
+	if err := t.realDirs(); err != nil {
+		return err
 	}
 	b, err := json.MarshalIndent(f, "", "  ")
 	if err != nil {
@@ -367,7 +375,20 @@ func (t *TeamUsers) freeUID(ctx context.Context, f *teamUsersFile) (int, error) 
 }
 
 func (t *TeamUsers) ensureTeamGroup(ctx context.Context) error {
-	if !t.exists(ctx, "group", TeamGroup) {
+	// A team group with another gid is never used, and gid 2000 held by
+	// another group is never taken over (R-0260 item 7).
+	if out, err := t.Run.Run(ctx, nil, "getent", "group", TeamGroup); err == nil {
+		if f := strings.Split(strings.TrimSpace(string(out)), ":"); len(f) < 3 || f[2] != strconv.Itoa(TeamGID) {
+			gid := "?"
+			if len(f) >= 3 {
+				gid = f[2]
+			}
+			return fmt.Errorf("this workspace's group %s has gid %s, not %d, so Portenv won't use it for the team. Remove or renumber it, then start the team again", TeamGroup, gid, TeamGID)
+		}
+	} else {
+		if out, err := t.Run.Run(ctx, nil, "getent", "group", strconv.Itoa(TeamGID)); err == nil {
+			return fmt.Errorf("gid %d belongs to another group (%s), so Portenv can't make the team's group", TeamGID, strings.SplitN(strings.TrimSpace(string(out)), ":", 2)[0])
+		}
 		if out, err := t.Run.Run(ctx, nil, "groupadd", "--gid", strconv.Itoa(TeamGID), TeamGroup); err != nil {
 			return cmdError("create group "+TeamGroup, out, err)
 		}
@@ -394,6 +415,23 @@ func (t *TeamUsers) ensureLines(ctx context.Context, rec agentUserRecord) error 
 	if out, err := t.Run.Run(ctx, nil, "id", "-u", rec.ID); err == nil {
 		if got := strings.TrimSpace(string(out)); got != uid {
 			return fmt.Errorf("user %s has uid %s, but its files belong to %s; it was changed outside Portenv", rec.ID, got, uid)
+		}
+		// Its own group first, and the team group (R-0260 item 8).
+		out, err := t.Run.Run(ctx, nil, "id", "-g", rec.ID)
+		if err != nil {
+			return cmdError("read "+rec.ID+"'s group", out, err)
+		}
+		if got := strings.TrimSpace(string(out)); got != uid {
+			return fmt.Errorf("user %s's group is %s, not its own %s; it was changed outside Portenv", rec.ID, got, uid)
+		}
+		out, err = t.Run.Run(ctx, nil, "id", "-nG", rec.ID)
+		if err != nil {
+			return cmdError("read "+rec.ID+"'s groups", out, err)
+		}
+		if !slices.Contains(strings.Fields(string(out)), TeamGroup) {
+			if out, err := t.Run.Run(ctx, nil, "usermod", "-a", "-G", TeamGroup, rec.ID); err != nil {
+				return cmdError("add "+rec.ID+" to "+TeamGroup, out, err)
+			}
 		}
 		return nil
 	}
@@ -475,3 +513,65 @@ func (t *TeamUsers) deleteHome(id string) error {
 
 // TeamRunDir holds each agent's socket folder (ADR 0022 §1).
 const TeamRunDir = "/run/portenv-team"
+
+// realDirs makes /home/.portenv and /home/.portenv/team, root's, 0755:
+// work can read the map but never write next to it (R-0260 item 9).
+func (t *TeamUsers) realDirs() error {
+	if err := checkRealDir(t.Cfg.HomeRoot); err != nil {
+		return err
+	}
+	for _, d := range []string{filepath.Join(t.Cfg.HomeRoot, ".portenv"), filepath.Dir(t.storePath())} {
+		if err := secureDir(d, 0o755); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// checkRealDir refuses a path that isn't a real folder (a symlink, say).
+func checkRealDir(dir string) error {
+	fi, err := os.Lstat(dir)
+	if err != nil {
+		return fmt.Errorf("check %s: %w", dir, err)
+	}
+	if !fi.IsDir() {
+		return fmt.Errorf("%s isn't a folder (a link isn't followed)", dir)
+	}
+	return nil
+}
+
+// secureDir makes dir if it's missing, refuses a symlink in its place, and
+// sets its mode through a descriptor of the folder itself (and, as root,
+// gives it to root), so a link swapped in between is never changed.
+func secureDir(dir string, mode os.FileMode) error {
+	if _, err := os.Lstat(dir); errors.Is(err, fs.ErrNotExist) {
+		if err := os.Mkdir(dir, mode); err != nil && !errors.Is(err, fs.ErrExist) {
+			return fmt.Errorf("make %s: %w", dir, err)
+		}
+	}
+	before, err := os.Lstat(dir)
+	if err != nil {
+		return fmt.Errorf("check %s: %w", dir, err)
+	}
+	if !before.IsDir() {
+		return fmt.Errorf("%s isn't a folder (a link isn't followed)", dir)
+	}
+	f, err := os.OpenFile(dir, os.O_RDONLY|syscall.O_DIRECTORY|syscall.O_NOFOLLOW, 0) // #nosec G304 -- a fixed folder
+	if err != nil {
+		return fmt.Errorf("open %s: %w", dir, err)
+	}
+	defer func() { _ = f.Close() }()
+	after, err := f.Stat()
+	if err != nil || !os.SameFile(before, after) {
+		return fmt.Errorf("%s changed while it was checked", dir)
+	}
+	if os.Geteuid() == 0 {
+		if err := f.Chown(0, 0); err != nil {
+			return fmt.Errorf("give %s to root: %w", dir, err)
+		}
+	}
+	if err := f.Chmod(mode); err != nil {
+		return fmt.Errorf("set %s's mode: %w", dir, err)
+	}
+	return nil
+}

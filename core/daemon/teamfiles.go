@@ -19,6 +19,8 @@ import (
 	"syscall"
 	"unicode/utf8"
 
+	"google.golang.org/protobuf/proto"
+
 	typesv1 "github.com/portenv/portenv/proto/gen/go/portenv/types/v1"
 )
 
@@ -155,7 +157,7 @@ type AgentSpec struct {
 
 // grantSet records which grant keys a file sets, for overrides.
 type grantSet struct {
-	panes, maxPanes, message, askOwner, packages bool
+	panes, maxPanes, message, askOwner, packages, teamStatus bool
 }
 
 // TeamAgent is one agent of a team: its repository file, the personal
@@ -590,7 +592,7 @@ func buildGrant(keys *fmKeys, g *typesv1.AgentGrant, set *grantSet, override boo
 		v := keys.vals[key]
 		full := "grant." + key
 		switch key {
-		case "panes", "max_panes", "message", "ask_owner", "packages":
+		case "panes", "max_panes", "message", "ask_owner", "packages", "team_status":
 		default:
 			p.addf("%q isn't a key an agent file may have.", full)
 			continue
@@ -630,6 +632,13 @@ func buildGrant(keys *fmKeys, g *typesv1.AgentGrant, set *grantSet, override boo
 				continue
 			}
 			g.Packages, set.packages = m, true
+		case "team_status":
+			// team_status: read (R-0257 item 1); none is the default.
+			if v.quoted || (v.s != "read" && v.s != "none") {
+				p.addf("grant.team_status is %q; it must be read or none.", v.s)
+				continue
+			}
+			g.TeamStatus, set.teamStatus = v.s == "read", true
 		case "ask_owner":
 			if v.quoted || (v.s != "true" && v.s != "false") {
 				p.addf("grant.ask_owner is %q; it must be true or false.", v.s)
@@ -684,13 +693,11 @@ func grantModeWord(m typesv1.GrantMode) string {
 }
 
 func cloneGrant(g *typesv1.AgentGrant) *typesv1.AgentGrant {
-	return &typesv1.AgentGrant{
-		Panes:    g.GetPanes(),
-		MaxPanes: g.GetMaxPanes(),
-		Message:  slices.Clone(g.GetMessage()),
-		AskOwner: g.GetAskOwner(),
-		Packages: g.GetPackages(),
+	// Every field, including ones added later (team_status, R-0257).
+	if g == nil {
+		return &typesv1.AgentGrant{}
 	}
+	return proto.CloneOf(g)
 }
 
 // applyOverride reads the agent's personal override, if there is one, and
@@ -747,6 +754,9 @@ func applyOverride(a *TeamAgent, src TeamSource, limits TeamLimits, p *problems)
 	if o.grant.packages && grantRank(og.GetPackages()) > grantRank(base.GetPackages()) {
 		widerf("packages", grantModeWord(og.GetPackages()), grantModeWord(base.GetPackages()))
 	}
+	if o.grant.teamStatus && og.GetTeamStatus() && !base.GetTeamStatus() {
+		widerf("team_status", "read", "none")
+	}
 
 	runnerLine, runner, remote, via := a.RunnerLine, a.Runner, a.Remote, a.Via
 	if o.set["runner"] {
@@ -785,5 +795,8 @@ func applyOverride(a *TeamAgent, src TeamSource, limits TeamLimits, p *problems)
 	}
 	if o.grant.packages {
 		a.Grant.Packages = og.GetPackages()
+	}
+	if o.grant.teamStatus {
+		a.Grant.TeamStatus = og.GetTeamStatus()
 	}
 }

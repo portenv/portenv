@@ -342,7 +342,7 @@ func (s *Server) ApproveAgentFile(ctx context.Context, req *daemonv1.ApproveAgen
 
 // SendMessage is the owner's message to an agent.
 func (s *Server) SendMessage(ctx context.Context, req *daemonv1.SendMessageRequest) (*daemonv1.SendMessageResponse, error) {
-	m, err := s.teamEng().ownerMessage(ctx, req.GetName(), req.GetTo(), req.GetThreadId(), req.GetText())
+	m, err := s.teamEng().ownerMessageOf(ctx, req.GetName(), req.GetTo(), req.GetThreadId(), req.GetText(), req.GetType())
 	if err != nil {
 		return nil, teamStatus(err)
 	}

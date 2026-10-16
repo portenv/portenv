@@ -29,6 +29,7 @@ type fakeTeamHelper struct {
 	started  []*agentv1.StartTeamAgentRequest
 	stopped  []string
 	nextPane int
+	handoffs []*agentv1.HandoffFilesRequest
 }
 
 func (f *fakeTeamHelper) AppendBoard(_ context.Context, in *agentv1.AppendBoardRequest, _ ...grpc.CallOption) (*agentv1.AppendBoardResponse, error) {
@@ -669,5 +670,144 @@ func TestTeamFilesRebuildsDontInterleave(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+	}
+}
+
+func setStatus(e *teamEngine, id string, s *agentv1.SetStatus) *agentv1.TeamCallsRequest {
+	return e.handleCall(context.Background(), "w", &agentv1.TeamCallsResponse{AgentId: id, Op: &agentv1.TeamCallsResponse_SetStatus{SetStatus: s}})
+}
+
+// R-0256: an agent sets and clears its own status, within the limits.
+func TestAnAgentsStatus(t *testing.T) {
+	e, _, clock := newTestEngine(t, defaultTeam()...)
+	if r := setStatus(e, "builder", &agentv1.SetStatus{Text: "Running the payments tests", ProgressDone: 3, ProgressTotal: 8}); !r.GetOk() {
+		t.Fatal(r.GetLine())
+	}
+	list := e.agentInfos(context.Background(), "w")
+	if st := list["builder"].GetStatus(); st.GetText() != "Running the payments tests" || st.GetProgressDone() != 3 || st.GetSetAt() == nil {
+		t.Errorf("status = %v", st)
+	}
+	// One update every 10 s.
+	if r := setStatus(e, "builder", &agentv1.SetStatus{Text: "again"}); r.GetOk() {
+		t.Error("a second update within 10 s")
+	}
+	clock.add(statusEvery)
+	for name, s := range map[string]*agentv1.SetStatus{
+		"long":     {Text: strings.Repeat("x", maxStatus+1)},
+		"escape":   {Text: "ok\x1b[2J"},
+		"newline":  {Text: "one\ntwo"},
+		"blocked":  {Text: "x", Blocked: "needs \u202ekey"},
+		"progress": {Text: "x", ProgressDone: 9, ProgressTotal: 8},
+		"empty":    {Text: ""},
+	} {
+		if r := setStatus(e, "builder", s); r.GetOk() {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+	if r := setStatus(e, "builder", &agentv1.SetStatus{Clear: true}); !r.GetOk() {
+		t.Fatal(r.GetLine())
+	}
+	if st := e.agentInfos(context.Background(), "w")["builder"].GetStatus(); st != nil {
+		t.Errorf("after clear: %v", st)
+	}
+}
+
+// R-0257 item 1: team status only with the grant, and never terminals.
+func TestTeamStatusNeedsTheGrant(t *testing.T) {
+	team := defaultTeam()
+	team[0].Grant.TeamStatus = true // lead
+	e, _, _ := newTestEngine(t, team...)
+	ctx := context.Background()
+	setStatus(e, "builder", &agentv1.SetStatus{Text: "building", Blocked: "needs the staging key"})
+	ask := func(id string) *agentv1.TeamCallsRequest {
+		return e.handleCall(ctx, "w", &agentv1.TeamCallsResponse{AgentId: id, Op: &agentv1.TeamCallsResponse_TeamStatus{TeamStatus: &agentv1.TeamStatus{}}})
+	}
+	if r := ask("builder"); r.GetOk() {
+		t.Error("team status without the grant")
+	}
+	r := ask("lead")
+	if !r.GetOk() {
+		t.Fatal(r.GetLine())
+	}
+	var b *agentv1.Teammate
+	for _, m := range r.GetTeamStatus().GetTeammates() {
+		if m.GetId() == "builder" {
+			b = m
+		}
+	}
+	if b == nil || b.GetStatus().GetBlocked() != "needs the staging key" {
+		t.Errorf("lead sees builder as %v", b)
+	}
+	// whoami: teammates' status only with the grant.
+	who := func(id string) *agentv1.WhoAmIResult {
+		return e.handleCall(ctx, "w", &agentv1.TeamCallsResponse{AgentId: id, Op: &agentv1.TeamCallsResponse_Whoami{Whoami: &agentv1.WhoAmI{}}}).GetWhoami()
+	}
+	for _, m := range who("reviewer").GetTeammates() {
+		if m.GetStatus() != nil {
+			t.Errorf("reviewer (no grant) sees %s's status", m.GetId())
+		}
+	}
+	if w := who("builder"); w.GetStatus().GetText() != "building" {
+		t.Errorf("builder's own status in whoami: %v", w.GetStatus())
+	}
+}
+
+// R-0256: Ask for Status is a status_request in the agent's inbox.
+func TestTheOwnerAsksForStatus(t *testing.T) {
+	e, _, _ := newTestEngine(t, defaultTeam()...)
+	m, err := e.ownerMessageOf(context.Background(), "w", "builder", "", "What are you working on?", typesv1.MessageType_MESSAGE_TYPE_STATUS_REQUEST)
+	if err != nil || m.GetType() != typesv1.MessageType_MESSAGE_TYPE_STATUS_REQUEST {
+		t.Fatalf("%v, %v", m, err)
+	}
+	if _, err := e.ownerMessageOf(context.Background(), "w", "builder", "", "x", typesv1.MessageType_MESSAGE_TYPE_ROUTINE); err == nil {
+		t.Error("the owner sent a routine-typed message")
+	}
+}
+
+func (f *fakeTeamHelper) HandoffFiles(_ context.Context, in *agentv1.HandoffFilesRequest, _ ...grpc.CallOption) (*agentv1.HandoffFilesResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.handoffs = append(f.handoffs, in)
+	return &agentv1.HandoffFilesResponse{Files: []*typesv1.HandoffFile{{Path: "inbox/" + in.GetFromAgent() + "/x/v2.fig", Sha256: strings.Repeat("a", 64), Size: 10}}}, nil
+}
+
+// R-0257 item 3: a hand-off goes only where the message grant allows,
+// only from the sender's home or the project, and posts the files.
+func TestHandoff(t *testing.T) {
+	e, h, _ := newTestEngine(t, defaultTeam()...)
+	ctx := context.Background()
+	hand := func(from, to, path, note string) *agentv1.TeamCallsRequest {
+		return e.handleCall(ctx, "w", &agentv1.TeamCallsResponse{AgentId: from, Op: &agentv1.TeamCallsResponse_Handoff{Handoff: &agentv1.Handoff{To: to, Path: path, Note: note}}})
+	}
+	r := hand("builder", "lead", "/home/builder/design/v2", "revision 2")
+	if !r.GetOk() || r.GetMessage().GetType() != typesv1.MessageType_MESSAGE_TYPE_HANDOFF || len(r.GetMessage().GetFiles()) != 1 {
+		t.Fatalf("handoff: %v", r)
+	}
+	if got := h.handoffs[0]; got.GetFromAgent() != "builder" || got.GetToAgent() != "lead" || got.GetRecipientQuotaBytes() <= 0 {
+		t.Errorf("helper asked %v", got)
+	}
+	if in := inbox(t, e, "lead", "").GetMessages(); len(in) != 1 || len(in[0].GetFiles()) != 1 {
+		t.Errorf("lead's inbox: %v", in)
+	}
+	for name, c := range map[string][4]string{
+		"not granted":         {"builder", "reviewer", "/home/builder/x", ""},
+		"to itself":           {"builder", "builder", "/home/builder/x", ""},
+		"another's home":      {"builder", "lead", "/home/reviewer/secret", ""},
+		"the owner's dotfile": {"builder", "lead", "/home/work/.ssh/id_ed25519", ""},
+		"outside home":        {"builder", "lead", "/etc/shadow", ""},
+		"dot-dot":             {"builder", "lead", "/home/builder/../work/.ssh", ""},
+		"relative":            {"builder", "lead", "design/v2", ""},
+		"bad note":            {"builder", "lead", "/home/builder/x", "hi\x1b[2J"},
+	} {
+		if r := hand(c[0], c[1], c[2], c[3]); r.GetOk() {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+	if len(h.handoffs) != 1 {
+		t.Errorf("the helper was asked %d times", len(h.handoffs))
+	}
+	// From the project is fine.
+	if r := hand("builder", "lead", "/home/work/w/exports/report.pdf", ""); !r.GetOk() {
+		t.Errorf("from the project: %s", r.GetLine())
 	}
 }

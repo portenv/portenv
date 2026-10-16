@@ -471,6 +471,7 @@ func TestOverrideCantWiden(t *testing.T) {
 		{"message", ofm("grant:", "  message: [lead, reviewer]"), `builder's override: grant.message is [lead, reviewer], wider than the repository file's [lead]; an override may only narrow a grant.`},
 		{"ask_owner", ofm("grant:", "  ask_owner: true"), `builder's override: grant.ask_owner is true, wider than the repository file's false; an override may only narrow a grant.`},
 		{"packages", ofm("grant:", "  packages: ask"), `builder's override: grant.packages is ask, wider than the repository file's never; an override may only narrow a grant.`},
+		{"team_status", ofm("grant:", "  team_status: read"), `builder's override: grant.team_status is read, wider than the repository file's none; an override may only narrow a grant.`},
 		{"home_seed", ofm("home_seed: [secrets]"), `builder's override: it sets home_seed; an override can't add home_seed.`},
 		{"name", ofm("name: Boss"), `builder's override: it sets name; an override may change only runner, via, avatar, share_login and grant.`},
 		{"unknown key", ofm("colour: red"), `builder's override: "colour" isn't a key an agent file may have.`},
@@ -493,7 +494,7 @@ func TestOverrideCantWiden(t *testing.T) {
 			// A refused override never widens what's in effect.
 			g := a.Grant
 			if g.GetPanes() != typesv1.GrantMode_GRANT_MODE_NEVER || g.GetMaxPanes() != 2 || g.GetAskOwner() ||
-				g.GetPackages() != typesv1.GrantMode_GRANT_MODE_NEVER || !reflect.DeepEqual(g.GetMessage(), []string{"lead"}) {
+				g.GetPackages() != typesv1.GrantMode_GRANT_MODE_NEVER || g.GetTeamStatus() || !reflect.DeepEqual(g.GetMessage(), []string{"lead"}) {
 				t.Errorf("effective grant widened: %v", g)
 			}
 			if !reflect.DeepEqual(a.Spec.HomeSeed, []string{"docs"}) {
@@ -679,5 +680,22 @@ func TestApprovalsStoreMissingIsNothingApproved(t *testing.T) {
 		if a.Approved {
 			t.Errorf("%s approved with no store", a.ID)
 		}
+	}
+}
+
+// R-0257 item 1: grant.team_status is read or none, off by default.
+func TestTeamStatusGrant(t *testing.T) {
+	src := teamDirs(t)
+	writeAgent(t, src, "lead", fm("id: lead", "name: Lead", "runner: claude", "grant:", "  team_status: read"))
+	writeAgent(t, src, "builder", fm("id: builder", "name: Builder", "runner: claude"))
+	writeAgent(t, src, "odd", fm("id: odd", "name: Odd", "runner: claude", "grant:", "  team_status: write"))
+	if a := loadAgent(t, src, "lead"); len(a.Problems) != 0 || !a.Grant.GetTeamStatus() {
+		t.Errorf("lead: %v, %v", a.Problems, a.Grant)
+	}
+	if a := loadAgent(t, src, "builder"); a.Grant.GetTeamStatus() {
+		t.Error("team_status is on by default")
+	}
+	if a := loadAgent(t, src, "odd"); len(a.Problems) != 1 || !strings.Contains(a.Problems[0], "read or none") {
+		t.Errorf("odd: %v", a.Problems)
 	}
 }

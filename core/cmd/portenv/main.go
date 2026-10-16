@@ -76,7 +76,7 @@ func run(ctx context.Context, args []string) int {
 		return 0
 	}
 	// An agent's own commands, inside a workspace (ADR 0022 §4).
-	if isTeamCommand(args[0]) {
+	if isAgentCommand(args[0], os.Getenv) {
 		return runTeam(ctx, args, os.Getenv, os.Stdin, os.Stdout, os.Stderr)
 	}
 	c, ok := commands[args[0]]

@@ -46,9 +46,9 @@ public struct QuitAll: Sendable {
 
     /// Closes each, in order. Returns true to quit, false when the person
     /// chose to stay (the rest keep running).
-    public func run(ask: @Sendable (String) async -> QuitChoice) async -> Bool {
+    public func run(ask: @Sendable (String) async -> QuitChoice, tell: @Sendable (String) async -> Void = { _ in }) async -> Bool {
         for box in boxes {
-            guard await QuitFlow(daemon: daemon, box: box, openHere: true).run(ask: ask) else { return false }
+            guard await QuitFlow(daemon: daemon, box: box, openHere: true).run(ask: ask, tell: tell) else { return false }
         }
         return true
     }

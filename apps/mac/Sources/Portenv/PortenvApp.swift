@@ -173,12 +173,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if let text = all.confirmation {
                 quit = await Self.confirmQuit(text)
             }
-            if quit { quit = await all.run(ask: Self.ask) }
+            if quit { quit = await all.run(ask: Self.ask, tell: Self.tell) }
             RunLoop.main.perform(inModes: [.default, .modalPanel]) {
                 NSApp.reply(toApplicationShouldTerminate: quit)
             }
         }
         return .terminateLater
+    }
+
+    /// Why a close was refused (a Move To in progress, R-0249), with OK.
+    nonisolated static func tell(_ message: String) async {
+        await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in
+            RunLoop.main.perform(inModes: [.default, .modalPanel]) {
+                MainActor.assumeIsolated {
+                    let alert = NSAlert()
+                    alert.messageText = message
+                    alert.addButton(withTitle: "OK")
+                    alert.runModal()
+                    done.resume()
+                }
+            }
+        }
     }
 
     /// Quit's confirmation, naming the running workspaces (R-0238): Quit is

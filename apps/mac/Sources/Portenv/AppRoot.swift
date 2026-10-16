@@ -276,7 +276,8 @@ final class AppModel {
     /// Close Workspace from the list: saved and released, asking on a
     /// failed save (Try Again, Close Anyway, Cancel), as quitting does.
     func closeWorkspace(_ box: String) async {
-        _ = await WindowClose.run(QuitFlow(daemon: daemon, box: box, openHere: true), ask: AppDelegate.askOnClose) {}
+        _ = await WindowClose.run(QuitFlow(daemon: daemon, box: box, openHere: true), ask: AppDelegate.askOnClose,
+                                  tell: AppDelegate.tell) {}
         await refreshRunning()
     }
 

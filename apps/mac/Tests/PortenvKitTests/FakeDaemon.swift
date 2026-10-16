@@ -27,6 +27,8 @@ final class FakeDaemon: DaemonAPI, @unchecked Sendable {
     var provided: [[String: Data]] { lock.withLock { _provided } }
     /// Actions that fail with this message, every time.
     var failing: [String: String] = [:]
+    /// Boxes whose close portenvd refuses: a Move To is in progress.
+    var movingFor: Set<String> = []
     /// "action box" pairs that fail every time (one box's close, say).
     var failingFor: Set<String> = []
     /// Actions that fail only the first time.
@@ -50,6 +52,11 @@ final class FakeDaemon: DaemonAPI, @unchecked Sendable {
         }
         if args.count > 2, lock.withLock({ failingFor.contains(action + " " + args[2]) }) {
             throw DaemonError("the workspace helper is unavailable")
+        }
+        if args.count > 2, lock.withLock({ movingFor.contains(args[2]) }), action == "close" {
+            var refused = DaemonError("\(args[2]) is moving to test-server. Close it once the move has finished.")
+            refused.moving = true
+            throw refused
         }
     }
 

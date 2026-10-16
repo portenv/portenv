@@ -46,11 +46,12 @@ public enum WindowClose {
     public static func run(
         _ flow: QuitFlow,
         ask: @Sendable (String) async -> QuitChoice,
+        tell: @Sendable (String) async -> Void = { _ in },
         closing: @Sendable (Bool) async -> Void = { _ in },
         showList: @Sendable () async -> Void
     ) async -> Bool {
         await closing(true)
-        guard await flow.run(message: message(box: flow.box), ask: ask) else {
+        guard await flow.run(message: message(box: flow.box), ask: ask, tell: tell) else {
             await closing(false)
             return false
         }

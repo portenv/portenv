@@ -24,6 +24,7 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -72,6 +73,7 @@ type Server struct {
 	closeForQuit func(ctx context.Context, name string) error
 
 	mu     sync.Mutex
+	moves  map[string]string     // box name → the target of a Move To in progress
 	open   map[string]*openBox   // by box name
 	remote map[string]*remoteBox // boxes this Mac opened on a server
 	// elsewhere: the lease another machine held on a box when OpenBox was
@@ -175,7 +177,7 @@ func New(env *local.Env, log *slog.Logger) *Server {
 		env.AppWords = true
 	}
 	bg, cancel := context.WithCancel(context.Background())
-	return &Server{env: env, log: log, open: map[string]*openBox{}, remote: map[string]*remoteBox{}, gen: map[string]uint64{},
+	return &Server{env: env, log: log, open: map[string]*openBox{}, moves: map[string]string{}, remote: map[string]*remoteBox{}, gen: map[string]uint64{},
 		now: time.Now, alive: processAlive, bgCtx: bg, bgCancel: cancel,
 		engine: func(ctx context.Context) error { return env.EngineAnswers(ctx) }}
 }
@@ -546,6 +548,13 @@ func (s *Server) CloseBox(ctx context.Context, req *daemonv1.CloseBoxRequest) (*
 	// and release, and every failure, never with a path.
 	id := s.boxID(req.GetName())
 	s.log.Info("close", "box_id", id)
+	// Never in the middle of a Move To: the move closes and opens the
+	// workspace itself (R-0249).
+	if target, moving := s.moveTarget(req.GetName()); moving {
+		s.log.Info("close refused", "box_id", id, "reason", "moving")
+		_ = grpc.SetTrailer(ctx, metadata.Pairs(RefusalTrailer, RefusalMoving))
+		return nil, status.Errorf(codes.FailedPrecondition, "%s is moving to %s. Close it once the move has finished.", req.GetName(), serverHost(target))
+	}
 	if err := s.closeBox(ctx, req.GetName()); err != nil {
 		s.log.Warn("close failed", "box_id", id, "err", noPaths(err.Error()))
 		return nil, err
@@ -654,6 +663,7 @@ func (s *Server) RevertToLastSavePoint(ctx context.Context, req *daemonv1.Revert
 // "this-mac", or a server from the machine's servers list.
 func (s *Server) MoveBox(ctx context.Context, req *daemonv1.MoveBoxRequest) (*daemonv1.MoveBoxResponse, error) {
 	name, target := req.GetName(), req.GetTarget()
+	defer s.moving(name, target)()
 	s.leaving(name)
 	if target == "this-mac" {
 		// Close it on the server it runs on, through that server's runner
@@ -811,6 +821,39 @@ func (w logWriter) Write(p []byte) (int, error) {
 		}
 	}
 	return len(p), nil
+}
+
+// moving records a Move To in progress until the returned func runs: a
+// close (Close Workspace, Quit) is refused meanwhile.
+func (s *Server) moving(name, target string) (done func()) {
+	s.mu.Lock()
+	s.moves[name] = target
+	s.mu.Unlock()
+	return func() {
+		s.mu.Lock()
+		delete(s.moves, name)
+		s.mu.Unlock()
+	}
+}
+
+// moveTarget is where a Move To in progress is taking the box.
+func (s *Server) moveTarget(name string) (string, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	t, ok := s.moves[name]
+	return t, ok
+}
+
+// serverHost is a move target as people read it: "test-server" for
+// "dev@test-server", "this Mac" for this-mac.
+func serverHost(target string) string {
+	if target == "this-mac" {
+		return "this Mac"
+	}
+	if _, host, ok := strings.Cut(target, "@"); ok {
+		return host
+	}
+	return target
 }
 
 // leaving records that this daemon is moving, closing or restarting the

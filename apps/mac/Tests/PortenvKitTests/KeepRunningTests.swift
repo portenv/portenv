@@ -87,4 +87,33 @@ struct KeepRunningTests {
         #expect(QuitAll(daemon: FakeDaemon(), boxes: ["acme-api"]).confirmation == "acme-api is running. Quitting saves and closes it.")
         #expect(QuitAll(daemon: FakeDaemon(), boxes: ["a", "b", "c"]).confirmation == "a, b and c are running. Quitting saves and closes them.")
     }
+
+    /// A Move To in progress: Quit and Close Workspace are refused plainly,
+    /// never with Quit Anyway or Close Anyway, and nothing else is closed
+    /// (R-0249).
+    @Test func aMoveInProgressRefusesQuitAndCloseWorkspace() async {
+        let d = daemon(["a": Self.running, "b": Self.running])
+        d.movingFor = ["a"]
+        let told = Told()
+        let quit = await QuitAll.prepare(d).run(ask: { _ in
+            Issue.record("asked Quit Anyway during a move")
+            return .quitAnyway
+        }, tell: { told.add($0) })
+        #expect(!quit)
+        #expect(told.all == ["a is moving to test-server. Close it once the move has finished."])
+        #expect(closes(d) == ["close a"]) // refused; b is never touched, no leave-unsaved
+        let closed = await WindowClose.run(QuitFlow(daemon: d, box: "a", openHere: true), ask: { _ in
+            Issue.record("asked Close Anyway during a move")
+            return .quitAnyway
+        }, tell: { told.add($0) }) {}
+        #expect(!closed)
+        #expect(told.all.count == 2)
+    }
+}
+
+final class Told: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _all: [String] = []
+    var all: [String] { lock.withLock { _all } }
+    func add(_ s: String) { lock.withLock { _all.append(s) } }
 }

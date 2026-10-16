@@ -174,6 +174,10 @@ public final class BoxController {
     /// Reopening after portenvd restarted: the state line keeps the real
     /// state instead of "Opening…".
     private var resuming = false
+    /// portenvd went away while this window had the workspace open here:
+    /// whatever the new portenvd says first (interrupted, or closed), the
+    /// window reopens it by itself, never showing "closed" (R-0250).
+    private var lostWhileOpenHere = false
     /// portenvd is away, or the workspace is being reopened after it came
     /// back: the tab view says it's reconnecting, never "disconnected" with
     /// a Reconnect that can't work yet (R-0242).
@@ -689,6 +693,9 @@ public final class BoxController {
                 }
             } catch {}
             if Task.isCancelled { return }
+            // The stream ended: portenvd went away. A workspace this window
+            // had open here is reattached when it's back (R-0250).
+            if location == .thisMac { lostWhileOpenHere = true }
             await daemonEnded()
             try? await Task.sleep(for: followRetry)
         }
@@ -710,16 +717,18 @@ public final class BoxController {
         daemonGoneSince = nil
         if error == Self.daemonGone { error = nil }
         if pushed && busy { return }
-        if st.interrupted {
+        if st.interrupted || (lostWhileOpenHere && st.save == .closed) {
             // portenvd restarted while this window had the box open: open it
             // again, handing the keys over (the window stays on the box).
             if location != .closed && !busy && !resumeTried {
                 resumeTried = true
+                lostWhileOpenHere = false
                 await resume()
             }
             return
         }
         resumeTried = false
+        lostWhileOpenHere = false
         switch st.save {
         case .closed: location = .closed
         default: location = st.location.map { .server($0) } ?? .thisMac

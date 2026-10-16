@@ -66,6 +66,86 @@ struct DaemonRestartTests {
     }
 
     /// A box closed in this window is not reopened behind the person's back.
+    /// R-0250: portenvd restarts (launchctl kickstart) while the window
+    /// follows a workspace that keeps running. The window reattaches by
+    /// itself, through the state stream, and never says "closed" in between.
+    @Test func aRestartReattachesThroughTheStateStreamWithoutAClick() async {
+        let cli = FakeDaemon()
+        let c = BoxController(box: "acme-api", daemon: cli, keychain: BlockingKeychain(blocks: false),
+                              ensureDaemon: { nil }, followRetry: .milliseconds(10))
+        cli.state = #"{"state":"SAVE_STATE_SAVED","saved_at":"\#(savedAt)"}"#
+        await c.open()
+        let following = Task { await c.follow() }
+        defer { following.cancel() }
+        for _ in 0 ..< 200 where !cli.calls.contains(["app", "watch", "acme-api"]) { try? await Task.sleep(for: .milliseconds(5)) }
+        let locations = Seen()
+        cli.onRun = { args in
+            await MainActor.run { locations.add("\(c.location)") }
+            if args.count > 1, args[1] == "open" {
+                cli.state = #"{"state":"SAVE_STATE_SAVED","saved_at":"\#(savedAt)"}"#
+            }
+        }
+        // The new portenvd hasn't opened it: it was open when the old one ended.
+        cli.state = #"{"state":"SAVE_STATE_NOT_SAVED","saved_at":"\#(savedAt)","interrupted":true}"#
+        let opensBefore = cli.calls.filter { $0.count > 1 && $0[1] == "open" }.count
+        cli.endWatches()
+        for _ in 0 ..< 300 where cli.calls.filter({ $0.count > 1 && $0[1] == "open" }).count == opensBefore {
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(cli.calls.filter { $0.count > 1 && $0[1] == "open" }.count == opensBefore + 1, "reopened by itself")
+        #expect(!locations.all.contains("closed"), "never closed in between: \(locations.all)")
+        #expect(c.location == .thisMac)
+    }
+
+    /// R-0250, as seen: after the restart the new portenvd said the
+    /// workspace was closed, not interrupted, and the window showed "closed"
+    /// with Open. A workspace this window had open when portenvd went away
+    /// is reopened by itself whatever the new portenvd says first.
+    @Test func aRestartThatSaysClosedStillReattaches() async {
+        let cli = FakeDaemon()
+        let c = BoxController(box: "acme-api", daemon: cli, keychain: BlockingKeychain(blocks: false),
+                              ensureDaemon: { nil }, followRetry: .milliseconds(10))
+        cli.state = #"{"state":"SAVE_STATE_SAVED","saved_at":"\#(savedAt)"}"#
+        await c.open()
+        let following = Task { await c.follow() }
+        defer { following.cancel() }
+        for _ in 0 ..< 200 where !cli.calls.contains(["app", "watch", "acme-api"]) { try? await Task.sleep(for: .milliseconds(5)) }
+        let locations = Seen()
+        cli.onRun = { args in
+            await MainActor.run { locations.add("\(c.location)") }
+            if args.count > 1, args[1] == "open" {
+                cli.state = #"{"state":"SAVE_STATE_SAVED","saved_at":"\#(savedAt)"}"#
+            }
+        }
+        cli.state = #"{"state":"SAVE_STATE_CLOSED","saved_at":"\#(savedAt)"}"#
+        let opensBefore = cli.calls.filter { $0.count > 1 && $0[1] == "open" }.count
+        cli.endWatches()
+        for _ in 0 ..< 300 where cli.calls.filter({ $0.count > 1 && $0[1] == "open" }).count == opensBefore {
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(cli.calls.filter { $0.count > 1 && $0[1] == "open" }.count == opensBefore + 1, "reopened by itself")
+        #expect(!locations.all.contains("closed"), "never closed in between: \(locations.all)")
+        #expect(c.location == .thisMac)
+    }
+
+    /// Closed by the person (Close Workspace, or another window's close)
+    /// while portenvd was there: no reattach.
+    @Test func aWorkspaceClosedWithPortenvdThereIsNotReopened() async {
+        let cli = FakeDaemon()
+        let c = BoxController(box: "acme-api", daemon: cli, keychain: BlockingKeychain(blocks: false),
+                              ensureDaemon: { nil }, followRetry: .milliseconds(10))
+        cli.state = #"{"state":"SAVE_STATE_SAVED","saved_at":"\#(savedAt)"}"#
+        await c.open()
+        let following = Task { await c.follow() }
+        defer { following.cancel() }
+        for _ in 0 ..< 200 where !cli.calls.contains(["app", "watch", "acme-api"]) { try? await Task.sleep(for: .milliseconds(5)) }
+        let opensBefore = cli.calls.filter { $0.count > 1 && $0[1] == "open" }.count
+        cli.push(#"{"state":"SAVE_STATE_CLOSED","saved_at":"\#(savedAt)"}"#)
+        try? await Task.sleep(for: .milliseconds(200))
+        #expect(c.location == .closed)
+        #expect(cli.calls.filter { $0.count > 1 && $0[1] == "open" }.count == opensBefore)
+    }
+
     @Test func aClosedWindowIsNotReopened() async {
         let cli = FakeDaemon(), restarts = Counter()
         let c = BoxController(box: "acme-api", daemon: cli, ensureDaemon: { restarts.add(); return nil })

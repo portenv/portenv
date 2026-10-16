@@ -71,6 +71,13 @@ type Server struct {
 	sleep        func(ctx context.Context, d time.Duration) bool
 	closeForQuit func(ctx context.Context, name string) error
 
+	// team is the agent team (ADR 0022), made on first use; teamPumps
+	// holds each workspace's TeamCalls stream.
+	teamOnce  sync.Once
+	team      *teamEngine
+	teamMu    sync.Mutex
+	teamPumps map[string]bool
+
 	mu     sync.Mutex
 	open   map[string]*openBox   // by box name
 	remote map[string]*remoteBox // boxes this Mac opened on a server

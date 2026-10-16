@@ -313,7 +313,10 @@ struct ClosedWorkspace: View {
                     .frame(maxWidth: 420)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            // Blue, as the default button reads in every window, not only in
+            // sheets (R-0229; the #135 render).
             Button(failure == nil ? ClosedText.open : ClosedText.tryAgain, action: open)
+                .buttonStyle(.borderedProminent)
                 .keyboardShortcut(.defaultAction)
                 .accessibilityLabel(ClosedText.buttonLabel(box, failed: failure != nil))
         }

@@ -75,7 +75,8 @@ check "/home takes default ACLs" in_box sh -c '
 	d=$(mktemp -d /home/.acl-check.XXXXXX) || exit 1
 	setfacl -d -m g:work:rwX "$d" && touch "$d/f" &&
 		getfacl -cp "$d" | grep -qx "default:group:work:rwx" &&
-		getfacl -cp "$d/f" | grep -q "^group:work:rw-"
+		getfacl -cp "$d/f" | grep -q "^group:work:rw" &&
+		getfacl -cp "$d/f" | grep -qx "mask::rw-"
 	rc=$?; rm -rf "$d"; exit $rc'
 check "build-essential" as_work 'gcc --version && make --version'
 check "python 3" as_work 'python3 --version'

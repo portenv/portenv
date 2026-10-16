@@ -205,7 +205,13 @@ public struct BlocksView: View {
     @State private var asking: CommandBlock?
     /// Where each block sits in the list's visible area, for the header that
     /// stays at the top.
-    @State private var frames: [Int: CGRect] = [:]
+    /// Open blocks whose top has scrolled above the list while their
+    /// output still shows: their header stays at the top. Only a change in
+    /// this set redraws the list, not every scrolled point (R-0243).
+    @State private var underTop: Set<Int> = []
+    /// Where VoiceOver's cursor is: a click on a header moves it there
+    /// (R-0244).
+    @AccessibilityFocusState private var spoken: Int?
     @FocusState private var findFocused: Bool
     /// Renders and tests: an output row to start scrolled to.
     private let startAt: Int?
@@ -240,6 +246,10 @@ public struct BlocksView: View {
                         ForEach(blocks) { block in
                             VStack(alignment: .leading, spacing: 0) {
                                 header(block, proxy: proxy, pinned: false)
+                                    .id(Self.headID(block.id))
+                                if block.state == .running {
+                                    Rectangle().fill(SwiftUI.Color.accentColor).frame(height: 2).accessibilityHidden(true)
+                                }
                                 BlockBody(block: block, reader: reader, palette: palette, open: isOpen(block),
                                           showAll: showAll.contains(block.id), highlights: highlights(block.id),
                                           expand: { showAll.insert(block.id) })
@@ -249,7 +259,12 @@ public struct BlocksView: View {
                                 .stroke(edge(block.state, selected: selected == block.id), lineWidth: selected == block.id ? 2 : 1))
                             .contextMenu { menu(block, proxy: proxy) }
                             .id(block.id)
-                            .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.space)) } action: { frames[block.id] = $0 }
+                            .onGeometryChange(for: Bool.self) { g in
+                                let f = g.frame(in: .named(Self.space))
+                                return f.minY < -1 && f.maxY > 80
+                            } action: { under in
+                                if under { underTop.insert(block.id) } else { underTop.remove(block.id) }
+                            }
                         }
                     }
                     .padding(14)
@@ -286,13 +301,25 @@ public struct BlocksView: View {
     }
 
     static let space = "blocks"
+    static func headID(_ id: Int) -> String { "head-\(id)" }
+
+    /// "↑ Top of block": to the block's header, not animated, and again once
+    /// the lazy rows above it have their real heights, so a jump over
+    /// thousands of rows doesn't land short (R-0239).
+    func top(_ block: CommandBlock, _ proxy: ScrollViewProxy) {
+        proxy.scrollTo(Self.headID(block.id), anchor: .top)
+        DispatchQueue.main.async { proxy.scrollTo(Self.headID(block.id), anchor: .top) }
+    }
 
     func header(_ block: CommandBlock, proxy: ScrollViewProxy, pinned: Bool) -> some View {
         BlockHeader(block: block, now: now, open: isOpen(block), pinned: pinned, selected: selected == block.id,
                     highlights: highlights(block.id)[-1] ?? [],
-                    actions: actions(block),
-                    toggle: { toggled.formSymmetricDifference([block.id]) },
-                    top: { withAnimation { proxy.scrollTo(block.id, anchor: .top) } })
+                    actions: actions(block), spoken: pinned ? nil : $spoken,
+                    toggle: {
+                        toggled.formSymmetricDifference([block.id])
+                        if !pinned { spoken = block.id }
+                    },
+                    top: { top(block, proxy) })
     }
 
     // MARK: Actions
@@ -341,10 +368,7 @@ public struct BlocksView: View {
 
     /// A header stays at the top while its block's output scrolls under it:
     /// the block's top has gone above the list's top, and its bottom hasn't.
-    func pinned(_ b: CommandBlock) -> Bool {
-        guard let f = frames[b.id], isOpen(b) else { return false }
-        return f.minY < -1 && f.maxY > 80
-    }
+    func pinned(_ b: CommandBlock) -> Bool { isOpen(b) && underTop.contains(b.id) }
 
     // MARK: Keys
 
@@ -497,6 +521,9 @@ struct BlockHeader: View {
     let selected: Bool
     let highlights: [(range: Range<Int>, current: Bool)]
     let actions: BlockActions
+    /// The list's VoiceOver focus, for the header in the list (not the
+    /// sticky copy): a click moves VoiceOver's cursor to it.
+    let spoken: AccessibilityFocusState<Int?>.Binding?
     let toggle: () -> Void
     let top: () -> Void
     @State private var hovering = false
@@ -519,10 +546,10 @@ struct BlockHeader: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help(BlockText.since(block) ?? "")
             .accessibilityLabel(BlockText.spoken(block, now: now))
             .accessibilityValue(BlockText.expandedState(open: open))
             .onKeyPress(.return) { toggle(); return .handled }
+            .modifier(SpokenFocus(spoken: spoken, id: block.id))
             .accessibilityActions {
                 if let a = actions.copyOutput { Button(BlockCopy.copyOutput, action: a) }
                 if let a = actions.copyCommand { Button(BlockCopy.copyCommand, action: a) }
@@ -555,7 +582,13 @@ struct BlockHeader: View {
         .accessibilityHidden(true)
     }
 
-    @ViewBuilder private var status: some View {
+    /// The status, with "since 14:37" as its tooltip (R-0207): on the
+    /// status itself, where the pointer rests, not on the whole button.
+    private var status: some View {
+        statusText.help(BlockText.since(block) ?? "")
+    }
+
+    @ViewBuilder private var statusText: some View {
         let words = BlockText.status(block, now: now)
         switch block.state {
         case .succeeded:
@@ -566,6 +599,17 @@ struct BlockHeader: View {
         case .running:
             (Text("\u{25CF} ").foregroundStyle(SwiftUI.Color.accentColor) + Text(words).foregroundStyle(SwiftUI.Color.accentColor))
         }
+    }
+}
+
+/// Moves VoiceOver's cursor to a header when it's clicked (R-0244); the
+/// sticky copy of a header has no binding and keeps the cursor where it is.
+struct SpokenFocus: ViewModifier {
+    let spoken: AccessibilityFocusState<Int?>.Binding?
+    let id: Int
+
+    func body(content: Content) -> some View {
+        if let spoken { content.accessibilityFocused(spoken, equals: id) } else { content }
     }
 }
 
@@ -613,8 +657,11 @@ struct BlockBody: View {
         let shown = BlockLayout.shown(reader.kept(block), open: open, showAll: showAll)
         Group {
             if shown != .folded {
-                Divider()
-                VStack(alignment: .leading, spacing: 2) {
+                if block.state != .running { Divider() }
+                // Lazy: Show All Output on a 2,400-line block builds only the
+                // rows on screen, for the window and for VoiceOver (R-0239,
+                // R-0243).
+                LazyVStack(alignment: .leading, spacing: 2) {
                     // Rows past the scrollback show as one note, not blanks.
                     if trimmed > 0 {
                         Text(BlockCopy.trimmedNote(trimmed))
@@ -656,7 +703,8 @@ func edge(_ state: CommandBlock.State, selected: Bool) -> SwiftUI.Color {
     if selected { return .accentColor }
     switch state {
     case .failed: return SwiftUI.Color(nsColor: .systemRed)
-    case .running: return .accentColor
-    case .succeeded: return SwiftUI.Color.primary.opacity(0.12)
+    // Running is a blue line under its header, not an outline: the accent
+    // outline means selected (R-0239).
+    case .running, .succeeded: return SwiftUI.Color.primary.opacity(0.12)
     }
 }

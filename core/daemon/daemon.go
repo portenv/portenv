@@ -15,6 +15,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -88,6 +89,8 @@ type Server struct {
 	network networkReport      // the app's last network report
 	now     func() time.Time   // the clock (tests set it)
 	alive   func(pid int) bool // whether a reporting app still runs
+	// engine asks the box engine whether it answers (tests set it).
+	engine func(ctx context.Context) error
 }
 
 // openBox is a box this daemon opened: its session, sync engine and agent
@@ -118,6 +121,48 @@ type openBox struct {
 	agentMu sync.RWMutex
 	// openedAt: when this portenvd opened the box (the inspector's "Since").
 	openedAt time.Time
+	// securityRestart: this open stopped and started the box again because
+	// it was left running with mounts it shouldn't have (R-0201).
+	securityRestart atomic.Bool
+}
+
+// takeOverDriver is what the take-over needs of a box's driver.
+type takeOverDriver interface {
+	AgentChannel(ctx context.Context, id driver.BoxID) (driver.AgentChannel, error)
+	Rekey(ctx context.Context, id driver.BoxID) error
+	Stop(ctx context.Context, id driver.BoxID, timeout time.Duration) (driver.State, error)
+}
+
+// takeOver handles a box left running without this process's channel
+// secrets (portenvd restarted: a crash, an update). It is re-keyed in
+// place, so it and its programs keep running (ADR 0014). If it was started
+// with other mounts than it should have (every box's repositories, from
+// before R-0201), Rekey refuses before making any key, and the box is
+// stopped here so the open starts it again with only its own: that is a
+// security restart, which the open reports to the person. Any other
+// failure also stops it, to open a new channel. Its home stays (rule 3).
+func (s *Server) takeOver(ctx context.Context, name string, d takeOverDriver, id driver.BoxID) (securityRestart bool, err error) {
+	if _, err := d.AgentChannel(ctx, id); !errors.Is(err, driver.ErrNoChannel) {
+		return false, nil
+	}
+	// Rekey refuses a box that isn't running; then it simply starts.
+	switch err := d.Rekey(ctx, id); {
+	case err == nil:
+		s.log.Info("took over the running workspace (re-keyed, not restarted)", "box", name)
+	case errors.Is(err, driver.ErrMountsChanged):
+		// By workspace ID only: no name, no path.
+		s.log.Warn("restarting the workspace to apply a security update: it could reach other workspaces' saves", "workspace", string(id))
+		securityRestart = true
+	default:
+		s.log.Info("no running box to take over, or the re-key failed: starting it", "box", name, "err", err)
+	}
+	if _, err := d.AgentChannel(ctx, id); errors.Is(err, driver.ErrNoChannel) {
+		s.leaving(name) // whatever had it open ends as for a restart
+		if _, err := d.Stop(ctx, id, 0); err != nil {
+			return false, err
+		}
+	}
+	return securityRestart, nil
 }
 
 // New returns a daemon for this machine's Portenv directory.
@@ -131,7 +176,8 @@ func New(env *local.Env, log *slog.Logger) *Server {
 	}
 	bg, cancel := context.WithCancel(context.Background())
 	return &Server{env: env, log: log, open: map[string]*openBox{}, remote: map[string]*remoteBox{}, gen: map[string]uint64{},
-		now: time.Now, alive: processAlive, bgCtx: bg, bgCancel: cancel}
+		now: time.Now, alive: processAlive, bgCtx: bg, bgCancel: cancel,
+		engine: func(ctx context.Context) error { return env.EngineAnswers(ctx) }}
 }
 
 // Serve listens on the socket in the Portenv directory (mode 0600 in a 0700
@@ -194,7 +240,22 @@ func (s *Server) Serve(ctx context.Context) error {
 
 // GetVersion implements daemonv1.DaemonServiceServer.
 func (s *Server) GetVersion(context.Context, *daemonv1.GetVersionRequest) (*daemonv1.GetVersionResponse, error) {
-	return &daemonv1.GetVersionResponse{Build: &typesv1.BuildInfo{Version: version.Version, Commit: version.Commit}}, nil
+	return &daemonv1.GetVersionResponse{Build: &typesv1.BuildInfo{Version: version.Version, Commit: version.Commit, BuildId: version.BuildID}}, nil
+}
+
+// engineTimeout bounds GetEngine: Welcome asks every 2 s.
+const engineTimeout = 1500 * time.Millisecond
+
+// GetEngine reports whether the box engine answers (Docker Desktop is
+// running), for Welcome's Docker card and the state line (R-0098).
+func (s *Server) GetEngine(ctx context.Context, _ *daemonv1.GetEngineRequest) (*daemonv1.GetEngineResponse, error) {
+	ctx, cancel := context.WithTimeout(ctx, engineTimeout)
+	defer cancel()
+	err := s.engine(ctx)
+	if err != nil {
+		s.log.Debug("engine check", "err", err)
+	}
+	return &daemonv1.GetEngineResponse{Running: err == nil}, nil
 }
 
 // ListBoxes lists the boxes configured on this machine.
@@ -240,7 +301,18 @@ func (s *Server) ListBoxes(context.Context, *daemonv1.ListBoxesRequest) (*daemon
 }
 
 // OpenBox applies the resume rules and starts the box on this Mac.
-func (s *Server) OpenBox(ctx context.Context, req *daemonv1.OpenBoxRequest) (*daemonv1.OpenBoxResponse, error) {
+func (s *Server) OpenBox(ctx context.Context, req *daemonv1.OpenBoxRequest) (_ *daemonv1.OpenBoxResponse, err error) {
+	// Logged by workspace ID, on entry and on every failure, never with a
+	// path (R-0209, R-0211): an open that fails says why in the log, and
+	// the app gets a plain line.
+	id := s.boxID(req.GetName())
+	s.log.Info("open", "box_id", id)
+	defer func() {
+		if err != nil {
+			s.log.Warn("open failed", "box_id", id, "err", noPaths(err.Error()))
+			err = plainOpenError(err)
+		}
+	}()
 	if req.GetConnectThere() {
 		return s.connectThere(ctx, req.GetName())
 	}
@@ -310,12 +382,13 @@ func (s *Server) OpenBox(ctx context.Context, req *daemonv1.OpenBoxRequest) (*da
 func (s *Server) openBox(ctx context.Context, name string, takeOver bool) (*openBox, boxsync.ResumeResult, error) {
 	var none boxsync.ResumeResult
 	t0 := time.Now()
-	step := func(what string) { s.log.Info(what, "box", name, "after", time.Since(t0).Round(time.Millisecond)) }
 	sess, err := s.env.Open(name)
 	if err != nil {
 		return nil, none, keyError(err)
 	}
-	if err := sess.EnsureCreated(ctx, func(msg string) { s.log.Info(msg, "box", name) }); err != nil {
+	id := string(sess.ID())
+	step := func(what string) { s.log.Info(what, "box_id", id, "after", time.Since(t0).Round(time.Millisecond)) }
+	if err := sess.EnsureCreated(ctx, step); err != nil {
 		return nil, none, err
 	}
 	// Storage reachability, alongside the box's start: no probe when the
@@ -332,28 +405,16 @@ func (s *Server) openBox(ctx context.Context, name string, takeOver bool) (*open
 		}()
 	}
 
-	// A box left running without this process's channel secrets (portenvd
-	// restarted: a crash, an update) is taken over: re-keyed in place, so
-	// it and its programs keep running (ADR 0014). Only if that fails is it
-	// restarted to open a new channel (its home stays: rule 3).
-	if _, err := sess.Drv.AgentChannel(ctx, sess.ID()); errors.Is(err, driver.ErrNoChannel) {
-		// Rekey refuses a box that isn't running; then it simply starts.
-		if err := sess.Drv.Rekey(ctx, sess.ID()); err == nil {
-			step("took over the running workspace (re-keyed, not restarted)")
-		} else {
-			s.log.Info("no running box to take over, or the re-key failed: starting it", "box", name, "err", err)
-		}
-		if _, err := sess.Drv.AgentChannel(ctx, sess.ID()); errors.Is(err, driver.ErrNoChannel) {
-			if _, err := sess.Drv.Stop(ctx, sess.ID(), 0); err != nil {
-				return nil, none, err
-			}
-		}
+	restarted, err := s.takeOver(ctx, name, sess.Drv, sess.ID())
+	if err != nil {
+		return nil, none, err
 	}
 	if _, err := sess.Drv.Start(ctx, sess.ID()); err != nil {
 		return nil, none, err
 	}
 	step("workspace started")
 	ob := &openBox{sess: sess, openedAt: time.Now()}
+	ob.securityRestart.Store(restarted)
 	// An empty home makes the agent report FAILED; restic still runs.
 	if _, err := ob.connect(ctx, true); err != nil {
 		return nil, none, agentError(err)
@@ -866,4 +927,50 @@ func short8(id string) string {
 		return id[:8]
 	}
 	return id
+}
+
+// boxID is a workspace's ID for the log, or "" when its settings can't be
+// read (the failure says why).
+func (s *Server) boxID(name string) string {
+	c, err := s.env.LoadBox(name)
+	if err != nil {
+		return ""
+	}
+	return c.ID
+}
+
+// The lines the app shows when the container engine isn't running, doesn't
+// answer, or a download stops (R-0211), worded as the app's own engine lines
+// (DaemonErrorText), which pass them through. The detail goes to the log.
+// testdata/engine-lines.txt holds the same three: the Go test checks these
+// against it, and the app's test runs each through DaemonErrorText
+// unchanged (R-0214).
+const (
+	EngineNotRunning   = "Portenv uses Docker Desktop to run workspaces on this Mac. Start Docker Desktop, then click Try Again."
+	EngineUnresponsive = "Docker Desktop is still starting, or isn’t answering. Wait a moment, then click Try Again."
+	PullStalled        = "Portenv couldn’t get the workspace image: the download stopped. Check this Mac is online, then click Try Again."
+)
+
+// plainOpenError turns the engine's failures into their plain lines; every
+// other error is already the one the app shows.
+func plainOpenError(err error) error {
+	switch {
+	case errors.Is(err, driver.ErrPullStalled):
+		return status.Error(codes.Unavailable, PullStalled)
+	case errors.Is(err, driver.ErrEngineNotRunning):
+		return status.Error(codes.Unavailable, EngineNotRunning)
+	case errors.Is(err, driver.ErrEngineUnresponsive):
+		return status.Error(codes.Unavailable, EngineUnresponsive)
+	}
+	return err
+}
+
+// pathRE is a file path of two or more parts, absolute or from ~; a part
+// may hold spaces ("Application Support").
+var pathRE = regexp.MustCompile(`(^|[\s"'(=])~?/(?:[^/\s"'()]+(?: [^/\s"'()]+)*/)+[^\s"'():]*`)
+
+// noPaths hides the file paths in a log line: they can name the person (a
+// home folder) and say nothing a workspace ID doesn't.
+func noPaths(s string) string {
+	return pathRE.ReplaceAllString(s, "${1}…")
 }

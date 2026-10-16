@@ -313,6 +313,53 @@ public nonisolated enum Portenv_Types_V1_ServerKeyState: SwiftProtobuf.Enum, Swi
 
 }
 
+/// One line of Add a Server's Check (ADR 0021 §3).
+public nonisolated enum Portenv_Types_V1_CheckState: SwiftProtobuf.Enum, Swift.CaseIterable {
+  public typealias RawValue = Int
+  case unspecified // = 0
+  case passed // = 1
+
+  /// Says what to do in fix. Nothing installs until no line fails.
+  case failed // = 2
+
+  /// Recorded, never a failure (KVM, an existing install).
+  case info // = 3
+  case UNRECOGNIZED(Int)
+
+  public init() {
+    self = .unspecified
+  }
+
+  public init?(rawValue: Int) {
+    switch rawValue {
+    case 0: self = .unspecified
+    case 1: self = .passed
+    case 2: self = .failed
+    case 3: self = .info
+    default: self = .UNRECOGNIZED(rawValue)
+    }
+  }
+
+  public var rawValue: Int {
+    switch self {
+    case .unspecified: return 0
+    case .passed: return 1
+    case .failed: return 2
+    case .info: return 3
+    case .UNRECOGNIZED(let i): return i
+    }
+  }
+
+  // The compiler won't synthesize support with the UNRECOGNIZED case.
+  public static let allCases: [Portenv_Types_V1_CheckState] = [
+    .unspecified,
+    .passed,
+    .failed,
+    .info,
+  ]
+
+}
+
 /// A box: a toolbox image plus a portable home. Only the home travels between
 /// machines; the image is pulled or rebuilt on each one.
 public nonisolated struct Portenv_Types_V1_Box: Sendable {
@@ -464,6 +511,11 @@ public nonisolated struct Portenv_Types_V1_BuildInfo: Sendable {
   /// Git commit the binary was built from.
   public var commit: String = String()
 
+  /// One build of the app and its helpers (gmake app): different for every
+  /// build, a lane's or a dev build of the same commit too. The app restarts
+  /// a portenvd whose build_id isn't its own (R-0198).
+  public var buildID: String = String()
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -539,6 +591,10 @@ nonisolated extension Portenv_Types_V1_TabTerminalEnd: SwiftProtobuf._ProtoNameP
 
 nonisolated extension Portenv_Types_V1_ServerKeyState: SwiftProtobuf._ProtoNameProviding {
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0SERVER_KEY_STATE_UNSPECIFIED\0\u{1}SERVER_KEY_STATE_UNCONFIRMED\0\u{1}SERVER_KEY_STATE_CONFIRMED\0\u{1}SERVER_KEY_STATE_CHANGED\0")
+}
+
+nonisolated extension Portenv_Types_V1_CheckState: SwiftProtobuf._ProtoNameProviding {
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0CHECK_STATE_UNSPECIFIED\0\u{1}CHECK_STATE_PASSED\0\u{1}CHECK_STATE_FAILED\0\u{1}CHECK_STATE_INFO\0")
 }
 
 nonisolated extension Portenv_Types_V1_Box: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
@@ -755,7 +811,7 @@ nonisolated extension Portenv_Types_V1_Lease: SwiftProtobuf.Message, SwiftProtob
 
 nonisolated extension Portenv_Types_V1_BuildInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".BuildInfo"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}version\0\u{1}commit\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}version\0\u{1}commit\0\u{3}build_id\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -765,6 +821,7 @@ nonisolated extension Portenv_Types_V1_BuildInfo: SwiftProtobuf.Message, SwiftPr
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularStringField(value: &self.version) }()
       case 2: try { try decoder.decodeSingularStringField(value: &self.commit) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.buildID) }()
       default: break
       }
     }
@@ -777,12 +834,16 @@ nonisolated extension Portenv_Types_V1_BuildInfo: SwiftProtobuf.Message, SwiftPr
     if !self.commit.isEmpty {
       try visitor.visitSingularStringField(value: self.commit, fieldNumber: 2)
     }
+    if !self.buildID.isEmpty {
+      try visitor.visitSingularStringField(value: self.buildID, fieldNumber: 3)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Portenv_Types_V1_BuildInfo, rhs: Portenv_Types_V1_BuildInfo) -> Bool {
     if lhs.version != rhs.version {return false}
     if lhs.commit != rhs.commit {return false}
+    if lhs.buildID != rhs.buildID {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

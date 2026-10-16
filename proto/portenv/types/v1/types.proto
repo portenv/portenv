@@ -111,6 +111,10 @@ message BuildInfo {
   string version = 1;
   // Git commit the binary was built from.
   string commit = 2;
+  // One build of the app and its helpers (gmake app): different for every
+  // build, a lane's or a dev build of the same commit too. The app restarts
+  // a portenvd whose build_id isn't its own (R-0198).
+  string build_id = 3;
 }
 
 // A tab in the box's terminal: one tmux window in the box's session
@@ -156,4 +160,14 @@ enum ServerKeyState {
   // It answered with another key, or this Mac's SSH recorded another one:
   // nothing runs on it, and there's no trusting it anyway.
   SERVER_KEY_STATE_CHANGED = 3;
+}
+
+// One line of Add a Server's Check (ADR 0021 §3).
+enum CheckState {
+  CHECK_STATE_UNSPECIFIED = 0;
+  CHECK_STATE_PASSED = 1;
+  // Says what to do in fix. Nothing installs until no line fails.
+  CHECK_STATE_FAILED = 2;
+  // Recorded, never a failure (KVM, an existing install).
+  CHECK_STATE_INFO = 3;
 }

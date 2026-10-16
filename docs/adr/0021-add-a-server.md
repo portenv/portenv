@@ -39,7 +39,7 @@ Where this differs from section 1 and the tests below, this wins.
   - a different key of that type is a changed key, with no Trust: "This server's key doesn't match the one this Mac's SSH recorded. Check with whoever runs it.";
   - no entry: the alert offers Trust, with the fingerprint.
 - **Until it's confirmed,** a server isn't contacted, and its workspaces say "Confirm <name> to open this." Instead of one alert listing every server, a plain alert at launch (at most once per launch) asks about each server waiting: Trust or Not Now.
-- **Until Forget is in the app** (Settings › Servers or the wizard), the changed-key line names the owner's fallback: `portenv app remove-server <name>`.
+- **Until Forget is in the app** (Settings › Servers or the wizard), the changed-key line names the owner's fallback: `portenv app forget-server <name>` (R-0185). It leaves the server unconfirmed and in Move To; it's owner-only and refused in a workspace. Forgetting a changed key keeps a `was_changed` mark: the next confirmation opens with "This server's key changed since you last confirmed it. Check the fingerprint with whoever runs it.", a match in this Mac's SSH known hosts doesn't confirm it silently, and Trust (with the fingerprint shown) clears the mark.
 - **For the owner's scripts only:** `portenv app trust-server USER@HOST "TYPE KEY"` pins a key given by a script that set the server up (no one looks at it), and `portenv app remove-server` drops a server. Both are refused inside a workspace (the box's environment marker), so a workspace's agent can't pin a server for the owner.
 - **The ControlMaster socket** is `<T>pv/c-<the server ID's 12 hex digits>`, not `c-%C`: %C's 40 hex digits, with the 17-character suffix ssh adds while it makes the socket, run past 104 bytes (found by the real-sshd test).
 - **`ControlPersist=600`:** the shared connection outlives its last use by 10 minutes at most. While it's up, any process of this user can reach the server through the socket with no Keychain prompt, so the window stays short; 10 minutes still covers an autosave cycle without signing in again each time.
@@ -56,11 +56,21 @@ The board's "Sign in with": **A key on this Mac** (the person's existing key or 
   - **Where the socket lives:** the per-user temp folder, read with `confstr(_CS_DARWIN_USER_TEMP_DIR)` (never the `TMPDIR` variable), in a folder `pv/` created 0700, owner and mode checked before every use: `<T>pv/a-<8 hex>`, random per run. macOS caps a socket path (`sun_path`) at 104 bytes and `<T>` is already about 50, so the names stay short, and a test asserts the longest path fits.
   - **The ControlMaster socket moves there too,** in the same PR: `<T>pv/c-%C`. Today's `/tmp/portenv-<uid>` is in a folder anyone can create first (a squatting race).
   - **How they fit:** a run that finds no master starts one; the master authenticates once, through that run's agent; once the master is up, the agent socket closes. Later runs reuse the master and need no key. A master that dies is started again the same way.
-  - **Nothing a workspace mounts is there:** boxes get their home volume, the storage folder (`Repositories`) and restic's cache volume, and that list is checked by a test.
+  - **Nothing a workspace mounts is there:** boxes get their home volume, their own repository folder (`Repositories/<box-id>`, never the whole folder: R-0201) and restic's cache volume, and that list is checked by a test.
   - **ssh options, set explicitly:** `IdentityAgent=<that socket>`, `IdentitiesOnly=yes`, `IdentityFile=none`, `ForwardAgent=no`, and `ClearAllForwardings=yes` except where a run needs the REST forward (ADR 0005's existing `-L` to the loopback REST server).
   - **No workspace or agent ever reaches it:** not mounted, not forwarded, not in any box's environment. A test starts a box and an agent session while a run is live, and checks neither can see the socket or `SSH_AUTH_SOCK`.
 - **"No SSH yet? Copy an install command…"** (PLAN.md's alternative path): a one-line command for the provider's web console or user-data that only adds this server's public key to the user's `authorized_keys`. It installs nothing; Check and Set Up still run from the wizard, so nothing installs before every check passes.
 - **"Someone is setting one up for me"** (R-0140, R-0141): the same key, made at once, its public half shown with Copy and "Send this to the person setting up your server. It's safe to share."; **Done** saves a Settings › Servers entry, "Waiting for an address". Opening it later ("The invitation arrived") asks for name, address and user, says "Signs in with: the key you sent on <date>", and continues at the fingerprint frame. "A key on this Mac" isn't offered there: testers may not have one, and it would share one key across everything they reach.
+
+### 2a. The per-server key, as built (2.9 1b)
+
+Where this differs from section 2, this wins.
+
+- **The key:** CryptoKit's Ed25519; the Keychain holds its 32-byte seed (service `dev.portenv.server-key`, a lane's own suffix; account the server ID; label `Portenv server key portenv-<id>`; never synchronised, this-device-only, with ADR 0019's caveat). Its public half is `ssh-ed25519 … portenv-<id>`. At launch the app reads the seeds of the servers that sign in with one and hands them to `portenvd` (`ProvideServerKey`), which holds them in memory only (tested: nothing in Portenv's folder or the log carries one). Without it, a run says "Portenv needs <name>'s key from the Keychain. Open Portenv on this Mac to allow it."
+- **The run agent** (`<T>pv/a-<8 hex>`, 0600) serves that key only, signs for nothing else, refuses add, remove, remove-all and lock, and is closed (socket gone) as soon as the shared connection it signed in is up. Later runs go through that connection with no key at all.
+- **`IdentityFile` names the key's public half,** `<T>pv/a-<8 hex>.pub`, beside the agent's socket and removed with it, instead of `none`: with `IdentitiesOnly=yes`, ssh offers an agent's key only when an `IdentityFile` names it (found by the real-sshd test). The private half is never on disk. Runs through the shared connection pass `IdentityFile=none` and `IdentityAgent=none`.
+- **A made-key server's command line:** the ssh binary only from `PORTENV_SSH` (its options, a later `-F` among them, would win over `-F none`), then `-F none`, the pins, `ProxyCommand=none`, `KnownHostsCommand=none`, `PermitLocalCommand=no`, `IdentitiesOnly=yes`, `IdentityFile`, `IdentityAgent`, `ForwardAgent=no`, `ClearAllForwardings=yes` (`no` only for the REST forward, ADR 0005) and `ControlMaster`/`ControlPath`. Scanning it uses `-F none` too. Tested against a real `sshd` with a planted config (`Match exec`, `ProxyCommand`, `LocalCommand`): nothing in it runs.
+- **Nothing a workspace mounts is there:** the driver's test checks a box mounts its home volume, its own repository folder and its cache volume, and nothing else; the socket folder is outside the person's home and Application Support (tested).
 
 ### 3. Check never changes the server
 
@@ -76,13 +86,25 @@ One read-only probe, run over SSH as the given user, bounded (ADR 0012), with ea
 
 Check writes nothing on the server: no package, file, user or setting. The probe is a fixed script sent on stdin, reviewed with this ADR, and a test runs it against a server whose file system is compared before and after. Each failure says what to do in one line (GUIDELINES §10), for example "Portenv downloads the workspace toolbox from ghcr.io over HTTPS. Allow outgoing HTTPS (port 443) in your provider's firewall, then choose Check Again." **Nothing installs until every check passes.**
 
+### 3a. Check, as built (2.9 PR 2a, R-0207)
+
+Where this differs from section 3, this wins.
+
+- **The probe** is `core/local/check.sh`, embedded in portenvd and sent on stdin to `LC_ALL=C bash --noprofile --norc -s`, so a server's dotfiles can't change its output. Its answers are `key=value` lines between markers carrying a random value for this run; portenvd reads only those, ignores unknown keys and any line over 256 bytes, and caps the whole output at 64 KB. A failure's line is Portenv's own words, never the server's: no raw output reaches an error.
+- **Systems:** Ubuntu 22.04 or 24.04, arm64 or amd64, which is what `server/setup.sh` installs on. Debian 12 waits for `setup.sh` to support it (PLAN.md's open questions).
+- **sudo** is asked with `sudo -n -l true`: whether it may run, without running it, since a run can leave a file (Ubuntu's `~/.sudo_as_admin_successful`).
+- **Outgoing HTTPS** is checked as a TCP connection to port 443 of `ghcr.io` and `download.docker.com` (bash's `/dev/tcp`, 5 s each), so the probe needs no `curl`. `download.docker.com` is only information when Docker is already there.
+- **Minimums:** 2 GB of memory and 15 GB free on `/`, as `setup.sh`'s preflight.
+- **Tested** against a real `sshd` on 127.0.0.1: `/etc`, `/usr/local`, `/opt` and the account's home are the same before and after; on CI's Ubuntu runner every line passes but those a runner can't meet.
+- **`portenvd`'s `CheckServer`** runs it on a confirmed server only.
+
 ### 4. Set up
 
 - **What it does:** uploads `portenv` and `portenv-runner` for the server's architecture (the release's own), checked against SHA-256 checksums from **a manifest inside the signed app bundle**, never fetched alongside the binaries, then runs `server/setup.sh` with sudo, which already: installs Docker Engine from Docker's repository, makes the encrypted volume for workspace homes, the SFTP-only storage account for saves and the loopback-only REST server, and opens no port. Then it starts a test workspace, checks its terminal and its save, and removes it.
 - **Everything Portenv adds is named `portenv-*`** and sits beside what's there.
 - **sudo after Set Up:** setup needs root or full `sudo -n` once. Day to day, Portenv runs only `sudo -n /usr/local/bin/portenv …` on the server (2.1's rule), never a shell; Portenv doesn't edit the person's own sudoers.
 - **The test workspace** checks a terminal and a save; it adds the port relay check once 1.6 ships (PLAN.md's step 5).
-- **`portenvd` owns the job,** not the window: closing the wizard doesn't stop it; it reports through a notification when it ends, and Settings › Servers shows it meanwhile. Stop Setup stops after the step running, and says what's left on the server.
+- **`portenvd` owns the job,** not the window: closing the wizard doesn't stop it; it reports through a notification when it ends, and Settings › Servers shows it meanwhile. When the app isn't running as it ends, the result shows at the next launch, once, as a notification posted then, and stays in Settings › Servers (R-0207). Stop Setup stops after the step running, and says what's left on the server.
 - **No new ports**, checked after Set Up by the same probe (listening sockets before and after).
 
 ### 5. "Turn off password logins": offered, never forced

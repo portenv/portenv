@@ -363,6 +363,61 @@ func (ServerKeyState) EnumDescriptor() ([]byte, []int) {
 	return file_portenv_types_v1_types_proto_rawDescGZIP(), []int{5}
 }
 
+// One line of Add a Server's Check (ADR 0021 §3).
+type CheckState int32
+
+const (
+	CheckState_CHECK_STATE_UNSPECIFIED CheckState = 0
+	CheckState_CHECK_STATE_PASSED      CheckState = 1
+	// Says what to do in fix. Nothing installs until no line fails.
+	CheckState_CHECK_STATE_FAILED CheckState = 2
+	// Recorded, never a failure (KVM, an existing install).
+	CheckState_CHECK_STATE_INFO CheckState = 3
+)
+
+// Enum value maps for CheckState.
+var (
+	CheckState_name = map[int32]string{
+		0: "CHECK_STATE_UNSPECIFIED",
+		1: "CHECK_STATE_PASSED",
+		2: "CHECK_STATE_FAILED",
+		3: "CHECK_STATE_INFO",
+	}
+	CheckState_value = map[string]int32{
+		"CHECK_STATE_UNSPECIFIED": 0,
+		"CHECK_STATE_PASSED":      1,
+		"CHECK_STATE_FAILED":      2,
+		"CHECK_STATE_INFO":        3,
+	}
+)
+
+func (x CheckState) Enum() *CheckState {
+	p := new(CheckState)
+	*p = x
+	return p
+}
+
+func (x CheckState) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (CheckState) Descriptor() protoreflect.EnumDescriptor {
+	return file_portenv_types_v1_types_proto_enumTypes[6].Descriptor()
+}
+
+func (CheckState) Type() protoreflect.EnumType {
+	return &file_portenv_types_v1_types_proto_enumTypes[6]
+}
+
+func (x CheckState) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use CheckState.Descriptor instead.
+func (CheckState) EnumDescriptor() ([]byte, []int) {
+	return file_portenv_types_v1_types_proto_rawDescGZIP(), []int{6}
+}
+
 // A box: a toolbox image plus a portable home. Only the home travels between
 // machines; the image is pulled or rebuilt on each one.
 type Box struct {
@@ -697,7 +752,11 @@ type BuildInfo struct {
 	// Semantic version, or "dev" for local builds.
 	Version string `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
 	// Git commit the binary was built from.
-	Commit        string `protobuf:"bytes,2,opt,name=commit,proto3" json:"commit,omitempty"`
+	Commit string `protobuf:"bytes,2,opt,name=commit,proto3" json:"commit,omitempty"`
+	// One build of the app and its helpers (gmake app): different for every
+	// build, a lane's or a dev build of the same commit too. The app restarts
+	// a portenvd whose build_id isn't its own (R-0198).
+	BuildId       string `protobuf:"bytes,3,opt,name=build_id,json=buildId,proto3" json:"build_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -742,6 +801,13 @@ func (x *BuildInfo) GetVersion() string {
 func (x *BuildInfo) GetCommit() string {
 	if x != nil {
 		return x.Commit
+	}
+	return ""
+}
+
+func (x *BuildInfo) GetBuildId() string {
+	if x != nil {
+		return x.BuildId
 	}
 	return ""
 }
@@ -874,10 +940,11 @@ const file_portenv_types_v1_types_proto_rawDesc = "" +
 	"machine_id\x18\x02 \x01(\tR\tmachineId\x120\n" +
 	"\x05since\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x05since\x12A\n" +
 	"\x0elast_heartbeat\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\rlastHeartbeat\x125\n" +
-	"\x06source\x18\x05 \x01(\x0e2\x1d.portenv.types.v1.LeaseSourceR\x06source\"=\n" +
+	"\x06source\x18\x05 \x01(\x0e2\x1d.portenv.types.v1.LeaseSourceR\x06source\"X\n" +
 	"\tBuildInfo\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12\x16\n" +
-	"\x06commit\x18\x02 \x01(\tR\x06commit\"\xb6\x01\n" +
+	"\x06commit\x18\x02 \x01(\tR\x06commit\x12\x19\n" +
+	"\bbuild_id\x18\x03 \x01(\tR\abuildId\"\xb6\x01\n" +
 	"\x03Tab\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x16\n" +
@@ -915,7 +982,13 @@ const file_portenv_types_v1_types_proto_rawDesc = "" +
 	"\x1cSERVER_KEY_STATE_UNSPECIFIED\x10\x00\x12 \n" +
 	"\x1cSERVER_KEY_STATE_UNCONFIRMED\x10\x01\x12\x1e\n" +
 	"\x1aSERVER_KEY_STATE_CONFIRMED\x10\x02\x12\x1c\n" +
-	"\x18SERVER_KEY_STATE_CHANGED\x10\x03B\xc6\x01\n" +
+	"\x18SERVER_KEY_STATE_CHANGED\x10\x03*o\n" +
+	"\n" +
+	"CheckState\x12\x1b\n" +
+	"\x17CHECK_STATE_UNSPECIFIED\x10\x00\x12\x16\n" +
+	"\x12CHECK_STATE_PASSED\x10\x01\x12\x16\n" +
+	"\x12CHECK_STATE_FAILED\x10\x02\x12\x14\n" +
+	"\x10CHECK_STATE_INFO\x10\x03B\xc6\x01\n" +
 	"\x14com.portenv.types.v1B\n" +
 	"TypesProtoP\x01Z@github.com/portenv/portenv/proto/gen/go/portenv/types/v1;typesv1\xa2\x02\x03PTX\xaa\x02\x10Portenv.Types.V1\xca\x02\x10Portenv\\Types\\V1\xe2\x02\x1cPortenv\\Types\\V1\\GPBMetadata\xea\x02\x12Portenv::Types::V1b\x06proto3"
 
@@ -931,7 +1004,7 @@ func file_portenv_types_v1_types_proto_rawDescGZIP() []byte {
 	return file_portenv_types_v1_types_proto_rawDescData
 }
 
-var file_portenv_types_v1_types_proto_enumTypes = make([]protoimpl.EnumInfo, 6)
+var file_portenv_types_v1_types_proto_enumTypes = make([]protoimpl.EnumInfo, 7)
 var file_portenv_types_v1_types_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_portenv_types_v1_types_proto_goTypes = []any{
 	(BoxState)(0),                 // 0: portenv.types.v1.BoxState
@@ -940,22 +1013,23 @@ var file_portenv_types_v1_types_proto_goTypes = []any{
 	(LeaseSource)(0),              // 3: portenv.types.v1.LeaseSource
 	(TabTerminalEnd)(0),           // 4: portenv.types.v1.TabTerminalEnd
 	(ServerKeyState)(0),           // 5: portenv.types.v1.ServerKeyState
-	(*Box)(nil),                   // 6: portenv.types.v1.Box
-	(*Resources)(nil),             // 7: portenv.types.v1.Resources
-	(*SnapshotRef)(nil),           // 8: portenv.types.v1.SnapshotRef
-	(*Lease)(nil),                 // 9: portenv.types.v1.Lease
-	(*BuildInfo)(nil),             // 10: portenv.types.v1.BuildInfo
-	(*Tab)(nil),                   // 11: portenv.types.v1.Tab
-	(*timestamppb.Timestamp)(nil), // 12: google.protobuf.Timestamp
+	(CheckState)(0),               // 6: portenv.types.v1.CheckState
+	(*Box)(nil),                   // 7: portenv.types.v1.Box
+	(*Resources)(nil),             // 8: portenv.types.v1.Resources
+	(*SnapshotRef)(nil),           // 9: portenv.types.v1.SnapshotRef
+	(*Lease)(nil),                 // 10: portenv.types.v1.Lease
+	(*BuildInfo)(nil),             // 11: portenv.types.v1.BuildInfo
+	(*Tab)(nil),                   // 12: portenv.types.v1.Tab
+	(*timestamppb.Timestamp)(nil), // 13: google.protobuf.Timestamp
 }
 var file_portenv_types_v1_types_proto_depIdxs = []int32{
-	7,  // 0: portenv.types.v1.Box.resources:type_name -> portenv.types.v1.Resources
-	12, // 1: portenv.types.v1.SnapshotRef.time:type_name -> google.protobuf.Timestamp
+	8,  // 0: portenv.types.v1.Box.resources:type_name -> portenv.types.v1.Resources
+	13, // 1: portenv.types.v1.SnapshotRef.time:type_name -> google.protobuf.Timestamp
 	2,  // 2: portenv.types.v1.SnapshotRef.kind:type_name -> portenv.types.v1.SnapshotKind
-	12, // 3: portenv.types.v1.Lease.since:type_name -> google.protobuf.Timestamp
-	12, // 4: portenv.types.v1.Lease.last_heartbeat:type_name -> google.protobuf.Timestamp
+	13, // 3: portenv.types.v1.Lease.since:type_name -> google.protobuf.Timestamp
+	13, // 4: portenv.types.v1.Lease.last_heartbeat:type_name -> google.protobuf.Timestamp
 	3,  // 5: portenv.types.v1.Lease.source:type_name -> portenv.types.v1.LeaseSource
-	12, // 6: portenv.types.v1.Tab.running_since:type_name -> google.protobuf.Timestamp
+	13, // 6: portenv.types.v1.Tab.running_since:type_name -> google.protobuf.Timestamp
 	7,  // [7:7] is the sub-list for method output_type
 	7,  // [7:7] is the sub-list for method input_type
 	7,  // [7:7] is the sub-list for extension type_name
@@ -973,7 +1047,7 @@ func file_portenv_types_v1_types_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_portenv_types_v1_types_proto_rawDesc), len(file_portenv_types_v1_types_proto_rawDesc)),
-			NumEnums:      6,
+			NumEnums:      7,
 			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   0,

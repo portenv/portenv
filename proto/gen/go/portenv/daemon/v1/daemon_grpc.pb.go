@@ -65,6 +65,9 @@ const (
 	DaemonService_ScanServerKey_FullMethodName         = "/portenv.daemon.v1.DaemonService/ScanServerKey"
 	DaemonService_TrustServerKey_FullMethodName        = "/portenv.daemon.v1.DaemonService/TrustServerKey"
 	DaemonService_ForgetServerKey_FullMethodName       = "/portenv.daemon.v1.DaemonService/ForgetServerKey"
+	DaemonService_ProvideServerKey_FullMethodName      = "/portenv.daemon.v1.DaemonService/ProvideServerKey"
+	DaemonService_CheckServer_FullMethodName           = "/portenv.daemon.v1.DaemonService/CheckServer"
+	DaemonService_GetEngine_FullMethodName             = "/portenv.daemon.v1.DaemonService/GetEngine"
 )
 
 // DaemonServiceClient is the client API for DaemonService service.
@@ -199,6 +202,21 @@ type DaemonServiceClient interface {
 	TrustServerKey(ctx context.Context, in *TrustServerKeyRequest, opts ...grpc.CallOption) (*TrustServerKeyResponse, error)
 	// Drop the server's pinned key: it is unconfirmed again.
 	ForgetServerKey(ctx context.Context, in *ForgetServerKeyRequest, opts ...grpc.CallOption) (*ForgetServerKeyResponse, error)
+	// A made key's private half (2.9 1b, ADR 0021), read by the app from the
+	// Keychain and held in portenvd's memory only, like ProvideKeys: never
+	// written, never logged. It signs in once per shared connection, through
+	// an agent of portenvd's own for that one run.
+	ProvideServerKey(ctx context.Context, in *ProvideServerKeyRequest, opts ...grpc.CallOption) (*ProvideServerKeyResponse, error)
+	// Add a Server's Check (2.9, ADR 0021 §3): a read-only probe over the
+	// server's pinned SSH connection, one line per question; each failure
+	// says what to do, in Portenv's words, never the server's. It changes
+	// nothing on the server.
+	CheckServer(ctx context.Context, in *CheckServerRequest, opts ...grpc.CallOption) (*CheckServerResponse, error)
+	// Whether this Mac's box engine answers (Docker Desktop is running), for
+	// Welcome's Docker card and the state line (R-0098). It only asks the
+	// engine: it never starts anything. portenvd gives the engine 1.5 s;
+	// the app waits 3 s for the answer.
+	GetEngine(ctx context.Context, in *GetEngineRequest, opts ...grpc.CallOption) (*GetEngineResponse, error)
 }
 
 type daemonServiceClient struct {
@@ -633,6 +651,36 @@ func (c *daemonServiceClient) ForgetServerKey(ctx context.Context, in *ForgetSer
 	return out, nil
 }
 
+func (c *daemonServiceClient) ProvideServerKey(ctx context.Context, in *ProvideServerKeyRequest, opts ...grpc.CallOption) (*ProvideServerKeyResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ProvideServerKeyResponse)
+	err := c.cc.Invoke(ctx, DaemonService_ProvideServerKey_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) CheckServer(ctx context.Context, in *CheckServerRequest, opts ...grpc.CallOption) (*CheckServerResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CheckServerResponse)
+	err := c.cc.Invoke(ctx, DaemonService_CheckServer_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) GetEngine(ctx context.Context, in *GetEngineRequest, opts ...grpc.CallOption) (*GetEngineResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetEngineResponse)
+	err := c.cc.Invoke(ctx, DaemonService_GetEngine_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DaemonServiceServer is the server API for DaemonService service.
 // All implementations must embed UnimplementedDaemonServiceServer
 // for forward compatibility.
@@ -765,6 +813,21 @@ type DaemonServiceServer interface {
 	TrustServerKey(context.Context, *TrustServerKeyRequest) (*TrustServerKeyResponse, error)
 	// Drop the server's pinned key: it is unconfirmed again.
 	ForgetServerKey(context.Context, *ForgetServerKeyRequest) (*ForgetServerKeyResponse, error)
+	// A made key's private half (2.9 1b, ADR 0021), read by the app from the
+	// Keychain and held in portenvd's memory only, like ProvideKeys: never
+	// written, never logged. It signs in once per shared connection, through
+	// an agent of portenvd's own for that one run.
+	ProvideServerKey(context.Context, *ProvideServerKeyRequest) (*ProvideServerKeyResponse, error)
+	// Add a Server's Check (2.9, ADR 0021 §3): a read-only probe over the
+	// server's pinned SSH connection, one line per question; each failure
+	// says what to do, in Portenv's words, never the server's. It changes
+	// nothing on the server.
+	CheckServer(context.Context, *CheckServerRequest) (*CheckServerResponse, error)
+	// Whether this Mac's box engine answers (Docker Desktop is running), for
+	// Welcome's Docker card and the state line (R-0098). It only asks the
+	// engine: it never starts anything. portenvd gives the engine 1.5 s;
+	// the app waits 3 s for the answer.
+	GetEngine(context.Context, *GetEngineRequest) (*GetEngineResponse, error)
 	mustEmbedUnimplementedDaemonServiceServer()
 }
 
@@ -894,6 +957,15 @@ func (UnimplementedDaemonServiceServer) TrustServerKey(context.Context, *TrustSe
 }
 func (UnimplementedDaemonServiceServer) ForgetServerKey(context.Context, *ForgetServerKeyRequest) (*ForgetServerKeyResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ForgetServerKey not implemented")
+}
+func (UnimplementedDaemonServiceServer) ProvideServerKey(context.Context, *ProvideServerKeyRequest) (*ProvideServerKeyResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ProvideServerKey not implemented")
+}
+func (UnimplementedDaemonServiceServer) CheckServer(context.Context, *CheckServerRequest) (*CheckServerResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CheckServer not implemented")
+}
+func (UnimplementedDaemonServiceServer) GetEngine(context.Context, *GetEngineRequest) (*GetEngineResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetEngine not implemented")
 }
 func (UnimplementedDaemonServiceServer) mustEmbedUnimplementedDaemonServiceServer() {}
 func (UnimplementedDaemonServiceServer) testEmbeddedByValue()                       {}
@@ -1600,6 +1672,60 @@ func _DaemonService_ForgetServerKey_Handler(srv interface{}, ctx context.Context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _DaemonService_ProvideServerKey_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ProvideServerKeyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).ProvideServerKey(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_ProvideServerKey_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).ProvideServerKey(ctx, req.(*ProvideServerKeyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_CheckServer_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CheckServerRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).CheckServer(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_CheckServer_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).CheckServer(ctx, req.(*CheckServerRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_GetEngine_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetEngineRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).GetEngine(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_GetEngine_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).GetEngine(ctx, req.(*GetEngineRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // DaemonService_ServiceDesc is the grpc.ServiceDesc for DaemonService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1750,6 +1876,18 @@ var DaemonService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ForgetServerKey",
 			Handler:    _DaemonService_ForgetServerKey_Handler,
+		},
+		{
+			MethodName: "ProvideServerKey",
+			Handler:    _DaemonService_ProvideServerKey_Handler,
+		},
+		{
+			MethodName: "CheckServer",
+			Handler:    _DaemonService_CheckServer_Handler,
+		},
+		{
+			MethodName: "GetEngine",
+			Handler:    _DaemonService_GetEngine_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

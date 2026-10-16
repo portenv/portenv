@@ -42,7 +42,8 @@ struct PortenvApp: App {
             AppRoot(model: model)
                 .task {
                     model.onOpen = { [delegate] controller in delegate.controller = controller }
-                    await model.start()
+                    // One launch wait at a time; Try Again restarts it.
+                    model.begin()
                 }
         }
         .windowToolbarStyle(.unified(showsTitle: true))
@@ -80,6 +81,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var relaunchingForUpdate = false
 
     func applicationWillFinishLaunching(_: Notification) {
+        // The display Portenv was launched from: first run opens there.
+        FirstRunLaunch.pointer = NSEvent.mouseLocation
         // Portenv's tab bar is the only tabs: no native window tabs.
         WindowCloseHook.turnOffNativeTabs()
     }
@@ -91,6 +94,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate()
         // Windows restored from a display that's gone come back on screen.
         OnScreen.watch()
+        // A read that may raise macOS's Keychain or Touch ID prompt brings
+        // the window that asked to the front first, so the prompt comes up
+        // over it, never unseen behind "Opening…" (R-0214).
+        KeychainWait.front.handler = {
+            DispatchQueue.main.async {
+                NSApp.activate()
+                (NSApp.keyWindow ?? NSApp.mainWindow ?? NSApp.windows.first { $0.isVisible })?.makeKeyAndOrderFront(nil)
+            }
+        }
         OnScreen.fixAll()
         // SIGTERM (Xcode's Stop, logout, kill) and SIGINT (Ctrl-C in the
         // Terminal that started it) quit like ⌘Q, so open boxes are saved

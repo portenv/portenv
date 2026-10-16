@@ -62,66 +62,134 @@ final class AppModel {
         Task { moveError = await MoveToApplications.answer(answer) }
     }
 
-    /// Waits for portenvd, lists the boxes, and decides.
+    /// Waits for portenvd, lists the boxes, and decides. Never a spinner
+    /// without end (R-0121): after two missed checks (about 4 s) the window
+    /// says the service isn't answering, with Try Again, and the checks go
+    /// on.
     private func waitAndDecide() async {
-        let deadline = ContinuousClock.now + .seconds(30)
-        var lastJobCheck = ContinuousClock.now - .seconds(10)
-        while !(await daemon.ping()) {
-            _ = await LoginItem.ensureRegistered()
-            if ContinuousClock.now - lastJobCheck >= .seconds(2) {
-                // The login item's status first (R-0028): waiting for
-                // approval is said as such and the wait goes on, so the app
-                // carries on once it's approved. launchd refusing an enabled
-                // item (exit 78) is said at once and ends the wait.
-                lastJobCheck = .now
-                problem = BackgroundServiceProblem.of(
+        let outcome = await LaunchWait.run(
+            ping: { [daemon] in
+                if await daemon.ping() { return true }
+                _ = await LoginItem.ensureRegistered()
+                return false
+            },
+            // The login item's status first (R-0028): waiting for approval
+            // is said as such and the wait goes on, so the app carries on
+            // once it's approved. launchd refusing an enabled item (exit 78)
+            // is said at once and ends the wait.
+            problem: {
+                BackgroundServiceProblem.of(
                     status: MoveToApplications.serviceStatus,
                     launchdJob: MoveToApplications.launchdJob(),
                     placement: MoveToApplications.placement
                 )
-                if let problem, problem.endsWait { return }
-            }
-            if problem == nil, ContinuousClock.now >= deadline {
-                problem = BackgroundServiceProblem(message: BoxController.daemonGone, opensLoginItems: false, offersTryAgain: true)
-                return
-            }
-            try? await Task.sleep(for: .milliseconds(200))
+            },
+            report: { [weak self] report in self?.waiting(report) },
+            sleep: { try? await Task.sleep(for: $0) },
+            boxes: { [daemon] in
+                // After an in-place update the running portenvd is still the
+                // old one: restart it here, saying so, rather than "out of
+                // date" later (R-0198).
+                if case let .refused(message) = await ServiceUpdates.shared.ensureCurrent() { throw DaemonError(message) }
+                let listed = try await daemon.boxes()
+                // A workspace made outside first run (portenv init) ends it too (R-0133).
+                DefaultsFirstRunMemory().forgetIfWorkspacesExist(listed)
+                // Pool entries for workspaces that exist go, and a workspace left
+                // half made is finished or discarded (ADR 0019, A3).
+                guard let creating = daemon as? BoxCreating else { return listed }
+                _ = await BoxMaker(daemon: creating).tidyAtLaunch()
+                return (try? await daemon.boxes()) ?? listed
+            },
+            decide: { [weak self] listed in self?.answered(listed) }
+        )
+        switch outcome {
+        case .decided, .cancelled:
+            break
+        case let .refused(p):
+            problem = p
+        case let .failed(message):
+            problem = BackgroundServiceProblem(message: message, opensLoginItems: false, offersTryAgain: true)
         }
+    }
+
+    /// portenvd answered: decide, unless the person has moved on from the
+    /// fallback screen, when the answer only refreshes the list (R-0125).
+    private func answered(_ listed: [String]) {
+        serviceNotAnswering = false
         problem = nil
-        do {
-            boxes = try await daemon.boxes()
-        } catch {
-            problem = BackgroundServiceProblem(
-                message: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription,
-                opensLoginItems: false,
-                offersTryAgain: true
-            )
-            return
-        }
-        // A workspace made outside first run (portenv init) ends it too (R-0133).
-        DefaultsFirstRunMemory().forgetIfWorkspacesExist(boxes)
-        // Pool entries for workspaces that exist go, and a workspace left
-        // half made is finished or discarded (ADR 0019, A3).
-        if let creating = daemon as? BoxCreating {
-            _ = await BoxMaker(daemon: creating).tidyAtLaunch()
-            if let listed = try? await daemon.boxes() { boxes = listed }
-        }
-        let requested = ProcessInfo.processInfo.environment["PORTENV_BOX"]
-        apply(LaunchDecision.decide(
-            requested: requested,
-            boxes: boxes,
+        boxes = listed
+        let decision = LaunchDecision.decide(
+            requested: ProcessInfo.processInfo.environment["PORTENV_BOX"],
+            boxes: listed,
             lastBox: defaults.string(forKey: Self.lastBoxKey),
             firstRunDone: defaults.bool(forKey: Self.firstRunDoneKey)
-        ))
+        )
+        let applies = LaunchWait.applies(decision, fallback: fallbackShown, current: launch,
+                                         firstRunStep: firstRun?.step)
+        fallbackShown = nil
+        if applies { apply(decision) }
         // Servers waiting for their host key to be confirmed: asked about
         // once per launch, after the window is up (ADR 0021, R-0180).
         Task { await ServerKeyAlert.runAtLaunch() }
+    }
+
+    /// The screen shown while portenvd wasn't answering, if any.
+    private var fallbackShown: Launch?
+
+    /// portenvd hasn't answered two checks in a row: true until it does.
+    private(set) var serviceNotAnswering = false
+    /// The running launch wait, so Try Again starts a fresh one.
+    private var startTask: Task<Void, Never>?
+
+    /// Starts (or, for Try Again, restarts) the launch: one wait at a
+    /// time, ending at an answer.
+    func begin() {
+        startTask?.cancel()
+        startTask = Task { await start() }
+    }
+
+    /// The windows showing the launch: the wait stops only when the last
+    /// one closes (R-0125, R-0132).
+    private var windows = LaunchWindows()
+
+    func windowAppeared() { windows.appeared() }
+
+    func windowDisappeared() {
+        if windows.disappeared() { stopWaiting() }
+    }
+
+    /// The launch wait stops asking: the last window closed, or the app is
+    /// quitting.
+    func stopWaiting() {
+        startTask?.cancel()
+        startTask = nil
+    }
+
+    /// What the launch wait says, on the window (R-0121).
+    private func waiting(_ report: LaunchWait.Report) {
+        switch report {
+        case let .problem(p):
+            problem = p
+        case .notAnswering:
+            problem = nil
+            serviceNotAnswering = true
+            guard launch == nil else { return }
+            let fallback = LaunchWait.fallback(lastBox: defaults.string(forKey: Self.lastBoxKey),
+                                               firstRunDone: defaults.bool(forKey: Self.firstRunDoneKey))
+            launch = fallback
+            fallbackShown = fallback
+            if case .firstRun = fallback {
+                firstRun = makeFlow(at: .welcome, fromBoxList: false, memory: DefaultsFirstRunMemory(), serviceGone: true)
+            }
+        }
     }
 
     private func apply(_ decision: Launch) {
         launch = decision
         switch decision {
         case let .firstRun(step):
+            // Docker Desktop is checked before Welcome's Continue and before
+            // making the first workspace (R-0098, R-0211).
             firstRun = makeFlow(at: step, fromBoxList: false, memory: DefaultsFirstRunMemory())
         case let .open(box):
             Task { await open(box) }
@@ -167,7 +235,12 @@ final class AppModel {
         await opening.value
         guard self.controller === controller else { return } // closed meanwhile
         // The state line follows the state portenvd pushes (WatchBoxState).
-        followTask = Task { await controller.follow() }
+        // Alongside, whether Docker Desktop stopped (R-0098).
+        followTask = Task {
+            async let follow: Void = controller.follow()
+            async let engine: Void = controller.watchEngine()
+            _ = await (follow, engine)
+        }
     }
 
     /// The window is closing. Closing the last box window goes back to
@@ -219,12 +292,17 @@ final class AppModel {
         (daemon as? (BoxCreating & RecoveryChecking)).map { RecoveryRefill(daemon: $0) }
     }
 
-    private func makeFlow(at step: FirstRunStep, fromBoxList: Bool, memory: FirstRunMemory) -> FirstRunFlow {
+    /// A first run, or New Box…; Docker Desktop's status is unknown until
+    /// its first check answers (R-0098). serviceGone: reached after the
+    /// launch's own two misses (R-0121).
+    private func makeFlow(at step: FirstRunStep, fromBoxList: Bool, memory: FirstRunMemory, serviceGone: Bool = false) -> FirstRunFlow {
         guard let creating = daemon as? BoxCreating else {
-            return FirstRunFlow(service: UnavailableFirstRunService(), at: step, existing: boxes, fromBoxList: fromBoxList, memory: memory)
+            return FirstRunFlow(service: UnavailableFirstRunService(), at: step, existing: boxes, fromBoxList: fromBoxList, memory: memory,
+                                docker: nil, serviceGone: serviceGone)
         }
         let service = KeyedFirstRunService(maker: BoxMaker(daemon: creating))
-        let flow = FirstRunFlow(service: service, at: step, existing: boxes, fromBoxList: fromBoxList, memory: memory)
+        let flow = FirstRunFlow(service: service, at: step, existing: boxes, fromBoxList: fromBoxList, memory: memory,
+                                docker: nil, serviceGone: serviceGone)
         service.keychainWaiting = { [weak flow] on in Task { @MainActor in flow?.keychainWaiting = on } }
         return flow
     }
@@ -257,7 +335,9 @@ struct AppRoot: View {
 
     var body: some View {
         Group {
-            if let problem = model.problem {
+            if ServiceUpdates.shared.updating {
+                ServiceUpdatingView()
+            } else if let problem = model.problem {
                 VStack(spacing: 12) {
                     Text(problem.message).font(.title3).multilineTextAlignment(.center).frame(maxWidth: 460)
                     HStack(spacing: 12) {
@@ -269,7 +349,7 @@ struct AppRoot: View {
                                 .keyboardShortcut(.defaultAction)
                         }
                         if problem.offersTryAgain {
-                            let tryAgain = Button("Try Again") { Task { await model.start() } }
+                            let tryAgain = Button("Try Again") { model.begin() }
                             if problem.opensLoginItems {
                                 tryAgain
                             } else {
@@ -282,16 +362,20 @@ struct AppRoot: View {
             } else {
                 switch model.launch {
                 case nil:
+                    // Never without end: after about 4 s, Welcome or the
+                    // list says the service isn't answering (R-0121).
                     ProgressView().controlSize(.small)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .accessibilityLabel("Starting Portenv")
+                        .accessibilityElement()
+                        .accessibilityLabel(LaunchWait.starting)
                 case .firstRun:
                     if let flow = model.firstRun {
                         FirstRunView(flow: flow, opened: { box in Task { await model.open(box) } },
                                      cancel: flow.fromBoxList ? { model.cancelNewBox() } : nil, refill: model.refill)
                     }
                 case let .boxList(notice):
-                    BoxListView(boxes: model.boxes, notice: notice) { box in
+                    BoxListView(boxes: model.boxes, notice: notice,
+                                retry: model.serviceNotAnswering ? { model.begin() } : nil) { box in
                         Task { await model.open(box) }
                     } newBox: {
                         model.newBox()
@@ -305,6 +389,8 @@ struct AppRoot: View {
         }
         .frame(minWidth: 640, minHeight: 440)
         .background(WindowCloseGuard { window in model.windowShouldClose(window) })
+        .onAppear { model.windowAppeared() }
+        .onDisappear { model.windowDisappeared() }
         // On the window, so it travels with it and never hides on another
         // Space; the launch carries on behind it (R-0121).
         .sheet(isPresented: $model.moveOffered) {
@@ -314,5 +400,17 @@ struct AppRoot: View {
                                                           set: { if !$0 { model.moveError = nil } })) {
             Button("OK") { model.moveError = nil }
         }
+    }
+}
+
+/// While portenvd restarts after an update (R-0198).
+struct ServiceUpdatingView: View {
+    var body: some View {
+        VStack(spacing: 12) {
+            ProgressView().controlSize(.small)
+            Text(ServiceUpdate.updatingText).font(.title3)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityElement(children: .combine)
     }
 }

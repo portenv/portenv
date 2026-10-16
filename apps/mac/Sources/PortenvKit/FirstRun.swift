@@ -32,8 +32,10 @@ public enum UsageCounting {
 }
 
 /// Where the first box's saves go (no Portenv storage before Phase 3). In
-/// 1.5 only this Mac: a server and a bucket are shown dimmed, marked LATER
-/// (the first-run-4-storage-this-mac board; R-0092, R-0132).
+/// 1.5 only this Mac: a server is shown dimmed, marked LATER until 2.9 (the
+/// first-run-4-storage-this-mac board; R-0092, R-0132). `bucket` stays as
+/// the internal storage kind (portenvd and the CLI know it); the app never
+/// offers it (R-0196).
 public enum StorageChoice: Equatable, Sendable {
     case server, bucket, thisMac
 }
@@ -151,6 +153,19 @@ public final class FirstRunFlow {
     public var boxName = ""
     /// Usage counting: off until the person ticks it (opt-in, R-0126).
     public var countUsage = false
+    /// Docker Desktop on this Mac (R-0098): Welcome's Continue waits until
+    /// it answers; nil until the first check does.
+    public var docker: DockerStatus?
+    /// portenvd missed Welcome's last two Docker checks in a row (about
+    /// 4 s): Welcome says the background service isn't answering, with Try
+    /// Again, so Continue is never disabled without a reason (R-0110,
+    /// R-0116). One slow answer isn't enough.
+    public private(set) var daemonGone = false
+    /// Docker checks portenvd missed in a row.
+    private var dockerMisses = 0
+    /// A Docker check is in flight: Try Again doesn't start another, so a
+    /// late answer can't overtake a newer one (R-0116).
+    public private(set) var checkingDocker = false
     public private(set) var error: String?
     /// A plain notice (secondary text), like a step not built yet.
     public private(set) var notice: String?
@@ -178,9 +193,21 @@ public final class FirstRunFlow {
     private let existing: Set<String>
     private let memory: FirstRunMemory
 
+    /// While portenvd isn't up (or restarts), a step is tried again this
+    /// often, for this long, saying so, before it fails (R-0202).
+    private let retryEvery: Duration
+    private let retryFor: Duration
+
     public init(service: FirstRunService, at start: FirstRunStep = .welcome, existing: [String] = [], fromBoxList: Bool = false,
-                memory: FirstRunMemory = NoFirstRunMemory()) {
+                memory: FirstRunMemory = NoFirstRunMemory(), retryEvery: Duration = .seconds(1), retryFor: Duration = .seconds(10),
+                docker: DockerStatus? = .running, serviceGone: Bool = false) {
+        self.retryEvery = retryEvery
+        self.retryFor = retryFor
         self.service = service
+        self.docker = docker
+        // Reached after the launch's own two misses (R-0121): already said.
+        daemonGone = serviceGone
+        dockerMisses = serviceGone ? 2 : 0
         self.existing = Set(existing)
         self.fromBoxList = fromBoxList
         self.memory = memory
@@ -195,16 +222,18 @@ public final class FirstRunFlow {
     }
 
     public var canContinue: Bool {
-        guard !busy else { return false }
+        // A Keychain prompt is up: a second press mustn't ask again (R-0216).
+        guard !busy, !keychainWaiting else { return false }
         switch step {
         case .welcome:
-            return true
+            return docker == .running
         case .recoveryKey:
             return recoveryKey != nil && recoverySaved
         case .storage:
             return storage == .thisMac
         case .firstBox:
-            return !boxName.isEmpty && nameProblem == nil
+            // Docker Desktop ready before making the first workspace (R-0211).
+            return docker == .running && !boxName.isEmpty && nameProblem == nil
         case .gettingReady:
             return false
         }
@@ -224,11 +253,12 @@ public final class FirstRunFlow {
         case .storage:
             return storage == nil ? FirstRunText.chooseStorage : FirstRunText.storageLater
         case .firstBox:
+            if docker != .running { return docker?.card?.title ?? DockerText.checkingFirst }
             return nameProblem ?? FirstRunText.typeName
         }
     }
 
-    /// "Waiting for Keychain access" while a Keychain call waits, else nil.
+    /// KeychainWait.line while a Keychain call waits, else nil.
     public var waitLine: String? { keychainWaiting ? KeychainWait.line : nil }
 
     /// What's said under Continue: an error, a notice, or why Continue
@@ -282,6 +312,88 @@ public final class FirstRunFlow {
         busy = true
         defer { busy = false }
         do {
+            try await whileServiceStarts { try await self.runStep() }
+            error = nil
+            notice = nil
+            step = steps[i + 1]
+        } catch let failure as FirstRunError where failure.notBuilt {
+            refuse(notice: failure.message)
+        } catch BoxMaker.Failure.poolEmpty {
+            // The pool ran out: the recovery key sheet (ADR 0019).
+            needsRecoveryKey = true
+            refuse(notice: BoxMaker.Failure.poolEmpty.errorDescription)
+        } catch {
+            notice = nil
+            refuse(error: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
+        }
+    }
+
+    /// Welcome's Docker check (R-0098): at once, then every 2 s while the
+    /// card shows. Stops as soon as Docker answers or Welcome is left. No
+    /// answer from portenvd keeps the last outcome and says the background
+    /// service isn't running, until it answers again (R-0110).
+    public func followDocker(every interval: Duration = DockerText.interval,
+                             check: @escaping @MainActor () async -> DockerStatus?,
+                             sleep: @escaping @MainActor (Duration) async -> Void = { try? await Task.sleep(for: $0) }) async {
+        let checked: Set<FirstRunStep> = [.welcome, .firstBox] // R-0098, R-0211
+        while checked.contains(step) && !Task.isCancelled {
+            await checkDocker(check)
+            if docker == .running || !checked.contains(step) { return }
+            await sleep(interval)
+        }
+    }
+
+    /// One Docker check: Try Again asks at once, between followDocker's.
+    /// While one is in flight, another does nothing.
+    public func checkDocker(_ check: @MainActor () async -> DockerStatus?) async {
+        guard !checkingDocker else { return }
+        checkingDocker = true
+        defer { checkingDocker = false }
+        if let status = await check() {
+            docker = status
+            dockerMisses = 0
+            daemonGone = false
+        } else {
+            dockerMisses += 1
+            if dockerMisses >= 2 { daemonGone = true }
+        }
+    }
+
+    /// Why Continue is disabled on Welcome, for VoiceOver (R-0116): the
+    /// service notice, or the Docker card's title; nil while it's enabled
+    /// or before the first answer.
+    public var continueHint: String? {
+        guard step == .welcome, !canContinue else { return nil }
+        return daemonGone ? FirstRunText.serviceNotAnswering : docker?.card?.title
+    }
+
+    /// What VoiceOver hears when the service notice comes or goes: the
+    /// notice, or, when it goes and a Docker card is still there, the
+    /// card's title (R-0116).
+    public var serviceNoticeAnnouncement: String? {
+        daemonGone ? FirstRunText.serviceNotAnswering : docker?.card?.title
+    }
+
+    private func trimmed(_ s: String) -> String { s.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    /// Runs body; while portenvd isn't there, says it's starting it and
+    /// tries again, for up to retryFor. Every step is safe to repeat
+    /// (CreateBox is idempotent on the box ID, ADR 0019).
+    private func whileServiceStarts(_ body: () async throws -> Void) async throws {
+        var deadline: ContinuousClock.Instant? // from when it's first found down
+        while true {
+            do {
+                return try await body()
+            } catch where DaemonErrorText.isServiceDown(error) && ContinuousClock.now < (deadline ?? .now + retryFor) {
+                if deadline == nil { deadline = .now + retryFor }
+                notice = DaemonErrorText.starting
+                try? await Task.sleep(for: retryEvery)
+            }
+        }
+    }
+
+    private func runStep() async throws {
+        do {
             switch step {
             case .welcome where recoveryKey == nil:
                 recoveryKey = try await service.makeRecoveryKey()
@@ -303,17 +415,6 @@ public final class FirstRunFlow {
             default:
                 break
             }
-            error = nil
-            notice = nil
-            step = steps[i + 1]
-        } catch let failure as FirstRunError where failure.notBuilt {
-            refuse(notice: failure.message)
-        } catch BoxMaker.Failure.poolEmpty {
-            // The pool ran out: the recovery key sheet (ADR 0019).
-            needsRecoveryKey = true
-            refuse(notice: BoxMaker.Failure.poolEmpty.errorDescription)
-        } catch {
-            refuse(error: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
         }
     }
 
@@ -340,6 +441,9 @@ public enum FirstRunText {
     /// The reduced Welcome: there's no account to be had, so just
     /// "Continue" (R-0126).
     public static let welcomeButton = "Continue"
+    /// Welcome when portenvd misses two Docker checks (R-0116): nothing
+    /// exists to save yet, so not BoxController.daemonGone.
+    public static let serviceNotAnswering = "Portenv\u{2019}s background service isn\u{2019}t answering. It usually starts by itself in a few seconds."
 
     public static let recoveryTitle = "Save your recovery key"
     /// The Protection step's message leads, then what the key is for
@@ -356,7 +460,7 @@ public enum FirstRunText {
     public static let noKeyYet = "Your recovery key isn\u{2019}t ready yet."
     public static let tickSaved = "Tick \u{201C}I\u{2019}ve saved my recovery key somewhere safe\u{201D} to continue."
     public static let chooseStorage = "Choose where your saves should go."
-    public static let storageLater = "Saving to a server or a bucket comes later. Keep your saves on this Mac for now."
+    public static let storageLater = "Saving to a server comes later. Keep your saves on this Mac for now."
     public static let typeName = "Give your workspace a name."
     public static let noBackgroundService = "Portenv\u{2019}s background service isn\u{2019}t answering. It usually starts by itself in a few seconds."
     public static let poolNotStored = "Portenv couldn\u{2019}t keep what it needs from your recovery key in the Keychain. Choose Continue to try again."
@@ -365,11 +469,9 @@ public enum FirstRunText {
     public static let storageTitle = "Where should your saves go?"
     public static let storageLine = "Saves are encrypted wherever they\u{2019}re stored, on this Mac too."
     public static let storageThisMac = "Keep on this Mac for now"
-    public static let thisMacOnly = "Saves stay on this Mac only. If this Mac is lost, they\u{2019}re lost too. You can add a server or bucket later."
+    public static let thisMacOnly = "Saves stay on this Mac only. If this Mac is lost, they\u{2019}re lost too. You can add a server later."
     public static let storageServer = "My own server"
     public static let storageServerLine = "Over SSH, such as a Hetzner or DigitalOcean server."
-    public static let storageBucket = "An S3-compatible bucket"
-    public static let storageBucketLine = "AWS S3, Backblaze B2, Cloudflare R2 and others."
     public static let later = "LATER"
 
     public static let firstBoxTitle = "Make your first workspace"

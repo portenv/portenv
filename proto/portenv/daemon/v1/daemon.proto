@@ -138,6 +138,21 @@ service DaemonService {
   rpc TrustServerKey(TrustServerKeyRequest) returns (TrustServerKeyResponse);
   // Drop the server's pinned key: it is unconfirmed again.
   rpc ForgetServerKey(ForgetServerKeyRequest) returns (ForgetServerKeyResponse);
+  // A made key's private half (2.9 1b, ADR 0021), read by the app from the
+  // Keychain and held in portenvd's memory only, like ProvideKeys: never
+  // written, never logged. It signs in once per shared connection, through
+  // an agent of portenvd's own for that one run.
+  rpc ProvideServerKey(ProvideServerKeyRequest) returns (ProvideServerKeyResponse);
+  // Add a Server's Check (2.9, ADR 0021 §3): a read-only probe over the
+  // server's pinned SSH connection, one line per question; each failure
+  // says what to do, in Portenv's words, never the server's. It changes
+  // nothing on the server.
+  rpc CheckServer(CheckServerRequest) returns (CheckServerResponse);
+  // Whether this Mac's box engine answers (Docker Desktop is running), for
+  // Welcome's Docker card and the state line (R-0098). It only asks the
+  // engine: it never starts anything. portenvd gives the engine 1.5 s;
+  // the app waits 3 s for the answer.
+  rpc GetEngine(GetEngineRequest) returns (GetEngineResponse);
 }
 
 message CheckBoxRequest {
@@ -338,6 +353,10 @@ message GetBoxStateResponse {
   string storage_place = 7;
   // When this portenvd opened the box (the inspector's "Since <time>").
   google.protobuf.Timestamp opened_at = 8;
+  // This open stopped and started the box again to apply a security update
+  // (it was left running with mounts it shouldn't have; R-0201). The app
+  // tells the person once. Only for the open that did it.
+  bool restarted_for_security_update = 9;
 }
 
 enum NetworkPath {
@@ -734,6 +753,12 @@ message ServerInfo {
   string fingerprint = 4;
   // Confirmed because this Mac's SSH known hosts had the same key.
   bool from_known_hosts = 5;
+  // Its key changed and was forgotten: the next confirmation says so
+  // first. Cleared on Trust (R-0185).
+  bool was_changed = 6;
+  // It signs in with a key Portenv made for it: the app hands that key
+  // over (ProvideServerKey).
+  bool made_key = 7;
 }
 
 message ScanServerKeyRequest {
@@ -761,4 +786,39 @@ message ForgetServerKeyRequest {
 
 message ForgetServerKeyResponse {
   ServerInfo info = 1;
+}
+
+message ProvideServerKeyRequest {
+  string server_id = 1;
+  // The Ed25519 private key's 32-byte seed.
+  bytes key = 2;
+}
+
+message ProvideServerKeyResponse {}
+
+message CheckServerRequest {
+  string server_id = 1;
+}
+
+message CheckLine {
+  string id = 1;
+  string title = 2;
+  portenv.types.v1.CheckState state = 3;
+  // What Portenv found, in its own words.
+  string detail = 4;
+  // For a failure: what to do, one plain line.
+  string fix = 5;
+}
+
+message CheckServerResponse {
+  repeated CheckLine lines = 1;
+  // No line failed: Set Up may install.
+  bool passed = 2;
+}
+
+message GetEngineRequest {}
+
+message GetEngineResponse {
+  // The engine answered.
+  bool running = 1;
 }

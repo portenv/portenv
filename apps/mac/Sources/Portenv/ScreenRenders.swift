@@ -58,8 +58,27 @@ enum ScreenRenders {
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             for step in FirstRunStep.allCases {
                 let flow = await sampleFlow(at: step)
-                try snapshot(FirstRunView(flow: flow, opened: { _ in }), name: "first-run-\(step.rawValue + 1)-\(name(step))", in: dir)
+                try snapshot(FirstRunView(flow: flow, opened: { _ in }, followsDocker: false),
+                             name: "first-run-\(step.rawValue + 1)-\(name(step))", in: dir)
             }
+            // Welcome while Docker Desktop isn't running, or isn't
+            // installed (R-0098's boards).
+            for (status, suffix) in [(DockerStatus.notRunning, "not-running"), (.missing, "missing"), (.starting, "starting")] {
+                let flow = FirstRunFlow(service: Sample(), docker: status)
+                try snapshot(FirstRunView(flow: flow, opened: { _ in }, followsDocker: false),
+                             name: "first-run-1-welcome-docker-\(suffix)", in: dir)
+            }
+            // The first workspace waits for Docker Desktop to be ready (R-0211).
+            let firstBoxStarting = FirstRunFlow(service: Sample(), at: .firstBox, docker: .starting)
+            firstBoxStarting.boxName = "acme-api"
+            try snapshot(FirstRunView(flow: firstBoxStarting, opened: { _ in }, followsDocker: false),
+                         name: "first-run-4-first-box-docker-starting", in: dir)
+            // Welcome when portenvd doesn't answer the check (R-0110).
+            let gone = FirstRunFlow(service: Sample(), docker: nil)
+            await gone.checkDocker { nil }
+            await gone.checkDocker { nil } // two misses in a row
+            try snapshot(FirstRunView(flow: gone, opened: { _ in }, followsDocker: false),
+                         name: "first-run-1-welcome-service-down", in: dir)
             // A key shown in an earlier launch that quit mid-flow (R-0132).
             let memory = NoFirstRunMemory()
             memory.keyShown = true
@@ -124,15 +143,20 @@ enum ScreenRenders {
             let waitingKey = ServerKeyInfo(id: "srv-0123456789ab", name: "test-server", state: .unconfirmed,
                                            fingerprint: "SHA256:uNiVztksCsDhcc0u9e8BujQXVUpKZIDTMczCvj3tD2s", keyType: "ssh-ed25519")
             try snapshot(alert: { ServerKeyAlert.question(ServerKeyQuestion(waitingKey)) }, name: "server-key-confirm", in: dir)
+            let forgotten = ServerKeyInfo(id: "srv-0123456789ab", name: "test-server", state: .unconfirmed,
+                                          fingerprint: "SHA256:uNiVztksCsDhcc0u9e8BujQXVUpKZIDTMczCvj3tD2s", keyType: "ssh-ed25519", wasChanged: true)
+            try snapshot(alert: { ServerKeyAlert.question(ServerKeyQuestion(forgotten)) }, name: "server-key-confirm-after-change", in: dir)
             try snapshot(alert: { ServerKeyAlert.notice(.mismatch("test-server")) }, name: "server-key-mismatch", in: dir)
             try snapshot(alert: { ServerKeyAlert.notice(.changed("test-server")) }, name: "server-key-changed", in: dir)
+            // After an in-place update, while portenvd restarts (R-0198).
+            try snapshot(ServiceUpdatingView().background(.background), name: "service-updating", size: NSSize(width: 720, height: 520), in: dir)
             // New Box… from the box list (the new-box boards).
             let newBox = FirstRunFlow(service: Sample(), at: .firstBox, existing: ["acme-api"], fromBoxList: true)
             newBox.boxName = "site"
-            try snapshot(FirstRunView(flow: newBox, opened: { _ in }, cancel: {}), name: "new-box", in: dir)
+            try snapshot(FirstRunView(flow: newBox, opened: { _ in }, cancel: {}, followsDocker: false), name: "new-box", in: dir)
             let invalid = FirstRunFlow(service: Sample(), at: .firstBox, existing: ["acme-api"], fromBoxList: true)
             invalid.boxName = "-api"
-            try snapshot(FirstRunView(flow: invalid, opened: { _ in }, cancel: {}), name: "new-box-invalid", in: dir)
+            try snapshot(FirstRunView(flow: invalid, opened: { _ in }, cancel: {}, followsDocker: false), name: "new-box-invalid", in: dir)
             try snapshot(
                 BoxListView(boxes: ["acme-api", "site", "notes"], notice: LaunchDecision.missing("demo"), open: { _ in }, newBox: {}),
                 name: "box-list", in: dir
@@ -142,6 +166,12 @@ enum ScreenRenders {
             try snapshot(
                 BoxListView(boxes: ["acme-api", "site", "notes"], notice: nil, open: { _ in }, newBox: {}),
                 name: "box-list-after-closing", in: dir
+            )
+            // A later launch while portenvd isn't answering (R-0121): the
+            // list, empty until it answers, with the notice and Try Again.
+            try snapshot(
+                BoxListView(boxes: [], notice: FirstRunText.serviceNotAnswering, retry: {}, open: { _ in }, newBox: {}),
+                name: "launch-service-down", in: dir
             )
             // The move question, as the sheet on the window (R-0121).
             try snapshot(MoveOfferView { _ in }.background(.background), name: "move-offer",
@@ -158,6 +188,19 @@ enum ScreenRenders {
             // (R-0131): with the inspector open, and closed.
             try await MainWindowRender.render(to: dir, terminal: { sampleTerminal() })
             try await MainWindowRender.render(to: dir, name: "main-window-no-inspector", inspector: false, terminal: { sampleTerminal() })
+            // A closed workspace's window: Open, and a failed open with Try
+            // Again (R-0211).
+            try snapshot(ClosedWorkspace(box: "acme-api", failure: nil) {}, name: "closed", size: NSSize(width: 720, height: 360), in: dir)
+            // portenvd's engine line as it sends it (core/daemon/testdata/
+            // engine-lines.txt), shown as is (R-0218).
+            try snapshot(ClosedWorkspace(box: "acme-api", failure: "Portenv uses Docker Desktop to run workspaces on this Mac. Start Docker Desktop, then click Try Again.") {},
+                         name: "closed-open-failed", size: NSSize(width: 720, height: 360), in: dir)
+            // Command blocks, folded by default and opened (R-0139, R-0174).
+            try BlockRenders.render(to: dir) { view, name, size in
+                for (suffix, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] where name.hasSuffix(suffix) {
+                    try snapshotOne(view, name: String(name.dropLast(suffix.count + 1)), suffix: suffix, size: size, appearance: appearance, in: dir)
+                }
+            }
             // Portenv › Settings…, each pane (R-0137).
             try await SettingsRender.render(to: dir)
             return 0
@@ -265,11 +308,25 @@ enum ScreenRenders {
     }
 
     private static func snapshot(_ view: some View, name: String, size: NSSize = NSSize(width: 720, height: 520), in dir: URL) throws {
+        // First run's screens must fit their window: content that doesn't
+        // is squeezed, and SwiftUI cuts its text short with "…" (R-0216).
+        if name.hasPrefix("first-run") { try requireFits(view, name: name, size: size) }
         // Drawn as in the key window of the active app, so the default
         // button is blue as a tester sees it (R-0153).
         try snapshot(view: { NSHostingView(rootView: view.frame(width: size.width, height: size.height).environment(\.isRendering, true)
                                 .environment(\.controlActiveState, .key)) },
                      name: name, size: size, in: dir)
+    }
+
+    /// Fails when the view, at its own height with every text wrapped, is
+    /// taller than the window: then some text would be cut short.
+    private static func requireFits(_ view: some View, name: String, size: NSSize) throws {
+        let host = NSHostingView(rootView: view.fixedSize(horizontal: false, vertical: true).frame(width: size.width)
+            .environment(\.isRendering, true))
+        let needed = host.fittingSize.height
+        if needed > size.height + 0.5 {
+            throw FirstRunError("\(name) needs \(Int(needed.rounded())) pt of height and has \(Int(size.height)): its text would be cut short")
+        }
     }
 
     /// An alert as it shows: its own content, laid out by NSAlert, drawn in
@@ -325,5 +382,22 @@ enum ScreenRenders {
             }
             try png.write(to: dir.appendingPathComponent("\(name)-\(suffix).png"))
         }
+    }
+
+    /// One appearance of a SwiftUI view (renders whose content depends on
+    /// the appearance, as the blocks' terminal palette does).
+    private static func snapshotOne(_ view: AnyView, name: String, suffix: String, size: NSSize,
+                                    appearance: NSAppearance.Name, in dir: URL) throws {
+        let host = NSHostingView(rootView: view.frame(width: size.width, height: size.height))
+        host.frame = NSRect(origin: .zero, size: size)
+        let window = ActiveLookingWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        window.appearance = NSAppearance(named: appearance)
+        window.contentView = host
+        host.layoutSubtreeIfNeeded()
+        RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+        guard let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { throw FirstRunError("no bitmap for \(name)") }
+        host.cacheDisplay(in: host.bounds, to: rep)
+        guard let png = rep.representation(using: .png, properties: [:]) else { throw FirstRunError("no PNG for \(name)") }
+        try png.write(to: dir.appendingPathComponent("\(name)-\(suffix).png"))
     }
 }

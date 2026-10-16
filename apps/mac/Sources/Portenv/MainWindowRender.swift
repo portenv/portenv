@@ -115,6 +115,7 @@ private struct NoKeychain: KeychainReading {
 private final class SampleDaemon: DaemonAPI, @unchecked Sendable {
     private let savedAt: Date
     init(savedAt: Date) { self.savedAt = savedAt }
+    func engineRunning() async -> Bool? { true }
     private let tabList = [
         TabInfo(id: "@0", name: "claude", active: true, program: "claude"),
         TabInfo(id: "@1", name: "shell", active: false),

@@ -17,14 +17,21 @@ public struct ServerKeyInfo: Equatable, Sendable {
     public let fromKnownHosts: Bool
     /// ssh-ed25519, ecdsa-sha2-nistp256, ssh-rsa…: from a scan only.
     public let keyType: String
+    /// Its key changed and was forgotten: the question says so first.
+    public let wasChanged: Bool
+    /// It signs in with a key Portenv made for it.
+    public let madeKey: Bool
 
-    public init(id: String, name: String, state: State, fingerprint: String, fromKnownHosts: Bool = false, keyType: String = "") {
+    public init(id: String, name: String, state: State, fingerprint: String, fromKnownHosts: Bool = false, keyType: String = "", wasChanged: Bool = false,
+                madeKey: Bool = false) {
         self.id = id
         self.name = name
         self.state = state
         self.fingerprint = fingerprint
         self.fromKnownHosts = fromKnownHosts
         self.keyType = keyType
+        self.wasChanged = wasChanged
+        self.madeKey = madeKey
     }
 }
 
@@ -52,10 +59,13 @@ public struct ServerKeyQuestion: Equatable, Sendable {
 
     public init(_ info: ServerKeyInfo) {
         title = "Is this \(info.name)?"
-        detail = "Portenv hasn’t confirmed this server yet, so it won’t connect to it or open its workspaces. Trust it only if this fingerprint matches the one its provider, or whoever runs it, shows you."
+        detail = (info.wasChanged ? Self.changedLine + " " : "") + "Portenv hasn’t confirmed this server yet, so it won’t connect to it or open its workspaces. Trust it only if this fingerprint matches the one its provider, or whoever runs it, shows you."
         fingerprint = info.fingerprint
         keyName = "\(Self.typeName(info.keyType)) key"
     }
+
+    /// A key that changed and was forgotten (R-0185).
+    static let changedLine = "This server’s key changed since you last confirmed it. Check the fingerprint with whoever runs it."
 
     /// The key type as people read it: ED25519, ECDSA, RSA.
     static func typeName(_ type: String) -> String {
@@ -82,7 +92,7 @@ public struct ServerKeyNotice: Equatable, Sendable {
     /// It answered with a key other than the one confirmed.
     public static func changed(_ name: String) -> ServerKeyNotice {
         ServerKeyNotice(title: "\(name)’s key has changed",
-                        detail: "Portenv won’t connect to it. This happens when a server is reinstalled, or when someone is in between. Check with whoever runs it. To start again, run portenv app remove-server \(name) in Terminal.")
+                        detail: "Portenv won’t connect to it. This happens when a server is reinstalled, or when someone is in between. Check with whoever runs it. To start again, run portenv app forget-server \(name) in Terminal.")
     }
 }
 

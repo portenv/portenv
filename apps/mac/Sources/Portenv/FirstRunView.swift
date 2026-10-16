@@ -13,6 +13,8 @@ struct FirstRunView: View {
     let opened: (String) -> Void
     /// New Box… from the box list: Cancel, ⎋ and "Your boxes" go back to it.
     var cancel: (() -> Void)?
+    /// Welcome checks Docker Desktop through portenvd (off for renders).
+    var followsDocker = true
     /// Where Continue and Back are, in the window (top-left origin), for
     /// the tests that click them (PortenvAppTests). Nil in the app.
     var controlFrames: (([String: CGRect]) -> Void)?
@@ -45,6 +47,9 @@ struct FirstRunView: View {
         .padding(.vertical, 48)
         .frame(minWidth: 720, minHeight: 520)
         .background(.background)
+        // The board's size, centred on the display Portenv was launched
+        // from, the first time this window shows first run (R-0186).
+        .background(FirstRunWindowPlacer())
         .onChange(of: flow.made) { _, made in
             if let made { opened(made) }
         }
@@ -112,12 +117,15 @@ struct FirstRunView: View {
     // MARK: Steps
 
     private var welcome: some View {
-        VStack(spacing: 20) {
+        // With a notice under it, Welcome tightens so it all fits the window,
+        // never cutting the tagline short (R-0216).
+        let notice = flow.daemonGone || flow.docker?.card != nil
+        return VStack(spacing: notice ? 14 : 20) {
             // Portenv's own icon, with its own shape and shadow: no tile
             // behind it (R-0151). Dev lanes show their lettered icon.
             Image(nsImage: WelcomeArt.image)
                 .resizable()
-                .frame(width: WelcomeArt.size, height: WelcomeArt.size)
+                .frame(width: notice ? WelcomeArt.compactSize : WelcomeArt.size, height: notice ? WelcomeArt.compactSize : WelcomeArt.size)
                 .accessibilityHidden(true)
             Text(FirstRunText.welcomeTitle).font(.system(size: 30, weight: .bold))
                 .accessibilityAddTraits(.isHeader)
@@ -125,12 +133,23 @@ struct FirstRunView: View {
                 .font(.title3)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+                // Wraps in every state: never cut short when a card shows (R-0216).
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: 440)
+            // portenvd didn't answer the check: say so, with Try Again
+            // (R-0110). Otherwise, Docker Desktop isn't running or isn't
+            // installed (R-0098): a card until it answers, checked again
+            // every 2 s.
+            dockerNotice
+            // Continue waits for Docker; dimmed as well as disabled (R-0049).
             Button(FirstRunText.welcomeButton) { Task { await flow.next() } }
                 .buttonStyle(.borderedProminent)
+                .tint(flow.primaryProminent ? Color.accentColor : Color.secondary.opacity(0.35))
                 .controlSize(.large)
                 .keyboardShortcut(.defaultAction)
-                .disabled(flow.busy)
+                // Disabled until Docker Desktop answers, saying why (R-0116).
+                .disabled(flow.busy || !flow.canContinue)
+                .accessibilityHint(flow.continueHint ?? "")
                 .reportsFrame(ControlFrames.continue)
             // While the key is made (R-0132).
             if flow.busy {
@@ -151,6 +170,23 @@ struct FirstRunView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .task {
+            guard followsDocker else { return }
+            await flow.followDocker(check: { await DockerDesktop.status() })
+        }
+        // The card is a status region: VoiceOver hears it appear and
+        // change, and hears it go only if one was shown (R-0110).
+        .onChange(of: flow.docker) { old, new in
+            if let words = DockerStatus.announcement(from: old, to: new) {
+                AccessibilityNotification.Announcement(words).post()
+            }
+        }
+        // The notice coming, or going with a card still there (R-0116).
+        .onChange(of: flow.daemonGone) { _, _ in
+            if let words = flow.serviceNoticeAnnouncement {
+                AccessibilityNotification.Announcement(words).post()
+            }
+        }
     }
 
     private var recoveryKey: some View {
@@ -183,15 +219,14 @@ struct FirstRunView: View {
     }
 
     /// The first-run-4-storage-this-mac board: this Mac, chosen; a server
-    /// and a bucket dimmed and marked LATER (R-0092, R-0132).
+    /// dimmed and marked LATER until 2.9 (R-0092, R-0132). No bucket: the
+    /// owner dropped it as too technical (R-0196).
     private var storage: some View {
         heading(FirstRunText.storageTitle, FirstRunText.storageLine) {
             VStack(spacing: 12) {
                 StorageRow(icon: "laptopcomputer", title: FirstRunText.storageThisMac, line: FirstRunText.thisMacOnly,
                            selected: flow.storage == .thisMac, later: false) { flow.storage = .thisMac }
                 StorageRow(icon: "server.rack", title: FirstRunText.storageServer, line: FirstRunText.storageServerLine,
-                           selected: false, later: true) {}
-                StorageRow(icon: "cylinder", title: FirstRunText.storageBucket, line: FirstRunText.storageBucketLine,
                            selected: false, later: true) {}
             }
             .frame(maxWidth: 600)
@@ -222,7 +257,36 @@ struct FirstRunView: View {
                     .font(.callout)
                     .foregroundStyle(look.showsError ? Color.red : Color.secondary)
                     .accessibilityHidden(true)
+                // Docker Desktop ready before the first workspace (R-0211).
+                dockerNotice
+                    .padding(.top, 12)
             }
+        }
+        .task {
+            guard followsDocker else { return }
+            await flow.followDocker(check: { await DockerDesktop.status() })
+        }
+    }
+
+    /// portenvd didn't answer the Docker check: say so, with Try Again
+    /// (R-0110). Otherwise, Docker Desktop isn't ready: a card until it
+    /// is, checked again every 2 s (R-0098, R-0211).
+    @ViewBuilder private var dockerNotice: some View {
+        if flow.daemonGone {
+            VStack(spacing: 10) {
+                Text(FirstRunText.serviceNotAnswering)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button(InspectorText.tryAgain) {
+                    Task { await flow.checkDocker { await DockerDesktop.status() } }
+                }
+                .disabled(flow.checkingDocker)
+            }
+            .frame(maxWidth: 440)
+        } else if let card = flow.docker?.card {
+            DockerCardView(card: card) { DockerDesktop.perform(card.action) }
+                .frame(maxWidth: 460)
         }
     }
 
@@ -283,7 +347,7 @@ struct FirstRunView: View {
                     .tint(flow.primaryProminent ? Color.accentColor : Color.secondary.opacity(0.35))
                     .controlSize(.large)
                     .keyboardShortcut(.defaultAction)
-                    .disabled(flow.busy)
+                    .disabled(flow.busy || flow.keychainWaiting)
                     .accessibilityHint(flow.whyNot ?? "")
                     .reportsFrame(ControlFrames.continue)
             }
@@ -361,6 +425,8 @@ enum Announce {
 /// Welcome's picture: the application icon itself (R-0151).
 enum WelcomeArt {
     static let size: CGFloat = 112
+    /// With a Docker or service notice under it.
+    static let compactSize: CGFloat = 88
     @MainActor static var image: NSImage { PortenvIcon.image }
 }
 
@@ -425,4 +491,32 @@ enum RecoveryKeyActions {
         text.font = .monospacedSystemFont(ofSize: 14, weight: .regular)
         NSPrintOperation(view: text).run()
     }
+}
+
+/// Places first run's window once: the board's size, centred on the display
+/// under the pointer when Portenv launched (WindowPlacement.firstRun).
+private struct FirstRunWindowPlacer: NSViewRepresentable {
+    func makeNSView(context _: Context) -> NSView { Placer() }
+    func updateNSView(_: NSView, context _: Context) {}
+
+    final class Placer: NSView {
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            guard let window, !FirstRunLaunch.placed.contains(ObjectIdentifier(window)) else { return }
+            FirstRunLaunch.placed.insert(ObjectIdentifier(window))
+            let screens = NSScreen.screens.map(\.visibleFrame)
+            guard let content = WindowPlacement.firstRun(pointer: FirstRunLaunch.pointer, screens: screens) else { return }
+            let frame = window.frameRect(forContentRect: NSRect(origin: .zero, size: content.size))
+            window.setFrame(NSRect(x: content.midX - frame.width / 2, y: content.midY - frame.height / 2,
+                                   width: frame.width, height: frame.height), display: true)
+        }
+    }
+}
+
+/// Where the pointer was when Portenv launched, and the windows already
+/// placed for first run.
+@MainActor
+enum FirstRunLaunch {
+    static var pointer = NSEvent.mouseLocation
+    static var placed: Set<ObjectIdentifier> = []
 }

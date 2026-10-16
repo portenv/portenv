@@ -23,9 +23,16 @@ AGENT_ARCHES := arm64 amd64
 
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
+# One build of the app and its helpers, the same in both (R-0198): the app
+# restarts a portenvd of another build after an in-place update. Made once
+# per make run, so a rebuild of the same commit (a lane's, a dev one) differs.
+ifndef BUILD_ID
+BUILD_ID := $(shell uuidgen 2>/dev/null || od -An -N16 -tx1 /dev/urandom | tr -d ' \n')
+endif
 LDFLAGS := -s -w \
 	-X github.com/portenv/portenv/core/internal/version.Version=$(VERSION) \
-	-X github.com/portenv/portenv/core/internal/version.Commit=$(COMMIT)
+	-X github.com/portenv/portenv/core/internal/version.Commit=$(COMMIT) \
+	-X github.com/portenv/portenv/core/internal/version.BuildID=$(BUILD_ID)
 
 # Pinned developer tools. Each is installed with its own module graph
 # (go install pkg@version), so their dependencies never conflict.
@@ -243,6 +250,7 @@ app: build $(TOOLS_STAMP)
 	mkdir -p $(BIN)/Portenv.app/Contents/Helpers && cp $(BIN)/portenv $(BIN)/portenvd $(BIN)/restic $(BIN)/Portenv.app/Contents/Helpers/
 	for f in portenv portenvd restic; do codesign --force --sign - $(BIN)/Portenv.app/Contents/Helpers/$$f; done
 	cp apps/mac/Info.plist $(BIN)/Portenv.app/Contents/Info.plist
+	/usr/libexec/PlistBuddy -c "Add :PortenvBuildID string $(BUILD_ID)" $(BIN)/Portenv.app/Contents/Info.plist
 	$(if $(ATTACHED_TERMINAL),/usr/libexec/PlistBuddy -c "Add :PortenvAttachedTerminal bool true" $(BIN)/Portenv.app/Contents/Info.plist)
 	# The app icon (R-0128); a dev lane's carries its letter, so it's never
 	# mistaken for the release app.

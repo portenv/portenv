@@ -124,7 +124,7 @@ func confirmedServers(t *testing.T, targets ...string) *Env {
 		}
 	}
 	e.UseForServers()
-	t.Cleanup(func() { useForServers(nil) })
+	t.Cleanup(func() { useForServers(nil); forgetMadeKeys() })
 	return e
 }
 
@@ -369,5 +369,50 @@ func TestServerFilesArePrivate(t *testing.T) {
 	fi, _ := os.Stat(e.Dir)
 	if fi.Mode().Perm() != 0o700 {
 		t.Fatalf("the folder is %o", fi.Mode().Perm())
+	}
+}
+
+// TestForgettingAChangedKeyIsRemembered (R-0185): Forget makes a changed
+// server unconfirmed and keeps it among this Mac's servers, marked
+// was_changed until the person trusts a key, with the fingerprint shown.
+// While marked, even a match in this Mac's SSH known hosts asks first.
+func TestForgettingAChangedKeyIsRemembered(t *testing.T) {
+	w := newTrustWorld(t, "me@test-server")
+	w.serve(t, "test-server", "203.0.113.24:2222", hostKey(t))
+	ctx := context.Background()
+	id := ServerID("me@test-server")
+	scan, _ := w.e.ScanServerKey(ctx, id)
+	if err := w.e.TrustServerKey(id, scan.Fingerprint); err != nil {
+		t.Fatal(err)
+	}
+	newKey := hostKey(t)
+	w.serve(t, "test-server", "203.0.113.24:2222", newKey)
+	if _, err := AppOn(ctx, "me@test-server", "state", "acme-api"); err == nil || !strings.Contains(err.Error(), "portenv app forget-server test-server") {
+		t.Fatalf("the changed-key line: %v", err)
+	}
+	if err := w.e.ForgetServerKey(id); err != nil {
+		t.Fatal(err)
+	}
+	r, _ := w.e.ServerRecord("me@test-server")
+	if r.State != ServerUnconfirmed || !r.WasChanged {
+		t.Fatalf("after Forget %+v", r)
+	}
+	if ts, _ := w.e.ServerTargets(); len(ts) != 1 {
+		t.Fatalf("Forget dropped it from Move To: %v", ts)
+	}
+	// This Mac's SSH has the new key: still asked, since it changed.
+	w.knownHosts(t, "[203.0.113.24]:2222 "+newKey)
+	scan, err := w.e.ScanServerKey(ctx, id)
+	if err != nil || scan.State != ServerUnconfirmed || scan.Fingerprint != Fingerprint(newKey) {
+		t.Fatalf("scan %+v, %v", scan, err)
+	}
+	if err := w.e.TrustServerKey(id, "SHA256:not-shown"); err == nil {
+		t.Fatal("trusted a fingerprint that wasn't shown")
+	}
+	if err := w.e.TrustServerKey(id, scan.Fingerprint); err != nil {
+		t.Fatal(err)
+	}
+	if r, _ := w.e.ServerRecord("me@test-server"); r.State != ServerConfirmed || r.WasChanged {
+		t.Fatalf("after Trust %+v", r)
 	}
 }

@@ -35,6 +35,10 @@ The first-run screens show the full version, from Phase 3. Phases 1 and 2 ship a
 | `settings` | Portenv › Settings… (⌘,), a toolbar window with five panes (R-0137): **Servers** (state, … menu, Add a Server…), **Agents** (access with scope, expiry and Revoke; "Let agents connect over SSH" marked PREVIEW and off), **Recovery Key** (saved state, Check…, Make New Key…, where saves go), **Updates** (automatic check that asks before installing, the version, Check Now; what the update check sends; Send Feedback…). General (appearance, terminal font) isn't drawn. Every row is one VoiceOver element. |
 | `agent-connect` | Letting an agent in (2.4, R-0138): Connect an Agent… shows the command to give the agent, the mode (On your behalf or In its own lane) and the duration; the approval ("Grok Bot wants to connect", the code in large type, Deny and Allow with no default button); and "access ends in 10 minutes" with Let It End or Extend 1 Hour, never past 24 hours. |
 | `command-blocks` | Command blocks (R-0139): success folds once it scrolls away, failure stays open with its exit code and a red edge, running shows its time with a blue edge, long output keeps the first and last 20 lines; who ran it is portenvd's recorded author; Copy Output, Copy Command, Run Again; the sticky header; link tooltips; the update prompt's copy. |
+| `team-sidebar` | The agent team (R-0226, R-0227), All tabs selected: the sidebar's Team section under the workspace. You first, then the agents from `.portenv/agents/` (avatar, name, status in words with a symbol, the agent's latest line), then agents connected from outside (Grok Bot over MCP, connected; Dots over SSH, disconnected), then a file that can't start. The Reviewer tab and avatar carry the orange dot. |
+| `team-agent-selected` | Builder selected: its tabs and panes expand beneath its row, the window shows only its tabs (two panes, the second opened by Builder), and its messages with you sit beside its terminals, with Message Builder and Send. |
+| `team-decision` | Reviewer needs you: a decision from `portenv propose-agent-change` (the change to builder.md as a diff, its reason in quotes), with Decline and Approve and no default button, answered only in the app. |
+| `team-states` | A board of what the frames don't show: every row status (running, idle, stopped, needs you, connected, disconnected, can't start); a question from `portenv ask-owner`, answered by typing; an invalid agent file with portenvd's reason; a remote agent connected and disconnected, with Revoke Access…. |
 
 ## Design notes
 
@@ -42,7 +46,7 @@ The first-run screens show the full version, from Phase 3. Phases 1 and 2 ship a
 - Type: system font (SF Pro) for UI, SF Mono for the terminal. Title 13 pt semibold with an 11 pt secondary subtitle; first-run headings 24 pt bold.
 - Colors (dark): window `#1A1A1C`, toolbar `#2B2B2E`, tab bar `#232325`, menus and popovers `#2C2C2E`, secondary text `#A1A1A6`, accent `#0A84FF` (buttons with white text use `#0A6EDB`), approval highlight `#FF9F0A`, destructive `#FF6961`.
 - Agent identity colors: monogram circles, one hue per agent, consistent everywhere the agent appears (toolbar, tab, popover).
-- Light appearance must be designed too; these renders only cover dark.
+- Light appearance must be designed too; most renders only cover dark. The `team-*` screens come in both: `<name>.png` is dark and `<name>-light.png` light, from the same HTML (open it with `#light` for the light appearance).
 - Every control needs a VoiceOver label (icon-only buttons included).
 
 ## History

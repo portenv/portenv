@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<title>Portenv team, agent selected</title>
+<style>
+:root{--win:#1A1A1C;--bar:#2B2B2E;--tabs:#232325;--side:#212123;--text:#F5F5F7;--sec:#A1A1A6;--ter:#8E8E93;
+--sep:#3A3A3D;--hair:#000;--fill:rgba(255,255,255,.07);--fill2:rgba(255,255,255,.035);--sel:#0A64D6;
+--accent:#0A84FF;--orange:#FF9F0A;--green:#30D158;--red:#FF6961;--card:#2C2C2E;--btn:#3A3A3D;--btnp:#0A6EDB;
+--ground:#0E0E10;--add:#30D158;--del:#FF6961;--hover:rgba(255,255,255,.05)}
+body.light{--win:#FFFFFF;--bar:#F3F3F3;--tabs:#EBEBEB;--side:#EEEEF0;--text:#1D1D1F;--sec:#6E6E73;--ter:#6E6E73;
+--sep:#D1D1D6;--hair:#C8C8CC;--fill:rgba(0,0,0,.06);--fill2:rgba(0,0,0,.035);--sel:#0064E1;
+--accent:#007AFF;--orange:#B25000;--green:#248A3D;--red:#D70015;--card:#FFFFFF;--btn:#E5E5EA;--btnp:#007AFF;
+--ground:#DCDCE0;--add:#248A3D;--del:#D70015;--hover:rgba(0,0,0,.04)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Helvetica Neue',system-ui,sans-serif;font-size:13px;color:var(--text)}
+.mono{font-family:'SF Mono',ui-monospace,Menlo,monospace}
+.win{width:1280px;height:800px;margin:0;display:flex;flex-direction:column;background:var(--win);border:1px solid var(--sep);border-radius:12px;overflow:hidden}
+header{display:flex;align-items:center;height:52px;background:var(--bar);border-bottom:1px solid var(--hair)}
+.tl{display:flex;gap:8px;padding:0 14px}.tl span{width:12px;height:12px;border-radius:50%}
+.hside{width:248px;display:flex;align-items:center;height:100%;border-right:1px solid var(--sep);background:var(--side)}
+.icon{display:flex;align-items:center;justify-content:center;width:32px;height:28px;color:var(--sec);border-radius:6px}
+.title{display:flex;flex-direction:column;gap:1px;padding:0 14px}
+.title b{font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px}
+.title small{font-size:11px;color:var(--sec)}
+.grow{flex-grow:1}
+.avs{display:flex;padding-right:6px}.avs .av{margin-left:-4px;border:2px solid var(--bar)}
+.av{position:relative;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;color:#fff;font-weight:600;flex:none}
+.av.s22{width:22px;height:22px;font-size:11px}.av.s26{width:26px;height:26px;font-size:12px}.av.s16{width:16px;height:16px;font-size:9px}
+.av .pip{position:absolute;right:-2px;top:-2px;width:9px;height:9px;border-radius:50%;background:var(--orange);border:2px solid var(--bar)}
+.c-you{background:#636366}.c-indigo{background:#5E5CE6}.c-teal{background:#1FA5BE}.c-purple{background:#AF52DE}.c-pink{background:#E0315A}.c-brown{background:#9C7E5A}
+.body{flex:1;display:flex;min-height:0}
+aside{width:248px;flex:none;background:var(--side);border-right:1px solid var(--sep);padding:10px 10px;overflow:hidden}
+.sh{font-size:11px;font-weight:600;color:var(--sec);padding:12px 8px 4px}
+.row{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;min-height:28px}
+.row.sel{background:var(--sel);color:#fff}.row.sel .sec,.row.sel .badge,.row.sel .badge *{color:rgba(255,255,255,.85)!important}
+.arow{display:flex;gap:8px;padding:6px 8px;border-radius:6px;align-items:flex-start}
+.arow.sel{background:var(--sel);color:#fff}.arow.sel .sec,.arow.sel .badge{color:rgba(255,255,255,.88)!important}
+.arow .main{flex:1;min-width:0}
+.arow .l1{display:flex;align-items:baseline;gap:6px}.arow .name{font-weight:500;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.arow .l2{font-size:11px;color:var(--sec);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+.sec{color:var(--sec)}
+.badge{font-size:11px;white-space:nowrap;display:inline-flex;align-items:center;gap:4px;color:var(--sec)}
+.b-run{color:var(--accent)}.b-need{color:var(--orange);font-weight:600}.b-ok{color:var(--green)}.b-bad{color:var(--red)}
+.dot{width:7px;height:7px;border-radius:50%;background:currentColor;display:inline-block}
+.ring{width:7px;height:7px;border-radius:50%;border:1.5px solid currentColor;display:inline-block}
+.sq{width:7px;height:7px;border-radius:1.5px;background:currentColor;display:inline-block}
+.sub{padding:3px 8px 3px 38px;font-size:12px;display:flex;align-items:center;gap:6px;border-radius:6px;color:var(--text)}
+.sub.subpane{padding-left:58px;color:var(--sec)}
+.count{margin-left:auto;font-size:11px;color:var(--sec)}
+main{flex:1;display:flex;flex-direction:column;min-width:0}
+.tabs{display:flex;height:30px;background:var(--tabs);border-bottom:1px solid var(--hair)}
+.tab{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;color:var(--sec);border-right:1px solid var(--hair);font-size:12.5px}
+.tab.on{background:var(--win);color:var(--text)}
+.tab .tdot{width:7px;height:7px;border-radius:50%}
+.tab.plus{flex:none;width:40px;border-right:none}
+.term{flex:1;padding:12px 16px;font-size:12.5px;line-height:1.55;overflow:hidden;white-space:pre}
+.blk{background:var(--fill2);border-radius:8px;margin-bottom:10px}
+.bh{display:flex;align-items:center;gap:8px;padding:8px 12px}
+.bo{padding:0 12px 10px 12px;white-space:pre}
+.ps{color:var(--sec)}.st{margin-left:auto;color:var(--sec)}
+.ok{color:var(--green)}.bad{color:var(--red)}.run{color:var(--accent)}
+.split{flex:1;display:flex;min-height:0}
+.pane{flex:1;display:flex;flex-direction:column;min-width:0;border-right:1px solid var(--sep)}
+.pane:last-child{border-right:none}
+.ph{display:flex;align-items:center;gap:6px;height:26px;padding:0 10px;font-size:11.5px;color:var(--sec);border-bottom:1px solid var(--sep);background:var(--fill2)}
+.pane.focus{outline:2px solid var(--accent);outline-offset:-2px}
+.convo{width:320px;flex:none;border-left:1px solid var(--sep);display:flex;flex-direction:column;background:var(--win)}
+.ch{padding:10px 14px;border-bottom:1px solid var(--sep);display:flex;align-items:center;gap:8px}
+.ch .t{font-weight:600}.ch .s{font-size:11px;color:var(--sec)}
+.msgs{flex:1;padding:6px 14px;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end}
+.msg{display:flex;gap:8px;padding:7px 0}
+.msg .who{font-size:12px;font-weight:600}.msg .tm{font-size:11px;color:var(--sec);font-weight:400;margin-left:6px}
+.msg .tx{margin-top:2px;line-height:1.4}
+.compose{padding:10px 14px;border-top:1px solid var(--sep);display:flex;gap:8px;align-items:center}
+.field{flex:1;height:28px;border:1px solid var(--sep);border-radius:6px;padding:0 8px;display:flex;align-items:center;color:var(--ter);background:var(--win)}
+.btn{display:inline-flex;align-items:center;justify-content:center;height:24px;padding:0 12px;border-radius:6px;background:var(--btn);color:var(--text);font-size:13px;white-space:nowrap}
+.btn.dis{opacity:.45}
+.btn.dest{color:var(--red);background:transparent;border:1px solid var(--sep)}
+.card{border:1px solid var(--sep);border-radius:10px;background:var(--card);padding:12px 14px;margin:6px 0}
+.card.attn{border-color:var(--orange);border-width:1.5px}
+.card .lbl{font-size:11px;font-weight:600;color:var(--sec)}
+.card .q{font-weight:600;margin:4px 0 8px}
+.diff{font-size:11.5px;line-height:1.5;background:var(--fill2);border-radius:6px;padding:6px 8px;white-space:pre;margin:8px 0}
+.diff .a{color:var(--add)}.diff .d{color:var(--del)}
+.acts{display:flex;gap:8px;justify-content:flex-end;margin-top:10px}
+.note{font-size:11px;color:var(--sec);margin-top:8px;line-height:1.4}
+.board{padding:24px;width:1440px}
+.board h1{font-size:18px;margin:0 0 4px}.board .lead{color:var(--sec);margin:0 0 18px;max-width:1100px;line-height:1.5}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.frame{background:var(--win);border:1px solid var(--sep);border-radius:12px;overflow:hidden}
+.cap{font-size:12px;color:var(--sec);font-weight:600;padding:10px 14px;border-bottom:1px solid var(--sep);background:var(--bar)}
+.notes{color:var(--sec);font-size:12.5px;line-height:1.6;margin-top:18px;max-width:1390px}.notes b{color:var(--text)}
+.center{flex:1;display:flex;align-items:center;justify-content:center}
+.panel{width:100%;max-width:480px;text-align:left;padding:0 28px}
+.panel h2{font-size:15px;margin:10px 0 6px}
+.panel p{margin:6px 0;line-height:1.45}
+.path{font-size:11.5px;color:var(--sec);background:var(--fill2);border-radius:5px;padding:3px 6px;display:inline-block}
+</style>
+</head>
+<body>
+<script>if(location.hash==='#light')document.body.classList.add('light')</script>
+<div class="win" role="application" aria-label="acme-api window, Builder selected">
+<header>
+<div class="hside"><div class="tl" aria-hidden="true"><span style="background:#FF5F57"></span><span style="background:#FEBC2E"></span><span style="background:#28C840"></span></div>
+<div class="grow"></div><span class="icon" role="button" aria-label="Hide sidebar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"></rect><path d="M9 4v16"></path></svg></span><span style="width:8px"></span></div>
+<div class="title" role="button" aria-label="acme-api, on This Mac, saved at 14:58. Workspace menu"><b>acme-api <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--sec)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M8 12.5l2.6 2.6L16 9.5"></path></svg> <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--sec)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></b><small>This Mac · Saved at 14:58</small></div>
+<div class="grow"></div>
+<div class="avs" role="group" aria-label="Agents here: Lead, Builder, Reviewer (needs you), Grok Bot"><span class="av s26 c-indigo" aria-hidden="true">L</span><span class="av s26 c-teal" aria-hidden="true">B</span><span class="av s26 c-purple" aria-hidden="true">R<span class="pip"></span></span><span class="av s26 c-pink" aria-hidden="true">G</span></div>
+<span class="icon" role="button" aria-label="Show inspector" style="margin-right:12px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"></rect><path d="M15 4v16"></path></svg></span>
+</header>
+<div class="body"><aside aria-label="Sidebar"><div class="sh">Workspace</div><div class="row" role="button" aria-label="All tabs, 5 tabs"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="1.5"></rect><rect x="13" y="4" width="7" height="7" rx="1.5"></rect><rect x="4" y="13" width="7" height="7" rx="1.5"></rect><rect x="13" y="13" width="7" height="7" rx="1.5"></rect></svg><span>All tabs</span><span class="count">5</span></div><div class="sh">Team</div><div class="arow" role="button" aria-label="You, on This Mac"><span class="av s22 c-you" aria-hidden="true">P</span><div class="main"><div class="l1"><span class="name">You</span></div><div class="l2 sec">This Mac</div></div></div><div class="arow" role="button" aria-label="Lead, idle. Waiting for Builder and Reviewer"><span class="av s22 c-indigo" aria-hidden="true">L</span><div class="main"><div class="l1"><span class="name">Lead</span><span class="badge "><span class="ring"></span>idle</span></div><div class="l2 sec">Waiting for Builder and Reviewer</div></div></div><div class="arow sel" role="button" aria-label="Builder, running. 40 of 40 runs pass. Over to Reviewer."><span class="av s22 c-teal" aria-hidden="true">B</span><div class="main"><div class="l1"><span class="name">Builder</span><span class="badge b-run"><span class="dot"></span>running</span></div><div class="l2 sec">40 of 40 runs pass. Over to Reviewer.</div></div></div><div class="sub" style="margin-top:2px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"></rect><path d="M7 9l3 3-3 3M12 15h5"></path></svg><span>builder</span><span class="count">2 panes</span></div><div class="sub subpane"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M12 4v16"></path></svg><span class="mono" style="font-size:11.5px">claude</span></div><div class="sub subpane"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M12 4v16"></path></svg><span class="mono" style="font-size:11.5px">npm test -- --watch</span></div><div class="sub" style="margin-bottom:4px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"></rect><path d="M7 9l3 3-3 3M12 15h5"></path></svg><span>dev server</span><span class="tdot" style="width:7px;height:7px;border-radius:50%;background:var(--green);margin-left:4px" title="Finished"></span></div><div class="arow" role="button" aria-label="Reviewer, needs you. Wants to change builder.md"><span class="av s22 c-purple" aria-hidden="true">R</span><div class="main"><div class="l1"><span class="name">Reviewer</span><span class="badge b-need"><span class="dot"></span>needs you</span></div><div class="l2 sec">Wants to change builder.md</div></div></div><div class="sh">Connected from outside</div><div class="arow" role="button" aria-label="Grok Bot, connected. Over MCP · read api/retries.ts"><span class="av s22 c-pink" aria-hidden="true">G</span><div class="main"><div class="l1"><span class="name">Grok Bot</span><span class="badge b-ok"><span class="dot"></span>connected</span></div><div class="l2 sec">Over MCP · read api/retries.ts</div></div></div><div class="arow" role="button" aria-label="Dots, disconnected. Over SSH · last seen at 11:20"><span class="av s22 c-brown" aria-hidden="true">D</span><div class="main"><div class="l1"><span class="name">Dots</span><span class="badge "><span class="ring"></span>disconnected</span></div><div class="l2 sec">Over SSH · last seen at 11:20</div></div></div><div class="sh">Needs fixing</div><div class="arow" role="button" aria-label="designer.md, can’t start. Unknown key grants on line 6."><span class="av s22" style="background:transparent;color:var(--red)" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5L2.8 19.5h18.4z"></path><path d="M12 10v4.5M12 17v.01"></path></svg></span><div class="main"><div class="l1"><span class="name mono" style="font-size:12px">designer.md</span><span class="badge b-bad">can’t start</span></div><div class="l2 sec">Unknown key “grants” on line 6</div></div></div></aside>
+<main><div class="tabs" role="tablist"><div class="tab on"><span class="av s16 c-teal" aria-hidden="true">B</span><span>builder</span></div><div class="tab"><span class="av s16 c-teal" aria-hidden="true">B</span><span>dev server</span><span class="tdot" style="background:var(--green)" title="Finished"></span></div><div class="tab plus" aria-label="New tab">+</div></div>
+<div class="split"><div class="pane focus"><div class="ph"><span class="av s16 c-teal" aria-hidden="true">B</span><span style="color:var(--text)">claude</span><span>·</span><span class="run">● running 9 min</span><span class="grow"></span><span>Builder</span></div>
+<div class="term mono">● Read api/retries.ts and its spec
+
+The retry delay comes from Date.now(),
+but the test's fake clock only advances
+on the first call. I changed
+api/retries.ts to take the clock as a
+parameter and updated the spec.
+
+● Opened a pane: npm test -- --watch
+
+<span class="ok">✓ 40 of 40 runs pass</span>
+
+● Sent to Reviewer: "fix/retries is
+  ready to review."
+</div></div><div class="pane"><div class="ph"><span class="av s16 c-teal" aria-hidden="true">B</span><span style="color:var(--text)">npm test -- --watch</span><span>·</span><span class="run">● running</span><span class="grow"></span><span>opened by Builder</span></div>
+<div class="term mono"><span class="ok">PASS</span> api/retries.spec.ts
+  <span class="ok">✓</span> retries a declined payment once (38 ms)
+  <span class="ok">✓</span> stops after two attempts (4 ms)
+  <span class="ok">✓</span> waits 200 ms between attempts (3 ms)
+
+Tests: <span class="ok">24 passed</span>, 24 total
+Time:  1.92 s
+
+Watching for changes. Press q to quit.
+</div></div></div></main><section class="convo" aria-label="Messages with Builder">
+<div class="ch"><span class="av s26 c-teal" aria-hidden="true">B</span><div><div class="t">Builder</div><div class="s">Running · Claude Code · since 14:20</div></div></div>
+<div class="msgs"><div class="msg"><span class="av s22 c-you" aria-hidden="true">P</span><div><div class="who">You<span class="tm">14:30</span></div><div class="tx">Fix the retry test first. Leave the API as it is.</div></div></div><div class="msg"><span class="av s22 c-teal" aria-hidden="true">B</span><div><div class="who">Builder<span class="tm">14:32</span></div><div class="tx">Found it: the retry delay uses Date.now() and the fake clock only moves once. I’ll pass the clock in.</div></div></div><div class="msg"><span class="av s22 c-teal" aria-hidden="true">B</span><div><div class="who">Builder<span class="tm">14:33</span></div><div class="tx">Opened a pane for npm test -- --watch.</div></div></div><div class="msg"><span class="av s22 c-you" aria-hidden="true">P</span><div><div class="who">You<span class="tm">14:35</span></div><div class="tx">Good. Tell me when 40 of 40 pass.</div></div></div><div class="msg"><span class="av s22 c-teal" aria-hidden="true">B</span><div><div class="who">Builder<span class="tm">14:38</span></div><div class="tx">40 of 40 runs pass. Over to Reviewer.</div></div></div></div>
+<div class="compose"><div class="field">Message Builder</div><span class="btn dis">Send</span></div>
+</section></div></div>
+</body>
+</html>

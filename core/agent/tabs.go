@@ -246,7 +246,11 @@ func (t tabs) open(ctx context.Context, name string) (*typesv1.Tab, error) {
 	if err := t.ensure(ctx); err != nil {
 		return nil, err
 	}
-	out, err := t.tmux(ctx, "new-window", "-t", t.target(), "-P", "-F", "#{window_id}", "-n", name)
+	escaped, err := tmuxName(name)
+	if err != nil {
+		return nil, err
+	}
+	out, err := t.tmux(ctx, "new-window", "-t", t.target(), "-P", "-F", "#{window_id}", "-n", escaped)
 	if err != nil {
 		return nil, status.Errorf(codes.Unavailable, "new tab: %v", err)
 	}
@@ -280,7 +284,11 @@ func (t tabs) rename(ctx context.Context, id, name string) error {
 	if _, err := t.find(ctx, id); err != nil {
 		return err
 	}
-	if _, err := t.tmux(ctx, "rename-window", "-t", id, "--", name); err != nil {
+	escaped, err := tmuxName(name)
+	if err != nil {
+		return err
+	}
+	if _, err := t.tmux(ctx, "rename-window", "-t", id, "--", escaped); err != nil {
 		return status.Errorf(codes.Unavailable, "rename tab: %v", err)
 	}
 	return nil

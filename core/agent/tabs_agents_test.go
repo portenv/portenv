@@ -380,3 +380,64 @@ func TestTheOwnersWindowShowsAndRoutesAgentsTabs(t *testing.T) {
 	}
 	tt.until(10*time.Second, "the agent's output", func(out []byte) bool { return bytes.Contains(out, []byte("agent-marker")) })
 }
+
+// A routine is typed, with its prefix and Enter, into the agent's main
+// pane only, whichever pane is current; anything but one line of plain
+// text is refused, and so is a main pane that's gone.
+func TestARoutineIsTypedIntoTheAgentsMainPaneOnly(t *testing.T) {
+	s := testAgentServers(t)
+	ctx := context.Background()
+	dir := t.TempDir()
+	reader := func(name string) []string {
+		return []string{"sh", "-c", `IFS= read -r line; printf '%s' "$line" > "$0"; exec sleep 100`, filepath.Join(dir, name)}
+	}
+	tabs, err := s.StartAgentTerminals(ctx, testSpec(t, "builder", reader("main")...))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Another pane, current, also waiting for a line.
+	other := paneAction(t, s, &agentv1.AgentPaneActionRequest{AgentId: "builder", Action: &agentv1.AgentPaneActionRequest_Split{
+		Split: &agentv1.Split{PaneId: tabs[0].GetPaneIds()[0], Argv: reader("other")}}})
+	paneAction(t, s, &agentv1.AgentPaneActionRequest{AgentId: "builder", Action: &agentv1.AgentPaneActionRequest_Focus{
+		Focus: &agentv1.PaneRef{PaneId: other.GetPaneId()}}})
+
+	for name, text := range map[string]string{
+		"empty":             " ",
+		"two lines":         "one\ntwo",
+		"an escape":         "x\x1b[2J",
+		"a carriage return": "x\ry",
+		"too long":          strings.Repeat("x", maxRoutine),
+		`ends in \;`:        `x\;`,
+	} {
+		if err := s.DeliverRoutine(ctx, "builder", text); status.Code(err) != codes.InvalidArgument {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	if err := s.DeliverRoutine(ctx, "reviewer", "check"); status.Code(err) != codes.FailedPrecondition {
+		t.Errorf("an agent that isn't running: %v", err)
+	}
+
+	text := "check the build #{pane_id} -l x;"
+	if err := s.DeliverRoutine(ctx, "builder", text); err != nil {
+		t.Fatal(err)
+	}
+	if got := waitFile(t, filepath.Join(dir, "main")); got != routinePrefix+text {
+		t.Errorf("the main pane read %q", got)
+	}
+	time.Sleep(200 * time.Millisecond)
+	if b, err := os.ReadFile(filepath.Join(dir, "other")); err == nil { // #nosec G304 -- test
+		t.Errorf("the other pane read %q", b)
+	}
+
+	// The main pane gone (its tab lives on in the split): refused.
+	run, _, _ := s.agentTmux(s.agents.by["builder"].user)
+	if _, err := run(ctx, "kill-pane", "-t", s.agents.by["builder"].mainPane); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DeliverRoutine(ctx, "builder", "check"); status.Code(err) != codes.FailedPrecondition {
+		t.Errorf("with the main pane gone: %v", err)
+	}
+	if _, err := os.ReadFile(filepath.Join(dir, "other")); err == nil { // #nosec G304 -- test
+		t.Error("the routine went to another pane")
+	}
+}

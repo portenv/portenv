@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"unicode/utf8"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -36,6 +37,9 @@ type agentServer struct {
 	user AgentServerSpec
 	tmux tmuxFunc
 	hub  *ctlHub
+	// mainPane is the runner's pane, the first in its main session: the
+	// only pane a routine is typed into.
+	mainPane string
 }
 
 // agentServers are the running agents' servers, by id.
@@ -295,14 +299,20 @@ func (s *apiServer) StartAgentTerminals(ctx context.Context, spec AgentServerSpe
 	}
 	// The session, sealed as the owner's is (tmuxHidden, tmuxOwned,
 	// tmuxSealed), with the runner in its first tab, run with no shell.
-	args := append([]string{"new-session", "-d", "-s", agentSession, "-n", spec.ID, "--"}, argv...)
+	args := append([]string{"new-session", "-d", "-s", agentSession, "-n", spec.ID, "-P", "-F", "#{pane_id}", "--"}, argv...)
 	args = append(args, tmuxHidden...)
 	args = append(args, tmuxOwned...)
 	args = append(args, tmuxSealed...)
-	if _, err := run(ctx, args...); err != nil {
+	out, err := run(ctx, args...)
+	if err != nil {
 		return nil, status.Errorf(codes.Unavailable, "%s's terminal couldn't start: %v", spec.ID, err)
 	}
-	a := &agentServer{user: spec, tmux: run, hub: newCtlHub(run, cmd)}
+	mainPane := strings.TrimSpace(out)
+	if !tmuxPaneRE.MatchString(mainPane) {
+		_, _ = run(ctx, "kill-server")
+		return nil, status.Errorf(codes.Internal, "%s's terminal: tmux answered %q", spec.ID, mainPane)
+	}
+	a := &agentServer{user: spec, tmux: run, hub: newCtlHub(run, cmd), mainPane: mainPane}
 	if s.agents.by == nil {
 		s.agents.by = map[string]*agentServer{}
 	}
@@ -528,4 +538,44 @@ func withUTF8(env []string) []string {
 		}
 	}
 	return append(out, "LANG=C.UTF-8")
+}
+
+// routinePrefix starts every routine typed to an agent (R-0258), so the
+// agent and anyone reading its terminal know where it came from.
+const routinePrefix = "[Portenv routine] "
+
+// maxRoutine is the longest routine line, in bytes, prefix included.
+const maxRoutine = 4096
+
+// DeliverRoutine types "[Portenv routine] <text>" and Enter into the
+// agent's main pane (its runner's, in its own main session, on its own
+// server), as the agent: one line of plain text, in one tmux command so
+// nothing lands between the line and its Enter. Any other pane, a pane
+// that's gone, and text with control characters are refused. portenvd
+// decides when the agent is idle.
+func (s *apiServer) DeliverRoutine(ctx context.Context, agentID, text string) error {
+	a, ok := s.agents.get(agentID)
+	if !ok {
+		return status.Errorf(codes.FailedPrecondition, "%s isn't running", agentID)
+	}
+	line := routinePrefix + text
+	switch {
+	case strings.TrimSpace(text) == "":
+		return status.Error(codes.InvalidArgument, "a routine needs text")
+	case !utf8.ValidString(text) || strings.IndexFunc(text, isControl) >= 0:
+		return status.Error(codes.InvalidArgument, "a routine is one line of plain text")
+	case len(line) > maxRoutine:
+		return status.Errorf(codes.InvalidArgument, "a routine is at most %d bytes", maxRoutine-len(routinePrefix))
+	}
+	escaped, err := tmuxArg(line)
+	if err != nil {
+		return err
+	}
+	if _, err := a.ownPane(ctx, a.mainPane); err != nil {
+		return status.Errorf(codes.FailedPrecondition, "%s's main pane is gone", agentID)
+	}
+	if _, err := a.tmux(ctx, "send-keys", "-t", a.mainPane, "-l", "--", escaped, ";", "send-keys", "-t", a.mainPane, "Enter"); err != nil {
+		return status.Errorf(codes.Unavailable, "routine to %s: %v", agentID, err)
+	}
+	return nil
 }

@@ -198,3 +198,21 @@ func TestKillUIDNeverTouchesRootOrWork(t *testing.T) {
 		}
 	}
 }
+
+// R-0258: the runner's idle pattern reaches lane A's idle decision.
+func TestStartTeamAgentSetsTheIdlePattern(t *testing.T) {
+	s, _, _, _, _ := newStartServer(t)
+	var got [2]string
+	s.setAgentIdleInput = func(id, p string) error { got = [2]string{id, p}; return nil }
+	if _, err := s.StartTeamAgent(context.Background(), &agentv1.StartTeamAgentRequest{AgentId: "builder", Argv: []string{"claude"}, IdlePattern: `^\s*>\s*$`}); err != nil {
+		t.Fatal(err)
+	}
+	if got != [2]string{"builder", `^\s*>\s*$`} {
+		t.Errorf("set %v", got)
+	}
+	for _, p := range []string{"(", strings.Repeat("a", maxIdlePattern+1)} {
+		if _, err := s.StartTeamAgent(context.Background(), &agentv1.StartTeamAgentRequest{AgentId: "builder", Argv: []string{"claude"}, IdlePattern: p}); status.Code(err) != codes.InvalidArgument {
+			t.Errorf("pattern %.10q: %v", p, err)
+		}
+	}
+}

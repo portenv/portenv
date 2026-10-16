@@ -87,6 +87,9 @@ type apiServer struct {
 	// runHomeIO runs team-io as an agent, for its home's files (nil: as
 	// the agent's uid, runAsAgent).
 	runHomeIO func(ctx context.Context, uid int, args []string, stdin io.Reader) ([]byte, error)
+	// setAgentIdleInput gives lane A's idle decision a running agent's
+	// idle-input pattern (nil until a build has it).
+	setAgentIdleInput func(id, pattern string) error
 	// prepareProject asks init to open the project to the team.
 	prepareProject func(ctx context.Context, projectDir string) error
 }

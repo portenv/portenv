@@ -3,6 +3,7 @@
 package agent
 
 import (
+	"io"
 	"bytes"
 	"context"
 	"crypto/subtle"
@@ -80,6 +81,9 @@ type apiServer struct {
 	// (lane A's terminal code; nil until a build has them).
 	startAgentServer func(ctx context.Context, spec AgentServerSpec) ([]*typesv1.Tab, error)
 	stopAgentServer  func(ctx context.Context, id string) error
+	// runTeamIO runs "portenv-agent team-io" as work (teamIOAs; in this
+	// process in tests).
+	runTeamIO func(ctx context.Context, args []string, stdin io.Reader) ([]byte, error)
 }
 
 // ctlHub returns the server's control-mode clients, made on first use.
@@ -108,6 +112,7 @@ func (s *apiServer) ctlHub() (*ctlHub, error) {
 func newChannelServer(cfg Config, keys *channelKeys) *grpc.Server {
 	s := &apiServer{cfg: cfg, keys: keys, tmux: tmuxAs, tmuxCmd: tmuxCmdAs, team: newTeamHub(TeamRunDir),
 		users: initUsers{socket: DefaultSocket}, writeAsUser: writeFileAsUser, killUID: killAgentUID}
+	s.runTeamIO = s.teamIOAs
 	srv := grpc.NewServer(
 		grpc.Creds(credentials.NewTLS(keys.tlsConfig())),
 		grpc.UnaryInterceptor(func(ctx context.Context, req any, _ *grpc.UnaryServerInfo, h grpc.UnaryHandler) (any, error) {

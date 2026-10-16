@@ -207,7 +207,7 @@ Each box has its own restic repository; saves happen automatically, and a lease 
 **When saves happen**
 
 - Every 30 seconds while there are changes (so the newest save is never more than a minute behind), and when the Mac sleeps or the lid closes (a power assertion holds sleep until the upload finishes, up to 60 seconds).
-- Before Move To, before closing the window, before an approved privileged action, on ⌘S (Make Save Point), and as a save point when a stand-in agent connects (so Revert To ▸ Last Save Point undoes its work).
+- Before Move To, on Close Workspace and Quit (ADR 0023: closing the window doesn't save), before an approved privileged action, on ⌘S (Make Save Point), and as a save point when a stand-in agent connects (so Revert To ▸ Last Save Point undoes its work).
 - The box agent tracks changed paths with inotify, so the toolbar can show unsaved state without scanning.
 - An optional `~/.portenv/hooks/pre-save` runs first, for example to dump a database running in the box.
 
@@ -610,7 +610,7 @@ The main window is a terminal with a title; everything else appears only when it
 **Principles**
 
 1. Deference: a thin unified toolbar, full-width terminal, sidebar hidden by default (⌘0).
-2. Automate instead of asking: autosave; closing the window saves and releases the workspace.
+2. Automate instead of asking: autosave; the workspace keeps running when its window closes, and Close Workspace or Quit saves and releases it (ADR 0023).
 3. Workspace actions live in the title menu, like a document's title menu in macOS.
 4. State is shown with quiet symbols (saved, saving, changes) with details on hover.
 5. Undo over "Are you sure?": history makes most actions reversible.
@@ -1233,10 +1233,10 @@ Reduced: no sign-in, Only you, Keychain keys, the recovery key; the Welcome scre
   - **The name field** has a hint ("Letters, numbers and hyphens, like the project's name."), and an inline error for an invalid name ("Start with a letter or a number.").
   - **Opening a box that's on a server** connects to it there; nothing moves unless the person chooses Move To.
   - **While the name is invalid** (R-0049): the field has a red border in place of the blue focus ring, and VoiceOver reads the problem as part of the field's description ("Workspace name. Start with a letter or a number."); Create Workspace is dimmed as well as disabled.
-- **Closing the last box window goes back to "Your workspaces"** instead of quitting (the owner, 2026-10-11). ⌘Q still quits.
-  - The box is closed, saved and released first, exactly as quitting does. If that fails, the app asks "acme-api couldn't be saved before closing. Its work is still on this Mac.", with Try Again, Close Anyway and Cancel.
-  - Close Anyway leaves the box as Quit Anyway does (the quit marker; saved first thing on the next open). Cancel keeps the window on the box.
-  - A box still opening finishes opening first, so it's never left open with no window. Closing another window on the same box just closes that window. Closing the list or first run, when it's the last window, quits.
+- **Closing the last workspace window goes back to "Your workspaces", and the workspace keeps running** (ADR 0023, replacing the owner's 2026-10-11 rule). ⌘Q still quits.
+  - Nothing is saved, released or stopped. The list shows it as "Running", with Open and Close Workspace.
+  - Close Workspace saves and releases it. If that fails, the app asks "acme-api couldn't be saved before closing. Its work is still on this Mac.", with Try Again, Close Anyway and Cancel. Close Anyway leaves it as Quit Anyway does (the quit marker; saved first thing on the next open).
+  - A workspace still opening finishes opening first. Closing another window on the same workspace just closes that window. Closing the list or first run, when it's the last window, quits.
 - **Link GitHub** (boards `link-github` and `link-github-linked`; before launch; not a Portenv account):
   - GitHub's device flow, through `gh auth login` inside the box, with the same access as the person's own gh; any number of repositories can be cloned into the box afterwards (the owner, 2026-10-10, ADR 0018: GitHub access works as on their Mac; no Portenv GitHub App and no repository picker);
   - gh's default scopes, then `gh auth setup-git`, so plain `git clone` and `git push` work for any repository the account can reach; the token lives in the box home's gh config (`hosts.yml`), never in the image;
@@ -1389,7 +1389,7 @@ Slow uplinks are a real user condition, not an edge case (the Phase 0 gate ran o
 - A Move, or any save that takes more than a few seconds, shows visible progress and a time estimate in the title subtitle, from the bytes still to send and the measured bandwidth.
 - Closing the laptop or quitting mid-upload never loses work and never leaves the lease in a bad state: the local home stays as it was (dirty), no partial save counts as complete, the lease stays with this machine until a save completes, and the upload resumes (restic deduplicates what already arrived) when the Mac wakes.
 - Same-machine resume never waits on the network: offline, the box starts from the local home and saves queue.
-- Quitting never fails silently. ⌘Q closes the box first (closing the last box window does too, then shows the box list: 1.5); if its release save fails, quitting stops and the app asks: "acme-api couldn't be saved before quitting. Its work is still on this Mac." with Try Again (default), Quit Anyway and Cancel. Quit Anyway, a force quit or a crash leaves the box as it is with a quit marker (`state/<box-id>/quit-unsaved`), written by portenvd's shutdown; the next open says "Not saved since 15:54 · Portenv quit before saving" and saves first thing, and the marker goes with the first successful save. Shutdown waits for boxes still opening and refuses new opens. Tested in `tests/e2e/daemon.sh` (agent down, Quit Anyway, relaunch; quit while opening) and `PortenvKitTests` (the alert's choices).
+- Quitting never fails silently. ⌘Q names every workspace running on this Mac, then closes each (ADR 0023); if its release save fails, quitting stops and the app asks: "acme-api couldn't be saved before quitting. Its work is still on this Mac." with Try Again (default), Quit Anyway and Cancel. Quit Anyway, a force quit or a crash leaves the box as it is with a quit marker (`state/<box-id>/quit-unsaved`), written by portenvd's shutdown; the next open says "Not saved since 15:54 · Portenv quit before saving" and saves first thing, and the marker goes with the first successful save. Shutdown waits for boxes still opening and refuses new opens. Tested in `tests/e2e/daemon.sh` (agent down, Quit Anyway, relaunch; quit while opening) and `PortenvKitTests` (the alert's choices).
 - Waking from sleep: the app reports the wake (`portenv app woke`); portenvd checks every open box's agent channel and restarts a box whose channel is gone (its home stays: rule 3), so a dropped channel never sits unnoticed for hours. Tested in `tests/e2e/daemon.sh` (the channel dropped during sleep).
 - A package that can't be installed never stops a box from starting. The box starts and the state line stays normal; the inspector's Where it is section shows "1 package couldn't be installed: <name> · Retry". The box agent tries the rest of the list one package at a time (one bad name never keeps the others out), retries the failed ones in the background (after 1, 5 and 15 minutes, then hourly, or at once on Retry: `portenv app retry-packages`), and logs the error; `portenv app state` lists them. Tested in `tests/e2e/daemon.sh` (a deliberately missing package) and the agent's unit tests.
 
@@ -1424,7 +1424,7 @@ Slow uplinks are a real user condition, not an edge case (the Phase 0 gate ran o
 - [ ] **Gates the design-tester build (R-0211):** first run's engine check waits for Docker Desktop to be ready, not just running: a short `Ping`, retried while it starts ("Docker Desktop is starting…"), never failing on a long dial; missing or stopped, it says what to do; the engine's own errors (not running, image missing, no disk) are plain lines in first run and the window (lane C)
 - [ ] **Gates the design-tester build (R-0211):** the first open's image pull shows its progress, "Getting the workspace image… 312 MB of 900 MB", streamed from `portenvd` (lane C)
 - [ ] **Gates the design-tester build (R-0211):** a failed open stays visible in the window, with its plain line and Try Again, and the box list has an Open button (lane D)
-- [ ] Closing the window saves and releases; reopening restores within 5 seconds
+- [ ] Close Workspace saves and releases; reopening restores within 5 seconds; closing the window leaves it running (ADR 0023)
 - [ ] On a throttled uplink (for example 400 kbit/s), a Move shows progress and an estimate, and closing the lid mid-upload loses nothing and leaves the lease with this machine
 - [ ] A version tag produces a signed, notarized, stapled `Portenv.dmg` and a signed `appcast.xml` on the GitHub release; `portenv.com/download` and `portenv.com/appcast.xml` redirect to them, and an installed build updates through Sparkle
 - [ ] The Sparkle key's offline backups exist and a restore test passed

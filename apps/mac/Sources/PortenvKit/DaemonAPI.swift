@@ -97,6 +97,10 @@ public struct DaemonError: Error, LocalizedError, Equatable {
     /// (portenvd's trailer portenv-refusal: open-elsewhere): the lease
     /// sheet, never an error line.
     public let openElsewhere: Bool
+    /// CloseBox refused because a Move To is in progress (portenvd's
+    /// trailer portenv-refusal: moving, R-0249): said plainly, with no
+    /// Close Anyway or Quit Anyway.
+    public var moving = false
     public init(_ message: String, unavailable: Bool = false, openElsewhere: Bool = false) {
         self.message = message
         self.unavailable = unavailable

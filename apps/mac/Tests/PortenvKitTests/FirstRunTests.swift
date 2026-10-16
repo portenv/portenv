@@ -455,4 +455,40 @@ struct FirstRunTests {
         #expect(flow.step == .firstBox)
         #expect(flow.error == DaemonErrorText.starting)
     }
+
+    /// The wait counts time awake, not wall time (the flake in lane A's run
+    /// on 2026-10-16: the Mac slept about 15 minutes mid-wait, and a wall
+    /// clock spent the whole wait while nothing ran). Here the awake clock
+    /// stands still across a long gap: the wait carries on.
+    @Test func timeAsleepDoesntSpendTheWait() async {
+        let service = FakeFirstRunService()
+        service.serviceDownFor = 3
+        let awake = FakeAwakeClock()
+        let flow = FirstRunFlow(service: service, at: .firstBox, retryEvery: .milliseconds(1), retryFor: .seconds(10), awake: { awake.now })
+        flow.boxName = "acme-api"
+        await flow.next()
+        #expect(flow.step == .gettingReady && service.creates == 4 && flow.error == nil)
+    }
+
+    /// Time awake does run the wait out: past it, the plain line.
+    @Test func timeAwakeEndsTheWait() async {
+        let service = FakeFirstRunService()
+        service.serviceDownFor = 1_000
+        let awake = FakeAwakeClock()
+        service.onCreate = { awake.advance(by: .seconds(4)) }
+        let flow = FirstRunFlow(service: service, at: .firstBox, retryEvery: .milliseconds(1), retryFor: .seconds(10), awake: { awake.now })
+        flow.boxName = "acme-api"
+        await flow.next()
+        #expect(flow.step == .firstBox && flow.error == DaemonErrorText.starting)
+        #expect(service.creates == 4) // at 4, 8, 12 and 16 s awake: the wait began at 4, so 16 is past it
+    }
+}
+
+/// An awake clock the test moves by hand.
+final class FakeAwakeClock: @unchecked Sendable {
+    private let lock = NSLock()
+    private let base = SuspendingClock.now
+    private var offset: Duration = .zero
+    var now: SuspendingClock.Instant { lock.withLock { base.advanced(by: offset) } }
+    func advance(by d: Duration) { lock.withLock { offset += d } }
 }

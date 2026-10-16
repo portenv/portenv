@@ -17,6 +17,14 @@ final class AppModel {
     /// 0023): the list shows them as "Running", with Close Workspace.
     private(set) var running: Set<String> = []
     private(set) var controller: BoxController?
+    /// The workspaces known to be running when portenvd last answered, and
+    /// the window's if it's open: what Quit names when portenvd doesn't
+    /// answer (R-0252).
+    var knownRunning: [String] {
+        var names = running
+        if let c = controller, c.isOpen { names.insert(c.box) }
+        return names.sorted()
+    }
     private(set) var tabs: TabsController?
     private(set) var firstRun: FirstRunFlow?
     /// Why portenvd isn't there, said plainly: with Open Login Items when it

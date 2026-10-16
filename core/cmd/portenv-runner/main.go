@@ -43,7 +43,6 @@ func main() {
 	}
 	log.Info("starting", "version", version.String(), "machine", env.Machine)
 	srv := daemon.New(env, log)
-	srv.KeepBoxesOnStop = true
 	if err := srv.Serve(ctx); err != nil {
 		log.Error("stopped", "err", err)
 		os.Exit(1)

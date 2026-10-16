@@ -48,11 +48,6 @@ type Server struct {
 	env *local.Env
 	log *slog.Logger
 
-	// KeepBoxesOnStop leaves boxes running when the daemon stops (the
-	// runner on a server: a runner restart must not stop anyone's box).
-	// portenvd on a Mac closes them: quitting the app saves and releases.
-	KeepBoxesOnStop bool
-
 	// relaunching: Portenv is relaunching for an update, so this daemon
 	// stops without closing its boxes (ADR 0014); stop ends Serve.
 	relaunching atomic.Bool
@@ -218,12 +213,14 @@ func (s *Server) Serve(ctx context.Context) error {
 	daemonv1.RegisterDaemonServiceServer(srv, s)
 	go func() {
 		<-ctx.Done()
-		// Save and release first, while the agent channels are up; then end
-		// every call, open terminals included (a graceful stop would wait
-		// for terminals forever). A runner leaves boxes running.
+		// Leave every workspace running (R-0252, ADR 0023): a portenvd or
+		// runner restart stops no one's work, and the next one takes each
+		// workspace over with its programs. Then end every call, open
+		// terminals included (a graceful stop would wait for terminals
+		// forever). A relaunch for an update needs no quit marker.
 		s.stopBackground()
-		if !s.KeepBoxesOnStop && !s.relaunching.Load() {
-			s.closeAll()
+		if !s.relaunching.Load() {
+			s.shutdown()
 		}
 		srv.Stop()
 	}()

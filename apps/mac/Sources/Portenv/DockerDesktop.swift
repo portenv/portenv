@@ -62,19 +62,20 @@ struct DockerCardView: View {
                 Text(card.line)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                HStack(spacing: 12) {
-                    if let button = card.button {
-                        Button(button, action: act)
-                            .controlSize(.large)
+                if card.saysChecking {
+                    HStack(spacing: 12) {
+                        if let button = card.button {
+                            Button(button, action: act)
+                                .controlSize(.large)
+                        }
+                        HStack(spacing: 6) {
+                            ProgressView().controlSize(.small)
+                            Text(DockerText.checking).foregroundStyle(.secondary)
+                        }
+                        .accessibilityElement(children: .combine)
                     }
-                    HStack(spacing: 6) {
-                        // Starting already spins by its title.
-                        if card.action != nil { ProgressView().controlSize(.small) }
-                        Text(DockerText.checking).foregroundStyle(.secondary)
-                    }
-                    .accessibilityElement(children: .combine)
+                    .padding(.top, 4)
                 }
-                .padding(.top, 4)
             }
             Spacer(minLength: 0)
         }

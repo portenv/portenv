@@ -190,7 +190,10 @@ public final class BoxController {
     private let ensureDaemon: (@Sendable () async -> String?)?
     /// How long portenvd may be away before the window says so plainly.
     private let daemonDeadline: Duration
-    private var daemonGoneSince: ContinuousClock.Instant?
+    private var daemonGoneSince: SuspendingClock.Instant?
+    /// Time awake: a Mac asleep while portenvd is away mustn't spend the
+    /// deadline (a wall clock did, on 2026-10-16).
+    private let awake: @Sendable () -> SuspendingClock.Instant
 
     /// What the window says when portenvd has been away past the deadline.
     public static let daemonGone = "Portenv's background service isn't running, so nothing is being saved. It's started again automatically; if this lasts, quit and reopen Portenv."
@@ -221,6 +224,7 @@ public final class BoxController {
                 notifier: KeychainWaitNotifying? = nil, keychainThreshold: Duration = KeychainWait.threshold,
                 ensureDaemon: (@Sendable () async -> String?)? = nil, followRetry: Duration = .seconds(1),
                 daemonDeadline: Duration = .seconds(30), savesRetry: Duration = .seconds(5),
+                awake: @escaping @Sendable () -> SuspendingClock.Instant = { .now },
                 now: @escaping @Sendable () -> Date = { Date() },
                 sleep: @escaping @Sendable (Duration) async -> Void = { try? await Task.sleep(for: $0) },
                 bringForward: @escaping @Sendable () -> Void = { KeychainWait.front.bringForward() }) {
@@ -237,6 +241,7 @@ public final class BoxController {
         self.keychainThreshold = keychainThreshold
         self.ensureDaemon = ensureDaemon
         self.daemonDeadline = daemonDeadline
+        self.awake = awake
         self.followRetry = followRetry
     }
 
@@ -589,11 +594,11 @@ public final class BoxController {
     private func daemonEnded() async {
         guard !leaving, location != .closed, !(await daemon.ping()) else { return }
         state = BoxState(save: .notSaved, savedAt: state?.savedAt, location: state?.location)
-        let since = daemonGoneSince ?? .now
+        let since = daemonGoneSince ?? awake()
         daemonGoneSince = since
         if let problem = await ensureDaemon?() {
             error = problem
-        } else if ContinuousClock.now - since >= daemonDeadline {
+        } else if awake() - since >= daemonDeadline {
             error = Self.daemonGone
         }
     }
@@ -601,11 +606,11 @@ public final class BoxController {
     /// Waits for portenvd at launch (launchd starts it with the login item),
     /// saying so plainly if it doesn't come within the deadline.
     public func waitForDaemon() async {
-        let start = ContinuousClock.now
+        let start = awake()
         while !(await daemon.ping()) {
             if let problem = await ensureDaemon?() {
                 error = problem
-            } else if ContinuousClock.now - start >= daemonDeadline {
+            } else if awake() - start >= daemonDeadline {
                 error = Self.daemonGone
                 return
             }

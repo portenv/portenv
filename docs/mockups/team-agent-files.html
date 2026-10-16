@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<title>Portenv agent files</title>
+<style>
+:root{--win:#1A1A1C;--bar:#2B2B2E;--tabs:#232325;--side:#212123;--text:#F5F5F7;--sec:#A1A1A6;--ter:#8E8E93;
+--sep:#3A3A3D;--hair:#000;--fill:rgba(255,255,255,.07);--fill2:rgba(255,255,255,.035);--sel:#0A64D6;
+--accent:#0A84FF;--orange:#FF9F0A;--green:#30D158;--red:#FF6961;--card:#2C2C2E;--btn:#3A3A3D;--btnp:#0A6EDB;
+--ground:#0E0E10;--add:#30D158;--del:#FF6961;--hover:rgba(255,255,255,.05)}
+body.light{--win:#FFFFFF;--bar:#F3F3F3;--tabs:#EBEBEB;--side:#EEEEF0;--text:#1D1D1F;--sec:#6E6E73;--ter:#6E6E73;
+--sep:#D1D1D6;--hair:#C8C8CC;--fill:rgba(0,0,0,.06);--fill2:rgba(0,0,0,.035);--sel:#0064E1;
+--accent:#007AFF;--orange:#B25000;--green:#248A3D;--red:#D70015;--card:#FFFFFF;--btn:#E5E5EA;--btnp:#007AFF;
+--ground:#DCDCE0;--add:#248A3D;--del:#D70015;--hover:rgba(0,0,0,.04)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Helvetica Neue',system-ui,sans-serif;font-size:13px;color:var(--text)}
+.mono{font-family:'SF Mono',ui-monospace,Menlo,monospace}
+.win{width:1280px;height:800px;margin:0;display:flex;flex-direction:column;background:var(--win);border:1px solid var(--sep);border-radius:12px;overflow:hidden}
+header{display:flex;align-items:center;height:52px;background:var(--bar);border-bottom:1px solid var(--hair)}
+.tl{display:flex;gap:8px;padding:0 14px}.tl span{width:12px;height:12px;border-radius:50%}
+.hside{width:248px;display:flex;align-items:center;height:100%;border-right:1px solid var(--sep);background:var(--side)}
+.icon{display:flex;align-items:center;justify-content:center;width:32px;height:28px;color:var(--sec);border-radius:6px}
+.title{display:flex;flex-direction:column;gap:1px;padding:0 14px}
+.title b{font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px}
+.title small{font-size:11px;color:var(--sec)}
+.grow{flex-grow:1}
+.avs{display:flex;padding-right:6px}.avs .av{margin-left:-4px;border:2px solid var(--bar)}
+.av{position:relative;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;color:#fff;font-weight:600;flex:none}
+.av.s22{width:22px;height:22px;font-size:11px}.av.s26{width:26px;height:26px;font-size:12px}.av.s16{width:16px;height:16px;font-size:9px}
+.av .pip{position:absolute;right:-2px;top:-2px;width:9px;height:9px;border-radius:50%;background:var(--orange);border:2px solid var(--bar)}
+.c-you{background:#636366}.c-indigo{background:#5E5CE6}.c-teal{background:#1FA5BE}.c-purple{background:#AF52DE}.c-pink{background:#E0315A}.c-brown{background:#9C7E5A}
+.body{flex:1;display:flex;min-height:0}
+aside{width:248px;flex:none;background:var(--side);border-right:1px solid var(--sep);padding:10px 10px;overflow:hidden}
+.sh{font-size:11px;font-weight:600;color:var(--sec);padding:12px 8px 4px}
+.row{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;min-height:28px}
+.row.sel{background:var(--sel);color:#fff}.row.sel .sec,.row.sel .badge,.row.sel .badge *{color:rgba(255,255,255,.85)!important}
+.arow{display:flex;gap:8px;padding:6px 8px;border-radius:6px;align-items:flex-start}
+.arow.sel{background:var(--sel);color:#fff}.arow.sel .sec,.arow.sel .badge{color:rgba(255,255,255,.88)!important}
+.arow .main{flex:1;min-width:0}
+.arow .l1{display:flex;align-items:baseline;gap:6px}.arow .name{font-weight:500;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.arow .l2{font-size:11px;color:var(--sec);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+.sec{color:var(--sec)}
+.badge{font-size:11px;white-space:nowrap;display:inline-flex;align-items:center;gap:4px;color:var(--sec)}
+.b-run{color:var(--accent)}.b-need{color:var(--orange);font-weight:600}.b-ok{color:var(--green)}.b-bad{color:var(--red)}
+.dot{width:7px;height:7px;border-radius:50%;background:currentColor;display:inline-block}
+.ring{width:7px;height:7px;border-radius:50%;border:1.5px solid currentColor;display:inline-block}
+.sq{width:7px;height:7px;border-radius:1.5px;background:currentColor;display:inline-block}
+.sub{padding:3px 8px 3px 38px;font-size:12px;display:flex;align-items:center;gap:6px;border-radius:6px;color:var(--text)}
+.sub.subpane{padding-left:58px;color:var(--sec)}
+.count{margin-left:auto;font-size:11px;color:var(--sec)}
+main{flex:1;display:flex;flex-direction:column;min-width:0}
+.tabs{display:flex;height:30px;background:var(--tabs);border-bottom:1px solid var(--hair)}
+.tab{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;color:var(--sec);border-right:1px solid var(--hair);font-size:12.5px}
+.tab.on{background:var(--win);color:var(--text)}
+.tab .tdot{width:7px;height:7px;border-radius:50%}
+.tab.plus{flex:none;width:40px;border-right:none}
+.term{flex:1;padding:12px 16px;font-size:12.5px;line-height:1.55;overflow:hidden;white-space:pre}
+.blk{background:var(--fill2);border-radius:8px;margin-bottom:10px}
+.bh{display:flex;align-items:center;gap:8px;padding:8px 12px}
+.bo{padding:0 12px 10px 12px;white-space:pre}
+.ps{color:var(--sec)}.st{margin-left:auto;color:var(--sec)}
+.ok{color:var(--green)}.bad{color:var(--red)}.run{color:var(--accent)}
+.split{flex:1;display:flex;min-height:0}
+.pane{flex:1;display:flex;flex-direction:column;min-width:0;border-right:1px solid var(--sep)}
+.pane:last-child{border-right:none}
+.ph{display:flex;align-items:center;gap:6px;height:26px;padding:0 10px;font-size:11.5px;color:var(--sec);border-bottom:1px solid var(--sep);background:var(--fill2)}
+.pane.focus{outline:2px solid var(--accent);outline-offset:-2px}
+.convo{width:320px;flex:none;border-left:1px solid var(--sep);display:flex;flex-direction:column;background:var(--win)}
+.ch{padding:10px 14px;border-bottom:1px solid var(--sep);display:flex;align-items:center;gap:8px}
+.ch .t{font-weight:600}.ch .s{font-size:11px;color:var(--sec)}
+.msgs{flex:1;padding:6px 14px;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end}
+.msg{display:flex;gap:8px;padding:7px 0}
+.msg .who{font-size:12px;font-weight:600}.msg .tm{font-size:11px;color:var(--sec);font-weight:400;margin-left:6px}
+.msg .tx{margin-top:2px;line-height:1.4}
+.compose{padding:10px 14px;border-top:1px solid var(--sep);display:flex;gap:8px;align-items:center}
+.field{flex:1;height:28px;border:1px solid var(--sep);border-radius:6px;padding:0 8px;display:flex;align-items:center;color:var(--ter);background:var(--win)}
+.btn{display:inline-flex;align-items:center;justify-content:center;height:24px;padding:0 12px;border-radius:6px;background:var(--btn);color:var(--text);font-size:13px;white-space:nowrap}
+.btn.dis{opacity:.45}
+.btn.dest{color:var(--red);background:transparent;border:1px solid var(--sep)}
+.card{border:1px solid var(--sep);border-radius:10px;background:var(--card);padding:12px 14px;margin:6px 0}
+.card.attn{border-color:var(--orange);border-width:1.5px}
+.card .lbl{font-size:11px;font-weight:600;color:var(--sec)}
+.card .q{font-weight:600;margin:4px 0 8px}
+.diff{font-size:11.5px;line-height:1.5;background:var(--fill2);border-radius:6px;padding:6px 8px;white-space:pre;margin:8px 0}
+.diff .a{color:var(--add)}.diff .d{color:var(--del)}
+.acts{display:flex;gap:8px;justify-content:flex-end;margin-top:10px}
+.note{font-size:11px;color:var(--sec);margin-top:8px;line-height:1.4}
+.board{padding:24px;width:1440px}
+.board h1{font-size:18px;margin:0 0 4px}.board .lead{color:var(--sec);margin:0 0 18px;max-width:1100px;line-height:1.5}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.frame{background:var(--win);border:1px solid var(--sep);border-radius:12px;overflow:hidden}
+.cap{font-size:12px;color:var(--sec);font-weight:600;padding:10px 14px;border-bottom:1px solid var(--sep);background:var(--bar)}
+.notes{color:var(--sec);font-size:12.5px;line-height:1.6;margin-top:18px;max-width:1390px}.notes b{color:var(--text)}
+.center{flex:1;display:flex;align-items:center;justify-content:center}
+.panel{width:100%;max-width:480px;text-align:left;padding:0 28px}
+.panel h2{font-size:15px;margin:10px 0 6px}
+.panel p{margin:6px 0;line-height:1.45}
+.path{font-size:11.5px;color:var(--sec);background:var(--fill2);border-radius:5px;padding:3px 6px;display:inline-block}
+
+.files{flex:1;display:flex;flex-direction:column;min-width:0;position:relative}
+.fh{padding:14px 18px 10px;border-bottom:1px solid var(--sep)}
+.fh .t{font-size:15px;font-weight:600;display:flex;align-items:center;gap:8px}
+.fh .s{font-size:12px;color:var(--sec);margin-top:4px;line-height:1.4}
+.fbar{display:flex;align-items:center;gap:12px;margin-top:10px}
+.quota{flex:1;max-width:260px}
+.qtrack{height:6px;border-radius:3px;background:var(--fill);overflow:hidden}
+.qfill{height:100%;background:var(--accent)}
+.qfill.full{background:var(--red)}
+.qtext{font-size:11px;color:var(--sec);margin-top:4px}
+table.ft{width:100%;border-collapse:collapse;font-size:12.5px}
+.ft th{font-size:11px;font-weight:600;color:var(--sec);text-align:left;padding:6px 18px;border-bottom:1px solid var(--sep)}
+.ft td{padding:6px 18px;border-bottom:1px solid var(--fill2)}
+.ft tr:nth-child(even) td{background:var(--fill2)}
+.ft .r{text-align:right}
+.drop{position:absolute;inset:8px;border:2px dashed var(--accent);border-radius:10px;background:color-mix(in srgb,var(--accent) 10%,transparent);display:flex;align-items:flex-end;justify-content:center;padding-bottom:28px}
+.drop span{background:var(--accent);color:#fff;border-radius:6px;padding:6px 12px;font-weight:600}
+.banner{margin:10px 18px 0;padding:10px 12px;border-radius:8px;border:1.5px solid var(--red);line-height:1.45}
+.banner b{color:var(--red)}
+.btn.prim{background:var(--btnp);color:#fff}
+.row.sel .count{color:rgba(255,255,255,.88)}
+
+.nyou{margin:4px 0 6px;padding:6px 8px;border-radius:8px;border:1.5px solid var(--orange)}
+.nyou .q{font-weight:600}.nyou .w{font-size:11px;color:var(--sec);margin-top:2px}
+.nyou.sel{background:var(--sel);border-color:var(--sel);color:#fff}.nyou.sel .w{color:rgba(255,255,255,.85)}
+.tabsub{padding:3px 8px 3px 38px;font-size:12px;display:flex;align-items:center;gap:6px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tabsub .cmd{color:var(--sec)}
+.addrow{display:flex;align-items:center;gap:8px;padding:6px 8px;color:var(--sec);font-size:12.5px}
+.alltabs{flex:none;display:flex;align-items:center;padding:0 12px;color:var(--accent);font-size:12.5px;border-left:1px solid var(--hair)}
+.later{font-size:10px;font-weight:600;letter-spacing:.04em;color:var(--sec);border:1px solid var(--sep);border-radius:4px;padding:1px 4px}
+.col{width:340px;flex:none;border-left:1px solid var(--sep);display:flex;flex-direction:column;background:var(--win)}
+.afs{border-top:1px solid var(--sep);padding:10px 14px 12px}
+.afs .h{font-size:11px;font-weight:600;color:var(--sec);display:flex;align-items:center;gap:6px}
+.afr{display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12.5px}
+.afr .sz{margin-left:auto;color:var(--sec);font-size:11.5px}
+.afq{font-size:11px;color:var(--sec);margin-top:6px}
+.lnk{color:var(--accent)}
+</style>
+</head>
+<body>
+<script>if(location.hash==='#light')document.body.classList.add('light')</script>
+<div class="board">
+<h1>Agent files · an agent’s own home, for you to see and add to (R-0234, R-0240, R-0241)</h1>
+<p class="lead">Below the agent’s conversation: the files in its private home, their size, the quota, and a drop target. Shown with the window’s centre left empty.</p>
+<div class="grid"><div class="frame"><div class="cap">Agent files under the conversation: adding by drag and drop, or Add Files…</div><div class="body" style="height:640px"><aside aria-label="Sidebar"><div class="sh">Needs you · 1</div><div class="nyou" role="button" aria-label="Needs you: Reviewer asks, merge #42? Waiting 6 minutes"><div class="q">Reviewer: merge #42?</div><div class="w">Waiting 6 min</div></div><div class="sh">Team</div><div class="arow" role="button" aria-label="You, 2 tabs"><span class="av s22 c-you" aria-hidden="true">P</span><div class="main"><div class="l1"><span class="name">You</span><span class="badge">2 tabs</span></div><div class="l2 sec">This Mac</div></div></div><div class="arow" role="button" aria-label="Lead, idle. Split the retry work in two"><span class="av s22 c-indigo" aria-hidden="true">L</span><div class="main"><div class="l1"><span class="name">Lead</span><span class="badge "><svg width="9" height="9" viewBox="0 0 10 10" aria-hidden="true"><circle cx="5" cy="5" r="3.8" fill="none" stroke="currentColor" stroke-width="1.3" stroke-dasharray="1.6 1.4"></circle></svg>idle</span></div><div class="l2 sec">Split the retry work in two</div></div></div><div class="arow sel" role="button" aria-label="Builder, running. Running the payments tests"><span class="av s22 c-teal" aria-hidden="true">B</span><div class="main"><div class="l1"><span class="name">Builder</span><span class="badge b-run"><svg width="8" height="9" viewBox="0 0 8 9" aria-hidden="true"><path d="M0.5 0.6v7.8L7.5 4.5z" fill="currentColor"></path></svg>running</span></div><div class="l2 sec">Running the payments tests</div></div></div><div class="tabsub">› <span>main session</span></div><div class="tabsub">› <span>tests</span> <span class=cmd>· npm test --watch</span></div><div class="tabsub">› <span>helper</span> <span class=cmd>· retries-refactor</span></div><div class="arow" role="button" aria-label="Reviewer, needs you. Wants to merge #42"><span class="av s22 c-purple" aria-hidden="true">R</span><div class="main"><div class="l1"><span class="name">Reviewer</span><span class="badge b-need"><span class="dot"></span>needs you</span></div><div class="l2 sec">Wants to merge #42</div></div></div><div class="arow" role="button" aria-label="Design System Keeper, idle. Icon set drafted"><span class="av s22 c-pink" aria-hidden="true">D</span><div class="main"><div class="l1"><span class="name">Design System Keeper</span><span class="badge "><svg width="9" height="9" viewBox="0 0 10 10" aria-hidden="true"><circle cx="5" cy="5" r="3.8" fill="none" stroke="currentColor" stroke-width="1.3" stroke-dasharray="1.6 1.4"></circle></svg>idle</span></div><div class="l2 sec">Icon set drafted</div></div></div><div class="addrow" role="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg><span>Add Agent…</span></div></aside><main></main><section class="col" style="position:relative" aria-label="Builder"><div class="ch"><span class="av s26 c-teal" aria-hidden="true">B</span><div><div class="t">Builder</div><div class="s">Runs as user builder · Claude Code · may open 4 panes</div></div></div>
+<div class="msgs" style="flex:none;height:90px"><div class="msg"><span class="av s22 c-teal" aria-hidden="true">B</span><div><div class="who">Builder<span class="tm">14:36</span></div><div class="tx">Will do.</div></div></div></div>
+<div class="afs" style="position:relative;flex:1"><div class="h"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path d="M3 7.5a2 2 0 012-2h4l2 2h8a2 2 0 012 2V17a2 2 0 01-2 2H5a2 2 0 01-2-2z"></path></svg> Agent files · Builder <span class="path mono" style="margin-left:auto">/home/builder</span></div>
+<div class="afq" style="margin:2px 0 8px">Private to Builder. Saved and moved with the workspace.</div>
+<div class="afr"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path d="M3 7.5a2 2 0 012-2h4l2 2h8a2 2 0 012 2V17a2 2 0 01-2 2H5a2 2 0 01-2-2z"></path></svg><span>notes</span><span class="sz">6 items</span></div><div class="afr"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path d="M3 7.5a2 2 0 012-2h4l2 2h8a2 2 0 012 2V17a2 2 0 01-2 2H5a2 2 0 01-2-2z"></path></svg><span>screenshots</span><span class="sz">41.2 MB</span></div><div class="afr"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h8l4 4v14H6z"></path><path d="M14 3v4h4"></path></svg><span>retries-plan.md</span><span class="sz">3 KB</span></div><div class="afr"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h8l4 4v14H6z"></path><path d="M14 3v4h4"></path></svg><span>api-conventions.md</span><span class="sz">6 KB</span></div><div class="afr"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h8l4 4v14H6z"></path><path d="M14 3v4h4"></path></svg><span>payments-sandbox-export.csv</span><span class="sz">170.4 MB</span></div>
+<div class="quota" style="max-width:none;margin-top:10px" role="progressbar" aria-label="212 MB of 500 MB"><div class="qtrack"><div class="qfill" style="width:42%"></div></div><div class="qtext">212 MB of 500 MB · drop files here to add</div></div>
+<div class="acts" style="justify-content:flex-start;margin-top:8px"><span class="btn">Add Files…</span></div><div class="drop" aria-hidden="true" style="inset:4px"><span>Add 2 files (8.4 MB)</span></div></div>
+<div class="compose"><div class="field">Message Builder</div><span class="btn dis">Send</span></div></section></div></div><div class="frame"><div class="cap">Full: what’s used, what wasn’t added, and what to do</div><div class="body" style="height:640px"><aside aria-label="Sidebar"><div class="sh">Needs you · 1</div><div class="nyou" role="button" aria-label="Needs you: Reviewer asks, merge #42? Waiting 6 minutes"><div class="q">Reviewer: merge #42?</div><div class="w">Waiting 6 min</div></div><div class="sh">Team</div><div class="arow" role="button" aria-label="You, 2 tabs"><span class="av s22 c-you" aria-hidden="true">P</span><div class="main"><div class="l1"><span class="name">You</span><span class="badge">2 tabs</span></div><div class="l2 sec">This Mac</div></div></div><div class="arow" role="button" aria-label="Lead, idle. Split the retry work in two"><span class="av s22 c-indigo" aria-hidden="true">L</span><div class="main"><div class="l1"><span class="name">Lead</span><span class="badge "><svg width="9" height="9" viewBox="0 0 10 10" aria-hidden="true"><circle cx="5" cy="5" r="3.8" fill="none" stroke="currentColor" stroke-width="1.3" stroke-dasharray="1.6 1.4"></circle></svg>idle</span></div><div class="l2 sec">Split the retry work in two</div></div></div><div class="arow sel" role="button" aria-label="Builder, running. Running the payments tests"><span class="av s22 c-teal" aria-hidden="true">B</span><div class="main"><div class="l1"><span class="name">Builder</span><span class="badge b-run"><svg width="8" height="9" viewBox="0 0 8 9" aria-hidden="true"><path d="M0.5 0.6v7.8L7.5 4.5z" fill="currentColor"></path></svg>running</span></div><div class="l2 sec">Running the payments tests</div></div></div><div class="tabsub">› <span>main session</span></div><div class="tabsub">› <span>tests</span> <span class=cmd>· npm test --watch</span></div><div class="tabsub">› <span>helper</span> <span class=cmd>· retries-refactor</span></div><div class="arow" role="button" aria-label="Reviewer, needs you. Wants to merge #42"><span class="av s22 c-purple" aria-hidden="true">R</span><div class="main"><div class="l1"><span class="name">Reviewer</span><span class="badge b-need"><span class="dot"></span>needs you</span></div><div class="l2 sec">Wants to merge #42</div></div></div><div class="arow" role="button" aria-label="Design System Keeper, idle. Icon set drafted"><span class="av s22 c-pink" aria-hidden="true">D</span><div class="main"><div class="l1"><span class="name">Design System Keeper</span><span class="badge "><svg width="9" height="9" viewBox="0 0 10 10" aria-hidden="true"><circle cx="5" cy="5" r="3.8" fill="none" stroke="currentColor" stroke-width="1.3" stroke-dasharray="1.6 1.4"></circle></svg>idle</span></div><div class="l2 sec">Icon set drafted</div></div></div><div class="addrow" role="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg><span>Add Agent…</span></div></aside><main></main><section class="col" style="position:relative" aria-label="Builder"><div class="ch"><span class="av s26 c-teal" aria-hidden="true">B</span><div><div class="t">Builder</div><div class="s">Runs as user builder · Claude Code · may open 4 panes</div></div></div>
+<div class="msgs" style="flex:none;height:90px"><div class="msg"><span class="av s22 c-teal" aria-hidden="true">B</span><div><div class="who">Builder<span class="tm">14:36</span></div><div class="tx">Will do.</div></div></div></div>
+<div class="afs" style="position:relative;flex:1"><div class="h"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path d="M3 7.5a2 2 0 012-2h4l2 2h8a2 2 0 012 2V17a2 2 0 01-2 2H5a2 2 0 01-2-2z"></path></svg> Agent files · Builder <span class="path mono" style="margin-left:auto">/home/builder</span></div>
+<div class="afq" style="margin:2px 0 8px">Private to Builder. Saved and moved with the workspace.</div>
+<div class="afr"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path d="M3 7.5a2 2 0 012-2h4l2 2h8a2 2 0 012 2V17a2 2 0 01-2 2H5a2 2 0 01-2-2z"></path></svg><span>notes</span><span class="sz">6 items</span></div><div class="afr"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path d="M3 7.5a2 2 0 012-2h4l2 2h8a2 2 0 012 2V17a2 2 0 01-2 2H5a2 2 0 01-2-2z"></path></svg><span>screenshots</span><span class="sz">41.2 MB</span></div><div class="afr"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h8l4 4v14H6z"></path><path d="M14 3v4h4"></path></svg><span>retries-plan.md</span><span class="sz">3 KB</span></div><div class="afr"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h8l4 4v14H6z"></path><path d="M14 3v4h4"></path></svg><span>api-conventions.md</span><span class="sz">6 KB</span></div><div class="afr"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h8l4 4v14H6z"></path><path d="M14 3v4h4"></path></svg><span>payments-sandbox-export.csv</span><span class="sz">170.4 MB</span></div><div class="afr"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h8l4 4v14H6z"></path><path d="M14 3v4h4"></path></svg><span>e2e-recordings.zip</span><span class="sz">288 MB</span></div>
+<div class="quota" style="max-width:none;margin-top:10px" role="progressbar" aria-label="500 MB of 500 MB"><div class="qtrack"><div class="qfill full" style="width:100%"></div></div><div class="qtext">500 MB of 500 MB · drop files here to add</div></div>
+<div class="banner" role="alert" style="margin:8px 0 0"><b>Builder’s files are full.</b> Builder can’t save new files until you remove some or raise its limit in Settings › Team. Not added: brand-guide.pdf (24 MB).</div><div class="acts" style="justify-content:flex-start;margin-top:8px"><span class="btn">Add Files…</span></div></div>
+<div class="compose"><div class="field">Message Builder</div><span class="btn dis">Send</span></div></section></div></div></div>
+<p class="notes"><b>What it shows:</b> the agent’s home, <span class="mono">/home/&lt;agent&gt;</span>, private to that agent (R-0234), with each item’s size. <b>Adding:</b> drop files or folders on the section or the agent’s row, or Add Files…; the drop target names what will be added and its size. Files are copied into the workspace as that agent. <b>Quota:</b> what’s used of the agent’s limit; red when full, with what wasn’t added and the next step. The size counts toward the workspace’s. File names an agent chose are plain text.</p>
+</div>
+</body>
+</html>

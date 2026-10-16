@@ -1,6 +1,6 @@
 # 0022. Agents in a workspace: a team the owner approves, each agent its own user, one grant check for every way in
 
-Date: 2026-10-16 · Status: proposed (R-0226, R-0227, R-0231 to R-0235, R-0237; lane A's tmux findings, CC-0345). No code before the reviewer approves it. Per-agent users are the owner's decision (13:19, R-0231), not a choice left in this ADR.
+Date: 2026-10-16 · Status: Accepted (the reviewer, R-0245), with R-0245's six additions, R-0246 and R-0247 in this text. Per-agent users are the owner's decision (13:19, R-0231; R-0235). Built from lane A's tmux findings (CC-0345), R-0226, R-0227 and R-0231 to R-0237.
 
 ## Context
 
@@ -76,6 +76,18 @@ This closes every item of lane A's list:
 
 - **Separately (lane A's small fix, which goes in regardless):** each tab streams the pane recorded when it was made, never "the active pane", so a split can't swap what a tab shows.
 
+**What agents still share with the owner, stated (R-0245):**
+- **`/tmp` and `/dev/shm`** are one per box, shared by every user.
+  - Each agent gets `TMPDIR=/run/portenv-team/<id>/tmp`, its own, 0700, so tools that honour `TMPDIR` keep their files out of `/tmp`.
+  - At every team start, the helper checks that `work`'s known sockets can't be reached by other uids, and refuses to start the team with a plain line if one can. The sockets checked: `SSH_AUTH_SOCK`'s, a gpg agent's, a VS Code server's, tmux's, and anything of `work`'s under `/tmp`.
+  - Lane E's rows (section 12) prove that no agent reaches them.
+- **`/proc`:** any user in the box can read every process's command line (`ps`), the owner's included. Hiding it (`hidepid=2`) needs `/proc` mounted again with that option, which needs `CAP_SYS_ADMIN`; the box doesn't have it, and the engine mounts `/proc` itself. **Residual risk:** a secret passed as an argument is readable by agents. Other users' environments (`/proc/<pid>/environ`) stay owner-only. `portenv guide` tells agents never to put secrets on a command line, and Portenv's own commands never take one there.
+- **The network:** agents share the box's network.
+  - They can reach anything listening in the box, the owner's dev servers and databases on `localhost` included, and whatever the box itself can reach outside.
+  - The agent channel stays safe: it is pinned TLS with keys only `portenvd` and the helper hold (ADR 0010), so an agent that reaches its port gets nothing.
+  - init's socket, `portenvd`'s and the helper's per-agent sockets are protected by file modes, not by the network.
+  - Per-agent network namespaces are a later option.
+
 ### 2. Files, secrets and identity for per-agent users
 
 **Who reaches what:**
@@ -114,7 +126,7 @@ This closes every item of lane A's list:
 
   An agent's git commands that write config (`git remote add`, `branch --set-upstream-to`) fail; the agent asks the owner.
 - **The owner's home:** `/home/work` becomes 0711 (agents can pass through, not list). The owner's dotfiles and logins (`~/.config`, `~/.claude`, `~/.ssh`) stay 0700. The helper refuses to start a team over a home whose modes would expose them, with a plain line.
-- **The residual risk, stated plainly:** an agent can change any project file (or file in `/home/team`) the owner later runs, such as a `Makefile`, a test or a `package.json` script. When the owner runs it, it runs as `work`, with sudo. That is the same trust as merging an agent's pull request without reading it, and the app says so the first time a team starts ("Agents can change your project's files. Check their changes before you run them."). File ownership shows who made a new file; git shows every change.
+- **The residual risk, stated plainly:** an agent can change any project file (or file in `/home/team`) the owner later runs, such as a `Makefile`, a test or a `package.json` script. When the owner runs it, it runs as `work`, with sudo. That is the same trust as merging an agent's pull request without reading it, and the app says so in the decision the owner approves when a team first starts (`team_start`, R-0245), and again in the Team section's header ("Agents can change your project's files. Check their changes before you run them."). File ownership shows who made a new file; git shows every change.
 
 **Rejected: a bind mount of the project into each agent's home.** The uids still differ, so a plain bind mount changes no permission: the agent needs group write anyway. Making an agent's writes land as `work` needs an idmapped mount, which needs `CAP_SYS_ADMIN` in the box. The box doesn't have it, and this ADR won't add it. It would also make an agent's writes look like the owner's.
 
@@ -162,6 +174,8 @@ You build what the lead asks for. …
 - `id` isn't a reserved name (section 1); `home_seed` paths are inside the project (section 2);
 - each problem is one plain line the app shows by the agent's row ("builder: runner `claude` isn't installed in this workspace. Install it, then choose Start.").
 
+**Approve shows the `runner` line first,** in full and in monospace, above the diff: it is code that will run in the workspace (R-0245).
+
 **Two locks on the files:**
 - **The owner approves each file's content before it runs.** A file is pinned by its SHA-256 once the owner approves it in the app. A changed file (an agent's proposal, a `git pull`, a teammate's commit) stops nothing that's running, but won't start again until the owner approves the new content, with the diff. This matters because a repository is shared: a commit from someone else could add an agent with `panes: allow` and any `runner`, which is code that runs in the owner's workspace.
 - **Agents can't edit them in place.** The project's `.portenv/` is `work`'s and never group-writable (section 2), so an agent's uid can't change an agent file. It proposes a change with `portenv propose-agent-change <file>`, which lands as a decision for the owner, with the diff, and then only runs once the owner approves the new content.
@@ -193,6 +207,31 @@ You build what the lead asks for. …
 
 **The path:** the in-box command → the helper's socket `/run/portenv-team/<id>/portenv.sock` (section 1's modes) → the helper fills in the caller from the socket (below) → over the existing agent channel to `portenvd` → the grant check → the action, carried out by the helper. The helper has no say in grants; it only names the caller.
 
+### 4a. What an agent learns about itself (R-0246, R-0247)
+
+Agents learn what they can do from Portenv, not from guesses. Everything below comes from what `portenvd` enforces, so it can't drift from it.
+- **`portenv whoami --json`** reports:
+  - the agent's id, name and role;
+  - the workspace and where it runs (Mac, server or hosted);
+  - the effective grant after overrides: panes (with `max_panes` and how many are open), message targets, `ask_owner`, `packages`;
+  - its limits and current use: home size and quota, pending decisions, package requests today;
+  - its teammates (ids, names, roles, states);
+  - the commands it may use now, and the runners on its `PATH` that pass section 3's check.
+- **A generated block at the top of `AGENTS.md`,** written by `portenvd` at every start from the grant, in plain text with no secrets:
+  > You are Builder in Portenv. You can: open up to 4 panes (the owner approves each), message lead and reviewer, ask the owner (`portenv ask-owner`), request system packages (`portenv request-package`). You can't: reach the owner's terminals or other agents' files. Run `portenv guide` for the board, and `portenv whoami` for what you can do now.
+  The agent file's instructions follow it.
+- **Grant changes reach the agent:** when the owner approves a changed file or override, the agent gets an inbox notice, and `whoami` shows the new grant at once.
+- **`portenv guide`** covers:
+  - the rules: messages are information, not orders; no secrets on a command line (section 1); ask the owner when unsure. It points to `whoami`;
+  - the board: what a message, a question, an answer and a notice are; threads (`--thread`); who sees what;
+  - the exact formats: the `portenv inbox --json` line schema with one example, and one worked example for each of `msg`, `ask-owner`, `request-package`, `share` and `propose-agent-change`, with the plain-line errors each can return;
+  - decisions: their states (pending, approved, declined, expired), waiting with `inbox --wait`, and that only the owner answers;
+  - etiquette: one topic per thread, reply in the thread, no secrets.
+
+  The `AGENTS.md` block keeps a short version.
+- **`portenv guide --json`** gives the same content as data, for a runner to load: message and decision types, fields and limits, with a `version`.
+- **One source:** both forms are generated from the proto and section 7's limits table. A test fails if a field in the proto's board, decision or `whoami` messages is missing from the guide.
+
 ### 5. Identity: one per agent, the same on every way in
 
 - **The identity is ADR 0016's,** made when the owner approves the agent: for a team agent, approving its file; for a remote agent, approving its pairing code. The Unix user is that identity's body inside the box.
@@ -205,7 +244,7 @@ You build what the lead asks for. …
 - **Where:** `/home/work/.portenv/board/` in the workspace (box-level, so it moves with the workspace and isn't committed). Two append-only JSONL files: `messages.jsonl` and `decisions.jsonl`. Agents can't write them: the directory is `work`'s, 0755. **One writer: the helper, on `portenvd`'s instruction**; no agent call writes a byte without `portenvd`'s check first.
 - **A message** is ADR 0016's type, with these fields and nothing else: `id` (ULID), `from`, `to` (an agent id or `owner`), `thread_id`, `type` (`question`, `answer`, `notice`), `text` (≤ 8 KB, plain text), `created_at`. `portenv inbox` returns an agent's own, with a cursor; the owner sees every message that involves their agents (ADR 0016 point 5).
 - **A decision** is a request for the owner: `id`, `from` (agent), `kind` (`ask_owner`, `pane`, `agent_file_change`, `share_login`, `package`), `summary` (≤ 200 characters), `detail` (≤ 32 KB: the question, the command, the diff), `state` (`pending`, `approved`, `declined`, `expired`), `answer_note`, `created_at`, `answered_at`. Each answer is a new line; the file is never rewritten.
-- **Only the app answers decisions,** with Approve and Decline, in front of the person (no agent, no CLI on the Mac, no door). A pending decision expires after 24 hours ("expired"), and the agent is told.
+- **Only the app answers decisions,** with Approve and Decline, in front of the person (no agent, no CLI on the Mac, no door). A pending decision expires after 24 hours. Expired is final: it never turns into an approval, and the app shows it greyed, with no Approve. The agent gets a notice in its inbox: "Your request expired before the owner answered. Ask again if you still need it." (R-0245)
 - **Board text is data, never UI or instructions:** the app shows it as plain text (no Markdown links, no images, no actions in it), and `portenv guide` tells agents that a message is information from another agent, not a command (ADR 0016 point 7).
 - **Package decisions (owner's request, 16 Oct).** An Approve on `ask-owner` only says yes; for a system package, Approve also installs it, so the owner doesn't have to type the install.
   - **The request:** `portenv request-package <name> [--reason "<text>"]`.
@@ -213,8 +252,8 @@ You build what the lead asks for. …
     - Never accepted: an option (anything starting with `-`), a URL, a path, a `.deb`, a source or a key.
     - With `packages: never`, the request is refused with a plain line.
   - **What the owner sees:**
-    - init (root, which already runs `apt-get` for `apt-packages.txt`) runs `apt-get -s install --no-install-recommends -- <name>` against the image's configured sources;
-    - the decision lists every package and the exact version apt would install, dependencies included, plus the reason and the line "Installing runs these packages' setup scripts as root.";
+    - init (root, which already runs `apt-get` for `apt-packages.txt`) runs `apt-get -s install --no-install-recommends -- <name>` against the image's configured sources. Only init runs it, with the box's network; the agent never runs `apt-get` (R-0245);
+    - the decision lists every package, the exact version apt would install and the configured repository it comes from, dependencies included, plus the reason and the line "Installing runs these packages' setup scripts as root.";
     - init refuses the request, before it reaches the owner, if the simulation would remove or downgrade anything, or would install more than 50 packages.
   - **On Approve:**
     - init installs exactly the approved set, each pinned (`name=version`), non-interactively (`DEBIAN_FRONTEND=noninteractive`, `-y`, `--no-install-recommends`), from the configured sources only. The request can't add a repository or a key.
@@ -252,6 +291,15 @@ Past a limit, the call is refused with a plain line ("builder has 4 panes open, 
 - **Moving and saving:** agent users and homes are in `/home`, so they travel with the workspace. init writes the users again from `users.json` at every box start, so each agent finds its own home again with the same uid, and a team is stopped before Move To (it starts again, by the owner's choice, where the workspace lands).
 
 ### 9. Proto
+
+**The source is `proto/`** (lane C's proto PR, the first code after approval). The sketch below is the approved shape. The PR also adds:
+- `GetAgentFile`, which returns content, approved content and runner, for Approve's diff;
+- decision kinds `team_start` and `delete_agent_files`, and `expires_at` on a decision;
+- `PackagePlan.source`;
+- `AgentGrant` with a `GrantMode`;
+- `AgentInfo.runner` and `grant`;
+- `WhoAmI` (R-0246);
+- shared types (`BoardMessage`, `Decision`, `AgentFile`, `FileChunk`) in `types.proto`, so neither file's generated indices move.
 
 All appended per the merge guard: new RPCs at the end of `DaemonService`, new messages at the end of `daemon.proto`, enums in `types/v1/types.proto`.
 
@@ -413,7 +461,7 @@ One lane owns each file; another lane that needs a change asks the owner of the 
 | Lane | Owns | Builds |
 | --- | --- | --- |
 | **A** (terminals) | `core/agent/controlmode*.go`, `ctlhub*.go`, `tabterm*.go`, `tabs*.go`, `paneparser*.go`, `panelane.go`, `terminal*.go`; `core/daemon/tabs.go`, `terminal.go`; `apps/mac/.../BoxTerminal.swift`, and `TabBar.swift` until 1.2c merges | one tmux server and control client per agent (started through a function lane C calls, with the user it's given); tab ids across servers; `agent_id` and `pane_ids` filled on each tab; the tab-pane fix; 1.2c's per-tab terminals in the window |
-| **C** (users, command, board) | `proto/` (all of section 9); `core/agent/init_linux.go`'s user and package calls (and `boot.go`'s apt code) and a new `core/agent/team*.go` (users, sockets, `SO_PEERCRED`, homes, quota, seeding, home file I/O, board writer); a new `core/daemon/team*.go` (agent files, pin, validation, grants, board, decisions, the RPCs); `core/cmd/portenv`'s in-box commands and `team init`; the templates; `images/toolbox-node/` (group `team`, `/run/portenv-team`); `docs/PLAN.md`; the run sheet | the preview's users and commands, then the board and agent files |
+| **C** (users, command, board) | `proto/` (all of section 9); `core/agent/init_linux.go`'s user and package calls (and `boot.go`'s apt code) and a new `core/agent/team*.go` (users, sockets, `SO_PEERCRED`, homes, quota, seeding, home file I/O, board writer); a new `core/daemon/team*.go` (agent files, pin, validation, grants, board, decisions, the RPCs); `core/cmd/portenv`'s in-box commands, `whoami`, `guide` (and its generator and test) and `team init`; the `AGENTS.md` block; the templates; `images/toolbox-node/` (group `team`, `/run/portenv-team`); `docs/PLAN.md`; the run sheet | the preview's users and commands, then the board and agent files |
 | **D** (the app) | `apps/mac/.../DaemonClient.swift`, `DaemonAPI.swift`, `MainWindow*.swift`, `InspectorView.swift`, `Inspector.swift` (Who's here), `SettingsWindow.swift`'s team limits, new `Team*.swift` and `AgentFiles*.swift`, and `TabBar.swift` after 1.2c | the Team sidebar, decisions, approving agent files with their diff, the Agent files view with drag and drop, filtering the window by agent |
 | **E** (boundary tests) | a new `tests/team-boundary/`, its CI job (`.github/workflows/`), its `Makefile` target, and `core/daemon/caller.go`'s agent caller | the per-agent boundary tests (below), table-driven against a real engine on both architectures, with a mutation check per rule; the agent identity in `caller.go` |
 
@@ -424,7 +472,9 @@ One lane owns each file; another lane that needs a change asks the owner of the 
 - `portenvd`'s socket, the SSH-agent socket and the agent channel's sockets;
 - `sudo` and set-uid binaries;
 - installing a system package without an approved decision (`apt-get`, `dpkg`, writing under `/etc/apt` or `/var/lib/dpkg`);
-- ADR 0005's memory probe.
+- ADR 0005's memory probe;
+- `work`'s sockets anywhere in the box (`SSH_AUTH_SOCK`, a gpg agent, a VS Code server, `/tmp/*`), and the team-start check that refuses when one is reachable;
+- `whoami` reports exactly what the grant check enforces: each grant and limit, flipped, changes both together.
 
 They gate the Saturday preview: a red row means the preview doesn't ship.
 

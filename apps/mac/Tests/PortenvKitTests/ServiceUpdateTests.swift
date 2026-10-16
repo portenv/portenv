@@ -15,6 +15,10 @@ private final class FakeService: ServiceBuild, ServiceRestarter, @unchecked Send
     var gentleBringsUp: String?
     var hardBringsUp: String?
     private(set) var steps: [String] = []
+    /// When set, Relaunch waits until the test lets it go (to look at the
+    /// app mid-restart, never racing it).
+    var held = false
+    func letGo() { lock.withLock { held = false } }
     init(build: String, executable: String?) {
         self.build = build
         self.executable = executable
@@ -23,6 +27,7 @@ private final class FakeService: ServiceBuild, ServiceRestarter, @unchecked Send
         lock.withLock { RunningService(buildID: build, executable: executable) }
     }
     func gentle() async {
+        while lock.withLock({ held }) { try? await Task.sleep(for: .milliseconds(1)) }
         lock.withLock { steps.append("relaunch"); if let b = gentleBringsUp { build = b } }
     }
     func hard() async {
@@ -99,14 +104,14 @@ struct ServiceUpdateTests {
         let s = FakeService(build: "build-1", executable: inside)
         let u = update(s)
         s.gentleBringsUp = "build-2"
-        var seen = false
+        s.held = true // the restart waits, so the line is looked at mid-restart (it once finished between looks)
         let task = Task { await u.ensureCurrent() }
-        for _ in 0 ..< 200 where !seen {
-            seen = u.updating
-            await Task.yield()
-        }
-        _ = await task.value
+        for _ in 0 ..< 2000 where !u.updating { try? await Task.sleep(for: .milliseconds(1)) }
+        let seen = u.updating
+        s.letGo()
+        #expect(await task.value == .restarted)
         #expect(seen)
+        #expect(!u.updating)
         #expect(ServiceUpdate.updatingText == "Updating Portenv’s background service…")
     }
 

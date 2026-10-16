@@ -134,8 +134,8 @@ struct BlocksAccessibilityTests {
         #expect(elements(window).contains { $0.label == "Top of block" })
         let before = scrolled(window)
         #expect(press("Top of block", in: window) == true)
-        // Up to 3 s for the rows to settle on a slow runner.
-        for _ in 0 ..< 100 where elements(window).contains(where: { $0.label == "Top of block" }) {
+        // Up to 5 s for the rows to settle on a slow runner.
+        for _ in 0 ..< 170 where elements(window).contains(where: { $0.label == "Top of block" }) {
             try? await Task.sleep(for: .milliseconds(30))
         }
         let after = scrolled(window)

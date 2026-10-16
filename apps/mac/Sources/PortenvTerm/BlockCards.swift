@@ -212,6 +212,8 @@ public struct BlocksView: View {
     /// Where VoiceOver's cursor is: a click on a header moves it there
     /// (R-0244).
     @AccessibilityFocusState private var spoken: Int?
+    /// "↑ Top of block" still going to the top.
+    @State private var jumping: Task<Void, Never>?
     @FocusState private var findFocused: Bool
     /// Renders and tests: an output row to start scrolled to.
     private let startAt: Int?
@@ -303,15 +305,20 @@ public struct BlocksView: View {
     static let space = "blocks"
     static func headID(_ id: Int) -> String { "head-\(id)" }
 
-    /// "↑ Top of block": to the block's header, not animated, and again over
-    /// the next few frames while the lazy rows above it take their real
-    /// heights, so a jump over thousands of rows doesn't land short, even on
-    /// a slow Mac (R-0239).
+    /// "↑ Top of block": to the block's header, not animated, and again
+    /// until the header has really reached the top (it unpins), for up to
+    /// 3 s: the lazy rows above take their real heights only as they're
+    /// laid out, so one jump over thousands of rows lands short, and how
+    /// many it takes depends on the Mac's speed (R-0239).
     func top(_ block: CommandBlock, _ proxy: ScrollViewProxy) {
         let id = Self.headID(block.id)
-        proxy.scrollTo(id, anchor: .top)
-        for delay in [0.0, 0.05, 0.15, 0.4] {
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { proxy.scrollTo(id, anchor: .top) }
+        jumping?.cancel()
+        jumping = Task { @MainActor in
+            for _ in 0 ..< 30 {
+                proxy.scrollTo(id, anchor: .top)
+                try? await Task.sleep(for: .milliseconds(100))
+                if Task.isCancelled || !underTop.contains(block.id) { return }
+            }
         }
     }
 

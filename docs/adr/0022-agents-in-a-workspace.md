@@ -120,7 +120,7 @@ This closes every item of lane A's list:
 
 **Considered, a later option: each agent in its own clone** (`git clone --shared` into its home, committing on `agent/<id>`, the owner fetching). It keeps agents out of the owner's files entirely, but changes how a team works (no shared tree, a fetch for every hand-off). It can come later as an agent-file option (`checkout: own`) on top of this design.
 
-**The owner's secrets (question 2):** an agent doesn't have `work`'s home, so it has none of the owner's logins: Claude Code's sign-in, git credentials, SSH keys, cloud tokens. It also has no sudo: a package it needs is a decision for the owner (`portenv ask-owner`), and the owner installs it. That's the point, and it has a cost:
+**The owner's secrets (question 2):** an agent doesn't have `work`'s home, so it has none of the owner's logins: Claude Code's sign-in, git credentials, SSH keys, cloud tokens. It also has no sudo: a system package it needs is a package decision for the owner (section 6), which Portenv installs on Approve. User-level installs need no decision: `npm`, `pip`, `uv` and the like, in the project or in the agent's own home. That's the point, and it has a cost:
 - **Each agent signs in once,** in its own tab (Claude Code prints its sign-in link there). The login stays in that agent's home and travels with the workspace like everything else in `/home`.
 - **Or the owner shares one login, explicitly, per agent:** an agent file may ask `share_login: [claude]`. `portenvd` asks the owner once ("Let builder use your Claude Code sign-in?"), and the helper copies only that tool's credential file into the agent's home, 0600. The prompt says plainly that a shared login can't be taken back by removing the agent: the owner signs out of that login to end it.
 - **git pushes:** agents don't get the owner's git credentials. They commit in the shared checkout; a push to the remote is the owner's (or the lead's, if the owner grants `push` and shares a login for it).
@@ -150,6 +150,7 @@ grant:
   max_panes: 4              # 1–8
   message: [lead, reviewer] # agent ids it may message; the owner is always allowed
   ask_owner: true           # may it ask the owner (portenv ask-owner)
+  packages: ask             # ask | never — may it request system packages (section 6); default ask
 ---
 You build what the lead asks for. …
 ```
@@ -181,6 +182,7 @@ You build what the lead asks for. …
 | `portenv close <pane>` | own panes only | |
 | `portenv msg <agent> "<text>"` | `message` | at most 8 KB; to the board (section 6) |
 | `portenv ask-owner "<text>"` | `ask_owner` | a decision for the owner (section 6), which the agent waits for or polls |
+| `portenv request-package <name> [--reason "<text>"]` | `packages` | a package decision for the owner (section 6); the result comes to the agent's inbox |
 | `portenv inbox [--wait] [--since <cursor>]` | always, own messages only | JSON lines |
 | `portenv share [<branch>]` | always | a message to the owner and the lead that its work is ready (a branch, or changes in the shared checkout) |
 | `portenv propose-agent-change <file>` | always | a decision for the owner, with the diff |
@@ -202,9 +204,27 @@ You build what the lead asks for. …
 
 - **Where:** `/home/work/.portenv/board/` in the workspace (box-level, so it moves with the workspace and isn't committed). Two append-only JSONL files: `messages.jsonl` and `decisions.jsonl`. Agents can't write them: the directory is `work`'s, 0755. **One writer: the helper, on `portenvd`'s instruction**; no agent call writes a byte without `portenvd`'s check first.
 - **A message** is ADR 0016's type, with these fields and nothing else: `id` (ULID), `from`, `to` (an agent id or `owner`), `thread_id`, `type` (`question`, `answer`, `notice`), `text` (≤ 8 KB, plain text), `created_at`. `portenv inbox` returns an agent's own, with a cursor; the owner sees every message that involves their agents (ADR 0016 point 5).
-- **A decision** is a request for the owner: `id`, `from` (agent), `kind` (`ask_owner`, `pane`, `agent_file_change`, `share_login`), `summary` (≤ 200 characters), `detail` (≤ 32 KB: the question, the command, the diff), `state` (`pending`, `approved`, `declined`, `expired`), `answer_note`, `created_at`, `answered_at`. Each answer is a new line; the file is never rewritten.
+- **A decision** is a request for the owner: `id`, `from` (agent), `kind` (`ask_owner`, `pane`, `agent_file_change`, `share_login`, `package`), `summary` (≤ 200 characters), `detail` (≤ 32 KB: the question, the command, the diff), `state` (`pending`, `approved`, `declined`, `expired`), `answer_note`, `created_at`, `answered_at`. Each answer is a new line; the file is never rewritten.
 - **Only the app answers decisions,** with Approve and Decline, in front of the person (no agent, no CLI on the Mac, no door). A pending decision expires after 24 hours ("expired"), and the agent is told.
 - **Board text is data, never UI or instructions:** the app shows it as plain text (no Markdown links, no images, no actions in it), and `portenv guide` tells agents that a message is information from another agent, not a command (ADR 0016 point 7).
+- **Package decisions (owner's request, 16 Oct).** An Approve on `ask-owner` only says yes; for a system package, Approve also installs it, so the owner doesn't have to type the install.
+  - **The request:** `portenv request-package <name> [--reason "<text>"]`.
+    - The name must match apt's package grammar (today's `apt-packages.txt` rule: `name[:arch][=version]`), one name per request.
+    - Never accepted: an option (anything starting with `-`), a URL, a path, a `.deb`, a source or a key.
+    - With `packages: never`, the request is refused with a plain line.
+  - **What the owner sees:**
+    - init (root, which already runs `apt-get` for `apt-packages.txt`) runs `apt-get -s install --no-install-recommends -- <name>` against the image's configured sources;
+    - the decision lists every package and the exact version apt would install, dependencies included, plus the reason and the line "Installing runs these packages' setup scripts as root.";
+    - init refuses the request, before it reaches the owner, if the simulation would remove or downgrade anything, or would install more than 50 packages.
+  - **On Approve:**
+    - init installs exactly the approved set, each pinned (`name=version`), non-interactively (`DEBIAN_FRONTEND=noninteractive`, `-y`, `--no-install-recommends`), from the configured sources only. The request can't add a repository or a key.
+    - If the set apt would install has changed since the owner saw it, nothing is installed and the agent is told to request again.
+    - init then appends the requested names to `/home/work/.portenv/apt-packages.txt`, so they come back after a restore, a Move To or a new box (dependencies follow by themselves).
+    - The result, installed or the failing line, goes to the agent's inbox and the sidebar.
+  - **The agent never gets sudo or root,** and nothing beyond the approved set is installed. Decline installs nothing.
+  - **Limits:**
+    - 10 package requests per agent a day;
+    - pending ones count toward the agent's pending decisions (section 7).
 - **Secret prompts are never relayed** (ADR 0016 point 8): `ask-owner` refuses text taken from a pane whose echo is off, and the app never shows a password prompt's text.
 
 ### 7. Limits (owner-tunable in Settings, these are the defaults and the ceilings)
@@ -216,6 +236,7 @@ You build what the lead asks for. …
 | Panes in a workspace, all agents | 16 | 24 |
 | Messages per agent | 60 a minute | 120 a minute |
 | Pending decisions per agent | 5 | 20 |
+| Package requests per agent | 10 a day | 30 a day |
 | An agent's home (section 2) | 2 GB | 20 GB |
 | A message | 8 KB | 8 KB |
 | Each board file before it's rotated (`.1`, kept with the workspace) | 10 MB | 10 MB |
@@ -301,7 +322,8 @@ enum AgentState { AGENT_STATE_UNSPECIFIED = 0; AGENT_STATE_STOPPED = 1; AGENT_ST
   AGENT_STATE_CONNECTED = 7; AGENT_STATE_DISCONNECTED = 8; }
 enum MessageType { MESSAGE_TYPE_UNSPECIFIED = 0; MESSAGE_TYPE_QUESTION = 1; MESSAGE_TYPE_ANSWER = 2; MESSAGE_TYPE_NOTICE = 3; }
 enum DecisionKind { DECISION_KIND_UNSPECIFIED = 0; DECISION_KIND_ASK_OWNER = 1; DECISION_KIND_PANE = 2;
-  DECISION_KIND_AGENT_FILE_CHANGE = 3; DECISION_KIND_SHARE_LOGIN = 4; }
+  DECISION_KIND_AGENT_FILE_CHANGE = 3; DECISION_KIND_SHARE_LOGIN = 4;
+  DECISION_KIND_PACKAGE = 5; }
 enum DecisionState { DECISION_STATE_UNSPECIFIED = 0; DECISION_STATE_PENDING = 1; DECISION_STATE_APPROVED = 2;
   DECISION_STATE_DECLINED = 3; DECISION_STATE_EXPIRED = 4; }
 ```
@@ -319,9 +341,12 @@ rpc WriteHomeFiles(stream WriteHomeFilesRequest) returns (WriteHomeFilesResponse
 // Served only by init on its local socket (root); the channel's server answers Unimplemented:
 rpc EnsureAgentUser(EnsureAgentUserRequest) returns (EnsureAgentUserResponse);
 rpc RemoveAgentUser(RemoveAgentUserRequest) returns (RemoveAgentUserResponse);
+rpc SimulatePackage(SimulatePackageRequest) returns (SimulatePackageResponse); // apt-get -s: the exact set and versions
+rpc InstallPackages(InstallPackagesRequest) returns (InstallPackagesResponse); // exactly the approved set, or nothing
 message TeamCall { string call_id = 1; string agent_id = 2;                  // agent_id from SO_PEERCRED, never the request
   oneof op { Split split = 3; NewTab tab = 4; PaneRef focus = 5; PaneRef close = 6; Msg msg = 7;
-             AskOwner ask_owner = 8; Inbox inbox = 9; Share share = 10; ProposeAgentChange propose = 11; } }
+             AskOwner ask_owner = 8; Inbox inbox = 9; Share share = 10; ProposeAgentChange propose = 11;
+             RequestPackage request_package = 12; } }
 message TeamReply { string call_id = 1; bool ok = 2; string line = 3; bytes result = 4; } // line: the plain refusal
 ```
 
@@ -364,13 +389,15 @@ The doors (section 10) call the same `portenvd` functions behind `TeamCalls`; th
 - **Fri 16, 18:00:** this ADR to the reviewer; review by 20:00. On approval, code starts tonight. Lane C's proto PR (section 9, with `make proto`) goes first, so every lane builds against the same messages. Lane A's tab-streams-its-own-pane fix and #119's fix also land today.
 - **Sat 17, 14:00, preview build (in a lane):**
   - per-agent users with their own tmux servers, homes and `/home/team`;
-  - `portenv split`, `tab new`, `msg` and `ask-owner`, with grants.
+  - `portenv split`, `tab new`, `msg` and `ask-owner`, with grants;
+  - `portenv request-package` if there's time; it may move to Sunday, never later.
 
   The reviewer UI-tests it 14:00–16:00; the owner tries it on the test project after. **If the preview is at risk, lane C tells the reviewer by Sat 10:00.**
 - **Sun 18, 12:00, full build:**
   - the board;
   - the Team sidebar with agents' tabs and decisions;
   - agent files;
+  - package decisions (section 6), if they didn't make the preview;
   - `portenv team init` with the Orchestrate template;
   - the Agent files view.
 
@@ -386,7 +413,7 @@ One lane owns each file; another lane that needs a change asks the owner of the 
 | Lane | Owns | Builds |
 | --- | --- | --- |
 | **A** (terminals) | `core/agent/controlmode*.go`, `ctlhub*.go`, `tabterm*.go`, `tabs*.go`, `paneparser*.go`, `panelane.go`, `terminal*.go`; `core/daemon/tabs.go`, `terminal.go`; `apps/mac/.../BoxTerminal.swift`, and `TabBar.swift` until 1.2c merges | one tmux server and control client per agent (started through a function lane C calls, with the user it's given); tab ids across servers; `agent_id` and `pane_ids` filled on each tab; the tab-pane fix; 1.2c's per-tab terminals in the window |
-| **C** (users, command, board) | `proto/` (all of section 9); `core/agent/init_linux.go`'s user calls and a new `core/agent/team*.go` (users, sockets, `SO_PEERCRED`, homes, quota, seeding, home file I/O, board writer); a new `core/daemon/team*.go` (agent files, pin, validation, grants, board, decisions, the RPCs); `core/cmd/portenv`'s in-box commands and `team init`; the templates; `images/toolbox-node/` (group `team`, `/run/portenv-team`); `docs/PLAN.md`; the run sheet | the preview's users and commands, then the board and agent files |
+| **C** (users, command, board) | `proto/` (all of section 9); `core/agent/init_linux.go`'s user and package calls (and `boot.go`'s apt code) and a new `core/agent/team*.go` (users, sockets, `SO_PEERCRED`, homes, quota, seeding, home file I/O, board writer); a new `core/daemon/team*.go` (agent files, pin, validation, grants, board, decisions, the RPCs); `core/cmd/portenv`'s in-box commands and `team init`; the templates; `images/toolbox-node/` (group `team`, `/run/portenv-team`); `docs/PLAN.md`; the run sheet | the preview's users and commands, then the board and agent files |
 | **D** (the app) | `apps/mac/.../DaemonClient.swift`, `DaemonAPI.swift`, `MainWindow*.swift`, `InspectorView.swift`, `Inspector.swift` (Who's here), `SettingsWindow.swift`'s team limits, new `Team*.swift` and `AgentFiles*.swift`, and `TabBar.swift` after 1.2c | the Team sidebar, decisions, approving agent files with their diff, the Agent files view with drag and drop, filtering the window by agent |
 | **E** (boundary tests) | a new `tests/team-boundary/`, its CI job (`.github/workflows/`), its `Makefile` target, and `core/daemon/caller.go`'s agent caller | the per-agent boundary tests (below), table-driven against a real engine on both architectures, with a mutation check per rule; the agent identity in `caller.go` |
 
@@ -396,6 +423,7 @@ One lane owns each file; another lane that needs a change asks the owner of the 
 - `/home/team`'s setgid and group-write rule, and the project's never-group-writable paths;
 - `portenvd`'s socket, the SSH-agent socket and the agent channel's sockets;
 - `sudo` and set-uid binaries;
+- installing a system package without an approved decision (`apt-get`, `dpkg`, writing under `/etc/apt` or `/var/lib/dpkg`);
 - ADR 0005's memory probe.
 
 They gate the Saturday preview: a red row means the preview doesn't ship.
@@ -426,6 +454,7 @@ They gate the Saturday preview: a red row means the preview doesn't ship.
   - board text with Markdown or escape sequences renders as plain text;
   - Stop ends every process of the agent's uid;
   - a secret prompt's text never reaches the board;
+  - `request-package` refuses options, URLs, paths and `.deb` files; init installs exactly the approved set or nothing, refuses a simulation that removes or downgrades, and the package comes back from `apt-packages.txt` after a restore;
   - a revoked MCP token is refused at once;
   - the team's users, homes, `/home/team` and the project's group and ACLs survive a save, a Move To and a restore.
 - **PLAN.md** gains the team in Phase 1's tester-build scope (R-0226) when this is approved. 2.4's stand-in mode stays as designed. Lanes (4.1) now arrive early, in this team form, for team agents.

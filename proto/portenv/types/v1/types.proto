@@ -137,6 +137,12 @@ message Tab {
   string command = 5;
   // When that command started.
   google.protobuf.Timestamp running_since = 6;
+  // The agent whose tmux server the tab is on (ADR 0022 §1); empty for the
+  // owner's tabs. Tab ids stay unique across servers: an agent's carry its
+  // id as a prefix.
+  string agent_id = 7;
+  // The tab's panes (tmux pane IDs, for example "%4"), in tmux's order.
+  repeated string pane_ids = 8;
 }
 
 // How a tab's terminal ended (ADR 0020): shared by portenvd's TabTerminal
@@ -170,4 +176,144 @@ enum CheckState {
   CHECK_STATE_FAILED = 2;
   // Recorded, never a failure (KVM, an existing install).
   CHECK_STATE_INFO = 3;
+}
+
+// ADR 0022: the agent team. Shared by daemon.proto (the app) and agent.proto
+// (the helper), and kept here so adding them moves none of either file's
+// generated type indices.
+
+// Where an agent stands, for the Team sidebar (ADR 0022 §8).
+enum AgentState {
+  AGENT_STATE_UNSPECIFIED = 0;
+  AGENT_STATE_STOPPED = 1;
+  AGENT_STATE_STARTING = 2;
+  AGENT_STATE_RUNNING = 3;
+  // A prompt on screen and nothing happening (ADR 0017's waiting detector).
+  AGENT_STATE_IDLE = 4;
+  // A pending decision from it, or it's waiting at a question.
+  AGENT_STATE_NEEDS_YOU = 5;
+  // Its agent file fails validation; AgentInfo.problem says why.
+  AGENT_STATE_INVALID = 6;
+  // Remote agents only (§10), after the owner's run.
+  AGENT_STATE_CONNECTED = 7;
+  AGENT_STATE_DISCONNECTED = 8;
+}
+
+// A board message's type (ADR 0022 §6).
+enum MessageType {
+  MESSAGE_TYPE_UNSPECIFIED = 0;
+  MESSAGE_TYPE_QUESTION = 1;
+  MESSAGE_TYPE_ANSWER = 2;
+  // Information, from an agent or from Portenv (a grant change, a package
+  // installed, a decision answered or expired).
+  MESSAGE_TYPE_NOTICE = 3;
+}
+
+// What a decision asks the owner for (ADR 0022 §6).
+enum DecisionKind {
+  DECISION_KIND_UNSPECIFIED = 0;
+  // portenv ask-owner: Approve only says yes.
+  DECISION_KIND_ASK_OWNER = 1;
+  // portenv split or tab new under panes: ask.
+  DECISION_KIND_PANE = 2;
+  // portenv propose-agent-change, with the diff.
+  DECISION_KIND_AGENT_FILE_CHANGE = 3;
+  // An agent file's share_login (§2).
+  DECISION_KIND_SHARE_LOGIN = 4;
+  // portenv request-package: Approve installs exactly the listed set.
+  DECISION_KIND_PACKAGE = 5;
+  // The first start of a team, with §2's residual-risk sentence (R-0245).
+  DECISION_KIND_TEAM_START = 6;
+  // Remove and delete an agent's files, with the size (§1).
+  DECISION_KIND_DELETE_AGENT_FILES = 7;
+}
+
+// Where a decision stands. Expired is final: an expired decision never
+// becomes approved; the agent is told "expired, ask again" (R-0245).
+enum DecisionState {
+  DECISION_STATE_UNSPECIFIED = 0;
+  DECISION_STATE_PENDING = 1;
+  DECISION_STATE_APPROVED = 2;
+  DECISION_STATE_DECLINED = 3;
+  DECISION_STATE_EXPIRED = 4;
+}
+
+// An agent file's grant for panes and packages (ADR 0022 §3).
+enum GrantMode {
+  GRANT_MODE_UNSPECIFIED = 0;
+  // Each use is a decision for the owner.
+  GRANT_MODE_ASK = 1;
+  // At once. Not valid for packages.
+  GRANT_MODE_ALLOW = 2;
+  // Refused with a plain line.
+  GRANT_MODE_NEVER = 3;
+}
+
+// One line of the board's messages.jsonl (ADR 0022 §6, ADR 0016's message).
+// Text is plain text: never Markdown, UI or instructions.
+message BoardMessage {
+  // A ULID.
+  string id = 1;
+  // An agent id, or "owner", or "portenv" for Portenv's own notices.
+  string from = 2;
+  // An agent id, or "owner".
+  string to = 3;
+  string thread_id = 4;
+  MessageType type = 5;
+  // At most 8 KB.
+  string text = 6;
+  google.protobuf.Timestamp created_at = 7;
+}
+
+// A request for the owner (ADR 0022 §6). Only the app answers it.
+message Decision {
+  // A ULID.
+  string id = 1;
+  // The agent that asked.
+  string from = 2;
+  DecisionKind kind = 3;
+  // At most 200 characters.
+  string summary = 4;
+  // At most 32 KB: the question, the command, the diff, the package list.
+  string detail = 5;
+  DecisionState state = 6;
+  string answer_note = 7;
+  google.protobuf.Timestamp created_at = 8;
+  google.protobuf.Timestamp answered_at = 9;
+  // For DECISION_KIND_PACKAGE: exactly what Approve installs.
+  repeated PackagePlan packages = 10;
+  // When a pending decision expires (24 hours after created_at).
+  google.protobuf.Timestamp expires_at = 11;
+}
+
+// One package apt-get -s would install, run by init (root), never by the
+// agent (ADR 0022 §6, R-0245 item 5).
+message PackagePlan {
+  string name = 1;
+  // The exact version; Approve installs name=version.
+  string version = 2;
+  // The configured repository it comes from, as apt names it.
+  string source = 3;
+  // Pulled in by the requested package.
+  bool dependency = 4;
+}
+
+// An agent's effective grant, after personal overrides (ADR 0022 §3).
+message AgentGrant {
+  GrantMode panes = 1;
+  int32 max_panes = 2;
+  // Agent ids it may message; the owner is always allowed.
+  repeated string message = 3;
+  bool ask_owner = 4;
+  // ASK or NEVER.
+  GrantMode packages = 5;
+}
+
+// A file or folder in an agent's home, for the Agent files view (§2).
+message AgentFile {
+  // Relative to the agent's home.
+  string path = 1;
+  bool dir = 2;
+  int64 size = 3;
+  google.protobuf.Timestamp modified = 4;
 }

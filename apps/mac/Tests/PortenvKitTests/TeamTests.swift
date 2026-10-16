@@ -66,6 +66,32 @@ struct TeamTextTests {
     }
 }
 
+/// No agent's avatar can look like the owner's (R-0253): not with a person
+/// symbol, not with grey, not with the owner's initial in the owner's place.
+struct AvatarLookTests {
+    let anySymbol: (String) -> Bool = { !$0.isEmpty }
+
+    @Test func noAgentLooksLikeTheOwner() {
+        let attempts = ["", "person.fill", "person", "person.circle.fill", "person.crop.circle", "gray", "grey", "indigo",
+                        "hammer.fill", "R", "\u{1b}[31m"]
+        var team: [TeamAgent] = []
+        for (i, avatar) in attempts.enumerated() {
+            team.append(TeamAgent(id: "a\(i)", name: i % 2 == 0 ? "Reviewer" : "retnan", avatar: avatar, status: .idle))
+        }
+        for a in team {
+            let look = AvatarLook.agent(a, in: team, isSymbol: anySymbol)
+            #expect(look != AvatarLook.owner, "\(a.avatar)")
+            #expect(look.colour != AvatarLook.owner.colour, "\(a.avatar)")
+            #expect(!(look.symbol ?? "").hasPrefix("person"), "\(a.avatar)")
+            #expect(AgentColours.order.contains(look.colour))
+        }
+        // A real symbol that isn't a person is kept; a colour name is a colour.
+        #expect(AvatarLook.agent(team[8], in: team, isSymbol: anySymbol).symbol == "hammer.fill")
+        #expect(AvatarLook.agent(team[7], in: team, isSymbol: anySymbol) == AvatarLook(symbol: nil, initial: "R", colour: "indigo"))
+        #expect(AvatarLook.owner.symbol == "person.fill" && AvatarLook.owner.initial.isEmpty)
+    }
+}
+
 struct TeamStateTests {
     func at(_ s: Double) -> Date { Date(timeIntervalSince1970: s) }
 

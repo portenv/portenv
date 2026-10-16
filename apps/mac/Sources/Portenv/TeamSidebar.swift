@@ -34,7 +34,7 @@ struct TeamSidebar: View {
                 YouRow(tabs: tabs.filter { $0.agentID.isEmpty }.count, compact: compact)
                     .tag(TeamSelection.you)
                 ForEach(state.agents) { a in
-                    AgentRow(agent: a, colour: AgentColours.name(for: a, in: state.agents), compact: compact)
+                    AgentRow(agent: a, team: state.agents, compact: compact)
                         .tag(TeamSelection.agent(a.id))
                     if selection == .agent(a.id), !compact {
                         ForEach(tabs.filter { $0.agentID == a.id }) { t in
@@ -52,20 +52,31 @@ struct TeamSidebar: View {
     }
 }
 
-/// An avatar: the agent's colour with its initial, or its SF Symbol.
+/// An avatar, as AvatarLook says: the owner's person on grey, or an
+/// agent's colour with its initial or SF Symbol.
 struct TeamAvatar: View {
-    let name: String
-    let avatar: String
-    let colour: String
+    let look: AvatarLook
     var size: CGFloat = 22
+
+    /// An agent's avatar in its team.
+    init(agent: TeamAgent, team: [TeamAgent], size: CGFloat = 22) {
+        look = AvatarLook.agent(agent, in: team) { NSImage(systemSymbolName: $0, accessibilityDescription: nil) != nil }
+        self.size = size
+    }
+
+    /// The owner's.
+    init(you size: CGFloat = 22) {
+        look = .owner
+        self.size = size
+    }
 
     var body: some View {
         ZStack {
-            Circle().fill(Self.colour(colour))
-            if !AgentColours.order.contains(avatar), NSImage(systemSymbolName: avatar, accessibilityDescription: nil) != nil {
-                Image(systemName: avatar).font(.system(size: size * 0.5, weight: .semibold))
+            Circle().fill(Self.colour(look.colour))
+            if let symbol = look.symbol {
+                Image(systemName: symbol).font(.system(size: size * 0.5, weight: .semibold))
             } else {
-                Text(String(name.prefix(1)).uppercased()).font(.system(size: size * 0.5, weight: .semibold))
+                Text(look.initial).font(.system(size: size * 0.5, weight: .semibold))
             }
         }
         .foregroundStyle(.white)
@@ -137,13 +148,13 @@ private struct StatusLabelStyle: LabelStyle {
 
 struct AgentRow: View {
     let agent: TeamAgent
-    let colour: String
+    let team: [TeamAgent]
     var compact = false
 
     var body: some View {
         Group {
             if compact {
-                TeamAvatar(name: agent.name, avatar: agent.avatar, colour: colour)
+                TeamAvatar(agent: agent, team: team)
                     .overlay(alignment: .bottomTrailing) { TeamStatus(status: agent.status, symbolOnly: true).offset(x: 4, y: 3) }
                     .help("\(agent.name), \(TeamText.word(agent.status))")
             } else {
@@ -153,7 +164,7 @@ struct AgentRow: View {
                             .foregroundStyle(SwiftUI.Color(nsColor: .systemRed))
                             .frame(width: 22, height: 22)
                     } else {
-                        TeamAvatar(name: agent.name, avatar: agent.avatar, colour: colour)
+                        TeamAvatar(agent: agent, team: team)
                     }
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 6) {
@@ -183,10 +194,10 @@ struct YouRow: View {
     var body: some View {
         Group {
             if compact {
-                TeamAvatar(name: NSFullUserName(), avatar: "", colour: "").help(TeamText.you)
+                TeamAvatar().help(TeamText.you)
             } else {
                 HStack(spacing: 8) {
-                    TeamAvatar(name: NSFullUserName(), avatar: "", colour: "")
+                    TeamAvatar()
                     Text(TeamText.you)
                     Spacer(minLength: 4)
                     Text(tabs == 1 ? "1 tab" : "\(tabs) tabs").font(.system(size: 11)).foregroundStyle(.secondary)
@@ -237,13 +248,17 @@ struct AgentTabRow: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            Text(verbatim: "\u{203A} \(tab.name)").lineLimit(1)
+            // The tab on screen: an accent dot and its name in bold
+            // (R-0253).
+            Circle().fill(tab.active ? SwiftUI.Color.accentColor : .clear).frame(width: 5, height: 5)
+            Text(verbatim: "\u{203A} \(tab.name)").lineLimit(1).fontWeight(tab.active ? .semibold : .regular)
             if !tab.command.isEmpty {
                 Text(verbatim: "\u{00B7} \(tab.command)").foregroundStyle(.secondary).lineLimit(1).truncationMode(.tail)
             }
         }
         .font(.system(size: 12))
-        .padding(.leading, 30)
+        .padding(.leading, 24)
         .accessibilityElement(children: .combine)
+        .accessibilityValue(tab.active ? "on screen" : "")
     }
 }

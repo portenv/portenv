@@ -22,9 +22,10 @@ enum TeamRenders {
         s.apply(.decision(TeamDecision(id: "d1", from: "reviewer", kind: .askOwner, summary: "merge #42?",
                                        detail: "Checks pass.", createdAt: now.addingTimeInterval(-6 * 60 - 10))))
         let tabs = [
-            TabInfo(id: "@1", name: "shell", active: true),
+            TabInfo(id: "@1", name: "shell", active: false),
             TabInfo(id: "@2", name: "notes", active: false),
-            TabInfo(id: "builder:@1", name: "main session", active: false, agentID: "builder"),
+            // Builder's main session is on screen (R-0253's mark).
+            TabInfo(id: "builder:@1", name: "main session", active: true, agentID: "builder"),
             TabInfo(id: "builder:@2", name: "tests", active: false, command: "npm test --watch", agentID: "builder"),
             TabInfo(id: "builder:@3", name: "helper", active: false, command: "retries-refactor", agentID: "builder"),
             TabInfo(id: "reviewer:@1", name: "review #42", active: false, command: "npm test", agentID: "reviewer"),

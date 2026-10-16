@@ -214,14 +214,18 @@ public final class BoxController {
     /// A secondary line under a progress line (the Keychain wait's hint).
     public private(set) var progressDetail: String?
     private var cancelKeychain: (@MainActor () -> Void)?
+    /// Brings this window forward before a read that may prompt (R-0214).
+    private let bringForward: @Sendable () -> Void
 
     public init(box: String, daemon: DaemonAPI, keychain: KeychainReading = SystemKeychain(),
                 notifier: KeychainWaitNotifying? = nil, keychainThreshold: Duration = KeychainWait.threshold,
                 ensureDaemon: (@Sendable () async -> String?)? = nil, followRetry: Duration = .seconds(1),
                 daemonDeadline: Duration = .seconds(30), savesRetry: Duration = .seconds(5),
                 now: @escaping @Sendable () -> Date = { Date() },
-                sleep: @escaping @Sendable (Duration) async -> Void = { try? await Task.sleep(for: $0) }) {
+                sleep: @escaping @Sendable (Duration) async -> Void = { try? await Task.sleep(for: $0) },
+                bringForward: @escaping @Sendable () -> Void = { KeychainWait.front.bringForward() }) {
         self.box = box
+        self.bringForward = bringForward
         self.savesRetry = savesRetry
         self.now = now
         self.sleep = sleep
@@ -252,7 +256,31 @@ public final class BoxController {
 
     /// The state line as it reads at a time: the title draws it at the time
     /// it's drawn (and again when savedAtChangesAt comes).
-    public func subtitle(at time: Date) -> String { progress ?? transient ?? state?.line(now: time) ?? "" }
+    public func subtitle(at time: Date) -> String {
+        progress ?? transient ?? (engineDown ? DockerText.stateLine : state?.line(now: time)) ?? ""
+    }
+
+    /// Docker Desktop stopped while the box is open on this Mac (R-0098):
+    /// the state line and the window say so, with Open Docker Desktop.
+    public private(set) var engineDown = false
+
+    /// Asks portenvd whether Docker answers, only while the box is open
+    /// here and its agent is unavailable (a working box never asks).
+    public func checkEngine() async {
+        guard isOpen, location == .thisMac, agentUnavailable else {
+            engineDown = false
+            return
+        }
+        engineDown = await daemon.engineRunning() == false
+    }
+
+    /// checkEngine every 2 s until cancelled (alongside follow).
+    public func watchEngine() async {
+        while !Task.isCancelled {
+            await checkEngine()
+            await sleep(DockerText.interval)
+        }
+    }
 
     /// A new save was recorded: the words roll over a minute later, and the
     /// saves list (once read) is read again now, not on a later state.
@@ -329,6 +357,7 @@ public final class BoxController {
     public func run(_ action: BoxMenuItem.Action) async {
         switch action {
         case .none: break
+        case .open: await open()
         case .move(let target): await requestMove(to: target)
         case .revertToLastSavePoint: await revertToLastSavePoint()
         case .makeSavePoint: await makeSavePoint()
@@ -362,12 +391,18 @@ public final class BoxController {
         }
     }
 
+    /// Why the last open failed, in portenvd's plain words (DaemonErrorText):
+    /// the closed window shows it with Try Again, instead of an alert alone
+    /// or a silent "is closed" (R-0211). Cleared when an open starts.
+    public private(set) var openFailure: String?
+
     /// Opens the box (on this Mac, or shows it where it runs).
     public func open() async {
         stopWaiting() // a new open ends Keep Waiting (R-0178)
+        openFailure = nil
         progress = resuming ? nil : "Opening…"
         var elsewhere = false
-        await perform {
+        await perform(failure: { [weak self] in self?.openFailure = $0 }) {
             self.servers = (try? await self.daemon.servers()) ?? []
             do {
                 try await self.daemon.open(self.box)
@@ -380,6 +415,7 @@ public final class BoxController {
                 // the person, and hand them over. Cancelled: nothing opened.
                 guard try await self.approveKeys() else {
                     self.location = .closed
+                    self.openFailure = KeychainWait.cancelled
                     return
                 }
                 try await self.daemon.open(self.box)
@@ -404,7 +440,7 @@ public final class BoxController {
     /// fills it in (R-0140). Never an error line.
     private func showWhereItIsOpen(retried: Bool = false) async {
         guard let first = try? await daemon.placement(box, probe: false) else {
-            error = "\(box) is open somewhere else."
+            openFailure = "\(box) is open somewhere else."
             return
         }
         // The other place let go meanwhile: open it once more (R-0178).
@@ -428,7 +464,7 @@ public final class BoxController {
     /// sheet as usual (never a second retry).
     private func openOnceMore(retried: Bool) async {
         guard !retried else {
-            error = "\(box) is open somewhere else."
+            openFailure = "\(box) is open somewhere else."
             return
         }
         var elsewhere = false
@@ -520,7 +556,8 @@ public final class BoxController {
                     if Task.isCancelled { return }
                     self.waitingFor = nil
                     self.progress = nil
-                    self.error = error.localizedDescription
+                    // A failed open: in the window, with Try Again (R-0211).
+                    self.openFailure = error.localizedDescription
                     return
                 }
             }
@@ -609,6 +646,8 @@ public final class BoxController {
     /// might be answering. Returns false when cancelled.
     private func approveKeys() async throws -> Bool {
         let ids = try await daemon.keyIDs(box)
+        // Its prompt comes up over this window (R-0214).
+        bringForward()
         let reader = keychain
         let once = Once<Result<[String: Data], Error>?>()
         let result = await withCheckedContinuation { (done: CheckedContinuation<Result<[String: Data], Error>?, Never>) in
@@ -838,14 +877,16 @@ public final class BoxController {
         await refresh()
     }
 
-    private func perform(_ action: @escaping @MainActor () async throws -> Void) async {
+    /// Runs an action while busy. A failure goes to `failure` when given
+    /// (an open's failure stays in the window), otherwise to the alert.
+    private func perform(failure: ((String) -> Void)? = nil, _ action: @escaping @MainActor () async throws -> Void) async {
         guard !busy else { return }
         busy = true
         defer { busy = false }
         do {
             try await action()
         } catch {
-            self.error = error.localizedDescription
+            if let failure { failure(error.localizedDescription) } else { self.error = error.localizedDescription }
         }
     }
 }

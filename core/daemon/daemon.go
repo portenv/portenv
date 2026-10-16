@@ -91,6 +91,8 @@ type Server struct {
 	network networkReport      // the app's last network report
 	now     func() time.Time   // the clock (tests set it)
 	alive   func(pid int) bool // whether a reporting app still runs
+	// engine asks the box engine whether it answers (tests set it).
+	engine func(ctx context.Context) error
 }
 
 // openBox is a box this daemon opened: its session, sync engine and agent
@@ -176,7 +178,8 @@ func New(env *local.Env, log *slog.Logger) *Server {
 	}
 	bg, cancel := context.WithCancel(context.Background())
 	return &Server{env: env, log: log, open: map[string]*openBox{}, remote: map[string]*remoteBox{}, gen: map[string]uint64{},
-		now: time.Now, alive: processAlive, bgCtx: bg, bgCancel: cancel}
+		now: time.Now, alive: processAlive, bgCtx: bg, bgCancel: cancel,
+		engine: func(ctx context.Context) error { return env.EngineAnswers(ctx) }}
 }
 
 // Serve listens on the socket in the Portenv directory (mode 0600 in a 0700
@@ -240,6 +243,21 @@ func (s *Server) Serve(ctx context.Context) error {
 // GetVersion implements daemonv1.DaemonServiceServer.
 func (s *Server) GetVersion(context.Context, *daemonv1.GetVersionRequest) (*daemonv1.GetVersionResponse, error) {
 	return &daemonv1.GetVersionResponse{Build: &typesv1.BuildInfo{Version: version.Version, Commit: version.Commit, BuildId: version.BuildID}}, nil
+}
+
+// engineTimeout bounds GetEngine: Welcome asks every 2 s.
+const engineTimeout = 1500 * time.Millisecond
+
+// GetEngine reports whether the box engine answers (Docker Desktop is
+// running), for Welcome's Docker card and the state line (R-0098).
+func (s *Server) GetEngine(ctx context.Context, _ *daemonv1.GetEngineRequest) (*daemonv1.GetEngineResponse, error) {
+	ctx, cancel := context.WithTimeout(ctx, engineTimeout)
+	defer cancel()
+	err := s.engine(ctx)
+	if err != nil {
+		s.log.Debug("engine check", "err", err)
+	}
+	return &daemonv1.GetEngineResponse{Running: err == nil}, nil
 }
 
 // ListBoxes lists the boxes configured on this machine.
@@ -928,10 +946,13 @@ func (s *Server) boxID(name string) string {
 // The lines the app shows when the container engine isn't running, doesn't
 // answer, or a download stops (R-0211), worded as the app's own engine lines
 // (DaemonErrorText), which pass them through. The detail goes to the log.
+// testdata/engine-lines.txt holds the same three: the Go test checks these
+// against it, and the app's test runs each through DaemonErrorText
+// unchanged (R-0214).
 const (
-	EngineNotRunning   = "Portenv uses Docker Desktop to run workspaces on this Mac. Start Docker Desktop, then open the workspace again."
-	EngineUnresponsive = "Docker Desktop is still starting, or isn't answering. Wait a moment, then open the workspace again."
-	PullStalled        = "Portenv couldn't get the workspace image: the download stopped. Check this Mac is online, then open the workspace again."
+	EngineNotRunning   = "Portenv uses Docker Desktop to run workspaces on this Mac. Start Docker Desktop, then click Try Again."
+	EngineUnresponsive = "Docker Desktop is still starting, or isn’t answering. Wait a moment, then click Try Again."
+	PullStalled        = "Portenv couldn’t get the workspace image: the download stopped. Check this Mac is online, then click Try Again."
 )
 
 // plainOpenError turns the engine's failures into their plain lines; every

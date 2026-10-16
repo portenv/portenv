@@ -200,7 +200,7 @@ public struct TitleLook: Equatable, Sendable {
 /// menu are built from the same list, in the same order. "—" is a separator.
 public struct BoxMenuItem: Equatable, Sendable {
     public enum Action: Equatable, Sendable {
-        case none, move(String), revertToLastSavePoint, makeSavePoint, restartBox
+        case none, open, move(String), revertToLastSavePoint, makeSavePoint, restartBox
     }
     public var title: String
     public var enabled = true
@@ -236,7 +236,12 @@ public enum BoxMenuModel {
                              lastSavePoint: Date? = nil, savesKnown: Bool = false, now: Date = Date()) -> [BoxMenuItem] {
         let act = open && !busy
         let move = moveSubmenu(busy: busy, location: location, servers: servers)
-        var items: [BoxMenuItem] = [
+        var items: [BoxMenuItem] = []
+        // A closed workspace's menu starts with Open (R-0211).
+        if !open {
+            items += [BoxMenuItem(title: "Open", enabled: !busy, action: .open), .separator]
+        }
+        items += [
             BoxMenuItem(title: "Rename…", enabled: false),
             BoxMenuItem(title: "Move To", enabled: !busy, submenu: move),
             .separator,
@@ -326,5 +331,15 @@ public enum A11y {
     /// A tab in Running now, and what runs in it.
     public static func runningTab(_ name: String, program: String?) -> String {
         program.map { "\(name) tab, running \($0)" } ?? "\(name) tab, idle"
+    }
+}
+
+/// A closed workspace's window (R-0211).
+public enum ClosedText {
+    public static func title(_ box: String) -> String { "\(box) is closed" }
+    public static let open = "Open"
+    public static let tryAgain = "Try Again"
+    public static func buttonLabel(_ box: String, failed: Bool) -> String {
+        failed ? "Try opening \(box) again" : "Open \(box)"
     }
 }

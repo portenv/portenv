@@ -61,8 +61,9 @@ struct KeychainWaitTests {
         let c = controller(kc, cli, n)
         let opening = Task { await c.open() }
         await waitUntil { c.waitingForKeychain }
-        #expect(c.subtitle == "Waiting for Keychain access")
-        #expect(c.progressDetail == "Check for a password prompt. It may be behind other windows.")
+        // R-0214: the window that asked says what it waits for.
+        #expect(c.subtitle == "Waiting for you to allow access to Portenv\u{2019}s keys\u{2026}")
+        #expect(c.progressDetail == "Allow it in the password or Touch ID prompt.")
         #expect(c.symbol == "lock" && !c.symbolSpins)
         #expect(c.title.consistent)
         // The line changes first, then the notification goes out.
@@ -72,6 +73,27 @@ struct KeychainWaitTests {
         await opening.value
         #expect(!c.waitingForKeychain)
         #expect(c.location == .thisMac)
+    }
+
+    /// R-0214: before a read that may prompt, the window that asked comes
+    /// to the front, so macOS's prompt shows over it, never behind
+    /// "Opening…" on another display or Space; the waiting line shows
+    /// while the read is blocked.
+    @Test func thePromptComesUpInFrontOfTheWindow() async {
+        let kc = BlockingKeychain(blocks: true), cli = FakeDaemon(), n = CountingNotifier()
+        defer { kc.release() }
+        final class Fronts: @unchecked Sendable { var count = 0 }
+        let fronts = Fronts()
+        cli.failingOnce["open"] = KeychainWait.daemonError
+        let c = BoxController(box: "acme-api", daemon: cli, keychain: kc, notifier: n, keychainThreshold: .milliseconds(200),
+                              bringForward: { fronts.count += 1 })
+        let opening = Task { await c.open() }
+        await waitUntil { c.waitingForKeychain }
+        #expect(fronts.count == 1)
+        #expect(c.subtitle == KeychainWait.line)
+        kc.release()
+        await opening.value
+        #expect(!c.waitingForKeychain)
     }
 
     /// After the person allows the read, the window says the box is opening
@@ -105,6 +127,8 @@ struct KeychainWaitTests {
         #expect(!actions.contains("provide-keys"), "nothing handed over after Cancel")
         #expect(actions.filter { $0 == "open" }.count == 1, "no second open after Cancel")
         #expect(c.location == .closed && !c.busy && !c.waitingForKeychain && c.error == nil)
+        // Never a silent "closed": the window says why (R-0211).
+        #expect(c.openFailure == KeychainWait.cancelled)
         kc.release() // the prompt is answered later: its result is dropped
     }
 

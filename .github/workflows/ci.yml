@@ -31,12 +31,12 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: core/go.mod
-          cache-dependency-path: '**/go.sum'
-      - name: Cache pinned tools
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+          cache: false
+      - uses: ./.github/actions/go-cache
         with:
-          path: bin
-          key: tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Makefile') }}
+          save: true
+          build-cache: true
+          tools: true
       - run: make build
       - name: tmux and zsh, for the agent's tab and shell-integration tests
         run: if ! command -v tmux || ! command -v zsh; then sudo apt-get update -q && sudo apt-get install -y -q tmux zsh; fi
@@ -60,7 +60,8 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: core/go.mod
-          cache-dependency-path: '**/go.sum'
+          cache: false
+      - uses: ./.github/actions/go-cache
       - run: make agent-linux
 
   proto:
@@ -72,12 +73,10 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: core/go.mod
-          cache-dependency-path: '**/go.sum'
-      - name: Cache pinned tools
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+          cache: false
+      - uses: ./.github/actions/go-cache
         with:
-          path: bin
-          key: tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Makefile') }}
+          tools: true
       # Lint and format run in the go job; this checks generated code is current.
       # Breaking-change checks (buf breaking) stay off until Phase 1.
       - run: make proto-check-go
@@ -92,7 +91,11 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: core/go.mod
-          cache-dependency-path: '**/go.sum'
+          cache: false
+      - uses: ./.github/actions/go-cache
+        with:
+          save: true
+          tools: true
       # The Makefile needs GNU Make 4 or later; macOS ships 3.81.
       - name: GNU Make 4
         run: |
@@ -121,7 +124,8 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: core/go.mod
-          cache-dependency-path: '**/go.sum'
+          cache: false
+      - uses: ./.github/actions/go-cache
       - run: make cli-linux
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -165,12 +169,10 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: core/go.mod
-          cache-dependency-path: '**/go.sum'
-      - name: Cache pinned tools
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+          cache: false
+      - uses: ./.github/actions/go-cache
         with:
-          path: bin
-          key: tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Makefile') }}
+          tools: true
       # Pull requests scan only their own commits; pushes to main scan main's
       # whole history (HEAD), never other branches. The nightly job scans
       # every branch (nightly-secret-scan.yml). An unmerged branch's commit

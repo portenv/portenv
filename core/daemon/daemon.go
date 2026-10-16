@@ -542,7 +542,12 @@ func (s *Server) get(name string) (*openBox, error) {
 
 // CloseBox saves, releases and stops the box.
 func (s *Server) CloseBox(ctx context.Context, req *daemonv1.CloseBoxRequest) (*daemonv1.CloseBoxResponse, error) {
+	// Logged by workspace ID, as OpenBox is (ADR 0023): on entry, its save
+	// and release, and every failure, never with a path.
+	id := s.boxID(req.GetName())
+	s.log.Info("close", "box_id", id)
 	if err := s.closeBox(ctx, req.GetName()); err != nil {
+		s.log.Warn("close failed", "box_id", id, "err", noPaths(err.Error()))
 		return nil, err
 	}
 	return &daemonv1.CloseBoxResponse{}, nil
@@ -562,14 +567,20 @@ func (s *Server) closeBox(ctx context.Context, name string) error {
 		return nil
 	}
 	ob.saving.Store(true)
-	_, err = ob.sb.Save(ctx, boxsync.SaveOptions{Kind: boxsync.SaveRelease})
+	snap, err := ob.sb.Save(ctx, boxsync.SaveOptions{Kind: boxsync.SaveRelease})
 	ob.saving.Store(false)
 	ob.failed.Store(err != nil)
 	if err != nil {
 		return ob.noteErr(err)
 	}
+	if s.log != nil {
+		s.log.Info("close saved", "box_id", string(ob.sess.ID()), "snapshot", short8(snap.ID))
+	}
 	ob.stop(ctx)
 	ob.closed = true
+	if s.log != nil {
+		s.log.Info("close released", "box_id", string(ob.sess.ID()))
+	}
 	s.mu.Lock()
 	delete(s.open, name)
 	s.mu.Unlock()

@@ -78,10 +78,16 @@ public enum KeychainWait {
     /// cancelled while its prompt is still up must not block the next).
     public static let queue = DispatchQueue(label: "com.portenv.keychain", qos: .userInitiated, attributes: .concurrent)
 
-    public static let line = "Waiting for Keychain access"
-    public static let detail = "Check for a password prompt. It may be behind other windows."
+    public static let line = "Waiting for you to allow access to Portenv\u{2019}s keys\u{2026}"
+    public static let detail = "Allow it in the password or Touch ID prompt."
+    /// Brings the window that asked to the front before a read that may
+    /// prompt, so macOS's prompt comes up over it, never behind it on
+    /// another display or Space (R-0214). The app sets the handler.
+    public static let front = FrontRelay()
     /// The error portenvd returns when a key needs the person's approval.
     public static let daemonError = "Keychain needs your approval. Open Portenv on this Mac to allow it."
+    /// The closed window's line after Cancel during the wait (R-0211).
+    public static let cancelled = "Opening stopped while Portenv waited for Keychain access."
     /// How long a read may take before the window says it's waiting.
     public static let threshold: Duration = .seconds(2)
 }
@@ -105,4 +111,17 @@ final class Once<T: Sendable>: @unchecked Sendable {
         }
         d?(value)
     }
+}
+
+/// Where the app brings its asking window forward (KeychainWait.front).
+public final class FrontRelay: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _handler: (@Sendable () -> Void)?
+    public init() {}
+    public var handler: (@Sendable () -> Void)? {
+        get { lock.withLock { _handler } }
+        set { lock.withLock { _handler = newValue } }
+    }
+
+    public func bringForward() { handler?() }
 }

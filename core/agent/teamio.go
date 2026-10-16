@@ -299,6 +299,16 @@ func TeamIO(args []string, stdin io.Reader, stdout io.Writer) error {
 			files = append(files, teamIOFile{Name: e.Name(), Content: b})
 		}
 		return json.NewEncoder(stdout).Encode(files)
+	case "handoff-pack":
+		if len(args) != 3 {
+			return errors.New("handoff-pack BASE PATH")
+		}
+		return handoffPack(dir, args[2], stdout)
+	case "handoff-unpack":
+		if len(args) != 4 {
+			return errors.New("handoff-unpack HOME DEST QUOTA")
+		}
+		return handoffUnpack(dir, args[2], args[3], stdin, stdout)
 	case "list-home":
 		if len(args) != 3 {
 			return errors.New("list-home HOME DIR")

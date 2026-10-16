@@ -87,6 +87,8 @@ type apiServer struct {
 	// runHomeIO runs team-io as an agent, for its home's files (nil: as
 	// the agent's uid, runAsAgent).
 	runHomeIO func(ctx context.Context, uid int, args []string, stdin io.Reader) ([]byte, error)
+	// now is the clock (nil: time.Now).
+	now func() time.Time
 }
 
 // ctlHub returns the server's control-mode clients, made on first use.

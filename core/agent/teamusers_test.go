@@ -28,6 +28,7 @@ type fakeSystem struct {
 	groups  map[string]int             // name → gid
 	members map[string]map[string]bool // group → users with it as a supplementary group
 	busy    map[string]bool            // userdel fails: the user has processes
+	primary map[string]int             // user → primary gid
 	calls   []string
 }
 
@@ -37,6 +38,7 @@ func newFakeSystem() *fakeSystem {
 		groups:  map[string]int{"root": 0, "work": 1000, "portenv-agent": 991, "portenv-sync": 990},
 		members: map[string]map[string]bool{},
 		busy:    map[string]bool{},
+		primary: map[string]int{"root": 0, "work": 1000, "portenv-agent": 991},
 	}
 }
 
@@ -72,6 +74,9 @@ func (f *fakeSystem) Run(_ context.Context, _ []string, name string, args ...str
 		if !ok {
 			return []byte("id: '" + user + "': no such user"), errors.New("exit status 1")
 		}
+		if args[0] == "-g" {
+			return []byte(strconv.Itoa(f.primary[user]) + "\n"), nil
+		}
 		if args[0] == "-nG" {
 			gs := []string{user}
 			for g, m := range f.members {
@@ -97,6 +102,8 @@ func (f *fakeSystem) Run(_ context.Context, _ []string, name string, args ...str
 		}
 		uid, _ := strconv.Atoi(args[slices.Index(args, "--uid")+1])
 		f.users[u] = uid
+		gid, _ := strconv.Atoi(args[slices.Index(args, "--gid")+1])
+		f.primary[u] = gid
 		if i := slices.Index(args, "--groups"); i >= 0 {
 			for _, g := range strings.Split(args[i+1], ",") {
 				if f.members[g] == nil {
@@ -592,5 +599,109 @@ func TestOnlyInitServesAgentUsers(t *testing.T) {
 	}
 	if _, err := (&apiServer{}).RemoveAgentUser(ctx, &agentv1.RemoveAgentUserRequest{AgentId: "builder"}); status.Code(err) != codes.Unimplemented {
 		t.Errorf("the channel's server: %v, want Unimplemented", err)
+	}
+}
+
+// R-0260 item 7: a team group with another gid is refused, never used.
+func TestATeamGroupWithAnotherGIDIsRefused(t *testing.T) {
+	team, sys, chowns := newTestTeam(t)
+	sys.groups["team"] = 1999
+	if _, err := team.Ensure(context.Background(), "builder"); err == nil || !strings.Contains(err.Error(), "1999") {
+		t.Fatalf("Ensure = %v, want a refusal naming gid 1999", err)
+	}
+	for _, c := range *chowns {
+		if c.gid == TeamGID {
+			t.Errorf("chowned to %d while team is 1999: %v", TeamGID, c)
+		}
+	}
+	if sys.ran("useradd") {
+		t.Errorf("a user was added: %q", sys.calls)
+	}
+	// And gid 2000 held by another group.
+	team2, sys2, _ := newTestTeam(t)
+	sys2.groups["other"] = TeamGID
+	if _, err := team2.Ensure(context.Background(), "builder"); err == nil {
+		t.Error("Ensure made team while gid 2000 belongs to another group")
+	}
+}
+
+// R-0260 item 8: the primary gid and team membership are checked too.
+func TestEnsureChecksTheGroupsToo(t *testing.T) {
+	team, sys, _ := newTestTeam(t)
+	ctx := context.Background()
+	if _, err := team.Ensure(ctx, "builder"); err != nil {
+		t.Fatal(err)
+	}
+	sys.primary["builder"] = 1000 // someone made work's group its primary
+	if _, err := team.Ensure(ctx, "builder"); err == nil {
+		t.Error("Ensure accepted builder with primary gid 1000")
+	}
+	sys.primary["builder"] = 2001
+	delete(sys.members["team"], "builder")
+	if _, err := team.Ensure(ctx, "builder"); err != nil {
+		t.Fatal(err)
+	}
+	if !sys.members["team"]["builder"] {
+		t.Error("builder's team membership wasn't put back")
+	}
+}
+
+// R-0260 item 9: the store's folder is root's 0755, and symlinks in the
+// way are refused.
+func TestTheStoresFolderAndLinksInTheWay(t *testing.T) {
+	team, _, _ := newTestTeam(t)
+	ctx := context.Background()
+	if _, err := team.Ensure(ctx, "builder"); err != nil {
+		t.Fatal(err)
+	}
+	for _, d := range []string{filepath.Join(team.Cfg.HomeRoot, ".portenv"), filepath.Dir(team.storePath())} {
+		info, err := os.Lstat(d)
+		if err != nil || !info.IsDir() || info.Mode().Perm() != 0o755 {
+			t.Errorf("%s: %v, %v; want a 0755 folder", d, info, err)
+		}
+	}
+	for name, setup := range map[string]func(t *testing.T, tu *TeamUsers){
+		"home root": func(t *testing.T, tu *TeamUsers) {
+			real := tu.Cfg.HomeRoot + "-real"
+			if err := os.Rename(tu.Cfg.HomeRoot, real); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(real, tu.Cfg.HomeRoot); err != nil {
+				t.Fatal(err)
+			}
+		},
+		".portenv": func(t *testing.T, tu *TeamUsers) {
+			if err := os.Symlink(t.TempDir(), filepath.Join(tu.Cfg.HomeRoot, ".portenv")); err != nil {
+				t.Fatal(err)
+			}
+		},
+		"run dir": func(t *testing.T, tu *TeamUsers) {
+			if err := os.MkdirAll(filepath.Dir(tu.RunDir), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(t.TempDir(), tu.RunDir); err != nil {
+				t.Fatal(err)
+			}
+		},
+	} {
+		tu, _, _ := newTestTeam(t)
+		setup(t, tu)
+		_, ensureErr := tu.Ensure(ctx, "builder")
+		tu.Restore(ctx)
+		restoreErr := tu.RestoreErr()
+		switch name {
+		case "home root":
+			if ensureErr == nil || restoreErr == nil {
+				t.Errorf("home root as a symlink: Ensure %v, Restore %v; want both refused", ensureErr, restoreErr)
+			}
+		case ".portenv":
+			if ensureErr == nil {
+				t.Error(".portenv as a symlink: Ensure accepted it")
+			}
+		case "run dir":
+			if restoreErr == nil {
+				t.Error("the run dir as a symlink: Restore accepted it")
+			}
+		}
 	}
 }

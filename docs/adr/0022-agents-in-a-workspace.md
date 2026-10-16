@@ -1,6 +1,6 @@
 # 0022. Agents in a workspace: a team the owner approves, each agent its own user, one grant check for every way in
 
-Date: 2026-10-16 · Status: proposed (R-0226, R-0227, R-0231, R-0232; lane A's tmux findings, CC-0345). No code before the reviewer approves it. Per-agent users are the owner's decision (13:19, R-0231), not a choice left in this ADR.
+Date: 2026-10-16 · Status: proposed (R-0226, R-0227, R-0231 to R-0235, R-0237; lane A's tmux findings, CC-0345). No code before the reviewer approves it. Per-agent users are the owner's decision (13:19, R-0231), not a choice left in this ADR.
 
 ## Context
 
@@ -21,28 +21,47 @@ Facts about today's workspace that decide the design:
 
 ## Decision
 
-### 1. Each agent runs as its own Unix user (the lane model of ADR 0006, now)
+### 1. Each agent is a user of the workspace (the lane model of ADR 0006, now)
 
-**Decided by the owner for the 27 Oct tester build (13:19, R-0231, replacing R-0228's choice):** per-agent users are required. There is no "agents run as you" build and no release-notes wording for one.
+**Decided by the owner (R-0231, 13:19, replacing R-0228; R-0235, 13:28):** an agent is a user of the workspace, required in the first tester build. It has a Unix login, a private home, its own processes and its own tmux server. **The isolation is the operating system's; the `portenv` command and its grants sit on top.** There is no "agents run as you" build.
 
-**The users: a fixed pool, made by init, never at run time.**
-- **Eight slot users,** `pv-1` to `pv-8`, uid and gid 2001–2008 (inside ADR 0010's lane range, 2000–2999), homes `/home/pv-1` to `/home/pv-8` (0700, owned by the slot), login shell `/bin/bash`, no password, not in `sudoers`. Eight is the team ceiling (section 7).
-- **A group `team`,** gid 2000, whose members are `work` and the eight slots (section 2).
-- **init makes them,** as root, at every box start and before the helper starts: it adds any missing `/etc/passwd`, `/etc/group` and `/etc/shadow` lines, makes missing homes and fixes their owner and mode. Nothing writes those files while the box runs. Toolbox images may ship the lines already; init's step is then a check.
-- **An agent gets a slot when the owner first starts it.** The map from agent id to slot is `/home/.portenv/team/slots.json` (written only by the helper, 0644, so it travels with the workspace). An agent keeps its slot, and its home, for its life. Removing an agent never deletes its home on its own: the owner chooses "Remove and delete its files" for that, and until then the slot stays taken.
-- **Names:** the app and every message show the agent's name ("builder"), never `pv-3`.
+**The owner** is `work`. Only the owner creates and removes agents, changes grants, sees agents' homes and answers decisions, all through the app. `work` keeps its sudo: the owner can also read any agent's home from a terminal. No agent can do any of these things.
+
+**The users.**
+- **The login name is the agent's id** (`builder`; section 3's rule). The uid and gid come from 2001–2008, inside ADR 0010's lane range (2000–2999); eight is the team ceiling (section 7).
+- **Each user has:**
+  - home `/home/<id>`, 0700, owned by the agent;
+  - `/bin/bash`, a locked password, and no `sudoers` entry;
+  - its own group, plus the group `team` (gid 2000, which `work` is also in).
+- **Ids that can't be agents:** any name already in the image's `/etc/passwd` or `/etc/group` (`root`, `work`, `portenv-agent` and the rest), `team`, and anything starting with `portenv`. `portenvd` refuses them with a plain line.
+- **Only init makes or removes users.** init (`portenv-agent init`, root, PID 1) already serves the agent API on `/run/portenv/agent.sock`. Only the helper's API process can reach that socket (root:991, 0710). init gains two calls there, `EnsureAgentUser(id)` and `RemoveAgentUser(id)`:
+  - init checks the id itself; it doesn't rely on the helper's check;
+  - it takes the lowest free uid in the range;
+  - it writes `/etc/passwd`, `/etc/group` and `/etc/shadow` atomically (a new file, fsync, rename, under one lock);
+  - it makes the home;
+  - it records the user in `/home/.portenv/team/users.json` (root's, 0644).
+
+  Nothing else in the box writes those files. The helper's API process gains no capability: it asks.
+- **At every box start,** init reads `users.json` and writes the lines again before the helper starts. An agent therefore keeps the same uid (its files' owner) across a save, a restore and a Move To.
+- **Removing an agent never deletes its files on its own:**
+  - `RemoveAgentUser` takes the user's lines out. The home and the uid stay, marked removed in `users.json`.
+  - They stay until the owner chooses "Remove and delete its files", a decision that shows the size. Only then does init delete the home and free the uid.
+  - This is a data-loss path: tests come first.
+- **Names:** the app and every message show the agent's display name ("Builder").
 
 **The helper's user switch.**
-- The helper's API process (uid 991) already holds `cap_setuid`, `cap_setgid`, `cap_chown` and `cap_kill` (ADR 0010). It needs no new capability.
-- **For each agent it starts two processes as the slot user,** in a forked child that calls `setgroups([team])`, `setgid`, `setuid`, clears the ambient capability set and sets `no_new_privs` before `exec`, so nothing an agent runs can gain a capability or use a set-uid binary (`sudo` included):
-  - the agent's own tmux server, on `/run/portenv/tmux/pv-N/default`; the helper makes that directory owned by the slot, 0700;
-  - one control client (ADR 0020's control mode) attached to that server, talking to the helper over pipes. It runs as the slot because tmux accepts only clients of the server's own uid.
-- **Stop** kills every process of the slot's uid (`cap_kill`), after ending its tmux server.
-- `work`'s tmux server and control client stay as they are, on `work`'s own 0700 socket directory.
+- **Sockets.** init makes `/run/portenv-team/` (root, 0755). For each agent, the helper makes `/run/portenv-team/<id>/`, owned by the helper (991) with the agent's group, 0710, so only that agent and the helper can pass through. Inside it:
+  - `portenv.sock`: the agent's `portenv` socket (section 4), 991 with the agent's group, 0660;
+  - `tmux/`: the agent's own, 0700, for its tmux server's socket.
+- **Processes.** The helper's API process (uid 991) already holds `cap_setuid`, `cap_setgid`, `cap_chown` and `cap_kill` (ADR 0010), and needs no new capability. For each agent it starts two processes as the agent's user. Each runs in a forked child that calls `setgroups([its group, team])`, `setgid` and `setuid`, clears the ambient capability set and sets `no_new_privs` before `exec`. So nothing an agent runs can gain a capability or use a set-uid binary, `sudo` included. The two processes are:
+  - the agent's own tmux server, on `/run/portenv-team/<id>/tmux/default`;
+  - one control client (ADR 0020's control mode) attached to that server, which talks to the helper over pipes. It runs as the agent because tmux accepts only clients with the server's own uid.
+- **Stop:** the helper ends the agent's tmux server, then kills every process with the agent's uid (`cap_kill`).
+- **`work`:** its tmux server and control client stay as they are, on `work`'s own 0700 socket directory.
 
 **What this guarantees (the boundary; it is never what gets cut for time):**
-- **Raw `tmux` from an agent reaches only its own server.** It can't open `work`'s socket (directory mode) or another slot's, and tmux refuses other uids anyway.
-- **The only way into the owner's window is `portenv split` or `portenv tab new` (section 4), after `portenvd`'s grant check.** Those panes live on the agent's own server; the app shows them in the owner's window, labelled with the agent.
+- **Raw `tmux` from an agent reaches only its own server.** It can't open `work`'s socket or another agent's (directory modes), and tmux refuses other uids anyway.
+- **`portenv split` and `portenv tab new` (section 4) are the only way into the owner's window,** and only after `portenvd`'s grant check. Those panes live on the agent's own server; the app shows them in the owner's window, labelled with the agent.
 - **No agent reads, splits or types into the owner's terminals or another agent's.** There is no command for it, and no socket to do it with.
 
 This closes every item of lane A's list:
@@ -59,6 +78,31 @@ This closes every item of lane A's list:
 
 ### 2. Files, secrets and identity for per-agent users
 
+**Who reaches what:**
+
+| Where | Who | Modes |
+| --- | --- | --- |
+| `/home/<id>`, the agent's home | that agent; the owner through the app | 0700, the agent's |
+| `/home/team`, the team folder | every agent and the owner | `work:team`, 2770, default ACL `g:team:rwX` |
+| the project, `/home/work/<workspace>` | every agent and the owner | the shared group, below |
+| the rest of `/home/work` | the owner | `/home/work` 0711; dotfiles and logins 0700 |
+
+**Agents' homes are workspace state (R-0234).**
+- They live in `/home`, so they are encrypted with the workspace, saved in its backups and moved with it (Mac, server, hosted). They are never in the repository.
+- **Seeding:** an agent file may list `home_seed: [paths in the repository]`. On the agent's first start, as the agent's user, the helper copies them into its home at the same relative paths. The rules:
+  - only regular files and folders inside the project, with no symlink leaving it, at most 100 MB together;
+  - a marker, `~/.portenv-seeded`, records the copy; later changes in the repository are not copied again.
+- **The Agent files view:** the owner lists, opens (a copy to the Mac) and adds files (drag and drop) for each agent in the app. The helper does each read and write as the agent's user, in a forked process with its uid, so new files belong to the agent. Nothing else crosses: no agent reads another's home, and no agent call reaches this view.
+- **Quota:**
+  - each agent's home has a limit (2 GB by default, 20 GB at most, section 7), and it counts toward the workspace's size;
+  - the box has no kernel quotas today (they need `CAP_SYS_ADMIN`, which it lacks), so the helper measures each home at start, every five minutes and on every add from the app;
+  - at 90% the sidebar says "builder's files are almost full (1.8 GB of 2 GB).";
+  - at 100% it says "builder's files are full (2 GB of 2 GB). Remove some in Agent files, or raise its limit in Settings." The app then refuses adds, and the agent's `portenv` calls answer with the same line;
+  - the kernel doesn't stop the agent's own writes past the limit. That waits for kernel quotas (open questions; the rootless spike, R-0223).
+- **Google Drive connectors** come after the tester build, since they need grants and a sign-in. Until then the owner exports the files and adds them in the app.
+
+**The team folder, `/home/team`:** files every agent shares. init makes it, and it persists like the homes. It has the group `team`, setgid, and a default ACL, so files stay group-writable whatever the umask. The helper never runs anything from it.
+
 **How agents change the project (the coordinator's question 1). Chosen: a shared group with setgid directories.**
 - **Everyone works in the owner's checkout,** which is what a lead, builder and reviewer working on one tree expect.
 - **The project's group becomes `team`.** At team start the helper sets the group on the tree (`cap_chown`) and the setgid bit on every directory, so new files and folders stay in `team`.
@@ -70,7 +114,7 @@ This closes every item of lane A's list:
 
   An agent's git commands that write config (`git remote add`, `branch --set-upstream-to`) fail; the agent asks the owner.
 - **The owner's home:** `/home/work` becomes 0711 (agents can pass through, not list). The owner's dotfiles and logins (`~/.config`, `~/.claude`, `~/.ssh`) stay 0700. The helper refuses to start a team over a home whose modes would expose them, with a plain line.
-- **The residual risk, stated plainly:** an agent can change any project file the owner later runs, such as a `Makefile`, a test or a `package.json` script. When the owner runs it, it runs as `work`, with sudo. That is the same trust as merging an agent's pull request without reading it, and the app says so the first time a team starts ("Agents can change your project's files. Check their changes before you run them."). File ownership shows who made a new file; git shows every change.
+- **The residual risk, stated plainly:** an agent can change any project file (or file in `/home/team`) the owner later runs, such as a `Makefile`, a test or a `package.json` script. When the owner runs it, it runs as `work`, with sudo. That is the same trust as merging an agent's pull request without reading it, and the app says so the first time a team starts ("Agents can change your project's files. Check their changes before you run them."). File ownership shows who made a new file; git shows every change.
 
 **Rejected: a bind mount of the project into each agent's home.** The uids still differ, so a plain bind mount changes no permission: the agent needs group write anyway. Making an agent's writes land as `work` needs an idmapped mount, which needs `CAP_SYS_ADMIN` in the box. The box doesn't have it, and this ADR won't add it. It would also make an agent's writes look like the owner's.
 
@@ -87,7 +131,7 @@ This closes every item of lane A's list:
 
 **Where:** `<project>/.portenv/agents/<id>.md` in the repository, so a team travels with the code. The project is the workspace's project folder (`/home/work/<workspace name>`, as first run makes it). A workspace without one has no team, and the Team section says so.
 
-**Personal overrides:** `~/Library/Application Support/Portenv/agents.local/<workspace id>/<id>.md` on the Mac, never in the repository or the box. An override may change `runner`, `avatar`, `share_login` and narrow a grant. It can't widen a grant past the repository file or the owner's limits.
+**Personal overrides:** `~/Library/Application Support/Portenv/agents.local/<workspace id>/<id>.md` on the Mac, never in the repository or the box. An override may change `runner`, `avatar`, `share_login` and narrow a grant. It can't widen a grant past the repository file or the owner's limits, or add `home_seed`.
 
 **Format:** YAML frontmatter, then Markdown instructions (the agent's system prompt or `AGENTS.md`, handed to it at start as `AGENTS.md` in its home).
 
@@ -100,6 +144,7 @@ runner: claude --permission-mode acceptEdits   # an argv, split like a shell wou
 via: mcp                    # only with runner: remote — ssh | mcp | web
 avatar: hammer              # an SF Symbol name, or a colour from GUIDELINES §11's agent colours
 share_login: []             # tools whose sign-in the owner may share (section 2); asked, never assumed
+home_seed: [docs/style-guide.md]   # repository paths copied into its home on first start (section 2)
 grant:
   panes: ask                # ask | allow | never — may it open panes and tabs
   max_panes: 4              # 1–8
@@ -113,6 +158,7 @@ You build what the lead asks for. …
 - only the keys above, with the types and ranges shown; the file at most 64 KB, its instructions at most 32 KB, UTF-8 without control or bidi characters (ADR 0020's rule) in `id`, `name` and `role`;
 - a local `runner`'s first word must be on the agent user's `PATH` in the box (the helper checks; `portenvd` never runs it to find out);
 - `message` names only agents in the team; `max_panes` within the owner's limit (section 7);
+- `id` isn't a reserved name (section 1); `home_seed` paths are inside the project (section 2);
 - each problem is one plain line the app shows by the agent's row ("builder: runner `claude` isn't installed in this workspace. Install it, then choose Start.").
 
 **Two locks on the files:**
@@ -143,14 +189,14 @@ You build what the lead asks for. …
 - `panes: ask` makes each `split` or `tab new` a decision for the owner ("builder wants a new tab running `npm test`"); `allow` runs it at once; `never` refuses it with a plain line.
 - The CLI is the same `portenv` binary, already in the image; inside a box it talks only to the helper's per-agent socket (below), never to `portenvd`'s socket on the Mac (which isn't there).
 
-**The path:** the in-box command → the helper's socket `/run/portenv/team/<id>.sock` (0600, owned by the agent's uid, in a 0711 directory) → the helper fills in the caller from the socket (below) → over the existing agent channel to `portenvd` → the grant check → the action, carried out by the helper. The helper has no say in grants; it only names the caller.
+**The path:** the in-box command → the helper's socket `/run/portenv-team/<id>/portenv.sock` (section 1's modes) → the helper fills in the caller from the socket (below) → over the existing agent channel to `portenvd` → the grant check → the action, carried out by the helper. The helper has no say in grants; it only names the caller.
 
 ### 5. Identity: one per agent, the same on every way in
 
 - **The identity is ADR 0016's,** made when the owner approves the agent: for a team agent, approving its file; for a remote agent, approving its pairing code. The Unix user is that identity's body inside the box.
 - **Inside the box, the caller is the socket's peer uid.** The helper reads it with `SO_PEERCRED` on the connection, maps uid → agent id, and passes the id to `portenvd`. The request carries no identity. An agent's process can reach only its own socket (file modes), and couldn't claim another's even on the right socket: the uid comes from the kernel.
 - **In `portenvd`, the caller is fixed when the call arrives** (ADR 0020's rule): `caller{kind: callerAgent, id, name, box}`, from the helper's message for that call, for a workspace whose helper `portenvd` already trusts (ADR 0010). It sets `CommandAuthor` and `author_agent_id` for everything the agent runs, so the blocks' chip and the sidebar agree.
-- **Remote agents land on the same user** (lane A's recommendation, taken): an SSH session's forced command runs as the agent's slot user; MCP tools run as the agent's slot user through the helper; a web terminal shows only that agent's panes. One identity, one user, one grant, whatever the door.
+- **Remote agents land on the same user** (lane A's recommendation, taken): an SSH session's forced command runs as the agent's user; MCP tools run as the agent's user through the helper; a web terminal shows only that agent's panes. One identity, one user, one grant, whatever the door.
 
 ### 6. The board (slice 1: messages and owner decisions)
 
@@ -170,6 +216,7 @@ You build what the lead asks for. …
 | Panes in a workspace, all agents | 16 | 24 |
 | Messages per agent | 60 a minute | 120 a minute |
 | Pending decisions per agent | 5 | 20 |
+| An agent's home (section 2) | 2 GB | 20 GB |
 | A message | 8 KB | 8 KB |
 | Each board file before it's rotated (`.1`, kept with the workspace) | 10 MB | 10 MB |
 
@@ -177,11 +224,11 @@ Past a limit, the call is refused with a plain line ("builder has 4 panes open, 
 
 ### 8. `portenvd` runs the team
 
-- **Start:** the owner chooses Start on an agent (or Start Team). `portenvd` checks the file is approved and valid, then asks the helper to give the agent a slot if it's new (section 1), check the project's modes (section 2), and start the agent's tmux server and control client. The helper runs the `runner` argv in the agent's first tab, as its slot user, with `PORTENV_AGENT=<id>`, `PORTENV_SOCKET=/run/portenv/team/<id>.sock` and `AGENTS.md` in its home.
+- **Start:** the owner chooses Start on an agent (or Start Team). `portenvd` checks the file is approved and valid, then asks the helper to have init make the agent's user if it's new (section 1), seed its home on first start, check the project's and homes' modes (section 2), and start the agent's tmux server and control client. The helper runs the `runner` argv in the agent's first tab, as its user, with `PORTENV_AGENT=<id>`, `PORTENV_SOCKET=/run/portenv-team/<id>/portenv.sock` and `AGENTS.md` in its home.
 - **Stop:** the helper ends the agent's tmux server and every process of its uid. Stop is immediate and needs no agent's agreement.
 - **Restart policy for the tester build:** none. An agent that exits shows Stopped, with its last line; the owner starts it again.
 - **States, shown in the sidebar:** `stopped`, `starting`, `running`, `idle` (ADR 0017's waiting detector: a prompt on screen and nothing happening), `needs_you` (a pending decision from it, or it's waiting at a question), `invalid` (with the line from section 3); for remote agents, `connected` and `disconnected`.
-- **Moving and saving:** agent users and homes are in `/home`, so they travel with the workspace. init remakes the slot users at every box start and `slots.json` travels in `/home`, so each agent finds its own home again, and a team is stopped before Move To (it starts again, by the owner's choice, where the workspace lands).
+- **Moving and saving:** agent users and homes are in `/home`, so they travel with the workspace. init writes the users again from `users.json` at every box start, so each agent finds its own home again with the same uid, and a team is stopped before Move To (it starts again, by the owner's choice, where the workspace lands).
 
 ### 9. Proto
 
@@ -195,6 +242,11 @@ rpc StartAgent(StartAgentRequest) returns (StartAgentResponse);
 rpc StopAgent(StopAgentRequest) returns (StopAgentResponse);
 rpc AnswerDecision(AnswerDecisionRequest) returns (AnswerDecisionResponse);
 rpc ApproveAgentFile(ApproveAgentFileRequest) returns (ApproveAgentFileResponse); // added to R-0226's five: the content pin of section 3
+rpc SendMessage(SendMessageRequest) returns (SendMessageResponse);                // the owner to an agent (lane D)
+rpc RemoveAgent(RemoveAgentRequest) returns (RemoveAgentResponse);                // delete_files only from the owner's decision (section 1)
+rpc ListAgentFiles(ListAgentFilesRequest) returns (ListAgentFilesResponse);       // the Agent files view (section 2)
+rpc ReadAgentFile(ReadAgentFileRequest) returns (stream FileChunk);
+rpc AddAgentFiles(stream AddAgentFilesRequest) returns (AddAgentFilesResponse);   // drag and drop; refused past the quota
 
 message ListAgentsRequest { string name = 1; }            // the workspace
 message ListAgentsResponse { repeated AgentInfo agents = 1; }
@@ -207,10 +259,11 @@ message AgentInfo {
   repeated string tab_ids = 11;                          // its tabs, for the sidebar
   string last_line = 12;                                 // its last board line, plain text
   int32 pending_decisions = 13;
+  int64 home_bytes = 14; int64 home_quota_bytes = 15;     // section 2's quota
 }
 message WatchTeamRequest { string name = 1; string cursor = 2; }
 message WatchTeamResponse {
-  oneof event { AgentInfo agent = 1; BoardMessage message = 2; Decision decision = 3; }
+  oneof event { AgentInfo agent = 1; BoardMessage message = 2; Decision decision = 3; string removed_agent_id = 5; }
   string cursor = 4;
 }
 message BoardMessage { string id = 1; string from = 2; string to = 3; string thread_id = 4;
@@ -226,6 +279,21 @@ message AnswerDecisionRequest { string name = 1; string decision_id = 2; bool ap
 message AnswerDecisionResponse { Decision decision = 1; }
 message ApproveAgentFileRequest { string name = 1; string agent_id = 2; string file_sha256 = 3; } // must match what the app showed
 message ApproveAgentFileResponse { AgentInfo agent = 1; }
+message SendMessageRequest { string name = 1; string to = 2; string thread_id = 3; string text = 4; } // from is always "owner"
+message SendMessageResponse { BoardMessage message = 1; }
+message RemoveAgentRequest { string name = 1; string agent_id = 2; bool delete_files = 3; }
+message RemoveAgentResponse {}
+message ListAgentFilesRequest { string name = 1; string agent_id = 2; string dir = 3; }   // dir relative to its home
+message ListAgentFilesResponse { repeated AgentFile files = 1; int64 home_bytes = 2; int64 home_quota_bytes = 3; }
+message AgentFile { string path = 1; bool dir = 2; int64 size = 3; google.protobuf.Timestamp modified = 4; }
+message ReadAgentFileRequest { string name = 1; string agent_id = 2; string path = 3; }
+message FileChunk { bytes data = 1; }
+message AddAgentFilesRequest { string name = 1; string agent_id = 2; string path = 3; bytes data = 4; bool last = 5; } // name and agent_id on the first
+message AddAgentFilesResponse { repeated AgentFile added = 1; }
+
+// types.proto, Tab (appended; lane D): which agent's server a tab is on, and its panes
+//   string agent_id = 7;            // empty for the owner's tabs
+//   repeated string pane_ids = 8;   // tab ids stay unique across servers: the helper prefixes an agent's with its id
 
 // types.proto
 enum AgentState { AGENT_STATE_UNSPECIFIED = 0; AGENT_STATE_STOPPED = 1; AGENT_STATE_STARTING = 2;
@@ -245,6 +313,12 @@ rpc TeamCalls(stream TeamReply) returns (stream TeamCall);   // portenvd opens i
 rpc StartTeamAgent(StartTeamAgentRequest) returns (StartTeamAgentResponse);
 rpc StopTeamAgent(StopTeamAgentRequest) returns (StopTeamAgentResponse);
 rpc AppendBoard(AppendBoardRequest) returns (AppendBoardResponse);           // the board's one writer
+rpc ListHomeFiles(ListHomeFilesRequest) returns (ListHomeFilesResponse);     // the Agent files view, done as the agent's user
+rpc ReadHomeFile(ReadHomeFileRequest) returns (stream FileChunk);
+rpc WriteHomeFiles(stream WriteHomeFilesRequest) returns (WriteHomeFilesResponse);
+// Served only by init on its local socket (root); the channel's server answers Unimplemented:
+rpc EnsureAgentUser(EnsureAgentUserRequest) returns (EnsureAgentUserResponse);
+rpc RemoveAgentUser(RemoveAgentUserRequest) returns (RemoveAgentUserResponse);
 message TeamCall { string call_id = 1; string agent_id = 2;                  // agent_id from SO_PEERCRED, never the request
   oneof op { Split split = 3; NewTab tab = 4; PaneRef focus = 5; PaneRef close = 6; Msg msg = 7;
              AskOwner ask_owner = 8; Inbox inbox = 9; Share share = 10; ProposeAgentChange propose = 11; } }
@@ -263,7 +337,7 @@ The doors (section 10) call the same `portenvd` functions behind `TeamCalls`; th
 
 **SSH (designed, after testers):**
 - **Keys:** only the owner adds a key, while approving the agent's pairing code. The agent's private key never leaves its side. ADR 0016's short-lived certificates replace bare keys when the runner's CA is used (ADR 0007).
-- **Where it lands:** on a server, the runner's sshd, with a forced command (`portenv agent-shell <id>`) that attaches to the agent's own tmux server as the agent's slot user. `restrict` is set, so there's no port forwarding, no agent forwarding, no X11 and no user rc.
+- **Where it lands:** on a server, the runner's sshd, with a forced command (`portenv agent-shell <id>`) that attaches to the agent's own tmux server as the agent's user. `restrict` is set, so there's no port forwarding, no agent forwarding, no X11 and no user rc.
 - **On a Mac:** none in the tester build. There's no inbound port, so a cloud agent can't reach the Mac. A local SSH client would gain nothing over MCP.
 
 **MCP (recommended for the tester build, in its local form):**
@@ -277,31 +351,54 @@ The doors (section 10) call the same `portenvd` functions behind `TeamCalls`; th
 **Web terminals (designed, after testers):**
 - **Where:** served on a private network only, the user's tailnet or LAN, never a public address. On a server it can be ADR 0015's door, under its conditions.
 - **Who:** the owner signs in with a passkey, then hands the agent a one-time link tied to one agent and one workspace (ADR 0015's rule).
-- **What it shows:** only that agent's panes, as the agent's slot user. Muse's way in.
+- **What it shows:** only that agent's panes, as the agent's user. Muse's way in.
 
-**Recommendation: build MCP, locally, for the tester build** (R-0231 asks for MCP or SSH; MCP is the one a Mac can serve without an inbound port).
+**Nothing remote is built before the owner's run (R-0237).** The first to build after it is local MCP (R-0231 asks for MCP or SSH; MCP is the one a Mac can serve without an inbound port).
 - **Why MCP:** one door serves several agents (Claude Desktop, Cursor, Codex today; ChatGPT once remote MCP exists). It needs no listener on the Mac. Its tools are section 4's commands, so it adds no new power to check.
 - **SSH next, then web.**
 - **The reviewer should know:** none of the three lets a *cloud* agent (Grok Bot, Dots, Muse) reach a workspace on a Mac in the tester build. Every path for them needs something reachable from the internet: the runner on the user's own server (2.7, 2.8, after testers, with 2.9 Set Up) or Portenv's gateway (Phase 3). Opening the Mac to them would break the no-inbound-port rule.
-- **What testers get:** local agents can join the team through MCP. The cloud agents' door comes with servers after the tester build.
-- **If time is short, remote goes first** (section 11). The per-agent boundary is never what gets cut.
+- **What testers get first:** the team inside the workspace. Local agents join through MCP once it's built after the owner's run; the cloud agents' door comes with servers.
 
-### 11. Build order and dates (R-0231, R-0232)
+### 11. Build order and dates (R-0237, R-0232)
 
-**Week of 19 Oct, in this order** (each step after its tests, below):
-1. **Mon 19 – Tue 20: users.** init's slot pool and `team` group, the helper's user switch, per-agent tmux servers and control clients, the shared-group modes and checks, lane A's tab-streams-its-own-pane fix.
-2. **The command and its grants:** the per-agent sockets with `SO_PEERCRED`, `portenv` in the box (section 4), the grant checks in `portenvd`.
-3. **The board:** messages and decisions (section 6), and Approve and Decline in the app.
-4. **The sidebar:** the Team section (lane D's mockups), agent states, approving agent files with their diff.
-5. **One remote path:** local MCP (section 10). First to drop if the week runs short.
+- **Fri 16, 18:00:** this ADR to the reviewer; review by 20:00. On approval, code starts tonight. Lane C's proto PR (section 9, with `make proto`) goes first, so every lane builds against the same messages. Lane A's tab-streams-its-own-pane fix and #119's fix also land today.
+- **Sat 17, 14:00, preview build (in a lane):**
+  - per-agent users with their own tmux servers, homes and `/home/team`;
+  - `portenv split`, `tab new`, `msg` and `ask-owner`, with grants.
 
-**Checkpoint, Wed 21 evening:** per-agent users working end to end in a lane build (an agent started as its slot user, lane A's repro failing at every step as that user, a `portenv split` showing in the owner's window). If not, lane C tells the reviewer at once.
+  The reviewer UI-tests it 14:00–16:00; the owner tries it on the test project after. **If the preview is at risk, lane C tells the reviewer by Sat 10:00.**
+- **Sun 18, 12:00, full build:**
+  - the board;
+  - the Team sidebar with agents' tabs and decisions;
+  - agent files;
+  - `portenv team init` with the Orchestrate template;
+  - the Agent files view.
 
-**After the build:**
-- **Fri 23 evening:** release-candidate build.
-- **Sat 24:** the reviewer's UI tests.
-- **Sun 25 – Mon 26:** the owner runs the Orchestrate team end to end (R-0232), from a short run sheet lane C writes in the build week: install, add a project, `portenv team init` (Orchestrate team), start the agents, watch the sidebar, answer a decision, open an agent's panes, move the workspace, close and reopen the window.
-- **Tue 27:** the tester build, only on the owner's word.
+  The reviewer tests 12:00–15:00. The owner's end-to-end run starts at 15:00, from lane C's run sheet: install, add the project, `portenv team init` (Orchestrate team), start the agents, watch the sidebar, answer a decision, open an agent's panes, move the workspace, close and reopen the window.
+- **Mon 19:** fixes from the owner's run. Testers only on the owner's word.
+- **If a part isn't ready,** the build ships without it and says so; nothing ships untested. Per-agent users are never the part that's cut. Remote agents wait until after the owner's run.
+- **One dependency:** filtering the window to one agent's tabs (lane D) needs per-tab terminals wired into the window (lane A's 1.2c). If 1.2c isn't merged by Sat evening, the Sunday build shows agents' tabs labelled in the one tab bar, and filtering waits for it.
+
+### 12. Who owns which files this weekend (R-0237)
+
+One lane owns each file; another lane that needs a change asks the owner of the file on the board. Small PRs, each reviewed as usual.
+
+| Lane | Owns | Builds |
+| --- | --- | --- |
+| **A** (terminals) | `core/agent/controlmode*.go`, `ctlhub*.go`, `tabterm*.go`, `tabs*.go`, `paneparser*.go`, `panelane.go`, `terminal*.go`; `core/daemon/tabs.go`, `terminal.go`; `apps/mac/.../BoxTerminal.swift`, and `TabBar.swift` until 1.2c merges | one tmux server and control client per agent (started through a function lane C calls, with the user it's given); tab ids across servers; `agent_id` and `pane_ids` filled on each tab; the tab-pane fix; 1.2c's per-tab terminals in the window |
+| **C** (users, command, board) | `proto/` (all of section 9); `core/agent/init_linux.go`'s user calls and a new `core/agent/team*.go` (users, sockets, `SO_PEERCRED`, homes, quota, seeding, home file I/O, board writer); a new `core/daemon/team*.go` (agent files, pin, validation, grants, board, decisions, the RPCs); `core/cmd/portenv`'s in-box commands and `team init`; the templates; `images/toolbox-node/` (group `team`, `/run/portenv-team`); `docs/PLAN.md`; the run sheet | the preview's users and commands, then the board and agent files |
+| **D** (the app) | `apps/mac/.../DaemonClient.swift`, `DaemonAPI.swift`, `MainWindow*.swift`, `InspectorView.swift`, `Inspector.swift` (Who's here), `SettingsWindow.swift`'s team limits, new `Team*.swift` and `AgentFiles*.swift`, and `TabBar.swift` after 1.2c | the Team sidebar, decisions, approving agent files with their diff, the Agent files view with drag and drop, filtering the window by agent |
+| **E** (boundary tests) | a new `tests/team-boundary/`, its CI job (`.github/workflows/`), its `Makefile` target, and `core/daemon/caller.go`'s agent caller | the per-agent boundary tests (below), table-driven against a real engine on both architectures, with a mutation check per rule; the agent identity in `caller.go` |
+
+**Lane E's boundary tests (its offer, taken):** each rule is one row, run as an agent's user, and each row has a mutation that must make it fail. The rows:
+- reaching the owner's or another agent's tmux;
+- the homes (another agent's, the owner's dotfiles);
+- `/home/team`'s setgid and group-write rule, and the project's never-group-writable paths;
+- `portenvd`'s socket, the SSH-agent socket and the agent channel's sockets;
+- `sudo` and set-uid binaries;
+- ADR 0005's memory probe.
+
+They gate the Saturday preview: a red row means the preview doesn't ship.
 
 ## Consequences
 
@@ -309,28 +406,33 @@ The doors (section 10) call the same `portenvd` functions behind `TeamCalls`; th
 - **Agents lose the owner's logins.** Each signs in, or the owner shares one login per agent, with a warning that sharing can't be undone by removing the agent. Testers will notice the extra sign-in; first-run copy for the Team should say why.
 - **Agents share the owner's checkout.** That's what a team on one tree expects, and it means the owner runs files agents changed (section 2's residual risk, which the app states once). Own clones per agent stay a later option.
 - **New code, all after approval:**
-  - **The helper:** the user switch into the slot pool (init makes the users), one tmux server and control client per agent, per-agent sockets with `SO_PEERCRED`, the board writer, and the shared-group and home-mode checks.
+  - **init:** making and removing agent users, and writing them again at every box start.
+  - **The helper:** the user switch, one tmux server and control client per agent, per-agent sockets with `SO_PEERCRED`, the board writer, home seeding, the quota and home file I/O, and the shared-group and home-mode checks.
   - **`portenvd`:** agent-file validation and the content pin, the grant checks, the board and decisions, `TeamCalls`, the RPCs above, and `portenv mcp`.
-  - **The app:** the Team section (lane D's mockups), Approve and Decline, approving a file with its diff, and issuing and revoking MCP tokens.
+  - **The app:** the Team section (lane D's mockups), Approve and Decline, approving a file with its diff, the Agent files view, and (after the owner's run) issuing and revoking MCP tokens.
   - **Templates and docs:** the Orchestrate team template and the owner's run sheet (section 11).
-- **Tests before code (data-loss and security paths):**
-  - an agent's raw `tmux` can't reach the owner's server: lane A's repro, run as a slot user, fails at every step, and so does reaching another slot's server;
+- **Tests before code (data-loss and security paths; lane E's boundary rows in section 12, plus these):**
+  - an agent's raw `tmux` can't reach the owner's server: lane A's repro, run as an agent's user, fails at every step, and so does reaching another agent's server;
   - a request naming another agent is attributed to its socket's uid;
   - `send-keys` into a pane the agent didn't open is refused;
   - a changed agent file doesn't start until approved, with the diff;
   - an agent's uid can write the project (new files stay in `team`, whatever its umask) but can't write `.git/hooks`, `.git/config` or the project's `.portenv/`, or read the owner's dotfiles;
   - the team won't start over a project or home whose modes are wrong, or a filesystem without ACLs;
   - an agent's process can't gain a capability or use `sudo` (`no_new_privs`, no ambient set);
-  - a removed agent's home stays until the owner deletes it, and its slot stays taken;
+  - a removed agent's home stays until the owner deletes it, and its uid stays taken; init refuses a reserved or malformed id even when the helper sends one;
+  - `users.json` brings every agent back with the same uid after a restore;
+  - `home_seed` refuses a path or symlink outside the project; the Agent files view writes as the agent's user and refuses past the quota;
   - each limit refuses with its line;
   - board text with Markdown or escape sequences renders as plain text;
   - Stop ends every process of the agent's uid;
   - a secret prompt's text never reaches the board;
   - a revoked MCP token is refused at once;
-  - the team's slots, homes and the project's group and ACLs survive a save, a Move To and a restore.
+  - the team's users, homes, `/home/team` and the project's group and ACLs survive a save, a Move To and a restore.
 - **PLAN.md** gains the team in Phase 1's tester-build scope (R-0226) when this is approved. 2.4's stand-in mode stays as designed. Lanes (4.1) now arrive early, in this team form, for team agents.
 - **Open questions** for PLAN when approved:
   - whether stand-in agents (the owner's access, ADR 0006 B) still make sense once team agents exist, or become a team agent with wider grants;
   - per-agent CPU and memory limits (cgroups need the engine's delegation, which the box lacks today; see the rootless spike, R-0223);
   - whether restic keeps the project's ACLs and setgid bits on restore, or the helper reapplies them at team start (the tests above decide);
-  - when to offer `checkout: own` (per-agent clones).
+  - when to offer `checkout: own` (per-agent clones);
+  - kernel quotas for agents' homes (today the limit is measured, not enforced);
+  - Google Drive connectors for agents' files (after the tester build).

@@ -1,0 +1,3 @@
+Portenv uses Docker Desktop to run workspaces on this Mac. Start Docker Desktop, then click Try Again.
+Docker Desktop is still starting, or isn’t answering. Wait a moment, then click Try Again.
+Portenv couldn’t get the workspace image: the download stopped. Check this Mac is online, then click Try Again.

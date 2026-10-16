@@ -361,6 +361,24 @@ func (t *tabStream) input(b []byte) (map[uint64]int, error) {
 	return ids, nil
 }
 
+// oldestPane is the pane a window was made with: tmux never reuses pane IDs
+// and numbers them in order, so it's the lowest one still there (the next
+// oldest, if that one has exited).
+func oldestPane(lines []string) string {
+	best, bestN := "", -1
+	for _, l := range lines {
+		l = strings.TrimSpace(l)
+		n, err := strconv.Atoi(strings.TrimPrefix(l, "%"))
+		if !strings.HasPrefix(l, "%") || err != nil || n < 0 {
+			continue
+		}
+		if bestN < 0 || n < bestN {
+			best, bestN = l, n
+		}
+	}
+	return best
+}
+
 // reset sends the tab's current state: its pane is found, its size set,
 // then the seed is taken in one command list, so no output lands inside
 // it; output for the pane until the seed's reply came is already in the
@@ -404,8 +422,10 @@ func (t *tabStream) resetOnce(ctx context.Context, skipped bool) error {
 	}
 	ctx, cancel := context.WithTimeout(ctx, seedTimeout)
 	defer cancel()
-	// The tab's pane.
-	id, err := c.send("display -p -t "+t.tab+" '#{pane_id}'", "", nil)
+	// The tab's pane: the one it was made with, never the window's active
+	// pane, so a pane split into the window (by anything running in the
+	// workspace) can't take the tab over on screen (R-0228, R-0231).
+	id, err := c.send("list-panes -t "+t.tab+" -F '#{pane_id}'", "", nil)
 	if err != nil {
 		return nil
 	}
@@ -413,8 +433,8 @@ func (t *tabStream) resetOnce(ctx context.Context, skipped bool) error {
 	if err != nil || !ok {
 		return err
 	}
-	pane := strings.TrimSpace(strings.Join(r.lines, ""))
-	if r.failed || !strings.HasPrefix(pane, "%") {
+	pane := oldestPane(r.lines)
+	if r.failed || pane == "" {
 		return t.closed() // the tab is gone
 	}
 	t.pane = pane

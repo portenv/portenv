@@ -1074,3 +1074,54 @@ func TestPendingEnterEndsAtTheNextPrompt(t *testing.T) {
 		}
 	}
 }
+
+func TestOldestPane(t *testing.T) {
+	for _, c := range []struct {
+		in   []string
+		want string
+	}{
+		{[]string{"%3"}, "%3"},
+		{[]string{"%12", "%3", "%40"}, "%3"},
+		{[]string{"%9", "%10"}, "%9"}, // numerically, not as text
+		{[]string{"", "junk", "%7"}, "%7"},
+		{nil, ""},
+		{[]string{"can't find window: @9"}, ""},
+	} {
+		if got := oldestPane(c.in); got != c.want {
+			t.Errorf("oldestPane(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+// A tab streams the pane it was made with: a pane split into its window
+// (by anything running in the workspace, as the window's active pane)
+// never takes the tab over, live or on its next reset (R-0228, R-0231).
+func TestATabKeepsItsOwnPane(t *testing.T) {
+	h := newTabTermHarness(t, "sh -c 'i=0; while :; do i=$((i+1)); echo owner-$i; sleep 0.05; done'")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	tab := h.firstTab()
+	tt := h.open(ctx, tab, "", 80, 24)
+	if tt.next(5*time.Second).GetReset_() == nil {
+		t.Fatal("no reset")
+	}
+	// Split in, as the window's active pane, printing its own lines.
+	h.raw("split-window", "-t", tab, "sh -c 'while :; do echo intruder; sleep 0.05; done'")
+	if got := strings.TrimSpace(h.raw("display", "-p", "-t", tab, "#{pane_id}")); got == "" {
+		t.Fatal("no active pane")
+	}
+	// Live: only the tab's own pane's output.
+	for _, m := range tt.until(5*time.Second, "owner output after the split", func(o []byte) bool { return bytes.Count(o, []byte("owner-")) > 20 }) {
+		if bytes.Contains(m.GetOutput(), []byte("intruder")) {
+			t.Fatalf("the split pane's output reached the tab: %q", m.GetOutput())
+		}
+	}
+	// On a reset (a new view of the tab): still its own pane.
+	r := h.open(ctx, tab, "", 80, 24).next(5 * time.Second).GetReset_()
+	if r == nil {
+		t.Fatal("no reset")
+	}
+	if bytes.Contains(r.GetSeed(), []byte("intruder")) || !bytes.Contains(r.GetSeed(), []byte("owner-")) {
+		t.Fatalf("the reset shows another pane: %q", tail(r.GetSeed()))
+	}
+}

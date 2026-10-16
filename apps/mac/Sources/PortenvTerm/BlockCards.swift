@@ -303,12 +303,16 @@ public struct BlocksView: View {
     static let space = "blocks"
     static func headID(_ id: Int) -> String { "head-\(id)" }
 
-    /// "↑ Top of block": to the block's header, not animated, and again once
-    /// the lazy rows above it have their real heights, so a jump over
-    /// thousands of rows doesn't land short (R-0239).
+    /// "↑ Top of block": to the block's header, not animated, and again over
+    /// the next few frames while the lazy rows above it take their real
+    /// heights, so a jump over thousands of rows doesn't land short, even on
+    /// a slow Mac (R-0239).
     func top(_ block: CommandBlock, _ proxy: ScrollViewProxy) {
-        proxy.scrollTo(Self.headID(block.id), anchor: .top)
-        DispatchQueue.main.async { proxy.scrollTo(Self.headID(block.id), anchor: .top) }
+        let id = Self.headID(block.id)
+        proxy.scrollTo(id, anchor: .top)
+        for delay in [0.0, 0.05, 0.15, 0.4] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { proxy.scrollTo(id, anchor: .top) }
+        }
     }
 
     func header(_ block: CommandBlock, proxy: ScrollViewProxy, pinned: Bool) -> some View {

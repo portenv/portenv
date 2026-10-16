@@ -121,7 +121,10 @@ struct BlocksAccessibilityTests {
         await settle()
         #expect(elements(window).contains { $0.label == "Top of block" })
         #expect(press("Top of block", in: window) == true)
-        await settle()
+        // Up to 3 s for the rows to settle on a slow runner.
+        for _ in 0 ..< 100 where elements(window).contains(where: { $0.label == "Top of block" }) {
+            try? await Task.sleep(for: .milliseconds(30))
+        }
         #expect(!elements(window).contains { $0.label == "Top of block" })
         #expect(elements(window).contains { $0.label.hasPrefix("npm run build") })
     }

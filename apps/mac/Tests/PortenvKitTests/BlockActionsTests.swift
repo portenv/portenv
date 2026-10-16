@@ -17,6 +17,11 @@ struct BlockActionsTests {
         #expect(BlockCopy.trimmedNote(1, locale: en) == "Output trimmed: the first line is past the scrollback.")
     }
 
+    @Test func copyBothPutsTheCommandFirst() {
+        #expect(BlockCopy.both(command: "ls", output: "a b") == "$ ls\na b")
+        #expect(BlockCopy.both(command: "true", output: "") == "$ true")
+    }
+
     @Test func runAgainTypesOnlyTheCommand() {
         #expect(BlockCopy.runAgainInput("npm test -- retries") == Array("npm test -- retries\r".utf8))
         // Control characters a buffer could hold never become keystrokes.

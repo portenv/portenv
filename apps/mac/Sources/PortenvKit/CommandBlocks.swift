@@ -244,9 +244,19 @@ public enum BlockCopy {
         return ("Run \u{201C}\(command)\u{201D} again?", "\(who) It runs in this tab as you.")
     }
 
+    /// Copy Both: the command as it was typed, after a prompt sign, then
+    /// its output.
+    public static func both(command: String, output: String) -> String {
+        output.isEmpty ? "$ \(command)" : "$ \(command)\n\(output)"
+    }
+
     public static let copyOutput = "Copy Output"
     public static let copyCommand = "Copy Command"
+    public static let copyBoth = "Copy Both"
     public static let runAgain = "Run Again"
+    public static let collapse = "Collapse"
+    public static let expand = "Expand"
+    public static let jumpToStart = "Jump to Start"
 }
 
 /// Moving between blocks (⌘↑ and ⌘↓, R-0139): the block above or below the

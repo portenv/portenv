@@ -46,6 +46,13 @@ enum BlockRenders {
         let reader = BlockReader(view: view)
         let blocks = reader.blocks()
         let now = day.addingTimeInterval(14 * 3600 + 40 * 60)
+        let small = TerminalViews.tab()
+        small.font = view.font
+        small.frame = view.frame
+        small.getTerminal().resize(cols: 110, rows: 30)
+        small.changeScrollback(1000)
+        session(into: small, day: day)
+        let smallReader = BlockReader(view: small)
         for (name, palette) in [("light", TerminalPalette.light), ("dark", TerminalPalette.dark)] {
             _ = name
             func cards(_ toggled: Set<Int>, showAll: Set<Int> = [], selected: Int? = nil, query: String? = nil, startAt: Int? = nil) -> AnyView {
@@ -69,6 +76,17 @@ enum BlockRenders {
             if let build = blocks.first(where: { $0.outputLines > 100 }), let rows = build.output {
                 try snapshot(cards([build.id], showAll: [build.id], startAt: rows.lowerBound + 600),
                              "blocks-sticky-\(palette.name)", NSSize(width: 980, height: 360))
+            }
+            // Slice 3: the build outgrew a 1,000-line scrollback; its card
+            // says so instead of showing blanks, and the selected block
+            // shows its actions.
+            let trimmedBlocks = smallReader.blocks()
+            if let build = trimmedBlocks.first(where: { $0.outputLines > 100 }) {
+                try snapshot(AnyView(BlocksView(blocks: trimmedBlocks.filter { $0.id >= build.id }, reader: smallReader, palette: palette,
+                                                now: now, toggled: [build.id], selected: build.id)
+                        .frame(maxHeight: .infinity, alignment: .top)
+                        .background(SwiftUI.Color(nsColor: .textBackgroundColor))),
+                    "blocks-trimmed-\(palette.name)", NSSize(width: 980, height: 1000))
             }
         }
     }

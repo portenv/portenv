@@ -402,12 +402,18 @@ func TestARoutineIsTypedIntoTheAgentsMainPaneOnly(t *testing.T) {
 		Focus: &agentv1.PaneRef{PaneId: other.GetPaneId()}}})
 
 	for name, text := range map[string]string{
-		"empty":             " ",
-		"two lines":         "one\ntwo",
-		"an escape":         "x\x1b[2J",
-		"a carriage return": "x\ry",
-		"too long":          strings.Repeat("x", maxRoutine),
-		`ends in \;`:        `x\;`,
+		"empty":                    " ",
+		"two lines":                "one\ntwo",
+		"an escape":                "x\x1b[2J",
+		"a carriage return":        "x\ry",
+		"a right-to-left override": "x\u202Ey",
+		"a right-to-left isolate":  "x\u2067y",
+		"a left-to-right mark":     "x\u200Ey",
+		"a right-to-left mark":     "x\u200Fy",
+		"an Arabic letter mark":    "x\u061Cy",
+		"invalid UTF-8":            "x\xffy",
+		"too long":                 strings.Repeat("x", maxRoutine),
+		`ends in \;`:               `x\;`,
 	} {
 		if err := s.DeliverRoutine(ctx, "builder", text); status.Code(err) != codes.InvalidArgument {
 			t.Errorf("%s: %v", name, err)

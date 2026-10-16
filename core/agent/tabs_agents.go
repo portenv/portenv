@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"unicode"
 	"unicode/utf8"
 
 	"google.golang.org/grpc/codes"
@@ -562,7 +563,7 @@ func (s *apiServer) DeliverRoutine(ctx context.Context, agentID, text string) er
 	switch {
 	case strings.TrimSpace(text) == "":
 		return status.Error(codes.InvalidArgument, "a routine needs text")
-	case !utf8.ValidString(text) || strings.IndexFunc(text, isControl) >= 0:
+	case !routineLine(text):
 		return status.Error(codes.InvalidArgument, "a routine is one line of plain text")
 	case len(line) > maxRoutine:
 		return status.Errorf(codes.InvalidArgument, "a routine is at most %d bytes", maxRoutine-len(routinePrefix))
@@ -578,4 +579,20 @@ func (s *apiServer) DeliverRoutine(ctx context.Context, agentID, text string) er
 		return status.Errorf(codes.Unavailable, "routine to %s: %v", agentID, err)
 	}
 	return nil
+}
+
+// routineLine is the board's plain-text rule for one line (plainText(s,
+// false) in teamio.go, #173): valid UTF-8, no control characters and no
+// bidi controls, which could make a routine read differently from what is
+// typed. It becomes a call to plainText once #173 is in.
+func routineLine(s string) bool {
+	if !utf8.ValidString(s) {
+		return false
+	}
+	for _, r := range s {
+		if unicode.IsControl(r) || (r >= 0x202A && r <= 0x202E) || (r >= 0x2066 && r <= 0x2069) || r == 0x200E || r == 0x200F || r == 0x061C {
+			return false
+		}
+	}
+	return true
 }

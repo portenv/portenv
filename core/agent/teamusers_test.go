@@ -222,6 +222,9 @@ func TestEnsureMakesTheUserItsHomeAndItsRecord(t *testing.T) {
 	if !slices.Contains(*chowns, chownCall{home, 2001, 2001}) {
 		t.Errorf("home not given to 2001: %v", *chowns)
 	}
+	if info, err := os.Lstat(filepath.Join(team.Cfg.HomeRoot, "team")); err != nil || info.Mode()&os.ModeSetgid == 0 {
+		t.Errorf("/home/team with the first agent: %v, %v", info, err)
+	}
 	f := readStore(t, team)
 	if f.Version != 1 || len(f.Users) != 1 || f.Users[0] != (agentUserRecord{ID: "builder", UID: 2001}) {
 		t.Errorf("users.json = %+v", f)
@@ -306,8 +309,10 @@ func TestEnsureRefusesAUserWhoseUIDMoved(t *testing.T) {
 	if _, err := team.Ensure(ctx, "builder"); err == nil {
 		t.Fatal("Ensure accepted builder with uid 1500, recorded as 2001")
 	}
-	if len(*chowns) > 0 {
-		t.Errorf("chown ran despite the mismatch: %v", *chowns)
+	for _, c := range *chowns {
+		if c.path == filepath.Join(team.Cfg.HomeRoot, "builder") {
+			t.Errorf("builder's home chowned despite the mismatch: %v", c)
+		}
 	}
 }
 
@@ -504,14 +509,27 @@ func TestRestoreBringsAgentsBackInANewBox(t *testing.T) {
 	_ = sys
 }
 
-func TestRestoreWithNoTeamMakesOnlyTheTeamFolder(t *testing.T) {
+// A workspace without a team keeps /home as it was: only work's home
+// (images/toolbox-node/test.sh checks the same in a real box).
+func TestRestoreWithNoTeamAddsNothingToHome(t *testing.T) {
 	team, sys, _ := newTestTeam(t)
 	team.Restore(context.Background())
 	if err := team.RestoreErr(); err != nil {
 		t.Fatal(err)
 	}
-	if sys.ran("useradd") {
-		t.Errorf("users added with no team: %q", sys.calls)
+	if sys.ran("useradd") || sys.ran("groupadd") || sys.ran("usermod") {
+		t.Errorf("users or groups changed with no team: %q", sys.calls)
+	}
+	entries, err := os.ReadDir(team.Cfg.HomeRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, e := range entries {
+		names = append(names, e.Name())
+	}
+	if !slices.Equal(names, []string{"work"}) {
+		t.Errorf("/home holds %v, want only work", names)
 	}
 	if _, err := os.Stat(team.storePath()); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("users.json written with no team: %v", err)

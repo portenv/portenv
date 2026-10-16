@@ -128,6 +128,12 @@ This closes every item of lane A's list:
 - **The owner's home:** `/home/work` becomes 0711 (agents can pass through, not list). The owner's dotfiles and logins (`~/.config`, `~/.claude`, `~/.ssh`) stay 0700. The helper refuses to start a team over a home whose modes would expose them, with a plain line.
 - **The residual risk, stated plainly:** an agent can change any project file (or file in `/home/team`) the owner later runs, such as a `Makefile`, a test or a `package.json` script. When the owner runs it, it runs as `work`, with sudo. That is the same trust as merging an agent's pull request without reading it, and the app says so in the decision the owner approves when a team first starts (`team_start`, R-0245), and again in the Team section's header ("Agents can change your project's files. Check their changes before you run them."). File ownership shows who made a new file; git shows every change.
 
+**How it's done (`PrepareTeamProject`, before each agent start):**
+- init (root) only checks: real folders, the project is `/home/work/<name>`, and the owner's private folders and logins aren't readable by others (else the team is refused with a line naming the one to fix).
+- The work on the tree runs as `work`, inside an `os.Root`, so a link an agent swaps in mid-walk reaches nothing `work` couldn't change: default ACLs, the group and setgid, the protected paths closed, `core.sharedRepository`, and `/home/work` 0711.
+- init adds the project as a system git `safe.directory`, so agents can use `work`'s repository.
+- It happens only when a team starts, never in a workspace without one. Stop Team doesn't revert it, and the team-start decision says so (R-0261).
+
 **Rejected: a bind mount of the project into each agent's home.** The uids still differ, so a plain bind mount changes no permission: the agent needs group write anyway. Making an agent's writes land as `work` needs an idmapped mount, which needs `CAP_SYS_ADMIN` in the box. The box doesn't have it, and this ADR won't add it. It would also make an agent's writes look like the owner's.
 
 **Considered, a later option: each agent in its own clone** (`git clone --shared` into its home, committing on `agent/<id>`, the owner fetching). It keeps agents out of the owner's files entirely, but changes how a team works (no shared tree, a fetch for every hand-off). It can come later as an agent-file option (`checkout: own`) on top of this design.
@@ -231,6 +237,36 @@ Agents learn what they can do from Portenv, not from guesses. Everything below c
   The `AGENTS.md` block keeps a short version.
 - **`portenv guide --json`** gives the same content as data, for a runner to load: message and decision types, fields and limits, with a `version`.
 - **One source:** both forms are generated from the proto and section 7's limits table. A test fails if a field in the proto's board, decision or `whoami` messages is missing from the guide.
+
+### 4b. Status, team status, hand-offs and routines (R-0256 to R-0258, R-0261)
+
+- **Status:**
+  - `portenv status set "<line>" [--progress N/M] [--blocked "<reason>"]` and `portenv status clear` set the caller's own status;
+  - limits: one plain line, at most 200 characters, one update every 10 s;
+  - it shows on the agent's row ("· 4 min ago"), in its `whoami`, and in teammates' with the grant below;
+  - the owner's **Ask for Status** is a `status_request` message.
+- **`grant.team_status: read`** (default `none`; an override can only narrow it):
+  - `portenv team status` and `whoami` show each teammate's state, status, pending requests and idle time;
+  - never terminals or homes;
+  - in the Orchestrate template, only the lead has it.
+- **Hand-offs: `portenv handoff AGENT PATH [--note]`,** under the `message` grant:
+  - **source:** only from the sender's home or the project, by full path;
+  - **reading:** as the sender, by an openat walk with `O_NOFOLLOW`; a link or special file refuses the whole hand-off;
+  - **writing:** as the recipient, new files only, into `~/inbox/<sender>/<UTC time>/`;
+  - **limits:** at most 100 MB, within the recipient's quota, or nothing lands;
+  - **the message:** a hand-off message lists each file's SHA-256.
+- **Routines** (only in the repository file, which the owner approves):
+  - **format:** `routine: ["every 30m: <note>", "every 2h: <note>"]`. The strict frontmatter has no inline maps, so this replaces R-0257's `{every, note}` example (R-0261 approved it). At least 10 minutes apart, at most a week, at most 4 per agent;
+  - **timing:** portenvd keeps the timers while the agent runs. A firing posts the note to the agent's inbox, and `DeliverRoutine` types `[Portenv routine] <note>` into the agent's own main pane;
+  - **busy agents:** the helper types only when the agent is idle: no question on screen (ADR 0017's `Waiting()`), 5 s of quiet, not the alternate screen, and the runner's idle-input pattern on its last lines. Otherwise portenvd tries again every 30 s, and missed fires collapse into one;
+  - **the runner table:** idle patterns come from portenvd's table, which `StartTeamAgent` passes to the helper. A runner with no pattern gets no routines, and its row and `whoami` say why;
+  - **the app:** pause and resume from the row menu;
+  - `portenv routine propose` isn't in this build; an approved proposal would have to change the repository file (open question).
+- **What's listed:** `whoami` and the `AGENTS.md` block list only commands that work in the build (R-0261). `propose-agent-change`, `request-package` and `routine propose` come back when they do.
+- **`portenv guide` and `guide --json`:**
+  - both are versioned, and generated from the proto and the one limits table (`core/internal/teamkit`), which portenvd also enforces;
+  - a test walks every type an agent can read and fails if the guide misses a field or value;
+  - `portenv team init [--template starter|orchestrate]` writes the agent files, never over an existing one.
 
 ### 5. Identity: one per agent, the same on every way in
 

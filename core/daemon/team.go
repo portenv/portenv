@@ -640,7 +640,8 @@ func (e *teamEngine) startAgent(ctx context.Context, name, agentID string) (*dae
 		if !b.teamStartPendingLocked() {
 			r := e.decideLocked(ctx, name, b, boardFrom, typesv1.DecisionKind_DECISION_KIND_TEAM_START,
 				"Start this workspace's agent team?",
-				"Each agent runs as its own user in this workspace, with its own terminals and files, and asks you before it opens a pane in your window. "+residualRisk, nil, "")
+				"Each agent runs as its own user in this workspace, with its own terminals and files, and asks you before it opens a pane in your window. "+
+					"Agents can pass through your home folder to reach the project (it becomes 0711); your logins and private folders stay yours, and Stop Team doesn't change it back. "+residualRisk, nil, "")
 			if !r.GetOk() {
 				return nil, errors.New(r.GetLine())
 			}
@@ -920,15 +921,14 @@ func (e *teamEngine) agentInfos(ctx context.Context, name string) map[string]*da
 
 // commandsFor is what an agent's grant lets it run now (R-0246).
 func commandsFor(g *typesv1.AgentGrant) []string {
-	cmds := []string{"msg", "inbox", "share", "whoami", "status set", "status clear", "handoff", "propose-agent-change"}
+	// Only what works in this build (R-0261): propose-agent-change,
+	// request-package and routine propose come back when they do.
+	cmds := []string{"msg", "inbox", "share", "whoami", "status set", "status clear", "handoff"}
 	if p := g.GetPanes(); p == typesv1.GrantMode_GRANT_MODE_ALLOW || p == typesv1.GrantMode_GRANT_MODE_ASK {
 		cmds = append(cmds, "split", "tab new", "focus", "close")
 	}
 	if g.GetAskOwner() {
 		cmds = append(cmds, "ask-owner")
-	}
-	if g.GetPackages() == typesv1.GrantMode_GRANT_MODE_ASK {
-		cmds = append(cmds, "request-package")
 	}
 	if g.GetTeamStatus() {
 		cmds = append(cmds, "team status")
@@ -982,9 +982,6 @@ func agentsMDBlock(team *Team, a *TeamAgent) string {
 		can = append(can, "ask the owner (portenv ask-owner)")
 	} else {
 		cant = append(cant, "ask the owner for decisions")
-	}
-	if g.GetPackages() == typesv1.GrantMode_GRANT_MODE_ASK {
-		can = append(can, "request system packages (portenv request-package)")
 	}
 	cant = append(cant, "reach the owner's terminals or other agents' files", "use sudo")
 	var mates []string

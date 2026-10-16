@@ -1016,3 +1016,20 @@ func TestTheProjectIsPreparedBeforeAgentsStart(t *testing.T) {
 		t.Errorf("prepared %v", got)
 	}
 }
+
+// R-0261: whoami lists only what works; the first start says what changes.
+func TestWhoAmIListsOnlyWhatWorks(t *testing.T) {
+	e, _, _ := newTestEngine(t, defaultTeam()...)
+	w := e.handleCall(context.Background(), "w", &agentv1.TeamCallsResponse{AgentId: "builder", Op: &agentv1.TeamCallsResponse_Whoami{Whoami: &agentv1.WhoAmI{}}}).GetWhoami()
+	for _, c := range w.GetCommands() {
+		if strings.Contains(c, "propose") || c == "request-package" {
+			t.Errorf("whoami lists %q, which isn't in this build", c)
+		}
+	}
+	_, _ = e.startAgent(context.Background(), "w", "lead")
+	for _, d := range e.box("w").decisions {
+		if d.GetKind() == typesv1.DecisionKind_DECISION_KIND_TEAM_START && !strings.Contains(d.GetDetail(), "Stop Team doesn't change it back") {
+			t.Errorf("team_start detail: %q", d.GetDetail())
+		}
+	}
+}

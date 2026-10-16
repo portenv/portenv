@@ -39,6 +39,7 @@ The first-run screens show the full version, from Phase 3. Phases 1 and 2 ship a
 | `team-agent-selected` | Builder selected: its tabs and panes expand beneath its row, the window shows only its tabs (two panes, the second opened by Builder), and its messages with you sit beside its terminals, with Message Builder and Send. |
 | `team-decision` | Reviewer needs you: a decision from `portenv propose-agent-change` (the change to builder.md as a diff, its reason in quotes), with Decline and Approve and no default button, answered only in the app. |
 | `team-states` | A board of what the frames don't show: every row status (running, idle, stopped, needs you, connected, disconnected, can't start); a question from `portenv ask-owner`, answered by typing; an invalid agent file with portenvd's reason; a remote agent connected and disconnected, with Revoke Access…. |
+| `team-agent-files` | Agent files (R-0234, R-0240): Files under the agent's row, after its tabs, with its size. The agent's private home (`/home/builder`): files and folders with size, who added them and when; Add Files… and drag and drop, the drop target naming what's added and its size; the quota bar; and the full state, red, with what wasn't added and what to do. |
 
 ## Design notes
 

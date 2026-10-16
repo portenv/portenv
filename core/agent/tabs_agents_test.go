@@ -388,11 +388,15 @@ func TestARoutineIsTypedIntoTheAgentsMainPaneOnly(t *testing.T) {
 	s := testAgentServers(t)
 	ctx := context.Background()
 	dir := t.TempDir()
+	shortQuiet(t)
 	reader := func(name string) []string {
-		return []string{"sh", "-c", `IFS= read -r line; printf '%s' "$line" > "$0"; exec sleep 100`, filepath.Join(dir, name)}
+		return standIn(idleBox+`IFS= read -r line; printf '%s' "$line" > "$0"; exec sleep 100`, filepath.Join(dir, name))
 	}
 	tabs, err := s.StartAgentTerminals(ctx, testSpec(t, "builder", reader("main")...))
 	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetAgentIdleInput("builder", idleBoxPattern); err != nil {
 		t.Fatal(err)
 	}
 	// Another pane, current, also waiting for a line.
@@ -423,6 +427,7 @@ func TestARoutineIsTypedIntoTheAgentsMainPaneOnly(t *testing.T) {
 		t.Errorf("an agent that isn't running: %v", err)
 	}
 
+	waitQuiet()
 	text := "check the build #{pane_id} -l x;"
 	if err := s.DeliverRoutine(ctx, "builder", text); err != nil {
 		t.Fatal(err)
@@ -445,5 +450,69 @@ func TestARoutineIsTypedIntoTheAgentsMainPaneOnly(t *testing.T) {
 	}
 	if _, err := os.ReadFile(filepath.Join(dir, "other")); err == nil { // #nosec G304 -- test
 		t.Error("the routine went to another pane")
+	}
+}
+
+// A stand-in for an agent CLI at its empty input box, and the kit's
+// pattern for it.
+const (
+	idleBox        = `printf '╭──────╮\n│ >    │\n╰──────╯\n  ? for shortcuts\n'; `
+	idleBoxPattern = `^│ > *│$`
+)
+
+// standIn runs script with sh, $0 as arg.
+func standIn(script, arg string) []string { return []string{"sh", "-c", script, arg} }
+
+// shortQuiet makes routineQuiet 2 s for a test.
+func shortQuiet(t *testing.T) {
+	old := routineQuiet
+	routineQuiet = 2 * time.Second
+	t.Cleanup(func() { routineQuiet = old })
+}
+
+// waitQuiet waits out routineQuiet, with tmux's whole seconds.
+func waitQuiet() { time.Sleep(routineQuiet + 1200*time.Millisecond) }
+
+// A routine waits until the agent is at its empty input, quiet, and not
+// asking anything: each stand-in below fails one rule, is refused as
+// busy, and gets nothing typed.
+func TestARoutineIsNeverTypedIntoABusyAgent(t *testing.T) {
+	s := testAgentServers(t)
+	ctx := context.Background()
+	shortQuiet(t)
+	read := `IFS= read -r line; exec sleep 100`
+	cases := []struct {
+		id, script, pattern, why string
+	}{
+		{"asks", idleBox + `printf 'Do you want to proceed? (y/n) '; ` + read, idleBoxPattern, "is asking something"},
+		{"asks-yn", `printf 'Overwrite .env? [y/n] '; ` + read, `.`, "is asking something"},
+		{"prints", idleBox + `while :; do printf .; sleep 0.3; done`, idleBoxPattern, "printed something"},
+		{"fullscreen", `printf '\033[?1049h'; ` + idleBox + read, idleBoxPattern, "full-screen"},
+		{"nopattern", idleBox + read, "", "no idle-input pattern"},
+		{"notidle", `printf 'Working… (esc to interrupt)\n'; ` + read, idleBoxPattern, "isn't waiting at its input"},
+	}
+	for _, c := range cases {
+		if _, err := s.StartAgentTerminals(ctx, testSpec(t, c.id, standIn(c.script, "x")...)); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.SetAgentIdleInput(c.id, c.pattern); err != nil {
+			t.Fatal(err)
+		}
+	}
+	waitQuiet()
+	for _, c := range cases {
+		err := s.DeliverRoutine(ctx, c.id, "check")
+		if status.Code(err) != codes.FailedPrecondition || !strings.Contains(status.Convert(err).Message(), c.why) {
+			t.Errorf("%s: %v, want busy: %s", c.id, err, c.why)
+		}
+		a := s.agents.by[c.id]
+		if screen, _ := a.tmux(ctx, "capture-pane", "-p", "-t", a.mainPane); strings.Contains(screen, "Portenv routine") {
+			t.Errorf("%s: typed into it:\n%s", c.id, screen)
+		}
+	}
+	for _, bad := range []string{"(", strings.Repeat("x", maxIdleInput+1)} {
+		if err := s.SetAgentIdleInput("asks", bad); status.Code(err) != codes.InvalidArgument {
+			t.Errorf("pattern %.10q: %v", bad, err)
+		}
 	}
 }

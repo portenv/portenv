@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 	"unicode"
 	"unicode/utf8"
 
@@ -41,6 +42,9 @@ type agentServer struct {
 	// mainPane is the runner's pane, the first in its main session: the
 	// only pane a routine is typed into.
 	mainPane string
+	// idleInput matches the runner's screen when it waits at an empty
+	// input (SetAgentIdleInput); nil refuses every routine.
+	idleInput *regexp.Regexp
 }
 
 // agentServers are the running agents' servers, by id.
@@ -548,12 +552,95 @@ const routinePrefix = "[Portenv routine] "
 // maxRoutine is the longest routine line, in bytes, prefix included.
 const maxRoutine = 4096
 
+// routineQuiet is how long the agent's window must have printed nothing
+// before a routine is typed (tmux counts activity in whole seconds).
+var routineQuiet = 5 * time.Second
+
+// maxIdleInput is the longest idle-input pattern.
+const maxIdleInput = 512
+
+// SetAgentIdleInput sets the pattern that says a running agent's runner
+// waits at an empty input: a regular expression (RE2, so its matching
+// time is linear), matched against the main pane's last lines, one per
+// line ((?m)). The kit supplies it per runner (lane C); a runner without
+// one gets no routines.
+func (s *apiServer) SetAgentIdleInput(id, pattern string) error {
+	if len(pattern) > maxIdleInput {
+		return status.Errorf(codes.InvalidArgument, "an idle-input pattern is at most %d bytes", maxIdleInput)
+	}
+	var re *regexp.Regexp
+	if pattern != "" {
+		var err error
+		if re, err = regexp.Compile("(?m)" + pattern); err != nil {
+			return status.Errorf(codes.InvalidArgument, "the idle-input pattern: %v", err)
+		}
+	}
+	s.agents.mu.Lock()
+	defer s.agents.mu.Unlock()
+	a, ok := s.agents.by[id]
+	if !ok {
+		return status.Errorf(codes.FailedPrecondition, "%s isn't running", id)
+	}
+	a.idleInput = re
+	return nil
+}
+
+// readyForRoutine says why the main pane can't take a routine now, or ""
+// when it can (R-0258, R-0260). The helper can't read an agent's /proc or
+// terminal modes (another user), so the waiting detector's verdict rests
+// on the screen and the quiet time here.
+//
+//  1. It isn't asking something (the detector's Waiting): a routine typed
+//     there would answer the question.
+//  2. The window has printed nothing for routineQuiet.
+//  3. It isn't a full-screen program (the alternate screen).
+//  4. The runner's idle-input pattern matches: it waits at an empty input.
+func (a *agentServer) readyForRoutine(ctx context.Context, idleInput *regexp.Regexp) (string, error) {
+	out, err := a.tmux(ctx, "display-message", "-p", "-t", a.mainPane, "#{alternate_on}\t#{window_activity}")
+	if err != nil {
+		return "", err
+	}
+	f := strings.Split(strings.TrimSpace(out), "\t")
+	if len(f) != 2 {
+		return "", fmt.Errorf("tmux answered %q", out)
+	}
+	activity, err := strconv.ParseInt(f[1], 10, 64)
+	if err != nil {
+		return "", fmt.Errorf("tmux answered %q", out)
+	}
+	screen, err := a.tmux(ctx, "capture-pane", "-p", "-t", a.mainPane)
+	if err != nil {
+		return "", err
+	}
+	lines := lastLines(screen, screenLines)
+	sig := waitSignals{
+		Shell:        shellUnknown,
+		Quiet:        time.Since(time.Unix(activity, 0)),
+		AltScreen:    f[0] == "1",
+		ScreenPrompt: screenAsks(lines),
+		LastLines:    lines,
+	}
+	switch {
+	case sig.Waiting():
+		return "busy: " + a.user.ID + " is asking something", nil
+	case sig.Quiet < routineQuiet:
+		return fmt.Sprintf("busy: %s printed something in the last %s", a.user.ID, routineQuiet), nil
+	case sig.AltScreen:
+		return "busy: " + a.user.ID + " is in a full-screen program", nil
+	case idleInput == nil:
+		return "busy: " + a.user.ID + "'s runner has no idle-input pattern, so it never takes routines", nil
+	case !idleInput.MatchString(strings.Join(lines, "\n")):
+		return "busy: " + a.user.ID + " isn't waiting at its input", nil
+	}
+	return "", nil
+}
+
 // DeliverRoutine types "[Portenv routine] <text>" and Enter into the
 // agent's main pane (its runner's, in its own main session, on its own
 // server), as the agent: one line of plain text, in one tmux command so
 // nothing lands between the line and its Enter. Any other pane, a pane
-// that's gone, and text with control characters are refused. portenvd
-// decides when the agent is idle.
+// that's gone, and text that isn't one plain line are refused; so is a
+// pane not ready for it (readyForRoutine: "busy", portenvd tries again).
 func (s *apiServer) DeliverRoutine(ctx context.Context, agentID, text string) error {
 	a, ok := s.agents.get(agentID)
 	if !ok {
@@ -574,6 +661,16 @@ func (s *apiServer) DeliverRoutine(ctx context.Context, agentID, text string) er
 	}
 	if _, err := a.ownPane(ctx, a.mainPane); err != nil {
 		return status.Errorf(codes.FailedPrecondition, "%s's main pane is gone", agentID)
+	}
+	s.agents.mu.Lock()
+	idleInput := a.idleInput
+	s.agents.mu.Unlock()
+	why, err := a.readyForRoutine(ctx, idleInput)
+	if err != nil {
+		return status.Errorf(codes.Unavailable, "routine to %s: %v", agentID, err)
+	}
+	if why != "" {
+		return status.Error(codes.FailedPrecondition, why)
 	}
 	if _, err := a.tmux(ctx, "send-keys", "-t", a.mainPane, "-l", "--", escaped, ";", "send-keys", "-t", a.mainPane, "Enter"); err != nil {
 		return status.Errorf(codes.Unavailable, "routine to %s: %v", agentID, err)

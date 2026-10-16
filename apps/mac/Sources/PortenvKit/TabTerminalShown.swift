@@ -12,6 +12,21 @@ import Observation
 @MainActor
 @Observable
 public final class TabTerminalShown {
+    /// What the view says while a lost stream comes back (R-0242).
+    public static let reconnectingLine = "Reconnecting to Portenv\u{2019}s background service\u{2026}"
+
+    /// Whether to show the reconnecting line rather than Disconnected:
+    /// while the stream retries, and while portenvd is away or the
+    /// workspace is being reopened (`serviceComing`), whatever the stream
+    /// said last.
+    public func showsReconnecting(serviceComing: Bool) -> Bool {
+        switch connection {
+        case .reconnecting: true
+        case .disconnected: serviceComing
+        case .connecting, .live: false
+        }
+    }
+
     public enum Connection: Equatable, Sendable {
         case connecting, live, reconnecting
         case disconnected(String?)

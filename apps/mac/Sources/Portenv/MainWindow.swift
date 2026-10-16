@@ -159,7 +159,8 @@ struct MainWindow: View {
                     } else if !AppTerminal.attached, let provider = controller.tabTerminals, let tab = tabs.current {
                         // Each tab's own terminal (ADR 0020).
                         MainTabTerminal(shown: TabTerminalShown(provider: provider), tab: tab.id,
-                                        generation: controller.terminalGeneration, label: A11y.terminal(box: controller.box))
+                                        generation: controller.terminalGeneration, label: A11y.terminal(box: controller.box),
+                                        serviceComing: controller.reconnectingToService)
                     } else if !AppTerminal.attached, controller.tabTerminals != nil {
                         // The tabs aren't known yet.
                         Color(nsColor: .textBackgroundColor)

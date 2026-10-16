@@ -16,6 +16,8 @@ struct MainTabTerminal: View {
     /// A new generation (the box opened or restarted) opens the stream again.
     let generation: Int
     let label: String
+    /// portenvd is away or the workspace is being reopened (R-0242).
+    var serviceComing = false
     @State private var focused = true
 
     var body: some View {
@@ -28,13 +30,19 @@ struct MainTabTerminal: View {
             switch shown.connection {
             case .connecting, .live:
                 EmptyView()
+            case _ where shown.showsReconnecting(serviceComing: serviceComing):
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text(TabTerminalShown.reconnectingLine)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(.regularMaterial, in: Capsule())
+                .frame(maxHeight: .infinity, alignment: .top)
+                .padding(.top, 12)
+                .accessibilityElement(children: .combine)
             case .reconnecting:
-                Text("Reconnecting…")
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(.regularMaterial, in: Capsule())
-                    .frame(maxHeight: .infinity, alignment: .top)
-                    .padding(.top, 12)
+                EmptyView()
             case let .disconnected(why):
                 VStack(spacing: 8) {
                     Text("Disconnected").font(.headline)

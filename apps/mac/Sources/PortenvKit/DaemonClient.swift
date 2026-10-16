@@ -507,6 +507,10 @@ extension TabTerminalStreamError {
         switch e.code {
         case .unimplemented:
             self.init(DaemonError.outOfDate, permanent: true)
+        case .failedPrecondition where e.message.contains("is not open on this Mac"):
+            // portenvd restarted and hasn't reopened the workspace yet: the
+            // app reopens it, so this passes (R-0242).
+            self.init(e.message, permanent: false)
         case .failedPrecondition, .invalidArgument, .permissionDenied, .unauthenticated, .notFound:
             self.init(e.message, permanent: true)
         default:

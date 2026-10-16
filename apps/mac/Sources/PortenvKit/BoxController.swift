@@ -174,6 +174,10 @@ public final class BoxController {
     /// Reopening after portenvd restarted: the state line keeps the real
     /// state instead of "Opening…".
     private var resuming = false
+    /// portenvd is away, or the workspace is being reopened after it came
+    /// back: the tab view says it's reconnecting, never "disconnected" with
+    /// a Reconnect that can't work yet (R-0242).
+    public var reconnectingToService: Bool { daemonGoneSince != nil || resuming }
     /// One reopen per restart, so a failing one doesn't read the Keychain
     /// every few seconds.
     private var resumeTried = false

@@ -49,3 +49,15 @@ func teamStatus(err error) error {
 	}
 	return status.Error(codes.FailedPrecondition, err.Error())
 }
+
+// PrepareTeamProject opens the project to the team (ADR 0022 §2); init
+// only.
+func (s *server) PrepareTeamProject(ctx context.Context, req *agentv1.PrepareTeamProjectRequest) (*agentv1.PrepareTeamProjectResponse, error) {
+	if s.team == nil {
+		return nil, status.Error(codes.Unavailable, "agent users aren't available in this workspace")
+	}
+	if err := s.team.PrepareProject(ctx, req.GetProjectDir()); err != nil {
+		return nil, status.Error(codes.FailedPrecondition, err.Error())
+	}
+	return &agentv1.PrepareTeamProjectResponse{}, nil
+}

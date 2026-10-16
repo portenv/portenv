@@ -87,6 +87,8 @@ type apiServer struct {
 	// runHomeIO runs team-io as an agent, for its home's files (nil: as
 	// the agent's uid, runAsAgent).
 	runHomeIO func(ctx context.Context, uid int, args []string, stdin io.Reader) ([]byte, error)
+	// prepareProject asks init to open the project to the team.
+	prepareProject func(ctx context.Context, projectDir string) error
 }
 
 // ctlHub returns the server's control-mode clients, made on first use.
@@ -114,7 +116,7 @@ func (s *apiServer) ctlHub() (*ctlHub, error) {
 // newChannelServer serves the API with the channel's current secrets.
 func newChannelServer(cfg Config, keys *channelKeys) *grpc.Server {
 	s := &apiServer{cfg: cfg, keys: keys, tmux: tmuxAs, tmuxCmd: tmuxCmdAs, team: newTeamHub(TeamRunDir),
-		users: initUsers{socket: DefaultSocket}, writeAsUser: writeFileAsUser, killUID: killAgentUID}
+		users: initUsers{socket: DefaultSocket}, writeAsUser: writeFileAsUser, killUID: killAgentUID, prepareProject: askInitPrepare(DefaultSocket)}
 	s.runTeamIO = s.teamIOAs
 	srv := grpc.NewServer(
 		grpc.Creds(credentials.NewTLS(keys.tlsConfig())),

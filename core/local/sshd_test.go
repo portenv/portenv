@@ -479,3 +479,135 @@ func killSSHTo(t *testing.T, target string) {
 		}
 	}
 }
+
+// fsState is a listing of paths with their sizes and times.
+func fsState(t *testing.T, roots ...string) map[string]string {
+	t.Helper()
+	st := map[string]string{}
+	for _, root := range roots {
+		_ = filepath.Walk(root, func(p string, fi os.FileInfo, err error) error {
+			if err != nil {
+				return nil // unreadable: the probe can't write there either
+			}
+			// The test host's own Homebrew services write their logs and run
+			// state by themselves (R-0220): only those folders, never any
+			// other var/log or var/run.
+			if fi.IsDir() && slices.Contains(hostServiceDirs(), p) {
+				return filepath.SkipDir
+			}
+			st[p] = fmt.Sprintf("%v %d %d", fi.Mode(), fi.Size(), fi.ModTime().UnixNano())
+			return nil
+		})
+	}
+	return st
+}
+
+// hostServiceDirs are the test host's Homebrew var/log and var/run, whose
+// services write them by themselves while the test runs: the prefix from
+// HOMEBREW_PREFIX, else `brew --prefix`, else /opt/homebrew.
+func hostServiceDirs() []string {
+	prefix := os.Getenv("HOMEBREW_PREFIX")
+	if prefix == "" {
+		if out, err := exec.Command("brew", "--prefix").Output(); err == nil { // #nosec G204 -- the test host's own Homebrew
+			prefix = strings.TrimSpace(string(out))
+		}
+	}
+	if prefix == "" {
+		prefix = "/opt/homebrew"
+	}
+	return []string{filepath.Join(prefix, "var", "log"), filepath.Join(prefix, "var", "run")}
+}
+
+// TestTheWriteCheckSkipsOnlyHomebrewsLogs (R-0220): a write into any other
+// var/log or var/run, a server's /var/log among them, still shows.
+func TestTheWriteCheckSkipsOnlyHomebrewsLogs(t *testing.T) {
+	t.Setenv("HOMEBREW_PREFIX", "/opt/homebrew")
+	if got := hostServiceDirs(); !slices.Equal(got, []string{"/opt/homebrew/var/log", "/opt/homebrew/var/run"}) {
+		t.Fatalf("skipped %v", got)
+	}
+	root := t.TempDir()
+	for _, d := range []string{"var/log", "var/run", "srv/var/log"} {
+		if err := os.MkdirAll(filepath.Join(root, d), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	before := fsState(t, root)
+	for _, f := range []string{"var/log/syslog", "var/run/probe.pid", "srv/var/log/app.log"} {
+		if err := os.WriteFile(filepath.Join(root, f), []byte("written"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		after := fsState(t, root)
+		if _, ok := after[filepath.Join(root, f)]; !ok || len(after) == len(before) {
+			t.Fatalf("a write to %s went unseen", f)
+		}
+	}
+}
+
+// homeTop is the person's real home, where ssh runs the probe: the names
+// one level deep (a stray write would add one, such as ~/.docker), and the
+// files the probe's tools could write to. Times of everything else there
+// change with whatever else this Mac is doing.
+func homeTop(t *testing.T) map[string]string {
+	t.Helper()
+	me, err := user.Current()
+	if err != nil {
+		t.Fatal(err)
+	}
+	st := map[string]string{}
+	ents, _ := os.ReadDir(me.HomeDir)
+	for _, e := range ents {
+		st[e.Name()] = "present"
+	}
+	for _, f := range []string{".docker", ".sudo_as_admin_successful", ".bash_history", ".lesshst", ".wget-hsts", ".curlrc", ".portenv"} {
+		if fi, err := os.Stat(filepath.Join(me.HomeDir, f)); err == nil {
+			st[f] = fmt.Sprintf("%d %d", fi.Size(), fi.ModTime().UnixNano())
+		}
+	}
+	return st
+}
+
+// TestCheckWritesNothing (ADR 0021 §3): Check runs on a real server (a real
+// sshd on 127.0.0.1, as this user) and nothing on it changes: the home
+// it runs in, /etc, /usr/local and /opt are the same before and after.
+func TestCheckWritesNothing(t *testing.T) {
+	_, target, _, _ := madeKeyServer(t)
+	// The server's side: ssh runs the probe in the account's real home
+	// (homeTop), not the test's HOME, which holds the Mac side's own files.
+	roots := []string{"/etc", "/usr/local", "/opt"}
+	before, top := fsState(t, roots...), homeTop(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	lines, err := CheckServer(ctx, target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(lines) == 0 {
+		t.Fatal("no lines")
+	}
+	after, top2 := fsState(t, roots...), homeTop(t)
+	for p, v := range after {
+		if before[p] != v {
+			t.Errorf("Check changed %s", p)
+		}
+	}
+	for p := range before {
+		if _, ok := after[p]; !ok {
+			t.Errorf("Check removed %s", p)
+		}
+	}
+	for n, v := range top2 {
+		if top[n] != v {
+			t.Errorf("Check changed ~/%s", n)
+		}
+	}
+	// On CI's Ubuntu runner the server is a real one: it passes but for
+	// what a runner can't have.
+	if os.Getenv("CI") != "" {
+		for _, l := range lines {
+			if l.State == CheckFailed && l.ID != "disk" && l.ID != "https-docker" {
+				t.Errorf("on the CI runner: %+v", l)
+			}
+		}
+	}
+	t.Logf("lines: %+v", lines)
+}

@@ -259,6 +259,18 @@ type Session struct {
 	RESTPassword []byte
 }
 
+// EngineAnswers reports whether this machine's box engine answers (on a
+// Mac, whether Docker Desktop is running), giving up at ctx's deadline. It
+// starts nothing (R-0098).
+func (e *Env) EngineAnswers(ctx context.Context) error {
+	drv, err := docker.New(docker.Config{StateDir: filepath.Join(e.Dir, "driver")})
+	if err != nil {
+		return err
+	}
+	defer func() { _ = drv.Close() }()
+	return drv.Ping(ctx)
+}
+
 func (e *Env) Open(name string) (*Session, error) {
 	c, err := e.LoadBox(name)
 	if err != nil {
@@ -562,7 +574,7 @@ func (s *Session) EnsureCreated(ctx context.Context, notify func(string)) error 
 	if s.Drv.Known(id) {
 		return nil
 	}
-	if _, err := s.Drv.Create(ctx, driver.Box{ID: id, Name: s.Cfg.Name, ToolboxImage: s.Cfg.Image}); err != nil {
+	if _, err := s.Drv.Create(ctx, driver.Box{ID: id, Name: s.Cfg.Name, ToolboxImage: s.Cfg.Image, Progress: notify}); err != nil {
 		return err
 	}
 	// Local development images stay as they are: their digest exists only

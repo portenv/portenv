@@ -153,6 +153,19 @@ public final class FirstRunFlow {
     public var boxName = ""
     /// Usage counting: off until the person ticks it (opt-in, R-0126).
     public var countUsage = false
+    /// Docker Desktop on this Mac (R-0098): Welcome's Continue waits until
+    /// it answers; nil until the first check does.
+    public var docker: DockerStatus?
+    /// portenvd missed Welcome's last two Docker checks in a row (about
+    /// 4 s): Welcome says the background service isn't answering, with Try
+    /// Again, so Continue is never disabled without a reason (R-0110,
+    /// R-0116). One slow answer isn't enough.
+    public private(set) var daemonGone = false
+    /// Docker checks portenvd missed in a row.
+    private var dockerMisses = 0
+    /// A Docker check is in flight: Try Again doesn't start another, so a
+    /// late answer can't overtake a newer one (R-0116).
+    public private(set) var checkingDocker = false
     public private(set) var error: String?
     /// A plain notice (secondary text), like a step not built yet.
     public private(set) var notice: String?
@@ -186,10 +199,15 @@ public final class FirstRunFlow {
     private let retryFor: Duration
 
     public init(service: FirstRunService, at start: FirstRunStep = .welcome, existing: [String] = [], fromBoxList: Bool = false,
-                memory: FirstRunMemory = NoFirstRunMemory(), retryEvery: Duration = .seconds(1), retryFor: Duration = .seconds(10)) {
+                memory: FirstRunMemory = NoFirstRunMemory(), retryEvery: Duration = .seconds(1), retryFor: Duration = .seconds(10),
+                docker: DockerStatus? = .running, serviceGone: Bool = false) {
         self.retryEvery = retryEvery
         self.retryFor = retryFor
         self.service = service
+        self.docker = docker
+        // Reached after the launch's own two misses (R-0121): already said.
+        daemonGone = serviceGone
+        dockerMisses = serviceGone ? 2 : 0
         self.existing = Set(existing)
         self.fromBoxList = fromBoxList
         self.memory = memory
@@ -204,16 +222,18 @@ public final class FirstRunFlow {
     }
 
     public var canContinue: Bool {
-        guard !busy else { return false }
+        // A Keychain prompt is up: a second press mustn't ask again (R-0216).
+        guard !busy, !keychainWaiting else { return false }
         switch step {
         case .welcome:
-            return true
+            return docker == .running
         case .recoveryKey:
             return recoveryKey != nil && recoverySaved
         case .storage:
             return storage == .thisMac
         case .firstBox:
-            return !boxName.isEmpty && nameProblem == nil
+            // Docker Desktop ready before making the first workspace (R-0211).
+            return docker == .running && !boxName.isEmpty && nameProblem == nil
         case .gettingReady:
             return false
         }
@@ -233,11 +253,12 @@ public final class FirstRunFlow {
         case .storage:
             return storage == nil ? FirstRunText.chooseStorage : FirstRunText.storageLater
         case .firstBox:
+            if docker != .running { return docker?.card?.title ?? DockerText.checkingFirst }
             return nameProblem ?? FirstRunText.typeName
         }
     }
 
-    /// "Waiting for Keychain access" while a Keychain call waits, else nil.
+    /// KeychainWait.line while a Keychain call waits, else nil.
     public var waitLine: String? { keychainWaiting ? KeychainWait.line : nil }
 
     /// What's said under Continue: an error, a notice, or why Continue
@@ -307,6 +328,54 @@ public final class FirstRunFlow {
         }
     }
 
+    /// Welcome's Docker check (R-0098): at once, then every 2 s while the
+    /// card shows. Stops as soon as Docker answers or Welcome is left. No
+    /// answer from portenvd keeps the last outcome and says the background
+    /// service isn't running, until it answers again (R-0110).
+    public func followDocker(every interval: Duration = DockerText.interval,
+                             check: @escaping @MainActor () async -> DockerStatus?,
+                             sleep: @escaping @MainActor (Duration) async -> Void = { try? await Task.sleep(for: $0) }) async {
+        let checked: Set<FirstRunStep> = [.welcome, .firstBox] // R-0098, R-0211
+        while checked.contains(step) && !Task.isCancelled {
+            await checkDocker(check)
+            if docker == .running || !checked.contains(step) { return }
+            await sleep(interval)
+        }
+    }
+
+    /// One Docker check: Try Again asks at once, between followDocker's.
+    /// While one is in flight, another does nothing.
+    public func checkDocker(_ check: @MainActor () async -> DockerStatus?) async {
+        guard !checkingDocker else { return }
+        checkingDocker = true
+        defer { checkingDocker = false }
+        if let status = await check() {
+            docker = status
+            dockerMisses = 0
+            daemonGone = false
+        } else {
+            dockerMisses += 1
+            if dockerMisses >= 2 { daemonGone = true }
+        }
+    }
+
+    /// Why Continue is disabled on Welcome, for VoiceOver (R-0116): the
+    /// service notice, or the Docker card's title; nil while it's enabled
+    /// or before the first answer.
+    public var continueHint: String? {
+        guard step == .welcome, !canContinue else { return nil }
+        return daemonGone ? FirstRunText.serviceNotAnswering : docker?.card?.title
+    }
+
+    /// What VoiceOver hears when the service notice comes or goes: the
+    /// notice, or, when it goes and a Docker card is still there, the
+    /// card's title (R-0116).
+    public var serviceNoticeAnnouncement: String? {
+        daemonGone ? FirstRunText.serviceNotAnswering : docker?.card?.title
+    }
+
+    private func trimmed(_ s: String) -> String { s.trimmingCharacters(in: .whitespacesAndNewlines) }
+
     /// Runs body; while portenvd isn't there, says it's starting it and
     /// tries again, for up to retryFor. Every step is safe to repeat
     /// (CreateBox is idempotent on the box ID, ADR 0019).
@@ -372,6 +441,9 @@ public enum FirstRunText {
     /// The reduced Welcome: there's no account to be had, so just
     /// "Continue" (R-0126).
     public static let welcomeButton = "Continue"
+    /// Welcome when portenvd misses two Docker checks (R-0116): nothing
+    /// exists to save yet, so not BoxController.daemonGone.
+    public static let serviceNotAnswering = "Portenv\u{2019}s background service isn\u{2019}t answering. It usually starts by itself in a few seconds."
 
     public static let recoveryTitle = "Save your recovery key"
     /// The Protection step's message leads, then what the key is for

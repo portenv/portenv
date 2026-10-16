@@ -170,6 +170,24 @@ touch /run/portenv-test/no-nnp
 echo "rm -f /etc/sudoers.d/zz-portenv-test /run/portenv-test/no-nnp" >> "$UNDO"`,
 	},
 	{
+		name: "an agent's tmux server and its panes have no capabilities and no_new_privs (CC-0409)",
+		steps: []step{{"builder", `sock=/run/portenv-team/builder/tmux/default
+pids="$(tmux -S $sock display -p '#{pid}') $(tmux -S $sock list-panes -a -F '#{pane_pid}')"
+[ -n "$pids" ] || exit 1
+for pid in $pids; do
+  st=/proc/$pid/status
+  for c in CapPrm CapEff CapAmb; do
+    grep -Eq "^$c:[[:space:]]+0+$" $st || { echo "$pid: $(grep "^$c:" $st)"; exit 1; }
+  done
+  grep -Eq '^NoNewPrivs:[[:space:]]+1$' $st || { echo "$pid: no no_new_privs"; exit 1; }
+done`}},
+		// The agent's server, started again without no_new_privs.
+		mutate: `restart='portenv-test-as builder "tmux -S /run/portenv-team/builder/tmux/default kill-server"; portenv-test-as builder "tmux -S /run/portenv-team/builder/tmux/default new-session -d -s main sleep\ 1000000"'
+touch /run/portenv-test/no-nnp
+sh -c "$restart"
+printf '%s\n' "rm -f /run/portenv-test/no-nnp" "$restart" >> "$UNDO"`,
+	},
+	{
 		name: "an agent can't install a system package without the owner's decision",
 		steps: []step{{"builder", `! apt-get install -y -q --no-download hello >/dev/null 2>&1 &&
 ! dpkg --configure -a >/dev/null 2>&1 &&

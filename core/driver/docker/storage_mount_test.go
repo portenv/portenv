@@ -211,3 +211,46 @@ func TestTakeOverRefusesAnOldMountBeforeReKeying(t *testing.T) {
 		t.Fatalf("take-over of the restarted box: %v", err)
 	}
 }
+
+// TestTakeOverOfAnUnchangedBoxReKeysIt (R-0242): portenvd restarts (an
+// update, launchctl kickstart) while a box runs, and nothing about its
+// mounts changed. The new portenvd re-keys it in place: no restart, so its
+// programs (the tabs) keep running. On Docker Desktop this failed: the
+// engine reports bind sources as /host_mnt/<real path>.
+func TestTakeOverOfAnUnchangedBoxReKeysIt(t *testing.T) {
+	image := os.Getenv("PORTENV_TEST_IMAGE")
+	if image == "" {
+		t.Skip("PORTENV_TEST_IMAGE not set; run make driver-test")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	first := newStorageBox(ctx, t, image, t.TempDir(), "", "")
+	if r := first.readiness(ctx, t); !strings.Contains(r, "READINESS_STATE_READY") {
+		t.Fatalf("the box didn't start: %s", r)
+	}
+	// Something running, as a tab's program would be, and a mark in the
+	// root file system, which a restart (a recreated container) would lose.
+	if _, code := first.sh(ctx, t, "", "echo here > /run/portenv-test-mark; nohup sleep 600 >/dev/null 2>&1 &"); code != 0 {
+		t.Fatal("start a program")
+	}
+	pid, _ := first.sh(ctx, t, "", "pgrep -o -x sleep")
+
+	// A new portenvd: a new driver, the same configuration.
+	again, err := New(Config{StateDir: first.d.cfg.StateDir, StorageDir: first.d.cfg.StorageDir, StorageRepo: first.d.cfg.StorageRepo})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := again.Rekey(ctx, first.id); err != nil {
+		t.Fatalf("take-over of an unchanged box: %v, want it re-keyed in place", err)
+	}
+	if _, err := again.AgentChannel(ctx, first.id); err != nil {
+		t.Fatalf("no channel after the take-over: %v", err)
+	}
+	same := storageBox{d: again, id: first.id}
+	if out, _ := same.sh(ctx, t, "", "cat /run/portenv-test-mark"); out != "here" {
+		t.Fatalf("the box was restarted: the mark is %q", out)
+	}
+	if now, _ := same.sh(ctx, t, "", "pgrep -o -x sleep"); pid == "" || now != pid {
+		t.Fatalf("the program running before the take-over: %q, now %q", pid, now)
+	}
+}

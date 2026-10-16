@@ -55,6 +55,7 @@ struct PortenvApp: App {
             AppRoot(model: model)
                 .task {
                     model.onOpen = { [delegate] controller in delegate.controller = controller }
+                    delegate.runningNames = { [model] in model.knownRunning }
                     // One launch wait at a time; Try Again restarts it.
                     model.begin()
                 }
@@ -88,6 +89,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var signals: [DispatchSourceSignal] = []
     /// The window's box: quitting closes it, waking checks it.
     var controller: BoxController?
+    /// The workspaces the app knows are running (AppModel.knownRunning).
+    var runningNames: () -> [String] = { [] }
+    var knownRunning: [String] { runningNames() }
     /// Set when Portenv quits to relaunch for an update (Sparkle's
     /// updaterWillRelaunchApplication, 1.8): the box keeps running and the
     /// next portenvd takes it over (ADR 0014). Cmd-Q still closes and saves.
@@ -153,6 +157,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // modal mode, where main-actor tasks do not run: work off the main
         // actor and show the alert and the reply in that mode.
         let flow = controller?.quitFlow
+        // The workspaces the app knows are running, named if portenvd
+        // doesn't answer (R-0252).
+        let known = knownRunning
         let relaunching = relaunchingForUpdate
         if relaunching { controller?.relaunchingForUpdate() }
         Task.detached {
@@ -168,7 +175,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // ADR 0023) is named, then closed, saved and released through
             // portenvd's API; portenvd itself stays with launchd, with
             // nothing open.
-            let all = await QuitAll.prepare(SharedDaemon.client)
+            let all = await QuitAll.prepare(SharedDaemon.client, known: known)
             var quit = true
             if let text = all.confirmation {
                 quit = await Self.confirmQuit(text)

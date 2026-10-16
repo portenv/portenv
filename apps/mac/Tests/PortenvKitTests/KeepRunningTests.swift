@@ -52,6 +52,26 @@ struct KeepRunningTests {
         #expect(closes(d) == ["close acme-api", "close test-119"])
     }
 
+    /// portenvd doesn't answer at Quit (R-0252): nothing can be saved, so the
+    /// app asks first, naming the workspaces it knows are running, and never
+    /// stops one. Quit then closes nothing: each keeps running for the next
+    /// portenvd to take over.
+    @Test func quitWithPortenvdDownAsksAndStopsNothing() async {
+        let d = daemon(["acme-api": Self.running])
+        d.failing["boxes"] = "portenvd is not running"
+        let one = await QuitAll.prepare(d, known: ["test-119"])
+        #expect(one.unreachable)
+        #expect(one.confirmation == "Portenv's background service isn't running, so test-119 can't be saved now. It keeps running; quit anyway?")
+        #expect(await one.run(ask: { _ in .cancel }))
+        #expect(closes(d).isEmpty, "a workspace was closed or left unsaved while portenvd was down")
+        let two = await QuitAll.prepare(d, known: ["test-119", "acme-api"])
+        #expect(two.confirmation == "Portenv's background service isn't running, so acme-api and test-119 can't be saved now. They keep running; quit anyway?")
+        // The app knows of none: it still asks, never quits silently.
+        let none = await QuitAll.prepare(d, known: [])
+        #expect(none.confirmation == "Portenv's background service isn't running, so no workspace can be saved now. Any that are running keep running; quit anyway?")
+        #expect(closes(d).isEmpty)
+    }
+
     /// Nothing running: no confirmation, nothing closed.
     @Test func quitWithNothingRunningAsksNothing() async {
         let d = daemon(["notes": Self.closed])

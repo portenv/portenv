@@ -714,4 +714,8 @@ message PrepareTeamProjectRequest {
   string project_dir = 1;
 }
 
-message PrepareTeamProjectResponse {}
+message PrepareTeamProjectResponse {
+  // What was made private in the owner's home (R-0262), since the last
+  // team start, as plain lines for the owner's board notice.
+  repeated string fixed = 1;
+}

@@ -5383,7 +5383,10 @@ func (x *PrepareTeamProjectRequest) GetProjectDir() string {
 }
 
 type PrepareTeamProjectResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// What was made private in the owner's home (R-0262), since the last
+	// team start, as plain lines for the owner's board notice.
+	Fixed         []string `protobuf:"bytes,1,rep,name=fixed,proto3" json:"fixed,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -5416,6 +5419,13 @@ func (x *PrepareTeamProjectResponse) ProtoReflect() protoreflect.Message {
 // Deprecated: Use PrepareTeamProjectResponse.ProtoReflect.Descriptor instead.
 func (*PrepareTeamProjectResponse) Descriptor() ([]byte, []int) {
 	return file_portenv_agent_v1_agent_proto_rawDescGZIP(), []int{83}
+}
+
+func (x *PrepareTeamProjectResponse) GetFixed() []string {
+	if x != nil {
+		return x.Fixed
+	}
+	return nil
 }
 
 var File_portenv_agent_v1_agent_proto protoreflect.FileDescriptor
@@ -5738,8 +5748,9 @@ const file_portenv_agent_v1_agent_proto_rawDesc = "" +
 	"\x05files\x18\x01 \x03(\v2\x1d.portenv.types.v1.HandoffFileR\x05files\"<\n" +
 	"\x19PrepareTeamProjectRequest\x12\x1f\n" +
 	"\vproject_dir\x18\x01 \x01(\tR\n" +
-	"projectDir\"\x1c\n" +
-	"\x1aPrepareTeamProjectResponse*\x86\x01\n" +
+	"projectDir\"2\n" +
+	"\x1aPrepareTeamProjectResponse\x12\x14\n" +
+	"\x05fixed\x18\x01 \x03(\tR\x05fixed*\x86\x01\n" +
 	"\x0eReadinessState\x12\x1f\n" +
 	"\x1bREADINESS_STATE_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18READINESS_STATE_STARTING\x10\x01\x12\x19\n" +

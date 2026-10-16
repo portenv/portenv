@@ -51,6 +51,8 @@ chown work:work /home/work/.ssh/id_test /home/work/.config/token; chmod 0600 /ho
 for f in .npmrc .netrc .git-credentials .gitconfig .bash_history; do
   echo "owner-secret $f" > "/home/work/$f"; chown work:work "/home/work/$f"; chmod 0600 "/home/work/$f"
 done
+# A real git config: the owner's git reads it.
+printf '[user]\n\tname = owner-secret\n' > /home/work/.gitconfig
 install -d -o work -g work -m 0700 /home/work/.config/gh /home/work/.docker
 for f in .ssh/id_ed25519 .config/gh/hosts.yml .claude/.credentials.json .gnupg/pubring.kbx .docker/config.json; do
   echo "owner-secret $f" > "/home/work/$f"; chown work:work "/home/work/$f"; chmod 0600 "/home/work/$f"

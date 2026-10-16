@@ -153,6 +153,34 @@ service DaemonService {
   // engine: it never starts anything. portenvd gives the engine 1.5 s;
   // the app waits 3 s for the answer.
   rpc GetEngine(GetEngineRequest) returns (GetEngineResponse);
+  // ADR 0022: the agent team. Every call names the workspace; only the app,
+  // in front of the person, makes them.
+  // A workspace's agents, from its project's agent files.
+  rpc ListAgents(ListAgentsRequest) returns (ListAgentsResponse);
+  // The agents, then every change, board message and decision, from a
+  // cursor.
+  rpc WatchTeam(WatchTeamRequest) returns (stream WatchTeamResponse);
+  // Starts an agent whose file is approved and valid.
+  rpc StartAgent(StartAgentRequest) returns (StartAgentResponse);
+  // Stops an agent at once: its tmux server and every process of its user.
+  rpc StopAgent(StopAgentRequest) returns (StopAgentResponse);
+  // Approve or Decline, the owner's answer to a pending decision.
+  rpc AnswerDecision(AnswerDecisionRequest) returns (AnswerDecisionResponse);
+  // An agent file's content and the content last approved, for Approve's
+  // diff and its runner line.
+  rpc GetAgentFile(GetAgentFileRequest) returns (GetAgentFileResponse);
+  // Pins an agent file's content (§3): the hash must be what the app showed.
+  rpc ApproveAgentFile(ApproveAgentFileRequest) returns (ApproveAgentFileResponse);
+  // The owner's message to an agent.
+  rpc SendMessage(SendMessageRequest) returns (SendMessageResponse);
+  // Removes an agent. Its files stay until the owner approves a
+  // DECISION_KIND_DELETE_AGENT_FILES decision (§1).
+  rpc RemoveAgent(RemoveAgentRequest) returns (RemoveAgentResponse);
+  // The Agent files view (§2): list, open and add, done as the agent's user.
+  rpc ListAgentFiles(ListAgentFilesRequest) returns (ListAgentFilesResponse);
+  rpc ReadAgentFile(ReadAgentFileRequest) returns (stream ReadAgentFileResponse);
+  // Drag and drop. Refused past the agent's quota.
+  rpc AddAgentFiles(stream AddAgentFilesRequest) returns (AddAgentFilesResponse);
 }
 
 message CheckBoxRequest {
@@ -821,4 +849,178 @@ message GetEngineRequest {}
 message GetEngineResponse {
   // The engine answered.
   bool running = 1;
+}
+
+// ADR 0022: the agent team.
+
+message ListAgentsRequest {
+  // The workspace.
+  string name = 1;
+}
+
+message ListAgentsResponse {
+  repeated AgentInfo agents = 1;
+}
+
+// One agent, as the Team sidebar shows it.
+message AgentInfo {
+  // Its id, which is also its login name in the workspace.
+  string id = 1;
+  string name = 2;
+  string role = 3;
+  // An SF Symbol name, or one of GUIDELINES §11's agent colours.
+  string avatar = 4;
+  // Remote agents (§10), after the owner's run.
+  bool remote = 5;
+  // "ssh", "mcp" or "web" when remote.
+  string via = 6;
+  portenv.types.v1.AgentState state = 7;
+  // One plain line when it's invalid or a start failed.
+  string problem = 8;
+  // The agent file's content hash, and whether it's the approved one.
+  string file_sha256 = 9;
+  bool approved = 10;
+  // Its tabs, in the order of ListTabs.
+  repeated string tab_ids = 11;
+  // Its last board line, plain text.
+  string last_line = 12;
+  int32 pending_decisions = 13;
+  // Its home's size and limit (§2's quota).
+  int64 home_bytes = 14;
+  int64 home_quota_bytes = 15;
+  // The runner line from its file, which Approve shows prominently
+  // (R-0245 item 4).
+  string runner = 16;
+  portenv.types.v1.AgentGrant grant = 17;
+}
+
+message WatchTeamRequest {
+  string name = 1;
+  // Empty for everything from the start of the board.
+  string cursor = 2;
+}
+
+message WatchTeamResponse {
+  oneof event {
+    AgentInfo agent = 1;
+    portenv.types.v1.BoardMessage message = 2;
+    portenv.types.v1.Decision decision = 3;
+    string removed_agent_id = 5;
+  }
+  string cursor = 4;
+}
+
+message StartAgentRequest {
+  string name = 1;
+  string agent_id = 2;
+}
+
+message StartAgentResponse {
+  AgentInfo agent = 1;
+}
+
+message StopAgentRequest {
+  string name = 1;
+  string agent_id = 2;
+}
+
+message StopAgentResponse {
+  AgentInfo agent = 1;
+}
+
+message AnswerDecisionRequest {
+  string name = 1;
+  string decision_id = 2;
+  bool approve = 3;
+  string note = 4;
+}
+
+message AnswerDecisionResponse {
+  portenv.types.v1.Decision decision = 1;
+}
+
+message GetAgentFileRequest {
+  string name = 1;
+  string agent_id = 2;
+}
+
+message GetAgentFileResponse {
+  // The file as it is now, and its hash.
+  string content = 1;
+  string file_sha256 = 2;
+  // The content last approved, empty if none was.
+  string approved_content = 3;
+  string runner = 4;
+}
+
+message ApproveAgentFileRequest {
+  string name = 1;
+  string agent_id = 2;
+  // Must match the content the app showed, or nothing is approved.
+  string file_sha256 = 3;
+}
+
+message ApproveAgentFileResponse {
+  AgentInfo agent = 1;
+}
+
+message SendMessageRequest {
+  string name = 1;
+  // An agent id. From is always "owner".
+  string to = 2;
+  string thread_id = 3;
+  string text = 4;
+}
+
+message SendMessageResponse {
+  portenv.types.v1.BoardMessage message = 1;
+}
+
+message RemoveAgentRequest {
+  string name = 1;
+  string agent_id = 2;
+}
+
+message RemoveAgentResponse {
+  // The decision to delete its files, if the owner wants that.
+  portenv.types.v1.Decision delete_files = 1;
+}
+
+message ListAgentFilesRequest {
+  string name = 1;
+  string agent_id = 2;
+  // A folder relative to the agent's home; empty for the home.
+  string dir = 3;
+}
+
+message ListAgentFilesResponse {
+  repeated portenv.types.v1.AgentFile files = 1;
+  int64 home_bytes = 2;
+  int64 home_quota_bytes = 3;
+}
+
+message ReadAgentFileRequest {
+  string name = 1;
+  string agent_id = 2;
+  string path = 3;
+}
+
+// A piece of the file, in order.
+message ReadAgentFileResponse {
+  bytes data = 1;
+}
+
+message AddAgentFilesRequest {
+  // name and agent_id on the first message only.
+  string name = 1;
+  string agent_id = 2;
+  // Relative to the agent's home; a new path starts a new file.
+  string path = 3;
+  bytes data = 4;
+  // The last piece of this file.
+  bool last = 5;
+}
+
+message AddAgentFilesResponse {
+  repeated portenv.types.v1.AgentFile added = 1;
 }

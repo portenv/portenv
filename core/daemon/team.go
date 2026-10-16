@@ -656,8 +656,13 @@ func (e *teamEngine) startAgent(ctx context.Context, name, agentID string) (*dae
 	}
 	// The project is the team's before each start (ADR 0022 §2): init
 	// checks it again every time, and refuses with a plain line.
-	if _, err := h.PrepareTeamProject(ctx, &agentv1.PrepareTeamProjectRequest{ProjectDir: "/home/work/" + name}); err != nil {
+	pr, err := h.PrepareTeamProject(ctx, &agentv1.PrepareTeamProjectRequest{ProjectDir: "/home/work/" + name})
+	if err != nil {
 		return nil, errors.New(status.Convert(err).Message())
+	}
+	// What init made private in the owner's home, told once (R-0262).
+	if fixed := pr.GetFixed(); len(fixed) > 0 {
+		e.noticeLocked(ctx, name, b, boardOwner, "", "Portenv made these private in your home, since agents can pass through it: "+strings.Join(fixed, "; ")+".")
 	}
 	b.states[agentID] = typesv1.AgentState_AGENT_STATE_STARTING
 	r, err := h.StartTeamAgent(ctx, &agentv1.StartTeamAgentRequest{

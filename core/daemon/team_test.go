@@ -40,6 +40,7 @@ type fakeTeamHelper struct {
 	busy       bool
 	prepared   []string
 	prepareErr string
+	fixed      []string
 	listed     []*agentv1.ListHomeFilesRequest
 	written    []*agentv1.WriteHomeFilesRequest
 }
@@ -994,7 +995,7 @@ func (f *fakeTeamHelper) PrepareTeamProject(_ context.Context, in *agentv1.Prepa
 	if f.prepareErr != "" {
 		return nil, status.Error(codes.FailedPrecondition, f.prepareErr)
 	}
-	return &agentv1.PrepareTeamProjectResponse{}, nil
+	return &agentv1.PrepareTeamProjectResponse{Fixed: f.fixed}, nil
 }
 
 // ADR 0022 §2: the project is opened to the team before its first agent
@@ -1142,5 +1143,24 @@ func TestADragAndDropGoesToOneAgent(t *testing.T) {
 	})
 	if err == nil {
 		t.Error("a second agent mid-stream was accepted")
+	}
+}
+
+// R-0262: what init made private in the owner's home reaches the owner.
+func TestTheOwnerHearsWhatWasMadePrivate(t *testing.T) {
+	e, h, _ := newTestEngine(t, defaultTeam()...)
+	approveFirstStart(t, e)
+	h.fixed = []string{"~/.npmrc: 644 → 640"}
+	if _, err := e.startAgent(context.Background(), "w", "lead"); err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, ev := range e.box("w").events {
+		if ev.msg != nil && ev.msg.GetTo() == "owner" && strings.Contains(ev.msg.GetText(), "~/.npmrc") {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("the owner wasn't told")
 	}
 }

@@ -3,5 +3,4 @@ go 1.26.7
 use (
 	./core
 	./proto/gen/go
-	./tests/team-boundary
 )

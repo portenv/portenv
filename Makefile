@@ -17,7 +17,10 @@ SHELL := $(CURDIR)/scripts/make-shell
 .SHELLFLAGS := -c
 
 BIN := $(CURDIR)/bin
-GO_MODULES := core proto/gen/go tests/team-boundary
+GO_MODULES := core proto/gen/go
+# The boundary tests are their own module, outside go.work: the toolbox
+# image's build copies go.work, and the tests don't belong in it.
+TEST_MODULES := tests/team-boundary
 CMDS := portenvd portenv-runner portenv-agent portenv
 AGENT_ARCHES := arm64 amd64
 
@@ -143,6 +146,8 @@ lint: $(TOOLS_STAMP) $(SHELLCHECK) spdx-check
 	for m in $(GO_MODULES); do \
 		(cd $$m && $(BIN)/golangci-lint run --config $(CURDIR)/.golangci.yml ./...); \
 	done
+	test -z "$$(gofmt -l $(TEST_MODULES) | tee /dev/stderr)"
+	for m in $(TEST_MODULES); do (cd $$m && GOWORK=off go vet ./... && GOWORK=off go mod verify && GOWORK=off $(BIN)/golangci-lint run --config $(CURDIR)/.golangci.yml ./...) || exit 1; done
 	cd proto && $(BIN)/buf lint && $(BIN)/buf format --diff --exit-code
 	scripts/install-shellcheck.sh --check
 	$(BIN)/actionlint -shellcheck=$(SHELLCHECK)
@@ -294,7 +299,7 @@ driver-test:
 
 ## team-boundary: the per-agent user boundary (ADR 0022) against $(IMAGE): every row as an agent, then with its mutation, which must fail it. TEAM_SETUP=fixture (the ADR's layout, built by the test) or real (the helper's team start; what the preview is gated on)
 team-boundary:
-	PORTENV_TEST_IMAGE=$(IMAGE) PORTENV_TEAM_SETUP=$(or $(TEAM_SETUP),fixture) go test -count=1 -timeout 20m -v ./tests/team-boundary/
+	cd tests/team-boundary && GOWORK=off PORTENV_TEST_IMAGE=$(IMAGE) PORTENV_TEAM_SETUP=$(or $(TEAM_SETUP),fixture) go test -count=1 -timeout 20m -v ./...
 
 ## e2e: restic isolation probe, two machines, SFTP storage and portenvd against $(IMAGE)
 e2e: build $(TOOLS_STAMP)

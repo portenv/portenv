@@ -195,8 +195,22 @@ func (h *teamHub) handle(a *teamAgent, conn *net.UnixConn) {
 	}
 	refuse := func(line string) { reply(&agentv1.TeamCallsRequest{Line: line}) }
 
-	uid, err := h.peerUID(conn)
-	if err != nil {
+	// Read the request before anything else, so a refusal always reaches
+	// the caller as a line: refusing first could close the connection under
+	// its write (EPIPE), and it would never see why.
+	_ = conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+	line, err := bufio.NewReaderSize(io.LimitReader(conn, maxTeamCallBytes+1), 64<<10).ReadBytes('\n')
+	tooLarge := len(line) > maxTeamCallBytes
+	if tooLarge {
+		// Let the rest of the write land, up to a bound, before answering.
+		// The CLI half-closes after its line, so this ends at once.
+		_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+		_, _ = io.Copy(io.Discard, io.LimitReader(conn, 8*maxTeamCallBytes))
+	}
+	_ = conn.CloseRead()
+
+	uid, perr := h.peerUID(conn)
+	if perr != nil {
 		refuse("Portenv couldn't tell who is calling.")
 		return
 	}
@@ -209,10 +223,7 @@ func (h *teamHub) handle(a *teamAgent, conn *net.UnixConn) {
 		refuse(fmt.Sprintf("uid %d isn't an agent on this socket.", uid))
 		return
 	}
-
-	_ = conn.SetReadDeadline(time.Now().Add(10 * time.Second))
-	line, err := bufio.NewReaderSize(io.LimitReader(conn, maxTeamCallBytes+1), 64<<10).ReadBytes('\n')
-	if len(line) > maxTeamCallBytes {
+	if tooLarge {
 		refuse("That request is too large.")
 		return
 	}

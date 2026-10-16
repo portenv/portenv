@@ -74,19 +74,20 @@ func newTeamEngine(helper func(context.Context, string) (agentv1.AgentServiceCli
 
 // teamBox is one workspace's board and agents.
 type teamBox struct {
-	mu        sync.Mutex
-	loaded    bool
-	events    []teamEvent
-	decisions map[string]*typesv1.Decision
-	states    map[string]typesv1.AgentState
-	panes     map[string][]string // agent → its panes
-	tabs      map[string][]string // agent → its tabs
-	sent      map[string][]time.Time
-	actions   map[string]*agentv1.AgentPaneActionRequest // pane decision → what Approve does
-	status    map[string]*typesv1.AgentStatus            // agent → what it says it's doing (R-0256)
-	active    map[string]time.Time                       // agent → its last board line or status
-	routines  map[string][]*routineState                 // running agent → its routines (R-0258)
-	changed   chan struct{}
+	mu          sync.Mutex
+	loaded      bool
+	events      []teamEvent
+	decisions   map[string]*typesv1.Decision
+	states      map[string]typesv1.AgentState
+	panes       map[string][]string // agent → its panes
+	tabs        map[string][]string // agent → its tabs
+	sent        map[string][]time.Time
+	actions     map[string]*agentv1.AgentPaneActionRequest // pane decision → what Approve does
+	status      map[string]*typesv1.AgentStatus            // agent → what it says it's doing (R-0256)
+	active      map[string]time.Time                       // agent → its last board line or status
+	routines    map[string][]*routineState                 // running agent → its routines (R-0258)
+	routinesOff map[string]string                          // agent → why its routines are off
+	changed     chan struct{}
 }
 
 // teamEvent is one thing that happened, in order; a cursor is a count of
@@ -104,16 +105,17 @@ func (e *teamEngine) box(name string) *teamBox {
 	b := e.boxes[name]
 	if b == nil {
 		b = &teamBox{
-			decisions: map[string]*typesv1.Decision{},
-			states:    map[string]typesv1.AgentState{},
-			panes:     map[string][]string{},
-			tabs:      map[string][]string{},
-			sent:      map[string][]time.Time{},
-			actions:   map[string]*agentv1.AgentPaneActionRequest{},
-			status:    map[string]*typesv1.AgentStatus{},
-			active:    map[string]time.Time{},
-			routines:  map[string][]*routineState{},
-			changed:   make(chan struct{}),
+			decisions:   map[string]*typesv1.Decision{},
+			states:      map[string]typesv1.AgentState{},
+			panes:       map[string][]string{},
+			tabs:        map[string][]string{},
+			sent:        map[string][]time.Time{},
+			actions:     map[string]*agentv1.AgentPaneActionRequest{},
+			status:      map[string]*typesv1.AgentStatus{},
+			active:      map[string]time.Time{},
+			routines:    map[string][]*routineState{},
+			routinesOff: map[string]string{},
+			changed:     make(chan struct{}),
 		}
 		e.boxes[name] = b
 	}
@@ -655,6 +657,7 @@ func (e *teamEngine) startAgent(ctx context.Context, name, agentID string) (*dae
 		AgentsMd:       agentsMDBlock(&team, a) + "\n" + a.Spec.Instructions,
 		HomeSeed:       a.Spec.HomeSeed,
 		HomeQuotaBytes: defaultHomeQuota,
+		IdlePattern:    runnerIdlePattern(a.Runner),
 	})
 	if err != nil {
 		b.states[agentID] = typesv1.AgentState_AGENT_STATE_STOPPED
@@ -662,7 +665,15 @@ func (e *teamEngine) startAgent(ctx context.Context, name, agentID string) (*dae
 	}
 	b.states[agentID] = typesv1.AgentState_AGENT_STATE_RUNNING
 	b.routines[agentID] = nil
+	idle := runnerIdlePattern(a.Runner)
+	delete(b.routinesOff, agentID)
+	if idle == "" && len(a.Spec.Routines) > 0 {
+		b.routinesOff[agentID] = routinesOffLine(a.Runner)
+	}
 	for _, r := range a.Spec.Routines {
+		if idle == "" {
+			break
+		}
 		every := time.Duration(r.EveryMinutes) * time.Minute
 		b.routines[agentID] = append(b.routines[agentID], &routineState{every: every, note: r.Note, next: e.now().Add(every)})
 	}
@@ -751,6 +762,10 @@ func (e *teamEngine) infoLocked(b *teamBox, a *TeamAgent) *daemonv1.AgentInfo {
 		info.Problem = a.Problems[0]
 	}
 	info.Status = b.status[a.ID]
+	info.RoutinesOff = b.routinesOff[a.ID]
+	if info.RoutinesOff == "" && a.Spec != nil && len(a.Spec.Routines) > 0 && runnerIdlePattern(a.Runner) == "" {
+		info.RoutinesOff = routinesOffLine(a.Runner)
+	}
 	if rs, ok := b.routines[a.ID]; ok {
 		for _, r := range rs {
 			info.Routines = append(info.Routines, &typesv1.Routine{EveryMinutes: int32(r.every / time.Minute), Note: r.note, Paused: r.paused, NextAt: timestamppb.New(r.next)}) // #nosec G115 -- at most a week
@@ -928,6 +943,9 @@ func (e *teamEngine) whoamiLocked(name string, b *teamBox, team *Team, me *TeamA
 		w.Name, w.Role = me.Spec.Name, me.Spec.Role
 	}
 	w.Status = b.status[me.ID]
+	if me.Spec != nil && len(me.Spec.Routines) > 0 && runnerIdlePattern(me.Runner) == "" {
+		w.RoutinesOff = routinesOffLine(me.Runner)
+	}
 	w.Teammates = e.teammatesLocked(b, team, me, me.Grant.GetTeamStatus())
 	return w
 }

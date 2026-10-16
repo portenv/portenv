@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -926,5 +927,55 @@ func TestPausedAndStoppedRoutinesDontFire(t *testing.T) {
 	e.tickRoutines(ctx)
 	if len(h.delivered) != 0 {
 		t.Error("a stopped agent's routine fired")
+	}
+}
+
+// R-0258 with lane A: routines need the runner's idle pattern, which goes
+// to the helper with the start; a runner Portenv doesn't know gets none,
+// and says so.
+func TestRoutinesNeedAKnownRunner(t *testing.T) {
+	_, h, _ := startedWithRoutine(t)
+	if p := h.started[0].GetIdlePattern(); p == "" || p != runnerIdlePattern([]string{"claude"}) {
+		t.Errorf("idle pattern sent: %q", p)
+	}
+
+	team := routineTeam()
+	team[0].Runner, team[0].RunnerLine = []string{"/usr/local/bin/aider"}, "aider"
+	team[0].Spec.Runner = team[0].Runner
+	e, h, clock := newTestEngine(t, team...)
+	approveFirstStart(t, e)
+	ctx := context.Background()
+	if _, err := e.startAgent(ctx, "w", "lead"); err != nil {
+		t.Fatal(err)
+	}
+	clock.add(time.Hour)
+	e.tickRoutines(ctx)
+	if len(h.delivered) != 0 || routineNotices(t, e, "lead") != 0 {
+		t.Error("a routine fired for a runner with no idle pattern")
+	}
+	info := e.agentInfos(ctx, "w")["lead"]
+	if !strings.Contains(info.GetRoutinesOff(), "aider") {
+		t.Errorf("the row doesn't say why: %q", info.GetRoutinesOff())
+	}
+	w := e.handleCall(ctx, "w", &agentv1.TeamCallsResponse{AgentId: "lead", Op: &agentv1.TeamCallsResponse_Whoami{Whoami: &agentv1.WhoAmI{}}}).GetWhoami()
+	if !strings.Contains(w.GetRoutinesOff(), "Routines are off") {
+		t.Errorf("whoami doesn't say why: %q", w.GetRoutinesOff())
+	}
+}
+
+func TestTheRunnerTablesPatterns(t *testing.T) {
+	re := regexp.MustCompile(runnerIdlePattern([]string{"claude", "--permission-mode", "acceptEdits"}))
+	for _, idle := range []string{"> ", "│ >                │", "  >"} {
+		if !re.MatchString(idle) {
+			t.Errorf("%q isn't idle", idle)
+		}
+	}
+	for _, busy := range []string{"> fix the tests", "Do you want to proceed? (y/n)", "✻ Thinking…", ""} {
+		if re.MatchString(busy) {
+			t.Errorf("%q counted as idle", busy)
+		}
+	}
+	if runnerIdlePattern([]string{"bash"}) != "" || runnerIdlePattern(nil) != "" {
+		t.Error("an unknown runner has a pattern")
 	}
 }

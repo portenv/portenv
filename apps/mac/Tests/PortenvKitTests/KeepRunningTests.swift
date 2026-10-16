@@ -1,0 +1,90 @@
+// SPDX-License-Identifier: Apache-2.0
+
+import Foundation
+import Testing
+
+@testable import PortenvKit
+
+/// A workspace keeps running when its window closes (ADR 0023, R-0238). It
+/// closes (saved and released) only on Close Workspace, on Quit, or on Move.
+/// Save, release and lease are data-loss paths: these come first.
+struct KeepRunningTests {
+    static let running = #"{"state":"SAVE_STATE_SAVED","saved_at":"2026-10-16T13:17:00Z"}"#
+    static let closed = #"{"state":"SAVE_STATE_CLOSED","saved_at":"2026-10-16T13:17:00Z"}"#
+    static let onServer = #"{"state":"SAVE_STATE_SAVED","location":"dev@test-server"}"#
+
+    func daemon(_ states: [String: String]) -> FakeDaemon {
+        let d = FakeDaemon()
+        d.boxNames = Array(states.keys).sorted()
+        for (box, json) in states { d.setState(box, json) }
+        return d
+    }
+
+    func closes(_ d: FakeDaemon) -> [String] {
+        d.calls.filter { $0.count > 2 && ($0[1] == "close" || $0[1] == "leave-unsaved") }.map { $0[1] + " " + $0[2] }
+    }
+
+    /// Closing a workspace's last window asks portenvd nothing: no save, no
+    /// release, no stop. The list replaces the window.
+    @Test func closingTheLastWindowLeavesTheWorkspaceRunning() {
+        #expect(WindowClose.action(showingBox: true, otherBoxWindows: 0) == .showListLeavingItRunning)
+        #expect(WindowClose.action(showingBox: true, otherBoxWindows: 1) == .closeWindow)
+        #expect(WindowClose.action(showingBox: false, otherBoxWindows: 0) == .closeWindow)
+    }
+
+    /// The list knows which workspaces run here: open on this Mac, not
+    /// closed, not on a server.
+    @Test func theListFindsTheRunningWorkspaces() async {
+        let d = daemon(["acme-api": Self.running, "notes": Self.closed, "remote": Self.onServer, "test-119": Self.running])
+        #expect(await RunningWorkspaces.here(d) == ["acme-api", "test-119"])
+        #expect(closes(d).isEmpty)
+    }
+
+    /// Quit names the running workspaces, and closes (saves and releases)
+    /// each once, in order, after the person says Quit.
+    @Test func quitClosesEveryRunningWorkspaceOnce() async {
+        let d = daemon(["acme-api": Self.running, "notes": Self.closed, "test-119": Self.running])
+        let flow = await QuitAll.prepare(d)
+        #expect(flow.boxes == ["acme-api", "test-119"])
+        #expect(flow.confirmation == "acme-api and test-119 are running. Quitting saves and closes them.")
+        let quit = await flow.run(ask: { _ in .cancel })
+        #expect(quit)
+        #expect(closes(d) == ["close acme-api", "close test-119"])
+    }
+
+    /// Nothing running: no confirmation, nothing closed.
+    @Test func quitWithNothingRunningAsksNothing() async {
+        let d = daemon(["notes": Self.closed])
+        let flow = await QuitAll.prepare(d)
+        #expect(flow.confirmation == nil)
+        #expect(await flow.run(ask: { _ in .cancel }))
+        #expect(closes(d).isEmpty)
+    }
+
+    /// A workspace that can't be saved stops the quit on Cancel, with the
+    /// workspaces before it already closed and the rest still running.
+    @Test func cancelOnAFailedSaveStopsTheQuit() async {
+        let d = daemon(["a": Self.running, "b": Self.running, "c": Self.running])
+        d.failingFor = ["close b"]
+        let flow = await QuitAll.prepare(d)
+        let quit = await flow.run(ask: { _ in .cancel })
+        #expect(!quit)
+        #expect(closes(d) == ["close a", "close b"])
+    }
+
+    /// Quit Anyway on a failed save leaves that workspace with the quit
+    /// marker (saved first thing on the next open) and goes on.
+    @Test func quitAnywayLeavesTheMarkerAndGoesOn() async {
+        let d = daemon(["a": Self.running, "b": Self.running])
+        d.failingFor = ["close a"]
+        let flow = await QuitAll.prepare(d)
+        #expect(await flow.run(ask: { _ in .quitAnyway }))
+        #expect(closes(d) == ["close a", "leave-unsaved a", "close b"])
+    }
+
+    /// One name, and three or more, read naturally.
+    @Test func theConfirmationNamesThem() {
+        #expect(QuitAll(daemon: FakeDaemon(), boxes: ["acme-api"]).confirmation == "acme-api is running. Quitting saves and closes it.")
+        #expect(QuitAll(daemon: FakeDaemon(), boxes: ["a", "b", "c"]).confirmation == "a, b and c are running. Quitting saves and closes them.")
+    }
+}

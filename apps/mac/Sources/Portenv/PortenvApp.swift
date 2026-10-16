@@ -164,14 +164,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 return
             }
-            // The box is closed, saved and released through portenvd's API;
-            // portenvd itself stays with launchd, with nothing open.
-            let quit = await flow?.run(ask: Self.ask) ?? true
+            // Every workspace running on this Mac (with or without a window,
+            // ADR 0023) is named, then closed, saved and released through
+            // portenvd's API; portenvd itself stays with launchd, with
+            // nothing open.
+            let all = await QuitAll.prepare(SharedDaemon.client)
+            var quit = true
+            if let text = all.confirmation {
+                quit = await Self.confirmQuit(text)
+            }
+            if quit { quit = await all.run(ask: Self.ask) }
             RunLoop.main.perform(inModes: [.default, .modalPanel]) {
                 NSApp.reply(toApplicationShouldTerminate: quit)
             }
         }
         return .terminateLater
+    }
+
+    /// Quit's confirmation, naming the running workspaces (R-0238): Quit is
+    /// the default.
+    nonisolated static func confirmQuit(_ text: String) async -> Bool {
+        await withCheckedContinuation { done in
+            RunLoop.main.perform(inModes: [.default, .modalPanel]) {
+                MainActor.assumeIsolated {
+                    let alert = NSAlert()
+                    alert.messageText = "Quit Portenv?"
+                    alert.informativeText = text
+                    alert.addButton(withTitle: "Quit")
+                    alert.addButton(withTitle: "Cancel")
+                    done.resume(returning: alert.runModal() == .alertFirstButtonReturn)
+                }
+            }
+        }
     }
 
     /// The alert when the box couldn't be saved before quitting.

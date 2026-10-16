@@ -16,6 +16,9 @@ final class FakeDaemon: DaemonAPI, @unchecked Sendable {
     private var watchers: [AsyncThrowingStream<BoxState, Error>.Continuation] = []
 
     var calls: [[String]] { lock.withLock { _calls } }
+    private var _states: [String: String] = [:]
+    /// One box's state, where it differs from `state`.
+    func setState(_ box: String, _ json: String) { lock.withLock { _states[box] = json } }
     var state: String {
         get { lock.withLock { _state } }
         set { lock.withLock { _state = newValue } }
@@ -24,6 +27,8 @@ final class FakeDaemon: DaemonAPI, @unchecked Sendable {
     var provided: [[String: Data]] { lock.withLock { _provided } }
     /// Actions that fail with this message, every time.
     var failing: [String: String] = [:]
+    /// "action box" pairs that fail every time (one box's close, say).
+    var failingFor: Set<String> = []
     /// Actions that fail only the first time.
     var failingOnce: [String: String] = [:]
     /// The time revert reports for the restored save point.
@@ -42,6 +47,9 @@ final class FakeDaemon: DaemonAPI, @unchecked Sendable {
         }
         if let message = lock.withLock({ failing[action] }) {
             throw DaemonError(message, unavailable: message.contains("not running"))
+        }
+        if args.count > 2, lock.withLock({ failingFor.contains(action + " " + args[2]) }) {
+            throw DaemonError("the workspace helper is unavailable")
         }
     }
 
@@ -104,7 +112,8 @@ final class FakeDaemon: DaemonAPI, @unchecked Sendable {
     func restart(_ box: String) async throws { try await record(["app", "restart", box]) }
     func state(_ box: String) async throws -> BoxState {
         try await record(["app", "state", box])
-        guard let s = BoxState.parse(state) else { throw DaemonError("bad state") }
+        let json = lock.withLock { _states[box] } ?? state
+        guard let s = BoxState.parse(json) else { throw DaemonError("bad state") }
         return s
     }
     func watch(_ box: String) -> AsyncThrowingStream<BoxState, Error> {

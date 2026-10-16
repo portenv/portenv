@@ -13,6 +13,9 @@ import SwiftUI
 final class AppModel {
     private(set) var launch: Launch?
     private(set) var boxes: [String] = []
+    /// The workspaces running on this Mac, with or without a window (ADR
+    /// 0023): the list shows them as "Running", with Close Workspace.
+    private(set) var running: Set<String> = []
     private(set) var controller: BoxController?
     private(set) var tabs: TabsController?
     private(set) var firstRun: FirstRunFlow?
@@ -243,37 +246,46 @@ final class AppModel {
         }
     }
 
-    /// The window is closing. Closing the last box window goes back to
-    /// "Your boxes" instead of quitting (the owner, 2026-10-11): the box is
-    /// closed, saved and released first, exactly as quitting does, and the
-    /// window stays, showing the list. Any other window just closes.
+    /// The window is closing. Closing the last workspace window goes back to
+    /// "Your workspaces", and the workspace keeps running (ADR 0023): nothing
+    /// is saved, released or stopped. Close Workspace, Quit or Move closes
+    /// it. Any other window just closes.
     func windowShouldClose(_ window: NSWindow) -> Bool {
-        guard case .open = launch, let controller else { return true }
+        guard case .open = launch, controller != nil else { return true }
         let others = WindowCloseHook.hookedWindows.filter { $0 !== window }.count
         switch WindowClose.action(showingBox: true, otherBoxWindows: others) {
         case .closeWindow:
             return true
-        case .closeBoxThenShowList:
+        case .showListLeavingItRunning:
             if !closing {
                 closing = true
-                Task { await closeToList(controller) }
+                Task { await leaveToList() }
             }
             return false
         }
     }
 
-    /// Closes the box (waiting for it to finish opening first, so a box
-    /// still opening is never left open with no window), then the list.
-    private func closeToList(_ controller: BoxController) async {
+    /// Back to the list, the workspace still running (once it has finished
+    /// opening, so an open in progress is never cut short).
+    private func leaveToList() async {
         defer { closing = false }
         await openTask?.value
-        _ = await WindowClose.run(controller.quitFlow, ask: AppDelegate.askOnClose,
-                                  closing: { on in await controller.showClosing(on) }) { [weak self] in
-            await self?.showList()
-        }
+        await showList()
     }
 
-    /// Back to "Your boxes", with the box closed.
+    /// Close Workspace from the list: saved and released, asking on a
+    /// failed save (Try Again, Close Anyway, Cancel), as quitting does.
+    func closeWorkspace(_ box: String) async {
+        _ = await WindowClose.run(QuitFlow(daemon: daemon, box: box, openHere: true), ask: AppDelegate.askOnClose) {}
+        await refreshRunning()
+    }
+
+    /// Reads which workspaces run on this Mac.
+    func refreshRunning() async {
+        running = Set(await RunningWorkspaces.here(daemon))
+    }
+
+    /// Back to "Your workspaces"; the workspace shown may still be running.
     private func showList() async {
         followTask?.cancel()
         followTask = nil
@@ -282,6 +294,7 @@ final class AppModel {
         tabs = nil
         onOpen?(nil)
         if let listed = try? await daemon.boxes() { boxes = listed }
+        await refreshRunning()
         launch = .boxList(notice: nil)
     }
 
@@ -375,7 +388,10 @@ struct AppRoot: View {
                     }
                 case let .boxList(notice):
                     BoxListView(boxes: model.boxes, notice: notice,
-                                retry: model.serviceNotAnswering ? { model.begin() } : nil) { box in
+                                retry: model.serviceNotAnswering ? { model.begin() } : nil,
+                                running: model.running,
+                                close: { box in Task { await model.closeWorkspace(box) } },
+                                refresh: { await model.refreshRunning() }) { box in
                         Task { await model.open(box) }
                     } newBox: {
                         model.newBox()

@@ -20,6 +20,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	agentv1 "github.com/portenv/portenv/proto/gen/go/portenv/agent/v1"
+	typesv1 "github.com/portenv/portenv/proto/gen/go/portenv/types/v1"
 )
 
 // The agent channel (ADR 0010). The driver hands each start's secrets to
@@ -70,6 +71,15 @@ type apiServer struct {
 	// team holds the agents' sockets and portenvd's TeamCalls stream
 	// (ADR 0022 §4); nil where there's no team (tests).
 	team *teamHub
+	// users asks init for agent users; writeAsUser writes a file as an
+	// agent; killUID ends every process of an agent's uid.
+	users       agentUsers
+	writeAsUser func(uid, gid int, path string, data []byte) error
+	killUID     func(uid int) error
+	// startAgentServer and stopAgentServer run one agent's own tmux server
+	// (lane A's terminal code; nil until a build has them).
+	startAgentServer func(ctx context.Context, spec AgentServerSpec) ([]*typesv1.Tab, error)
+	stopAgentServer  func(ctx context.Context, id string) error
 }
 
 // ctlHub returns the server's control-mode clients, made on first use.
@@ -96,7 +106,8 @@ func (s *apiServer) ctlHub() (*ctlHub, error) {
 
 // newChannelServer serves the API with the channel's current secrets.
 func newChannelServer(cfg Config, keys *channelKeys) *grpc.Server {
-	s := &apiServer{cfg: cfg, keys: keys, tmux: tmuxAs, tmuxCmd: tmuxCmdAs, team: newTeamHub(TeamRunDir)}
+	s := &apiServer{cfg: cfg, keys: keys, tmux: tmuxAs, tmuxCmd: tmuxCmdAs, team: newTeamHub(TeamRunDir),
+		users: initUsers{socket: DefaultSocket}, writeAsUser: writeFileAsUser, killUID: killAgentUID}
 	srv := grpc.NewServer(
 		grpc.Creds(credentials.NewTLS(keys.tlsConfig())),
 		grpc.UnaryInterceptor(func(ctx context.Context, req any, _ *grpc.UnaryServerInfo, h grpc.UnaryHandler) (any, error) {

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -41,6 +42,155 @@ type agentServer struct {
 type agentServers struct {
 	mu sync.Mutex
 	by map[string]*agentServer
+	// sel is the agent tab a viewer of the owner's window has chosen, by
+	// session and viewer (viewKey): the agent's server can't hold the
+	// owner's choice, as the owner's own tmux session holds it for the
+	// owner's tabs.
+	sel map[string]string
+	// ch is closed when an agent's tabs may have changed (changed).
+	ch chan struct{}
+}
+
+// changed is closed at the next start, stop or pane action. Changes an
+// agent makes with its own tmux reach a watch at its next safety list.
+func (a *agentServers) changed() <-chan struct{} {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.ch == nil {
+		a.ch = make(chan struct{})
+	}
+	return a.ch
+}
+
+// touchLocked closes ch; a.mu is held.
+func (a *agentServers) touchLocked() {
+	if a.ch != nil {
+		close(a.ch)
+		a.ch = nil
+	}
+}
+
+func (a *agentServers) touch() {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.touchLocked()
+}
+
+// viewKey is a viewer of a session.
+func viewKey(session, viewer string) string { return session + "\x00" + viewer }
+
+// mergeAgents adds the running agents' tabs, by agent id, after the
+// owner's. The viewer's chosen agent tab is the active one; when it's gone
+// the owner's current tab is again.
+func (s *apiServer) mergeAgents(key string) func(ctx context.Context, own []*typesv1.Tab) []*typesv1.Tab {
+	return func(ctx context.Context, own []*typesv1.Tab) []*typesv1.Tab {
+		s.agents.mu.Lock()
+		servers := make([]*agentServer, 0, len(s.agents.by))
+		for _, a := range s.agents.by {
+			servers = append(servers, a)
+		}
+		sel := s.agents.sel[key]
+		s.agents.mu.Unlock()
+		slices.SortFunc(servers, func(x, y *agentServer) int { return strings.Compare(x.user.ID, y.user.ID) })
+		out, found := own, false
+		for _, a := range servers {
+			ts, err := a.tabs(ctx)
+			if err != nil {
+				continue // stopping
+			}
+			for _, t := range ts {
+				t.Active = t.GetId() == sel
+				found = found || t.Active
+			}
+			out = append(out, ts...)
+		}
+		if found {
+			for _, t := range own {
+				t.Active = false
+			}
+		} else if sel != "" {
+			s.agents.mu.Lock()
+			if s.agents.sel[key] == sel {
+				delete(s.agents.sel, key)
+			}
+			s.agents.mu.Unlock()
+		}
+		return out
+	}
+}
+
+// agentTab finds an agent's tab from an app tab id ("builder:@3"): its
+// server and tmux window id. ok is false for the owner's tabs.
+func (s *apiServer) agentTab(ctx context.Context, id string) (a *agentServer, window string, ok bool, err error) {
+	agent, window, valid := SplitTabID(id)
+	if agent == "" {
+		return nil, "", false, nil
+	}
+	if !valid {
+		return nil, "", true, status.Error(codes.InvalidArgument, "an agent's tab ids look like builder:@3")
+	}
+	a, running := s.agents.get(agent)
+	if !running {
+		return nil, "", true, status.Errorf(codes.NotFound, "%s isn't running", agent)
+	}
+	ts, err := a.tabs(ctx)
+	if err != nil {
+		return nil, "", true, err
+	}
+	if !slices.ContainsFunc(ts, func(t *typesv1.Tab) bool { return t.GetId() == id }) {
+		return nil, "", true, status.Errorf(codes.NotFound, "%s has no tab %s", agent, window)
+	}
+	return a, window, true, nil
+}
+
+// selectAgentTab makes an agent's tab the viewer's chosen one, or (id
+// empty) goes back to the owner's.
+func (s *apiServer) selectAgentTab(key, id string) {
+	s.agents.mu.Lock()
+	defer s.agents.mu.Unlock()
+	if id == "" {
+		if _, ok := s.agents.sel[key]; !ok {
+			return
+		}
+		delete(s.agents.sel, key)
+	} else {
+		if s.agents.sel == nil {
+			s.agents.sel = map[string]string{}
+		}
+		s.agents.sel[key] = id
+	}
+	s.agents.touchLocked()
+}
+
+// closeAgentTab closes an agent's tab, unless it's the agent's last: that
+// one closes when the agent stops.
+func (a *agentServer) closeTab(ctx context.Context, window string) error {
+	ts, err := a.tabs(ctx)
+	if err != nil {
+		return err
+	}
+	if len(ts) == 1 {
+		return status.Errorf(codes.FailedPrecondition, "%s's last tab closes when %s stops", a.user.ID, a.user.ID)
+	}
+	if _, err := a.tmux(ctx, "kill-window", "-t", window); err != nil {
+		return status.Errorf(codes.Unavailable, "close tab: %v", err)
+	}
+	return nil
+}
+
+// renameTab renames an agent's tab.
+func (a *agentServer) renameTab(ctx context.Context, window, name string) error {
+	if err := checkTabName(name); err != nil {
+		return err
+	}
+	escaped, err := tmuxName(name)
+	if err != nil {
+		return err
+	}
+	if _, err := a.tmux(ctx, "rename-window", "-t", window, "--", escaped); err != nil {
+		return status.Errorf(codes.Unavailable, "rename tab: %v", err)
+	}
+	return nil
 }
 
 func (a *agentServers) get(id string) (*agentServer, bool) {
@@ -157,6 +307,7 @@ func (s *apiServer) StartAgentTerminals(ctx context.Context, spec AgentServerSpe
 		s.agents.by = map[string]*agentServer{}
 	}
 	s.agents.by[spec.ID] = a
+	s.agents.touchLocked()
 	return a.tabs(ctx)
 }
 
@@ -168,6 +319,7 @@ func (s *apiServer) StopAgentTerminals(ctx context.Context, id string) error {
 	s.agents.mu.Lock()
 	a, ok := s.agents.by[id]
 	delete(s.agents.by, id)
+	s.agents.touchLocked()
 	s.agents.mu.Unlock()
 	if !ok {
 		return nil
@@ -227,6 +379,7 @@ func (s *apiServer) AgentPaneAction(ctx context.Context, req *agentv1.AgentPaneA
 	if err != nil {
 		return nil, err
 	}
+	s.agents.touch()
 	return &agentv1.AgentPaneActionResponse{Pane: pane}, nil
 }
 

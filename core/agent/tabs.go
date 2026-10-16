@@ -41,6 +41,28 @@ type tabs struct {
 	// procRoot is /proc, where a tab's running command is read ("" means
 	// /proc; tests point it elsewhere).
 	procRoot string
+	// merge, when set, adds the running agents' tabs to a watch's list
+	// (mergeAgents), and changed says when they may have changed.
+	merge   func(ctx context.Context, own []*typesv1.Tab) []*typesv1.Tab
+	changed func() <-chan struct{}
+}
+
+// watchList is the tabs a watch sends: the session's, then the agents'.
+func (t tabs) watchList(ctx context.Context) ([]*typesv1.Tab, error) {
+	ts, err := t.list(ctx)
+	if err != nil || t.merge == nil {
+		return ts, err
+	}
+	return t.merge(ctx, ts), nil
+}
+
+// agentsChanged is closed when the agents' tabs may have changed; nil
+// (never ready) without agents.
+func (t tabs) agentsChanged() <-chan struct{} {
+	if t.changed == nil {
+		return nil
+	}
+	return t.changed()
 }
 
 func (t tabs) proc() string {
@@ -169,21 +191,21 @@ func (t tabs) list(ctx context.Context) ([]*typesv1.Tab, error) {
 	if err := t.ensure(ctx); err != nil {
 		return nil, err
 	}
-	out, err := t.tmux(ctx, "list-windows", "-t", t.target(), "-F", "#{window_id}\t#{window_active}\t#{pane_current_command}\t#{pane_pid}\t#{window_name}")
+	out, err := t.tmux(ctx, "list-windows", "-t", t.target(), "-F", "#{window_id}\t#{window_active}\t#{pane_current_command}\t#{pane_pid}\t#{P:#{pane_id} }\t#{window_name}")
 	if err != nil {
 		return nil, status.Errorf(codes.Unavailable, "list tabs: %v", err)
 	}
 	var ts []*typesv1.Tab
 	for _, line := range strings.Split(strings.TrimRight(out, "\n"), "\n") {
-		f := strings.SplitN(line, "\t", 5)
-		if len(f) != 5 || !windowIDRE.MatchString(f[0]) {
+		f := strings.SplitN(line, "\t", 6)
+		if len(f) != 6 || !windowIDRE.MatchString(f[0]) {
 			continue
 		}
 		program := f[2]
 		if shells[program] {
 			program = ""
 		}
-		tab := &typesv1.Tab{Id: f[0], Name: f[4], Active: f[1] == "1", Program: program}
+		tab := &typesv1.Tab{Id: f[0], Name: f[5], Active: f[1] == "1", Program: program, PaneIds: strings.Fields(f[4])}
 		// The whole command line, for the Move confirmation: to the app
 		// only, never logged (2.3, R-0140). Read whatever the program's
 		// name: a script run with sh is a command still running, though
@@ -291,7 +313,7 @@ var outputRelist = time.Second
 func (t tabs) watchEvents(ctx context.Context, sub *ctlSub, safety time.Duration, send func([]*typesv1.Tab) error) error {
 	var last []*typesv1.Tab
 	sendIfChanged := func(first bool) error {
-		ts, err := t.list(ctx)
+		ts, err := t.watchList(ctx)
 		if err != nil {
 			if ctx.Err() != nil {
 				return nil
@@ -318,6 +340,7 @@ func (t tabs) watchEvents(ctx context.Context, sub *ctlSub, safety time.Duration
 		case <-ctx.Done():
 			return nil
 		case <-tick.C:
+		case <-t.agentsChanged():
 		case <-outputDue:
 			outputDue = nil
 		case <-sub.kick:
@@ -361,7 +384,7 @@ func (t tabs) watchEvents(ctx context.Context, sub *ctlSub, safety time.Duration
 func (t tabs) watch(ctx context.Context, every time.Duration, send func([]*typesv1.Tab) error) error {
 	var last []*typesv1.Tab
 	for first := true; ; first = false {
-		ts, err := t.list(ctx)
+		ts, err := t.watchList(ctx)
 		if err != nil {
 			if ctx.Err() != nil {
 				return nil
@@ -378,6 +401,7 @@ func (t tabs) watch(ctx context.Context, every time.Duration, send func([]*types
 		case <-ctx.Done():
 			return nil
 		case <-time.After(every):
+		case <-t.agentsChanged():
 		}
 	}
 }

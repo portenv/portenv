@@ -3,6 +3,7 @@
 package agent
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -16,6 +17,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	agentv1 "github.com/portenv/portenv/proto/gen/go/portenv/agent/v1"
+	typesv1 "github.com/portenv/portenv/proto/gen/go/portenv/types/v1"
 )
 
 // testAgentServers is an apiServer whose agents' tmux servers are plain
@@ -30,6 +32,13 @@ func testAgentServers(t *testing.T) *apiServer {
 		t.Skip("tmux not installed")
 	}
 	s := &apiServer{}
+	withAgentServers(t, s)
+	return s
+}
+
+// withAgentServers gives s agents' servers on plain tmux (testAgentServers).
+func withAgentServers(t *testing.T, s *apiServer) {
+	t.Helper()
 	s.agentTmux = func(spec AgentServerSpec) (tmuxFunc, tmuxCmdFunc, error) {
 		sock := agentSocket(spec)
 		command := func(ctx context.Context, args ...string) *exec.Cmd {
@@ -47,7 +56,6 @@ func testAgentServers(t *testing.T) *apiServer {
 		t.Cleanup(func() { _, _ = run(context.Background(), "kill-server") })
 		return run, command, nil
 	}
-	return s
 }
 
 // testSpec is an agent whose runner is argv, with a short socket folder
@@ -263,4 +271,112 @@ func TestAgentTabIDsCarryTheAgent(t *testing.T) {
 			t.Errorf("SplitTabID(%q) = %s, want %s", id, got, want)
 		}
 	}
+}
+
+// The owner's window shows the agents' tabs after its own, routes each
+// call on an agent's tab to that agent's server, and keeps the owner's
+// choice of an agent's tab.
+func TestTheOwnersWindowShowsAndRoutesAgentsTabs(t *testing.T) {
+	// No safety list: only a kick can show the agent's tab.
+	oldSafety := tabsSafety
+	tabsSafety = time.Hour
+	t.Cleanup(func() { tabsSafety = oldSafety })
+	// The owner's tab prints nothing, so no output relists either.
+	h := newTabTermHarness(t, "sleep 600")
+	withAgentServers(t, h.srv)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	watch, err := h.c.WatchTabs(ctx, &agentv1.WatchTabsRequest{Session: "main"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sent := make(chan *agentv1.WatchTabsResponse, 100)
+	go func() {
+		for {
+			m, err := watch.Recv()
+			if err != nil {
+				return
+			}
+			sent <- m
+		}
+	}()
+	if m := <-sent; len(m.GetTabs()) != 1 {
+		t.Fatalf("first watch list: %v", m)
+	}
+	// The control client's own first events relist once; let them pass.
+	for quiet := time.After(500 * time.Millisecond); ; {
+		select {
+		case <-sent:
+			continue
+		case <-quiet:
+		}
+		break
+	}
+	if _, err := h.srv.StartAgentTerminals(ctx, testSpec(t, "builder", "sh", "-c", "echo agent-marker; exec sleep 100")); err != nil {
+		t.Fatal(err)
+	}
+	// A start reaches the watch at once.
+	select {
+	case m := <-sent:
+		if len(m.GetTabs()) != 2 {
+			t.Fatalf("watch after the start: %v", m)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the watch never saw the start")
+	}
+
+	list := func() []*typesv1.Tab {
+		t.Helper()
+		r, err := h.c.ListTabs(ctx, &agentv1.ListTabsRequest{Session: "main"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return r.GetTabs()
+	}
+	ts := list()
+	own, agent := ts[0], ts[1]
+	if own.GetAgentId() != "" || len(own.GetPaneIds()) != 1 || !own.GetActive() {
+		t.Errorf("the owner's tab: %v", own)
+	}
+	if agent.GetAgentId() != "builder" || !strings.HasPrefix(agent.GetId(), "builder:@") || len(agent.GetPaneIds()) != 1 || agent.GetActive() {
+		t.Errorf("the agent's tab: %v", agent)
+	}
+
+	// Choosing the agent's tab makes it the active one; choosing the
+	// owner's goes back.
+	if _, err := h.c.SelectTab(ctx, &agentv1.SelectTabRequest{Session: "main", Id: agent.GetId()}); err != nil {
+		t.Fatal(err)
+	}
+	if ts := list(); ts[0].GetActive() || !ts[1].GetActive() {
+		t.Errorf("after choosing the agent's tab: %v", ts)
+	}
+	if _, err := h.c.SelectTab(ctx, &agentv1.SelectTabRequest{Session: "main", Id: own.GetId()}); err != nil {
+		t.Fatal(err)
+	}
+	if ts := list(); !ts[0].GetActive() || ts[1].GetActive() {
+		t.Errorf("after choosing the owner's tab again: %v", ts)
+	}
+
+	// Rename and close reach the agent's server; its last tab stays.
+	if _, err := h.c.RenameTab(ctx, &agentv1.RenameTabRequest{Session: "main", Id: agent.GetId(), Name: "build #{pane_id}"}); err != nil {
+		t.Fatal(err)
+	}
+	if ts := list(); ts[1].GetName() != "build #{pane_id}" || ts[0].GetName() == ts[1].GetName() {
+		t.Errorf("after rename: %v", ts)
+	}
+	if _, err := h.c.CloseTab(ctx, &agentv1.CloseTabRequest{Session: "main", Id: agent.GetId()}); status.Code(err) != codes.FailedPrecondition {
+		t.Errorf("closing the agent's last tab: %v", err)
+	}
+	for _, id := range []string{"reviewer:@0", "builder:@99", "builder:3"} {
+		if _, err := h.c.SelectTab(ctx, &agentv1.SelectTabRequest{Session: "main", Id: id}); err == nil {
+			t.Errorf("chose %s", id)
+		}
+	}
+
+	// The agent's tab's terminal is its own server's.
+	tt := h.open(ctx, agent.GetId(), "", 80, 24)
+	if m := tt.next(5 * time.Second); bytes.Contains(m.GetReset_().GetSeed(), []byte("agent-marker")) {
+		return
+	}
+	tt.until(10*time.Second, "the agent's output", func(out []byte) bool { return bytes.Contains(out, []byte("agent-marker")) })
 }

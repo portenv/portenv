@@ -230,3 +230,45 @@ struct TeamTabsTests {
         #expect(tabs.shown(for: .agent("nobody")).isEmpty)
     }
 }
+
+/// The agent's status in its row (R-0256) and its routines in the menu
+/// (R-0257, R-0258).
+struct TeamStatusTextTests {
+    let now = Date(timeIntervalSince1970: 100_000)
+    func ago(_ minutes: Double) -> Date { now.addingTimeInterval(-minutes * 60) }
+
+    @Test func aFreshStatusShowsWithItsAge() {
+        let s = AgentWorkStatus(text: "Running the payments tests", setAt: ago(4))
+        #expect(TeamStatusText.line(s, since: nil, now: now) == ("Running the payments tests \u{00B7} 4 min ago", false))
+        let p = AgentWorkStatus(text: "Migrating tables", progress: (3, 5), setAt: ago(0.2))
+        #expect(TeamStatusText.line(p, since: nil, now: now).text == "Migrating tables (3/5) \u{00B7} just now")
+        let b = AgentWorkStatus(text: "Deploying", progress: (1, 2), blocked: "needs the staging key", setAt: ago(2))
+        #expect(TeamStatusText.line(b, since: nil, now: now).text == "blocked: needs the staging key \u{00B7} 2 min ago")
+    }
+
+    @Test func noStatusOrAStaleOneSaysHowLong() {
+        #expect(TeamStatusText.line(AgentWorkStatus(text: "Old", setAt: ago(35)), since: nil, now: now) == ("no status for 35 min", true))
+        #expect(TeamStatusText.line(AgentWorkStatus(text: "Edge", setAt: ago(30)), since: nil, now: now).stale == false)
+        #expect(TeamStatusText.line(nil, since: ago(95), now: now) == ("no status for 1 hour 35 min", true))
+        #expect(TeamStatusText.line(nil, since: nil, now: now) == ("no status", true))
+        // A cleared status (portenv status clear) counts as none.
+        #expect(TeamStatusText.line(AgentWorkStatus(text: "", setAt: ago(5)), since: nil, now: now).stale)
+    }
+
+    @Test func statusIsPlainAndBounded() {
+        let s = AgentWorkStatus(text: "line\n\u{1b}[31mred " + String(repeating: "x", count: 300), progress: (9, 5), blocked: "")
+        #expect(!s.text.contains("\n") && !s.text.contains("\u{1b}") && s.text.count == 200)
+        #expect(s.progress?.done == 5 && s.progress?.total == 5)
+        #expect(AgentWorkStatus(text: "x", progress: (1, 0)).progress == nil)
+    }
+
+    @Test func routinesInTheMenu() {
+        #expect(TeamStatusText.routines([]) == nil)
+        #expect(TeamStatusText.routines([AgentRoutine(every: 30 * 60, note: "Status round")]) == "Routines: every 30 min")
+        #expect(TeamStatusText.routines([AgentRoutine(every: 30 * 60, note: "a"), AgentRoutine(every: 2 * 3600, note: "b")])
+            == "Routines: every 30 min, every 2 hours")
+        #expect(TeamStatusText.routines([AgentRoutine(every: 3600, note: "a", paused: true)]) == "Routines: every 1 hour (paused)")
+        #expect(TeamStatusText.pauseRoutines(false) == "Pause Routines" && TeamStatusText.pauseRoutines(true) == "Resume Routines")
+        #expect(TeamStatusText.span(90 * 60) == "1 hour 30 min")
+    }
+}

@@ -393,3 +393,87 @@ public enum AgentColours {
         return order[i % order.count]
     }
 }
+
+/// What an agent says it's doing (R-0256): `portenv status set`, one plain
+/// line, with optional progress and a blocked reason.
+public struct AgentWorkStatus: Equatable, Sendable {
+    public var text: String
+    /// Done and total, from `--progress N/M`.
+    public var progress: (done: Int, total: Int)?
+    /// Why it's blocked, from `--blocked "<reason>"`.
+    public var blocked: String
+    public var setAt: Date?
+
+    public init(text: String, progress: (done: Int, total: Int)? = nil, blocked: String = "", setAt: Date? = nil) {
+        self.text = TeamText.line(text, max: 200)
+        self.progress = progress.flatMap { $0.total > 0 && $0.done >= 0 ? (min($0.done, $0.total), $0.total) : nil }
+        self.blocked = TeamText.line(blocked, max: 200)
+        self.setAt = setAt
+    }
+
+    public static func == (a: Self, b: Self) -> Bool {
+        a.text == b.text && a.progress?.done == b.progress?.done && a.progress?.total == b.progress?.total
+            && a.blocked == b.blocked && a.setAt == b.setAt
+    }
+}
+
+/// A routine from the agent's file (R-0257, R-0258): Portenv delivers its
+/// note on this schedule while the agent runs.
+public struct AgentRoutine: Equatable, Sendable {
+    public var every: TimeInterval
+    public var note: String
+    public var paused: Bool
+
+    public init(every: TimeInterval, note: String, paused: Bool = false) {
+        self.every = every
+        self.note = TeamText.line(note, max: 200)
+        self.paused = paused
+    }
+}
+
+/// The status line and routine words for an agent's row and menu.
+public enum TeamStatusText {
+    /// A status older than this reads as no status (R-0256).
+    public static let stale: TimeInterval = 30 * 60
+
+    /// The row's line: "Running the payments tests (3/5) · 4 min ago",
+    /// "blocked: needs the staging key · 2 min ago", or, with no status or a
+    /// stale one, "no status for 35 min" (`stale` true, shown secondary).
+    /// `since` is when the agent started, for an agent that never set one.
+    public static func line(_ s: AgentWorkStatus?, since started: Date?, now: Date) -> (text: String, stale: Bool) {
+        if let s, let at = s.setAt, now.timeIntervalSince(at) <= stale, !(s.text.isEmpty && s.blocked.isEmpty) {
+            var text = s.blocked.isEmpty ? s.text : "blocked: \(s.blocked)"
+            if s.blocked.isEmpty, let p = s.progress { text += " (\(p.done)/\(p.total))" }
+            return ("\(text) \u{00B7} \(ago(at, now: now))", false)
+        }
+        guard let from = s?.setAt ?? started else { return ("no status", true) }
+        return ("no status for \(span(now.timeIntervalSince(from)))", true)
+    }
+
+    /// "just now", "4 min ago", "2 hours ago".
+    public static func ago(_ at: Date, now: Date) -> String {
+        let s = max(0, now.timeIntervalSince(at))
+        return s < 60 ? "just now" : "\(span(s)) ago"
+    }
+
+    /// "35 min", "1 hour", "3 hours", "1 hour 30 min".
+    public static func span(_ seconds: TimeInterval) -> String {
+        let minutes = max(1, Int(seconds / 60))
+        guard minutes >= 60 else { return "\(minutes) min" }
+        let h = minutes / 60, m = minutes % 60
+        let hours = h == 1 ? "1 hour" : "\(h) hours"
+        return m == 0 ? hours : "\(hours) \(m) min"
+    }
+
+    /// The row menu's line: "Routines: every 30 min", "Routines: every
+    /// 30 min, every 2 hours", "Routines: every 30 min (paused)"; nil when
+    /// the agent has none.
+    public static func routines(_ rs: [AgentRoutine]) -> String? {
+        guard !rs.isEmpty else { return nil }
+        let each = rs.map { "every \(span($0.every))" }.joined(separator: ", ")
+        return rs.allSatisfy(\.paused) ? "Routines: \(each) (paused)" : "Routines: \(each)"
+    }
+
+    public static func pauseRoutines(_ paused: Bool) -> String { paused ? "Resume Routines" : "Pause Routines" }
+    public static let askForStatus = "Ask for Status"
+}

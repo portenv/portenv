@@ -85,6 +85,7 @@ type teamBox struct {
 	actions   map[string]*agentv1.AgentPaneActionRequest // pane decision → what Approve does
 	status    map[string]*typesv1.AgentStatus            // agent → what it says it's doing (R-0256)
 	active    map[string]time.Time                       // agent → its last board line or status
+	routines  map[string][]*routineState                 // running agent → its routines (R-0258)
 	changed   chan struct{}
 }
 
@@ -111,6 +112,7 @@ func (e *teamEngine) box(name string) *teamBox {
 			actions:   map[string]*agentv1.AgentPaneActionRequest{},
 			status:    map[string]*typesv1.AgentStatus{},
 			active:    map[string]time.Time{},
+			routines:  map[string][]*routineState{},
 			changed:   make(chan struct{}),
 		}
 		e.boxes[name] = b
@@ -310,7 +312,7 @@ func (e *teamEngine) handleCall(ctx context.Context, name string, c *agentv1.Tea
 		return e.handoffLocked(ctx, name, b, &team, me, op.Handoff, id)
 	case *agentv1.TeamCallsResponse_Whoami:
 		return &agentv1.TeamCallsRequest{CallId: id, Ok: true, Result: &agentv1.TeamCallsRequest_Whoami{Whoami: e.whoamiLocked(name, b, &team, me)}}
-	case *agentv1.TeamCallsResponse_Propose, *agentv1.TeamCallsResponse_RequestPackage:
+	case *agentv1.TeamCallsResponse_Propose, *agentv1.TeamCallsResponse_RequestPackage, *agentv1.TeamCallsResponse_ProposeRoutine:
 		return refuse(id, "That command isn't in this build of Portenv yet.")
 	}
 	return refuse(id, "Portenv doesn't know that command.")
@@ -659,6 +661,11 @@ func (e *teamEngine) startAgent(ctx context.Context, name, agentID string) (*dae
 		return nil, err
 	}
 	b.states[agentID] = typesv1.AgentState_AGENT_STATE_RUNNING
+	b.routines[agentID] = nil
+	for _, r := range a.Spec.Routines {
+		every := time.Duration(r.EveryMinutes) * time.Minute
+		b.routines[agentID] = append(b.routines[agentID], &routineState{every: every, note: r.Note, next: e.now().Add(every)})
+	}
 	b.tabs[agentID], b.panes[agentID] = nil, nil
 	for _, t := range r.GetTabs() {
 		b.tabs[agentID] = append(b.tabs[agentID], t.GetId())
@@ -692,6 +699,7 @@ func (e *teamEngine) stopAgent(ctx context.Context, name, agentID string) (*daem
 	}
 	defer b.mu.Unlock()
 	b.states[agentID] = typesv1.AgentState_AGENT_STATE_STOPPED
+	delete(b.routines, agentID)
 	b.tabs[agentID], b.panes[agentID] = nil, nil
 	info := e.infoLocked(b, a)
 	b.events = append(b.events, teamEvent{agent: info})
@@ -743,6 +751,15 @@ func (e *teamEngine) infoLocked(b *teamBox, a *TeamAgent) *daemonv1.AgentInfo {
 		info.Problem = a.Problems[0]
 	}
 	info.Status = b.status[a.ID]
+	if rs, ok := b.routines[a.ID]; ok {
+		for _, r := range rs {
+			info.Routines = append(info.Routines, &typesv1.Routine{EveryMinutes: int32(r.every / time.Minute), Note: r.note, Paused: r.paused, NextAt: timestamppb.New(r.next)}) // #nosec G115 -- at most a week
+		}
+	} else if a.Spec != nil {
+		for _, r := range a.Spec.Routines {
+			info.Routines = append(info.Routines, &typesv1.Routine{EveryMinutes: int32(r.EveryMinutes), Note: r.Note}) // #nosec G115 -- at most a week
+		}
+	}
 	for i := len(b.events) - 1; i >= 0; i-- {
 		if m := b.events[i].msg; m != nil && m.GetFrom() == a.ID {
 			info.LastLine = m.GetText()
@@ -1018,4 +1035,100 @@ func boardText(s string, multiline bool) bool {
 		}
 	}
 	return true
+}
+
+// routineState is one running agent's routine: Portenv keeps the timer
+// (R-0258).
+type routineState struct {
+	every  time.Duration
+	note   string
+	next   time.Time
+	missed int
+	paused bool
+}
+
+// tickRoutines fires what's due, in every workspace: a routine note goes
+// to the agent's inbox at once, and is typed into its own main pane at its
+// next idle (the helper refuses while it's busy), with missed fires
+// collapsed into one.
+func (e *teamEngine) tickRoutines(ctx context.Context) {
+	e.mu.Lock()
+	names := make([]string, 0, len(e.boxes))
+	for n := range e.boxes {
+		names = append(names, n)
+	}
+	e.mu.Unlock()
+	for _, name := range names {
+		b, err := e.lockBox(ctx, name)
+		if err != nil {
+			continue
+		}
+		now := e.now()
+		for agent, rs := range b.routines {
+			if b.states[agent] != typesv1.AgentState_AGENT_STATE_RUNNING {
+				continue
+			}
+			for _, r := range rs {
+				if r.paused {
+					continue
+				}
+				fired := false
+				for !now.Before(r.next) {
+					r.missed++
+					r.next = r.next.Add(r.every)
+					fired = true
+				}
+				if fired {
+					m := &typesv1.BoardMessage{Id: newULID(now), From: boardFrom, To: agent, Type: typesv1.MessageType_MESSAGE_TYPE_ROUTINE, Text: r.note, CreatedAt: timestamppb.New(now)}
+					m.ThreadId = m.Id
+					_ = e.appendLocked(ctx, name, b, &agentv1.AppendBoardRequest{Line: &agentv1.AppendBoardRequest_Message{Message: m}})
+				}
+				if r.missed == 0 {
+					continue
+				}
+				text := r.note
+				if r.missed > 1 {
+					text += fmt.Sprintf(" (missed %d rounds)", r.missed)
+				}
+				h, err := e.helper(ctx, name)
+				if err != nil {
+					continue
+				}
+				if _, err := h.DeliverRoutine(ctx, &agentv1.DeliverRoutineRequest{AgentId: agent, Text: text}); err == nil {
+					r.missed = 0
+				}
+			}
+		}
+		b.mu.Unlock()
+	}
+}
+
+// setRoutinePaused pauses or resumes one of a running agent's routines,
+// from the app.
+func (e *teamEngine) setRoutinePaused(ctx context.Context, name, agent string, index int, paused bool) (*daemonv1.AgentInfo, error) {
+	team, err := e.loadTeam(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	a := team.agent(agent)
+	if a == nil {
+		return nil, fmt.Errorf("this workspace has no agent %q", agent)
+	}
+	b, err := e.lockBox(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	defer b.mu.Unlock()
+	rs := b.routines[agent]
+	if index < 0 || index >= len(rs) {
+		return nil, fmt.Errorf("%s has no routine %d running", agent, index+1)
+	}
+	rs[index].paused = paused
+	if !paused {
+		rs[index].next, rs[index].missed = e.now().Add(rs[index].every), 0
+	}
+	info := e.infoLocked(b, a)
+	b.events = append(b.events, teamEvent{agent: info})
+	b.changedLocked()
+	return info, nil
 }

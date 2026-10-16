@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	agentv1 "github.com/portenv/portenv/proto/gen/go/portenv/agent/v1"
 	typesv1 "github.com/portenv/portenv/proto/gen/go/portenv/types/v1"
@@ -23,13 +25,15 @@ import (
 type fakeTeamHelper struct {
 	agentv1.AgentServiceClient
 
-	mu       sync.Mutex
-	board    []*agentv1.AppendBoardRequest
-	panes    []*agentv1.AgentPaneActionRequest
-	started  []*agentv1.StartTeamAgentRequest
-	stopped  []string
-	nextPane int
-	handoffs []*agentv1.HandoffFilesRequest
+	mu        sync.Mutex
+	board     []*agentv1.AppendBoardRequest
+	panes     []*agentv1.AgentPaneActionRequest
+	started   []*agentv1.StartTeamAgentRequest
+	stopped   []string
+	nextPane  int
+	handoffs  []*agentv1.HandoffFilesRequest
+	delivered []*agentv1.DeliverRoutineRequest
+	busy      bool
 }
 
 func (f *fakeTeamHelper) AppendBoard(_ context.Context, in *agentv1.AppendBoardRequest, _ ...grpc.CallOption) (*agentv1.AppendBoardResponse, error) {
@@ -809,5 +813,118 @@ func TestHandoff(t *testing.T) {
 	// From the project is fine.
 	if r := hand("builder", "lead", "/home/work/w/exports/report.pdf", ""); !r.GetOk() {
 		t.Errorf("from the project: %s", r.GetLine())
+	}
+}
+
+func (f *fakeTeamHelper) DeliverRoutine(_ context.Context, in *agentv1.DeliverRoutineRequest, _ ...grpc.CallOption) (*agentv1.DeliverRoutineResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.busy {
+		return nil, status.Error(codes.FailedPrecondition, "busy")
+	}
+	f.delivered = append(f.delivered, in)
+	return &agentv1.DeliverRoutineResponse{}, nil
+}
+
+func routineTeam() []TeamAgent {
+	team := defaultTeam()
+	team[0].Spec.Routines = []AgentRoutine{{EveryMinutes: 30, Note: "Status round"}}
+	return team
+}
+
+func startedWithRoutine(t *testing.T) (*teamEngine, *fakeTeamHelper, *testClock) {
+	t.Helper()
+	e, h, clock := newTestEngine(t, routineTeam()...)
+	approveFirstStart(t, e)
+	if _, err := e.startAgent(context.Background(), "w", "lead"); err != nil {
+		t.Fatal(err)
+	}
+	return e, h, clock
+}
+
+func routineNotices(t *testing.T, e *teamEngine, id string) int {
+	n := 0
+	for _, m := range inbox(t, e, id, "").GetMessages() {
+		if m.GetType() == typesv1.MessageType_MESSAGE_TYPE_ROUTINE {
+			n++
+		}
+	}
+	return n
+}
+
+// R-0258: Portenv fires a routine on time, into the agent's own pane when
+// it's idle, and into its inbox.
+func TestARoutineFiresOnTime(t *testing.T) {
+	e, h, clock := startedWithRoutine(t)
+	ctx := context.Background()
+	e.tickRoutines(ctx)
+	clock.add(29 * time.Minute)
+	e.tickRoutines(ctx)
+	if len(h.delivered) != 0 {
+		t.Fatal("fired early")
+	}
+	clock.add(time.Minute)
+	e.tickRoutines(ctx)
+	if len(h.delivered) != 1 || h.delivered[0].GetAgentId() != "lead" || h.delivered[0].GetText() != "Status round" {
+		t.Fatalf("delivered = %v", h.delivered)
+	}
+	if n := routineNotices(t, e, "lead"); n != 1 {
+		t.Errorf("%d routine notices in lead's inbox, want 1", n)
+	}
+	if info := e.agentInfos(ctx, "w")["lead"]; len(info.GetRoutines()) != 1 || info.GetRoutines()[0].GetEveryMinutes() != 30 {
+		t.Errorf("routines on the row: %v", info.GetRoutines())
+	}
+}
+
+// Busy: it waits for the next idle, and missed fires collapse into one.
+func TestABusyAgentGetsOneCollapsedRoutine(t *testing.T) {
+	e, h, clock := startedWithRoutine(t)
+	ctx := context.Background()
+	h.busy = true
+	clock.add(30 * time.Minute)
+	e.tickRoutines(ctx)
+	clock.add(30 * time.Minute)
+	e.tickRoutines(ctx)
+	if len(h.delivered) != 0 {
+		t.Fatal("typed into a busy agent")
+	}
+	h.busy = false
+	clock.add(time.Minute)
+	e.tickRoutines(ctx)
+	if len(h.delivered) != 1 || !strings.Contains(h.delivered[0].GetText(), "missed 2 rounds") {
+		t.Fatalf("delivered = %v", h.delivered)
+	}
+	clock.add(time.Minute)
+	e.tickRoutines(ctx)
+	if len(h.delivered) != 1 {
+		t.Errorf("delivered again: %v", h.delivered)
+	}
+}
+
+// Paused, or the agent stopped: nothing fires.
+func TestPausedAndStoppedRoutinesDontFire(t *testing.T) {
+	e, h, clock := startedWithRoutine(t)
+	ctx := context.Background()
+	if _, err := e.setRoutinePaused(ctx, "w", "lead", 0, true); err != nil {
+		t.Fatal(err)
+	}
+	clock.add(time.Hour)
+	e.tickRoutines(ctx)
+	if len(h.delivered) != 0 || routineNotices(t, e, "lead") != 0 {
+		t.Fatal("a paused routine fired")
+	}
+	if _, err := e.setRoutinePaused(ctx, "w", "lead", 0, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.setRoutinePaused(ctx, "w", "lead", 3, true); err == nil {
+		t.Error("paused a routine that doesn't exist")
+	}
+	if _, err := e.stopAgent(ctx, "w", "lead"); err != nil {
+		t.Fatal(err)
+	}
+	clock.add(time.Hour)
+	e.tickRoutines(ctx)
+	if len(h.delivered) != 0 {
+		t.Error("a stopped agent's routine fired")
 	}
 }

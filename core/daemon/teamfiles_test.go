@@ -699,3 +699,38 @@ func TestTeamStatusGrant(t *testing.T) {
 		t.Errorf("odd: %v", a.Problems)
 	}
 }
+
+// R-0258: routines in the agent file, checked; never from an override.
+func TestRoutinesInTheAgentFile(t *testing.T) {
+	src := teamDirs(t)
+	writeAgent(t, src, "lead", fm("id: lead", "name: Lead", "runner: claude",
+		`routine: ["every 30m: Status round: check every agent and report blockers", "every 2h: Tidy the board"]`))
+	a := loadAgent(t, src, "lead")
+	if len(a.Problems) != 0 {
+		t.Fatal(a.Problems)
+	}
+	want := []AgentRoutine{{30, "Status round: check every agent and report blockers"}, {120, "Tidy the board"}}
+	if !reflect.DeepEqual(a.Spec.Routines, want) {
+		t.Errorf("routines = %v", a.Spec.Routines)
+	}
+	for name, line := range map[string]string{
+		"too often":  `routine: ["every 5m: ping"]`,
+		"no every":   `routine: ["30m: ping"]`,
+		"too many":   `routine: ["every 10m: a", "every 10m: b", "every 10m: c", "every 10m: d", "every 10m: e"]`,
+		"escape":     `routine: ["every 30m: hi \u001b[2J"]`,
+		"empty note": `routine: ["every 30m: "]`,
+		"a week+":    `routine: ["every 200h: x"]`,
+	} {
+		src := teamDirs(t)
+		writeAgent(t, src, "lead", fm("id: lead", "name: Lead", "runner: claude", line))
+		if a := loadAgent(t, src, "lead"); len(a.Problems) == 0 {
+			t.Errorf("%s: no problem for %s", name, line)
+		}
+	}
+	src = teamDirs(t)
+	writeAgent(t, src, "lead", fm("id: lead", "name: Lead", "runner: claude"))
+	writeOverride(t, src, "lead", ofm(`routine: ["every 30m: sneaky"]`))
+	if a := loadAgent(t, src, "lead"); len(a.Problems) != 1 || !strings.Contains(a.Problems[0], "only the repository file") {
+		t.Errorf("an override's routine: %v", a.Problems)
+	}
+}

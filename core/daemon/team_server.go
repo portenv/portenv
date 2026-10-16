@@ -29,6 +29,19 @@ func (s *Server) teamEng() *teamEngine {
 	s.teamOnce.Do(func() {
 		s.team = newTeamEngine(s.agentFor, s.loadTeam)
 		s.team.readBoard = s.readBoard
+		// Routines' timers (R-0258), while portenvd runs.
+		go func() {
+			tick := time.NewTicker(30 * time.Second)
+			defer tick.Stop()
+			for {
+				select {
+				case <-s.bgCtx.Done():
+					return
+				case <-tick.C:
+					s.team.tickRoutines(s.bgCtx)
+				}
+			}
+		}()
 	})
 	return s.team
 }
@@ -347,4 +360,13 @@ func (s *Server) SendMessage(ctx context.Context, req *daemonv1.SendMessageReque
 		return nil, teamStatus(err)
 	}
 	return &daemonv1.SendMessageResponse{Message: m}, nil
+}
+
+// SetRoutinePaused pauses or resumes a routine from the agent's row menu.
+func (s *Server) SetRoutinePaused(ctx context.Context, req *daemonv1.SetRoutinePausedRequest) (*daemonv1.SetRoutinePausedResponse, error) {
+	info, err := s.teamEng().setRoutinePaused(ctx, req.GetName(), req.GetAgentId(), int(req.GetIndex()), req.GetPaused())
+	if err != nil {
+		return nil, teamStatus(err)
+	}
+	return &daemonv1.SetRoutinePausedResponse{Agent: info}, nil
 }

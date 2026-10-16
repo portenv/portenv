@@ -114,8 +114,9 @@ public enum BlockLayout {
 
 /// A block's words (the command-blocks board), in the app's language.
 public enum BlockText {
-    /// The header's trailing status: "✓ 0.8 s · 14:20", "✗ exit 1 · 8.4 s ·
-    /// 14:31", "running 3 min · since 14:37". Times the app didn't see are
+    /// The header's trailing status: "0.8 s · 14:20", "exit 1 · 8.4 s ·
+    /// 14:31", "running · 3 min" (when it started is in `since`, for the
+    /// tooltip and VoiceOver, not said twice; R-0207). Times the app didn't see are
     /// left out, never guessed. Times follow the person's 12/24-hour
     /// setting, as the state line's do; numbers, the app's language.
     public static func status(_ block: CommandBlock, now: Date, timeZone: TimeZone = .current, clockLocale: Locale = .current,
@@ -124,10 +125,7 @@ public enum BlockText {
         switch block.state {
         case .running:
             var parts = ["running"]
-            if let s = block.startedAt {
-                parts.append(elapsed(now.timeIntervalSince(s), locale: locale))
-                parts.append("since " + clock(s))
-            }
+            if let s = block.startedAt { parts.append(elapsed(now.timeIntervalSince(s), locale: locale)) }
             return parts.joined(separator: " · ")
         case .succeeded, .failed:
             var parts: [String] = []
@@ -136,6 +134,49 @@ public enum BlockText {
             if let e = block.endedAt { parts.append(clock(e)) }
             return parts.joined(separator: " · ")
         }
+    }
+
+    /// "since 14:37" for a running block the app saw start: its header's
+    /// tooltip and VoiceOver label; nil otherwise.
+    public static func since(_ block: CommandBlock, timeZone: TimeZone = .current, clockLocale: Locale = .current) -> String? {
+        guard block.state == .running, let s = block.startedAt else { return nil }
+        return "since " + StateLine.clock(s, timeZone: timeZone, locale: clockLocale)
+    }
+
+    /// What VoiceOver reads for a block's header, a button (R-0207): "npm
+    /// run build, succeeded, 41 seconds". Its expanded or collapsed state is
+    /// the button's value (`expandedState`).
+    public static func spoken(_ block: CommandBlock, now: Date, timeZone: TimeZone = .current, clockLocale: Locale = .current) -> String {
+        var parts = [block.command.isEmpty ? "command" : block.command]
+        switch block.state {
+        case .succeeded: parts.append("succeeded")
+        case let .failed(code): parts += ["failed", "exit \(code)"]
+        case .running: parts.append("running")
+        }
+        if block.state == .running, let s = block.startedAt {
+            parts.append(spokenElapsed(now.timeIntervalSince(s)))
+            parts.append(since(block, timeZone: timeZone, clockLocale: clockLocale) ?? "")
+        } else if let s = block.startedAt, let e = block.endedAt {
+            parts.append(spokenElapsed(e.timeIntervalSince(s)))
+        }
+        return parts.filter { !$0.isEmpty }.joined(separator: ", ")
+    }
+
+    public static func expandedState(open: Bool) -> String { open ? "expanded" : "collapsed" }
+
+    /// Elapsed time as it's said: "0.8 seconds", "1 second", "41 seconds",
+    /// "3 minutes", "2 hours 5 minutes".
+    public static func spokenElapsed(_ seconds: TimeInterval) -> String {
+        let s = max(0, seconds)
+        func unit(_ n: Int, _ one: String) -> String { "\(n) \(one)\(n == 1 ? "" : "s")" }
+        if s < 10 {
+            let tenths = (s * 10).rounded() / 10
+            return tenths == 1 ? "1 second" : String(format: "%.1f seconds", tenths).replacingOccurrences(of: ".0 ", with: " ")
+        }
+        if s < 60 { return unit(Int(s), "second") }
+        let m = Int(s / 60)
+        if m < 60 { return unit(m, "minute") }
+        return unit(m / 60, "hour") + (m % 60 == 0 ? "" : " " + unit(m % 60, "minute"))
     }
 
     /// "0.8 s", "8.4 s", "41 s", "3 min", "2 h 5 min".
@@ -206,4 +247,79 @@ public enum BlockCopy {
     public static let copyOutput = "Copy Output"
     public static let copyCommand = "Copy Command"
     public static let runAgain = "Run Again"
+}
+
+/// Moving between blocks (⌘↑ and ⌘↓, R-0139): the block above or below the
+/// selected one, oldest first; with none selected, the newest (⌘↑) or the
+/// oldest (⌘↓). Stops at the ends.
+public enum BlockNavigation {
+    public static func previous(from selected: Int?, in blocks: [CommandBlock]) -> Int? {
+        let ids = blocks.map(\.id)
+        guard let selected, let i = ids.firstIndex(of: selected) else { return ids.last }
+        return i > 0 ? ids[i - 1] : selected
+    }
+
+    public static func next(from selected: Int?, in blocks: [CommandBlock]) -> Int? {
+        let ids = blocks.map(\.id)
+        guard let selected, let i = ids.firstIndex(of: selected) else { return ids.first }
+        return i + 1 < ids.count ? ids[i + 1] : selected
+    }
+}
+
+/// Find across the blocks (R-0139, R-0174): every block's command and every
+/// output row, folded or hidden ones too, case-insensitively, in order. A
+/// match in a folded block or in hidden rows opens them when it's shown.
+public enum BlockFind {
+    public struct Match: Equatable, Sendable {
+        public let block: Int
+        /// The output row, or nil for the block's command.
+        public let row: Int?
+        /// Where, in characters of that line.
+        public let range: Range<Int>
+    }
+
+    public static func matches(_ query: String, in blocks: [CommandBlock], row text: (Int) -> String?) -> [Match] {
+        var out: [Match] = []
+        for b in blocks {
+            out += matches(query, inCommandOf: b)
+            if let rows = b.output { out += matches(query, block: b.id, rows: rows, row: text) }
+        }
+        return out
+    }
+
+    /// The matches in a block's command.
+    public static func matches(_ query: String, inCommandOf block: CommandBlock) -> [Match] {
+        scan(query, block.command).map { Match(block: block.id, row: nil, range: $0) }
+    }
+
+    /// The matches in some of a block's rows: the app searches a long block
+    /// in chunks of `chunkRows`, letting the window draw between them.
+    public static func matches(_ query: String, block: Int, rows: ClosedRange<Int>, row text: (Int) -> String?) -> [Match] {
+        var out: [Match] = []
+        for r in rows { if let t = text(r) { out += scan(query, t).map { Match(block: block, row: r, range: $0) } } }
+        return out
+    }
+
+    /// Rows searched between two chances for the window to draw.
+    public static let chunkRows = 250
+
+    static func scan(_ query: String, _ line: String) -> [Range<Int>] {
+        let q = query.lowercased()
+        guard !q.isEmpty else { return [] }
+        let lower = line.lowercased()
+        // A character whose lower case is longer: compare as is.
+        guard lower.count == line.count else { return ranges(of: query, in: line) }
+        return ranges(of: q, in: lower)
+    }
+
+    static func ranges(of needle: String, in hay: String) -> [Range<Int>] {
+        guard !needle.isEmpty, hay.count >= needle.count else { return [] }
+        return Array(hay).ranges(of: Array(needle))
+    }
+
+    /// "3 of 12", or "Not found".
+    public static func count(current: Int?, total: Int) -> String {
+        guard total > 0 else { return "Not found" }
+        return "\((current ?? 0) + 1) of \(total)"
+    }
 }

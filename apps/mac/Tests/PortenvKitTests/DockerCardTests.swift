@@ -260,6 +260,10 @@ struct DockerReadyTests {
         let card = DockerStatus.starting.card
         #expect(card?.title == "Docker Desktop is starting\u{2026}")
         #expect(card?.button == nil && card?.action == nil)
+        // Its line already says Portenv carries on by itself: no "Checking
+        // again by itself" under it (R-0217). The other cards keep it.
+        #expect(card?.saysChecking == false)
+        #expect(DockerStatus.notRunning.card?.saysChecking == true && DockerStatus.missing.card?.saysChecking == true)
         #expect(DockerStatus.announcement(from: .notRunning, to: .starting) == card?.title)
     }
 

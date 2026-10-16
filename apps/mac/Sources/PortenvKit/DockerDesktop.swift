@@ -62,6 +62,9 @@ public struct DockerCard: Equatable, Sendable {
     /// None while Docker Desktop starts: there's nothing to do but wait.
     public let button: String?
     public let action: Action?
+    /// "Checking again by itself" under the card: not while Docker Desktop
+    /// starts, whose line already says Portenv carries on by itself (R-0217).
+    public var saysChecking: Bool { action != nil }
 }
 
 /// The cards' words (R-0098; GUIDELINES §10).

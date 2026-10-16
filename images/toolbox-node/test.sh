@@ -60,6 +60,8 @@ check "skeleton shell files" in_box test -f /home/work/.bashrc
 check "agent socket reaches root and portenv-agent only" test "$(in_box stat -c '%a %U:%G' /run/portenv /run/portenv/agent.sock | tr '\n' ' ')" = "710 root:portenv-agent 660 root:portenv-agent "
 check "the agent channel copy carries only setuid, setgid, chown and kill" test "$(in_box getcap /usr/local/libexec/portenv/agent-serve | awk '{print $2}')" = "cap_chown,cap_kill,cap_setgid,cap_setuid=ep"
 check "work has passwordless sudo" as_work 'sudo -n true'
+# R-0262: what work makes at the top of its home is private.
+check "work's login shells use umask 077" as_work 'test "$(umask)" = 0077'
 check "node 22" as_work 'node --version | grep -q "^v22\."'
 check "npm installs globals into the home" as_work 'test "$(npm config get prefix)" = /home/work/.local'
 check "~/.local/bin on PATH" as_work 'case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) false ;; esac'

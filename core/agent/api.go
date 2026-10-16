@@ -91,7 +91,7 @@ type apiServer struct {
 	// idle-input pattern (nil until a build has it).
 	setAgentIdleInput func(id, pattern string) error
 	// prepareProject asks init to open the project to the team.
-	prepareProject func(ctx context.Context, projectDir string) error
+	prepareProject func(ctx context.Context, projectDir string) ([]string, error)
 }
 
 // ctlHub returns the server's control-mode clients, made on first use.

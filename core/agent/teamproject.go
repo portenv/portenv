@@ -10,6 +10,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 
@@ -35,18 +36,15 @@ import (
 // teamIOBinary is the plain portenv-agent, which runs team-io.
 const teamIOBinary = "/usr/local/bin/portenv-agent"
 
-// privateDotfiles must not be readable by others once /home/work is 0711.
-var privateDotfiles = []string{".ssh", ".gnupg", ".aws", ".config", ".claude", ".kube", ".docker", ".netrc", ".git-credentials", ".npmrc", ".pypirc"}
-
 // protectedInProject are never the team's to write.
 var protectedInProject = []string{".git/hooks", ".git/config", ".portenv"}
 
 // PrepareProject opens the project folder (/home/<user>/<name>) to the team.
-func (t *TeamUsers) PrepareProject(ctx context.Context, projectDir string) error {
+func (t *TeamUsers) PrepareProject(ctx context.Context, projectDir string) ([]string, error) {
 	prefix := "/home/" + t.Cfg.User + "/"
 	name, ok := strings.CutPrefix(projectDir, prefix)
 	if !ok || name == "" || strings.Contains(name, "/") || strings.HasPrefix(name, ".") || path.Clean(projectDir) != projectDir {
-		return fmt.Errorf("%q isn't a project folder in %s", projectDir, prefix)
+		return nil, fmt.Errorf("%q isn't a project folder in %s", projectDir, prefix)
 	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -54,33 +52,29 @@ func (t *TeamUsers) PrepareProject(ctx context.Context, projectDir string) error
 	project := filepath.Join(work, name)
 	for _, d := range []string{t.Cfg.HomeRoot, work, project} {
 		if err := checkRealDir(d); err != nil {
-			return err
+			return nil, err
 		}
 	}
-	// The owner's private folders stay private once others can pass
-	// through /home/work.
-	for _, n := range privateDotfiles {
-		fi, err := os.Lstat(filepath.Join(work, n))
-		if errors.Is(err, fs.ErrNotExist) {
-			continue
-		}
-		if err != nil {
-			return err
-		}
-		if fi.Mode()&os.ModeSymlink != 0 || fi.Mode().Perm()&0o077 != 0 {
-			return fmt.Errorf("~/%s can be read by others in this workspace. Make it private (chmod 700 ~/%s, or 600 for a file), then start the team again", n, n)
-		}
+	// Nothing directly in the owner's home is readable by others once they
+	// can pass through it (R-0262).
+	fixed, err := t.tightenHome(work, append(t.projects(), name))
+	if err != nil {
+		return nil, err
+	}
+	fixed = append(t.takeHomeFixesLocked(), fixed...)
+	if err := t.recordProject(name); err != nil {
+		return nil, err
 	}
 	if out, err := t.Run.Run(ctx, nil, "runuser", "-u", t.Cfg.User, "--", teamIOBinary, "team-io", "open-project", project); err != nil {
-		return cmdError("open the project to the team", out, err)
+		return nil, cmdError("open the project to the team", out, err)
 	}
 	if fi, err := os.Lstat(filepath.Join(project, ".git")); err == nil && fi.IsDir() {
 		// Agents run git in work's repository: allow it for this one only.
 		if out, err := t.Run.Run(ctx, nil, "git", "config", "--system", "--add", "safe.directory", projectDir); err != nil {
-			return cmdError("let agents use the project's git repository", out, err)
+			return nil, cmdError("let agents use the project's git repository", out, err)
 		}
 	}
-	return nil
+	return fixed, nil
 }
 
 // errNoACL is the plain line when the filesystem won't keep ACLs.
@@ -180,23 +174,135 @@ func (s *apiServer) PrepareTeamProject(ctx context.Context, req *agentv1.Prepare
 	if s.prepareProject == nil {
 		return nil, status.Error(codes.Unimplemented, "no team in this workspace")
 	}
-	if err := s.prepareProject(ctx, req.GetProjectDir()); err != nil {
+	fixed, err := s.prepareProject(ctx, req.GetProjectDir())
+	if err != nil {
 		return nil, status.Error(codes.FailedPrecondition, err.Error())
 	}
-	return &agentv1.PrepareTeamProjectResponse{}, nil
+	return &agentv1.PrepareTeamProjectResponse{Fixed: fixed}, nil
 }
 
 // askInitPrepare asks init on its local socket.
-func askInitPrepare(socket string) func(context.Context, string) error {
-	return func(ctx context.Context, dir string) error {
+func askInitPrepare(socket string) func(context.Context, string) ([]string, error) {
+	return func(ctx context.Context, dir string) ([]string, error) {
 		conn, err := grpc.NewClient("unix://"+socket, grpc.WithTransportCredentials(insecure.NewCredentials()))
 		if err != nil {
-			return fmt.Errorf("connect to init: %w", err)
+			return nil, fmt.Errorf("connect to init: %w", err)
 		}
 		defer func() { _ = conn.Close() }()
-		if _, err := agentv1.NewAgentServiceClient(conn).PrepareTeamProject(ctx, &agentv1.PrepareTeamProjectRequest{ProjectDir: dir}); err != nil {
-			return errors.New(status.Convert(err).Message())
+		r, err := agentv1.NewAgentServiceClient(conn).PrepareTeamProject(ctx, &agentv1.PrepareTeamProjectRequest{ProjectDir: dir})
+		if err != nil {
+			return nil, errors.New(status.Convert(err).Message())
 		}
+		return r.GetFixed(), nil
+	}
+}
+
+// tightenHome takes the "other" bits, and group write, off every entry
+// directly in the owner's home except the projects and .portenv, and gives
+// any that's in group team back to work's group: folders end up 0700 or
+// 0750, files 0600 or 0640 (R-0262). Each change goes through a descriptor
+// of the entry itself, never through a link; links and special files are
+// left as they are. It returns what it changed, for the log and the
+// owner's notice.
+func (t *TeamUsers) tightenHome(work string, projects []string) ([]string, error) {
+	entries, err := os.ReadDir(work)
+	if err != nil {
+		return nil, err
+	}
+	groupOf := t.groupOf
+	if groupOf == nil {
+		groupOf = fileGroup
+	}
+	var fixed []string
+	for _, e := range entries {
+		n := e.Name()
+		if n == ".portenv" || slices.Contains(projects, n) {
+			continue
+		}
+		p := filepath.Join(work, n)
+		if e.Type()&os.ModeSymlink != 0 || (!e.IsDir() && !e.Type().IsRegular()) {
+			continue
+		}
+		flags := os.O_RDONLY | syscall.O_NOFOLLOW | syscall.O_NONBLOCK
+		if e.IsDir() {
+			flags |= syscall.O_DIRECTORY
+		}
+		f, err := os.OpenFile(p, flags, 0) // #nosec G304 -- an entry of work's home, never a link
+		if err != nil {
+			return fixed, fmt.Errorf("check ~/%s: %w", n, err)
+		}
+		fi, err := f.Stat()
+		if err != nil {
+			_ = f.Close()
+			return fixed, err
+		}
+		perm := fi.Mode().Perm()
+		var what []string
+		if perm&0o027 != 0 {
+			if err := f.Chmod(fi.Mode()&os.ModeSetgid | perm&^0o027); err != nil {
+				_ = f.Close()
+				return fixed, fmt.Errorf("make ~/%s private: %w", n, err)
+			}
+			what = append(what, fmt.Sprintf("%o → %o", perm, perm&^0o027))
+		}
+		if g := groupOf(p); g != t.Cfg.UID {
+			if err := t.Chown(p, -1, t.Cfg.UID); err != nil {
+				_ = f.Close()
+				return fixed, fmt.Errorf("give ~/%s back to group %s: %w", n, t.Cfg.User, err)
+			}
+			what = append(what, fmt.Sprintf("group %d → %s", g, t.Cfg.User))
+		}
+		_ = f.Close()
+		if len(what) > 0 {
+			fixed = append(fixed, "~/"+n+": "+strings.Join(what, ", "))
+		}
+	}
+	return fixed, nil
+}
+
+// fileGroup is a path's group, without following a link.
+func fileGroup(p string) int {
+	fi, err := os.Lstat(p)
+	if err != nil {
+		return -1
+	}
+	if st, ok := fi.Sys().(*syscall.Stat_t); ok {
+		return int(st.Gid)
+	}
+	return -1
+}
+
+// projects are the project folders a team has opened, from users.json.
+func (t *TeamUsers) projects() []string {
+	f, err := t.load()
+	if err != nil {
 		return nil
 	}
+	return f.Projects
+}
+
+func (t *TeamUsers) recordProject(name string) error {
+	f, err := t.load()
+	if err != nil {
+		return err
+	}
+	if slices.Contains(f.Projects, name) {
+		return nil
+	}
+	f.Projects = append(f.Projects, name)
+	return t.save(f)
+}
+
+// takeHomeFixes returns what box starts fixed since the last team start,
+// once.
+func (t *TeamUsers) takeHomeFixes() []string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.takeHomeFixesLocked()
+}
+
+func (t *TeamUsers) takeHomeFixesLocked() []string {
+	out := t.homeFixes
+	t.homeFixes = nil
+	return out
 }

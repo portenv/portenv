@@ -64,6 +64,12 @@ struct TeamAvatar: View {
         self.size = size
     }
 
+    /// A look already decided (a tab's chip).
+    init(look: AvatarLook, size: CGFloat = 22) {
+        self.look = look
+        self.size = size
+    }
+
     /// The owner's.
     init(you size: CGFloat = 22) {
         look = .owner

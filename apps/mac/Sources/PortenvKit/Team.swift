@@ -477,3 +477,23 @@ public enum TeamStatusText {
     public static func pauseRoutines(_ paused: Bool) -> String { paused ? "Resume Routines" : "Pause Routines" }
     public static let askForStatus = "Ask for Status"
 }
+
+/// A tab's label in the tab bar (R-0265 item 4): an agent's tab always
+/// carries its agent's chip and name before the tab's, so it can never pass
+/// for one of the owner's tabs, whatever the agent names it ("shell").
+public struct TabLabel: Equatable, Sendable {
+    public var title: String
+    /// The agent's chip; nil for the owner's own tabs.
+    public var chip: AvatarLook?
+
+    public static func of(_ tab: TabInfo, team: [TeamAgent], isSymbol: (String) -> Bool) -> TabLabel {
+        guard !tab.agentID.isEmpty else { return TabLabel(title: tab.name, chip: nil) }
+        let agent = team.first { $0.id == tab.agentID }
+        let shown = agent.map { $0.name.isEmpty ? tab.agentID : $0.name } ?? tab.agentID
+        // An agent the team doesn't list (yet) still gets a chip that isn't
+        // the owner's: its id's initial on the first agent colour.
+        let chip = agent.map { AvatarLook.agent($0, in: team, isSymbol: isSymbol) }
+            ?? AvatarLook(symbol: nil, initial: tab.agentID.first.map { String($0).uppercased() } ?? "?", colour: AgentColours.order[0])
+        return TabLabel(title: "\(shown) \u{00B7} \(tab.name)", chip: chip)
+    }
+}

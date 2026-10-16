@@ -272,3 +272,27 @@ struct TeamStatusTextTests {
         #expect(TeamStatusText.span(90 * 60) == "1 hour 30 min")
     }
 }
+
+/// An agent's tab can never look like the owner's (R-0265 item 4).
+struct TabLabelTests {
+    let symbol: (String) -> Bool = { !$0.isEmpty }
+
+    @Test func agentTabsAlwaysCarryTheAgent() {
+        let team = [TeamAgent(id: "builder", name: "Builder", status: .running),
+                    TeamAgent(id: "sly", name: "", avatar: "person.fill", status: .running)]
+        let owner = TabLabel.of(TabInfo(id: "@1", name: "shell", active: true), team: team, isSymbol: symbol)
+        #expect(owner == TabLabel(title: "shell", chip: nil))
+        let agentTabs = [
+            TabInfo(id: "builder:@1", name: "shell", active: false, agentID: "builder"),
+            TabInfo(id: "sly:@1", name: "shell", active: false, agentID: "sly"),
+            TabInfo(id: "ghost:@1", name: "shell", active: false, agentID: "ghost"),
+        ]
+        let labels = agentTabs.map { TabLabel.of($0, team: team, isSymbol: symbol) }
+        #expect(labels.map(\.title) == ["Builder \u{00B7} shell", "sly \u{00B7} shell", "ghost \u{00B7} shell"])
+        for l in labels {
+            #expect(l != owner && l.title != owner.title)
+            #expect(l.chip != nil && l.chip != AvatarLook.owner && l.chip?.colour != AvatarLook.owner.colour)
+            #expect(l.chip?.symbol?.hasPrefix("person") != true)
+        }
+    }
+}

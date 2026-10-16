@@ -68,6 +68,15 @@ check "git" as_work 'git --version'
 check "tmux 3.4" as_work 'test "$(tmux -V)" = "tmux 3.4"'
 check "ripgrep" as_work 'rg --version'
 check "jq" as_work 'jq --version'
+# Agents share files through default ACLs (ADR 0022 §2): the tools, and a
+# /home that keeps a default ACL and applies it to new files.
+check "setfacl and getfacl" in_box sh -c 'command -v setfacl && command -v getfacl'
+check "/home takes default ACLs" in_box sh -c '
+	d=$(mktemp -d /home/.acl-check.XXXXXX) || exit 1
+	setfacl -d -m g:work:rwX "$d" && touch "$d/f" &&
+		getfacl -cp "$d" | grep -qx "default:group:work:rwx" &&
+		getfacl -cp "$d/f" | grep -q "^group:work:rw-"
+	rc=$?; rm -rf "$d"; exit $rc'
 check "build-essential" as_work 'gcc --version && make --version'
 check "python 3" as_work 'python3 --version'
 check "shell integration (OSC 133) in login shells" as_work 'bash -lic "declare -F __portenv_osc133_precmd"'

@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"io"
 	"path"
 	"regexp"
 	"slices"
@@ -1153,4 +1154,101 @@ func (e *teamEngine) setRoutinePaused(ctx context.Context, name, agent string, i
 	b.events = append(b.events, teamEvent{agent: info})
 	b.changedLocked()
 	return info, nil
+}
+
+// The Agent files view (ADR 0022 §2): the owner's, from the app, for
+// agents of the team only. The helper does the file work as the agent,
+// never through a link (R-0254 rule 1); portenvd gives it the quota.
+
+func (e *teamEngine) teamAgent(ctx context.Context, name, agent string) error {
+	team, err := e.loadTeam(ctx, name)
+	if err != nil {
+		return err
+	}
+	if team.agent(agent) == nil {
+		return fmt.Errorf("this workspace has no agent %q", agent)
+	}
+	return nil
+}
+
+func (e *teamEngine) listAgentFiles(ctx context.Context, name, agent, dir string) ([]*typesv1.AgentFile, int64, int64, error) {
+	if err := e.teamAgent(ctx, name, agent); err != nil {
+		return nil, 0, 0, err
+	}
+	h, err := e.helper(ctx, name)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	r, err := h.ListHomeFiles(ctx, &agentv1.ListHomeFilesRequest{AgentId: agent, Dir: dir})
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	return r.GetFiles(), r.GetHomeBytes(), defaultHomeQuota, nil
+}
+
+func (e *teamEngine) readAgentFile(ctx context.Context, name, agent, path string, send func([]byte) error) error {
+	if err := e.teamAgent(ctx, name, agent); err != nil {
+		return err
+	}
+	h, err := e.helper(ctx, name)
+	if err != nil {
+		return err
+	}
+	st, err := h.ReadHomeFile(ctx, &agentv1.ReadHomeFileRequest{AgentId: agent, Path: path})
+	if err != nil {
+		return err
+	}
+	for {
+		r, err := st.Recv()
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if err := send(r.GetData()); err != nil {
+			return err
+		}
+	}
+}
+
+// addAgentFiles relays the owner's drag and drop. The first message names
+// the workspace and agent; the agent can't be changed mid-stream.
+func (e *teamEngine) addAgentFiles(ctx context.Context, name, agent string, recv func() (*daemonv1.AddAgentFilesRequest, error)) ([]*typesv1.AgentFile, error) {
+	if err := e.teamAgent(ctx, name, agent); err != nil {
+		return nil, err
+	}
+	h, err := e.helper(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	st, err := h.WriteHomeFiles(ctx)
+	if err != nil {
+		return nil, err
+	}
+	first := true
+	for {
+		m, err := recv()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		if (m.GetAgentId() != "" && m.GetAgentId() != agent) || (m.GetName() != "" && m.GetName() != name) {
+			return nil, errors.New("one drag and drop goes to one agent")
+		}
+		out := &agentv1.WriteHomeFilesRequest{Path: m.GetPath(), Data: m.GetData(), Last: m.GetLast()}
+		if first {
+			out.AgentId, out.HomeQuotaBytes, first = agent, defaultHomeQuota, false
+		}
+		if err := st.Send(out); err != nil {
+			return nil, err
+		}
+	}
+	r, err := st.CloseAndRecv()
+	if err != nil {
+		return nil, err
+	}
+	return r.GetAdded(), nil
 }

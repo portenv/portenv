@@ -5,6 +5,7 @@ package docker
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -199,6 +200,46 @@ func TestMountsCompare(t *testing.T) {
 	} {
 		if sameMounts(now, ran) {
 			t.Errorf("%s: taken for the same", name)
+		}
+	}
+}
+
+// TestMountsCompareAsDockerDesktopReportsThem (R-0242): Docker Desktop
+// reports a bind mount's source as /host_mnt plus the real path (symlinks
+// resolved: /var is /private/var on a Mac), not as it was created. The same
+// mount must compare equal, or every take-over after a portenvd restart
+// looks like "mounts changed" and restarts the box with a false security
+// notice. A different folder must still differ.
+func TestMountsCompareAsDockerDesktopReportsThem(t *testing.T) {
+	real := t.TempDir()
+	link := filepath.Join(t.TempDir(), "link")
+	if err := os.Symlink(real, link); err != nil {
+		t.Fatal(err)
+	}
+	resolved, err := filepath.EvalSymlinks(real)
+	if err != nil {
+		t.Fatal(err)
+	}
+	home := mount.Mount{Type: mount.TypeVolume, Source: "vol", Target: "/home"}
+	cache := mount.Mount{Type: mount.TypeVolume, Source: "portenv-cache-box-1", Target: CacheMount}
+	own := func(src string) mount.Mount {
+		return mount.Mount{Type: mount.TypeBind, Source: src, Target: StorageMount + "/box-1"}
+	}
+	for name, c := range map[string]struct {
+		want, got string
+		same      bool
+	}{
+		"as created":                         {real, real, true},
+		"Desktop's /host_mnt":                {real, "/host_mnt" + resolved, true},
+		"Desktop's /host_mnt, via a symlink": {link, "/host_mnt" + resolved, true},
+		"another folder":                     {real, "/host_mnt" + filepath.Dir(resolved), false},
+		"another folder, as created":         {real, filepath.Dir(real), false},
+		"/host_mnt with nothing after it":    {real, "/host_mnt", false},
+		"a look-alike prefix":                {real, "/host_mntx" + resolved, false},
+	} {
+		got := sameMounts([]mount.Mount{home, own(c.want), cache}, []mount.Mount{cache, own(c.got), home})
+		if got != c.same {
+			t.Errorf("%s: same %v, want %v", name, got, c.same)
 		}
 	}
 }

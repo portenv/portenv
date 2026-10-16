@@ -600,12 +600,27 @@ func TestCheckWritesNothing(t *testing.T) {
 			t.Errorf("Check changed ~/%s", n)
 		}
 	}
-	// On CI's Ubuntu runner the server is a real one: it passes but for
-	// what a runner can't have.
+	// This test is about writing nothing. On CI's Ubuntu runner it also
+	// checks the lines that are the runner's own (its system, its sudo, its
+	// clock) pass. Lines that depend on the network or the runner's size
+	// (ghcr.io and download.docker.com answering, free disk) need only have
+	// run: passed, or failed with their fix (a runner's network once
+	// refused ghcr.io, and the test failed on that).
 	if os.Getenv("CI") != "" {
+		mayFail := map[string]bool{"https-ghcr": true, "https-docker": true, "disk": true}
 		for _, l := range lines {
-			if l.State == CheckFailed && l.ID != "disk" && l.ID != "https-docker" {
+			switch {
+			case l.State == 0:
+				t.Errorf("on the CI runner, a line didn't run: %+v", l)
+			case l.State == CheckFailed && !mayFail[l.ID]:
 				t.Errorf("on the CI runner: %+v", l)
+			case l.State == CheckFailed && l.Fix == "":
+				t.Errorf("a failure with no fix: %+v", l)
+			}
+		}
+		for _, id := range []string{"system", "sudo", "clock", "https-ghcr", "https-docker"} {
+			if !slices.ContainsFunc(lines, func(l CheckLine) bool { return l.ID == id }) {
+				t.Errorf("no %s line", id)
 			}
 		}
 	}

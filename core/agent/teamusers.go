@@ -124,6 +124,9 @@ func (t *TeamUsers) Ensure(ctx context.Context, id string) (AgentUser, error) {
 	if err := t.ensureTeamGroup(ctx); err != nil {
 		return AgentUser{}, err
 	}
+	if err := t.ensureTeamDir(); err != nil {
+		return AgentUser{}, err
+	}
 	rec := store.find(id)
 	created := false
 	switch {
@@ -201,9 +204,9 @@ func (t *TeamUsers) Remove(ctx context.Context, id string, deleteFiles bool) err
 	return t.save(store)
 }
 
-// Restore runs at every box start, after work's user and home: the team
-// group, /home/team, the socket folder, and every recorded agent's user
-// lines and home. It never stops the box; what fails is kept for the next
+// Restore runs at every box start, after work's user and home: the socket
+// folder and, for a workspace that has a team, the team group, /home/team
+// and every recorded agent's user lines and home. It never stops the box; what fails is kept for the next
 // Ensure to report.
 func (t *TeamUsers) Restore(ctx context.Context) {
 	t.mu.Lock()
@@ -216,12 +219,6 @@ func (t *TeamUsers) restore(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := t.ensureTeamGroup(ctx); err != nil {
-		return err
-	}
-	if err := t.ensureTeamDir(); err != nil {
-		return err
-	}
 	if t.RunDir != "" {
 		if err := os.MkdirAll(t.RunDir, 0o755); err != nil { // #nosec G301 -- each agent's folder inside is closed (§1)
 			return fmt.Errorf("make %s: %w", t.RunDir, err)
@@ -229,6 +226,17 @@ func (t *TeamUsers) restore(ctx context.Context) error {
 		if err := os.Chmod(t.RunDir, 0o755); err != nil { // #nosec G302 -- a directory others pass through
 			return fmt.Errorf("set %s's mode: %w", t.RunDir, err)
 		}
+	}
+	// A workspace without a team gets nothing in /home: no team folder
+	// until its first agent.
+	if len(store.Users) == 0 {
+		return nil
+	}
+	if err := t.ensureTeamGroup(ctx); err != nil {
+		return err
+	}
+	if err := t.ensureTeamDir(); err != nil {
+		return err
 	}
 	var errs []error
 	for _, rec := range store.Users {

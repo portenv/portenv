@@ -299,6 +299,21 @@ func TeamIO(args []string, stdin io.Reader, stdout io.Writer) error {
 			files = append(files, teamIOFile{Name: e.Name(), Content: b})
 		}
 		return json.NewEncoder(stdout).Encode(files)
+	case "list-home":
+		if len(args) != 3 {
+			return errors.New("list-home HOME DIR")
+		}
+		return homeList(dir, args[2], stdout)
+	case "read-home":
+		if len(args) != 3 {
+			return errors.New("read-home HOME PATH")
+		}
+		return homeRead(dir, args[2], stdout)
+	case "write-home":
+		if len(args) != 4 {
+			return errors.New("write-home HOME PATH QUOTA")
+		}
+		return homeWrite(dir, args[2], args[3], stdin, stdout)
 	}
 	return fmt.Errorf("team-io: unknown operation %q", args[0])
 }

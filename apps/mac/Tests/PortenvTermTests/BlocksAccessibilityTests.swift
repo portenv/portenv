@@ -62,6 +62,18 @@ struct BlocksAccessibilityTests {
         return out
     }
 
+    /// The list's vertical scroll position (0 top, 1 bottom), as its
+    /// scroll bar tells VoiceOver.
+    func scrolled(_ window: NSWindow) -> Double? {
+        for e in elements(window) where e.role == NSAccessibility.Role.scrollBar.rawValue {
+            guard let o = e.element as? NSAccessibilityProtocol else { continue }
+            let orientation = o.accessibilityOrientation()
+            let value: Any? = o.accessibilityValue()
+            if orientation == .vertical || orientation == .unknown, let v = value as? NSNumber { return v.doubleValue }
+        }
+        return nil
+    }
+
     func press(_ label: String, in window: NSWindow) -> Bool? {
         guard let e = elements(window).first(where: { $0.label == label || $0.label.hasPrefix(label + ",") })?.element else { return nil }
         return e.accessibilityPerformPress?()
@@ -120,12 +132,18 @@ struct BlocksAccessibilityTests {
         defer { window.close() }
         await settle()
         #expect(elements(window).contains { $0.label == "Top of block" })
+        let before = scrolled(window)
         #expect(press("Top of block", in: window) == true)
         // Up to 3 s for the rows to settle on a slow runner.
         for _ in 0 ..< 100 where elements(window).contains(where: { $0.label == "Top of block" }) {
             try? await Task.sleep(for: .milliseconds(30))
         }
-        #expect(!elements(window).contains { $0.label == "Top of block" })
+        let after = scrolled(window)
+        let pinned = elements(window).contains { $0.label == "Top of block" }
+        // The list went up to the block's top (the build is the second
+        // block, so near the top of the list), and its header unpinned.
+        #expect((after ?? 1) < 0.1, "scroll \(String(describing: before)) → \(String(describing: after)), sticky header still there: \(pinned)")
+        #expect(!pinned, "scroll \(String(describing: before)) → \(String(describing: after))")
         #expect(elements(window).contains { $0.label.hasPrefix("npm run build") })
     }
 }

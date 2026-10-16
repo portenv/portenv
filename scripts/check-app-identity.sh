@@ -32,4 +32,13 @@ for h in portenv portenvd; do
 		[[ $v != *"["* ]] || fail "$h's version '$v' carries a stamp in a release build"
 	fi
 done
+# The dev-only attached terminal (ADR 0020, decision 12) never reaches a
+# release build: neither its Info.plist marker nor its binary's.
+if [[ -z $inst ]]; then
+	marker=$($pb -c "Print :PortenvAttachedTerminal" "$info" 2>/dev/null || true)
+	[[ -z $marker ]] || fail "a release build carries the dev-only attached terminal (PortenvAttachedTerminal)"
+	if grep -qa PORTENV_ATTACHED_TERMINAL_BUILD "$app/Contents/MacOS/Portenv"; then
+		fail "a release build's binary was built with ATTACHED_TERMINAL"
+	fi
+fi
 echo "identity ok: $id, $label${inst:+ ($inst)}"

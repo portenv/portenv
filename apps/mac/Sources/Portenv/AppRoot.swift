@@ -359,6 +359,10 @@ struct AppRoot: View {
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                // Back from System Settings: check again at once (R-0250).
+                .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+                    model.begin()
+                }
             } else {
                 switch model.launch {
                 case nil:

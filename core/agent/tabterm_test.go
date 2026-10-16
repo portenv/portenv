@@ -1006,6 +1006,75 @@ func TestPaneLanesEndWithTheirPanes(t *testing.T) {
 	}
 }
 
+// A list-panes that fails, or answers with anything but pane IDs, ends no
+// lane (R-0180).
+func TestPruneLanesIgnoresAFailedList(t *testing.T) {
+	dir := t.TempDir()
+	again := filepath.Join(dir, "again")
+	h := newTabTermHarness(t, "sh -c 'echo tick; while [ ! -e "+again+" ]; do sleep 0.05; done; echo tock; exec sleep 600'")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	tt := h.open(ctx, h.firstTab(), "", 80, 24)
+	if tt.next(5*time.Second).GetReset_() == nil {
+		t.Fatal("no reset")
+	}
+	time.Sleep(200 * time.Millisecond)
+	hub, _ := h.srv.ctlHub()
+	c := hub.client("main")
+	lanes := func() map[string]*paneLane {
+		c.lmu.Lock()
+		defer c.lmu.Unlock()
+		return maps.Clone(c.lanes)
+	}
+	before := lanes()
+	if len(before) == 0 {
+		t.Fatal("no lanes")
+	}
+	c.pruneLanes([]string{"can't find session: main"}, true)
+	c.pruneLanes([]string{"%1", "not a pane"}, false)
+	c.pruneLanes(nil, true)
+	time.Sleep(200 * time.Millisecond)
+	if after := lanes(); !maps.Equal(after, before) {
+		t.Errorf("lanes %v after failed lists, from %v", after, before)
+	}
+	// The pane's lane, and its parser, go on: its output still streams.
+	if err := os.WriteFile(again, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	tt.until(5*time.Second, "tock", func(o []byte) bool { return bytes.Contains(o, []byte("tock")) })
+}
+
+// A pending Enter's author ends at the next prompt (R-0177): an Enter
+// typed into python names no command, and once python exits, a command a
+// script starts at the shell gets no author.
+func TestPendingEnterEndsAtTheNextPrompt(t *testing.T) {
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("no python3")
+	}
+	h := newTabTermHarness(t, newShellCommand(t, "zsh"))
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	tab := h.firstTab()
+	a := h.open(ctx, tab, "Retnan", 80, 24)
+	if a.next(5*time.Second).GetReset_() == nil {
+		t.Fatal("no reset")
+	}
+	time.Sleep(500 * time.Millisecond) // the first prompt
+	a.input("python3 -q\r")
+	a.until(10*time.Second, "python's prompt", func(o []byte) bool { return bytes.Contains(o, []byte(">>> ")) })
+	a.input("1+1\r")
+	a.until(5*time.Second, "2", func(o []byte) bool { return bytes.Contains(o, []byte("2\r\n>>> ")) })
+	a.input("exit()\r")
+	a.until(10*time.Second, "the shell's prompt", func(o []byte) bool { return bytes.Contains(o, []byte("\x1b]133;A")) })
+	time.Sleep(300 * time.Millisecond)
+	h.raw("send-keys", "-t", tab, "echo scripted", "Enter")
+	for _, m := range a.until(5*time.Second, "scripted", func(o []byte) bool { return bytes.Contains(o, []byte("scripted\r\n")) }) {
+		if au := m.GetAuthor(); au != nil {
+			t.Errorf("the scripted command got the author %q of an Enter typed into python", au.GetName())
+		}
+	}
+}
+
 func TestOldestPane(t *testing.T) {
 	for _, c := range []struct {
 		in   []string

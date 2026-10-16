@@ -305,6 +305,17 @@ Also checked on tmux 3.4 in the image:
       - It's a Swift compilation condition (`PORTENV_ATTACHED_TERMINAL`) set only for lane builds. The Makefile refuses it without `LANE`.
       - `scripts/release-local.sh` and `check-app-identity.sh` refuse an app built with it, read from a marker in its Info.plist.
       - It never reaches a release build, and it's deleted once the gate passes.
+    - **As built (1.2c PR 6):**
+      - **The guards:**
+        - `release-local.sh` calls `refuse_attached_terminal` (`scripts/release-guards.sh`).
+        - `check-app-identity.sh` refuses a release app that has the Info.plist marker, or the string `PORTENV_ATTACHED_TERMINAL_BUILD` in its binary.
+        - `scripts/test-attached-terminal.sh` checks each guard, and each guard is mutation-checked.
+      - **The main window:**
+        - It shows the current tab's own terminal (`MainTabTerminal`, `TabTerminalShown`) through `ControlModeTabProvider` over portenvd's `TabTerminal` (`DaemonClient`).
+        - **Reconnecting:** a lost stream says "Reconnecting…" while it opens again (waits from 0.25 s, doubling to 4 s).
+        - **Giving up:** after 8 attempts in a row with no reset, or a permanent refusal, it says "Disconnected", with portenvd's reason, and offers Reconnect.
+        - **Permanent refusals:** a tmux too old, an unknown call, or a refused request.
+        - **Typing:** nothing typed before a reset is sent, then or later.
 13. **Agents' terminal access is unchanged in what it permits.** Agents (2.4) keep today's paths and limits: the attached `Terminal` RPC through their own viewer, `portenv screen`/`send`/`wait`, and ADR 0016's grants.
     - `TabTerminal` is opened by the app over portenvd's socket, which only the Mac's user can reach (ADR 0014). This decision gives agents nothing new.
     - Whether agents later move to `TabTerminal`, for per-author attribution of their keystrokes, is an open question (PLAN.md). It would be a separate decision, with the same grants.

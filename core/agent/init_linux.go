@@ -40,8 +40,12 @@ func Init(ctx context.Context, cfg Config, log *slog.Logger) error {
 	defer signal.Stop(sigs)
 
 	readiness := NewReadiness()
+	// The reaper and the start sequence's commands share this lock, so the
+	// reaper never collects a child that ExecRunner is still waiting for.
+	var mu sync.Mutex
+	team := &TeamUsers{Cfg: cfg, Run: ExecRunner{Mu: &mu}, Chown: os.Lchown, RunDir: TeamRunDir}
 	go func() {
-		if err := Serve(ctx, DefaultSocket, readiness); err != nil {
+		if err := ServeWithTeam(ctx, DefaultSocket, readiness, team); err != nil {
 			log.Error("agent API stopped", "err", err)
 		}
 	}()
@@ -57,9 +61,6 @@ func Init(ctx context.Context, cfg Config, log *slog.Logger) error {
 		}
 	}
 
-	// The reaper and the start sequence's commands share this lock, so the
-	// reaper never collects a child that ExecRunner is still waiting for.
-	var mu sync.Mutex
 	booted := make(chan struct{})
 	go func() {
 		defer close(booted)
@@ -67,6 +68,12 @@ func Init(ctx context.Context, cfg Config, log *slog.Logger) error {
 			readiness.Fail(err)
 			log.Error("start sequence failed", "err", err)
 			return
+		}
+		// Agent users come back before the box is ready; a failure never
+		// stops the box, and the next EnsureAgentUser reports it.
+		team.Restore(ctx)
+		if err := team.RestoreErr(); err != nil {
+			log.Error("agent users couldn't be restored", "err", err)
 		}
 		readiness.Ready()
 		log.Info("box ready")

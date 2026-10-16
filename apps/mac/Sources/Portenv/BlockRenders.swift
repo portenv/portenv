@@ -43,6 +43,10 @@ enum BlockRenders {
         view.frame = NSRect(x: 0, y: 0, width: 980, height: 600)
         view.getTerminal().resize(cols: 110, rows: 30)
         session(into: view, day: day)
+        // Attached to a scripted tab, as a real one is, so the cards offer
+        // Run Again; nothing is played or sent.
+        let tab = ScriptedTabSource(tab: "@render"), smallTab = ScriptedTabSource(tab: "@render-small")
+        view.attach(tab)
         let reader = BlockReader(view: view)
         let blocks = reader.blocks()
         let now = day.addingTimeInterval(14 * 3600 + 40 * 60)
@@ -52,6 +56,7 @@ enum BlockRenders {
         small.getTerminal().resize(cols: 110, rows: 30)
         small.changeScrollback(1000)
         session(into: small, day: day)
+        small.attach(smallTab)
         let smallReader = BlockReader(view: small)
         for (name, palette) in [("light", TerminalPalette.light), ("dark", TerminalPalette.dark)] {
             _ = name

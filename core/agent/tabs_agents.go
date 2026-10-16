@@ -595,6 +595,10 @@ func (s *apiServer) SetAgentIdleInput(id, pattern string) error {
 //  2. The window has printed nothing for routineQuiet.
 //  3. It isn't a full-screen program (the alternate screen).
 //  4. The runner's idle-input pattern matches: it waits at an empty input.
+//
+// And whatever the four say, nothing is typed while any of the last lines
+// reads as a secret prompt (ADR 0016's rule: "Password:", a passphrase, a
+// token asked for), even when the runner's pattern matches (R-0261).
 func (a *agentServer) readyForRoutine(ctx context.Context, idleInput *regexp.Regexp) (string, error) {
 	out, err := a.tmux(ctx, "display-message", "-p", "-t", a.mainPane, "#{alternate_on}\t#{window_activity}")
 	if err != nil {
@@ -621,6 +625,9 @@ func (a *agentServer) readyForRoutine(ctx context.Context, idleInput *regexp.Reg
 		LastLines:    lines,
 	}
 	switch {
+	case sig.Secret():
+		// Never the prompt's text (ADR 0016 point 8).
+		return "busy: " + a.user.ID + "'s terminal asks for a secret", nil
 	case sig.Waiting():
 		return "busy: " + a.user.ID + " is asking something", nil
 	case sig.Quiet < routineQuiet:

@@ -488,6 +488,8 @@ func TestARoutineIsNeverTypedIntoABusyAgent(t *testing.T) {
 		{"asks-yn", `printf 'Overwrite .env? [y/n] '; ` + read, `.`, "is asking something"},
 		{"prints", idleBox + `while :; do printf .; sleep 0.3; done`, idleBoxPattern, "printed something"},
 		{"fullscreen", `printf '\033[?1049h'; ` + idleBox + read, idleBoxPattern, "full-screen"},
+		{"password", idleBox + `printf 'Password: '; ` + read, idleBoxPattern, "asks for a secret"},
+		{"passphrase", `printf 'Enter your passphrase to unlock the key\n'; ` + idleBox + read, idleBoxPattern, "asks for a secret"},
 		{"nopattern", idleBox + read, "", "no idle-input pattern"},
 		{"notidle", `printf 'Working… (esc to interrupt)\n'; ` + read, idleBoxPattern, "isn't waiting at its input"},
 	}

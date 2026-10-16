@@ -49,6 +49,9 @@ const (
 	AgentService_RemoveAgentUser_FullMethodName = "/portenv.agent.v1.AgentService/RemoveAgentUser"
 	AgentService_SimulatePackage_FullMethodName = "/portenv.agent.v1.AgentService/SimulatePackage"
 	AgentService_InstallPackages_FullMethodName = "/portenv.agent.v1.AgentService/InstallPackages"
+	AgentService_AgentPaneAction_FullMethodName = "/portenv.agent.v1.AgentService/AgentPaneAction"
+	AgentService_ReadBoard_FullMethodName       = "/portenv.agent.v1.AgentService/ReadBoard"
+	AgentService_ReadAgentFiles_FullMethodName  = "/portenv.agent.v1.AgentService/ReadAgentFiles"
 )
 
 // AgentServiceClient is the client API for AgentService service.
@@ -118,6 +121,14 @@ type AgentServiceClient interface {
 	SimulatePackage(ctx context.Context, in *SimulatePackageRequest, opts ...grpc.CallOption) (*SimulatePackageResponse, error)
 	// Installs exactly the approved set, pinned, or nothing.
 	InstallPackages(ctx context.Context, in *InstallPackagesRequest, opts ...grpc.CallOption) (*InstallPackagesResponse, error)
+	// Opens, focuses or closes a pane on an agent's own tmux server, as that
+	// agent. portenvd calls it only after its grant check (at once for
+	// panes: allow, on the owner's Approve for panes: ask).
+	AgentPaneAction(ctx context.Context, in *AgentPaneActionRequest, opts ...grpc.CallOption) (*AgentPaneActionResponse, error)
+	// The board's lines from the start, for portenvd after a restart.
+	ReadBoard(ctx context.Context, in *ReadBoardRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ReadBoardResponse], error)
+	// The project's agent files (.portenv/agents/*.md), read by the helper.
+	ReadAgentFiles(ctx context.Context, in *ReadAgentFilesRequest, opts ...grpc.CallOption) (*ReadAgentFilesResponse, error)
 }
 
 type agentServiceClient struct {
@@ -398,6 +409,45 @@ func (c *agentServiceClient) InstallPackages(ctx context.Context, in *InstallPac
 	return out, nil
 }
 
+func (c *agentServiceClient) AgentPaneAction(ctx context.Context, in *AgentPaneActionRequest, opts ...grpc.CallOption) (*AgentPaneActionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AgentPaneActionResponse)
+	err := c.cc.Invoke(ctx, AgentService_AgentPaneAction_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *agentServiceClient) ReadBoard(ctx context.Context, in *ReadBoardRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ReadBoardResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &AgentService_ServiceDesc.Streams[6], AgentService_ReadBoard_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[ReadBoardRequest, ReadBoardResponse]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type AgentService_ReadBoardClient = grpc.ServerStreamingClient[ReadBoardResponse]
+
+func (c *agentServiceClient) ReadAgentFiles(ctx context.Context, in *ReadAgentFilesRequest, opts ...grpc.CallOption) (*ReadAgentFilesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ReadAgentFilesResponse)
+	err := c.cc.Invoke(ctx, AgentService_ReadAgentFiles_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AgentServiceServer is the server API for AgentService service.
 // All implementations must embed UnimplementedAgentServiceServer
 // for forward compatibility.
@@ -465,6 +515,14 @@ type AgentServiceServer interface {
 	SimulatePackage(context.Context, *SimulatePackageRequest) (*SimulatePackageResponse, error)
 	// Installs exactly the approved set, pinned, or nothing.
 	InstallPackages(context.Context, *InstallPackagesRequest) (*InstallPackagesResponse, error)
+	// Opens, focuses or closes a pane on an agent's own tmux server, as that
+	// agent. portenvd calls it only after its grant check (at once for
+	// panes: allow, on the owner's Approve for panes: ask).
+	AgentPaneAction(context.Context, *AgentPaneActionRequest) (*AgentPaneActionResponse, error)
+	// The board's lines from the start, for portenvd after a restart.
+	ReadBoard(*ReadBoardRequest, grpc.ServerStreamingServer[ReadBoardResponse]) error
+	// The project's agent files (.portenv/agents/*.md), read by the helper.
+	ReadAgentFiles(context.Context, *ReadAgentFilesRequest) (*ReadAgentFilesResponse, error)
 	mustEmbedUnimplementedAgentServiceServer()
 }
 
@@ -546,6 +604,15 @@ func (UnimplementedAgentServiceServer) SimulatePackage(context.Context, *Simulat
 }
 func (UnimplementedAgentServiceServer) InstallPackages(context.Context, *InstallPackagesRequest) (*InstallPackagesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method InstallPackages not implemented")
+}
+func (UnimplementedAgentServiceServer) AgentPaneAction(context.Context, *AgentPaneActionRequest) (*AgentPaneActionResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AgentPaneAction not implemented")
+}
+func (UnimplementedAgentServiceServer) ReadBoard(*ReadBoardRequest, grpc.ServerStreamingServer[ReadBoardResponse]) error {
+	return status.Error(codes.Unimplemented, "method ReadBoard not implemented")
+}
+func (UnimplementedAgentServiceServer) ReadAgentFiles(context.Context, *ReadAgentFilesRequest) (*ReadAgentFilesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ReadAgentFiles not implemented")
 }
 func (UnimplementedAgentServiceServer) mustEmbedUnimplementedAgentServiceServer() {}
 func (UnimplementedAgentServiceServer) testEmbeddedByValue()                      {}
@@ -942,6 +1009,53 @@ func _AgentService_InstallPackages_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AgentService_AgentPaneAction_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AgentPaneActionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentServiceServer).AgentPaneAction(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentService_AgentPaneAction_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentServiceServer).AgentPaneAction(ctx, req.(*AgentPaneActionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AgentService_ReadBoard_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(ReadBoardRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(AgentServiceServer).ReadBoard(m, &grpc.GenericServerStream[ReadBoardRequest, ReadBoardResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type AgentService_ReadBoardServer = grpc.ServerStreamingServer[ReadBoardResponse]
+
+func _AgentService_ReadAgentFiles_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReadAgentFilesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentServiceServer).ReadAgentFiles(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentService_ReadAgentFiles_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentServiceServer).ReadAgentFiles(ctx, req.(*ReadAgentFilesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AgentService_ServiceDesc is the grpc.ServiceDesc for AgentService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1021,6 +1135,14 @@ var AgentService_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "InstallPackages",
 			Handler:    _AgentService_InstallPackages_Handler,
 		},
+		{
+			MethodName: "AgentPaneAction",
+			Handler:    _AgentService_AgentPaneAction_Handler,
+		},
+		{
+			MethodName: "ReadAgentFiles",
+			Handler:    _AgentService_ReadAgentFiles_Handler,
+		},
 	},
 	Streams: []grpc.StreamDesc{
 		{
@@ -1055,6 +1177,11 @@ var AgentService_ServiceDesc = grpc.ServiceDesc{
 			StreamName:    "WriteHomeFiles",
 			Handler:       _AgentService_WriteHomeFiles_Handler,
 			ClientStreams: true,
+		},
+		{
+			StreamName:    "ReadBoard",
+			Handler:       _AgentService_ReadBoard_Handler,
+			ServerStreams: true,
 		},
 	},
 	Metadata: "portenv/agent/v1/agent.proto",

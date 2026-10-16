@@ -898,6 +898,8 @@ message AgentInfo {
   portenv.types.v1.AgentStatus status = 18;
   // Its routines (R-0258).
   repeated portenv.types.v1.Routine routines = 19;
+  // Why its routines are off, if they are (R-0258).
+  string routines_off = 20;
 }
 
 message WatchTeamRequest {

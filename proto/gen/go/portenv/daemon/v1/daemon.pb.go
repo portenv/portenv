@@ -5688,7 +5688,9 @@ type AgentInfo struct {
 	// What it says it's working on (R-0256); empty when it hasn't said.
 	Status *v1.AgentStatus `protobuf:"bytes,18,opt,name=status,proto3" json:"status,omitempty"`
 	// Its routines (R-0258).
-	Routines      []*v1.Routine `protobuf:"bytes,19,rep,name=routines,proto3" json:"routines,omitempty"`
+	Routines []*v1.Routine `protobuf:"bytes,19,rep,name=routines,proto3" json:"routines,omitempty"`
+	// Why its routines are off, if they are (R-0258).
+	RoutinesOff   string `protobuf:"bytes,20,opt,name=routines_off,json=routinesOff,proto3" json:"routines_off,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -5854,6 +5856,13 @@ func (x *AgentInfo) GetRoutines() []*v1.Routine {
 		return x.Routines
 	}
 	return nil
+}
+
+func (x *AgentInfo) GetRoutinesOff() string {
+	if x != nil {
+		return x.RoutinesOff
+	}
+	return ""
 }
 
 type WatchTeamRequest struct {
@@ -7556,7 +7565,7 @@ const file_portenv_daemon_v1_daemon_proto_rawDesc = "" +
 	"\x11ListAgentsRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\"J\n" +
 	"\x12ListAgentsResponse\x124\n" +
-	"\x06agents\x18\x01 \x03(\v2\x1c.portenv.daemon.v1.AgentInfoR\x06agents\"\xf6\x04\n" +
+	"\x06agents\x18\x01 \x03(\v2\x1c.portenv.daemon.v1.AgentInfoR\x06agents\"\x99\x05\n" +
 	"\tAgentInfo\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
@@ -7579,7 +7588,8 @@ const file_portenv_daemon_v1_daemon_proto_rawDesc = "" +
 	"\x06runner\x18\x10 \x01(\tR\x06runner\x122\n" +
 	"\x05grant\x18\x11 \x01(\v2\x1c.portenv.types.v1.AgentGrantR\x05grant\x125\n" +
 	"\x06status\x18\x12 \x01(\v2\x1d.portenv.types.v1.AgentStatusR\x06status\x125\n" +
-	"\broutines\x18\x13 \x03(\v2\x19.portenv.types.v1.RoutineR\broutines\">\n" +
+	"\broutines\x18\x13 \x03(\v2\x19.portenv.types.v1.RoutineR\broutines\x12!\n" +
+	"\froutines_off\x18\x14 \x01(\tR\vroutinesOff\">\n" +
 	"\x10WatchTeamRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x16\n" +
 	"\x06cursor\x18\x02 \x01(\tR\x06cursor\"\x8c\x02\n" +

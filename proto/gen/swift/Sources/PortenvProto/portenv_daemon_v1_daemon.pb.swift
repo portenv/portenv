@@ -2174,6 +2174,12 @@ public nonisolated struct Portenv_Daemon_V1_AgentInfo: @unchecked Sendable {
     set {_uniqueStorage()._routines = newValue}
   }
 
+  /// Why its routines are off, if they are (R-0258).
+  public var routinesOff: String {
+    get {_storage._routinesOff}
+    set {_uniqueStorage()._routinesOff = newValue}
+  }
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -6206,7 +6212,7 @@ nonisolated extension Portenv_Daemon_V1_ListAgentsResponse: SwiftProtobuf.Messag
 
 nonisolated extension Portenv_Daemon_V1_AgentInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".AgentInfo"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}name\0\u{1}role\0\u{1}avatar\0\u{1}remote\0\u{1}via\0\u{1}state\0\u{1}problem\0\u{3}file_sha256\0\u{1}approved\0\u{3}tab_ids\0\u{3}last_line\0\u{3}pending_decisions\0\u{3}home_bytes\0\u{3}home_quota_bytes\0\u{1}runner\0\u{1}grant\0\u{1}status\0\u{1}routines\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}name\0\u{1}role\0\u{1}avatar\0\u{1}remote\0\u{1}via\0\u{1}state\0\u{1}problem\0\u{3}file_sha256\0\u{1}approved\0\u{3}tab_ids\0\u{3}last_line\0\u{3}pending_decisions\0\u{3}home_bytes\0\u{3}home_quota_bytes\0\u{1}runner\0\u{1}grant\0\u{1}status\0\u{1}routines\0\u{3}routines_off\0")
 
   fileprivate class _StorageClass {
     var _id: String = String()
@@ -6228,6 +6234,7 @@ nonisolated extension Portenv_Daemon_V1_AgentInfo: SwiftProtobuf.Message, SwiftP
     var _grant: Portenv_Types_V1_AgentGrant? = nil
     var _status: Portenv_Types_V1_AgentStatus? = nil
     var _routines: [Portenv_Types_V1_Routine] = []
+    var _routinesOff: String = String()
 
       // This property is used as the initial default value for new instances of the type.
       // The type itself is protecting the reference to its storage via CoW semantics.
@@ -6257,6 +6264,7 @@ nonisolated extension Portenv_Daemon_V1_AgentInfo: SwiftProtobuf.Message, SwiftP
       _grant = source._grant
       _status = source._status
       _routines = source._routines
+      _routinesOff = source._routinesOff
     }
   }
 
@@ -6294,6 +6302,7 @@ nonisolated extension Portenv_Daemon_V1_AgentInfo: SwiftProtobuf.Message, SwiftP
         case 17: try { try decoder.decodeSingularMessageField(value: &_storage._grant) }()
         case 18: try { try decoder.decodeSingularMessageField(value: &_storage._status) }()
         case 19: try { try decoder.decodeRepeatedMessageField(value: &_storage._routines) }()
+        case 20: try { try decoder.decodeSingularStringField(value: &_storage._routinesOff) }()
         default: break
         }
       }
@@ -6363,6 +6372,9 @@ nonisolated extension Portenv_Daemon_V1_AgentInfo: SwiftProtobuf.Message, SwiftP
       if !_storage._routines.isEmpty {
         try visitor.visitRepeatedMessageField(value: _storage._routines, fieldNumber: 19)
       }
+      if !_storage._routinesOff.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._routinesOff, fieldNumber: 20)
+      }
     }
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -6391,6 +6403,7 @@ nonisolated extension Portenv_Daemon_V1_AgentInfo: SwiftProtobuf.Message, SwiftP
         if _storage._grant != rhs_storage._grant {return false}
         if _storage._status != rhs_storage._status {return false}
         if _storage._routines != rhs_storage._routines {return false}
+        if _storage._routinesOff != rhs_storage._routinesOff {return false}
         return true
       }
       if !storagesAreEqual {return false}

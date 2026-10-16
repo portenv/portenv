@@ -89,6 +89,12 @@ service AgentService {
   // recipient's ~/inbox/<sender>/<timestamp>/ as the recipient (R-0257
   // item 3): regular files only, no links, at most 100 MB, within quota.
   rpc HandoffFiles(HandoffFilesRequest) returns (HandoffFilesResponse);
+  // Served only by init: opens the project to the team at team start
+  // (ADR 0022 §2): /home/work 0711 with its dotfiles 0700, the project's
+  // group team, setgid folders and default ACLs, with .git/hooks,
+  // .git/config and .portenv/ never group-writable. Refuses with a plain
+  // line when the filesystem won't keep ACLs.
+  rpc PrepareTeamProject(PrepareTeamProjectRequest) returns (PrepareTeamProjectResponse);
 }
 
 message RunResticRequest {
@@ -481,6 +487,9 @@ message WhoAmIResult {
   // The runners on its PATH that pass the agent-file check.
   repeated string runners = 14;
   portenv.types.v1.AgentStatus status = 15;
+  // Why its routines are off, if they are ("Portenv doesn't know when
+  // this runner is idle").
+  string routines_off = 16;
 }
 
 message Teammate {
@@ -505,6 +514,11 @@ message StartTeamAgentRequest {
   // Repository paths copied into its home on first start (§2).
   repeated string home_seed = 4;
   int64 home_quota_bytes = 5;
+  // The runner's idle-input pattern (RE2, matched against the main pane's
+  // last line) from portenvd's runner table: DeliverRoutine types only
+  // when it matches, with no question on screen, 5 s of quiet and not the
+  // alternate screen. Empty: routines are off for this runner (R-0258).
+  string idle_pattern = 6;
 }
 
 message StartTeamAgentResponse {
@@ -694,3 +708,10 @@ message HandoffFilesRequest {
 message HandoffFilesResponse {
   repeated portenv.types.v1.HandoffFile files = 1;
 }
+
+message PrepareTeamProjectRequest {
+  // The project folder, /home/work/<workspace>.
+  string project_dir = 1;
+}
+
+message PrepareTeamProjectResponse {}

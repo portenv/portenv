@@ -21,6 +21,7 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
+	"github.com/portenv/portenv/core/internal/teamkit"
 	typesv1 "github.com/portenv/portenv/proto/gen/go/portenv/types/v1"
 )
 
@@ -37,10 +38,10 @@ const (
 	maxAgentNameChars         = 40
 	maxAgentRoleChars         = 120
 	// The ceilings of ADR 0022 §7; the owner may set lower limits.
-	maxTeamAgents      = 8
-	maxAgentPanes      = 8
-	defaultTeamAgents  = 4
-	defaultAgentPanes  = 4
+	maxTeamAgents      = teamkit.MaxTeamAgents
+	maxAgentPanes      = teamkit.MaxAgentPanes
+	defaultTeamAgents  = teamkit.DefaultTeamAgents
+	defaultAgentPanes  = teamkit.DefaultAgentPanes
 	agentFilesRelative = ".portenv/agents"
 )
 
@@ -823,8 +824,8 @@ func applyOverride(a *TeamAgent, src TeamSource, limits TeamLimits, p *problems)
 
 // Routines (R-0258): at least 10 minutes apart, at most 4 per agent.
 const (
-	maxRoutines        = 4
-	minRoutineMinutes  = 10
+	maxRoutines        = teamkit.MaxRoutines
+	minRoutineMinutes  = teamkit.MinRoutineMinutes
 	maxRoutineMinutes  = 7 * 24 * 60
 	maxRoutineNoteRune = 200
 )

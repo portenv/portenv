@@ -20,6 +20,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/portenv/portenv/core/internal/teamkit"
 	agentv1 "github.com/portenv/portenv/proto/gen/go/portenv/agent/v1"
 	daemonv1 "github.com/portenv/portenv/proto/gen/go/portenv/daemon/v1"
 	typesv1 "github.com/portenv/portenv/proto/gen/go/portenv/types/v1"
@@ -31,20 +32,20 @@ import (
 // helper, on this engine's instruction only.
 
 const (
-	maxBoardMessage          = 8 << 10
-	maxDecisionDetail        = 32 << 10
-	maxDecisionSummary       = 200
-	messagesPerMinute        = 60
-	pendingDecisionsPerAgent = 5
-	decisionExpiry           = 24 * time.Hour
-	inboxWait                = 60 * time.Second
+	maxBoardMessage          = teamkit.MaxMessageBytes
+	maxDecisionDetail        = teamkit.MaxDecisionDetailBytes
+	maxDecisionSummary       = teamkit.MaxDecisionSummary
+	messagesPerMinute        = teamkit.MessagesPerMinute
+	pendingDecisionsPerAgent = teamkit.PendingDecisionsPerAgent
+	decisionExpiry           = teamkit.DecisionExpiry
+	inboxWait                = teamkit.InboxWait
 	// maxCallsInFlight caps one agent's calls at once, inbox --wait
 	// holds included (R-0260 item 5).
-	maxCallsInFlight = 16
+	maxCallsInFlight = teamkit.MaxCallsInFlight
 	// A status line (R-0256): 200 characters, one update every 10 s.
-	maxStatus        = 200
-	statusEvery      = 10 * time.Second
-	defaultHomeQuota = 2 << 30
+	maxStatus        = teamkit.MaxStatus
+	statusEvery      = teamkit.StatusEvery
+	defaultHomeQuota = teamkit.DefaultHomeQuota
 	// boardFrom is Portenv's own name on the board, for its notices.
 	boardFrom  = "portenv"
 	boardOwner = "owner"

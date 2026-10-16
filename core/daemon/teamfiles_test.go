@@ -15,6 +15,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/portenv/portenv/core/internal/teamkit"
 	typesv1 "github.com/portenv/portenv/proto/gen/go/portenv/types/v1"
 )
 
@@ -732,5 +733,49 @@ func TestRoutinesInTheAgentFile(t *testing.T) {
 	writeOverride(t, src, "lead", ofm(`routine: ["every 30m: sneaky"]`))
 	if a := loadAgent(t, src, "lead"); len(a.Problems) != 1 || !strings.Contains(a.Problems[0], "only the repository file") {
 		t.Errorf("an override's routine: %v", a.Problems)
+	}
+}
+
+// Every template portenv team init writes is a valid team with no
+// problems (R-0232's Orchestrate team included).
+func TestTheTemplatesAreValidTeams(t *testing.T) {
+	for _, name := range teamkit.Templates {
+		t.Run(name, func(t *testing.T) {
+			files, err := teamkit.Template(name)
+			if err != nil || len(files) == 0 {
+				t.Fatalf("%v, %d files", err, len(files))
+			}
+			src := teamDirs(t)
+			for f, content := range files {
+				writeAgent(t, src, strings.TrimSuffix(f, ".md"), string(content))
+			}
+			team, err := LoadTeam(src)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(team.Agents) != len(files) || len(team.Problems) != 0 {
+				t.Fatalf("agents %d, team problems %v", len(team.Agents), team.Problems)
+			}
+			for _, a := range team.Agents {
+				if len(a.Problems) != 0 {
+					t.Errorf("%s: %v", a.ID, a.Problems)
+				}
+				if runnerIdlePattern(a.Runner) == "" && len(a.Spec.Routines) > 0 {
+					t.Errorf("%s has routines but a runner without an idle pattern", a.ID)
+				}
+			}
+		})
+	}
+	// Only Orchestrate's lead sees the team's status (R-0257).
+	files, _ := teamkit.Template("orchestrate")
+	src := teamDirs(t)
+	for f, content := range files {
+		writeAgent(t, src, strings.TrimSuffix(f, ".md"), string(content))
+	}
+	team, _ := LoadTeam(src)
+	for _, a := range team.Agents {
+		if a.Grant.GetTeamStatus() != (a.ID == "lead") {
+			t.Errorf("%s: team_status %v", a.ID, a.Grant.GetTeamStatus())
+		}
 	}
 }

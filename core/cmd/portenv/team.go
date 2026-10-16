@@ -5,6 +5,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -18,6 +19,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/portenv/portenv/core/internal/teamkit"
 	agentv1 "github.com/portenv/portenv/proto/gen/go/portenv/agent/v1"
 	typesv1 "github.com/portenv/portenv/proto/gen/go/portenv/types/v1"
 )
@@ -39,7 +41,8 @@ var teamUsage = map[string]string{
 	"request-package":      "request-package NAME [--reason TEXT]",
 	"whoami":               "whoami",
 	"status":               "status set TEXT [--progress N/M] [--blocked REASON] | status clear",
-	"team":                 "team status",
+	"team":                 "team status | team init [--template starter|orchestrate] [--dir PROJECT]",
+	"guide":                "guide [--json]",
 	"handoff":              "handoff AGENT PATH [--note TEXT]",
 }
 
@@ -75,6 +78,14 @@ func runTeam(ctx context.Context, args []string, getenv func(string) string, _ i
 		}
 		_, _ = fmt.Fprintf(stderr, "usage: portenv %s [--json]\n", teamUsage[name])
 		return 2
+	}
+	// Neither needs the agent's socket: the guide is built in, and team
+	// init writes files in the owner's project.
+	if name == "guide" {
+		return runGuide(args[1:], stdout, stderr)
+	}
+	if name == "team" && len(args) > 1 && args[1] == "init" {
+		return runTeamInit(args[2:], stdout, stderr)
 	}
 	sock := getenv("PORTENV_SOCKET")
 	if sock == "" {
@@ -462,4 +473,65 @@ func shownPlain(s string) string {
 		}
 	}
 	return b.String()
+}
+
+func runGuide(args []string, stdout, stderr io.Writer) int {
+	g := teamkit.NewGuide()
+	switch {
+	case len(args) == 0:
+		_, _ = io.WriteString(stdout, g.Text())
+	case len(args) == 1 && args[0] == "--json":
+		b, _ := json.MarshalIndent(g, "", "  ")
+		_, _ = fmt.Fprintln(stdout, string(b))
+	default:
+		_, _ = fmt.Fprintln(stderr, "usage: portenv guide [--json]")
+		return 2
+	}
+	return 0
+}
+
+// runTeamInit writes a template's agent files into the project's
+// .portenv/agents/, never over a file that's there. Nothing runs until
+// the owner approves each file in Portenv.
+func runTeamInit(args []string, stdout, stderr io.Writer) int {
+	a, err := parseTeamArgs(args, nil, []string{"template", "dir"})
+	if err != nil || len(a.pos) != 0 || a.dash {
+		_, _ = fmt.Fprintln(stderr, "usage: portenv team init [--template starter|orchestrate] [--dir PROJECT]")
+		return 2
+	}
+	name := a.flags["template"]
+	if name == "" {
+		name = "starter"
+	}
+	files, err := teamkit.Template(name)
+	if err != nil {
+		_, _ = fmt.Fprintln(stderr, "portenv:", err)
+		return 2
+	}
+	dir := a.flags["dir"]
+	if dir == "" {
+		if dir, err = os.Getwd(); err != nil {
+			_, _ = fmt.Fprintln(stderr, "portenv:", err)
+			return 1
+		}
+	}
+	agents := filepath.Join(dir, ".portenv", "agents")
+	for _, f := range teamkit.TemplateFiles(name) {
+		if _, err := os.Lstat(filepath.Join(agents, f)); err == nil {
+			_, _ = fmt.Fprintf(stderr, "portenv: %s is already there; nothing was written. Move it away to start from the %s template.\n", filepath.Join(".portenv", "agents", f), name)
+			return 1
+		}
+	}
+	if err := os.MkdirAll(agents, 0o755); err != nil { // #nosec G301 -- the project's, readable by the team
+		_, _ = fmt.Fprintln(stderr, "portenv:", err)
+		return 1
+	}
+	for _, f := range teamkit.TemplateFiles(name) {
+		if err := os.WriteFile(filepath.Join(agents, f), files[f], 0o644); err != nil { // #nosec G306 -- an agent file, read by the team
+			_, _ = fmt.Fprintln(stderr, "portenv:", err)
+			return 1
+		}
+	}
+	_, _ = fmt.Fprintf(stdout, "Wrote %d agent files to .portenv/agents/ (%s). Approve each in Portenv's Team section; nothing runs before you do.\n", len(files), strings.Join(teamkit.TemplateFiles(name), ", "))
+	return 0
 }

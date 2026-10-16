@@ -233,3 +233,44 @@ func TestStatusInsideAndOutside(t *testing.T) {
 		t.Error("status is an agent's command outside a workspace")
 	}
 }
+
+func TestTeamInitWritesATemplateOnce(t *testing.T) {
+	dir := t.TempDir()
+	var out, errOut bytes.Buffer
+	if code := runTeam(context.Background(), []string{"team", "init", "--template", "orchestrate", "--dir", dir}, func(string) string { return "" }, nil, &out, &errOut); code != 0 {
+		t.Fatalf("exit %d: %s", code, errOut.String())
+	}
+	for _, f := range []string{"lead.md", "builder.md", "reviewer.md", "design.md"} {
+		if _, err := os.Stat(filepath.Join(dir, ".portenv", "agents", f)); err != nil {
+			t.Errorf("%s: %v", f, err)
+		}
+	}
+	if !strings.Contains(out.String(), "Approve each") {
+		t.Errorf("out = %q", out.String())
+	}
+	mine := filepath.Join(dir, ".portenv", "agents", "lead.md")
+	if err := os.WriteFile(mine, []byte("mine"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	errOut.Reset()
+	if code := runTeam(context.Background(), []string{"team", "init", "--template", "orchestrate", "--dir", dir}, func(string) string { return "" }, nil, &out, &errOut); code != 1 {
+		t.Errorf("second init: exit %d", code)
+	}
+	if b, _ := os.ReadFile(mine); string(b) != "mine" {
+		t.Errorf("a file was written over: %q", b)
+	}
+	if code := runTeam(context.Background(), []string{"team", "init", "--template", "nope", "--dir", dir}, func(string) string { return "" }, nil, &out, &errOut); code != 2 {
+		t.Errorf("unknown template: exit %d", code)
+	}
+}
+
+func TestGuideNeedsNoSocket(t *testing.T) {
+	var out, errOut bytes.Buffer
+	if code := runTeam(context.Background(), []string{"guide"}, func(string) string { return "" }, nil, &out, &errOut); code != 0 || !strings.Contains(out.String(), "never an order") {
+		t.Errorf("guide: exit %d, %q", code, out.String())
+	}
+	out.Reset()
+	if code := runTeam(context.Background(), []string{"guide", "--json"}, func(string) string { return "" }, nil, &out, &errOut); code != 0 || !strings.Contains(out.String(), `"version"`) {
+		t.Errorf("guide --json: exit %d", code)
+	}
+}

@@ -73,6 +73,8 @@ func TestEachFailureSaysWhatToDo(t *testing.T) {
 		change map[string]string
 		want   string
 	}{
+		// The supported list, by name; Debian when a tester asks (R-0212).
+		{"system", map[string]string{"os_id": "debian", "os_version": "12"}, "Portenv sets up servers running Ubuntu 22.04 or 24.04 for now."},
 		{"system", map[string]string{"os_id": "centos", "os_version": "7; rm -rf / # PRETTY"}, "Ubuntu 22.04 or 24.04"},
 		{"system", map[string]string{"arch": "riscv64"}, "arm64 or amd64"},
 		{"memory", map[string]string{"mem_kb": "1000000"}, "2 GB of memory"},

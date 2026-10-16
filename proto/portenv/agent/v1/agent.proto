@@ -72,6 +72,29 @@ service AgentService {
   rpc SimulatePackage(SimulatePackageRequest) returns (SimulatePackageResponse);
   // Installs exactly the approved set, pinned, or nothing.
   rpc InstallPackages(InstallPackagesRequest) returns (InstallPackagesResponse);
+  // Opens, focuses or closes a pane on an agent's own tmux server, as that
+  // agent. portenvd calls it only after its grant check (at once for
+  // panes: allow, on the owner's Approve for panes: ask).
+  rpc AgentPaneAction(AgentPaneActionRequest) returns (AgentPaneActionResponse);
+  // The board's lines from the start, for portenvd after a restart.
+  rpc ReadBoard(ReadBoardRequest) returns (stream ReadBoardResponse);
+  // The project's agent files (.portenv/agents/*.md), read by the helper.
+  rpc ReadAgentFiles(ReadAgentFilesRequest) returns (ReadAgentFilesResponse);
+  // Types a routine's note into the agent's own main pane, prefixed
+  // "[Portenv routine] ", then Enter (R-0258). portenvd calls it only when
+  // the agent is idle; the helper checks the text again and types only into
+  // the agent's recorded main pane.
+  rpc DeliverRoutine(DeliverRoutineRequest) returns (DeliverRoutineResponse);
+  // Copies files from the sender's home or the project into the
+  // recipient's ~/inbox/<sender>/<timestamp>/ as the recipient (R-0257
+  // item 3): regular files only, no links, at most 100 MB, within quota.
+  rpc HandoffFiles(HandoffFilesRequest) returns (HandoffFilesResponse);
+  // Served only by init: opens the project to the team at team start
+  // (ADR 0022 §2): /home/work 0711 with its dotfiles 0700, the project's
+  // group team, setgid folders and default ACLs, with .git/hooks,
+  // .git/config and .portenv/ never group-writable. Refuses with a plain
+  // line when the filesystem won't keep ACLs.
+  rpc PrepareTeamProject(PrepareTeamProjectRequest) returns (PrepareTeamProjectResponse);
 }
 
 message RunResticRequest {
@@ -352,6 +375,10 @@ message TeamCallsResponse {
     ProposeAgentChange propose = 11;
     RequestPackage request_package = 12;
     WhoAmI whoami = 13;
+    SetStatus set_status = 14;
+    TeamStatus team_status = 15;
+    Handoff handoff = 16;
+    ProposeRoutine propose_routine = 17;
   }
 }
 
@@ -368,6 +395,7 @@ message TeamCallsRequest {
     portenv.types.v1.Decision decision = 6;
     portenv.types.v1.BoardMessage message = 7;
     WhoAmIResult whoami = 8;
+    TeamStatusResult team_status = 9;
   }
 }
 
@@ -458,6 +486,10 @@ message WhoAmIResult {
   repeated string commands = 13;
   // The runners on its PATH that pass the agent-file check.
   repeated string runners = 14;
+  portenv.types.v1.AgentStatus status = 15;
+  // Why its routines are off, if they are ("Portenv doesn't know when
+  // this runner is idle").
+  string routines_off = 16;
 }
 
 message Teammate {
@@ -465,6 +497,11 @@ message Teammate {
   string name = 2;
   string role = 3;
   portenv.types.v1.AgentState state = 4;
+  // Only with team_status: read (R-0257 item 1).
+  portenv.types.v1.AgentStatus status = 5;
+  int32 pending_decisions = 6;
+  // Seconds since its last board line or status.
+  int64 idle_seconds = 7;
 }
 
 message StartTeamAgentRequest {
@@ -477,6 +514,11 @@ message StartTeamAgentRequest {
   // Repository paths copied into its home on first start (§2).
   repeated string home_seed = 4;
   int64 home_quota_bytes = 5;
+  // The runner's idle-input pattern (RE2, matched against the main pane's
+  // last line) from portenvd's runner table: DeliverRoutine types only
+  // when it matches, with no question on screen, 5 s of quiet and not the
+  // alternate screen. Empty: routines are off for this runner (R-0258).
+  string idle_pattern = 6;
 }
 
 message StartTeamAgentResponse {
@@ -563,6 +605,11 @@ message InstallPackagesRequest {
   // The requested name, appended to apt-packages.txt on success.
   string name = 1;
   repeated portenv.types.v1.PackagePlan approved = 2;
+  // The package decision (R-0254): init reads it from the board itself,
+  // and installs only if it is approved and not expired, and a fresh
+  // simulation equals its packages exactly (names, versions, sources).
+  // Otherwise nothing is installed.
+  string decision_id = 3;
 }
 
 message InstallPackagesResponse {
@@ -570,3 +617,101 @@ message InstallPackagesResponse {
   // The result, or the failing line, for the agent's inbox.
   string line = 2;
 }
+
+message AgentPaneActionRequest {
+  string agent_id = 1;
+  oneof action {
+    Split split = 2;
+    NewTeamTab tab = 3;
+    PaneRef focus = 4;
+    PaneRef close = 5;
+  }
+}
+
+message AgentPaneActionResponse {
+  // The pane made or acted on.
+  PaneRef pane = 1;
+}
+
+message ReadBoardRequest {}
+
+// One board line, in the order written.
+message ReadBoardResponse {
+  oneof line {
+    portenv.types.v1.BoardMessage message = 1;
+    portenv.types.v1.Decision decision = 2;
+  }
+}
+
+message ReadAgentFilesRequest {
+  // The project folder inside the box, e.g. /home/work/<workspace>.
+  string project_dir = 1;
+}
+
+message ReadAgentFilesResponse {
+  repeated AgentFileContent files = 1;
+}
+
+// One agent file as the helper read it: its name (id.md) and its bytes.
+message AgentFileContent {
+  string name = 1;
+  bytes content = 2;
+}
+
+// portenv status set|clear (R-0256).
+message SetStatus {
+  // Empty with clear.
+  string text = 1;
+  int32 progress_done = 2;
+  int32 progress_total = 3;
+  string blocked = 4;
+  bool clear = 5;
+}
+
+// portenv team status (R-0257 item 1); needs team_status: read.
+message TeamStatus {}
+
+message TeamStatusResult {
+  repeated Teammate teammates = 1;
+}
+
+// portenv handoff AGENT PATH [--note] (R-0257 item 3), under grant message.
+message Handoff {
+  string to = 1;
+  // In the sender's home or the project, as the CLI resolved it.
+  string path = 2;
+  string note = 3;
+}
+
+// portenv routine propose (R-0258): an agent_file_change decision.
+message ProposeRoutine {
+  int32 every_minutes = 1;
+  string note = 2;
+}
+
+message DeliverRoutineRequest {
+  string agent_id = 1;
+  // One plain line, without the prefix, at most 4078 bytes.
+  string text = 2;
+}
+
+message DeliverRoutineResponse {}
+
+message HandoffFilesRequest {
+  string from_agent = 1;
+  string to_agent = 2;
+  // An absolute path in the box: the sender's home or the project.
+  string source_path = 3;
+  int64 recipient_quota_bytes = 4;
+}
+
+message HandoffFilesResponse {
+  repeated portenv.types.v1.HandoffFile files = 1;
+}
+
+message PrepareTeamProjectRequest {
+  // The project folder, /home/work/<workspace>.
+  string project_dir = 1;
+}
+
+message PrepareTeamProjectResponse {}

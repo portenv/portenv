@@ -61,7 +61,9 @@ func TestAShutdownLeavesEveryWorkspaceRunning(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 	var logs syncBuffer
-	s := New(&local.Env{Dir: dir, Machine: "mac-1"}, slog.New(slog.NewTextHandler(&logs, nil)))
+	// Logged as portenvd logs (cmd/portenvd), so the line checked here is
+	// the one in its log, the one tests/e2e/daemon.sh greps for.
+	s := New(&local.Env{Dir: dir, Machine: "mac-1"}, slog.New(slog.NewTextHandler(&logs, nil)).With("component", "portenvd"))
 	c := boxWithState(t, s, "")
 	// No sync engine and no driver: a save, release or stop would panic.
 	ob := &openBox{sess: &local.Session{Cfg: c}}
@@ -97,7 +99,7 @@ func TestAShutdownLeavesEveryWorkspaceRunning(t *testing.T) {
 		t.Fatalf("an open during shutdown: %v, want Unavailable", err)
 	}
 	l := logs.String()
-	if !strings.Contains(l, "msg=close box_id="+c.ID+" reason=shutdown") {
+	if !strings.Contains(l, "msg=close component=portenvd box_id="+c.ID+` reason=shutdown action="left running"`) {
 		t.Fatalf("log %q, want the close entry line with reason=shutdown", l)
 	}
 	for _, never := range []string{"close saved", "close released"} {

@@ -142,7 +142,7 @@ wait "$dpid" 2>/dev/null || true
 expect "  leaving the box running (same start time)" test "$(docker inspect -f '{{.State.Running}} {{.State.StartedAt}}' "portenv-daemon-$(box_id)")" = "true $started"
 expect "  and the long command too" probe "portenv-daemon-$(box_id)" pgrep -x sleep
 since=$(tail -n +"$((before + 1))" "$root/portenvd.log")
-expect "  logged as a close with reason=shutdown, by workspace ID" grep -q "msg=close box_id=$(box_id) reason=shutdown" <<<"$since"
+expect "  logged as a close with reason=shutdown, by workspace ID" grep -qF "msg=close component=portenvd box_id=$(box_id) reason=shutdown action=\"left running\"" <<<"$since"
 expect "  and never saved or released" bash -c "! grep -qE 'msg=\"close (saved|released)\"' <<<'$since'"
 start_daemon
 out=$("$portenv" app open d 2>&1) || true; echo "  $out"

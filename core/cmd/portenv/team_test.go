@@ -177,3 +177,31 @@ func TestIsTeamCommand(t *testing.T) {
 		}
 	}
 }
+
+// R-0260 item 10: what other agents wrote is never raw on the terminal.
+func TestInboxEscapesControlCharacters(t *testing.T) {
+	sock, _ := fakeHelper(t, &agentv1.TeamCallsRequest{Ok: true, Result: &agentv1.TeamCallsRequest_Inbox{Inbox: &agentv1.InboxResult{
+		Messages: []*typesv1.BoardMessage{{From: "lead\x1b[31m", To: "builder", Text: "hi\x1b]52;c;cHduZWQ=\x07 there\u202e", Type: typesv1.MessageType_MESSAGE_TYPE_NOTICE}},
+	}}})
+	code, out, _ := runTeamCmd(t, sock, "inbox")
+	if code != 0 {
+		t.Fatalf("exit %d", code)
+	}
+	for _, bad := range []string{"\x1b", "\x07", "\u202e"} {
+		if strings.Contains(out, bad) {
+			t.Errorf("printed %q raw: %q", bad, out)
+		}
+	}
+	if !strings.Contains(out, "hi") || !strings.Contains(out, "there") {
+		t.Errorf("the text itself is gone: %q", out)
+	}
+}
+
+func TestAHugeReplyIsRefused(t *testing.T) {
+	sock, _ := fakeHelper(t, &agentv1.TeamCallsRequest{Ok: true, Result: &agentv1.TeamCallsRequest_Inbox{Inbox: &agentv1.InboxResult{
+		Messages: []*typesv1.BoardMessage{{From: "lead", To: "builder", Text: strings.Repeat("x", maxTeamReply+1)}},
+	}}})
+	if code, _, errOut := runTeamCmd(t, sock, "inbox"); code != 1 || !strings.Contains(errOut, "too large") {
+		t.Errorf("exit %d, %q", code, errOut)
+	}
+}

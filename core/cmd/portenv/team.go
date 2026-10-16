@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode"
 
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -41,6 +42,9 @@ var teamUsage = map[string]string{
 
 // maxProposedFile is an agent file's limit (ADR 0022 §3).
 const maxProposedFile = 64 << 10
+
+// maxTeamReply caps an answer from the helper (R-0260 item 10).
+const maxTeamReply = 1 << 20
 
 func isTeamCommand(name string) bool { _, ok := teamUsage[name]; return ok }
 
@@ -298,7 +302,10 @@ func sendTeamCall(ctx context.Context, sock string, call *agentv1.TeamCallsRespo
 	if uc, ok := conn.(*net.UnixConn); ok {
 		_ = uc.CloseWrite()
 	}
-	line, err := bufio.NewReaderSize(conn, 64<<10).ReadBytes('\n')
+	line, err := bufio.NewReaderSize(io.LimitReader(conn, maxTeamReply+1), 64<<10).ReadBytes('\n')
+	if len(line) > maxTeamReply {
+		return nil, errors.New("Portenv's answer is too large to show") //nolint:staticcheck // ST1005: a plain line
+	}
 	if err != nil && !errors.Is(err, io.EOF) {
 		return nil, fmt.Errorf("no answer from Portenv: %w", err)
 	}
@@ -334,31 +341,48 @@ func printTeamReply(w io.Writer, name string, call *agentv1.TeamCallsResponse, r
 	}
 	switch name {
 	case "split", "tab":
-		_, _ = fmt.Fprintf(w, "Opened pane %s.\n", r.GetPane().GetPaneId())
+		_, _ = fmt.Fprintf(w, "Opened pane %s.\n", shownPlain(r.GetPane().GetPaneId()))
 	case "msg":
-		_, _ = fmt.Fprintf(w, "Sent to %s.\n", call.GetMsg().GetTo())
+		_, _ = fmt.Fprintf(w, "Sent to %s.\n", shownPlain(call.GetMsg().GetTo()))
 	case "ask-owner", "request-package", "propose-agent-change":
-		_, _ = fmt.Fprintf(w, "Asked the owner (decision %s). Wait for the answer with: portenv inbox --wait\n", r.GetDecision().GetId())
+		_, _ = fmt.Fprintf(w, "Asked the owner (decision %s). Wait for the answer with: portenv inbox --wait\n", shownPlain(r.GetDecision().GetId()))
 	case "inbox":
 		in := r.GetInbox()
 		for _, m := range in.GetMessages() {
-			_, _ = fmt.Fprintf(w, "%s  %s → %s  %s: %s\n", m.GetCreatedAt().AsTime().Format(time.DateTime), m.GetFrom(), m.GetTo(),
-				strings.ToLower(strings.TrimPrefix(m.GetType().String(), "MESSAGE_TYPE_")), m.GetText())
+			_, _ = fmt.Fprintf(w, "%s  %s → %s  %s: %s\n", m.GetCreatedAt().AsTime().Format(time.DateTime), shownPlain(m.GetFrom()), shownPlain(m.GetTo()),
+				strings.ToLower(strings.TrimPrefix(m.GetType().String(), "MESSAGE_TYPE_")), shownPlain(m.GetText()))
 		}
 		for _, d := range in.GetDecisions() {
-			_, _ = fmt.Fprintf(w, "decision %s: %s\n", d.GetId(), strings.ToLower(strings.TrimPrefix(d.GetState().String(), "DECISION_STATE_")))
+			_, _ = fmt.Fprintf(w, "decision %s: %s\n", shownPlain(d.GetId()), strings.ToLower(strings.TrimPrefix(d.GetState().String(), "DECISION_STATE_")))
 		}
 		if in.GetCursor() != "" {
-			_, _ = fmt.Fprintf(w, "(next: portenv inbox --since %s)\n", in.GetCursor())
+			_, _ = fmt.Fprintf(w, "(next: portenv inbox --since %s)\n", shownPlain(in.GetCursor()))
 		}
 	case "whoami":
 		me := r.GetWhoami()
-		_, _ = fmt.Fprintf(w, "You are %s (%s) in %s, on %s.\n", me.GetName(), me.GetId(), me.GetWorkspace(), me.GetLocation())
+		_, _ = fmt.Fprintf(w, "You are %s (%s) in %s, on %s.\n", shownPlain(me.GetName()), shownPlain(me.GetId()), shownPlain(me.GetWorkspace()), shownPlain(me.GetLocation()))
 		if len(me.GetCommands()) > 0 {
-			_, _ = fmt.Fprintf(w, "You can use: %s\n", strings.Join(me.GetCommands(), ", "))
+			_, _ = fmt.Fprintf(w, "You can use: %s\n", shownPlain(strings.Join(me.GetCommands(), ", ")))
 		}
 		_, _ = fmt.Fprintln(w, "For everything, run: portenv whoami --json")
 	default:
 		_, _ = fmt.Fprintln(w, "Done.")
 	}
+}
+
+// shownPlain escapes what a terminal would act on (control and bidi
+// characters) in text other agents wrote: it's shown, never run.
+func shownPlain(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		switch {
+		case r == '\n' || r == '\t':
+			b.WriteRune(r)
+		case unicode.IsControl(r), r >= 0x202A && r <= 0x202E, r >= 0x2066 && r <= 0x2069, r == 0x200E, r == 0x200F, r == 0x061C:
+			fmt.Fprintf(&b, "\\u%04x", r)
+		default:
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }

@@ -489,11 +489,58 @@ func fsState(t *testing.T, roots ...string) map[string]string {
 			if err != nil {
 				return nil // unreadable: the probe can't write there either
 			}
+			// The test host's own Homebrew services write their logs and run
+			// state by themselves (R-0220): only those folders, never any
+			// other var/log or var/run.
+			if fi.IsDir() && slices.Contains(hostServiceDirs(), p) {
+				return filepath.SkipDir
+			}
 			st[p] = fmt.Sprintf("%v %d %d", fi.Mode(), fi.Size(), fi.ModTime().UnixNano())
 			return nil
 		})
 	}
 	return st
+}
+
+// hostServiceDirs are the test host's Homebrew var/log and var/run, whose
+// services write them by themselves while the test runs: the prefix from
+// HOMEBREW_PREFIX, else `brew --prefix`, else /opt/homebrew.
+func hostServiceDirs() []string {
+	prefix := os.Getenv("HOMEBREW_PREFIX")
+	if prefix == "" {
+		if out, err := exec.Command("brew", "--prefix").Output(); err == nil { // #nosec G204 -- the test host's own Homebrew
+			prefix = strings.TrimSpace(string(out))
+		}
+	}
+	if prefix == "" {
+		prefix = "/opt/homebrew"
+	}
+	return []string{filepath.Join(prefix, "var", "log"), filepath.Join(prefix, "var", "run")}
+}
+
+// TestTheWriteCheckSkipsOnlyHomebrewsLogs (R-0220): a write into any other
+// var/log or var/run, a server's /var/log among them, still shows.
+func TestTheWriteCheckSkipsOnlyHomebrewsLogs(t *testing.T) {
+	t.Setenv("HOMEBREW_PREFIX", "/opt/homebrew")
+	if got := hostServiceDirs(); !slices.Equal(got, []string{"/opt/homebrew/var/log", "/opt/homebrew/var/run"}) {
+		t.Fatalf("skipped %v", got)
+	}
+	root := t.TempDir()
+	for _, d := range []string{"var/log", "var/run", "srv/var/log"} {
+		if err := os.MkdirAll(filepath.Join(root, d), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	before := fsState(t, root)
+	for _, f := range []string{"var/log/syslog", "var/run/probe.pid", "srv/var/log/app.log"} {
+		if err := os.WriteFile(filepath.Join(root, f), []byte("written"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		after := fsState(t, root)
+		if _, ok := after[filepath.Join(root, f)]; !ok || len(after) == len(before) {
+			t.Fatalf("a write to %s went unseen", f)
+		}
+	}
 }
 
 // homeTop is the person's real home, where ssh runs the probe: the names
@@ -553,12 +600,27 @@ func TestCheckWritesNothing(t *testing.T) {
 			t.Errorf("Check changed ~/%s", n)
 		}
 	}
-	// On CI's Ubuntu runner the server is a real one: it passes but for
-	// what a runner can't have.
+	// This test is about writing nothing. On CI's Ubuntu runner it also
+	// checks the lines that are the runner's own (its system, its sudo, its
+	// clock) pass. Lines that depend on the network or the runner's size
+	// (ghcr.io and download.docker.com answering, free disk) need only have
+	// run: passed, or failed with their fix (a runner's network once
+	// refused ghcr.io, and the test failed on that).
 	if os.Getenv("CI") != "" {
+		mayFail := map[string]bool{"https-ghcr": true, "https-docker": true, "disk": true}
 		for _, l := range lines {
-			if l.State == CheckFailed && l.ID != "disk" && l.ID != "https-docker" {
+			switch {
+			case l.State == 0:
+				t.Errorf("on the CI runner, a line didn't run: %+v", l)
+			case l.State == CheckFailed && !mayFail[l.ID]:
 				t.Errorf("on the CI runner: %+v", l)
+			case l.State == CheckFailed && l.Fix == "":
+				t.Errorf("a failure with no fix: %+v", l)
+			}
+		}
+		for _, id := range []string{"system", "sudo", "clock", "https-ghcr", "https-docker"} {
+			if !slices.ContainsFunc(lines, func(l CheckLine) bool { return l.ID == id }) {
+				t.Errorf("no %s line", id)
 			}
 		}
 	}

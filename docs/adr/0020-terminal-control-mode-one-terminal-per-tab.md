@@ -201,6 +201,7 @@ Also checked on tmux 3.4 in the image:
      - **The rule:** a replayed mark is never on the wrong line, and a missing one costs only a block header in old history.
      - **The test:** identical prompts (`$ ` twenty times, same text, which a text match can't tell apart). Every replayed mark lands on its own line.
    - **As built (1.2c PR 3):** `core/agent/tabterm.go`.
+     - **The tab's pane (R-0228, R-0231):** the one the window was made with, the window's oldest pane (tmux numbers panes in order and never reuses an ID), never its active pane. A pane split into the window by anything in the workspace can't take the tab over on screen; it only shrinks the tab's pane, which shows.
      - **Order:** the helper asks for the tab's pane, then sends one command list: the size, if the view gave one, then the state read and both captures. It drops the pane's output until the last reply, whose parser snapshot is taken as the reply is read. Output after it follows the seed, and a test reopens a printing counter ten times to check nothing is lost or repeated.
      - **Mark lines:** the parser's line of the cursor at the snapshot is matched to the capture's cursor line. That gives every mark's line in the seed without `history_size`.
      - **Epochs:** only the current epoch's marks are replayed. Older epochs (before a full-screen erase or a width change) can't be aligned, so their marks are left out rather than risk a wrong line. Their commands lose their block headers in old history.

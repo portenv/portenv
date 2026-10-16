@@ -5,6 +5,8 @@ package daemon
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -477,5 +479,195 @@ func TestTheOwnerMessagesAnAgent(t *testing.T) {
 	}
 	if _, err := e.ownerMessage(ctx, "w", "nobody", "", "hi"); err == nil {
 		t.Error("a message to no agent was sent")
+	}
+}
+
+// R-0260 item 1: share is a message, under the same grant, limit and checks.
+func TestShareIsAMessageUnderTheGrant(t *testing.T) {
+	team := defaultTeam()
+	team[2].Grant.Message = nil // reviewer may message no agent, only the owner
+	e, h, _ := newTestEngine(t, team...)
+	ctx := context.Background()
+	share := func(id, text string) *agentv1.TeamCallsRequest {
+		return e.handleCall(ctx, "w", &agentv1.TeamCallsResponse{AgentId: id, Op: &agentv1.TeamCallsResponse_Share{Share: &agentv1.Share{Text: text}}})
+	}
+	if r := share("reviewer", "done"); !r.GetOk() {
+		t.Fatalf("share: %s", r.GetLine())
+	}
+	if got := inbox(t, e, "lead", "").GetMessages(); len(got) != 0 {
+		t.Errorf("lead got a share from an agent not granted to message it: %v", got)
+	}
+	if r := share("builder", "\x1b]52;c;cHduZWQ=\x07"); r.GetOk() {
+		t.Error("a share with an escape sequence went through")
+	}
+	if r := share("builder", strings.Repeat("x", maxBoardMessage)); r.GetOk() {
+		t.Error("a share over 8 KB went through")
+	}
+	n := len(h.board)
+	for i := 0; ; i++ {
+		if r := share("builder", fmt.Sprint(i)); !r.GetOk() {
+			break
+		}
+		if i > messagesPerMinute {
+			t.Fatal("share has no per-minute limit")
+		}
+	}
+	if got := len(h.board) - n; got > messagesPerMinute {
+		t.Errorf("%d share lines in a minute, over the limit of %d", got, messagesPerMinute)
+	}
+}
+
+// R-0260 item 2: pending pane requests count, and Approve rechecks.
+func TestApproveRechecksThePaneLimit(t *testing.T) {
+	team := defaultTeam()
+	team[1].Grant.MaxPanes = 1 // builder, panes: ask
+	e, h, _ := newTestEngine(t, team...)
+	ctx := context.Background()
+	first := e.handleCall(ctx, "w", splitCall("builder"))
+	if !first.GetOk() {
+		t.Fatal(first.GetLine())
+	}
+	if r := e.handleCall(ctx, "w", splitCall("builder")); r.GetOk() {
+		t.Error("a second pane request was queued past max_panes 1")
+	}
+	// Even if several were queued (an older build), Approve rechecks.
+	b := e.box("w")
+	b.mu.Lock()
+	b.panes["builder"] = []string{"%9"}
+	b.mu.Unlock()
+	if _, err := e.answer(ctx, "w", first.GetDecision().GetId(), true, ""); err == nil {
+		t.Error("Approve opened a pane past max_panes")
+	}
+	if h.paneActions() != 0 {
+		t.Errorf("pane actions: %d", h.paneActions())
+	}
+	found := false
+	for _, m := range inbox(t, e, "builder", "").GetMessages() {
+		if strings.Contains(m.GetText(), "limit") {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("builder wasn't told why")
+	}
+}
+
+// R-0260 item 3: every text and id field is plain; thread ids are ULIDs.
+func TestBoardTextIsPlain(t *testing.T) {
+	e, h, _ := newTestEngine(t, defaultTeam()...)
+	ctx := context.Background()
+	bad := []*agentv1.TeamCallsResponse{
+		msgCall("builder", "lead", "hi \x1b[2J"),
+		msgCall("builder", "lead", "abc\u202edcb"),
+		{AgentId: "builder", Op: &agentv1.TeamCallsResponse_Msg{Msg: &agentv1.Msg{To: "lead", Text: "hi", ThreadId: "../../etc", Type: typesv1.MessageType_MESSAGE_TYPE_NOTICE}}},
+		{AgentId: "builder", Op: &agentv1.TeamCallsResponse_AskOwner{AskOwner: &agentv1.AskOwner{Text: "ok?\x07"}}},
+		{AgentId: "builder", Op: &agentv1.TeamCallsResponse_AskOwner{AskOwner: &agentv1.AskOwner{Text: "ok?", ThreadId: "not-a-ulid"}}},
+		{AgentId: "lead", Op: &agentv1.TeamCallsResponse_Tab{Tab: &agentv1.NewTeamTab{Name: "t\x1b", Argv: []string{"x"}}}},
+		{AgentId: "builder", Op: &agentv1.TeamCallsResponse_Split{Split: &agentv1.Split{PaneId: "%1", Argv: []string{"rm\u202e"}}}},
+	}
+	for _, c := range bad {
+		if r := e.handleCall(ctx, "w", c); r.GetOk() {
+			t.Errorf("%v: accepted", c)
+		}
+	}
+	if _, err := e.ownerMessage(ctx, "w", "builder", "", "hi\x1b"); err == nil {
+		t.Error("the owner's message with an escape was accepted")
+	}
+	if _, err := e.ownerMessage(ctx, "w", "builder", "x/y", "hi"); err == nil {
+		t.Error("the owner's message with a bad thread was accepted")
+	}
+	if len(h.board) != 0 {
+		t.Errorf("board lines written: %d", len(h.board))
+	}
+	// Newlines and tabs are fine in message text; a real ULID thread is fine.
+	ok := msgCall("builder", "lead", "line one\n\tline two")
+	ok.GetMsg().ThreadId = newULID(time.Now())
+	if r := e.handleCall(ctx, "w", ok); !r.GetOk() {
+		t.Errorf("a plain multi-line message: %s", r.GetLine())
+	}
+}
+
+// R-0260 item 5: a cap on calls in flight per agent.
+func TestCallsInFlightAreCapped(t *testing.T) {
+	e, _, _ := newTestEngine(t, defaultTeam()...)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	wait := &agentv1.TeamCallsResponse{AgentId: "lead", Op: &agentv1.TeamCallsResponse_Inbox{Inbox: &agentv1.Inbox{Wait: true, SinceCursor: "999"}}}
+	done := make(chan struct{}, maxCallsInFlight)
+	for range maxCallsInFlight {
+		go func() { e.handleCall(ctx, "w", wait); done <- struct{}{} }()
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for e.inFlight("w", "lead") < maxCallsInFlight && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	r := e.handleCall(ctx, "w", msgCall("lead", "builder", "one more"))
+	if r.GetOk() || !strings.Contains(r.GetLine(), "at once") {
+		t.Errorf("call past the cap: %v", r)
+	}
+	if r := e.handleCall(ctx, "w", msgCall("builder", "lead", "another agent")); !r.GetOk() {
+		t.Errorf("another agent was capped too: %s", r.GetLine())
+	}
+	cancel()
+	for range maxCallsInFlight {
+		<-done
+	}
+	if n := e.inFlight("w", "lead"); n != 0 {
+		t.Errorf("%d calls still counted", n)
+	}
+}
+
+// R-0260 item 6: an overdue decision can't be approved, even if its
+// expiry line wasn't written.
+func TestAnOverdueDecisionCantBeApproved(t *testing.T) {
+	e, h, clock := newTestEngine(t, defaultTeam()...)
+	ctx := context.Background()
+	d := e.handleCall(ctx, "w", splitCall("builder")).GetDecision()
+	clock.add(decisionExpiry + time.Second)
+	// Approve directly, past the sweep: the state is still pending.
+	b := e.box("w")
+	b.mu.Lock()
+	_, err := e.answerLocked(ctx, "w", b, d.GetId(), true, "")
+	b.mu.Unlock()
+	if err == nil {
+		t.Fatal("an overdue decision was approved")
+	}
+	if h.paneActions() != 0 {
+		t.Error("a pane opened for an overdue decision")
+	}
+}
+
+// R-0260 item 4: a reader never sees half a rebuild of the agent files.
+func TestTeamFilesRebuildsDontInterleave(t *testing.T) {
+	state := t.TempDir()
+	sets := [][]*agentv1.AgentFileContent{
+		{{Name: "lead.md", Content: []byte("a")}, {Name: "builder.md", Content: []byte("a")}, {Name: "reviewer.md", Content: []byte("a")}},
+		{{Name: "designer.md", Content: []byte("b")}, {Name: "writer.md", Content: []byte("b")}},
+	}
+	var wg sync.WaitGroup
+	errs := make(chan error, 200)
+	for i := range 200 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			set := sets[i%2]
+			errs <- withTeamFiles(state, set, func(dir string) error {
+				entries, err := os.ReadDir(filepath.Join(dir, filepath.FromSlash(agentFilesRelative)))
+				if err != nil {
+					return err
+				}
+				if len(entries) != len(set) {
+					return fmt.Errorf("saw %d files, want %d", len(entries), len(set))
+				}
+				return nil
+			})
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 }

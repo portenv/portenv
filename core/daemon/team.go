@@ -7,11 +7,13 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -34,7 +36,10 @@ const (
 	pendingDecisionsPerAgent = 5
 	decisionExpiry           = 24 * time.Hour
 	inboxWait                = 60 * time.Second
-	defaultHomeQuota         = 2 << 30
+	// maxCallsInFlight caps one agent's calls at once, inbox --wait
+	// holds included (R-0260 item 5).
+	maxCallsInFlight = 16
+	defaultHomeQuota = 2 << 30
 	// boardFrom is Portenv's own name on the board, for its notices.
 	boardFrom  = "portenv"
 	boardOwner = "owner"
@@ -54,10 +59,13 @@ type teamEngine struct {
 
 	mu    sync.Mutex
 	boxes map[string]*teamBox
+
+	flightMu sync.Mutex
+	inflight map[string]int // "<box>/<agent>" → calls in flight
 }
 
 func newTeamEngine(helper func(context.Context, string) (agentv1.AgentServiceClient, error), loadTeam func(context.Context, string) (Team, error)) *teamEngine {
-	return &teamEngine{now: time.Now, helper: helper, loadTeam: loadTeam, boxes: map[string]*teamBox{}}
+	return &teamEngine{now: time.Now, helper: helper, loadTeam: loadTeam, boxes: map[string]*teamBox{}, inflight: map[string]int{}}
 }
 
 // teamBox is one workspace's board and agents.
@@ -211,6 +219,19 @@ func (e *teamEngine) handleCall(ctx context.Context, name string, c *agentv1.Tea
 	if me == nil || !me.Valid() || !me.Approved {
 		return refuse(id, "%s isn't an approved agent of this workspace's team.", c.GetAgentId())
 	}
+	key := name + "/" + me.ID
+	e.flightMu.Lock()
+	if e.inflight[key] >= maxCallsInFlight {
+		e.flightMu.Unlock()
+		return refuse(id, "%s has %d calls waiting at once, its limit. Let one finish first.", me.ID, maxCallsInFlight)
+	}
+	e.inflight[key]++
+	e.flightMu.Unlock()
+	defer func() {
+		e.flightMu.Lock()
+		e.inflight[key]--
+		e.flightMu.Unlock()
+	}()
 	if c.GetInbox().GetWait() {
 		return e.inboxWait(ctx, name, me.ID, c.GetInbox().GetSinceCursor(), id)
 	}
@@ -228,8 +249,11 @@ func (e *teamEngine) handleCall(ctx context.Context, name string, c *agentv1.Tea
 			return refuse(id, "%s may not ask the owner (its grant has ask_owner: false).", me.ID)
 		}
 		text := strings.TrimSpace(op.AskOwner.GetText())
-		if text == "" || len(text) > maxDecisionDetail {
-			return refuse(id, "A question for the owner is 1 to %d KB of text.", maxDecisionDetail>>10)
+		if text == "" || len(text) > maxDecisionDetail || !boardText(text, true) {
+			return refuse(id, "A question for the owner is 1 to %d KB of plain text.", maxDecisionDetail>>10)
+		}
+		if !threadOK(op.AskOwner.GetThreadId()) {
+			return refuse(id, "A thread id is the id of a board message.")
 		}
 		return e.decideLocked(ctx, name, b, me.ID, typesv1.DecisionKind_DECISION_KIND_ASK_OWNER, text, text, nil, id)
 	case *agentv1.TeamCallsResponse_Split:
@@ -244,27 +268,29 @@ func (e *teamEngine) handleCall(ctx context.Context, name string, c *agentv1.Tea
 		in := b.inboxLocked(me.ID, op.Inbox.GetSinceCursor())
 		return &agentv1.TeamCallsRequest{CallId: id, Ok: true, Result: &agentv1.TeamCallsRequest_Inbox{Inbox: in}}
 	case *agentv1.TeamCallsResponse_Share:
+		// A share is a message to the owner, and to the lead when the
+		// grant names it: the same checks and limit (R-0260 item 1).
 		text := "Work is ready"
 		if br := op.Share.GetBranch(); br != "" {
 			text += " on " + br
 		} else {
 			text += " in the shared checkout"
 		}
-		if t := strings.TrimSpace(op.Share.GetText()); t != "" {
-			text += ": " + t
+		if s := strings.TrimSpace(op.Share.GetText()); s != "" {
+			text += ": " + s
 		}
-		var last *typesv1.BoardMessage
+		var last *agentv1.TeamCallsRequest
 		for _, to := range []string{boardOwner, "lead"} {
-			if to == me.ID || (to != boardOwner && team.agent(to) == nil) {
+			if to == me.ID || (to != boardOwner && !slices.Contains(g.GetMessage(), to)) {
 				continue
 			}
-			m := &typesv1.BoardMessage{Id: newULID(e.now()), From: me.ID, To: to, Type: typesv1.MessageType_MESSAGE_TYPE_NOTICE, Text: text, CreatedAt: timestamppb.New(e.now())}
-			if err := e.appendLocked(ctx, name, b, &agentv1.AppendBoardRequest{Line: &agentv1.AppendBoardRequest_Message{Message: m}}); err != nil {
-				return refuse(id, "%v", err)
+			r := e.msgLocked(ctx, name, b, &team, me, &agentv1.Msg{To: to, Text: text, Type: typesv1.MessageType_MESSAGE_TYPE_NOTICE}, id)
+			if !r.GetOk() {
+				return r
 			}
-			last = m
+			last = r
 		}
-		return &agentv1.TeamCallsRequest{CallId: id, Ok: true, Result: &agentv1.TeamCallsRequest_Message{Message: last}}
+		return last
 	case *agentv1.TeamCallsResponse_Whoami:
 		return &agentv1.TeamCallsRequest{CallId: id, Ok: true, Result: &agentv1.TeamCallsRequest_Whoami{Whoami: e.whoamiLocked(name, b, &team, me)}}
 	case *agentv1.TeamCallsResponse_Propose, *agentv1.TeamCallsResponse_RequestPackage:
@@ -279,8 +305,11 @@ func (e *teamEngine) msgLocked(ctx context.Context, name string, b *teamBox, tea
 		return refuse(id, "%s may not message %s (its grant's message list doesn't name it).", me.ID, to)
 	}
 	text := m.GetText()
-	if strings.TrimSpace(text) == "" || len(text) > maxBoardMessage {
-		return refuse(id, "A message is 1 to %d KB of text.", maxBoardMessage>>10)
+	if strings.TrimSpace(text) == "" || len(text) > maxBoardMessage || !boardText(text, true) {
+		return refuse(id, "A message is 1 to %d KB of plain text, with no control characters.", maxBoardMessage>>10)
+	}
+	if !threadOK(m.GetThreadId()) {
+		return refuse(id, "A thread id is the id of a board message.")
 	}
 	now := e.now()
 	recent := b.sent[me.ID][:0]
@@ -344,8 +373,20 @@ func (e *teamEngine) paneLocked(ctx context.Context, name string, b *teamBox, me
 	if len(argv) == 0 {
 		return refuse(id, "Give the command to run in the new pane.")
 	}
-	if n := len(b.panes[me.ID]); n >= int(g.GetMaxPanes()) {
-		return refuse(id, "%s has %d panes open, its limit. Close one first.", me.ID, n)
+	for _, s := range append(argv, a.GetTab().GetName()) {
+		if !boardText(s, false) {
+			return refuse(id, "A pane's command and name are plain text, with no control characters.")
+		}
+	}
+	// Requests waiting for the owner count too (R-0260 item 2).
+	n := len(b.panes[me.ID])
+	for _, w := range b.actions {
+		if w.GetAgentId() == me.ID {
+			n++
+		}
+	}
+	if n >= int(g.GetMaxPanes()) {
+		return refuse(id, "%s has %d panes open or asked for, its limit. Close one first.", me.ID, n)
 	}
 	if g.GetPanes() == typesv1.GrantMode_GRANT_MODE_ASK {
 		cmd := strings.Join(argv, " ")
@@ -442,14 +483,36 @@ func (e *teamEngine) answer(ctx context.Context, name, decisionID string, approv
 		return nil, err
 	}
 	defer b.mu.Unlock()
+	return e.answerLocked(ctx, name, b, decisionID, approve, note)
+}
+
+func (e *teamEngine) answerLocked(ctx context.Context, name string, b *teamBox, decisionID string, approve bool, note string) (*typesv1.Decision, error) {
 	d := b.decisions[decisionID]
 	switch {
 	case d == nil:
 		return nil, errors.New("there's no such request")
-	case d.GetState() == typesv1.DecisionState_DECISION_STATE_EXPIRED:
+	case d.GetState() == typesv1.DecisionState_DECISION_STATE_EXPIRED,
+		// Overdue is expired, even if its expiry line wasn't written (R-0260 item 6).
+		d.GetState() == typesv1.DecisionState_DECISION_STATE_PENDING && d.GetExpiresAt() != nil && !e.now().Before(d.GetExpiresAt().AsTime()):
 		return nil, errors.New("that request expired; the agent was told to ask again")
 	case d.GetState() != typesv1.DecisionState_DECISION_STATE_PENDING:
 		return nil, errors.New("that request was already answered")
+	}
+	if !boardText(note, true) || len(note) > maxBoardMessage {
+		return nil, errors.New("a note is at most 8 KB of plain text")
+	}
+	action := b.actions[decisionID]
+	if approve && action != nil {
+		// The pane limit again, at Approve (R-0260 item 2).
+		team, err := e.loadTeam(ctx, name)
+		if err != nil {
+			return nil, err
+		}
+		a := team.agent(action.GetAgentId())
+		if a == nil || len(b.panes[action.GetAgentId()]) >= int(a.Grant.GetMaxPanes()) {
+			e.noticeLocked(ctx, name, b, d.GetFrom(), decisionID, "The owner approved your pane, but you're at your pane limit. Close a pane, then ask again.")
+			return nil, fmt.Errorf("%s is at its pane limit; it must close one first", d.GetFrom())
+		}
 	}
 	x := proto.CloneOf(d)
 	x.State, x.AnswerNote, x.AnsweredAt = typesv1.DecisionState_DECISION_STATE_DECLINED, note, timestamppb.New(e.now())
@@ -459,7 +522,6 @@ func (e *teamEngine) answer(ctx context.Context, name, decisionID string, approv
 	if err := e.appendLocked(ctx, name, b, &agentv1.AppendBoardRequest{Line: &agentv1.AppendBoardRequest_Decision{Decision: x}}); err != nil {
 		return nil, err
 	}
-	action := b.actions[decisionID]
 	delete(b.actions, decisionID)
 	if approve && action != nil {
 		pane, err := e.doPaneLocked(ctx, name, b, action)
@@ -481,8 +543,11 @@ func (e *teamEngine) ownerMessage(ctx context.Context, name, to, thread, text st
 	if team.agent(to) == nil {
 		return nil, fmt.Errorf("this workspace has no agent %q", to)
 	}
-	if strings.TrimSpace(text) == "" || len(text) > maxBoardMessage {
-		return nil, fmt.Errorf("a message is 1 to %d KB of text", maxBoardMessage>>10)
+	if strings.TrimSpace(text) == "" || len(text) > maxBoardMessage || !boardText(text, true) {
+		return nil, fmt.Errorf("a message is 1 to %d KB of plain text", maxBoardMessage>>10)
+	}
+	if !threadOK(thread) {
+		return nil, errors.New("a thread id is the id of a board message")
 	}
 	b, err := e.lockBox(ctx, name)
 	if err != nil {
@@ -766,4 +831,33 @@ func newULID(t time.Time) string {
 		hi >>= 5
 	}
 	return string(out)
+}
+
+// inFlight is how many of an agent's calls are in flight.
+func (e *teamEngine) inFlight(box, agent string) int {
+	e.flightMu.Lock()
+	defer e.flightMu.Unlock()
+	return e.inflight[box+"/"+agent]
+}
+
+var ulidRE = regexp.MustCompile(`^[0-9A-HJKMNP-TV-Z]{26}$`)
+
+// threadOK: no thread, or a board message's id (R-0260 item 3).
+func threadOK(s string) bool { return s == "" || ulidRE.MatchString(s) }
+
+// boardText is ADR 0020's rule for text on the board: valid UTF-8, no
+// control or bidi characters, except newlines and tabs in multi-line text.
+func boardText(s string, multiline bool) bool {
+	if !utf8.ValidString(s) {
+		return false
+	}
+	for _, r := range s {
+		if multiline && (r == '\n' || r == '\t') {
+			continue
+		}
+		if hasUnsafeRune(string(r)) {
+			return false
+		}
+	}
+	return true
 }

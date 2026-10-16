@@ -39,46 +39,71 @@ func projectDir(name string) string { return "/home/work/" + name }
 
 var agentFileNameRE = regexp.MustCompile(`^[a-z][a-z0-9-]{0,31}\.md$`)
 
-// loadTeam reads the project's agent files through the helper into a
-// private copy in portenvd's state folder, then checks them there.
-func (s *Server) loadTeam(ctx context.Context, name string) (Team, error) {
+// teamFilesMu serialises every rebuild and read of a workspace's copy of
+// its agent files (R-0260 item 4).
+var teamFilesMu sync.Mutex
+
+// withTeamFiles rebuilds state/team-files from files (when not nil), then
+// runs fn on it, all under one lock, so no reader sees half a rebuild.
+func withTeamFiles(state string, files []*agentv1.AgentFileContent, fn func(dir string) error) error {
+	teamFilesMu.Lock()
+	defer teamFilesMu.Unlock()
+	snap := filepath.Join(state, "team-files")
+	if files != nil {
+		if err := os.RemoveAll(snap); err != nil {
+			return err
+		}
+		agents := filepath.Join(snap, filepath.FromSlash(agentFilesRelative))
+		if err := os.MkdirAll(agents, 0o700); err != nil {
+			return err
+		}
+		for _, f := range files {
+			if !agentFileNameRE.MatchString(f.GetName()) || len(f.GetContent()) > maxAgentFileBytes {
+				continue // the checks would refuse it; nothing else is written
+			}
+			if err := os.WriteFile(filepath.Join(agents, f.GetName()), f.GetContent(), 0o600); err != nil {
+				return err
+			}
+		}
+	}
+	return fn(snap)
+}
+
+// withTeam reads the project's agent files through the helper into a
+// private copy in portenvd's state folder, checks them, and runs fn with
+// the team, under the copy's lock.
+func (s *Server) withTeam(ctx context.Context, name string, fn func(src TeamSource, team Team) error) error {
 	c, err := s.env.LoadBox(name)
 	if err != nil {
-		return Team{}, err
+		return err
 	}
 	a, err := s.agentFor(ctx, name)
 	if err != nil {
-		return Team{}, err
+		return err
 	}
 	r, err := a.ReadAgentFiles(ctx, &agentv1.ReadAgentFilesRequest{ProjectDir: projectDir(name)})
 	if err != nil {
-		return Team{}, fmt.Errorf("read the agent files: %w", agentError(err))
+		return fmt.Errorf("read the agent files: %w", agentError(err))
+	}
+	files := r.GetFiles()
+	if files == nil {
+		files = []*agentv1.AgentFileContent{}
 	}
 	state := filepath.Join(s.env.Dir, "state", c.ID)
-	snap := filepath.Join(state, "team-files")
-	if err := os.RemoveAll(snap); err != nil {
-		return Team{}, err
-	}
-	agents := filepath.Join(snap, filepath.FromSlash(agentFilesRelative))
-	if len(r.GetFiles()) > 0 {
-		if err := os.MkdirAll(agents, 0o700); err != nil {
-			return Team{}, err
+	return withTeamFiles(state, files, func(dir string) error {
+		src := TeamSource{ProjectDir: dir, OverridesDir: filepath.Join(s.env.Dir, "agents.local"), WorkspaceID: c.ID, StateDir: state}
+		team, err := LoadTeam(src)
+		if err != nil {
+			return err
 		}
-	}
-	for _, f := range r.GetFiles() {
-		if !agentFileNameRE.MatchString(f.GetName()) || len(f.GetContent()) > maxAgentFileBytes {
-			continue // the checks would refuse it; nothing else is written
-		}
-		if err := os.WriteFile(filepath.Join(agents, f.GetName()), f.GetContent(), 0o600); err != nil {
-			return Team{}, err
-		}
-	}
-	return LoadTeam(TeamSource{
-		ProjectDir:   snap,
-		OverridesDir: filepath.Join(s.env.Dir, "agents.local"),
-		WorkspaceID:  c.ID,
-		StateDir:     state,
+		return fn(src, team)
 	})
+}
+
+func (s *Server) loadTeam(ctx context.Context, name string) (Team, error) {
+	var team Team
+	err := s.withTeam(ctx, name, func(_ TeamSource, t Team) error { team = t; return nil })
+	return team, err
 }
 
 func (s *Server) readBoard(ctx context.Context, name string) ([]*agentv1.ReadBoardResponse, error) {
@@ -277,36 +302,30 @@ func (s *Server) AnswerDecision(ctx context.Context, req *daemonv1.AnswerDecisio
 }
 
 func (s *Server) GetAgentFile(ctx context.Context, req *daemonv1.GetAgentFileRequest) (*daemonv1.GetAgentFileResponse, error) {
-	team, err := s.loadTeam(ctx, req.GetName())
+	var out *daemonv1.GetAgentFileResponse
+	err := s.withTeam(ctx, req.GetName(), func(src TeamSource, team Team) error {
+		a := team.agent(req.GetAgentId())
+		if a == nil {
+			return status.Errorf(codes.NotFound, "this workspace has no agent %q", req.GetAgentId())
+		}
+		b, err := os.ReadFile(filepath.Join(src.agentsDir(), a.ID+".md")) // #nosec G304 -- portenvd's own copy
+		if err != nil {
+			return err
+		}
+		out = &daemonv1.GetAgentFileResponse{Content: string(b), FileSha256: a.SHA256, ApprovedContent: a.ApprovedContent, Runner: a.RunnerLine}
+		return nil
+	})
 	if err != nil {
 		return nil, teamStatus(err)
 	}
-	a := team.agent(req.GetAgentId())
-	if a == nil {
-		return nil, status.Errorf(codes.NotFound, "this workspace has no agent %q", req.GetAgentId())
-	}
-	c, err := s.env.LoadBox(req.GetName())
-	if err != nil {
-		return nil, teamStatus(err)
-	}
-	b, err := os.ReadFile(filepath.Join(s.env.Dir, "state", c.ID, "team-files", filepath.FromSlash(agentFilesRelative), a.ID+".md")) // #nosec G304 -- portenvd's own copy
-	if err != nil {
-		return nil, teamStatus(err)
-	}
-	return &daemonv1.GetAgentFileResponse{Content: string(b), FileSha256: a.SHA256, ApprovedContent: a.ApprovedContent, Runner: a.RunnerLine}, nil
+	return out, nil
 }
 
 func (s *Server) ApproveAgentFile(ctx context.Context, req *daemonv1.ApproveAgentFileRequest) (*daemonv1.ApproveAgentFileResponse, error) {
-	if _, err := s.loadTeam(ctx, req.GetName()); err != nil {
-		return nil, teamStatus(err)
-	}
-	c, err := s.env.LoadBox(req.GetName())
+	err := s.withTeam(ctx, req.GetName(), func(src TeamSource, _ Team) error {
+		return ApproveAgentFile(src, req.GetAgentId(), req.GetFileSha256())
+	})
 	if err != nil {
-		return nil, teamStatus(err)
-	}
-	state := filepath.Join(s.env.Dir, "state", c.ID)
-	src := TeamSource{ProjectDir: filepath.Join(state, "team-files"), OverridesDir: filepath.Join(s.env.Dir, "agents.local"), WorkspaceID: c.ID, StateDir: state}
-	if err := ApproveAgentFile(src, req.GetAgentId(), req.GetFileSha256()); err != nil {
 		return nil, teamStatus(err)
 	}
 	list, err := s.ListAgents(ctx, &daemonv1.ListAgentsRequest{Name: req.GetName()})

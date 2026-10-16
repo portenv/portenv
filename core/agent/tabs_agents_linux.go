@@ -22,8 +22,11 @@ import (
 // can't set no_new_privs or clear ambient capabilities for a child, so the
 // switch happens in that process, before tmux runs.
 func agentAs(spec AgentServerSpec) (tmuxFunc, tmuxCmdFunc, error) {
-	if _, err := checkAsAgent(spec.UID, spec.GID, spec.Home); err != nil {
+	if err := checkAgentSpec(spec); err != nil {
 		return nil, nil, err
+	}
+	if err := checkTrustedFile(agentTmuxPath, 0); err != nil {
+		return nil, nil, fmt.Errorf("tmux: %w", err)
 	}
 	self, err := os.Executable()
 	if err != nil {
@@ -89,9 +92,9 @@ func RunAsAgent(args []string) error {
 	if err := os.Chdir(home); err != nil {
 		return err
 	}
-	path, err := exec.LookPath(argv[0])
-	if err != nil {
-		return err
+	// Checked again here, just before it runs.
+	if err := checkTrustedFile(agentTmuxPath, 0); err != nil {
+		return fmt.Errorf("tmux: %w", err)
 	}
-	return syscall.Exec(path, argv, os.Environ()) // #nosec G204 -- tmux, checked in parseAsAgent
+	return syscall.Exec(agentTmuxPath, argv, os.Environ()) // #nosec G204 -- tmux by its absolute path; argv checked in parseAsAgent
 }

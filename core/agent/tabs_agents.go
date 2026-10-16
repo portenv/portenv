@@ -6,12 +6,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -496,9 +498,72 @@ func (a *agentServer) String() string { return fmt.Sprintf("agent %s's tmux", a.
 // agentSocket is the agent's tmux socket, in its own 0700 folder.
 func agentSocket(spec AgentServerSpec) string { return filepath.Join(spec.SocketDir, "default") }
 
+// agentTmuxPath is the only program the switch to an agent runs: by its
+// absolute path, never through PATH (an agent's PATH starts with its own
+// ~/.local/bin, where it could put a "tmux" of its own whose output the
+// helper would trust; R-0265).
+const agentTmuxPath = "/usr/bin/tmux"
+
+// checkTrustedFile allows a program only when it and every folder above
+// it belong to owner (root, outside tests) and no group or other user can
+// write to them: a regular file, not a link.
+func checkTrustedFile(path string, owner uint32) error {
+	if !filepath.IsAbs(path) || filepath.Clean(path) != path {
+		return fmt.Errorf("%q isn't a clean absolute path", path)
+	}
+	for p := path; ; p = filepath.Dir(p) {
+		fi, err := os.Lstat(p)
+		if err != nil {
+			return err
+		}
+		if err := checkTrustedEntry(p, fi, owner, p == path); err != nil {
+			return err
+		}
+		if p == "/" {
+			return nil
+		}
+	}
+}
+
+// checkTrustedEntry checks one step of checkTrustedFile: the program a
+// plain file, each folder above it a folder (no links), all owner's, none
+// writable by group or others.
+func checkTrustedEntry(p string, fi os.FileInfo, owner uint32, program bool) error {
+	if program && !fi.Mode().IsRegular() {
+		return fmt.Errorf("%s isn't a plain file", p)
+	}
+	if !program && !fi.IsDir() {
+		return fmt.Errorf("%s isn't a folder", p)
+	}
+	st, ok := fi.Sys().(*syscall.Stat_t)
+	if !ok || st.Uid != owner {
+		return fmt.Errorf("%s isn't owned by uid %d", p, owner)
+	}
+	if fi.Mode().Perm()&0o022 != 0 {
+		return fmt.Errorf("%s can be written by its group or others", p)
+	}
+	return nil
+}
+
+// checkAgentSpec allows a start for an agent only: its uid and group, its
+// home /home/<id> and its tmux folder TeamRunDir/<id>/tmux.
+func checkAgentSpec(spec AgentServerSpec) error {
+	if !agentIDRE.MatchString(spec.ID) || spec.ID == "work" {
+		return fmt.Errorf("%q isn't an agent's id", spec.ID)
+	}
+	if spec.Home != "/home/"+spec.ID {
+		return fmt.Errorf("%q isn't %s's home", spec.Home, spec.ID)
+	}
+	if spec.SocketDir != filepath.Join(TeamRunDir, spec.ID, "tmux") {
+		return fmt.Errorf("%q isn't %s's tmux folder", spec.SocketDir, spec.ID)
+	}
+	_, err := checkAsAgent(spec.UID, spec.GID, spec.Home)
+	return err
+}
+
 // checkAsAgent allows the switch to an agent's user only: an agent's uid,
 // its own group, and a home under /home. Root, the helper, work and every
-// other uid are refused.
+// other uid are refused. It returns the agent's id, from its home.
 func checkAsAgent(uid, gid int, home string) (string, error) {
 	if uid < AgentUIDFirst || uid > AgentUIDLast {
 		return "", fmt.Errorf("uid %d isn't an agent's", uid)
@@ -509,17 +574,19 @@ func checkAsAgent(uid, gid int, home string) (string, error) {
 	if gid != uid {
 		return "", fmt.Errorf("gid %d isn't uid %d's own group", gid, uid)
 	}
-	if filepath.Clean(home) != home || filepath.Dir(home) != "/home" || home == "/home/work" {
+	id := strings.TrimPrefix(home, "/home/")
+	if filepath.Clean(home) != home || filepath.Dir(home) != "/home" || !agentIDRE.MatchString(id) || id == "work" {
 		return "", fmt.Errorf("%q isn't an agent's home", home)
 	}
-	return home, nil
+	return id, nil
 }
 
-// parseAsAgent reads "UID GID HOME -- tmux ARGS…" and checks it: the
-// switch is to an agent only, and the program is tmux only.
+// parseAsAgent reads "UID GID HOME -- tmux -S SOCKET ARGS…" and checks it:
+// the switch is to an agent only, the program is tmux only, and the
+// socket is that agent's own (TeamRunDir/<id>/tmux/default).
 func parseAsAgent(args []string) (uid, gid int, home string, argv []string, err error) {
-	if len(args) < 5 || args[3] != "--" || args[4] != "tmux" {
-		return 0, 0, "", nil, errors.New("usage: portenv-agent as-agent UID GID HOME -- tmux ARGS")
+	if len(args) < 7 || args[3] != "--" || args[4] != "tmux" || args[5] != "-S" {
+		return 0, 0, "", nil, errors.New("usage: portenv-agent as-agent UID GID HOME -- tmux -S SOCKET ARGS")
 	}
 	if uid, err = strconv.Atoi(args[0]); err != nil {
 		return 0, 0, "", nil, err
@@ -527,10 +594,14 @@ func parseAsAgent(args []string) (uid, gid int, home string, argv []string, err 
 	if gid, err = strconv.Atoi(args[1]); err != nil {
 		return 0, 0, "", nil, err
 	}
-	if home, err = checkAsAgent(uid, gid, args[2]); err != nil {
+	id, err := checkAsAgent(uid, gid, args[2])
+	if err != nil {
 		return 0, 0, "", nil, err
 	}
-	return uid, gid, home, args[4:], nil
+	if want := filepath.Join(TeamRunDir, id, "tmux", "default"); args[6] != want {
+		return 0, 0, "", nil, fmt.Errorf("%q isn't %s's tmux socket", args[6], id)
+	}
+	return uid, gid, args[2], args[4:], nil
 }
 
 // withUTF8 is env with LANG=C.UTF-8 unless it sets LANG: without a UTF-8

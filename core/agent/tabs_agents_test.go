@@ -232,28 +232,152 @@ func TestStoppingAnAgentEndsItsServer(t *testing.T) {
 
 // The switch is to an agent's user only, and only to run tmux.
 func TestAsAgentRefusesAnyoneButAnAgent(t *testing.T) {
-	ok := []string{"2001", "2001", "/home/builder", "--", "tmux", "-S", "/run/portenv-team/builder/tmux/default", "list-sessions"}
-	if _, _, _, argv, err := parseAsAgent(ok); err != nil || argv[0] != "tmux" {
+	ok := func() []string {
+		return []string{"2001", "2001", "/home/builder", "--", "tmux", "-S", "/run/portenv-team/builder/tmux/default", "list-sessions"}
+	}
+	if _, _, _, argv, err := parseAsAgent(ok()); err != nil || argv[0] != "tmux" {
 		t.Fatalf("an agent was refused: %v", err)
 	}
-	for name, args := range map[string][]string{
-		"root":                 {"0", "0", "/home/builder", "--", "tmux"},
-		"work":                 {"1000", "1000", "/home/builder", "--", "tmux"},
-		"portenv-sync":         {"990", "990", "/home/builder", "--", "tmux"},
-		"the team group's id":  {"2000", "2000", "/home/builder", "--", "tmux"},
-		"past the last agent":  {"2009", "2009", "/home/builder", "--", "tmux"},
-		"another group":        {"2001", "1000", "/home/builder", "--", "tmux"},
-		"work's home":          {"2001", "2001", "/home/work", "--", "tmux"},
-		"a home outside /home": {"2001", "2001", "/root", "--", "tmux"},
-		"a home that climbs":   {"2001", "2001", "/home/../root", "--", "tmux"},
-		"a program but tmux":   {"2001", "2001", "/home/builder", "--", "sh", "-c", "id"},
-		"no program":           {"2001", "2001", "/home/builder", "--"},
-		"no separator":         {"2001", "2001", "/home/builder", "tmux", "x"},
-		"a uid that isn't one": {"x", "2001", "/home/builder", "--", "tmux"},
+	// Each case changes one thing in ok.
+	for name, change := range map[string]func(a []string) []string{
+		"root":                 func(a []string) []string { a[0], a[1] = "0", "0"; return a },
+		"work":                 func(a []string) []string { a[0], a[1] = "1000", "1000"; return a },
+		"portenv-sync":         func(a []string) []string { a[0], a[1] = "990", "990"; return a },
+		"the team group's id":  func(a []string) []string { a[0], a[1] = "2000", "2000"; return a },
+		"past the last agent":  func(a []string) []string { a[0], a[1] = "2009", "2009"; return a },
+		"another group":        func(a []string) []string { a[1] = "1000"; return a },
+		"work's home":          func(a []string) []string { a[2] = "/home/work"; return a },
+		"a home outside /home": func(a []string) []string { a[2] = "/root"; return a },
+		"a home that climbs":   func(a []string) []string { a[2] = "/home/../root"; return a },
+		"a home that's no id":  func(a []string) []string { a[2] = "/home/Builder"; return a },
+		"a program but tmux":   func(a []string) []string { a[4] = "sh"; return a },
+		"tmux by a path":       func(a []string) []string { a[4] = "/home/builder/.local/bin/tmux"; return a },
+		"no separator":         func(a []string) []string { a[3] = "tmux"; return a },
+		"a uid that isn't one": func(a []string) []string { a[0] = "x"; return a },
+		"no socket":            func(a []string) []string { a[5] = "-L"; return a },
+		"another agent's":      func(a []string) []string { a[6] = "/run/portenv-team/reviewer/tmux/default"; return a },
+		"the main user's":      func(a []string) []string { a[6] = "/tmp/tmux-1000/default"; return a },
+		"a socket that climbs": func(a []string) []string {
+			a[6] = "/run/portenv-team/builder/tmux/../../reviewer/tmux/default"
+			return a
+		},
+		"too short": func(a []string) []string { return a[:6] },
 	} {
-		if _, _, _, _, err := parseAsAgent(args); err == nil {
+		if _, _, _, _, err := parseAsAgent(change(ok())); err == nil {
 			t.Errorf("%s: allowed", name)
 		}
+	}
+}
+
+// A start is for an agent's own home and tmux folder only.
+func TestAnAgentsSpecIsItsOwn(t *testing.T) {
+	ok := func() AgentServerSpec {
+		return AgentServerSpec{ID: "builder", UID: 2001, GID: 2001, Home: "/home/builder", SocketDir: "/run/portenv-team/builder/tmux"}
+	}
+	if err := checkAgentSpec(ok()); err != nil {
+		t.Fatalf("an agent was refused: %v", err)
+	}
+	for name, change := range map[string]func(s *AgentServerSpec){
+		"another agent's home":         func(s *AgentServerSpec) { s.Home = "/home/reviewer" },
+		"another agent's tmux folder":  func(s *AgentServerSpec) { s.SocketDir = "/run/portenv-team/reviewer/tmux" },
+		"a tmux folder elsewhere":      func(s *AgentServerSpec) { s.SocketDir = "/home/builder/tmux" },
+		"the agent's folder, not tmux": func(s *AgentServerSpec) { s.SocketDir = "/run/portenv-team/builder" },
+		"work": func(s *AgentServerSpec) {
+			s.ID, s.Home, s.SocketDir = "work", "/home/work", "/run/portenv-team/work/tmux"
+		},
+		"root's uid": func(s *AgentServerSpec) { s.UID, s.GID = 0, 0 },
+	} {
+		s := ok()
+		change(&s)
+		if err := checkAgentSpec(s); err == nil {
+			t.Errorf("%s: allowed", name)
+		}
+	}
+}
+
+// The switch to an agent runs tmux by its absolute path only, and only a
+// trusted file: an agent's own "tmux" early in its PATH is never run.
+func TestAPlantedTmuxIsNeverRun(t *testing.T) {
+	// The source: no PATH lookup anywhere in the switch.
+	for _, f := range []string{"tabs_agents.go", "tabs_agents_linux.go"} {
+		src, err := os.ReadFile(f) // #nosec G304 -- this package's own source
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(src), "LookPath") {
+			t.Errorf("%s looks tmux up in PATH", f)
+		}
+	}
+	if !filepath.IsAbs(agentTmuxPath) {
+		t.Fatalf("agentTmuxPath %q isn't absolute", agentTmuxPath)
+	}
+
+	// The trust check, on files this test owns.
+	me := uint32(os.Getuid()) // #nosec G115 -- a uid
+	dir, err := os.MkdirTemp("", "tt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	dir, _ = filepath.EvalSymlinks(dir)
+	tmux := filepath.Join(dir, "tmux")
+	if err := os.WriteFile(tmux, []byte("#!/bin/sh\n"), 0o755); err != nil { // #nosec G306 -- a test program
+		t.Fatal(err)
+	}
+	// Folders above the temp folder belong to root, not this test, so the
+	// owner check stops there for this user: refused, as it should be.
+	if err := checkTrustedFile(tmux, me); err == nil {
+		t.Error("trusted a file under folders it doesn't own")
+	}
+	if err := checkTrustedFile(tmux, 0); err == nil {
+		t.Error("trusted a file root doesn't own")
+	}
+	entry := func(path string, program bool) error {
+		t.Helper()
+		fi, err := os.Lstat(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return checkTrustedEntry(path, fi, me, program)
+	}
+	if err := entry(tmux, true); err != nil {
+		t.Errorf("its own 0755 file: %v", err)
+	}
+	for mode, why := range map[os.FileMode]string{0o775: "group-writable", 0o757: "writable by others"} {
+		if err := os.Chmod(tmux, mode); err != nil {
+			t.Fatal(err)
+		}
+		if err := entry(tmux, true); err == nil {
+			t.Errorf("trusted a %s program", why)
+		}
+	}
+	link := filepath.Join(dir, "link")
+	if err := os.Symlink("/usr/bin/env", link); err != nil {
+		t.Fatal(err)
+	}
+	if err := entry(link, true); err == nil {
+		t.Error("trusted a link")
+	}
+	if err := entry(link, false); err == nil {
+		t.Error("trusted a link as a folder")
+	}
+	if err := entry(dir, true); err == nil {
+		t.Error("trusted a folder as the program")
+	}
+	if err := os.Chmod(dir, 0o777); err != nil { // #nosec G302 -- the test
+		t.Fatal(err)
+	}
+	if err := entry(dir, false); err == nil {
+		t.Error("trusted a folder anyone can write to")
+	}
+	_ = os.Chmod(dir, 0o700)
+	for name, p := range map[string]string{"a relative path": "tmux", "a path that climbs": "/usr/bin/../bin/env"} {
+		if err := checkTrustedFile(p, 0); err == nil {
+			t.Errorf("%s: trusted", name)
+		}
+	}
+	if err := checkTrustedFile("/usr/bin/env", 0); err != nil {
+		t.Errorf("a root-owned program was refused: %v", err)
 	}
 }
 

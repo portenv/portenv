@@ -3,12 +3,12 @@
 package agent
 
 import (
-	"io"
 	"bytes"
 	"context"
 	"crypto/subtle"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"regexp"
 	"sync"

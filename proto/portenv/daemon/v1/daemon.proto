@@ -181,6 +181,8 @@ service DaemonService {
   rpc ReadAgentFile(ReadAgentFileRequest) returns (stream ReadAgentFileResponse);
   // Drag and drop. Refused past the agent's quota.
   rpc AddAgentFiles(stream AddAgentFilesRequest) returns (AddAgentFilesResponse);
+  // Pauses or resumes one of an agent's routines (R-0258).
+  rpc SetRoutinePaused(SetRoutinePausedRequest) returns (SetRoutinePausedResponse);
 }
 
 message CheckBoxRequest {
@@ -892,6 +894,10 @@ message AgentInfo {
   // (R-0245 item 4).
   string runner = 16;
   portenv.types.v1.AgentGrant grant = 17;
+  // What it says it's working on (R-0256); empty when it hasn't said.
+  portenv.types.v1.AgentStatus status = 18;
+  // Its routines (R-0258).
+  repeated portenv.types.v1.Routine routines = 19;
 }
 
 message WatchTeamRequest {
@@ -970,6 +976,8 @@ message SendMessageRequest {
   string to = 2;
   string thread_id = 3;
   string text = 4;
+  // NOTICE (the default) or STATUS_REQUEST (Ask for Status, R-0256).
+  portenv.types.v1.MessageType type = 5;
 }
 
 message SendMessageResponse {
@@ -1023,4 +1031,16 @@ message AddAgentFilesRequest {
 
 message AddAgentFilesResponse {
   repeated portenv.types.v1.AgentFile added = 1;
+}
+
+message SetRoutinePausedRequest {
+  string name = 1;
+  string agent_id = 2;
+  // The routine's place in the agent file's list.
+  int32 index = 3;
+  bool paused = 4;
+}
+
+message SetRoutinePausedResponse {
+  AgentInfo agent = 1;
 }

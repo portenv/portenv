@@ -35,6 +35,20 @@ struct PortenvApp: App {
         if let i = CommandLine.arguments.firstIndex(of: "--render-screens"), i + 1 < CommandLine.arguments.count {
             exit(MainActor.assumeIsolated { ScreenRenders.write(to: CommandLine.arguments[i + 1]) })
         }
+        #if PORTENV_DEV_PREVIEWS
+        // Lane builds only (R-0220): the command blocks in a window of their
+        // own, with no portenvd; closing it quits.
+        if CommandLine.arguments.contains(BlocksPreview.argument) {
+            MainActor.assumeIsolated {
+                let app = NSApplication.shared
+                app.setActivationPolicy(.regular)
+                BlocksPreview.show()
+                NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: nil, queue: .main) { _ in exit(0) }
+                app.run()
+            }
+            exit(0)
+        }
+        #endif
     }
 
     var body: some Scene {

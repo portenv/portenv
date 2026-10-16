@@ -160,7 +160,7 @@ func checkLines(kv map[string]string, now time.Time) []CheckLine {
 	arch := map[string]string{"x86_64": "amd64", "amd64": "amd64", "aarch64": "arm64", "arm64": "arm64"}[kv["arch"]]
 	switch {
 	case !osOK:
-		add("system", "System", false, "", "Portenv sets up servers running Ubuntu 22.04 or 24.04. Choose a server with one of those, then choose Check Again.")
+		add("system", "System", false, "", "Portenv sets up servers running Ubuntu 22.04 or 24.04 for now. Choose a server with one of those, then choose Check Again.")
 	case arch == "":
 		add("system", "System", false, "", "Portenv needs an arm64 or amd64 (x86-64) server. Choose a server with one of those, then choose Check Again.")
 	default:

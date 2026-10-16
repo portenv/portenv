@@ -119,6 +119,7 @@ test: $(TOOLS_STAMP)
 	scripts/test-check-terminal-views.sh
 	scripts/test-attached-terminal.sh
 	scripts/test-check-ssh-keygen.sh
+	scripts/test-check-dev-previews.sh
 
 ## fuzz: the workspace helper's control-mode decoder, line reader and pane parser, briefly (R-0162, R-0142)
 # Counts of runs, not durations: with a duration, go test fails with
@@ -150,6 +151,7 @@ lint: $(TOOLS_STAMP) $(SHELLCHECK) spdx-check
 	scripts/check-terminal-views.sh
 	scripts/check-ssh-keygen.sh
 	python3 -I scripts/check-workspace-word.py
+	scripts/check-dev-previews.sh
 
 ## fmt: format Go and proto sources
 fmt: $(TOOLS_STAMP)
@@ -237,7 +239,9 @@ endif
 SWIFT := env -i PATH="$(PATH)" HOME="$(HOME)" TMPDIR="$(or $(TMPDIR),/tmp)" LANG=en_US.UTF-8 swift
 app: build $(TOOLS_STAMP)
 	# Source paths remapped: a release build never carries this machine's paths.
-	cd apps/mac && $(SWIFT) build -c release --scratch-path "$(APP_BUILD)" $(APP_SWIFTFLAGS) \
+	# A lane build also compiles the dev-only previews (R-0220); a release
+	# build never does, and check-dev-previews.sh checks its binary below.
+	cd apps/mac && $(SWIFT) build -c release --scratch-path "$(APP_BUILD)" $(if $(LANE),-Xswiftc -DPORTENV_DEV_PREVIEWS) $(APP_SWIFTFLAGS) \
 		-Xswiftc -file-prefix-map -Xswiftc "$(CURDIR)/=" -Xcc -ffile-prefix-map="$(CURDIR)/=" \
 		-Xswiftc -file-prefix-map -Xswiftc "$(APP_BUILD)/=build/" -Xcc -ffile-prefix-map="$(APP_BUILD)/=build/"
 	rm -rf $(BIN)/Portenv.app && mkdir -p $(BIN)/Portenv.app/Contents/MacOS
@@ -272,6 +276,7 @@ app: build $(TOOLS_STAMP)
 	go run ./core/tools/notices check --app $(BIN)/Portenv.app --resolved apps/mac/Package.resolved
 	$(if $(INSTANCE),scripts/stamp-instance.sh $(BIN)/Portenv.app $(INSTANCE))
 	scripts/check-app-identity.sh $(BIN)/Portenv.app $(INSTANCE)
+	$(if $(LANE),,scripts/check-dev-previews.sh --binary $(BIN)/Portenv.app/Contents/MacOS/Portenv)
 	scripts/check-build-paths.sh $(BIN)/Portenv.app/Contents/MacOS/Portenv $(addprefix $(BIN)/Portenv.app/Contents/Helpers/,portenv portenvd restic)
 	codesign --force --sign - $(BIN)/Portenv.app
 

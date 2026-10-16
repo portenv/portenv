@@ -50,6 +50,8 @@ fi
 
 check "portenv-agent is PID 1" test "$(in_box ps -p 1 -o comm=)" = portenv-agent
 check "work has uid 1000" test "$(in_box id -u work)" = 1000
+# A workspace with no agent team: /home/team and agents' homes appear only
+# with a team's first agent (ADR 0022 §1), never at a plain start.
 check "/home holds only work" test "$(in_box ls -A /home)" = work
 check "home is 0700 and owned by work" test "$(in_box stat -c '%a %U' /home/work)" = "700 work"
 check "skeleton apt-packages.txt" in_box test -f /home/work/.portenv/apt-packages.txt

@@ -17,7 +17,7 @@ SHELL := $(CURDIR)/scripts/make-shell
 .SHELLFLAGS := -c
 
 BIN := $(CURDIR)/bin
-GO_MODULES := core proto/gen/go
+GO_MODULES := core proto/gen/go tests/team-boundary
 CMDS := portenvd portenv-runner portenv-agent portenv
 AGENT_ARCHES := arm64 amd64
 
@@ -61,7 +61,7 @@ SWIFT_PROTOBUF := 1.38.1
 GRPC_SWIFT_PROTOBUF := 2.4.1
 SWIFT_PLUGINS := $(BIN)/protoc-gen-swift $(BIN)/protoc-gen-grpc-swift-2
 
-.PHONY: all build app release-local unregister-service test fuzz lint fmt proto proto-go proto-swift proto-check proto-check-go agent-linux cli-linux cli-darwin swift-test swift-env-check \
+.PHONY: team-boundary all build app release-local unregister-service test fuzz lint fmt proto proto-go proto-swift proto-check proto-check-go agent-linux cli-linux cli-darwin swift-test swift-env-check \
 	secrets spdx-check check tools clean image image-test driver-test e2e
 
 all: build test lint proto-check
@@ -291,6 +291,10 @@ image-test: image
 ## driver-test: run the driver conformance suite against Docker with $(IMAGE)
 driver-test:
 	PORTENV_TEST_IMAGE=$(IMAGE) go test -count=1 -timeout 20m ./core/driver/docker/
+
+## team-boundary: the per-agent user boundary (ADR 0022) against $(IMAGE): every row as an agent, then with its mutation, which must fail it. TEAM_SETUP=fixture (the ADR's layout, built by the test) or real (the helper's team start; what the preview is gated on)
+team-boundary:
+	PORTENV_TEST_IMAGE=$(IMAGE) PORTENV_TEAM_SETUP=$(or $(TEAM_SETUP),fixture) go test -count=1 -timeout 20m -v ./tests/team-boundary/
 
 ## e2e: restic isolation probe, two machines, SFTP storage and portenvd against $(IMAGE)
 e2e: build $(TOOLS_STAMP)

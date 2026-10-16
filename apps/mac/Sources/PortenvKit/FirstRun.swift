@@ -197,12 +197,17 @@ public final class FirstRunFlow {
     /// often, for this long, saying so, before it fails (R-0202).
     private let retryEvery: Duration
     private let retryFor: Duration
+    /// Time awake: a Mac asleep mid-wait mustn't spend it (a wall clock did,
+    /// on 2026-10-16).
+    private let awake: @Sendable () -> SuspendingClock.Instant
 
     public init(service: FirstRunService, at start: FirstRunStep = .welcome, existing: [String] = [], fromBoxList: Bool = false,
                 memory: FirstRunMemory = NoFirstRunMemory(), retryEvery: Duration = .seconds(1), retryFor: Duration = .seconds(10),
-                docker: DockerStatus? = .running, serviceGone: Bool = false) {
+                docker: DockerStatus? = .running, serviceGone: Bool = false,
+                awake: @escaping @Sendable () -> SuspendingClock.Instant = { .now }) {
         self.retryEvery = retryEvery
         self.retryFor = retryFor
+        self.awake = awake
         self.service = service
         self.docker = docker
         // Reached after the launch's own two misses (R-0121): already said.
@@ -380,12 +385,12 @@ public final class FirstRunFlow {
     /// tries again, for up to retryFor. Every step is safe to repeat
     /// (CreateBox is idempotent on the box ID, ADR 0019).
     private func whileServiceStarts(_ body: () async throws -> Void) async throws {
-        var deadline: ContinuousClock.Instant? // from when it's first found down
+        var deadline: SuspendingClock.Instant? // from when it's first found down, in time awake
         while true {
             do {
                 return try await body()
-            } catch where DaemonErrorText.isServiceDown(error) && ContinuousClock.now < (deadline ?? .now + retryFor) {
-                if deadline == nil { deadline = .now + retryFor }
+            } catch where DaemonErrorText.isServiceDown(error) && awake() < (deadline ?? awake() + retryFor) {
+                if deadline == nil { deadline = awake() + retryFor }
                 notice = DaemonErrorText.starting
                 try? await Task.sleep(for: retryEvery)
             }

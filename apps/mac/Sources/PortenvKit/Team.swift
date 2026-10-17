@@ -360,6 +360,28 @@ public enum TeamText {
     }
 }
 
+/// How an avatar looks. The owner's is their own (a person on grey), and
+/// no agent's can look like it: an agent never gets grey or a person
+/// symbol, whatever its file says (R-0253), so nothing an agent sets can
+/// pass for the owner.
+public struct AvatarLook: Equatable, Sendable {
+    /// An SF Symbol, or nil for the initial.
+    public var symbol: String?
+    public var initial: String
+    /// One of AgentColours.order, or "gray" for the owner.
+    public var colour: String
+
+    public static let owner = AvatarLook(symbol: "person.fill", initial: "", colour: "gray")
+
+    /// An agent's: its file's SF Symbol when it names a real one that isn't
+    /// a person, else its initial; its colour by team order (GUIDELINES 11).
+    public static func agent(_ a: TeamAgent, in team: [TeamAgent], isSymbol: (String) -> Bool) -> AvatarLook {
+        let symbol = !AgentColours.order.contains(a.avatar) && !a.avatar.hasPrefix("person") && isSymbol(a.avatar) ? a.avatar : nil
+        let initial = a.name.first.map { String($0).uppercased() } ?? "?"
+        return AvatarLook(symbol: symbol, initial: initial, colour: AgentColours.name(for: a, in: team))
+    }
+}
+
 /// GUIDELINES §11: agent colours in this order, by team order; an avatar
 /// that names one of them keeps it.
 public enum AgentColours {

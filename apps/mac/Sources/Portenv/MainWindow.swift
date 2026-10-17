@@ -37,7 +37,7 @@ struct MainWindow: View {
 
     /// Open while an agent is selected, whatever the person last chose.
     private var columnOpen: Binding<Bool> {
-        Binding(get: { inspectorOpen || agent != nil }, set: { inspectorOpen = $0 })
+        Binding(get: { inspectorOpen || agent != nil || team?.selectedDecision != nil }, set: { inspectorOpen = $0 })
     }
 
     var body: some View {
@@ -57,6 +57,9 @@ struct MainWindow: View {
             .boxWindowColumns(inspectorOpen: columnOpen) {
                 if let agent, let team {
                     TeamColumn(agent: agent, team: team)
+                        .inspectorToggle(isOpen: columnOpen)
+                } else if let team, let decision = team.selectedDecision {
+                    DecisionColumn(decision: decision, team: team)
                         .inspectorToggle(isOpen: columnOpen)
                 } else {
                     inspectorView

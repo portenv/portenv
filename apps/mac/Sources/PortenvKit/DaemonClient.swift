@@ -498,6 +498,19 @@ extension DaemonClient {
         let req = Portenv_Daemon_V1_StopAgentRequest.with { $0.name = box; $0.agentID = id }
         return try await call { TeamAgent(try await api.stopAgent(req).agent) }
     }
+
+    public func getAgentFile(_ box: String, id: String) async throws -> AgentFileContent {
+        let req = Portenv_Daemon_V1_GetAgentFileRequest.with { $0.name = box; $0.agentID = id }
+        return try await call {
+            let r = try await api.getAgentFile(req)
+            return AgentFileContent(content: r.content, sha256: r.fileSha256, approvedContent: r.approvedContent, runner: r.runner)
+        }
+    }
+
+    public func approveAgentFile(_ box: String, id: String, sha256: String) async throws -> TeamAgent {
+        let req = Portenv_Daemon_V1_ApproveAgentFileRequest.with { $0.name = box; $0.agentID = id; $0.fileSha256 = sha256 }
+        return try await call { TeamAgent(try await api.approveAgentFile(req).agent) }
+    }
 }
 
 extension TeamEvent {

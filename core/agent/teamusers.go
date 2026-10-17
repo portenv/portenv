@@ -79,6 +79,11 @@ type TeamUsers struct {
 
 	mu         sync.Mutex
 	restoreErr error
+	// homeFixes are what box starts fixed in the owner's home, for the
+	// next team start's notice (R-0262); groupOf reads a path's group (a
+	// fake in tests).
+	homeFixes []string
+	groupOf   func(string) int
 }
 
 type agentUserRecord struct {
@@ -92,6 +97,9 @@ type agentUserRecord struct {
 type teamUsersFile struct {
 	Version int               `json:"version"`
 	Users   []agentUserRecord `json:"users"`
+	// Projects are the project folders a team has opened (R-0262: the
+	// home is re-checked around them at every box start).
+	Projects []string `json:"projects,omitempty"`
 }
 
 func (t *TeamUsers) storePath() string {
@@ -245,6 +253,13 @@ func (t *TeamUsers) restore(ctx context.Context) error {
 	}
 	if err := t.ensureTeamDir(); err != nil {
 		return err
+	}
+	// The owner's home, again, at every box start with a team (R-0262).
+	work := filepath.Join(t.Cfg.HomeRoot, t.Cfg.User)
+	if fixed, err := t.tightenHome(work, store.Projects); err != nil {
+		return err
+	} else if len(fixed) > 0 {
+		t.homeFixes = append(t.homeFixes, fixed...)
 	}
 	var errs []error
 	for _, rec := range store.Users {

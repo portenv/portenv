@@ -25,33 +25,34 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	AgentService_GetVersion_FullMethodName      = "/portenv.agent.v1.AgentService/GetVersion"
-	AgentService_GetReadiness_FullMethodName    = "/portenv.agent.v1.AgentService/GetReadiness"
-	AgentService_RetryPackages_FullMethodName   = "/portenv.agent.v1.AgentService/RetryPackages"
-	AgentService_RunRestic_FullMethodName       = "/portenv.agent.v1.AgentService/RunRestic"
-	AgentService_GetPathInfo_FullMethodName     = "/portenv.agent.v1.AgentService/GetPathInfo"
-	AgentService_Terminal_FullMethodName        = "/portenv.agent.v1.AgentService/Terminal"
-	AgentService_ListTabs_FullMethodName        = "/portenv.agent.v1.AgentService/ListTabs"
-	AgentService_NewTab_FullMethodName          = "/portenv.agent.v1.AgentService/NewTab"
-	AgentService_CloseTab_FullMethodName        = "/portenv.agent.v1.AgentService/CloseTab"
-	AgentService_RenameTab_FullMethodName       = "/portenv.agent.v1.AgentService/RenameTab"
-	AgentService_SelectTab_FullMethodName       = "/portenv.agent.v1.AgentService/SelectTab"
-	AgentService_WatchTabs_FullMethodName       = "/portenv.agent.v1.AgentService/WatchTabs"
-	AgentService_TabTerminal_FullMethodName     = "/portenv.agent.v1.AgentService/TabTerminal"
-	AgentService_TeamCalls_FullMethodName       = "/portenv.agent.v1.AgentService/TeamCalls"
-	AgentService_StartTeamAgent_FullMethodName  = "/portenv.agent.v1.AgentService/StartTeamAgent"
-	AgentService_StopTeamAgent_FullMethodName   = "/portenv.agent.v1.AgentService/StopTeamAgent"
-	AgentService_AppendBoard_FullMethodName     = "/portenv.agent.v1.AgentService/AppendBoard"
-	AgentService_ListHomeFiles_FullMethodName   = "/portenv.agent.v1.AgentService/ListHomeFiles"
-	AgentService_ReadHomeFile_FullMethodName    = "/portenv.agent.v1.AgentService/ReadHomeFile"
-	AgentService_WriteHomeFiles_FullMethodName  = "/portenv.agent.v1.AgentService/WriteHomeFiles"
-	AgentService_EnsureAgentUser_FullMethodName = "/portenv.agent.v1.AgentService/EnsureAgentUser"
-	AgentService_RemoveAgentUser_FullMethodName = "/portenv.agent.v1.AgentService/RemoveAgentUser"
-	AgentService_SimulatePackage_FullMethodName = "/portenv.agent.v1.AgentService/SimulatePackage"
-	AgentService_InstallPackages_FullMethodName = "/portenv.agent.v1.AgentService/InstallPackages"
-	AgentService_AgentPaneAction_FullMethodName = "/portenv.agent.v1.AgentService/AgentPaneAction"
-	AgentService_ReadBoard_FullMethodName       = "/portenv.agent.v1.AgentService/ReadBoard"
-	AgentService_ReadAgentFiles_FullMethodName  = "/portenv.agent.v1.AgentService/ReadAgentFiles"
+	AgentService_GetVersion_FullMethodName         = "/portenv.agent.v1.AgentService/GetVersion"
+	AgentService_GetReadiness_FullMethodName       = "/portenv.agent.v1.AgentService/GetReadiness"
+	AgentService_RetryPackages_FullMethodName      = "/portenv.agent.v1.AgentService/RetryPackages"
+	AgentService_RunRestic_FullMethodName          = "/portenv.agent.v1.AgentService/RunRestic"
+	AgentService_GetPathInfo_FullMethodName        = "/portenv.agent.v1.AgentService/GetPathInfo"
+	AgentService_Terminal_FullMethodName           = "/portenv.agent.v1.AgentService/Terminal"
+	AgentService_ListTabs_FullMethodName           = "/portenv.agent.v1.AgentService/ListTabs"
+	AgentService_NewTab_FullMethodName             = "/portenv.agent.v1.AgentService/NewTab"
+	AgentService_CloseTab_FullMethodName           = "/portenv.agent.v1.AgentService/CloseTab"
+	AgentService_RenameTab_FullMethodName          = "/portenv.agent.v1.AgentService/RenameTab"
+	AgentService_SelectTab_FullMethodName          = "/portenv.agent.v1.AgentService/SelectTab"
+	AgentService_WatchTabs_FullMethodName          = "/portenv.agent.v1.AgentService/WatchTabs"
+	AgentService_TabTerminal_FullMethodName        = "/portenv.agent.v1.AgentService/TabTerminal"
+	AgentService_TeamCalls_FullMethodName          = "/portenv.agent.v1.AgentService/TeamCalls"
+	AgentService_StartTeamAgent_FullMethodName     = "/portenv.agent.v1.AgentService/StartTeamAgent"
+	AgentService_StopTeamAgent_FullMethodName      = "/portenv.agent.v1.AgentService/StopTeamAgent"
+	AgentService_AppendBoard_FullMethodName        = "/portenv.agent.v1.AgentService/AppendBoard"
+	AgentService_ListHomeFiles_FullMethodName      = "/portenv.agent.v1.AgentService/ListHomeFiles"
+	AgentService_ReadHomeFile_FullMethodName       = "/portenv.agent.v1.AgentService/ReadHomeFile"
+	AgentService_WriteHomeFiles_FullMethodName     = "/portenv.agent.v1.AgentService/WriteHomeFiles"
+	AgentService_EnsureAgentUser_FullMethodName    = "/portenv.agent.v1.AgentService/EnsureAgentUser"
+	AgentService_RemoveAgentUser_FullMethodName    = "/portenv.agent.v1.AgentService/RemoveAgentUser"
+	AgentService_SimulatePackage_FullMethodName    = "/portenv.agent.v1.AgentService/SimulatePackage"
+	AgentService_InstallPackages_FullMethodName    = "/portenv.agent.v1.AgentService/InstallPackages"
+	AgentService_AgentPaneAction_FullMethodName    = "/portenv.agent.v1.AgentService/AgentPaneAction"
+	AgentService_ReadBoard_FullMethodName          = "/portenv.agent.v1.AgentService/ReadBoard"
+	AgentService_ReadAgentFiles_FullMethodName     = "/portenv.agent.v1.AgentService/ReadAgentFiles"
+	AgentService_PrepareTeamProject_FullMethodName = "/portenv.agent.v1.AgentService/PrepareTeamProject"
 )
 
 // AgentServiceClient is the client API for AgentService service.
@@ -129,6 +130,12 @@ type AgentServiceClient interface {
 	ReadBoard(ctx context.Context, in *ReadBoardRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ReadBoardResponse], error)
 	// The project's agent files (.portenv/agents/*.md), read by the helper.
 	ReadAgentFiles(ctx context.Context, in *ReadAgentFilesRequest, opts ...grpc.CallOption) (*ReadAgentFilesResponse, error)
+	// Served only by init: opens the project to the team at team start
+	// (ADR 0022 §2): /home/work 0711 with its dotfiles 0700, the project's
+	// group team, setgid folders and default ACLs, with .git/hooks,
+	// .git/config and .portenv/ never group-writable. Refuses with a plain
+	// line when the filesystem won't keep ACLs.
+	PrepareTeamProject(ctx context.Context, in *PrepareTeamProjectRequest, opts ...grpc.CallOption) (*PrepareTeamProjectResponse, error)
 }
 
 type agentServiceClient struct {
@@ -448,6 +455,16 @@ func (c *agentServiceClient) ReadAgentFiles(ctx context.Context, in *ReadAgentFi
 	return out, nil
 }
 
+func (c *agentServiceClient) PrepareTeamProject(ctx context.Context, in *PrepareTeamProjectRequest, opts ...grpc.CallOption) (*PrepareTeamProjectResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PrepareTeamProjectResponse)
+	err := c.cc.Invoke(ctx, AgentService_PrepareTeamProject_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AgentServiceServer is the server API for AgentService service.
 // All implementations must embed UnimplementedAgentServiceServer
 // for forward compatibility.
@@ -523,6 +540,12 @@ type AgentServiceServer interface {
 	ReadBoard(*ReadBoardRequest, grpc.ServerStreamingServer[ReadBoardResponse]) error
 	// The project's agent files (.portenv/agents/*.md), read by the helper.
 	ReadAgentFiles(context.Context, *ReadAgentFilesRequest) (*ReadAgentFilesResponse, error)
+	// Served only by init: opens the project to the team at team start
+	// (ADR 0022 §2): /home/work 0711 with its dotfiles 0700, the project's
+	// group team, setgid folders and default ACLs, with .git/hooks,
+	// .git/config and .portenv/ never group-writable. Refuses with a plain
+	// line when the filesystem won't keep ACLs.
+	PrepareTeamProject(context.Context, *PrepareTeamProjectRequest) (*PrepareTeamProjectResponse, error)
 	mustEmbedUnimplementedAgentServiceServer()
 }
 
@@ -613,6 +636,9 @@ func (UnimplementedAgentServiceServer) ReadBoard(*ReadBoardRequest, grpc.ServerS
 }
 func (UnimplementedAgentServiceServer) ReadAgentFiles(context.Context, *ReadAgentFilesRequest) (*ReadAgentFilesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ReadAgentFiles not implemented")
+}
+func (UnimplementedAgentServiceServer) PrepareTeamProject(context.Context, *PrepareTeamProjectRequest) (*PrepareTeamProjectResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method PrepareTeamProject not implemented")
 }
 func (UnimplementedAgentServiceServer) mustEmbedUnimplementedAgentServiceServer() {}
 func (UnimplementedAgentServiceServer) testEmbeddedByValue()                      {}
@@ -1056,6 +1082,24 @@ func _AgentService_ReadAgentFiles_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AgentService_PrepareTeamProject_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PrepareTeamProjectRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentServiceServer).PrepareTeamProject(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentService_PrepareTeamProject_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentServiceServer).PrepareTeamProject(ctx, req.(*PrepareTeamProjectRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AgentService_ServiceDesc is the grpc.ServiceDesc for AgentService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1142,6 +1186,10 @@ var AgentService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ReadAgentFiles",
 			Handler:    _AgentService_ReadAgentFiles_Handler,
+		},
+		{
+			MethodName: "PrepareTeamProject",
+			Handler:    _AgentService_PrepareTeamProject_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

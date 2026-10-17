@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"regexp"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -15,6 +16,9 @@ import (
 
 	agentv1 "github.com/portenv/portenv/proto/gen/go/portenv/agent/v1"
 )
+
+// maxIdlePattern is the helper's limit on an idle-input pattern.
+const maxIdlePattern = 512
 
 // maxAgentsMD caps AGENTS.md: the generated block and a file's
 // instructions (32 KB, ADR 0022 §3), with room to spare.
@@ -73,6 +77,11 @@ func (s *apiServer) StartTeamAgent(ctx context.Context, req *agentv1.StartTeamAg
 	if len(argv) == 0 || argv[0] == "" {
 		return nil, status.Errorf(codes.InvalidArgument, "%s has no runner", id)
 	}
+	if p := req.GetIdlePattern(); len(p) > maxIdlePattern {
+		return nil, status.Errorf(codes.InvalidArgument, "%s's idle pattern is over %d bytes", id, maxIdlePattern)
+	} else if _, err := regexp.Compile(p); err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "%s's idle pattern: %v", id, err)
+	}
 	if len(req.GetAgentsMd()) > maxAgentsMD {
 		return nil, status.Errorf(codes.InvalidArgument, "%s's AGENTS.md is over %d KB", id, maxAgentsMD>>10)
 	}
@@ -113,6 +122,13 @@ func (s *apiServer) StartTeamAgent(ctx context.Context, req *agentv1.StartTeamAg
 	tabs, err := start(ctx, spec)
 	if err != nil {
 		return nil, fail(codes.Internal, "start %s's terminal: %v", id, err)
+	}
+	// The runner's idle-input pattern, for routines (R-0258): none means
+	// the agent gets no routines.
+	if p := req.GetIdlePattern(); p != "" && s.setAgentIdleInput != nil {
+		if err := s.setAgentIdleInput(id, p); err != nil {
+			return nil, status.Errorf(codes.Internal, "set %s's idle pattern: %v", id, err)
+		}
 	}
 	return &agentv1.StartTeamAgentResponse{Tabs: tabs}, nil
 }

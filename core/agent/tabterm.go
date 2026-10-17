@@ -60,8 +60,9 @@ func (s *apiServer) TabTerminal(stream agentv1.AgentService_TabTerminalServer) e
 	if open == nil {
 		return status.Error(codes.InvalidArgument, "the first message must open a tab")
 	}
-	if !windowIDRE.MatchString(open.GetTab()) {
-		return status.Error(codes.InvalidArgument, "a tab ID is @ and a number")
+	agentTabID, window, valid := SplitTabID(open.GetTab())
+	if !valid {
+		return status.Error(codes.InvalidArgument, "a tab ID is @ and a number, or an agent's: builder:@3")
 	}
 	name, agentID := strings.TrimSpace(open.GetAuthor()), open.GetAuthorAgentId()
 	if utf8.RuneCountInString(name) > maxAuthorName || strings.IndexFunc(name, isControl) >= 0 || !utf8.ValidString(name) {
@@ -75,21 +76,31 @@ func (s *apiServer) TabTerminal(stream agentv1.AgentService_TabTerminalServer) e
 		return err
 	}
 	ctx := stream.Context()
-	hub, err := s.ctlHub()
-	if err != nil {
-		return status.Errorf(codes.FailedPrecondition, "tab terminals: %v", err)
+	var hub *ctlHub
+	session := tb.session
+	if agentTabID != "" {
+		// An agent's tab: on its own server, through its own client.
+		a, _, _, err := s.agentTab(ctx, open.GetTab())
+		if err != nil {
+			return err
+		}
+		hub, session = a.hub, agentSession
+	} else {
+		if hub, err = s.ctlHub(); err != nil {
+			return status.Errorf(codes.FailedPrecondition, "tab terminals: %v", err)
+		}
+		if err := tb.ensure(ctx); err != nil {
+			return err
+		}
 	}
-	if err := tb.ensure(ctx); err != nil {
-		return err
-	}
-	sub, stop, err := hub.subscribe(ctx, tb.session)
+	sub, stop, err := hub.subscribe(ctx, session)
 	if errors.Is(err, errTmuxTooOld) {
 		return status.Error(codes.FailedPrecondition, "This workspace's tmux is too old for the app's terminal (needs 3.4 or later).")
 	} else if err != nil {
 		return status.Errorf(codes.Unavailable, "tab terminal: %v", err)
 	}
 	defer stop()
-	t := &tabStream{inputIDs: map[uint64]int{}, hub: hub, session: tb.session, tab: open.GetTab(), sub: sub, stream: stream, author: name, agentID: agentID}
+	t := &tabStream{inputIDs: map[uint64]int{}, hub: hub, session: session, tab: window, sub: sub, stream: stream, author: name, agentID: agentID}
 	if size := open.GetSize(); size.GetCols() > 0 && size.GetRows() > 0 {
 		t.size = [2]int{int(size.GetCols()), int(size.GetRows())} // #nosec G115 -- checked below
 	}
@@ -353,6 +364,24 @@ func (t *tabStream) input(b []byte) (map[uint64]int, error) {
 	return ids, nil
 }
 
+// oldestPane is the pane a window was made with: tmux never reuses pane IDs
+// and numbers them in order, so it's the lowest one still there (the next
+// oldest, if that one has exited).
+func oldestPane(lines []string) string {
+	best, bestN := "", -1
+	for _, l := range lines {
+		l = strings.TrimSpace(l)
+		n, err := strconv.Atoi(strings.TrimPrefix(l, "%"))
+		if !strings.HasPrefix(l, "%") || err != nil || n < 0 {
+			continue
+		}
+		if bestN < 0 || n < bestN {
+			best, bestN = l, n
+		}
+	}
+	return best
+}
+
 // reset sends the tab's current state: its pane is found, its size set,
 // then the seed is taken in one command list, so no output lands inside
 // it; output for the pane until the seed's reply came is already in the
@@ -396,8 +425,10 @@ func (t *tabStream) resetOnce(ctx context.Context, skipped bool) error {
 	}
 	ctx, cancel := context.WithTimeout(ctx, seedTimeout)
 	defer cancel()
-	// The tab's pane.
-	id, err := c.send("display -p -t "+t.tab+" '#{pane_id}'", "", nil)
+	// The tab's pane: the one it was made with, never the window's active
+	// pane, so a pane split into the window (by anything running in the
+	// workspace) can't take the tab over on screen (R-0228, R-0231).
+	id, err := c.send("list-panes -t "+t.tab+" -F '#{pane_id}'", "", nil)
 	if err != nil {
 		return nil
 	}
@@ -405,8 +436,8 @@ func (t *tabStream) resetOnce(ctx context.Context, skipped bool) error {
 	if err != nil || !ok {
 		return err
 	}
-	pane := strings.TrimSpace(strings.Join(r.lines, ""))
-	if r.failed || !strings.HasPrefix(pane, "%") {
+	pane := oldestPane(r.lines)
+	if r.failed || pane == "" {
 		return t.closed() // the tab is gone
 	}
 	t.pane = pane

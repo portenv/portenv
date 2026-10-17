@@ -383,6 +383,7 @@ extension BoxState {
         storagePlace = r.storagePlace.isEmpty ? nil : r.storagePlace
         openedAt = r.hasOpenedAt ? r.openedAt.date : nil
         restartedForSecurityUpdate = r.restartedForSecurityUpdate
+        if r.hasImagePull { imagePull = ImagePull(done: r.imagePull.doneBytes, total: r.imagePull.totalBytes) }
     }
 }
 
@@ -551,6 +552,9 @@ extension TeamMessage {
         let kind: Kind = switch m.type {
         case .question: .question
         case .notice: .notice
+        // These show as notices until the sidebar gives them their own
+        // kinds (lane D).
+        case .statusRequest, .routine, .handoff: .notice
         case .answer, .unspecified, .UNRECOGNIZED: .answer
         }
         self.init(id: m.id, from: m.from, to: m.to, threadID: m.threadID, kind: kind, text: m.text,

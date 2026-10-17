@@ -132,6 +132,13 @@ Each false "waiting" is removed by another signal: OSC 133 removes the idle shel
 - **Real Claude Code and a real second agent CLI** replace the stand-ins later. They need accounts, so not in this spike (the owner, 2026-10-10).
 - **Inside a real box,** the agent reads `/proc` and runs `stty` as the main user. The spike ran those as that user directly, but the agent's helper for it isn't built yet.
 - **The quiet threshold (1.5 s), the 8 screen lines and the probe interval** are first values, to tune against real agent CLIs.
+- **A new case, "an agent idle at its input box" (R-0258, R-0260),** is still to be labelled with the real CLI. "Waiting" here means asking a person something, not idle. A routine typed into a pending question would answer it, so routines to an agent (ADR 0022) are typed only when all four of these hold:
+  - the detector says the agent is **not** waiting;
+  - its window has printed nothing for 5 s;
+  - it isn't on the alternate screen;
+  - the runner's own idle-input pattern, which the kit supplies, matches its last lines.
+
+  The helper can't read an agent's `/proc` or terminal modes, because the agent is another user. So for agents the verdict rests on the screen and the quiet time. Today the tests use stand-ins: an empty input box, a y/n question with and without the box, steady output, a full-screen program, no pattern, and a busy line. The real CLI's idle screen, and each runner's pattern, get labelled when its account is available.
 
 ## Consequences
 

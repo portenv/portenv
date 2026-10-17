@@ -17,6 +17,7 @@ import SwiftUI
 enum BlocksPreview {
     static let argument = "--blocks-preview"
     private static var window: NSWindow?
+    private static var quits: NSObjectProtocol?
 
     static func show() {
         let day = Calendar.current.startOfDay(for: Date())
@@ -40,6 +41,10 @@ enum BlocksPreview {
         w.makeKeyAndOrderFront(nil)
         NSApp.activate()
         window = w
+        // Closing it quits: this window only, never one of macOS's own,
+        // like the text input window a click in a block's output closes
+        // (R-0272, R-0273).
+        quits = QuitWithWindow.watch(w) { exit(0) }
     }
 }
 #endif

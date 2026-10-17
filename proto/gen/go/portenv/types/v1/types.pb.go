@@ -500,6 +500,12 @@ const (
 	// Information, from an agent or from Portenv (a grant change, a package
 	// installed, a decision answered or expired).
 	MessageType_MESSAGE_TYPE_NOTICE MessageType = 3
+	// The owner asks an agent what it's working on (R-0256).
+	MessageType_MESSAGE_TYPE_STATUS_REQUEST MessageType = 4
+	// A routine's note, delivered by Portenv (R-0258).
+	MessageType_MESSAGE_TYPE_ROUTINE MessageType = 5
+	// Files handed over to the recipient's ~/inbox (R-0257 item 3).
+	MessageType_MESSAGE_TYPE_HANDOFF MessageType = 6
 )
 
 // Enum value maps for MessageType.
@@ -509,12 +515,18 @@ var (
 		1: "MESSAGE_TYPE_QUESTION",
 		2: "MESSAGE_TYPE_ANSWER",
 		3: "MESSAGE_TYPE_NOTICE",
+		4: "MESSAGE_TYPE_STATUS_REQUEST",
+		5: "MESSAGE_TYPE_ROUTINE",
+		6: "MESSAGE_TYPE_HANDOFF",
 	}
 	MessageType_value = map[string]int32{
-		"MESSAGE_TYPE_UNSPECIFIED": 0,
-		"MESSAGE_TYPE_QUESTION":    1,
-		"MESSAGE_TYPE_ANSWER":      2,
-		"MESSAGE_TYPE_NOTICE":      3,
+		"MESSAGE_TYPE_UNSPECIFIED":    0,
+		"MESSAGE_TYPE_QUESTION":       1,
+		"MESSAGE_TYPE_ANSWER":         2,
+		"MESSAGE_TYPE_NOTICE":         3,
+		"MESSAGE_TYPE_STATUS_REQUEST": 4,
+		"MESSAGE_TYPE_ROUTINE":        5,
+		"MESSAGE_TYPE_HANDOFF":        6,
 	}
 )
 
@@ -1254,8 +1266,10 @@ type BoardMessage struct {
 	ThreadId string      `protobuf:"bytes,4,opt,name=thread_id,json=threadId,proto3" json:"thread_id,omitempty"`
 	Type     MessageType `protobuf:"varint,5,opt,name=type,proto3,enum=portenv.types.v1.MessageType" json:"type,omitempty"`
 	// At most 8 KB.
-	Text          string                 `protobuf:"bytes,6,opt,name=text,proto3" json:"text,omitempty"`
-	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	Text      string                 `protobuf:"bytes,6,opt,name=text,proto3" json:"text,omitempty"`
+	CreatedAt *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	// For MESSAGE_TYPE_HANDOFF: what landed in the recipient's inbox.
+	Files         []*HandoffFile `protobuf:"bytes,8,rep,name=files,proto3" json:"files,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1335,6 +1349,13 @@ func (x *BoardMessage) GetText() string {
 func (x *BoardMessage) GetCreatedAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.CreatedAt
+	}
+	return nil
+}
+
+func (x *BoardMessage) GetFiles() []*HandoffFile {
+	if x != nil {
+		return x.Files
 	}
 	return nil
 }
@@ -1552,7 +1573,11 @@ type AgentGrant struct {
 	Message  []string `protobuf:"bytes,3,rep,name=message,proto3" json:"message,omitempty"`
 	AskOwner bool     `protobuf:"varint,4,opt,name=ask_owner,json=askOwner,proto3" json:"ask_owner,omitempty"`
 	// ASK or NEVER.
-	Packages      GrantMode `protobuf:"varint,5,opt,name=packages,proto3,enum=portenv.types.v1.GrantMode" json:"packages,omitempty"`
+	Packages GrantMode `protobuf:"varint,5,opt,name=packages,proto3,enum=portenv.types.v1.GrantMode" json:"packages,omitempty"`
+	// team_status: read (R-0257 item 1): teammates' state, status, pending
+	// count and last activity in whoami and portenv team status. Off by
+	// default; never terminals or homes.
+	TeamStatus    bool `protobuf:"varint,6,opt,name=team_status,json=teamStatus,proto3" json:"team_status,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1620,6 +1645,13 @@ func (x *AgentGrant) GetPackages() GrantMode {
 		return x.Packages
 	}
 	return GrantMode_GRANT_MODE_UNSPECIFIED
+}
+
+func (x *AgentGrant) GetTeamStatus() bool {
+	if x != nil {
+		return x.TeamStatus
+	}
+	return false
 }
 
 // A file or folder in an agent's home, for the Agent files view (§2).
@@ -1692,6 +1724,219 @@ func (x *AgentFile) GetModified() *timestamppb.Timestamp {
 	return nil
 }
 
+// What an agent says it's working on (R-0256): information, never an
+// instruction. Plain text, at most 200 characters.
+type AgentStatus struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Text  string                 `protobuf:"bytes,1,opt,name=text,proto3" json:"text,omitempty"`
+	// Progress N of M; both 0 when not given.
+	ProgressDone  int32 `protobuf:"varint,2,opt,name=progress_done,json=progressDone,proto3" json:"progress_done,omitempty"`
+	ProgressTotal int32 `protobuf:"varint,3,opt,name=progress_total,json=progressTotal,proto3" json:"progress_total,omitempty"`
+	// Why it's blocked, if it is.
+	Blocked       string                 `protobuf:"bytes,4,opt,name=blocked,proto3" json:"blocked,omitempty"`
+	SetAt         *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=set_at,json=setAt,proto3" json:"set_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AgentStatus) Reset() {
+	*x = AgentStatus{}
+	mi := &file_portenv_types_v1_types_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AgentStatus) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AgentStatus) ProtoMessage() {}
+
+func (x *AgentStatus) ProtoReflect() protoreflect.Message {
+	mi := &file_portenv_types_v1_types_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AgentStatus.ProtoReflect.Descriptor instead.
+func (*AgentStatus) Descriptor() ([]byte, []int) {
+	return file_portenv_types_v1_types_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *AgentStatus) GetText() string {
+	if x != nil {
+		return x.Text
+	}
+	return ""
+}
+
+func (x *AgentStatus) GetProgressDone() int32 {
+	if x != nil {
+		return x.ProgressDone
+	}
+	return 0
+}
+
+func (x *AgentStatus) GetProgressTotal() int32 {
+	if x != nil {
+		return x.ProgressTotal
+	}
+	return 0
+}
+
+func (x *AgentStatus) GetBlocked() string {
+	if x != nil {
+		return x.Blocked
+	}
+	return ""
+}
+
+func (x *AgentStatus) GetSetAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.SetAt
+	}
+	return nil
+}
+
+// One file of a hand-off, as it landed in the recipient's home.
+type HandoffFile struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Relative to the recipient's home: inbox/<sender>/<timestamp>/...
+	Path          string `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
+	Sha256        string `protobuf:"bytes,2,opt,name=sha256,proto3" json:"sha256,omitempty"`
+	Size          int64  `protobuf:"varint,3,opt,name=size,proto3" json:"size,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *HandoffFile) Reset() {
+	*x = HandoffFile{}
+	mi := &file_portenv_types_v1_types_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HandoffFile) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HandoffFile) ProtoMessage() {}
+
+func (x *HandoffFile) ProtoReflect() protoreflect.Message {
+	mi := &file_portenv_types_v1_types_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HandoffFile.ProtoReflect.Descriptor instead.
+func (*HandoffFile) Descriptor() ([]byte, []int) {
+	return file_portenv_types_v1_types_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *HandoffFile) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *HandoffFile) GetSha256() string {
+	if x != nil {
+		return x.Sha256
+	}
+	return ""
+}
+
+func (x *HandoffFile) GetSize() int64 {
+	if x != nil {
+		return x.Size
+	}
+	return 0
+}
+
+// A routine from an agent file (R-0258): portenvd keeps the timer.
+type Routine struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// At least 10 minutes, in minutes.
+	EveryMinutes int32 `protobuf:"varint,1,opt,name=every_minutes,json=everyMinutes,proto3" json:"every_minutes,omitempty"`
+	// One plain line, at most 200 characters.
+	Note          string                 `protobuf:"bytes,2,opt,name=note,proto3" json:"note,omitempty"`
+	Paused        bool                   `protobuf:"varint,3,opt,name=paused,proto3" json:"paused,omitempty"`
+	NextAt        *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=next_at,json=nextAt,proto3" json:"next_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Routine) Reset() {
+	*x = Routine{}
+	mi := &file_portenv_types_v1_types_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Routine) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Routine) ProtoMessage() {}
+
+func (x *Routine) ProtoReflect() protoreflect.Message {
+	mi := &file_portenv_types_v1_types_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Routine.ProtoReflect.Descriptor instead.
+func (*Routine) Descriptor() ([]byte, []int) {
+	return file_portenv_types_v1_types_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *Routine) GetEveryMinutes() int32 {
+	if x != nil {
+		return x.EveryMinutes
+	}
+	return 0
+}
+
+func (x *Routine) GetNote() string {
+	if x != nil {
+		return x.Note
+	}
+	return ""
+}
+
+func (x *Routine) GetPaused() bool {
+	if x != nil {
+		return x.Paused
+	}
+	return false
+}
+
+func (x *Routine) GetNextAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.NextAt
+	}
+	return nil
+}
+
 var File_portenv_types_v1_types_proto protoreflect.FileDescriptor
 
 const file_portenv_types_v1_types_proto_rawDesc = "" +
@@ -1736,7 +1981,7 @@ const file_portenv_types_v1_types_proto_rawDesc = "" +
 	"\acommand\x18\x05 \x01(\tR\acommand\x12?\n" +
 	"\rrunning_since\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\frunningSince\x12\x19\n" +
 	"\bagent_id\x18\a \x01(\tR\aagentId\x12\x19\n" +
-	"\bpane_ids\x18\b \x03(\tR\apaneIds\"\xe1\x01\n" +
+	"\bpane_ids\x18\b \x03(\tR\apaneIds\"\x96\x02\n" +
 	"\fBoardMessage\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04from\x18\x02 \x01(\tR\x04from\x12\x0e\n" +
@@ -1745,7 +1990,8 @@ const file_portenv_types_v1_types_proto_rawDesc = "" +
 	"\x04type\x18\x05 \x01(\x0e2\x1d.portenv.types.v1.MessageTypeR\x04type\x12\x12\n" +
 	"\x04text\x18\x06 \x01(\tR\x04text\x129\n" +
 	"\n" +
-	"created_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"\xda\x03\n" +
+	"created_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x123\n" +
+	"\x05files\x18\b \x03(\v2\x1d.portenv.types.v1.HandoffFileR\x05files\"\xda\x03\n" +
 	"\bDecision\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04from\x18\x02 \x01(\tR\x04from\x122\n" +
@@ -1769,19 +2015,36 @@ const file_portenv_types_v1_types_proto_rawDesc = "" +
 	"\x06source\x18\x03 \x01(\tR\x06source\x12\x1e\n" +
 	"\n" +
 	"dependency\x18\x04 \x01(\bR\n" +
-	"dependency\"\xcc\x01\n" +
+	"dependency\"\xed\x01\n" +
 	"\n" +
 	"AgentGrant\x121\n" +
 	"\x05panes\x18\x01 \x01(\x0e2\x1b.portenv.types.v1.GrantModeR\x05panes\x12\x1b\n" +
 	"\tmax_panes\x18\x02 \x01(\x05R\bmaxPanes\x12\x18\n" +
 	"\amessage\x18\x03 \x03(\tR\amessage\x12\x1b\n" +
 	"\task_owner\x18\x04 \x01(\bR\baskOwner\x127\n" +
-	"\bpackages\x18\x05 \x01(\x0e2\x1b.portenv.types.v1.GrantModeR\bpackages\"}\n" +
+	"\bpackages\x18\x05 \x01(\x0e2\x1b.portenv.types.v1.GrantModeR\bpackages\x12\x1f\n" +
+	"\vteam_status\x18\x06 \x01(\bR\n" +
+	"teamStatus\"}\n" +
 	"\tAgentFile\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x10\n" +
 	"\x03dir\x18\x02 \x01(\bR\x03dir\x12\x12\n" +
 	"\x04size\x18\x03 \x01(\x03R\x04size\x126\n" +
-	"\bmodified\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\bmodified*\xb0\x01\n" +
+	"\bmodified\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\bmodified\"\xba\x01\n" +
+	"\vAgentStatus\x12\x12\n" +
+	"\x04text\x18\x01 \x01(\tR\x04text\x12#\n" +
+	"\rprogress_done\x18\x02 \x01(\x05R\fprogressDone\x12%\n" +
+	"\x0eprogress_total\x18\x03 \x01(\x05R\rprogressTotal\x12\x18\n" +
+	"\ablocked\x18\x04 \x01(\tR\ablocked\x121\n" +
+	"\x06set_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\x05setAt\"M\n" +
+	"\vHandoffFile\x12\x12\n" +
+	"\x04path\x18\x01 \x01(\tR\x04path\x12\x16\n" +
+	"\x06sha256\x18\x02 \x01(\tR\x06sha256\x12\x12\n" +
+	"\x04size\x18\x03 \x01(\x03R\x04size\"\x8f\x01\n" +
+	"\aRoutine\x12#\n" +
+	"\revery_minutes\x18\x01 \x01(\x05R\feveryMinutes\x12\x12\n" +
+	"\x04note\x18\x02 \x01(\tR\x04note\x12\x16\n" +
+	"\x06paused\x18\x03 \x01(\bR\x06paused\x123\n" +
+	"\anext_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x06nextAt*\xb0\x01\n" +
 	"\bBoxState\x12\x19\n" +
 	"\x15BOX_STATE_UNSPECIFIED\x10\x00\x12\x15\n" +
 	"\x11BOX_STATE_CREATED\x10\x01\x12\x16\n" +
@@ -1829,12 +2092,15 @@ const file_portenv_types_v1_types_proto_rawDesc = "" +
 	"\x15AGENT_STATE_NEEDS_YOU\x10\x05\x12\x17\n" +
 	"\x13AGENT_STATE_INVALID\x10\x06\x12\x19\n" +
 	"\x15AGENT_STATE_CONNECTED\x10\a\x12\x1c\n" +
-	"\x18AGENT_STATE_DISCONNECTED\x10\b*x\n" +
+	"\x18AGENT_STATE_DISCONNECTED\x10\b*\xcd\x01\n" +
 	"\vMessageType\x12\x1c\n" +
 	"\x18MESSAGE_TYPE_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15MESSAGE_TYPE_QUESTION\x10\x01\x12\x17\n" +
 	"\x13MESSAGE_TYPE_ANSWER\x10\x02\x12\x17\n" +
-	"\x13MESSAGE_TYPE_NOTICE\x10\x03*\x85\x02\n" +
+	"\x13MESSAGE_TYPE_NOTICE\x10\x03\x12\x1f\n" +
+	"\x1bMESSAGE_TYPE_STATUS_REQUEST\x10\x04\x12\x18\n" +
+	"\x14MESSAGE_TYPE_ROUTINE\x10\x05\x12\x18\n" +
+	"\x14MESSAGE_TYPE_HANDOFF\x10\x06*\x85\x02\n" +
 	"\fDecisionKind\x12\x1d\n" +
 	"\x19DECISION_KIND_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17DECISION_KIND_ASK_OWNER\x10\x01\x12\x16\n" +
@@ -1871,7 +2137,7 @@ func file_portenv_types_v1_types_proto_rawDescGZIP() []byte {
 }
 
 var file_portenv_types_v1_types_proto_enumTypes = make([]protoimpl.EnumInfo, 12)
-var file_portenv_types_v1_types_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
+var file_portenv_types_v1_types_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
 var file_portenv_types_v1_types_proto_goTypes = []any{
 	(BoxState)(0),                 // 0: portenv.types.v1.BoxState
 	(Architecture)(0),             // 1: portenv.types.v1.Architecture
@@ -1896,32 +2162,38 @@ var file_portenv_types_v1_types_proto_goTypes = []any{
 	(*PackagePlan)(nil),           // 20: portenv.types.v1.PackagePlan
 	(*AgentGrant)(nil),            // 21: portenv.types.v1.AgentGrant
 	(*AgentFile)(nil),             // 22: portenv.types.v1.AgentFile
-	(*timestamppb.Timestamp)(nil), // 23: google.protobuf.Timestamp
+	(*AgentStatus)(nil),           // 23: portenv.types.v1.AgentStatus
+	(*HandoffFile)(nil),           // 24: portenv.types.v1.HandoffFile
+	(*Routine)(nil),               // 25: portenv.types.v1.Routine
+	(*timestamppb.Timestamp)(nil), // 26: google.protobuf.Timestamp
 }
 var file_portenv_types_v1_types_proto_depIdxs = []int32{
 	13, // 0: portenv.types.v1.Box.resources:type_name -> portenv.types.v1.Resources
-	23, // 1: portenv.types.v1.SnapshotRef.time:type_name -> google.protobuf.Timestamp
+	26, // 1: portenv.types.v1.SnapshotRef.time:type_name -> google.protobuf.Timestamp
 	2,  // 2: portenv.types.v1.SnapshotRef.kind:type_name -> portenv.types.v1.SnapshotKind
-	23, // 3: portenv.types.v1.Lease.since:type_name -> google.protobuf.Timestamp
-	23, // 4: portenv.types.v1.Lease.last_heartbeat:type_name -> google.protobuf.Timestamp
+	26, // 3: portenv.types.v1.Lease.since:type_name -> google.protobuf.Timestamp
+	26, // 4: portenv.types.v1.Lease.last_heartbeat:type_name -> google.protobuf.Timestamp
 	3,  // 5: portenv.types.v1.Lease.source:type_name -> portenv.types.v1.LeaseSource
-	23, // 6: portenv.types.v1.Tab.running_since:type_name -> google.protobuf.Timestamp
+	26, // 6: portenv.types.v1.Tab.running_since:type_name -> google.protobuf.Timestamp
 	8,  // 7: portenv.types.v1.BoardMessage.type:type_name -> portenv.types.v1.MessageType
-	23, // 8: portenv.types.v1.BoardMessage.created_at:type_name -> google.protobuf.Timestamp
-	9,  // 9: portenv.types.v1.Decision.kind:type_name -> portenv.types.v1.DecisionKind
-	10, // 10: portenv.types.v1.Decision.state:type_name -> portenv.types.v1.DecisionState
-	23, // 11: portenv.types.v1.Decision.created_at:type_name -> google.protobuf.Timestamp
-	23, // 12: portenv.types.v1.Decision.answered_at:type_name -> google.protobuf.Timestamp
-	20, // 13: portenv.types.v1.Decision.packages:type_name -> portenv.types.v1.PackagePlan
-	23, // 14: portenv.types.v1.Decision.expires_at:type_name -> google.protobuf.Timestamp
-	11, // 15: portenv.types.v1.AgentGrant.panes:type_name -> portenv.types.v1.GrantMode
-	11, // 16: portenv.types.v1.AgentGrant.packages:type_name -> portenv.types.v1.GrantMode
-	23, // 17: portenv.types.v1.AgentFile.modified:type_name -> google.protobuf.Timestamp
-	18, // [18:18] is the sub-list for method output_type
-	18, // [18:18] is the sub-list for method input_type
-	18, // [18:18] is the sub-list for extension type_name
-	18, // [18:18] is the sub-list for extension extendee
-	0,  // [0:18] is the sub-list for field type_name
+	26, // 8: portenv.types.v1.BoardMessage.created_at:type_name -> google.protobuf.Timestamp
+	24, // 9: portenv.types.v1.BoardMessage.files:type_name -> portenv.types.v1.HandoffFile
+	9,  // 10: portenv.types.v1.Decision.kind:type_name -> portenv.types.v1.DecisionKind
+	10, // 11: portenv.types.v1.Decision.state:type_name -> portenv.types.v1.DecisionState
+	26, // 12: portenv.types.v1.Decision.created_at:type_name -> google.protobuf.Timestamp
+	26, // 13: portenv.types.v1.Decision.answered_at:type_name -> google.protobuf.Timestamp
+	20, // 14: portenv.types.v1.Decision.packages:type_name -> portenv.types.v1.PackagePlan
+	26, // 15: portenv.types.v1.Decision.expires_at:type_name -> google.protobuf.Timestamp
+	11, // 16: portenv.types.v1.AgentGrant.panes:type_name -> portenv.types.v1.GrantMode
+	11, // 17: portenv.types.v1.AgentGrant.packages:type_name -> portenv.types.v1.GrantMode
+	26, // 18: portenv.types.v1.AgentFile.modified:type_name -> google.protobuf.Timestamp
+	26, // 19: portenv.types.v1.AgentStatus.set_at:type_name -> google.protobuf.Timestamp
+	26, // 20: portenv.types.v1.Routine.next_at:type_name -> google.protobuf.Timestamp
+	21, // [21:21] is the sub-list for method output_type
+	21, // [21:21] is the sub-list for method input_type
+	21, // [21:21] is the sub-list for extension type_name
+	21, // [21:21] is the sub-list for extension extendee
+	0,  // [0:21] is the sub-list for field type_name
 }
 
 func init() { file_portenv_types_v1_types_proto_init() }
@@ -1935,7 +2207,7 @@ func file_portenv_types_v1_types_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_portenv_types_v1_types_proto_rawDesc), len(file_portenv_types_v1_types_proto_rawDesc)),
 			NumEnums:      12,
-			NumMessages:   11,
+			NumMessages:   14,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

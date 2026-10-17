@@ -50,6 +50,8 @@ fi
 
 check "portenv-agent is PID 1" test "$(in_box ps -p 1 -o comm=)" = portenv-agent
 check "work has uid 1000" test "$(in_box id -u work)" = 1000
+# A workspace with no agent team: /home/team and agents' homes appear only
+# with a team's first agent (ADR 0022 §1), never at a plain start.
 check "/home holds only work" test "$(in_box ls -A /home)" = work
 check "home is 0700 and owned by work" test "$(in_box stat -c '%a %U' /home/work)" = "700 work"
 check "skeleton apt-packages.txt" in_box test -f /home/work/.portenv/apt-packages.txt
@@ -58,6 +60,8 @@ check "skeleton shell files" in_box test -f /home/work/.bashrc
 check "agent socket reaches root and portenv-agent only" test "$(in_box stat -c '%a %U:%G' /run/portenv /run/portenv/agent.sock | tr '\n' ' ')" = "710 root:portenv-agent 660 root:portenv-agent "
 check "the agent channel copy carries only setuid, setgid, chown and kill" test "$(in_box getcap /usr/local/libexec/portenv/agent-serve | awk '{print $2}')" = "cap_chown,cap_kill,cap_setgid,cap_setuid=ep"
 check "work has passwordless sudo" as_work 'sudo -n true'
+# R-0262: what work makes at the top of its home is private.
+check "work's login shells use umask 077" as_work 'test "$(umask)" = 0077'
 check "node 22" as_work 'node --version | grep -q "^v22\."'
 check "npm installs globals into the home" as_work 'test "$(npm config get prefix)" = /home/work/.local'
 check "~/.local/bin on PATH" as_work 'case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) false ;; esac'
@@ -66,6 +70,9 @@ check "git" as_work 'git --version'
 # The helper's control mode was measured on tmux 3.4 and refuses older
 # (ADR 0020, decision 10); the Dockerfile pins it.
 check "tmux 3.4" as_work 'test "$(tmux -V)" = "tmux 3.4"'
+# The switch to an agent's user runs tmux by this path only, and only when
+# root owns it and no one else can write to it (R-0265).
+check "tmux at /usr/bin/tmux, root's, writable by root only" in_box sh -c 'test "$(stat -L -c %U:%a /usr/bin/tmux)" = root:755 && test "$(stat -c %F /usr/bin/tmux)" = "regular file"'
 check "ripgrep" as_work 'rg --version'
 check "jq" as_work 'jq --version'
 check "build-essential" as_work 'gcc --version && make --version'

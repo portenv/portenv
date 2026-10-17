@@ -181,6 +181,8 @@ service DaemonService {
   rpc ReadAgentFile(ReadAgentFileRequest) returns (stream ReadAgentFileResponse);
   // Drag and drop. Refused past the agent's quota.
   rpc AddAgentFiles(stream AddAgentFilesRequest) returns (AddAgentFilesResponse);
+  // Pauses or resumes one of an agent's routines (R-0258).
+  rpc SetRoutinePaused(SetRoutinePausedRequest) returns (SetRoutinePausedResponse);
 }
 
 message CheckBoxRequest {
@@ -385,6 +387,9 @@ message GetBoxStateResponse {
   // (it was left running with mounts it shouldn't have; R-0201). The app
   // tells the person once. Only for the open that did it.
   bool restarted_for_security_update = 9;
+  // While this open pulls the workspace's toolbox image (the first open):
+  // how far it has got (R-0211). Unset otherwise.
+  ImagePull image_pull = 10;
 }
 
 enum NetworkPath {
@@ -851,6 +856,13 @@ message GetEngineResponse {
   bool running = 1;
 }
 
+// A toolbox image's pull: bytes fetched of the bytes known so far (the
+// total grows as Docker starts each layer).
+message ImagePull {
+  int64 done_bytes = 1;
+  int64 total_bytes = 2;
+}
+
 // ADR 0022: the agent team.
 
 message ListAgentsRequest {
@@ -892,6 +904,12 @@ message AgentInfo {
   // (R-0245 item 4).
   string runner = 16;
   portenv.types.v1.AgentGrant grant = 17;
+  // What it says it's working on (R-0256); empty when it hasn't said.
+  portenv.types.v1.AgentStatus status = 18;
+  // Its routines (R-0258).
+  repeated portenv.types.v1.Routine routines = 19;
+  // Why its routines are off, if they are (R-0258).
+  string routines_off = 20;
 }
 
 message WatchTeamRequest {
@@ -970,6 +988,8 @@ message SendMessageRequest {
   string to = 2;
   string thread_id = 3;
   string text = 4;
+  // NOTICE (the default) or STATUS_REQUEST (Ask for Status, R-0256).
+  portenv.types.v1.MessageType type = 5;
 }
 
 message SendMessageResponse {
@@ -1023,4 +1043,16 @@ message AddAgentFilesRequest {
 
 message AddAgentFilesResponse {
   repeated portenv.types.v1.AgentFile added = 1;
+}
+
+message SetRoutinePausedRequest {
+  string name = 1;
+  string agent_id = 2;
+  // The routine's place in the agent file's list.
+  int32 index = 3;
+  bool paused = 4;
+}
+
+message SetRoutinePausedResponse {
+  AgentInfo agent = 1;
 }

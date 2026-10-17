@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import Foundation
+import PortenvProto
 import Testing
 
 @testable import PortenvKit
@@ -55,6 +56,18 @@ struct TeamTextTests {
         let en = Locale(identifier: "en")
         #expect(TeamText.size(1_200_000, locale: en) == "1.2 MB" && TeamText.size(4_096, locale: en) == "4.1 KB")
         #expect(TeamText.size(2_000_000_000, locale: en) == "2 GB" && TeamText.size(512, locale: en) == "512 bytes")
+    }
+
+    /// Portenv's routine notes, status requests and hand-offs show as
+    /// notices until the sidebar has kinds of its own for them.
+    @Test func routineMessagesShowAsNotices() {
+        var m = Portenv_Types_V1_BoardMessage()
+        m.id = "r1"
+        m.from = "portenv"
+        m.to = "lead"
+        m.type = .routine
+        m.text = "Check the build"
+        #expect(TeamMessage(m).kind == .notice)
     }
 
     @Test func coloursFollowTeamOrderUnlessTheFileNamesOne() {

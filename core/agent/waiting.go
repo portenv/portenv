@@ -39,6 +39,10 @@ type waitSignals struct {
 	LastLines []string
 }
 
+// screenLines is how many of the last non-empty lines are read: agent CLIs
+// print the question above a few choices, often inside a box.
+const screenLines = 8
+
 // quietAfter is how long a tab's output must be still before it can count
 // as waiting.
 const quietAfter = 1500 * time.Millisecond
@@ -181,4 +185,16 @@ func CheckRelayAnswer(q relayedQuestion, now waitSignals) error {
 		return secretPromptError{}
 	}
 	return nil
+}
+
+// lastLines are the last n non-empty lines of a screen capture.
+func lastLines(screen string, n int) []string {
+	var out []string
+	lines := strings.Split(screen, "\n")
+	for i := len(lines) - 1; i >= 0 && len(out) < n; i-- {
+		if strings.TrimSpace(lines[i]) != "" {
+			out = append([]string{strings.TrimRight(lines[i], " ")}, out...)
+		}
+	}
+	return out
 }

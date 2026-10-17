@@ -96,6 +96,8 @@ type apiServer struct {
 	setAgentIdleInput func(id, pattern string) error
 	// prepareProject asks init to open the project to the team.
 	prepareProject func(ctx context.Context, projectDir string) ([]string, error)
+	// now is the clock (nil: time.Now).
+	now func() time.Time
 }
 
 // ctlHub returns the server's control-mode clients, made on first use.

@@ -36,6 +36,17 @@ public struct BoxState: Equatable, Sendable {
     /// This open stopped and started the box again to apply a security
     /// update (R-0201): the window tells the person once.
     public var restartedForSecurityUpdate = false
+    /// The first open's image pull, while it runs (R-0211).
+    public struct ImagePull: Equatable, Sendable {
+        public let done: Int64
+        public let total: Int64
+        public init(done: Int64, total: Int64) {
+            self.done = done
+            self.total = total
+        }
+    }
+
+    public var imagePull: ImagePull?
 
     public init(save: Save, savedAt: Date? = nil, location: String? = nil) {
         self.save = save
@@ -54,6 +65,20 @@ public struct BoxState: Equatable, Sendable {
             let storage_place: String?
             let opened_at: Date?
             let restarted_for_security_update: Bool?
+            let image_pull: Pull?
+            struct Pull: Decodable {
+                // protojson writes int64 as a string; tests write numbers.
+                let done_bytes: Flex?
+                let total_bytes: Flex?
+            }
+
+            struct Flex: Decodable {
+                let value: Int64
+                init(from decoder: Decoder) throws {
+                    let c = try decoder.singleValueContainer()
+                    if let n = try? c.decode(Int64.self) { value = n } else { value = Int64(try c.decode(String.self)) ?? 0 }
+                }
+            }
         }
         let d = JSONDecoder()
         d.dateDecodingStrategy = .custom { dec in
@@ -72,6 +97,7 @@ public struct BoxState: Equatable, Sendable {
         s.storagePlace = (w.storage_place?.isEmpty ?? true) ? nil : w.storage_place
         s.openedAt = w.opened_at
         s.restartedForSecurityUpdate = w.restarted_for_security_update ?? false
+        if let p = w.image_pull { s.imagePull = ImagePull(done: p.done_bytes?.value ?? 0, total: p.total_bytes?.value ?? 0) }
         return s
     }
 
@@ -703,6 +729,11 @@ public final class BoxController {
             notice = Self.securityRestartNotice
         }
         if newSave { savedAtChanged() }
+        // The first open's pull: the line says how far it has got, and
+        // goes back to "Opening…" when it's done (R-0211).
+        if busy, let line = progress, line == StateLine.opening || line.hasPrefix(StateLine.gettingImagePrefix) {
+            progress = st.imagePull.map { StateLine.gettingImage(done: $0.done, total: $0.total) } ?? StateLine.opening
+        }
         // portenvd answers again: whatever said it was away no longer holds.
         daemonGoneSince = nil
         if error == Self.daemonGone { error = nil }

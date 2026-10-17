@@ -46,6 +46,8 @@ type Server struct {
 	daemonv1.UnimplementedDaemonServiceServer
 	env *local.Env
 	log *slog.Logger
+	// pulling: the first open's image pull, for the box's state (R-0211).
+	pulling pulls
 
 	// KeepBoxesOnStop leaves boxes running when the daemon stops (the
 	// runner on a server: a runner restart must not stop anyone's box).
@@ -70,6 +72,13 @@ type Server struct {
 	bgCancel     context.CancelFunc
 	sleep        func(ctx context.Context, d time.Duration) bool
 	closeForQuit func(ctx context.Context, name string) error
+
+	// team is the agent team (ADR 0022), made on first use; teamPumps
+	// holds each workspace's TeamCalls stream.
+	teamOnce  sync.Once
+	team      *teamEngine
+	teamMu    sync.Mutex
+	teamPumps map[string]bool
 
 	mu     sync.Mutex
 	open   map[string]*openBox   // by box name
@@ -345,6 +354,8 @@ func (s *Server) OpenBox(ctx context.Context, req *daemonv1.OpenBoxRequest) (_ *
 		return nil, err
 	}
 	defer done()
+	ctx, pulled := s.followPull(ctx, req.GetName())
+	defer pulled()
 	ob, res, err := s.openBox(ctx, req.GetName(), req.GetTakeOver())
 	if err != nil {
 		var held *boxsync.LeaseHeldError

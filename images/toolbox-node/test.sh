@@ -87,6 +87,10 @@ check "portenv whoami in a plain shell exits 2 and says why" as_work \
 check "portenv guide" as_work 'out=$(portenv guide) && test -n "$out"'
 check "portenv team init writes the starter agent files" as_work \
 	'd=$(mktemp -d) && portenv team init --dir "$d" >/dev/null && test "$(ls "$d/.portenv/agents" | tr "\n" " ")" = "builder.md lead.md reviewer.md " && rm -rf "$d"'
+# The owner's commands are refused inside: portenv init would write a box's
+# repository key in the home (CC-0453).
+check "portenv init is refused inside a workspace" as_work \
+	'out=$(portenv init x 2>&1); rc=$?; test "$rc" -ne 0 && grep -qx "This is the owner.s command; run it on your Mac." <<<"$out"'
 check "the in-box portenv commands write nothing in the home" as_work 'test ! -e ~/.config/Portenv'
 
 # An orphan that exits must be reaped by PID 1, not left as a zombie.

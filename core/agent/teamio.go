@@ -302,6 +302,16 @@ func TeamIO(args []string, stdin io.Reader, stdout io.Writer) error {
 	case "open-project":
 		// As work, from init at team start (ADR 0022 §2).
 		return openProject(context.Background(), dir, ExecRunner{}, func(r *os.Root, rel string, uid, gid int) error { return r.Lchown(rel, uid, gid) })
+	case "handoff-pack":
+		if len(args) != 3 {
+			return errors.New("handoff-pack BASE PATH")
+		}
+		return handoffPack(dir, args[2], stdout)
+	case "handoff-unpack":
+		if len(args) != 4 {
+			return errors.New("handoff-unpack HOME DEST QUOTA")
+		}
+		return handoffUnpack(dir, args[2], args[3], stdin, stdout)
 	case "list-home":
 		if len(args) != 3 {
 			return errors.New("list-home HOME DIR")

@@ -783,12 +783,24 @@ public nonisolated struct Portenv_Daemon_V1_GetBoxStateResponse: Sendable {
   /// tells the person once. Only for the open that did it.
   public var restartedForSecurityUpdate: Bool = false
 
+  /// While this open pulls the workspace's toolbox image (the first open):
+  /// how far it has got (R-0211). Unset otherwise.
+  public var imagePull: Portenv_Daemon_V1_ImagePull {
+    get {_imagePull ?? Portenv_Daemon_V1_ImagePull()}
+    set {_imagePull = newValue}
+  }
+  /// Returns true if `imagePull` has been explicitly set.
+  public var hasImagePull: Bool {self._imagePull != nil}
+  /// Clears the value of `imagePull`. Subsequent reads from it will return its default value.
+  public mutating func clearImagePull() {self._imagePull = nil}
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
 
   fileprivate var _savedAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
   fileprivate var _openedAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
+  fileprivate var _imagePull: Portenv_Daemon_V1_ImagePull? = nil
 }
 
 public nonisolated struct Portenv_Daemon_V1_SetNetworkPathRequest: Sendable {
@@ -2021,6 +2033,22 @@ public nonisolated struct Portenv_Daemon_V1_GetEngineResponse: Sendable {
 
   /// The engine answered.
   public var running: Bool = false
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+/// A toolbox image's pull: bytes fetched of the bytes known so far (the
+/// total grows as Docker starts each layer).
+public nonisolated struct Portenv_Daemon_V1_ImagePull: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var doneBytes: Int64 = 0
+
+  public var totalBytes: Int64 = 0
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -3608,7 +3636,7 @@ nonisolated extension Portenv_Daemon_V1_GetBoxStateRequest: SwiftProtobuf.Messag
 
 nonisolated extension Portenv_Daemon_V1_GetBoxStateResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".GetBoxStateResponse"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}state\0\u{3}saved_at\0\u{1}location\0\u{3}failed_packages\0\u{3}packages_error\0\u{1}interrupted\0\u{3}storage_place\0\u{3}opened_at\0\u{3}restarted_for_security_update\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}state\0\u{3}saved_at\0\u{1}location\0\u{3}failed_packages\0\u{3}packages_error\0\u{1}interrupted\0\u{3}storage_place\0\u{3}opened_at\0\u{3}restarted_for_security_update\0\u{3}image_pull\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -3625,6 +3653,7 @@ nonisolated extension Portenv_Daemon_V1_GetBoxStateResponse: SwiftProtobuf.Messa
       case 7: try { try decoder.decodeSingularStringField(value: &self.storagePlace) }()
       case 8: try { try decoder.decodeSingularMessageField(value: &self._openedAt) }()
       case 9: try { try decoder.decodeSingularBoolField(value: &self.restartedForSecurityUpdate) }()
+      case 10: try { try decoder.decodeSingularMessageField(value: &self._imagePull) }()
       default: break
       }
     }
@@ -3662,6 +3691,9 @@ nonisolated extension Portenv_Daemon_V1_GetBoxStateResponse: SwiftProtobuf.Messa
     if self.restartedForSecurityUpdate != false {
       try visitor.visitSingularBoolField(value: self.restartedForSecurityUpdate, fieldNumber: 9)
     }
+    try { if let v = self._imagePull {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 10)
+    } }()
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -3675,6 +3707,7 @@ nonisolated extension Portenv_Daemon_V1_GetBoxStateResponse: SwiftProtobuf.Messa
     if lhs.storagePlace != rhs.storagePlace {return false}
     if lhs._openedAt != rhs._openedAt {return false}
     if lhs.restartedForSecurityUpdate != rhs.restartedForSecurityUpdate {return false}
+    if lhs._imagePull != rhs._imagePull {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -6145,6 +6178,41 @@ nonisolated extension Portenv_Daemon_V1_GetEngineResponse: SwiftProtobuf.Message
 
   public static func ==(lhs: Portenv_Daemon_V1_GetEngineResponse, rhs: Portenv_Daemon_V1_GetEngineResponse) -> Bool {
     if lhs.running != rhs.running {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Portenv_Daemon_V1_ImagePull: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ImagePull"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}done_bytes\0\u{3}total_bytes\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularInt64Field(value: &self.doneBytes) }()
+      case 2: try { try decoder.decodeSingularInt64Field(value: &self.totalBytes) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.doneBytes != 0 {
+      try visitor.visitSingularInt64Field(value: self.doneBytes, fieldNumber: 1)
+    }
+    if self.totalBytes != 0 {
+      try visitor.visitSingularInt64Field(value: self.totalBytes, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Portenv_Daemon_V1_ImagePull, rhs: Portenv_Daemon_V1_ImagePull) -> Bool {
+    if lhs.doneBytes != rhs.doneBytes {return false}
+    if lhs.totalBytes != rhs.totalBytes {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

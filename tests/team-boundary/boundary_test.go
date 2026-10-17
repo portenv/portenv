@@ -66,12 +66,42 @@ cat /home/builder/secret >/dev/null`}},
 chmod 0755 /home/reviewer; chmod 0644 /home/reviewer/secret`,
 	},
 	{
-		name: "an agent can't list the owner's home or read its logins",
-		steps: []step{{"builder", `! ls /home/work 2>/dev/null && ! cat /home/work/.ssh/id_test 2>/dev/null &&
-! cat /home/work/.config/token 2>/dev/null && ! ls /home/work/.claude 2>/dev/null &&
-test -d /home/work/proj/src`}},
-		mutate: `keep /home/work/.ssh /home/work/.ssh/id_test
-chmod 0755 /home/work/.ssh; chmod 0644 /home/work/.ssh/id_test`,
+		name:  "an agent can't list the owner's home (0711, R-0261)",
+		steps: []step{{"builder", `! ls /home/work 2>/dev/null && test -d /home/work/proj/src`}},
+		mutate: `keep /home/work
+chmod 0755 /home/work`,
+	},
+	{
+		name: "an agent can't enter the owner's private folders (.ssh, .config, .claude, .gnupg, .docker)",
+		steps: []step{{"builder", `for d in .ssh .config .claude .gnupg .docker; do
+  if ls "/home/work/$d" >/dev/null 2>&1; then echo "listed $d"; exit 1; fi
+done`}},
+		mutate: `keep /home/work/.config
+chmod 0755 /home/work/.config`,
+	},
+	{
+		name: "an agent gets EACCES on every one of the owner's known secret paths (R-0262)",
+		steps: []step{{"builder", `python3 - <<'PY'
+import sys
+paths = ["/home/work/" + p for p in (
+    ".npmrc", ".netrc", ".git-credentials", ".gitconfig", ".bash_history",
+    ".ssh/id_ed25519", ".ssh/id_test", ".config/gh/hosts.yml", ".config/token",
+    ".claude/.credentials.json", ".gnupg/pubring.kbx", ".docker/config.json")]
+bad = []
+for p in paths:
+    try:
+        open(p, "rb").close()
+        bad.append(p + ": opened")
+    except PermissionError:
+        pass
+    except OSError as e:
+        bad.append(p + ": " + e.strerror + ", not EACCES")
+if bad:
+    print("; ".join(bad))
+    sys.exit(1)
+PY`}},
+		mutate: `keep /home/work/.npmrc
+chmod 0644 /home/work/.npmrc`,
 	},
 	{
 		name: "the team folder keeps its group: what one agent makes, another can change",
@@ -140,6 +170,24 @@ touch /run/portenv-test/no-nnp
 echo "rm -f /etc/sudoers.d/zz-portenv-test /run/portenv-test/no-nnp" >> "$UNDO"`,
 	},
 	{
+		name: "an agent's tmux server and its panes have no capabilities and no_new_privs (CC-0409)",
+		steps: []step{{"builder", `sock=/run/portenv-team/builder/tmux/default
+pids="$(tmux -S $sock display -p '#{pid}') $(tmux -S $sock list-panes -a -F '#{pane_pid}')"
+[ -n "$pids" ] || exit 1
+for pid in $pids; do
+  st=/proc/$pid/status
+  for c in CapPrm CapEff CapAmb; do
+    grep -Eq "^$c:[[:space:]]+0+$" $st || { echo "$pid: $(grep "^$c:" $st)"; exit 1; }
+  done
+  grep -Eq '^NoNewPrivs:[[:space:]]+1$' $st || { echo "$pid: no no_new_privs"; exit 1; }
+done`}},
+		// The agent's server, started again without no_new_privs.
+		mutate: `restart='portenv-test-as builder "tmux -S /run/portenv-team/builder/tmux/default kill-server"; portenv-test-as builder "tmux -S /run/portenv-team/builder/tmux/default new-session -d -s main sleep\ 1000000"'
+touch /run/portenv-test/no-nnp
+sh -c "$restart"
+printf '%s\n' "rm -f /run/portenv-test/no-nnp" "$restart" >> "$UNDO"`,
+	},
+	{
 		name: "an agent can't install a system package without the owner's decision",
 		steps: []step{{"builder", `! apt-get install -y -q --no-download hello >/dev/null 2>&1 &&
 ! dpkg --configure -a >/dev/null 2>&1 &&
@@ -173,6 +221,30 @@ echo "pkill -u builder -f 'sleep 1000002'; mv /run/portenv-test/memory-targets.o
 	{
 		name:    "portenv whoami reports what the grant check enforces",
 		pending: "lane C's portenv whoami (R-0246)",
+	},
+	{
+		name:    "a new world-readable file at the top of the owner's home is made private again at the next team start (R-0262)",
+		pending: "lane C's PrepareTeamProject in the image (real mode)",
+	},
+	{
+		name:    "an agent can only set its own status (R-0256)",
+		pending: "lane C's portenv status set and SetStatus",
+	},
+	{
+		name:    "an agent without the team_status grant gets no team status (R-0257)",
+		pending: "lane C's portenv team status",
+	},
+	{
+		name:    "a hand-off lands only in the recipient's ~/inbox/<sender>/<timestamp>/, owned by the recipient, regular files only (R-0257)",
+		pending: "lane C's portenv handoff",
+	},
+	{
+		name:    "a routine is delivered only to the agent's own main pane, never while it's busy, and collapses after misses (R-0258)",
+		pending: "lane C's routines and ADR 0017's waiting detector",
+	},
+	{
+		name:    "an agent's routine propose changes nothing until the owner approves it (R-0258)",
+		pending: "lane C's portenv routine propose",
 	},
 }
 

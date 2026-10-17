@@ -81,12 +81,21 @@ type apiServer struct {
 	// (lane A's terminal code; nil until a build has them).
 	startAgentServer func(ctx context.Context, spec AgentServerSpec) ([]*typesv1.Tab, error)
 	stopAgentServer  func(ctx context.Context, id string) error
+	// agents are the running agents' own tmux servers; agentTmux reaches
+	// one as its agent (agentAs; plain tmux in tests).
+	agents    agentServers
+	agentTmux agentTmuxFunc
 	// runTeamIO runs "portenv-agent team-io" as work (teamIOAs; in this
 	// process in tests).
 	runTeamIO func(ctx context.Context, args []string, stdin io.Reader) ([]byte, error)
 	// runHomeIO runs team-io as an agent, for its home's files (nil: as
 	// the agent's uid, runAsAgent).
 	runHomeIO func(ctx context.Context, uid int, args []string, stdin io.Reader) ([]byte, error)
+	// setAgentIdleInput gives lane A's idle decision a running agent's
+	// idle-input pattern (SetAgentIdleInput; nil in tests).
+	setAgentIdleInput func(id, pattern string) error
+	// prepareProject asks init to open the project to the team.
+	prepareProject func(ctx context.Context, projectDir string) ([]string, error)
 	// now is the clock (nil: time.Now).
 	now func() time.Time
 }
@@ -116,7 +125,10 @@ func (s *apiServer) ctlHub() (*ctlHub, error) {
 // newChannelServer serves the API with the channel's current secrets.
 func newChannelServer(cfg Config, keys *channelKeys) *grpc.Server {
 	s := &apiServer{cfg: cfg, keys: keys, tmux: tmuxAs, tmuxCmd: tmuxCmdAs, team: newTeamHub(TeamRunDir),
-		users: initUsers{socket: DefaultSocket}, writeAsUser: writeFileAsUser, killUID: killAgentUID}
+		users: initUsers{socket: DefaultSocket}, writeAsUser: writeFileAsUser, killUID: killAgentUID, prepareProject: askInitPrepare(DefaultSocket)}
+	s.agentTmux = agentAs
+	s.startAgentServer, s.stopAgentServer = s.StartAgentTerminals, s.StopAgentTerminals
+	s.setAgentIdleInput = s.SetAgentIdleInput
 	s.runTeamIO = s.teamIOAs
 	srv := grpc.NewServer(
 		grpc.Creds(credentials.NewTLS(keys.tlsConfig())),

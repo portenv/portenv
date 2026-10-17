@@ -198,3 +198,44 @@ func TestKillUIDNeverTouchesRootOrWork(t *testing.T) {
 		}
 	}
 }
+
+// R-0258: the runner's idle pattern reaches lane A's idle decision.
+func TestStartTeamAgentSetsTheIdlePattern(t *testing.T) {
+	s, _, _, _, _ := newStartServer(t)
+	var got [2]string
+	s.setAgentIdleInput = func(id, p string) error { got = [2]string{id, p}; return nil }
+	if _, err := s.StartTeamAgent(context.Background(), &agentv1.StartTeamAgentRequest{AgentId: "builder", Argv: []string{"claude"}, IdlePattern: `^\s*>\s*$`}); err != nil {
+		t.Fatal(err)
+	}
+	if got != [2]string{"builder", `^\s*>\s*$`} {
+		t.Errorf("set %v", got)
+	}
+	for _, p := range []string{"(", strings.Repeat("a", maxIdlePattern+1)} {
+		if _, err := s.StartTeamAgent(context.Background(), &agentv1.StartTeamAgentRequest{AgentId: "builder", Argv: []string{"claude"}, IdlePattern: p}); status.Code(err) != codes.InvalidArgument {
+			t.Errorf("pattern %.10q: %v", p, err)
+		}
+	}
+}
+
+// R-0285: newChannelServer's wiring. StartTeamAgent's idle pattern lands
+// in lane A's own SetAgentIdleInput, so the routine check has it.
+func TestStartTeamAgentReachesLaneAsIdleInput(t *testing.T) {
+	s, _, _, _, _ := newStartServer(t)
+	s.setAgentIdleInput = s.SetAgentIdleInput
+	s.agents.by = map[string]*agentServer{}
+	s.startAgentServer = func(_ context.Context, spec AgentServerSpec) ([]*typesv1.Tab, error) {
+		s.agents.mu.Lock()
+		s.agents.by[spec.ID] = &agentServer{user: spec}
+		s.agents.mu.Unlock()
+		return nil, nil
+	}
+	if _, err := s.StartTeamAgent(context.Background(), &agentv1.StartTeamAgentRequest{AgentId: "builder", Argv: []string{"claude"}, IdlePattern: `^\s*>\s*$`}); err != nil {
+		t.Fatal(err)
+	}
+	s.agents.mu.Lock()
+	re := s.agents.by["builder"].idleInput
+	s.agents.mu.Unlock()
+	if re == nil || !re.MatchString("output\n> \n") || re.MatchString("thinking…") {
+		t.Errorf("builder's idle input = %v", re)
+	}
+}

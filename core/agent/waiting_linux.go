@@ -26,10 +26,6 @@ type tabProbe struct {
 	stty func(ctx context.Context, tty string) (string, error)
 }
 
-// screenLines is how many of the last non-empty lines are read: agent CLIs
-// print the question above a few choices, often inside a box.
-const screenLines = 8
-
 // Each signal's verdict on its own, for the ADR's error table.
 func (s waitSignals) soloShell() bool   { return s.Shell == shellRunning }
 func (s waitSignals) soloBlocked() bool { return s.BlockedOnTTY }
@@ -170,16 +166,4 @@ func ttyModes(stty string) (echoOff, canonical bool) {
 		}
 	}
 	return echoOff, canonical
-}
-
-// lastLines are the last n non-empty lines of a screen capture.
-func lastLines(screen string, n int) []string {
-	var out []string
-	lines := strings.Split(screen, "\n")
-	for i := len(lines) - 1; i >= 0 && len(out) < n; i-- {
-		if strings.TrimSpace(lines[i]) != "" {
-			out = append([]string{strings.TrimRight(lines[i], " ")}, out...)
-		}
-	}
-	return out
 }

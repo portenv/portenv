@@ -12,6 +12,11 @@
 //	portenv attach <box> [--session NAME]      this terminal in the box's tmux session
 //	portenv app ACTION BOX [TARGET]            the box's actions through portenvd
 //	portenv version
+//
+// Inside a workspace, an agent's own commands go through its socket
+// ($PORTENV_SOCKET) and portenvd's grant check (ADR 0022 §4): split, tab
+// new, focus, close, msg, ask-owner, inbox, share, propose-agent-change,
+// request-package and whoami.
 package main
 
 import (
@@ -70,6 +75,10 @@ func run(ctx context.Context, args []string) int {
 		fmt.Println(e.Machine)
 		return 0
 	}
+	// An agent's own commands, inside a workspace (ADR 0022 §4).
+	if isAgentCommand(args[0], os.Getenv) {
+		return runTeam(ctx, args, os.Getenv, os.Stdin, os.Stdout, os.Stderr)
+	}
 	c, ok := commands[args[0]]
 	if !ok {
 		fmt.Fprintf(os.Stderr, "portenv: unknown command %q\n", args[0])
@@ -125,6 +134,10 @@ Commands:
                                           close, save, point, revert, history, housekeep [--prune],
                                           move BOX this-mac|USER@HOST, …
   version
+
+Inside a workspace, for agents (each through Portenv's grant check):
+  split, tab new, focus, close, msg, ask-owner, inbox, share,
+  propose-agent-change, request-package, whoami     add --json for data
 `)
 }
 

@@ -9,6 +9,9 @@ import SwiftUI
 /// the same from fixtures.
 struct InspectorView: View {
     let content: InspectorContent
+    /// The workspace has a team: the sidebar's Team section replaces Who's
+    /// here (GUIDELINES 6.2).
+    var hasTeam = false
     /// The first letter of the person's name, for their avatar.
     let yourInitial: String
     /// Move To ▸'s places, as in the title menu (BoxMenuModel.moveSubmenu).
@@ -37,7 +40,7 @@ struct InspectorView: View {
         VStack(alignment: .leading, spacing: 24) {
             whereItIs
             saves
-            whosHere
+            if !hasTeam { whosHere }
             runningNow
         }
         .padding(.horizontal, 16)

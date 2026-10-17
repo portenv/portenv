@@ -299,6 +299,9 @@ func TeamIO(args []string, stdin io.Reader, stdout io.Writer) error {
 			files = append(files, teamIOFile{Name: e.Name(), Content: b})
 		}
 		return json.NewEncoder(stdout).Encode(files)
+	case "open-project":
+		// As work, from init at team start (ADR 0022 §2).
+		return openProject(context.Background(), dir, ExecRunner{}, func(r *os.Root, rel string, uid, gid int) error { return r.Lchown(rel, uid, gid) })
 	case "handoff-pack":
 		if len(args) != 3 {
 			return errors.New("handoff-pack BASE PATH")

@@ -387,6 +387,9 @@ message GetBoxStateResponse {
   // (it was left running with mounts it shouldn't have; R-0201). The app
   // tells the person once. Only for the open that did it.
   bool restarted_for_security_update = 9;
+  // While this open pulls the workspace's toolbox image (the first open):
+  // how far it has got (R-0211). Unset otherwise.
+  ImagePull image_pull = 10;
 }
 
 enum NetworkPath {
@@ -853,6 +856,13 @@ message GetEngineResponse {
   bool running = 1;
 }
 
+// A toolbox image's pull: bytes fetched of the bytes known so far (the
+// total grows as Docker starts each layer).
+message ImagePull {
+  int64 done_bytes = 1;
+  int64 total_bytes = 2;
+}
+
 // ADR 0022: the agent team.
 
 message ListAgentsRequest {
@@ -898,6 +908,8 @@ message AgentInfo {
   portenv.types.v1.AgentStatus status = 18;
   // Its routines (R-0258).
   repeated portenv.types.v1.Routine routines = 19;
+  // Why its routines are off, if they are (R-0258).
+  string routines_off = 20;
 }
 
 message WatchTeamRequest {

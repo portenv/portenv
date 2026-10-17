@@ -29,6 +29,9 @@ check() { # check NAME COMMAND...
 }
 in_box() { docker exec "$new" "$@"; }
 as_work() { docker exec -u work -w /home/work "$new" bash -lc "$1"; }
+# as_agent: a team agent's user, made the way init makes one (core/agent/teamusers.go).
+agent=tester
+as_agent() { docker exec -u "$agent" -w "/home/$agent" "$new" bash -lc "$1"; }
 
 # wait_health CONTAINER WANT: wait for Docker's health status, up to 10 minutes.
 wait_health() {
@@ -80,6 +83,29 @@ check "python 3" as_work 'python3 --version'
 check "shell integration (OSC 133) in login shells" as_work 'bash -lic "declare -F __portenv_osc133_precmd"'
 check "skeleton .zshrc sources the zsh integration" in_box grep -q osc133.zsh /home/work/.zshrc
 check "claude code" as_work 'claude --version'
+# The portenv CLI, for agents' own commands inside the workspace (ADR 0022 §4).
+check "portenv on PATH at /usr/local/bin, root's, 755" in_box sh -c 'test "$(command -v portenv)" = /usr/local/bin/portenv && test "$(stat -c %U:%G:%a /usr/local/bin/portenv)" = root:root:755'
+check "portenv whoami in a plain shell exits 2 and says why" as_work \
+	'out=$(portenv whoami 2>&1); rc=$?; test "$rc" -eq 2 && grep -q "works only for an agent inside a workspace (PORTENV_SOCKET isn.t set)" <<<"$out"'
+check "portenv guide" as_work 'out=$(portenv guide) && test -n "$out"'
+check "portenv team init writes the starter agent files" as_work \
+	'd=$(mktemp -d) && portenv team init --dir "$d" >/dev/null && test "$(ls "$d/.portenv/agents" | tr "\n" " ")" = "builder.md lead.md reviewer.md " && rm -rf "$d"'
+# The owner's commands are refused inside: portenv init would write a box's
+# repository key in the home (CC-0453).
+check "portenv init is refused inside a workspace" as_work \
+	'out=$(portenv init x 2>&1); rc=$?; test "$rc" -eq 2 && grep -qx "This is the owner.s command; run it on your Mac." <<<"$out"'
+check "the in-box portenv commands write nothing in the home" as_work 'test ! -e ~/.config/Portenv'
+# The same for an agent's user (uid 2001), made as init makes one: the team
+# group, the agent's own group, then the user and its 0700 home. Removed
+# after, so the rest of the run sees a box with no team.
+check "make an agent's user, uid 2001" in_box sh -c "groupadd --gid 2000 team && groupadd --gid 2001 $agent &&
+	useradd --uid 2001 --gid 2001 --groups team --no-create-home --home-dir /home/$agent --shell /bin/bash $agent &&
+	install -d -m 0700 -o 2001 -g 2001 /home/$agent && test \"\$(id -u $agent)\" = 2001"
+check "portenv init is refused for an agent's user" as_agent \
+	'out=$(portenv init x 2>&1); rc=$?; test "$rc" -eq 2 && grep -qx "This is the owner.s command; run it on your Mac." <<<"$out"'
+check "nothing written in the agent's home" as_agent 'test "$HOME" = "/home/$(id -un)" && test "$(id -u)" = 2001 && test ! -e ~/.config/Portenv'
+check "remove the agent's user" in_box sh -c "userdel $agent && { ! getent group $agent >/dev/null || groupdel $agent; } &&
+	groupdel team && rm -rf /home/$agent && test \"\$(ls -A /home)\" = work"
 
 # An orphan that exits must be reaped by PID 1, not left as a zombie.
 in_box bash -c '(sleep 1 &) ; exit 0'

@@ -201,6 +201,13 @@ enum ScreenRenders {
                     try snapshotOne(view, name: String(name.dropLast(suffix.count + 1)), suffix: suffix, size: size, appearance: appearance, in: dir)
                 }
             }
+            // The Team sidebar (GUIDELINES 6.2): All tabs, an agent
+            // selected, and compact.
+            try TeamRenders.render(to: dir) { view, name, size in
+                for (suffix, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] where name.hasSuffix(suffix) {
+                    try snapshotOne(view, name: String(name.dropLast(suffix.count + 1)), suffix: suffix, size: size, appearance: appearance, in: dir)
+                }
+            }
             // Portenv › Settings…, each pane (R-0137).
             try await SettingsRender.render(to: dir)
             return 0

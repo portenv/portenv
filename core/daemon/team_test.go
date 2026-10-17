@@ -1118,3 +1118,38 @@ func TestTeamCallsNeverApproveAnAgentFile(t *testing.T) {
 		t.Fatal("the owner's Approve didn't approve")
 	}
 }
+
+// An agent file added, changed or removed while the workspace is open
+// reaches the app without reopening it.
+func TestSyncAgentsFollowsTheFiles(t *testing.T) {
+	e, _, _ := newTestEngine(t)
+	team := []TeamAgent{testAgent("lead", grant(typesv1.GrantMode_GRANT_MODE_ASK, 2, nil, true))}
+	e.loadTeam = func(context.Context, string) (Team, error) { return Team{Agents: slices.Clone(team)}, nil }
+	ctx := context.Background()
+	look := func() []teamEvent {
+		t.Helper()
+		n := len(e.box("w").events)
+		if err := e.syncAgents(ctx, "w"); err != nil {
+			t.Fatal(err)
+		}
+		return e.box("w").events[n:]
+	}
+	if evs := look(); len(evs) != 0 {
+		t.Fatalf("the first look only records: %v", evs)
+	}
+	team = append(team, testAgent("builder", grant(typesv1.GrantMode_GRANT_MODE_ASK, 2, nil, true)))
+	if evs := look(); len(evs) != 1 || evs[0].agent.GetId() != "builder" {
+		t.Fatalf("added: %v", evs)
+	}
+	if evs := look(); len(evs) != 0 {
+		t.Fatalf("nothing changed: %v", evs)
+	}
+	team[0].SHA256, team[0].Approved = "def", false
+	if evs := look(); len(evs) != 1 || evs[0].agent.GetId() != "lead" || evs[0].agent.GetApproved() {
+		t.Fatalf("changed: %v", evs)
+	}
+	team = team[1:]
+	if evs := look(); len(evs) != 1 || evs[0].removed != "lead" {
+		t.Fatalf("removed: %v", evs)
+	}
+}

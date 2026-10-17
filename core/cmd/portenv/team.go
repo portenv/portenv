@@ -5,6 +5,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -18,6 +19,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/portenv/portenv/core/internal/teamkit"
 	agentv1 "github.com/portenv/portenv/proto/gen/go/portenv/agent/v1"
 	typesv1 "github.com/portenv/portenv/proto/gen/go/portenv/types/v1"
 )
@@ -38,6 +40,10 @@ var teamUsage = map[string]string{
 	"propose-agent-change": "propose-agent-change FILE",
 	"request-package":      "request-package NAME [--reason TEXT]",
 	"whoami":               "whoami",
+	"status":               "status set TEXT [--progress N/M] [--blocked REASON] | status clear",
+	"team":                 "team status | team init [--template starter|orchestrate] [--dir PROJECT]",
+	"guide":                "guide [--json]",
+	"handoff":              "handoff AGENT PATH [--note TEXT]",
 }
 
 // maxProposedFile is an agent file's limit (ADR 0022 §3).
@@ -46,7 +52,21 @@ const maxProposedFile = 64 << 10
 // maxTeamReply caps an answer from the helper (R-0260 item 10).
 const maxTeamReply = 1 << 20
 
-func isTeamCommand(name string) bool { _, ok := teamUsage[name]; return ok }
+// isTeamCommand is whether a command is an agent's own. "status" is also
+// the person's command for a workspace, so it's an agent's only inside a
+// workspace (with PORTENV_SOCKET set).
+func isTeamCommand(name string) bool {
+	if name == "status" {
+		return false
+	}
+	_, ok := teamUsage[name]
+	return ok
+}
+
+// isAgentCommand is isTeamCommand, with "status" inside a workspace.
+func isAgentCommand(name string, getenv func(string) string) bool {
+	return isTeamCommand(name) || (name == "status" && getenv("PORTENV_SOCKET") != "")
+}
 
 // runTeam runs one in-box command and returns its exit status: 0 done,
 // 1 refused (the plain line on stderr), 2 a usage mistake.
@@ -58,6 +78,14 @@ func runTeam(ctx context.Context, args []string, getenv func(string) string, _ i
 		}
 		_, _ = fmt.Fprintf(stderr, "usage: portenv %s [--json]\n", teamUsage[name])
 		return 2
+	}
+	// Neither needs the agent's socket: the guide is built in, and team
+	// init writes files in the owner's project.
+	if name == "guide" {
+		return runGuide(args[1:], stdout, stderr)
+	}
+	if name == "team" && len(args) > 1 && args[1] == "init" {
+		return runTeamInit(args[2:], stdout, stderr)
 	}
 	sock := getenv("PORTENV_SOCKET")
 	if sock == "" {
@@ -148,6 +176,10 @@ func buildTeamCall(name string, args []string, getenv func(string) string) (*age
 		values = []string{"text"}
 	case "request-package":
 		values = []string{"reason"}
+	case "status":
+		values = []string{"progress", "blocked"}
+	case "handoff":
+		values = []string{"note"}
 	}
 	a, err := parseTeamArgs(args, bools, values)
 	if err != nil {
@@ -258,6 +290,37 @@ func buildTeamCall(name string, args []string, getenv func(string) string) (*age
 			return nil, false, err
 		}
 		c.Op = &agentv1.TeamCallsResponse_Whoami{Whoami: &agentv1.WhoAmI{}}
+	case "status":
+		switch {
+		case len(a.pos) == 1 && a.pos[0] == "clear" && a.flags["progress"] == "" && a.flags["blocked"] == "":
+			c.Op = &agentv1.TeamCallsResponse_SetStatus{SetStatus: &agentv1.SetStatus{Clear: true}}
+		case len(a.pos) == 2 && a.pos[0] == "set":
+			s := &agentv1.SetStatus{Text: a.pos[1], Blocked: a.flags["blocked"]}
+			if p := a.flags["progress"]; p != "" {
+				var done, total int32
+				if n, err := fmt.Sscanf(p, "%d/%d", &done, &total); err != nil || n != 2 || done < 0 || total <= 0 || done > total || fmt.Sprintf("%d/%d", done, total) != p {
+					return nil, false, errors.New("--progress is N/M, like 3/8")
+				}
+				s.ProgressDone, s.ProgressTotal = done, total
+			}
+			c.Op = &agentv1.TeamCallsResponse_SetStatus{SetStatus: s}
+		default:
+			return nil, false, errors.New(`use "status set TEXT" or "status clear"`)
+		}
+	case "team":
+		if len(a.pos) != 1 || a.pos[0] != "status" {
+			return nil, false, errors.New(`the only team command here is "team status"`)
+		}
+		c.Op = &agentv1.TeamCallsResponse_TeamStatus{TeamStatus: &agentv1.TeamStatus{}}
+	case "handoff":
+		if err := needPos(2); err != nil {
+			return nil, false, err
+		}
+		path, err := filepath.Abs(a.pos[1])
+		if err != nil {
+			return nil, false, err
+		}
+		c.Op = &agentv1.TeamCallsResponse_Handoff{Handoff: &agentv1.Handoff{To: a.pos[0], Path: path, Note: a.flags["note"]}}
 	}
 	if a.dash && name != "split" && name != "tab" {
 		return nil, false, errors.New(`"--" is only for split and tab new`)
@@ -329,6 +392,8 @@ func printTeamReply(w io.Writer, name string, call *agentv1.TeamCallsResponse, r
 		result = x.Message
 	case *agentv1.TeamCallsRequest_Whoami:
 		result = x.Whoami
+	case *agentv1.TeamCallsRequest_TeamStatus:
+		result = x.TeamStatus
 	}
 	if jsonOut {
 		if result == nil {
@@ -344,6 +409,29 @@ func printTeamReply(w io.Writer, name string, call *agentv1.TeamCallsResponse, r
 		_, _ = fmt.Fprintf(w, "Opened pane %s.\n", shownPlain(r.GetPane().GetPaneId()))
 	case "msg":
 		_, _ = fmt.Fprintf(w, "Sent to %s.\n", shownPlain(call.GetMsg().GetTo()))
+	case "status":
+		if call.GetSetStatus().GetClear() {
+			_, _ = fmt.Fprintln(w, "Status cleared.")
+		} else {
+			_, _ = fmt.Fprintln(w, "Status set.")
+		}
+	case "handoff":
+		m := r.GetMessage()
+		_, _ = fmt.Fprintf(w, "Handed %d files to %s.\n", len(m.GetFiles()), shownPlain(call.GetHandoff().GetTo()))
+		for _, f := range m.GetFiles() {
+			_, _ = fmt.Fprintf(w, "  %s  %s\n", shownPlain(f.GetSha256()), shownPlain(f.GetPath()))
+		}
+	case "team":
+		for _, m := range r.GetTeamStatus().GetTeammates() {
+			line := strings.ToLower(strings.TrimPrefix(m.GetState().String(), "AGENT_STATE_"))
+			if st := m.GetStatus(); st != nil {
+				line += " · " + st.GetText()
+				if st.GetBlocked() != "" {
+					line += " · blocked: " + st.GetBlocked()
+				}
+			}
+			_, _ = fmt.Fprintf(w, "%s  %s\n", shownPlain(m.GetId()), shownPlain(line))
+		}
 	case "ask-owner", "request-package", "propose-agent-change":
 		_, _ = fmt.Fprintf(w, "Asked the owner (decision %s). Wait for the answer with: portenv inbox --wait\n", shownPlain(r.GetDecision().GetId()))
 	case "inbox":
@@ -385,4 +473,65 @@ func shownPlain(s string) string {
 		}
 	}
 	return b.String()
+}
+
+func runGuide(args []string, stdout, stderr io.Writer) int {
+	g := teamkit.NewGuide()
+	switch {
+	case len(args) == 0:
+		_, _ = io.WriteString(stdout, g.Text())
+	case len(args) == 1 && args[0] == "--json":
+		b, _ := json.MarshalIndent(g, "", "  ")
+		_, _ = fmt.Fprintln(stdout, string(b))
+	default:
+		_, _ = fmt.Fprintln(stderr, "usage: portenv guide [--json]")
+		return 2
+	}
+	return 0
+}
+
+// runTeamInit writes a template's agent files into the project's
+// .portenv/agents/, never over a file that's there. Nothing runs until
+// the owner approves each file in Portenv.
+func runTeamInit(args []string, stdout, stderr io.Writer) int {
+	a, err := parseTeamArgs(args, nil, []string{"template", "dir"})
+	if err != nil || len(a.pos) != 0 || a.dash {
+		_, _ = fmt.Fprintln(stderr, "usage: portenv team init [--template starter|orchestrate] [--dir PROJECT]")
+		return 2
+	}
+	name := a.flags["template"]
+	if name == "" {
+		name = "starter"
+	}
+	files, err := teamkit.Template(name)
+	if err != nil {
+		_, _ = fmt.Fprintln(stderr, "portenv:", err)
+		return 2
+	}
+	dir := a.flags["dir"]
+	if dir == "" {
+		if dir, err = os.Getwd(); err != nil {
+			_, _ = fmt.Fprintln(stderr, "portenv:", err)
+			return 1
+		}
+	}
+	agents := filepath.Join(dir, ".portenv", "agents")
+	for _, f := range teamkit.TemplateFiles(name) {
+		if _, err := os.Lstat(filepath.Join(agents, f)); err == nil {
+			_, _ = fmt.Fprintf(stderr, "portenv: %s is already there; nothing was written. Move it away to start from the %s template.\n", filepath.Join(".portenv", "agents", f), name)
+			return 1
+		}
+	}
+	if err := os.MkdirAll(agents, 0o755); err != nil { // #nosec G301 -- the project's, readable by the team
+		_, _ = fmt.Fprintln(stderr, "portenv:", err)
+		return 1
+	}
+	for _, f := range teamkit.TemplateFiles(name) {
+		if err := os.WriteFile(filepath.Join(agents, f), files[f], 0o644); err != nil { // #nosec G306 -- an agent file, read by the team
+			_, _ = fmt.Fprintln(stderr, "portenv:", err)
+			return 1
+		}
+	}
+	_, _ = fmt.Fprintf(stdout, "Wrote %d agent files to .portenv/agents/ (%s). Approve each in Portenv's Team section; nothing runs before you do.\n", len(files), strings.Join(teamkit.TemplateFiles(name), ", "))
+	return 0
 }

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -14,6 +15,8 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	agentv1 "github.com/portenv/portenv/proto/gen/go/portenv/agent/v1"
 	typesv1 "github.com/portenv/portenv/proto/gen/go/portenv/types/v1"
@@ -24,12 +27,17 @@ import (
 type fakeTeamHelper struct {
 	agentv1.AgentServiceClient
 
-	mu       sync.Mutex
-	board    []*agentv1.AppendBoardRequest
-	panes    []*agentv1.AgentPaneActionRequest
-	started  []*agentv1.StartTeamAgentRequest
-	stopped  []string
-	nextPane int
+	mu         sync.Mutex
+	board      []*agentv1.AppendBoardRequest
+	panes      []*agentv1.AgentPaneActionRequest
+	started    []*agentv1.StartTeamAgentRequest
+	stopped    []string
+	nextPane   int
+	handoffs   []*agentv1.HandoffFilesRequest
+	delivered  []*agentv1.DeliverRoutineRequest
+	busy       bool
+	prepared   []string
+	prepareErr string
 }
 
 func (f *fakeTeamHelper) AppendBoard(_ context.Context, in *agentv1.AppendBoardRequest, _ ...grpc.CallOption) (*agentv1.AppendBoardResponse, error) {
@@ -673,6 +681,360 @@ func TestTeamFilesRebuildsDontInterleave(t *testing.T) {
 	}
 }
 
+func setStatus(e *teamEngine, id string, s *agentv1.SetStatus) *agentv1.TeamCallsRequest {
+	return e.handleCall(context.Background(), "w", &agentv1.TeamCallsResponse{AgentId: id, Op: &agentv1.TeamCallsResponse_SetStatus{SetStatus: s}})
+}
+
+// R-0256: an agent sets and clears its own status, within the limits.
+func TestAnAgentsStatus(t *testing.T) {
+	e, _, clock := newTestEngine(t, defaultTeam()...)
+	if r := setStatus(e, "builder", &agentv1.SetStatus{Text: "Running the payments tests", ProgressDone: 3, ProgressTotal: 8}); !r.GetOk() {
+		t.Fatal(r.GetLine())
+	}
+	list := e.agentInfos(context.Background(), "w")
+	if st := list["builder"].GetStatus(); st.GetText() != "Running the payments tests" || st.GetProgressDone() != 3 || st.GetSetAt() == nil {
+		t.Errorf("status = %v", st)
+	}
+	// One update every 10 s.
+	if r := setStatus(e, "builder", &agentv1.SetStatus{Text: "again"}); r.GetOk() {
+		t.Error("a second update within 10 s")
+	}
+	clock.add(statusEvery)
+	for name, s := range map[string]*agentv1.SetStatus{
+		"long":     {Text: strings.Repeat("x", maxStatus+1)},
+		"escape":   {Text: "ok\x1b[2J"},
+		"newline":  {Text: "one\ntwo"},
+		"blocked":  {Text: "x", Blocked: "needs \u202ekey"},
+		"progress": {Text: "x", ProgressDone: 9, ProgressTotal: 8},
+		"empty":    {Text: ""},
+	} {
+		if r := setStatus(e, "builder", s); r.GetOk() {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+	if r := setStatus(e, "builder", &agentv1.SetStatus{Clear: true}); !r.GetOk() {
+		t.Fatal(r.GetLine())
+	}
+	if st := e.agentInfos(context.Background(), "w")["builder"].GetStatus(); st != nil {
+		t.Errorf("after clear: %v", st)
+	}
+}
+
+// R-0257 item 1: team status only with the grant, and never terminals.
+func TestTeamStatusNeedsTheGrant(t *testing.T) {
+	team := defaultTeam()
+	team[0].Grant.TeamStatus = true // lead
+	e, _, _ := newTestEngine(t, team...)
+	ctx := context.Background()
+	setStatus(e, "builder", &agentv1.SetStatus{Text: "building", Blocked: "needs the staging key"})
+	ask := func(id string) *agentv1.TeamCallsRequest {
+		return e.handleCall(ctx, "w", &agentv1.TeamCallsResponse{AgentId: id, Op: &agentv1.TeamCallsResponse_TeamStatus{TeamStatus: &agentv1.TeamStatus{}}})
+	}
+	if r := ask("builder"); r.GetOk() {
+		t.Error("team status without the grant")
+	}
+	r := ask("lead")
+	if !r.GetOk() {
+		t.Fatal(r.GetLine())
+	}
+	var b *agentv1.Teammate
+	for _, m := range r.GetTeamStatus().GetTeammates() {
+		if m.GetId() == "builder" {
+			b = m
+		}
+	}
+	if b == nil || b.GetStatus().GetBlocked() != "needs the staging key" {
+		t.Errorf("lead sees builder as %v", b)
+	}
+	// whoami: teammates' status only with the grant.
+	who := func(id string) *agentv1.WhoAmIResult {
+		return e.handleCall(ctx, "w", &agentv1.TeamCallsResponse{AgentId: id, Op: &agentv1.TeamCallsResponse_Whoami{Whoami: &agentv1.WhoAmI{}}}).GetWhoami()
+	}
+	for _, m := range who("reviewer").GetTeammates() {
+		if m.GetStatus() != nil {
+			t.Errorf("reviewer (no grant) sees %s's status", m.GetId())
+		}
+	}
+	if w := who("builder"); w.GetStatus().GetText() != "building" {
+		t.Errorf("builder's own status in whoami: %v", w.GetStatus())
+	}
+}
+
+// R-0256: Ask for Status is a status_request in the agent's inbox.
+func TestTheOwnerAsksForStatus(t *testing.T) {
+	e, _, _ := newTestEngine(t, defaultTeam()...)
+	m, err := e.ownerMessageOf(context.Background(), "w", "builder", "", "What are you working on?", typesv1.MessageType_MESSAGE_TYPE_STATUS_REQUEST)
+	if err != nil || m.GetType() != typesv1.MessageType_MESSAGE_TYPE_STATUS_REQUEST {
+		t.Fatalf("%v, %v", m, err)
+	}
+	if _, err := e.ownerMessageOf(context.Background(), "w", "builder", "", "x", typesv1.MessageType_MESSAGE_TYPE_ROUTINE); err == nil {
+		t.Error("the owner sent a routine-typed message")
+	}
+}
+
+func (f *fakeTeamHelper) HandoffFiles(_ context.Context, in *agentv1.HandoffFilesRequest, _ ...grpc.CallOption) (*agentv1.HandoffFilesResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.handoffs = append(f.handoffs, in)
+	return &agentv1.HandoffFilesResponse{Files: []*typesv1.HandoffFile{{Path: "inbox/" + in.GetFromAgent() + "/x/v2.fig", Sha256: strings.Repeat("a", 64), Size: 10}}}, nil
+}
+
+// R-0257 item 3: a hand-off goes only where the message grant allows,
+// only from the sender's home or the project, and posts the files.
+func TestHandoff(t *testing.T) {
+	e, h, _ := newTestEngine(t, defaultTeam()...)
+	ctx := context.Background()
+	hand := func(from, to, path, note string) *agentv1.TeamCallsRequest {
+		return e.handleCall(ctx, "w", &agentv1.TeamCallsResponse{AgentId: from, Op: &agentv1.TeamCallsResponse_Handoff{Handoff: &agentv1.Handoff{To: to, Path: path, Note: note}}})
+	}
+	r := hand("builder", "lead", "/home/builder/design/v2", "revision 2")
+	if !r.GetOk() || r.GetMessage().GetType() != typesv1.MessageType_MESSAGE_TYPE_HANDOFF || len(r.GetMessage().GetFiles()) != 1 {
+		t.Fatalf("handoff: %v", r)
+	}
+	if got := h.handoffs[0]; got.GetFromAgent() != "builder" || got.GetToAgent() != "lead" || got.GetRecipientQuotaBytes() <= 0 {
+		t.Errorf("helper asked %v", got)
+	}
+	if in := inbox(t, e, "lead", "").GetMessages(); len(in) != 1 || len(in[0].GetFiles()) != 1 {
+		t.Errorf("lead's inbox: %v", in)
+	}
+	for name, c := range map[string][4]string{
+		"not granted":         {"builder", "reviewer", "/home/builder/x", ""},
+		"to itself":           {"builder", "builder", "/home/builder/x", ""},
+		"another's home":      {"builder", "lead", "/home/reviewer/secret", ""},
+		"the owner's dotfile": {"builder", "lead", "/home/work/.ssh/id_ed25519", ""},
+		"outside home":        {"builder", "lead", "/etc/shadow", ""},
+		"dot-dot":             {"builder", "lead", "/home/builder/../work/.ssh", ""},
+		"relative":            {"builder", "lead", "design/v2", ""},
+		"bad note":            {"builder", "lead", "/home/builder/x", "hi\x1b[2J"},
+	} {
+		if r := hand(c[0], c[1], c[2], c[3]); r.GetOk() {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+	if len(h.handoffs) != 1 {
+		t.Errorf("the helper was asked %d times", len(h.handoffs))
+	}
+	// From the project is fine.
+	if r := hand("builder", "lead", "/home/work/w/exports/report.pdf", ""); !r.GetOk() {
+		t.Errorf("from the project: %s", r.GetLine())
+	}
+}
+
+func (f *fakeTeamHelper) DeliverRoutine(_ context.Context, in *agentv1.DeliverRoutineRequest, _ ...grpc.CallOption) (*agentv1.DeliverRoutineResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.busy {
+		return nil, status.Error(codes.FailedPrecondition, "busy")
+	}
+	f.delivered = append(f.delivered, in)
+	return &agentv1.DeliverRoutineResponse{}, nil
+}
+
+func routineTeam() []TeamAgent {
+	team := defaultTeam()
+	team[0].Spec.Routines = []AgentRoutine{{EveryMinutes: 30, Note: "Status round"}}
+	return team
+}
+
+func startedWithRoutine(t *testing.T) (*teamEngine, *fakeTeamHelper, *testClock) {
+	t.Helper()
+	e, h, clock := newTestEngine(t, routineTeam()...)
+	approveFirstStart(t, e)
+	if _, err := e.startAgent(context.Background(), "w", "lead"); err != nil {
+		t.Fatal(err)
+	}
+	return e, h, clock
+}
+
+func routineNotices(t *testing.T, e *teamEngine, id string) int {
+	n := 0
+	for _, m := range inbox(t, e, id, "").GetMessages() {
+		if m.GetType() == typesv1.MessageType_MESSAGE_TYPE_ROUTINE {
+			n++
+		}
+	}
+	return n
+}
+
+// R-0258: Portenv fires a routine on time, into the agent's own pane when
+// it's idle, and into its inbox.
+func TestARoutineFiresOnTime(t *testing.T) {
+	e, h, clock := startedWithRoutine(t)
+	ctx := context.Background()
+	e.tickRoutines(ctx)
+	clock.add(29 * time.Minute)
+	e.tickRoutines(ctx)
+	if len(h.delivered) != 0 {
+		t.Fatal("fired early")
+	}
+	clock.add(time.Minute)
+	e.tickRoutines(ctx)
+	if len(h.delivered) != 1 || h.delivered[0].GetAgentId() != "lead" || h.delivered[0].GetText() != "Status round" {
+		t.Fatalf("delivered = %v", h.delivered)
+	}
+	if n := routineNotices(t, e, "lead"); n != 1 {
+		t.Errorf("%d routine notices in lead's inbox, want 1", n)
+	}
+	if info := e.agentInfos(ctx, "w")["lead"]; len(info.GetRoutines()) != 1 || info.GetRoutines()[0].GetEveryMinutes() != 30 {
+		t.Errorf("routines on the row: %v", info.GetRoutines())
+	}
+}
+
+// Busy: it waits for the next idle, and missed fires collapse into one.
+func TestABusyAgentGetsOneCollapsedRoutine(t *testing.T) {
+	e, h, clock := startedWithRoutine(t)
+	ctx := context.Background()
+	h.busy = true
+	clock.add(30 * time.Minute)
+	e.tickRoutines(ctx)
+	clock.add(30 * time.Minute)
+	e.tickRoutines(ctx)
+	if len(h.delivered) != 0 {
+		t.Fatal("typed into a busy agent")
+	}
+	h.busy = false
+	clock.add(time.Minute)
+	e.tickRoutines(ctx)
+	if len(h.delivered) != 1 || !strings.Contains(h.delivered[0].GetText(), "missed 2 rounds") {
+		t.Fatalf("delivered = %v", h.delivered)
+	}
+	clock.add(time.Minute)
+	e.tickRoutines(ctx)
+	if len(h.delivered) != 1 {
+		t.Errorf("delivered again: %v", h.delivered)
+	}
+}
+
+// Paused, or the agent stopped: nothing fires.
+func TestPausedAndStoppedRoutinesDontFire(t *testing.T) {
+	e, h, clock := startedWithRoutine(t)
+	ctx := context.Background()
+	if _, err := e.setRoutinePaused(ctx, "w", "lead", 0, true); err != nil {
+		t.Fatal(err)
+	}
+	clock.add(time.Hour)
+	e.tickRoutines(ctx)
+	if len(h.delivered) != 0 || routineNotices(t, e, "lead") != 0 {
+		t.Fatal("a paused routine fired")
+	}
+	if _, err := e.setRoutinePaused(ctx, "w", "lead", 0, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.setRoutinePaused(ctx, "w", "lead", 3, true); err == nil {
+		t.Error("paused a routine that doesn't exist")
+	}
+	if _, err := e.stopAgent(ctx, "w", "lead"); err != nil {
+		t.Fatal(err)
+	}
+	clock.add(time.Hour)
+	e.tickRoutines(ctx)
+	if len(h.delivered) != 0 {
+		t.Error("a stopped agent's routine fired")
+	}
+}
+
+// R-0258 with lane A: routines need the runner's idle pattern, which goes
+// to the helper with the start; a runner Portenv doesn't know gets none,
+// and says so.
+func TestRoutinesNeedAKnownRunner(t *testing.T) {
+	_, h, _ := startedWithRoutine(t)
+	if p := h.started[0].GetIdlePattern(); p == "" || p != runnerIdlePattern([]string{"claude"}) {
+		t.Errorf("idle pattern sent: %q", p)
+	}
+
+	team := routineTeam()
+	team[0].Runner, team[0].RunnerLine = []string{"/usr/local/bin/aider"}, "aider"
+	team[0].Spec.Runner = team[0].Runner
+	e, h, clock := newTestEngine(t, team...)
+	approveFirstStart(t, e)
+	ctx := context.Background()
+	if _, err := e.startAgent(ctx, "w", "lead"); err != nil {
+		t.Fatal(err)
+	}
+	clock.add(time.Hour)
+	e.tickRoutines(ctx)
+	if len(h.delivered) != 0 || routineNotices(t, e, "lead") != 0 {
+		t.Error("a routine fired for a runner with no idle pattern")
+	}
+	info := e.agentInfos(ctx, "w")["lead"]
+	if !strings.Contains(info.GetRoutinesOff(), "aider") {
+		t.Errorf("the row doesn't say why: %q", info.GetRoutinesOff())
+	}
+	w := e.handleCall(ctx, "w", &agentv1.TeamCallsResponse{AgentId: "lead", Op: &agentv1.TeamCallsResponse_Whoami{Whoami: &agentv1.WhoAmI{}}}).GetWhoami()
+	if !strings.Contains(w.GetRoutinesOff(), "Routines are off") {
+		t.Errorf("whoami doesn't say why: %q", w.GetRoutinesOff())
+	}
+}
+
+func TestTheRunnerTablesPatterns(t *testing.T) {
+	re := regexp.MustCompile(runnerIdlePattern([]string{"claude", "--permission-mode", "acceptEdits"}))
+	for _, idle := range []string{"> ", "│ >                │", "  >"} {
+		if !re.MatchString(idle) {
+			t.Errorf("%q isn't idle", idle)
+		}
+	}
+	for _, busy := range []string{"> fix the tests", "Do you want to proceed? (y/n)", "✻ Thinking…", ""} {
+		if re.MatchString(busy) {
+			t.Errorf("%q counted as idle", busy)
+		}
+	}
+	if runnerIdlePattern([]string{"bash"}) != "" || runnerIdlePattern(nil) != "" {
+		t.Error("an unknown runner has a pattern")
+	}
+}
+
+func (f *fakeTeamHelper) PrepareTeamProject(_ context.Context, in *agentv1.PrepareTeamProjectRequest, _ ...grpc.CallOption) (*agentv1.PrepareTeamProjectResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.prepared = append(f.prepared, in.GetProjectDir())
+	if f.prepareErr != "" {
+		return nil, status.Error(codes.FailedPrecondition, f.prepareErr)
+	}
+	return &agentv1.PrepareTeamProjectResponse{}, nil
+}
+
+// ADR 0022 §2: the project is opened to the team before its first agent
+// starts, and a refusal (open dotfiles, no ACLs) stops the start.
+func TestTheProjectIsPreparedBeforeAgentsStart(t *testing.T) {
+	e, h, _ := newTestEngine(t, defaultTeam()...)
+	approveFirstStart(t, e)
+	ctx := context.Background()
+	h.prepareErr = "~/.ssh can be read by others in this workspace."
+	if _, err := e.startAgent(ctx, "w", "lead"); err == nil || !strings.Contains(err.Error(), ".ssh") {
+		t.Fatalf("start = %v, want the helper's line", err)
+	}
+	if len(h.started) != 0 {
+		t.Fatal("an agent started over an unprepared project")
+	}
+	h.prepareErr = ""
+	if _, err := e.startAgent(ctx, "w", "lead"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.startAgent(ctx, "w", "builder"); err != nil {
+		t.Fatal(err)
+	}
+	if got := h.prepared; len(got) < 2 || got[len(got)-1] != "/home/work/w" {
+		t.Errorf("prepared %v", got)
+	}
+}
+
+// R-0261: whoami lists only what works; the first start says what changes.
+func TestWhoAmIListsOnlyWhatWorks(t *testing.T) {
+	e, _, _ := newTestEngine(t, defaultTeam()...)
+	w := e.handleCall(context.Background(), "w", &agentv1.TeamCallsResponse{AgentId: "builder", Op: &agentv1.TeamCallsResponse_Whoami{Whoami: &agentv1.WhoAmI{}}}).GetWhoami()
+	for _, c := range w.GetCommands() {
+		if strings.Contains(c, "propose") || c == "request-package" {
+			t.Errorf("whoami lists %q, which isn't in this build", c)
+		}
+	}
+	_, _ = e.startAgent(context.Background(), "w", "lead")
+	for _, d := range e.box("w").decisions {
+		if d.GetKind() == typesv1.DecisionKind_DECISION_KIND_TEAM_START && !strings.Contains(d.GetDetail(), "Stop Team doesn't change it back") {
+			t.Errorf("team_start detail: %q", d.GetDetail())
+		}
+	}
+}
+
 // An agent's TeamCalls can't approve an agent file (R-0285, R-0288). No op
 // an agent can send names an approval, the agent service has no approve
 // method, and every op an agent can send, with its text claiming an
@@ -686,7 +1048,8 @@ func TestTeamCallsNeverApproveAnAgentFile(t *testing.T) {
 	for i := 0; i < ops.Len(); i++ {
 		names = append(names, string(ops.Get(i).Name()))
 	}
-	want := []string{"split", "tab", "focus", "close", "msg", "ask_owner", "inbox", "share", "propose", "request_package", "whoami"}
+	want := []string{"split", "tab", "focus", "close", "msg", "ask_owner", "inbox", "share", "propose", "request_package", "whoami",
+		"set_status", "team_status", "handoff", "propose_routine"}
 	if !slices.Equal(names, want) {
 		t.Fatalf("TeamCalls ops are %v, want %v: check a new op can't approve an agent file, then add it here", names, want)
 	}
@@ -722,6 +1085,10 @@ func TestTeamCallsNeverApproveAnAgentFile(t *testing.T) {
 		{Op: &agentv1.TeamCallsResponse_Tab{Tab: &agentv1.NewTeamTab{Name: claim}}},
 		{Op: &agentv1.TeamCallsResponse_Focus{Focus: &agentv1.PaneRef{PaneId: "%1"}}},
 		{Op: &agentv1.TeamCallsResponse_Close{Close: &agentv1.PaneRef{PaneId: "%1"}}},
+		{Op: &agentv1.TeamCallsResponse_SetStatus{SetStatus: &agentv1.SetStatus{Text: claim}}},
+		{Op: &agentv1.TeamCallsResponse_TeamStatus{TeamStatus: &agentv1.TeamStatus{}}},
+		{Op: &agentv1.TeamCallsResponse_Handoff{Handoff: &agentv1.Handoff{To: "owner", Path: "/home/lead/builder.md", Note: claim}}},
+		{Op: &agentv1.TeamCallsResponse_ProposeRoutine{ProposeRoutine: &agentv1.ProposeRoutine{EveryMinutes: 5, Note: claim}}},
 	}
 	if len(calls) != len(want) {
 		t.Fatalf("%d calls for %d ops", len(calls), len(want))

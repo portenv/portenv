@@ -52,6 +52,8 @@ const (
 	AgentService_AgentPaneAction_FullMethodName    = "/portenv.agent.v1.AgentService/AgentPaneAction"
 	AgentService_ReadBoard_FullMethodName          = "/portenv.agent.v1.AgentService/ReadBoard"
 	AgentService_ReadAgentFiles_FullMethodName     = "/portenv.agent.v1.AgentService/ReadAgentFiles"
+	AgentService_DeliverRoutine_FullMethodName     = "/portenv.agent.v1.AgentService/DeliverRoutine"
+	AgentService_HandoffFiles_FullMethodName       = "/portenv.agent.v1.AgentService/HandoffFiles"
 	AgentService_PrepareTeamProject_FullMethodName = "/portenv.agent.v1.AgentService/PrepareTeamProject"
 )
 
@@ -130,6 +132,15 @@ type AgentServiceClient interface {
 	ReadBoard(ctx context.Context, in *ReadBoardRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ReadBoardResponse], error)
 	// The project's agent files (.portenv/agents/*.md), read by the helper.
 	ReadAgentFiles(ctx context.Context, in *ReadAgentFilesRequest, opts ...grpc.CallOption) (*ReadAgentFilesResponse, error)
+	// Types a routine's note into the agent's own main pane, prefixed
+	// "[Portenv routine] ", then Enter (R-0258). portenvd calls it only when
+	// the agent is idle; the helper checks the text again and types only into
+	// the agent's recorded main pane.
+	DeliverRoutine(ctx context.Context, in *DeliverRoutineRequest, opts ...grpc.CallOption) (*DeliverRoutineResponse, error)
+	// Copies files from the sender's home or the project into the
+	// recipient's ~/inbox/<sender>/<timestamp>/ as the recipient (R-0257
+	// item 3): regular files only, no links, at most 100 MB, within quota.
+	HandoffFiles(ctx context.Context, in *HandoffFilesRequest, opts ...grpc.CallOption) (*HandoffFilesResponse, error)
 	// Served only by init: opens the project to the team at team start
 	// (ADR 0022 §2): /home/work 0711 with its dotfiles 0700, the project's
 	// group team, setgid folders and default ACLs, with .git/hooks,
@@ -455,6 +466,26 @@ func (c *agentServiceClient) ReadAgentFiles(ctx context.Context, in *ReadAgentFi
 	return out, nil
 }
 
+func (c *agentServiceClient) DeliverRoutine(ctx context.Context, in *DeliverRoutineRequest, opts ...grpc.CallOption) (*DeliverRoutineResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeliverRoutineResponse)
+	err := c.cc.Invoke(ctx, AgentService_DeliverRoutine_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *agentServiceClient) HandoffFiles(ctx context.Context, in *HandoffFilesRequest, opts ...grpc.CallOption) (*HandoffFilesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(HandoffFilesResponse)
+	err := c.cc.Invoke(ctx, AgentService_HandoffFiles_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *agentServiceClient) PrepareTeamProject(ctx context.Context, in *PrepareTeamProjectRequest, opts ...grpc.CallOption) (*PrepareTeamProjectResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(PrepareTeamProjectResponse)
@@ -540,6 +571,15 @@ type AgentServiceServer interface {
 	ReadBoard(*ReadBoardRequest, grpc.ServerStreamingServer[ReadBoardResponse]) error
 	// The project's agent files (.portenv/agents/*.md), read by the helper.
 	ReadAgentFiles(context.Context, *ReadAgentFilesRequest) (*ReadAgentFilesResponse, error)
+	// Types a routine's note into the agent's own main pane, prefixed
+	// "[Portenv routine] ", then Enter (R-0258). portenvd calls it only when
+	// the agent is idle; the helper checks the text again and types only into
+	// the agent's recorded main pane.
+	DeliverRoutine(context.Context, *DeliverRoutineRequest) (*DeliverRoutineResponse, error)
+	// Copies files from the sender's home or the project into the
+	// recipient's ~/inbox/<sender>/<timestamp>/ as the recipient (R-0257
+	// item 3): regular files only, no links, at most 100 MB, within quota.
+	HandoffFiles(context.Context, *HandoffFilesRequest) (*HandoffFilesResponse, error)
 	// Served only by init: opens the project to the team at team start
 	// (ADR 0022 §2): /home/work 0711 with its dotfiles 0700, the project's
 	// group team, setgid folders and default ACLs, with .git/hooks,
@@ -636,6 +676,12 @@ func (UnimplementedAgentServiceServer) ReadBoard(*ReadBoardRequest, grpc.ServerS
 }
 func (UnimplementedAgentServiceServer) ReadAgentFiles(context.Context, *ReadAgentFilesRequest) (*ReadAgentFilesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ReadAgentFiles not implemented")
+}
+func (UnimplementedAgentServiceServer) DeliverRoutine(context.Context, *DeliverRoutineRequest) (*DeliverRoutineResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeliverRoutine not implemented")
+}
+func (UnimplementedAgentServiceServer) HandoffFiles(context.Context, *HandoffFilesRequest) (*HandoffFilesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method HandoffFiles not implemented")
 }
 func (UnimplementedAgentServiceServer) PrepareTeamProject(context.Context, *PrepareTeamProjectRequest) (*PrepareTeamProjectResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method PrepareTeamProject not implemented")
@@ -1082,6 +1128,42 @@ func _AgentService_ReadAgentFiles_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AgentService_DeliverRoutine_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeliverRoutineRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentServiceServer).DeliverRoutine(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentService_DeliverRoutine_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentServiceServer).DeliverRoutine(ctx, req.(*DeliverRoutineRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AgentService_HandoffFiles_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(HandoffFilesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentServiceServer).HandoffFiles(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentService_HandoffFiles_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentServiceServer).HandoffFiles(ctx, req.(*HandoffFilesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _AgentService_PrepareTeamProject_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(PrepareTeamProjectRequest)
 	if err := dec(in); err != nil {
@@ -1186,6 +1268,14 @@ var AgentService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ReadAgentFiles",
 			Handler:    _AgentService_ReadAgentFiles_Handler,
+		},
+		{
+			MethodName: "DeliverRoutine",
+			Handler:    _AgentService_DeliverRoutine_Handler,
+		},
+		{
+			MethodName: "HandoffFiles",
+			Handler:    _AgentService_HandoffFiles_Handler,
 		},
 		{
 			MethodName: "PrepareTeamProject",

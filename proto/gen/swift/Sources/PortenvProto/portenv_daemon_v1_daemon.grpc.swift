@@ -737,6 +737,19 @@ public enum Portenv_Daemon_V1_DaemonService: Sendable {
                 type: .clientStreaming
             )
         }
+        /// Namespace for "SetRoutinePaused" metadata.
+        public enum SetRoutinePaused: Sendable {
+            /// Request type for "SetRoutinePaused".
+            public typealias Input = Portenv_Daemon_V1_SetRoutinePausedRequest
+            /// Response type for "SetRoutinePaused".
+            public typealias Output = Portenv_Daemon_V1_SetRoutinePausedResponse
+            /// Descriptor for "SetRoutinePaused".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "SetRoutinePaused",
+                type: .unary
+            )
+        }
         /// Descriptors for all methods in the "portenv.daemon.v1.DaemonService" service.
         public static let descriptors: [GRPCCore.MethodDescriptor] = [
             GetVersion.descriptor,
@@ -793,7 +806,8 @@ public enum Portenv_Daemon_V1_DaemonService: Sendable {
             RemoveAgent.descriptor,
             ListAgentFiles.descriptor,
             ReadAgentFile.descriptor,
-            AddAgentFiles.descriptor
+            AddAgentFiles.descriptor,
+            SetRoutinePaused.descriptor
         ]
     }
 }
@@ -2118,6 +2132,29 @@ extension Portenv_Daemon_V1_DaemonService {
             deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_AddAgentFilesResponse>,
             options: GRPCCore.CallOptions,
             onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_AddAgentFilesResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "SetRoutinePaused" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Pauses or resumes one of an agent's routines (R-0258).
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_SetRoutinePausedRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_SetRoutinePausedRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_SetRoutinePausedResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func setRoutinePaused<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_SetRoutinePausedRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_SetRoutinePausedRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_SetRoutinePausedResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_SetRoutinePausedResponse>) async throws -> Result
         ) async throws -> Result where Result: Sendable
     }
 
@@ -4036,6 +4073,40 @@ extension Portenv_Daemon_V1_DaemonService {
                 onResponse: handleResponse
             )
         }
+
+        /// Call the "SetRoutinePaused" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Pauses or resumes one of an agent's routines (R-0258).
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_SetRoutinePausedRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_SetRoutinePausedRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_SetRoutinePausedResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func setRoutinePaused<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_SetRoutinePausedRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_SetRoutinePausedRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_SetRoutinePausedResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_SetRoutinePausedResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.SetRoutinePaused.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
     }
 }
 
@@ -5658,6 +5729,35 @@ extension Portenv_Daemon_V1_DaemonService.ClientProtocol {
             request: request,
             serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_AddAgentFilesRequest>(),
             deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_AddAgentFilesResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "SetRoutinePaused" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Pauses or resumes one of an agent's routines (R-0258).
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_SetRoutinePausedRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func setRoutinePaused<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_SetRoutinePausedRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_SetRoutinePausedResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.setRoutinePaused(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_SetRoutinePausedRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_SetRoutinePausedResponse>(),
             options: options,
             onResponse: handleResponse
         )
@@ -7505,6 +7605,39 @@ extension Portenv_Daemon_V1_DaemonService.ClientProtocol {
             producer: producer
         )
         return try await self.addAgentFiles(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "SetRoutinePaused" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Pauses or resumes one of an agent's routines (R-0258).
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func setRoutinePaused<Result>(
+        _ message: Portenv_Daemon_V1_SetRoutinePausedRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_SetRoutinePausedResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_SetRoutinePausedRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.setRoutinePaused(
             request: request,
             options: options,
             onResponse: handleResponse

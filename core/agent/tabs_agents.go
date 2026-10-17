@@ -713,13 +713,13 @@ func (a *agentServer) readyForRoutine(ctx context.Context, idleInput *regexp.Reg
 	return "", nil
 }
 
-// DeliverRoutine types "[Portenv routine] <text>" and Enter into the
+// deliverRoutine types "[Portenv routine] <text>" and Enter into the
 // agent's main pane (its runner's, in its own main session, on its own
 // server), as the agent: one line of plain text, in one tmux command so
 // nothing lands between the line and its Enter. Any other pane, a pane
 // that's gone, and text that isn't one plain line are refused; so is a
 // pane not ready for it (readyForRoutine: "busy", portenvd tries again).
-func (s *apiServer) DeliverRoutine(ctx context.Context, agentID, text string) error {
+func (s *apiServer) deliverRoutine(ctx context.Context, agentID, text string) error {
 	a, ok := s.agents.get(agentID)
 	if !ok {
 		return status.Errorf(codes.FailedPrecondition, "%s isn't running", agentID)

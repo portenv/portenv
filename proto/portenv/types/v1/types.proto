@@ -207,6 +207,12 @@ enum MessageType {
   // Information, from an agent or from Portenv (a grant change, a package
   // installed, a decision answered or expired).
   MESSAGE_TYPE_NOTICE = 3;
+  // The owner asks an agent what it's working on (R-0256).
+  MESSAGE_TYPE_STATUS_REQUEST = 4;
+  // A routine's note, delivered by Portenv (R-0258).
+  MESSAGE_TYPE_ROUTINE = 5;
+  // Files handed over to the recipient's ~/inbox (R-0257 item 3).
+  MESSAGE_TYPE_HANDOFF = 6;
 }
 
 // What a decision asks the owner for (ADR 0022 §6).
@@ -263,6 +269,8 @@ message BoardMessage {
   // At most 8 KB.
   string text = 6;
   google.protobuf.Timestamp created_at = 7;
+  // For MESSAGE_TYPE_HANDOFF: what landed in the recipient's inbox.
+  repeated HandoffFile files = 8;
 }
 
 // A request for the owner (ADR 0022 §6). Only the app answers it.
@@ -307,6 +315,10 @@ message AgentGrant {
   bool ask_owner = 4;
   // ASK or NEVER.
   GrantMode packages = 5;
+  // team_status: read (R-0257 item 1): teammates' state, status, pending
+  // count and last activity in whoami and portenv team status. Off by
+  // default; never terminals or homes.
+  bool team_status = 6;
 }
 
 // A file or folder in an agent's home, for the Agent files view (§2).
@@ -316,4 +328,34 @@ message AgentFile {
   bool dir = 2;
   int64 size = 3;
   google.protobuf.Timestamp modified = 4;
+}
+
+// What an agent says it's working on (R-0256): information, never an
+// instruction. Plain text, at most 200 characters.
+message AgentStatus {
+  string text = 1;
+  // Progress N of M; both 0 when not given.
+  int32 progress_done = 2;
+  int32 progress_total = 3;
+  // Why it's blocked, if it is.
+  string blocked = 4;
+  google.protobuf.Timestamp set_at = 5;
+}
+
+// One file of a hand-off, as it landed in the recipient's home.
+message HandoffFile {
+  // Relative to the recipient's home: inbox/<sender>/<timestamp>/...
+  string path = 1;
+  string sha256 = 2;
+  int64 size = 3;
+}
+
+// A routine from an agent file (R-0258): portenvd keeps the timer.
+message Routine {
+  // At least 10 minutes, in minutes.
+  int32 every_minutes = 1;
+  // One plain line, at most 200 characters.
+  string note = 2;
+  bool paused = 3;
+  google.protobuf.Timestamp next_at = 4;
 }

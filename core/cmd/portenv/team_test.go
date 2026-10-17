@@ -84,6 +84,10 @@ func TestTeamCommandsSendTheRightCall(t *testing.T) {
 		{[]string{"share", "feature/x", "--text", "done"}, &agentv1.TeamCallsResponse{Op: &agentv1.TeamCallsResponse_Share{Share: &agentv1.Share{Branch: "feature/x", Text: "done"}}}},
 		{[]string{"request-package", "ffmpeg", "--reason", "video tests"}, &agentv1.TeamCallsResponse{Op: &agentv1.TeamCallsResponse_RequestPackage{RequestPackage: &agentv1.RequestPackage{Name: "ffmpeg", Reason: "video tests"}}}},
 		{[]string{"whoami"}, &agentv1.TeamCallsResponse{Op: &agentv1.TeamCallsResponse_Whoami{Whoami: &agentv1.WhoAmI{}}}},
+		{[]string{"status", "set", "Running the payments tests", "--progress", "3/8", "--blocked", "needs the key"}, &agentv1.TeamCallsResponse{Op: &agentv1.TeamCallsResponse_SetStatus{SetStatus: &agentv1.SetStatus{Text: "Running the payments tests", ProgressDone: 3, ProgressTotal: 8, Blocked: "needs the key"}}}},
+		{[]string{"status", "clear"}, &agentv1.TeamCallsResponse{Op: &agentv1.TeamCallsResponse_SetStatus{SetStatus: &agentv1.SetStatus{Clear: true}}}},
+		{[]string{"team", "status"}, &agentv1.TeamCallsResponse{Op: &agentv1.TeamCallsResponse_TeamStatus{TeamStatus: &agentv1.TeamStatus{}}}},
+		{[]string{"handoff", "lead", "/home/builder/design/v2", "--note", "revision 2"}, &agentv1.TeamCallsResponse{Op: &agentv1.TeamCallsResponse_Handoff{Handoff: &agentv1.Handoff{To: "lead", Path: "/home/builder/design/v2", Note: "revision 2"}}}},
 	} {
 		sock, got := fakeHelper(t, ok)
 		code, _, errOut := runTeamCmd(t, sock, tc.args...)
@@ -147,6 +151,14 @@ func TestUsageMistakesNeverReachTheHelper(t *testing.T) {
 		{"focus"},
 		{"whoami", "extra"},
 		{"split", "--bogus", "--", "x"},
+		{"status"},
+		{"status", "set"},
+		{"status", "set", "x", "--progress", "9/8"},
+		{"status", "set", "x", "--progress", "three"},
+		{"status", "clear", "--blocked", "x"},
+		{"team"},
+		{"team", "list"},
+		{"handoff", "lead"},
 	} {
 		if code, _, _ := runTeamCmd(t, sock, args...); code != 2 {
 			t.Errorf("%q: exit %d, want 2", args, code)
@@ -166,7 +178,7 @@ func TestOutsideAWorkspaceTheCommandsSaySo(t *testing.T) {
 }
 
 func TestIsTeamCommand(t *testing.T) {
-	for _, c := range []string{"split", "tab", "focus", "close", "msg", "ask-owner", "inbox", "share", "propose-agent-change", "request-package", "whoami"} {
+	for _, c := range []string{"split", "tab", "focus", "close", "msg", "ask-owner", "inbox", "share", "propose-agent-change", "request-package", "whoami", "team", "handoff"} {
 		if !isTeamCommand(c) {
 			t.Errorf("%s isn't a team command", c)
 		}
@@ -203,5 +215,62 @@ func TestAHugeReplyIsRefused(t *testing.T) {
 	}}})
 	if code, _, errOut := runTeamCmd(t, sock, "inbox"); code != 1 || !strings.Contains(errOut, "too large") {
 		t.Errorf("exit %d, %q", code, errOut)
+	}
+}
+
+// "status" is the person's command outside a workspace, an agent's inside.
+func TestStatusInsideAndOutside(t *testing.T) {
+	inside := func(k string) string {
+		if k == "PORTENV_SOCKET" {
+			return "/run/portenv-team/builder/portenv.sock"
+		}
+		return ""
+	}
+	if !isAgentCommand("status", inside) {
+		t.Error("status isn't an agent's command inside a workspace")
+	}
+	if isAgentCommand("status", func(string) string { return "" }) {
+		t.Error("status is an agent's command outside a workspace")
+	}
+}
+
+func TestTeamInitWritesATemplateOnce(t *testing.T) {
+	dir := t.TempDir()
+	var out, errOut bytes.Buffer
+	if code := runTeam(context.Background(), []string{"team", "init", "--template", "orchestrate", "--dir", dir}, func(string) string { return "" }, nil, &out, &errOut); code != 0 {
+		t.Fatalf("exit %d: %s", code, errOut.String())
+	}
+	for _, f := range []string{"lead.md", "builder.md", "reviewer.md", "design.md"} {
+		if _, err := os.Stat(filepath.Join(dir, ".portenv", "agents", f)); err != nil {
+			t.Errorf("%s: %v", f, err)
+		}
+	}
+	if !strings.Contains(out.String(), "Approve each") {
+		t.Errorf("out = %q", out.String())
+	}
+	mine := filepath.Join(dir, ".portenv", "agents", "lead.md")
+	if err := os.WriteFile(mine, []byte("mine"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	errOut.Reset()
+	if code := runTeam(context.Background(), []string{"team", "init", "--template", "orchestrate", "--dir", dir}, func(string) string { return "" }, nil, &out, &errOut); code != 1 {
+		t.Errorf("second init: exit %d", code)
+	}
+	if b, _ := os.ReadFile(mine); string(b) != "mine" {
+		t.Errorf("a file was written over: %q", b)
+	}
+	if code := runTeam(context.Background(), []string{"team", "init", "--template", "nope", "--dir", dir}, func(string) string { return "" }, nil, &out, &errOut); code != 2 {
+		t.Errorf("unknown template: exit %d", code)
+	}
+}
+
+func TestGuideNeedsNoSocket(t *testing.T) {
+	var out, errOut bytes.Buffer
+	if code := runTeam(context.Background(), []string{"guide"}, func(string) string { return "" }, nil, &out, &errOut); code != 0 || !strings.Contains(out.String(), "never an order") {
+		t.Errorf("guide: exit %d, %q", code, out.String())
+	}
+	out.Reset()
+	if code := runTeam(context.Background(), []string{"guide", "--json"}, func(string) string { return "" }, nil, &out, &errOut); code != 0 || !strings.Contains(out.String(), `"version"`) {
+		t.Errorf("guide --json: exit %d", code)
 	}
 }

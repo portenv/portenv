@@ -15,6 +15,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/portenv/portenv/core/internal/teamkit"
 	typesv1 "github.com/portenv/portenv/proto/gen/go/portenv/types/v1"
 )
 
@@ -471,6 +472,7 @@ func TestOverrideCantWiden(t *testing.T) {
 		{"message", ofm("grant:", "  message: [lead, reviewer]"), `builder's override: grant.message is [lead, reviewer], wider than the repository file's [lead]; an override may only narrow a grant.`},
 		{"ask_owner", ofm("grant:", "  ask_owner: true"), `builder's override: grant.ask_owner is true, wider than the repository file's false; an override may only narrow a grant.`},
 		{"packages", ofm("grant:", "  packages: ask"), `builder's override: grant.packages is ask, wider than the repository file's never; an override may only narrow a grant.`},
+		{"team_status", ofm("grant:", "  team_status: read"), `builder's override: grant.team_status is read, wider than the repository file's none; an override may only narrow a grant.`},
 		{"home_seed", ofm("home_seed: [secrets]"), `builder's override: it sets home_seed; an override can't add home_seed.`},
 		{"name", ofm("name: Boss"), `builder's override: it sets name; an override may change only runner, via, avatar, share_login and grant.`},
 		{"unknown key", ofm("colour: red"), `builder's override: "colour" isn't a key an agent file may have.`},
@@ -493,7 +495,7 @@ func TestOverrideCantWiden(t *testing.T) {
 			// A refused override never widens what's in effect.
 			g := a.Grant
 			if g.GetPanes() != typesv1.GrantMode_GRANT_MODE_NEVER || g.GetMaxPanes() != 2 || g.GetAskOwner() ||
-				g.GetPackages() != typesv1.GrantMode_GRANT_MODE_NEVER || !reflect.DeepEqual(g.GetMessage(), []string{"lead"}) {
+				g.GetPackages() != typesv1.GrantMode_GRANT_MODE_NEVER || g.GetTeamStatus() || !reflect.DeepEqual(g.GetMessage(), []string{"lead"}) {
 				t.Errorf("effective grant widened: %v", g)
 			}
 			if !reflect.DeepEqual(a.Spec.HomeSeed, []string{"docs"}) {
@@ -678,6 +680,102 @@ func TestApprovalsStoreMissingIsNothingApproved(t *testing.T) {
 	for _, a := range team.Agents {
 		if a.Approved {
 			t.Errorf("%s approved with no store", a.ID)
+		}
+	}
+}
+
+// R-0257 item 1: grant.team_status is read or none, off by default.
+func TestTeamStatusGrant(t *testing.T) {
+	src := teamDirs(t)
+	writeAgent(t, src, "lead", fm("id: lead", "name: Lead", "runner: claude", "grant:", "  team_status: read"))
+	writeAgent(t, src, "builder", fm("id: builder", "name: Builder", "runner: claude"))
+	writeAgent(t, src, "odd", fm("id: odd", "name: Odd", "runner: claude", "grant:", "  team_status: write"))
+	if a := loadAgent(t, src, "lead"); len(a.Problems) != 0 || !a.Grant.GetTeamStatus() {
+		t.Errorf("lead: %v, %v", a.Problems, a.Grant)
+	}
+	if a := loadAgent(t, src, "builder"); a.Grant.GetTeamStatus() {
+		t.Error("team_status is on by default")
+	}
+	if a := loadAgent(t, src, "odd"); len(a.Problems) != 1 || !strings.Contains(a.Problems[0], "read or none") {
+		t.Errorf("odd: %v", a.Problems)
+	}
+}
+
+// R-0258: routines in the agent file, checked; never from an override.
+func TestRoutinesInTheAgentFile(t *testing.T) {
+	src := teamDirs(t)
+	writeAgent(t, src, "lead", fm("id: lead", "name: Lead", "runner: claude",
+		`routine: ["every 30m: Status round: check every agent and report blockers", "every 2h: Tidy the board"]`))
+	a := loadAgent(t, src, "lead")
+	if len(a.Problems) != 0 {
+		t.Fatal(a.Problems)
+	}
+	want := []AgentRoutine{{30, "Status round: check every agent and report blockers"}, {120, "Tidy the board"}}
+	if !reflect.DeepEqual(a.Spec.Routines, want) {
+		t.Errorf("routines = %v", a.Spec.Routines)
+	}
+	for name, line := range map[string]string{
+		"too often":  `routine: ["every 5m: ping"]`,
+		"no every":   `routine: ["30m: ping"]`,
+		"too many":   `routine: ["every 10m: a", "every 10m: b", "every 10m: c", "every 10m: d", "every 10m: e"]`,
+		"escape":     `routine: ["every 30m: hi \u001b[2J"]`,
+		"empty note": `routine: ["every 30m: "]`,
+		"a week+":    `routine: ["every 200h: x"]`,
+	} {
+		src := teamDirs(t)
+		writeAgent(t, src, "lead", fm("id: lead", "name: Lead", "runner: claude", line))
+		if a := loadAgent(t, src, "lead"); len(a.Problems) == 0 {
+			t.Errorf("%s: no problem for %s", name, line)
+		}
+	}
+	src = teamDirs(t)
+	writeAgent(t, src, "lead", fm("id: lead", "name: Lead", "runner: claude"))
+	writeOverride(t, src, "lead", ofm(`routine: ["every 30m: sneaky"]`))
+	if a := loadAgent(t, src, "lead"); len(a.Problems) != 1 || !strings.Contains(a.Problems[0], "only the repository file") {
+		t.Errorf("an override's routine: %v", a.Problems)
+	}
+}
+
+// Every template portenv team init writes is a valid team with no
+// problems (R-0232's Orchestrate team included).
+func TestTheTemplatesAreValidTeams(t *testing.T) {
+	for _, name := range teamkit.Templates {
+		t.Run(name, func(t *testing.T) {
+			files, err := teamkit.Template(name)
+			if err != nil || len(files) == 0 {
+				t.Fatalf("%v, %d files", err, len(files))
+			}
+			src := teamDirs(t)
+			for f, content := range files {
+				writeAgent(t, src, strings.TrimSuffix(f, ".md"), string(content))
+			}
+			team, err := LoadTeam(src)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(team.Agents) != len(files) || len(team.Problems) != 0 {
+				t.Fatalf("agents %d, team problems %v", len(team.Agents), team.Problems)
+			}
+			for _, a := range team.Agents {
+				if len(a.Problems) != 0 {
+					t.Errorf("%s: %v", a.ID, a.Problems)
+				}
+				if runnerIdlePattern(a.Runner) == "" && len(a.Spec.Routines) > 0 {
+					t.Errorf("%s has routines but a runner without an idle pattern", a.ID)
+				}
+			}
+		})
+	}
+	// Only Orchestrate's lead sees the team's status (R-0257).
+	files, _ := teamkit.Template("orchestrate")
+	src := teamDirs(t)
+	for f, content := range files {
+		writeAgent(t, src, strings.TrimSuffix(f, ".md"), string(content))
+	}
+	team, _ := LoadTeam(src)
+	for _, a := range team.Agents {
+		if a.Grant.GetTeamStatus() != (a.ID == "lead") {
+			t.Errorf("%s: team_status %v", a.ID, a.Grant.GetTeamStatus())
 		}
 	}
 }

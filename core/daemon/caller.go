@@ -104,15 +104,18 @@ const maxAuthorName = 64
 // The helper lives in the workspace, so its authors are checked, and a
 // bad one is dropped, never repaired (R-0178).
 func validAuthorName(n string) bool {
-	if !utf8.ValidString(n) || utf8.RuneCountInString(n) > maxAuthorName {
-		return false
-	}
-	for _, r := range n {
+	return utf8.ValidString(n) && utf8.RuneCountInString(n) <= maxAuthorName && !hasUnsafeRune(n)
+}
+
+// hasUnsafeRune reports a control character or a bidi control
+// (U+202A–202E, U+2066–2069) in s. Agent files share the rule (ADR 0022 §3).
+func hasUnsafeRune(s string) bool {
+	for _, r := range s {
 		if unicode.IsControl(r) || (r >= 0x202A && r <= 0x202E) || (r >= 0x2066 && r <= 0x2069) {
-			return false
+			return true
 		}
 	}
-	return true
+	return false
 }
 
 // mayOpen refuses a workspace the caller isn't limited to. It runs before

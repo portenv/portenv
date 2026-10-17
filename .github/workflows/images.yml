@@ -16,6 +16,7 @@ on:
       - go.work
       - .dockerignore
       - tests/e2e/**
+      - tests/team-boundary/**
       - server/**
       - Makefile
       - .github/workflows/images.yml
@@ -28,6 +29,7 @@ on:
       - go.work
       - .dockerignore
       - tests/e2e/**
+      - tests/team-boundary/**
       - server/**
       - Makefile
       - .github/workflows/images.yml

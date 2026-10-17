@@ -80,6 +80,7 @@ const (
 	DaemonService_ListAgentFiles_FullMethodName        = "/portenv.daemon.v1.DaemonService/ListAgentFiles"
 	DaemonService_ReadAgentFile_FullMethodName         = "/portenv.daemon.v1.DaemonService/ReadAgentFile"
 	DaemonService_AddAgentFiles_FullMethodName         = "/portenv.daemon.v1.DaemonService/AddAgentFiles"
+	DaemonService_SetRoutinePaused_FullMethodName      = "/portenv.daemon.v1.DaemonService/SetRoutinePaused"
 )
 
 // DaemonServiceClient is the client API for DaemonService service.
@@ -257,6 +258,8 @@ type DaemonServiceClient interface {
 	ReadAgentFile(ctx context.Context, in *ReadAgentFileRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ReadAgentFileResponse], error)
 	// Drag and drop. Refused past the agent's quota.
 	AddAgentFiles(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[AddAgentFilesRequest, AddAgentFilesResponse], error)
+	// Pauses or resumes one of an agent's routines (R-0258).
+	SetRoutinePaused(ctx context.Context, in *SetRoutinePausedRequest, opts ...grpc.CallOption) (*SetRoutinePausedResponse, error)
 }
 
 type daemonServiceClient struct {
@@ -862,6 +865,16 @@ func (c *daemonServiceClient) AddAgentFiles(ctx context.Context, opts ...grpc.Ca
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type DaemonService_AddAgentFilesClient = grpc.ClientStreamingClient[AddAgentFilesRequest, AddAgentFilesResponse]
 
+func (c *daemonServiceClient) SetRoutinePaused(ctx context.Context, in *SetRoutinePausedRequest, opts ...grpc.CallOption) (*SetRoutinePausedResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetRoutinePausedResponse)
+	err := c.cc.Invoke(ctx, DaemonService_SetRoutinePaused_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DaemonServiceServer is the server API for DaemonService service.
 // All implementations must embed UnimplementedDaemonServiceServer
 // for forward compatibility.
@@ -1037,6 +1050,8 @@ type DaemonServiceServer interface {
 	ReadAgentFile(*ReadAgentFileRequest, grpc.ServerStreamingServer[ReadAgentFileResponse]) error
 	// Drag and drop. Refused past the agent's quota.
 	AddAgentFiles(grpc.ClientStreamingServer[AddAgentFilesRequest, AddAgentFilesResponse]) error
+	// Pauses or resumes one of an agent's routines (R-0258).
+	SetRoutinePaused(context.Context, *SetRoutinePausedRequest) (*SetRoutinePausedResponse, error)
 	mustEmbedUnimplementedDaemonServiceServer()
 }
 
@@ -1211,6 +1226,9 @@ func (UnimplementedDaemonServiceServer) ReadAgentFile(*ReadAgentFileRequest, grp
 }
 func (UnimplementedDaemonServiceServer) AddAgentFiles(grpc.ClientStreamingServer[AddAgentFilesRequest, AddAgentFilesResponse]) error {
 	return status.Error(codes.Unimplemented, "method AddAgentFiles not implemented")
+}
+func (UnimplementedDaemonServiceServer) SetRoutinePaused(context.Context, *SetRoutinePausedRequest) (*SetRoutinePausedResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetRoutinePaused not implemented")
 }
 func (UnimplementedDaemonServiceServer) mustEmbedUnimplementedDaemonServiceServer() {}
 func (UnimplementedDaemonServiceServer) testEmbeddedByValue()                       {}
@@ -2162,6 +2180,24 @@ func _DaemonService_AddAgentFiles_Handler(srv interface{}, stream grpc.ServerStr
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type DaemonService_AddAgentFilesServer = grpc.ClientStreamingServer[AddAgentFilesRequest, AddAgentFilesResponse]
 
+func _DaemonService_SetRoutinePaused_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetRoutinePausedRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).SetRoutinePaused(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_SetRoutinePaused_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).SetRoutinePaused(ctx, req.(*SetRoutinePausedRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // DaemonService_ServiceDesc is the grpc.ServiceDesc for DaemonService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -2360,6 +2396,10 @@ var DaemonService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListAgentFiles",
 			Handler:    _DaemonService_ListAgentFiles_Handler,
+		},
+		{
+			MethodName: "SetRoutinePaused",
+			Handler:    _DaemonService_SetRoutinePaused_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

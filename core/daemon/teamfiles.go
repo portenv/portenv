@@ -19,6 +19,9 @@ import (
 	"syscall"
 	"unicode/utf8"
 
+	"google.golang.org/protobuf/proto"
+
+	"github.com/portenv/portenv/core/internal/teamkit"
 	typesv1 "github.com/portenv/portenv/proto/gen/go/portenv/types/v1"
 )
 
@@ -35,10 +38,10 @@ const (
 	maxAgentNameChars         = 40
 	maxAgentRoleChars         = 120
 	// The ceilings of ADR 0022 §7; the owner may set lower limits.
-	maxTeamAgents      = 8
-	maxAgentPanes      = 8
-	defaultTeamAgents  = 4
-	defaultAgentPanes  = 4
+	maxTeamAgents      = teamkit.MaxTeamAgents
+	maxAgentPanes      = teamkit.MaxAgentPanes
+	defaultTeamAgents  = teamkit.DefaultTeamAgents
+	defaultAgentPanes  = teamkit.DefaultAgentPanes
 	agentFilesRelative = ".portenv/agents"
 )
 
@@ -145,6 +148,8 @@ type AgentSpec struct {
 	ShareLogin []string
 	// HomeSeed is cleaned, relative to the project.
 	HomeSeed []string
+	// Routines are the file's routines (R-0258).
+	Routines []AgentRoutine
 	// Grant is the file's grant, with the defaults filled in.
 	Grant        *typesv1.AgentGrant
 	Instructions string
@@ -155,7 +160,7 @@ type AgentSpec struct {
 
 // grantSet records which grant keys a file sets, for overrides.
 type grantSet struct {
-	panes, maxPanes, message, askOwner, packages bool
+	panes, maxPanes, message, askOwner, packages, teamStatus bool
 }
 
 // TeamAgent is one agent of a team: its repository file, the personal
@@ -372,8 +377,8 @@ func pathErrText(err error) error {
 }
 
 var (
-	agentFileKeys = []string{"id", "name", "role", "runner", "via", "avatar", "share_login", "home_seed", "grant"}
-	agentListLike = map[string]string{"share_login": "[claude]", "home_seed": "[docs/style-guide.md]", "grant.message": "[lead]"}
+	agentFileKeys = []string{"id", "name", "role", "runner", "via", "avatar", "share_login", "home_seed", "routine", "grant"}
+	agentListLike = map[string]string{"share_login": "[claude]", "home_seed": "[docs/style-guide.md]", "routine": `["every 30m: Status round"]`, "grant.message": "[lead]"}
 )
 
 // buildAgentSpec checks one file's content. For an override, missing keys
@@ -449,6 +454,9 @@ func buildAgentSpec(content []byte, fileID string, override bool, limits TeamLim
 			switch key {
 			case "home_seed":
 				p.addf("it sets home_seed; an override can't add home_seed.")
+				continue
+			case "routine":
+				p.addf("it sets routine; only the repository file, which the owner approves, has routines.")
 				continue
 			case "name", "role":
 				p.addf("it sets %s; an override may change only runner, via, avatar, share_login and grant.", key)
@@ -541,6 +549,21 @@ func buildAgentSpec(content []byte, fileID string, override bool, limits TeamLim
 				}
 				s.ShareLogin = append(s.ShareLogin, t)
 			}
+		case "routine":
+			// R-0258: "every 30m: <note>" items; Portenv keeps the timers.
+			items, _ := list(key, v)
+			if len(items) > maxRoutines {
+				p.addf("routine has %d entries; an agent has at most %d.", len(items), maxRoutines)
+				break
+			}
+			for _, r := range items {
+				rt, err := parseRoutine(r)
+				if err != nil {
+					p.addf("routine %q: %v", r, err)
+					continue
+				}
+				s.Routines = append(s.Routines, rt)
+			}
 		case "home_seed":
 			items, _ := list(key, v)
 			for _, h := range items {
@@ -590,7 +613,7 @@ func buildGrant(keys *fmKeys, g *typesv1.AgentGrant, set *grantSet, override boo
 		v := keys.vals[key]
 		full := "grant." + key
 		switch key {
-		case "panes", "max_panes", "message", "ask_owner", "packages":
+		case "panes", "max_panes", "message", "ask_owner", "packages", "team_status":
 		default:
 			p.addf("%q isn't a key an agent file may have.", full)
 			continue
@@ -630,6 +653,13 @@ func buildGrant(keys *fmKeys, g *typesv1.AgentGrant, set *grantSet, override boo
 				continue
 			}
 			g.Packages, set.packages = m, true
+		case "team_status":
+			// team_status: read (R-0257 item 1); none is the default.
+			if v.quoted || (v.s != "read" && v.s != "none") {
+				p.addf("grant.team_status is %q; it must be read or none.", v.s)
+				continue
+			}
+			g.TeamStatus, set.teamStatus = v.s == "read", true
 		case "ask_owner":
 			if v.quoted || (v.s != "true" && v.s != "false") {
 				p.addf("grant.ask_owner is %q; it must be true or false.", v.s)
@@ -684,13 +714,11 @@ func grantModeWord(m typesv1.GrantMode) string {
 }
 
 func cloneGrant(g *typesv1.AgentGrant) *typesv1.AgentGrant {
-	return &typesv1.AgentGrant{
-		Panes:    g.GetPanes(),
-		MaxPanes: g.GetMaxPanes(),
-		Message:  slices.Clone(g.GetMessage()),
-		AskOwner: g.GetAskOwner(),
-		Packages: g.GetPackages(),
+	// Every field, including ones added later (team_status, R-0257).
+	if g == nil {
+		return &typesv1.AgentGrant{}
 	}
+	return proto.CloneOf(g)
 }
 
 // applyOverride reads the agent's personal override, if there is one, and
@@ -747,6 +775,9 @@ func applyOverride(a *TeamAgent, src TeamSource, limits TeamLimits, p *problems)
 	if o.grant.packages && grantRank(og.GetPackages()) > grantRank(base.GetPackages()) {
 		widerf("packages", grantModeWord(og.GetPackages()), grantModeWord(base.GetPackages()))
 	}
+	if o.grant.teamStatus && og.GetTeamStatus() && !base.GetTeamStatus() {
+		widerf("team_status", "read", "none")
+	}
 
 	runnerLine, runner, remote, via := a.RunnerLine, a.Runner, a.Remote, a.Via
 	if o.set["runner"] {
@@ -786,4 +817,45 @@ func applyOverride(a *TeamAgent, src TeamSource, limits TeamLimits, p *problems)
 	if o.grant.packages {
 		a.Grant.Packages = og.GetPackages()
 	}
+	if o.grant.teamStatus {
+		a.Grant.TeamStatus = og.GetTeamStatus()
+	}
+}
+
+// Routines (R-0258): at least 10 minutes apart, at most 4 per agent.
+const (
+	maxRoutines        = teamkit.MaxRoutines
+	minRoutineMinutes  = teamkit.MinRoutineMinutes
+	maxRoutineMinutes  = 7 * 24 * 60
+	maxRoutineNoteRune = 200
+)
+
+// AgentRoutine is one routine from an agent file.
+type AgentRoutine struct {
+	EveryMinutes int
+	Note         string
+}
+
+var routineRE = regexp.MustCompile(`^every ([0-9]{1,5})(m|h): (.+)$`)
+
+// parseRoutine reads "every 30m: <note>" or "every 2h: <note>".
+func parseRoutine(s string) (AgentRoutine, error) {
+	m := routineRE.FindStringSubmatch(s)
+	if m == nil {
+		return AgentRoutine{}, errors.New(`write it as "every 30m: <note>" or "every 2h: <note>"`)
+	}
+	n, _ := strconv.Atoi(m[1])
+	if m[2] == "h" {
+		n *= 60
+	}
+	note := strings.TrimSpace(m[3])
+	switch {
+	case n < minRoutineMinutes:
+		return AgentRoutine{}, fmt.Errorf("it's every %d minutes; a routine is at least %d minutes apart", n, minRoutineMinutes)
+	case n > maxRoutineMinutes:
+		return AgentRoutine{}, errors.New("a routine is at most a week apart")
+	case note == "" || utf8.RuneCountInString(note) > maxRoutineNoteRune || hasUnsafeRune(note):
+		return AgentRoutine{}, fmt.Errorf("its note is one line of plain text, up to %d characters", maxRoutineNoteRune)
+	}
+	return AgentRoutine{EveryMinutes: n, Note: note}, nil
 }

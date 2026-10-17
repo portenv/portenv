@@ -543,17 +543,17 @@ func TestARoutineIsTypedIntoTheAgentsMainPaneOnly(t *testing.T) {
 		"too long":                 strings.Repeat("x", maxRoutine),
 		`ends in \;`:               `x\;`,
 	} {
-		if err := s.DeliverRoutine(ctx, "builder", text); status.Code(err) != codes.InvalidArgument {
+		if err := s.deliverRoutine(ctx, "builder", text); status.Code(err) != codes.InvalidArgument {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
-	if err := s.DeliverRoutine(ctx, "reviewer", "check"); status.Code(err) != codes.FailedPrecondition {
+	if err := s.deliverRoutine(ctx, "reviewer", "check"); status.Code(err) != codes.FailedPrecondition {
 		t.Errorf("an agent that isn't running: %v", err)
 	}
 
 	waitQuiet()
 	text := "check the build #{pane_id} -l x;"
-	if err := s.DeliverRoutine(ctx, "builder", text); err != nil {
+	if err := s.deliverRoutine(ctx, "builder", text); err != nil {
 		t.Fatal(err)
 	}
 	if got := waitFile(t, filepath.Join(dir, "main")); got != routinePrefix+text {
@@ -569,7 +569,7 @@ func TestARoutineIsTypedIntoTheAgentsMainPaneOnly(t *testing.T) {
 	if _, err := run(ctx, "kill-pane", "-t", s.agents.by["builder"].mainPane); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.DeliverRoutine(ctx, "builder", "check"); status.Code(err) != codes.FailedPrecondition {
+	if err := s.deliverRoutine(ctx, "builder", "check"); status.Code(err) != codes.FailedPrecondition {
 		t.Errorf("with the main pane gone: %v", err)
 	}
 	if _, err := os.ReadFile(filepath.Join(dir, "other")); err == nil { // #nosec G304 -- test
@@ -627,7 +627,7 @@ func TestARoutineIsNeverTypedIntoABusyAgent(t *testing.T) {
 	}
 	waitQuiet()
 	for _, c := range cases {
-		err := s.DeliverRoutine(ctx, c.id, "check")
+		err := s.deliverRoutine(ctx, c.id, "check")
 		if status.Code(err) != codes.FailedPrecondition || !strings.Contains(status.Convert(err).Message(), c.why) {
 			t.Errorf("%s: %v, want busy: %s", c.id, err, c.why)
 		}

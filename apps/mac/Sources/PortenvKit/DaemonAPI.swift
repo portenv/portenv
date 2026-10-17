@@ -65,6 +65,20 @@ public protocol DaemonAPI: Sendable {
     /// The tabs at once, then on every change. Ends (or throws) when the box
     /// closes, its agent goes away, or portenvd does.
     func watchTabs(_ box: String) -> AsyncThrowingStream<[TabInfo], Error>
+    /// The team (ADR 0022): every agent, then each change, board message
+    /// and decision from `cursor` on, each with the cursor after it.
+    func watchTeam(_ box: String, cursor: String) -> AsyncThrowingStream<(TeamEvent, String), Error>
+    /// Approve or Decline a pending decision; the app alone answers them.
+    func answerDecision(_ box: String, id: String, approve: Bool, note: String) async throws -> TeamDecision
+    /// The owner's message to an agent.
+    func sendMessage(_ box: String, to agent: String, thread: String, text: String) async throws -> TeamMessage
+    func startAgent(_ box: String, id: String) async throws -> TeamAgent
+    func stopAgent(_ box: String, id: String) async throws -> TeamAgent
+    /// An agent file as portenvd has it, for Approve.
+    func getAgentFile(_ box: String, id: String) async throws -> AgentFileContent
+    /// Pins the agent file whose text hashes to `sha256`; only the owner's
+    /// app calls it (R-0285).
+    func approveAgentFile(_ box: String, id: String, sha256: String) async throws -> TeamAgent
 }
 
 public extension DaemonAPI {
@@ -76,6 +90,20 @@ public extension DaemonAPI {
         throw DaemonError(DaemonError.outOfDate)
     }
     func connectThere(_: String) async throws { throw DaemonError(DaemonError.outOfDate) }
+    // The team (ADR 0022): a portenvd without it, or a render.
+    func watchTeam(_: String, cursor _: String) -> AsyncThrowingStream<(TeamEvent, String), Error> {
+        AsyncThrowingStream { $0.finish(throwing: DaemonError(DaemonError.outOfDate)) }
+    }
+    func answerDecision(_: String, id _: String, approve _: Bool, note _: String) async throws -> TeamDecision {
+        throw DaemonError(DaemonError.outOfDate)
+    }
+    func sendMessage(_: String, to _: String, thread _: String, text _: String) async throws -> TeamMessage {
+        throw DaemonError(DaemonError.outOfDate)
+    }
+    func startAgent(_: String, id _: String) async throws -> TeamAgent { throw DaemonError(DaemonError.outOfDate) }
+    func stopAgent(_: String, id _: String) async throws -> TeamAgent { throw DaemonError(DaemonError.outOfDate) }
+    func getAgentFile(_: String, id _: String) async throws -> AgentFileContent { throw DaemonError(DaemonError.outOfDate) }
+    func approveAgentFile(_: String, id _: String, sha256 _: String) async throws -> TeamAgent { throw DaemonError(DaemonError.outOfDate) }
 }
 
 /// A box saved in the background after Quit Anyway.

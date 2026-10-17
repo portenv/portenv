@@ -21,7 +21,7 @@ enum MainWindowRender {
     /// The board's window: 1280 × 890 pt with the inspector open.
     static let size = NSSize(width: 1280, height: 890)
 
-    static func render(to dir: URL, name: String = "main-window", inspector: Bool = true,
+    static func render(to dir: URL, name: String = "main-window", inspector: Bool = true, team withTeam: Bool = false,
                        terminal: @escaping () -> NSView) async throws {
         let box = "acme-api"
         UserDefaults.standard.set(inspector, forKey: InspectorToggle.key(box))
@@ -34,12 +34,18 @@ enum MainWindowRender {
         for (suffix, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
             // The terminal takes its palette from the app's appearance.
             NSApp.appearance = NSAppearance(named: appearance)
-            let daemon = SampleDaemon(savedAt: savedAt)
+            let daemon = SampleDaemon(savedAt: savedAt, team: withTeam ? TeamRenders.sample(now: drawnAt) : nil)
             let controller = BoxController(box: box, daemon: daemon, keychain: NoKeychain(), now: { drawnAt })
             let tabs = TabsController(box: box, daemon: daemon)
             await controller.open()
             let follow = Task { await tabs.follow() }
             defer { follow.cancel() }
+            // The team-agent-selected board: Builder selected (R-0241).
+            let team = withTeam ? TeamController(box: box, daemon: daemon) : nil
+            let following = Task { await team?.follow() }
+            defer { following.cancel() }
+            for _ in 0 ..< 100 where withTeam && team?.state.hasTeam != true { try? await Task.sleep(for: .milliseconds(10)) }
+            team?.selection = .agent("builder")
 
             let window = ActiveLookingWindow(contentRect: NSRect(origin: .zero, size: size),
                                   styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
@@ -47,7 +53,7 @@ enum MainWindowRender {
             window.isReleasedWhenClosed = false
             window.toolbarStyle = .unified
             window.appearance = NSAppearance(named: appearance)
-            let host = NSHostingView(rootView: MainWindow(controller: controller, tabs: tabs, renderTerminal: terminal))
+            let host = NSHostingView(rootView: MainWindow(controller: controller, tabs: tabs, team: team, renderTerminal: terminal))
             host.sceneBridgingOptions = [.toolbars, .title]
             window.contentView = host
             window.setContentSize(size)
@@ -114,13 +120,19 @@ private struct NoKeychain: KeychainReading {
 /// saved a few minutes ago, with the board's three tabs.
 private final class SampleDaemon: DaemonAPI, @unchecked Sendable {
     private let savedAt: Date
-    init(savedAt: Date) { self.savedAt = savedAt }
+    /// The sample team and its tabs, for the team renders.
+    private let team: (TeamState, [TabInfo])?
+    init(savedAt: Date, team: (TeamState, [TabInfo])? = nil) {
+        self.savedAt = savedAt
+        self.team = team
+        tabList = team?.1 ?? [
+            TabInfo(id: "@0", name: "claude", active: true, program: "claude"),
+            TabInfo(id: "@1", name: "shell", active: false),
+            TabInfo(id: "@2", name: "muse", active: false),
+        ]
+    }
     func engineRunning() async -> Bool? { true }
-    private let tabList = [
-        TabInfo(id: "@0", name: "claude", active: true, program: "claude"),
-        TabInfo(id: "@1", name: "shell", active: false),
-        TabInfo(id: "@2", name: "muse", active: false),
-    ]
+    private let tabList: [TabInfo]
 
     private var stateNow: BoxState {
         var s = BoxState(save: .saved, savedAt: savedAt)
@@ -167,5 +179,11 @@ private final class SampleDaemon: DaemonAPI, @unchecked Sendable {
     func watchTabs(_: String) -> AsyncThrowingStream<[TabInfo], Error> {
         let t = tabList
         return AsyncThrowingStream { $0.yield(t) }
+    }
+    func watchTeam(_: String, cursor _: String) -> AsyncThrowingStream<(TeamEvent, String), Error> {
+        guard let state = team?.0 else { return AsyncThrowingStream { $0.finish(throwing: DaemonError(DaemonError.outOfDate)) } }
+        let events: [TeamEvent] = state.agents.map { .agent($0) } + state.messages.map { .message($0) } + state.decisions.map { .decision($0) }
+        // The events, then it stays open, as portenvd's stream does.
+        return AsyncThrowingStream { c in for (i, e) in events.enumerated() { c.yield((e, "c\(i)")) } }
     }
 }

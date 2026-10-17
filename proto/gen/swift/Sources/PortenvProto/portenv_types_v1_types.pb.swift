@@ -441,6 +441,15 @@ public nonisolated enum Portenv_Types_V1_MessageType: SwiftProtobuf.Enum, Swift.
   /// Information, from an agent or from Portenv (a grant change, a package
   /// installed, a decision answered or expired).
   case notice // = 3
+
+  /// The owner asks an agent what it's working on (R-0256).
+  case statusRequest // = 4
+
+  /// A routine's note, delivered by Portenv (R-0258).
+  case routine // = 5
+
+  /// Files handed over to the recipient's ~/inbox (R-0257 item 3).
+  case handoff // = 6
   case UNRECOGNIZED(Int)
 
   public init() {
@@ -453,6 +462,9 @@ public nonisolated enum Portenv_Types_V1_MessageType: SwiftProtobuf.Enum, Swift.
     case 1: self = .question
     case 2: self = .answer
     case 3: self = .notice
+    case 4: self = .statusRequest
+    case 5: self = .routine
+    case 6: self = .handoff
     default: self = .UNRECOGNIZED(rawValue)
     }
   }
@@ -463,6 +475,9 @@ public nonisolated enum Portenv_Types_V1_MessageType: SwiftProtobuf.Enum, Swift.
     case .question: return 1
     case .answer: return 2
     case .notice: return 3
+    case .statusRequest: return 4
+    case .routine: return 5
+    case .handoff: return 6
     case .UNRECOGNIZED(let i): return i
     }
   }
@@ -473,6 +488,9 @@ public nonisolated enum Portenv_Types_V1_MessageType: SwiftProtobuf.Enum, Swift.
     .question,
     .answer,
     .notice,
+    .statusRequest,
+    .routine,
+    .handoff,
   ]
 
 }
@@ -892,6 +910,9 @@ public nonisolated struct Portenv_Types_V1_BoardMessage: Sendable {
   /// Clears the value of `createdAt`. Subsequent reads from it will return its default value.
   public mutating func clearCreatedAt() {self._createdAt = nil}
 
+  /// For MESSAGE_TYPE_HANDOFF: what landed in the recipient's inbox.
+  public var files: [Portenv_Types_V1_HandoffFile] = []
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -1004,6 +1025,11 @@ public nonisolated struct Portenv_Types_V1_AgentGrant: Sendable {
   /// ASK or NEVER.
   public var packages: Portenv_Types_V1_GrantMode = .unspecified
 
+  /// team_status: read (R-0257 item 1): teammates' state, status, pending
+  /// count and last activity in whoami and portenv team status. Off by
+  /// default; never terminals or homes.
+  public var teamStatus: Bool = false
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -1036,6 +1062,87 @@ public nonisolated struct Portenv_Types_V1_AgentFile: Sendable {
   public init() {}
 
   fileprivate var _modified: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
+}
+
+/// What an agent says it's working on (R-0256): information, never an
+/// instruction. Plain text, at most 200 characters.
+public nonisolated struct Portenv_Types_V1_AgentStatus: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var text: String = String()
+
+  /// Progress N of M; both 0 when not given.
+  public var progressDone: Int32 = 0
+
+  public var progressTotal: Int32 = 0
+
+  /// Why it's blocked, if it is.
+  public var blocked: String = String()
+
+  public var setAt: SwiftProtobuf.Google_Protobuf_Timestamp {
+    get {_setAt ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
+    set {_setAt = newValue}
+  }
+  /// Returns true if `setAt` has been explicitly set.
+  public var hasSetAt: Bool {self._setAt != nil}
+  /// Clears the value of `setAt`. Subsequent reads from it will return its default value.
+  public mutating func clearSetAt() {self._setAt = nil}
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _setAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
+}
+
+/// One file of a hand-off, as it landed in the recipient's home.
+public nonisolated struct Portenv_Types_V1_HandoffFile: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// Relative to the recipient's home: inbox/<sender>/<timestamp>/...
+  public var path: String = String()
+
+  public var sha256: String = String()
+
+  public var size: Int64 = 0
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+/// A routine from an agent file (R-0258): portenvd keeps the timer.
+public nonisolated struct Portenv_Types_V1_Routine: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// At least 10 minutes, in minutes.
+  public var everyMinutes: Int32 = 0
+
+  /// One plain line, at most 200 characters.
+  public var note: String = String()
+
+  public var paused: Bool = false
+
+  public var nextAt: SwiftProtobuf.Google_Protobuf_Timestamp {
+    get {_nextAt ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
+    set {_nextAt = newValue}
+  }
+  /// Returns true if `nextAt` has been explicitly set.
+  public var hasNextAt: Bool {self._nextAt != nil}
+  /// Clears the value of `nextAt`. Subsequent reads from it will return its default value.
+  public mutating func clearNextAt() {self._nextAt = nil}
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _nextAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
 }
 
 // MARK: - Code below here is support for the SwiftProtobuf runtime.
@@ -1075,7 +1182,7 @@ nonisolated extension Portenv_Types_V1_AgentState: SwiftProtobuf._ProtoNameProvi
 }
 
 nonisolated extension Portenv_Types_V1_MessageType: SwiftProtobuf._ProtoNameProviding {
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0MESSAGE_TYPE_UNSPECIFIED\0\u{1}MESSAGE_TYPE_QUESTION\0\u{1}MESSAGE_TYPE_ANSWER\0\u{1}MESSAGE_TYPE_NOTICE\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0MESSAGE_TYPE_UNSPECIFIED\0\u{1}MESSAGE_TYPE_QUESTION\0\u{1}MESSAGE_TYPE_ANSWER\0\u{1}MESSAGE_TYPE_NOTICE\0\u{1}MESSAGE_TYPE_STATUS_REQUEST\0\u{1}MESSAGE_TYPE_ROUTINE\0\u{1}MESSAGE_TYPE_HANDOFF\0")
 }
 
 nonisolated extension Portenv_Types_V1_DecisionKind: SwiftProtobuf._ProtoNameProviding {
@@ -1413,7 +1520,7 @@ nonisolated extension Portenv_Types_V1_Tab: SwiftProtobuf.Message, SwiftProtobuf
 
 nonisolated extension Portenv_Types_V1_BoardMessage: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".BoardMessage"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}from\0\u{1}to\0\u{3}thread_id\0\u{1}type\0\u{1}text\0\u{3}created_at\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}from\0\u{1}to\0\u{3}thread_id\0\u{1}type\0\u{1}text\0\u{3}created_at\0\u{1}files\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1428,6 +1535,7 @@ nonisolated extension Portenv_Types_V1_BoardMessage: SwiftProtobuf.Message, Swif
       case 5: try { try decoder.decodeSingularEnumField(value: &self.type) }()
       case 6: try { try decoder.decodeSingularStringField(value: &self.text) }()
       case 7: try { try decoder.decodeSingularMessageField(value: &self._createdAt) }()
+      case 8: try { try decoder.decodeRepeatedMessageField(value: &self.files) }()
       default: break
       }
     }
@@ -1459,6 +1567,9 @@ nonisolated extension Portenv_Types_V1_BoardMessage: SwiftProtobuf.Message, Swif
     try { if let v = self._createdAt {
       try visitor.visitSingularMessageField(value: v, fieldNumber: 7)
     } }()
+    if !self.files.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.files, fieldNumber: 8)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -1470,6 +1581,7 @@ nonisolated extension Portenv_Types_V1_BoardMessage: SwiftProtobuf.Message, Swif
     if lhs.type != rhs.type {return false}
     if lhs.text != rhs.text {return false}
     if lhs._createdAt != rhs._createdAt {return false}
+    if lhs.files != rhs.files {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -1606,7 +1718,7 @@ nonisolated extension Portenv_Types_V1_PackagePlan: SwiftProtobuf.Message, Swift
 
 nonisolated extension Portenv_Types_V1_AgentGrant: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".AgentGrant"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}panes\0\u{3}max_panes\0\u{1}message\0\u{3}ask_owner\0\u{1}packages\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}panes\0\u{3}max_panes\0\u{1}message\0\u{3}ask_owner\0\u{1}packages\0\u{3}team_status\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1619,6 +1731,7 @@ nonisolated extension Portenv_Types_V1_AgentGrant: SwiftProtobuf.Message, SwiftP
       case 3: try { try decoder.decodeRepeatedStringField(value: &self.message) }()
       case 4: try { try decoder.decodeSingularBoolField(value: &self.askOwner) }()
       case 5: try { try decoder.decodeSingularEnumField(value: &self.packages) }()
+      case 6: try { try decoder.decodeSingularBoolField(value: &self.teamStatus) }()
       default: break
       }
     }
@@ -1640,6 +1753,9 @@ nonisolated extension Portenv_Types_V1_AgentGrant: SwiftProtobuf.Message, SwiftP
     if self.packages != .unspecified {
       try visitor.visitSingularEnumField(value: self.packages, fieldNumber: 5)
     }
+    if self.teamStatus != false {
+      try visitor.visitSingularBoolField(value: self.teamStatus, fieldNumber: 6)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -1649,6 +1765,7 @@ nonisolated extension Portenv_Types_V1_AgentGrant: SwiftProtobuf.Message, SwiftP
     if lhs.message != rhs.message {return false}
     if lhs.askOwner != rhs.askOwner {return false}
     if lhs.packages != rhs.packages {return false}
+    if lhs.teamStatus != rhs.teamStatus {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -1698,6 +1815,149 @@ nonisolated extension Portenv_Types_V1_AgentFile: SwiftProtobuf.Message, SwiftPr
     if lhs.dir != rhs.dir {return false}
     if lhs.size != rhs.size {return false}
     if lhs._modified != rhs._modified {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Portenv_Types_V1_AgentStatus: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".AgentStatus"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}text\0\u{3}progress_done\0\u{3}progress_total\0\u{1}blocked\0\u{3}set_at\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.text) }()
+      case 2: try { try decoder.decodeSingularInt32Field(value: &self.progressDone) }()
+      case 3: try { try decoder.decodeSingularInt32Field(value: &self.progressTotal) }()
+      case 4: try { try decoder.decodeSingularStringField(value: &self.blocked) }()
+      case 5: try { try decoder.decodeSingularMessageField(value: &self._setAt) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    if !self.text.isEmpty {
+      try visitor.visitSingularStringField(value: self.text, fieldNumber: 1)
+    }
+    if self.progressDone != 0 {
+      try visitor.visitSingularInt32Field(value: self.progressDone, fieldNumber: 2)
+    }
+    if self.progressTotal != 0 {
+      try visitor.visitSingularInt32Field(value: self.progressTotal, fieldNumber: 3)
+    }
+    if !self.blocked.isEmpty {
+      try visitor.visitSingularStringField(value: self.blocked, fieldNumber: 4)
+    }
+    try { if let v = self._setAt {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 5)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Portenv_Types_V1_AgentStatus, rhs: Portenv_Types_V1_AgentStatus) -> Bool {
+    if lhs.text != rhs.text {return false}
+    if lhs.progressDone != rhs.progressDone {return false}
+    if lhs.progressTotal != rhs.progressTotal {return false}
+    if lhs.blocked != rhs.blocked {return false}
+    if lhs._setAt != rhs._setAt {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Portenv_Types_V1_HandoffFile: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".HandoffFile"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}path\0\u{1}sha256\0\u{1}size\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.path) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.sha256) }()
+      case 3: try { try decoder.decodeSingularInt64Field(value: &self.size) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.path.isEmpty {
+      try visitor.visitSingularStringField(value: self.path, fieldNumber: 1)
+    }
+    if !self.sha256.isEmpty {
+      try visitor.visitSingularStringField(value: self.sha256, fieldNumber: 2)
+    }
+    if self.size != 0 {
+      try visitor.visitSingularInt64Field(value: self.size, fieldNumber: 3)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Portenv_Types_V1_HandoffFile, rhs: Portenv_Types_V1_HandoffFile) -> Bool {
+    if lhs.path != rhs.path {return false}
+    if lhs.sha256 != rhs.sha256 {return false}
+    if lhs.size != rhs.size {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Portenv_Types_V1_Routine: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".Routine"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}every_minutes\0\u{1}note\0\u{1}paused\0\u{3}next_at\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularInt32Field(value: &self.everyMinutes) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.note) }()
+      case 3: try { try decoder.decodeSingularBoolField(value: &self.paused) }()
+      case 4: try { try decoder.decodeSingularMessageField(value: &self._nextAt) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    if self.everyMinutes != 0 {
+      try visitor.visitSingularInt32Field(value: self.everyMinutes, fieldNumber: 1)
+    }
+    if !self.note.isEmpty {
+      try visitor.visitSingularStringField(value: self.note, fieldNumber: 2)
+    }
+    if self.paused != false {
+      try visitor.visitSingularBoolField(value: self.paused, fieldNumber: 3)
+    }
+    try { if let v = self._nextAt {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 4)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Portenv_Types_V1_Routine, rhs: Portenv_Types_V1_Routine) -> Bool {
+    if lhs.everyMinutes != rhs.everyMinutes {return false}
+    if lhs.note != rhs.note {return false}
+    if lhs.paused != rhs.paused {return false}
+    if lhs._nextAt != rhs._nextAt {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

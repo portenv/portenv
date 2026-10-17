@@ -25,7 +25,9 @@ public final class BlockReader {
         let tracker = view.tracker!
         tracker.refresh()
         let marks = tracker.rows.marks
-        return CommandBlocks.blocks(marks: marks, cursorRow: tracker.cursorRow) { [self] promptRow in
+        // Trimmed marks keep the start of a block that outgrew the
+        // scrollback (its command is gone with its prompt line).
+        return CommandBlocks.blocks(marks: tracker.rows.trimmed + marks, cursorRow: tracker.cursorRow) { [self] promptRow in
             command(promptRow: promptRow, marks: marks)
         }
     }
@@ -53,6 +55,54 @@ public final class BlockReader {
     /// One row's plain text, for Find.
     public func text(_ r: Int) -> String? {
         terminal.getScrollInvariantLine(row: r)?.translateToString(trimRight: true, skipNullCellsFollowingWide: true)
+    }
+
+    /// The first row still in the scrollback.
+    public var firstRow: Int { view.tracker.firstValid }
+
+    /// How many of a block's output lines are past the scrollback.
+    public func trimmedLines(of block: CommandBlock) -> Int {
+        guard let rows = block.output else { return 0 }
+        return max(0, min(firstRow, rows.upperBound + 1) - rows.lowerBound)
+    }
+
+    /// The block with only the output still in the scrollback, so a card
+    /// lays out (first and last 20, lines hidden) what it can show.
+    public func kept(_ block: CommandBlock) -> CommandBlock {
+        guard let rows = block.output, rows.lowerBound < firstRow else { return block }
+        let output = rows.upperBound >= firstRow ? firstRow ... rows.upperBound : nil
+        return CommandBlock(id: block.id, command: block.command, state: block.state, output: output,
+                            startedAt: block.startedAt, endedAt: block.endedAt)
+    }
+
+    /// Copy Output's text: the whole block (R-0171), read in chunks with a
+    /// yield between them like Find, so a long block never holds the main
+    /// thread; first, when it outgrew the scrollback, a line saying so. Nil
+    /// if cancelled.
+    public func outputText(of block: CommandBlock) async -> String? {
+        var lines: [String] = []
+        if let rows = block.output, rows.upperBound >= firstRow {
+            var lo = max(rows.lowerBound, firstRow)
+            while lo <= rows.upperBound {
+                let hi = min(lo + BlockFind.chunkRows - 1, rows.upperBound)
+                for r in lo ... hi { lines.append(text(r) ?? "") }
+                lo = hi + 1
+                await Task.yield()
+                if Task.isCancelled { return nil }
+            }
+        }
+        return BlockCopy.output(lines: lines, trimmed: trimmedLines(of: block))
+    }
+
+    /// Whether Run Again can type into the tab: it's attached to one.
+    public var canRunAgain: Bool { view.source != nil }
+
+    /// Run Again: types the command and Return into the tab, as the person,
+    /// through the same path as their keystrokes. Asking first is the
+    /// caller's job (`BlockCopy.asksBeforeRunningAgain`).
+    public func runAgain(_ block: CommandBlock) {
+        guard let bytes = BlockCopy.runAgainInput(block.command) else { return }
+        view.source?.send(bytes)
     }
 
     /// One row as styled text, or nil if it left the scrollback.
@@ -150,9 +200,20 @@ public struct BlocksView: View {
     @State private var found: [BlockFind.Match] = []
     @State private var current: Int?
     @State private var searching: Task<Void, Never>?
+    @State private var copying: Task<Void, Never>?
+    /// The block Run Again is asking about.
+    @State private var asking: CommandBlock?
     /// Where each block sits in the list's visible area, for the header that
     /// stays at the top.
-    @State private var frames: [Int: CGRect] = [:]
+    /// Open blocks whose top has scrolled above the list while their
+    /// output still shows: their header stays at the top. Only a change in
+    /// this set redraws the list, not every scrolled point (R-0243).
+    @State private var underTop: Set<Int> = []
+    /// Where VoiceOver's cursor is: a click on a header moves it there
+    /// (R-0244).
+    @AccessibilityFocusState private var spoken: Int?
+    /// "↑ Top of block" still going to the top.
+    @State private var jumping: Task<Void, Never>?
     @FocusState private var findFocused: Bool
     /// Renders and tests: an output row to start scrolled to.
     private let startAt: Int?
@@ -187,6 +248,10 @@ public struct BlocksView: View {
                         ForEach(blocks) { block in
                             VStack(alignment: .leading, spacing: 0) {
                                 header(block, proxy: proxy, pinned: false)
+                                    .id(Self.headID(block.id))
+                                if block.state == .running {
+                                    Rectangle().fill(SwiftUI.Color.accentColor).frame(height: 2).accessibilityHidden(true)
+                                }
                                 BlockBody(block: block, reader: reader, palette: palette, open: isOpen(block),
                                           showAll: showAll.contains(block.id), highlights: highlights(block.id),
                                           expand: { showAll.insert(block.id) })
@@ -194,8 +259,14 @@ public struct BlocksView: View {
                             .background(RoundedRectangle(cornerRadius: 8).fill(SwiftUI.Color.primary.opacity(0.035)))
                             .overlay(RoundedRectangle(cornerRadius: 8)
                                 .stroke(edge(block.state, selected: selected == block.id), lineWidth: selected == block.id ? 2 : 1))
+                            .contextMenu { menu(block, proxy: proxy) }
                             .id(block.id)
-                            .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.space)) } action: { frames[block.id] = $0 }
+                            .onGeometryChange(for: Bool.self) { g in
+                                let f = g.frame(in: .named(Self.space))
+                                return f.minY < -1 && f.maxY > 80
+                            } action: { under in
+                                if under { underTop.insert(block.id) } else { underTop.remove(block.id) }
+                            }
                         }
                     }
                     .padding(14)
@@ -222,23 +293,93 @@ public struct BlocksView: View {
         .focusable()
         .focusEffectDisabled()
         .onKeyPress(phases: .down) { press in key(press) }
+        .alert(asking.map { BlockCopy.runAgainQuestion(command: $0.command, author: nil).title } ?? "",
+               isPresented: Binding(get: { asking != nil }, set: { if !$0 { asking = nil } }), presenting: asking) { block in
+            Button(BlockCopy.runAgain) { reader.runAgain(block) }
+            Button("Cancel", role: .cancel) {}
+        } message: { block in
+            Text(BlockCopy.runAgainQuestion(command: block.command, author: nil).message)
+        }
     }
 
     static let space = "blocks"
+    static func headID(_ id: Int) -> String { "head-\(id)" }
+
+    /// "↑ Top of block": to the block's header, not animated, and again
+    /// until the header has really reached the top (it unpins), for up to
+    /// 3 s: the lazy rows above take their real heights only as they're
+    /// laid out, so one jump over thousands of rows lands short, and how
+    /// many it takes depends on the Mac's speed (R-0239).
+    func top(_ block: CommandBlock, _ proxy: ScrollViewProxy) {
+        let id = Self.headID(block.id)
+        jumping?.cancel()
+        jumping = Task { @MainActor in
+            for _ in 0 ..< 30 {
+                proxy.scrollTo(id, anchor: .top)
+                try? await Task.sleep(for: .milliseconds(100))
+                if Task.isCancelled || !underTop.contains(block.id) { return }
+            }
+        }
+    }
 
     func header(_ block: CommandBlock, proxy: ScrollViewProxy, pinned: Bool) -> some View {
-        BlockHeader(block: block, now: now, open: isOpen(block), pinned: pinned,
+        BlockHeader(block: block, now: now, open: isOpen(block), pinned: pinned, selected: selected == block.id,
                     highlights: highlights(block.id)[-1] ?? [],
-                    toggle: { toggled.formSymmetricDifference([block.id]) },
-                    top: { withAnimation { proxy.scrollTo(block.id, anchor: .top) } })
+                    actions: actions(block), spoken: pinned ? nil : $spoken,
+                    toggle: {
+                        toggled.formSymmetricDifference([block.id])
+                        if !pinned { spoken = block.id }
+                    },
+                    top: { top(block, proxy) })
+    }
+
+    // MARK: Actions
+
+    func actions(_ block: CommandBlock) -> BlockActions {
+        BlockActions(copyOutput: block.output == nil ? nil : { copyOutput(block) },
+                     copyCommand: block.command.isEmpty ? nil : { Self.copy(block.command) },
+                     runAgain: reader.canRunAgain && BlockCopy.runAgainInput(block.command) != nil ? { runAgain(block) } : nil)
+    }
+
+    /// The context menu: the hover actions, then Copy Both, Collapse and
+    /// Jump to Start (GUIDELINES 4.2).
+    @ViewBuilder func menu(_ block: CommandBlock, proxy: ScrollViewProxy) -> some View {
+        let a = actions(block)
+        Button(BlockCopy.copyOutput) { a.copyOutput?() }.disabled(a.copyOutput == nil)
+        Button(BlockCopy.copyCommand) { a.copyCommand?() }.disabled(a.copyCommand == nil)
+        Button(BlockCopy.copyBoth) { copyOutput(block, withCommand: true) }.disabled(block.command.isEmpty && block.output == nil)
+        Divider()
+        Button(BlockCopy.runAgain + "\u{2026}") { a.runAgain?() }.disabled(a.runAgain == nil)
+        Divider()
+        Button(isOpen(block) ? BlockCopy.collapse : BlockCopy.expand) { toggled.formSymmetricDifference([block.id]) }
+        Button(BlockCopy.jumpToStart) { withAnimation { proxy.scrollTo(block.id, anchor: .top) } }
+    }
+
+    /// Copies the whole block's output (R-0171), read in chunks off the
+    /// buffer; a second copy cancels one still reading.
+    func copyOutput(_ block: CommandBlock, withCommand: Bool = false) {
+        copying?.cancel()
+        let reader = reader
+        copying = Task { @MainActor in
+            guard let text = await reader.outputText(of: block) else { return }
+            Self.copy(withCommand ? BlockCopy.both(command: block.command, output: text) : text)
+        }
+    }
+
+    /// Run Again asks first unless portenvd recorded that you ran it; until
+    /// blocks carry their author (slice 4), that's every time (R-0139).
+    func runAgain(_ block: CommandBlock) {
+        if BlockCopy.asksBeforeRunningAgain(authorIsYou: nil) { asking = block } else { reader.runAgain(block) }
+    }
+
+    static func copy(_ text: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
     }
 
     /// A header stays at the top while its block's output scrolls under it:
     /// the block's top has gone above the list's top, and its bottom hasn't.
-    func pinned(_ b: CommandBlock) -> Bool {
-        guard let f = frames[b.id], isOpen(b) else { return false }
-        return f.minY < -1 && f.maxY > 80
-    }
+    func pinned(_ b: CommandBlock) -> Bool { isOpen(b) && underTop.contains(b.id) }
 
     // MARK: Keys
 
@@ -250,6 +391,11 @@ public struct BlocksView: View {
             return .handled
         case .downArrow where cmd:
             selected = BlockNavigation.next(from: selected, in: blocks)
+            return .handled
+        case KeyEquivalent("c") where cmd && press.modifiers.contains(.option):
+            // ⌥⌘C copies the selected block's output.
+            guard let id = selected, let block = blocks.first(where: { $0.id == id }), block.output != nil else { return .ignored }
+            copyOutput(block)
             return .handled
         case KeyEquivalent("f") where cmd:
             finding = true
@@ -383,7 +529,12 @@ struct BlockHeader: View {
     let now: Date
     let open: Bool
     let pinned: Bool
+    let selected: Bool
     let highlights: [(range: Range<Int>, current: Bool)]
+    let actions: BlockActions
+    /// The list's VoiceOver focus, for the header in the list (not the
+    /// sticky copy): a click moves VoiceOver's cursor to it.
+    let spoken: AccessibilityFocusState<Int?>.Binding?
     let toggle: () -> Void
     let top: () -> Void
     @State private var hovering = false
@@ -406,10 +557,16 @@ struct BlockHeader: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help(BlockText.since(block) ?? "")
             .accessibilityLabel(BlockText.spoken(block, now: now))
             .accessibilityValue(BlockText.expandedState(open: open))
             .onKeyPress(.return) { toggle(); return .handled }
+            .modifier(SpokenFocus(spoken: spoken, id: block.id))
+            .accessibilityActions {
+                if let a = actions.copyOutput { Button(BlockCopy.copyOutput, action: a) }
+                if let a = actions.copyCommand { Button(BlockCopy.copyCommand, action: a) }
+                if let a = actions.runAgain { Button(BlockCopy.runAgain, action: a) }
+            }
+            if hovering || selected { toolbar }
             if pinned {
                 // Set 12 pt apart from the status's time (R-0219): the row's
                 // 8 pt and 4 more.
@@ -424,7 +581,25 @@ struct BlockHeader: View {
         .onHover { hovering = $0 }
     }
 
-    @ViewBuilder private var status: some View {
+    /// The hover toolbar (the board's actions): shown on hover and on the
+    /// selected block.
+    private var toolbar: some View {
+        HStack(spacing: 6) {
+            if let a = actions.copyOutput { ActionButton(title: BlockCopy.copyOutput, action: a) }
+            if let a = actions.copyCommand { ActionButton(title: BlockCopy.copyCommand, action: a) }
+            if let a = actions.runAgain { ActionButton(title: BlockCopy.runAgain, action: a) }
+        }
+        .padding(.leading, 2)
+        .accessibilityHidden(true)
+    }
+
+    /// The status, with "since 14:37" as its tooltip (R-0207): on the
+    /// status itself, where the pointer rests, not on the whole button.
+    private var status: some View {
+        statusText.help(BlockText.since(block) ?? "")
+    }
+
+    @ViewBuilder private var statusText: some View {
         let words = BlockText.status(block, now: now)
         switch block.state {
         case .succeeded:
@@ -435,6 +610,44 @@ struct BlockHeader: View {
         case .running:
             (Text("\u{25CF} ").foregroundStyle(SwiftUI.Color.accentColor) + Text(words).foregroundStyle(SwiftUI.Color.accentColor))
         }
+    }
+}
+
+/// Moves VoiceOver's cursor to a header when it's clicked (R-0244); the
+/// sticky copy of a header has no binding and keeps the cursor where it is.
+struct SpokenFocus: ViewModifier {
+    let spoken: AccessibilityFocusState<Int?>.Binding?
+    let id: Int
+
+    func body(content: Content) -> some View {
+        if let spoken { content.accessibilityFocused(spoken, equals: id) } else { content }
+    }
+}
+
+/// What a block's header offers; nil when an action can't run (no output
+/// yet, no command, or no tab to type into).
+struct BlockActions {
+    let copyOutput: (() -> Void)?
+    let copyCommand: (() -> Void)?
+    let runAgain: (() -> Void)?
+}
+
+/// A hover-toolbar button: 11 pt system text on a quiet fill, as on the
+/// board.
+struct ActionButton: View {
+    let title: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 11))
+                .padding(.horizontal, 8)
+                .frame(minHeight: 22)
+                .background(RoundedRectangle(cornerRadius: 5).fill(SwiftUI.Color.primary.opacity(0.1)))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -452,11 +665,21 @@ struct BlockBody: View {
     static func rowID(_ r: Int) -> String { "row-\(r)" }
 
     var body: some View {
-        let shown = BlockLayout.shown(block, open: open, showAll: showAll)
+        let shown = BlockLayout.shown(reader.kept(block), open: open, showAll: showAll)
         Group {
             if shown != .folded {
-                Divider()
-                VStack(alignment: .leading, spacing: 2) {
+                if block.state != .running { Divider() }
+                // Lazy: Show All Output on a 2,400-line block builds only the
+                // rows on screen, for the window and for VoiceOver (R-0239,
+                // R-0243).
+                LazyVStack(alignment: .leading, spacing: 2) {
+                    // Rows past the scrollback show as one note, not blanks.
+                    if trimmed > 0 {
+                        Text(BlockCopy.trimmedNote(trimmed))
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                            .padding(.bottom, 4)
+                    }
                     switch shown {
                     case .folded: EmptyView()
                     case let .all(rows): rowsView(rows)
@@ -477,6 +700,8 @@ struct BlockBody: View {
         }
     }
 
+    private var trimmed: Int { reader.trimmedLines(of: block) }
+
     private func rowsView(_ rows: ClosedRange<Int>) -> some View {
         ForEach(Array(rows), id: \.self) { r in
             Text(highlighted(reader.row(r, palette: palette) ?? AttributedString(" "), highlights[r] ?? []))
@@ -489,7 +714,8 @@ func edge(_ state: CommandBlock.State, selected: Bool) -> SwiftUI.Color {
     if selected { return .accentColor }
     switch state {
     case .failed: return SwiftUI.Color(nsColor: .systemRed)
-    case .running: return .accentColor
-    case .succeeded: return SwiftUI.Color.primary.opacity(0.12)
+    // Running is a blue line under its header, not an outline: the accent
+    // outline means selected (R-0239).
+    case .running, .succeeded: return SwiftUI.Color.primary.opacity(0.12)
     }
 }

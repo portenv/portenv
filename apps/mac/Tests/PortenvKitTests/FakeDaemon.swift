@@ -45,6 +45,9 @@ final class FakeDaemon: DaemonAPI, @unchecked Sendable {
         }
     }
 
+    /// How many watch streams are open.
+    var watching: Int { lock.withLock { watchers.count } }
+
     /// Pushes a state (JSON) to every watcher.
     func push(_ json: String) {
         guard let s = BoxState.parse(json) else { return }
@@ -198,5 +201,57 @@ final class FakeDaemon: DaemonAPI, @unchecked Sendable {
     func takeSavedAfterQuit() async throws -> [SavedAfterQuit] {
         try await record(["app", "take-saved-after-quit"])
         return lock.withLock { let s = savedAfterQuit; savedAfterQuit = []; return s }
+    }
+
+    // MARK: The team (ADR 0022)
+
+    /// One watch of the team: its events, then it ends, or fails with
+    /// `failure` (a message; DaemonError.outOfDate for an older portenvd).
+    struct TeamScript: Sendable {
+        var events: [(TeamEvent, String)]
+        var failure: String?
+    }
+    /// Each watchTeam plays the next script; after the last, it waits.
+    var teamScripts: [TeamScript] = []
+    /// The decision answerDecision returns, keyed by id.
+    var answered: [String: TeamDecision] = [:]
+    func watchTeam(_ box: String, cursor: String) -> AsyncThrowingStream<(TeamEvent, String), Error> {
+        let script: TeamScript? = lock.withLock {
+            _calls.append(["app", "watch-team", box, cursor])
+            return teamScripts.isEmpty ? nil : teamScripts.removeFirst()
+        }
+        return AsyncThrowingStream { continuation in
+            guard let script else { return }
+            for e in script.events { continuation.yield(e) }
+            if let f = script.failure { continuation.finish(throwing: DaemonError(f)) } else { continuation.finish() }
+        }
+    }
+    func answerDecision(_ box: String, id: String, approve: Bool, note: String) async throws -> TeamDecision {
+        try await record(["app", "answer-decision", box, id, approve ? "approve" : "decline", note])
+        guard let d = lock.withLock({ answered[id] }) else { throw DaemonError("No decision \(id).") }
+        return d
+    }
+    func sendMessage(_ box: String, to agent: String, thread: String, text: String) async throws -> TeamMessage {
+        try await record(["app", "send-message", box, agent, text])
+        return TeamMessage(id: "m-\(lock.withLock { _calls.count })", from: TeamText.owner, to: agent, threadID: thread, text: text)
+    }
+    func startAgent(_ box: String, id: String) async throws -> TeamAgent {
+        try await record(["app", "start-agent", box, id])
+        return TeamAgent(id: id, name: id, status: .starting)
+    }
+    func stopAgent(_ box: String, id: String) async throws -> TeamAgent {
+        try await record(["app", "stop-agent", box, id])
+        return TeamAgent(id: id, name: id, status: .stopped)
+    }
+    /// Each agent's file as getAgentFile returns it.
+    var agentFiles: [String: AgentFileContent] = [:]
+    func getAgentFile(_ box: String, id: String) async throws -> AgentFileContent {
+        try await record(["app", "get-agent-file", box, id])
+        guard let f = lock.withLock({ agentFiles[id] }) else { throw DaemonError("this workspace has no agent \"\(id)\"") }
+        return f
+    }
+    func approveAgentFile(_ box: String, id: String, sha256: String) async throws -> TeamAgent {
+        try await record(["app", "approve-agent-file", box, id, sha256])
+        return TeamAgent(id: id, name: id, status: .stopped, fileSHA256: sha256, approved: true)
     }
 }

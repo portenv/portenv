@@ -31,10 +31,17 @@ public struct TabInfo: Equatable, Sendable, Identifiable {
     public var command: String
     /// When that command started.
     public var runningSince: Date?
+    /// The agent whose tmux server the tab is on (ADR 0022 §1); empty for
+    /// the owner's tabs.
+    public var agentID: String
+    /// The tab's panes (tmux pane IDs), in tmux's order.
+    public var paneIDs: [String]
 
     public init(id: String, name: String, active: Bool, program: String = "", waiting: TabQuestion? = nil,
                 lastOutputAt: Date? = nil, typingAuthor: TabAuthor? = nil, watchers: [String] = [],
-                command: String = "", runningSince: Date? = nil) {
+                command: String = "", runningSince: Date? = nil, agentID: String = "", paneIDs: [String] = []) {
+        self.agentID = agentID
+        self.paneIDs = paneIDs
         self.command = command
         self.runningSince = runningSince
         self.id = id
@@ -204,6 +211,16 @@ public final class TabsController {
 
     /// The tab the terminal shows.
     public var current: TabInfo? { tabs.first { $0.active } }
+
+    /// The tabs to show for what the Team sidebar selects (R-0241): every
+    /// tab, the owner's own, or one agent's.
+    public func shown(for selection: TeamSelection) -> [TabInfo] {
+        switch selection {
+        case .allTabs, .decision: tabs
+        case .you: tabs.filter { $0.agentID.isEmpty }
+        case .agent(let id): tabs.filter { $0.agentID == id }
+        }
+    }
 
     /// Reads the tabs once.
     public func load() async {

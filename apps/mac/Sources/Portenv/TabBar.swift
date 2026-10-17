@@ -13,6 +13,8 @@ struct TabBar: View {
     /// What the Team sidebar selects: every tab, yours, or one agent's
     /// (lane D, ADR 0022 §12; GUIDELINES 6.2).
     var selection: TeamSelection = .allTabs
+    /// The team, for each agent tab's chip and name (R-0265 item 4).
+    var team: [TeamAgent] = []
     /// The tab being renamed, and the name being typed.
     @State private var renaming: String?
     @State private var draft = ""
@@ -22,7 +24,8 @@ struct TabBar: View {
     var body: some View {
         HStack(spacing: 0) {
             ForEach(tabs.shown(for: selection)) { tab in
-                TabItem(tab: tab, canClose: tabs.canClose, renaming: renaming == tab.id, draft: $draft,
+                TabItem(tab: tab, label: TabLabel.of(tab, team: team) { NSImage(systemSymbolName: $0, accessibilityDescription: nil) != nil },
+                        canClose: tabs.canClose, renaming: renaming == tab.id, draft: $draft,
                         select: { Task { await tabs.select(tab.id) } },
                         close: { Task { _ = await tabs.requestClose(id: tab.id) } },
                         startRename: { draft = tab.name; renaming = tab.id },
@@ -140,6 +143,8 @@ struct TabCommands: Commands {
 /// tab); double-click or Rename… in its menu to rename it in place.
 private struct TabItem: View {
     let tab: TabInfo
+    /// What the tab shows: an agent's tab always with its chip and name.
+    let label: TabLabel
     let canClose: Bool
     let renaming: Bool
     @Binding var draft: String
@@ -164,12 +169,15 @@ private struct TabItem: View {
                     .onChange(of: fieldFocused) { _, focused in if !focused { finishRename(true) } }
                     .accessibilityLabel(A11y.renameTab(tab.name))
             } else {
-                Text(tab.name)
-                    .font(.system(size: 12, weight: tab.active ? .semibold : .regular))
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .foregroundStyle(tab.active ? .primary : .secondary)
-                    .padding(.horizontal, 28)
+                HStack(spacing: 5) {
+                    if let chip = label.chip { TeamAvatar(look: chip, size: 16) }
+                    Text(verbatim: label.title)
+                        .font(.system(size: 12, weight: tab.active ? .semibold : .regular))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .foregroundStyle(tab.active ? .primary : .secondary)
+                }
+                .padding(.horizontal, 28)
             }
             if canClose && hovering && !renaming {
                 HStack {
@@ -204,7 +212,7 @@ private struct TabItem: View {
             Button("Close Tab", action: close).disabled(!canClose)
         }
         .accessibilityElement(children: renaming ? .contain : .ignore)
-        .accessibilityLabel(A11y.tab(tab.name))
+        .accessibilityLabel(A11y.tab(label.title))
         .accessibilityAddTraits(tab.active ? [.isButton, .isSelected] : .isButton)
         .accessibilityAction(.default, select)
         .accessibilityAction(named: "Rename", startRename)

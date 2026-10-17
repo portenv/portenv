@@ -46,6 +46,17 @@ chmod 0711 /home/work
 for d in .ssh .config .claude .gnupg; do install -d -o work -g work -m 0700 "/home/work/$d"; done
 echo owner-key > /home/work/.ssh/id_test; echo owner-token > /home/work/.config/token
 chown work:work /home/work/.ssh/id_test /home/work/.config/token; chmod 0600 /home/work/.ssh/id_test /home/work/.config/token
+# The secret paths a team start must leave unreadable to agents (R-0262):
+# top-level files 0600, the rest inside 0700 folders.
+for f in .npmrc .netrc .git-credentials .gitconfig .bash_history; do
+  echo "owner-secret $f" > "/home/work/$f"; chown work:work "/home/work/$f"; chmod 0600 "/home/work/$f"
+done
+# A real git config: the owner's git reads it.
+printf '[user]\n\tname = owner-secret\n' > /home/work/.gitconfig
+install -d -o work -g work -m 0700 /home/work/.config/gh /home/work/.docker
+for f in .ssh/id_ed25519 .config/gh/hosts.yml .claude/.credentials.json .gnupg/pubring.kbx .docker/config.json; do
+  echo "owner-secret $f" > "/home/work/$f"; chown work:work "/home/work/$f"; chmod 0600 "/home/work/$f"
+done
 # The team folder.
 install -d -o work -g team -m 2770 /home/team
 # The project: group team, setgid directories, group-writable files. (The

@@ -45,6 +45,9 @@ final class FakeDaemon: DaemonAPI, @unchecked Sendable {
         }
     }
 
+    /// How many watch streams are open.
+    var watching: Int { lock.withLock { watchers.count } }
+
     /// Pushes a state (JSON) to every watcher.
     func push(_ json: String) {
         guard let s = BoxState.parse(json) else { return }

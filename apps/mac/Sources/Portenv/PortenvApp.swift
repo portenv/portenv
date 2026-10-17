@@ -42,7 +42,6 @@ struct PortenvApp: App {
                 let app = NSApplication.shared
                 app.setActivationPolicy(.regular)
                 BlocksPreview.show()
-                NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: nil, queue: .main) { _ in exit(0) }
                 app.run()
             }
             exit(0)

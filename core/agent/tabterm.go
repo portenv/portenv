@@ -60,8 +60,9 @@ func (s *apiServer) TabTerminal(stream agentv1.AgentService_TabTerminalServer) e
 	if open == nil {
 		return status.Error(codes.InvalidArgument, "the first message must open a tab")
 	}
-	if !windowIDRE.MatchString(open.GetTab()) {
-		return status.Error(codes.InvalidArgument, "a tab ID is @ and a number")
+	agentTabID, window, valid := SplitTabID(open.GetTab())
+	if !valid {
+		return status.Error(codes.InvalidArgument, "a tab ID is @ and a number, or an agent's: builder:@3")
 	}
 	name, agentID := strings.TrimSpace(open.GetAuthor()), open.GetAuthorAgentId()
 	if utf8.RuneCountInString(name) > maxAuthorName || strings.IndexFunc(name, isControl) >= 0 || !utf8.ValidString(name) {
@@ -75,21 +76,31 @@ func (s *apiServer) TabTerminal(stream agentv1.AgentService_TabTerminalServer) e
 		return err
 	}
 	ctx := stream.Context()
-	hub, err := s.ctlHub()
-	if err != nil {
-		return status.Errorf(codes.FailedPrecondition, "tab terminals: %v", err)
+	var hub *ctlHub
+	session := tb.session
+	if agentTabID != "" {
+		// An agent's tab: on its own server, through its own client.
+		a, _, _, err := s.agentTab(ctx, open.GetTab())
+		if err != nil {
+			return err
+		}
+		hub, session = a.hub, agentSession
+	} else {
+		if hub, err = s.ctlHub(); err != nil {
+			return status.Errorf(codes.FailedPrecondition, "tab terminals: %v", err)
+		}
+		if err := tb.ensure(ctx); err != nil {
+			return err
+		}
 	}
-	if err := tb.ensure(ctx); err != nil {
-		return err
-	}
-	sub, stop, err := hub.subscribe(ctx, tb.session)
+	sub, stop, err := hub.subscribe(ctx, session)
 	if errors.Is(err, errTmuxTooOld) {
 		return status.Error(codes.FailedPrecondition, "This workspace's tmux is too old for the app's terminal (needs 3.4 or later).")
 	} else if err != nil {
 		return status.Errorf(codes.Unavailable, "tab terminal: %v", err)
 	}
 	defer stop()
-	t := &tabStream{inputIDs: map[uint64]int{}, hub: hub, session: tb.session, tab: open.GetTab(), sub: sub, stream: stream, author: name, agentID: agentID}
+	t := &tabStream{inputIDs: map[uint64]int{}, hub: hub, session: session, tab: window, sub: sub, stream: stream, author: name, agentID: agentID}
 	if size := open.GetSize(); size.GetCols() > 0 && size.GetRows() > 0 {
 		t.size = [2]int{int(size.GetCols()), int(size.GetRows())} // #nosec G115 -- checked below
 	}

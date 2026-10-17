@@ -140,5 +140,62 @@ struct BlockReaderTests {
         #expect(found.first?.block == blocks.first?.id)
         #expect(chunk < .milliseconds(16))
     }
-}
 
+    /// Copy Output copies the whole block (R-0171); a block that outgrew
+    /// the scrollback says how many lines it lost, first, rather than
+    /// copying less silently, and its card shows that note, not blanks.
+    @Test func copyOutputSaysWhatLeftTheScrollback() async {
+        let v = view(cols: 80, rows: 24)
+        v.changeScrollback(100)
+        var out = Self.prompt("npm run build")
+        for i in 1 ... 300 { out += "line \(i)\r\n" }
+        out += Self.end(0) + Self.prompt("ls") + "a b\r\n" + Self.end(0)
+        v.ingest(Array(out.utf8))
+        let reader = BlockReader(view: v)
+        let blocks = reader.blocks()
+        #expect(blocks.count == 2)
+        let build = blocks[0]
+        let trimmed = reader.trimmedLines(of: build)
+        #expect(trimmed > 0 && trimmed < 300)
+        #expect(reader.trimmedLines(of: blocks[1]) == 0)
+        // The card lays out only the rows it can show.
+        #expect(reader.kept(build).output == reader.firstRow ... build.output!.upperBound)
+        #expect(reader.kept(blocks[1]) == blocks[1])
+        let copied = await reader.outputText(of: build)?.components(separatedBy: "\n") ?? []
+        #expect(copied.first == BlockCopy.trimmedNote(trimmed))
+        #expect(copied.count == 300 - trimmed + 1)
+        #expect(copied.last == "line 300")
+        #expect(copied[1] == "line \(trimmed + 1)")
+        #expect(await reader.outputText(of: blocks[1]) == "a b")
+    }
+
+    /// A long block's copy reads in chunks with a yield between them, so
+    /// it's cancellable and each chunk stays under a frame.
+    @Test func copyingALongBlockIsCancellable() async {
+        let v = view(cols: 120, rows: 40)
+        var out = Self.prompt("npm run build")
+        for i in 1 ... 5_000 { out += "transforming (\(i))\r\n" }
+        out += Self.end(0) + Self.prompt("ls")
+        v.ingest(Array(out.utf8))
+        let reader = BlockReader(view: v)
+        let block = reader.blocks()[0]
+        let task = Task { @MainActor in await reader.outputText(of: block) }
+        task.cancel()
+        #expect(await task.value == nil)
+        let whole = await reader.outputText(of: block)
+        #expect(whole?.components(separatedBy: "\n").count == 5_000)
+    }
+
+    /// Run Again types only the command and Return into the tab, through
+    /// the source, as the person's keystrokes do; with no tab, it can't.
+    @Test func runAgainTypesTheCommandIntoTheTab() {
+        let v = view(), s = ScriptedTabSource(tab: "@1")
+        v.ingest(Array((Self.prompt("npm test -- retries") + "Tests: 1 failed\r\n" + Self.end(1)).utf8))
+        #expect(!BlockReader(view: v).canRunAgain)
+        v.attach(s)
+        let reader = BlockReader(view: v)
+        #expect(reader.canRunAgain)
+        reader.runAgain(reader.blocks()[0])
+        #expect(s.sent == [Array("npm test -- retries\r".utf8)])
+    }
+}

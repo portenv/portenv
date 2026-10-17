@@ -19,6 +19,14 @@ enum TeamRenders {
             TeamAgent(id: "keeper", name: "Design System Keeper", status: .idle, lastLine: "Icon set drafted", runner: "claude"),
             TeamAgent(id: "designer", name: "designer.md", status: .invalid, problem: "Unknown key \u{201C}grants\u{201D} on line 6"),
         ] { s.apply(.agent(a)) }
+        for (i, (from, to, text, minutes)) in [
+            ("lead", "builder", "Take the retry half; keep the payments API unchanged.", 34),
+            ("builder", TeamText.owner, "Split done. Tests are running in my second pane.", 29),
+            (TeamText.owner, "builder", "Ping me before touching the refunds module.", 27),
+            ("builder", TeamText.owner, "Will do.", 26),
+        ].enumerated() {
+            s.apply(.message(TeamMessage(id: "m\(i)", from: from, to: to, text: text, createdAt: now.addingTimeInterval(Double(-minutes * 60)))))
+        }
         s.apply(.decision(TeamDecision(id: "d1", from: "reviewer", kind: .askOwner, summary: "merge #42?",
                                        detail: "Checks pass.", createdAt: now.addingTimeInterval(-6 * 60 - 10))))
         let tabs = [

@@ -66,6 +66,10 @@ type apiServer struct {
 
 	hubMu sync.Mutex
 	hub   *ctlHub
+
+	// team holds the agents' sockets and portenvd's TeamCalls stream
+	// (ADR 0022 §4); nil where there's no team (tests).
+	team *teamHub
 }
 
 // ctlHub returns the server's control-mode clients, made on first use.
@@ -92,7 +96,7 @@ func (s *apiServer) ctlHub() (*ctlHub, error) {
 
 // newChannelServer serves the API with the channel's current secrets.
 func newChannelServer(cfg Config, keys *channelKeys) *grpc.Server {
-	s := &apiServer{cfg: cfg, keys: keys, tmux: tmuxAs, tmuxCmd: tmuxCmdAs}
+	s := &apiServer{cfg: cfg, keys: keys, tmux: tmuxAs, tmuxCmd: tmuxCmdAs, team: newTeamHub(TeamRunDir)}
 	srv := grpc.NewServer(
 		grpc.Creds(credentials.NewTLS(keys.tlsConfig())),
 		grpc.UnaryInterceptor(func(ctx context.Context, req any, _ *grpc.UnaryServerInfo, h grpc.UnaryHandler) (any, error) {

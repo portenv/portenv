@@ -149,7 +149,7 @@ Rules:
 - Your own blocks use your initial on a neutral grey. Each agent gets a stable color, assigned on first connection and kept per workspace.
 - Full-screen and interactive programs (Claude Code, vim, less, top) are one block whose body is the live program. No block decorations inside it.
 - Block background is a subtle tint (one step lighter than the terminal ground in dark mode, one step darker in light mode), radius 8 pt. No coloured side borders.
-- Actions on a block (context menu and hover toolbar): Copy Command, Copy Output, Copy Both, Collapse, and Jump to Start.
+- Actions on a block: the hover toolbar (shown on hover and on the selected block) has Copy Output, Copy Command and Run Again, which VoiceOver offers as the block's actions; the context menu has those three plus Copy Both, Collapse and Jump to Start. ⌥⌘C copies the selected block's output. Copy Output copies the whole block and says first how many lines left the scrollback. Run Again asks first unless portenvd recorded that you ran the command (R-0224).
 
 ### 4.3 Sticky header
 

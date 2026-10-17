@@ -88,6 +88,14 @@ func run(args []string) int {
 		}
 		_ = json.NewEncoder(os.Stdout).Encode(info)
 		return 0
+	case "team-io":
+		// The board and agent files, run as work by the API process
+		// (ADR 0022 §6).
+		if err := agent.TeamIO(args[1:], os.Stdin, os.Stdout); err != nil {
+			fmt.Fprintln(os.Stderr, "portenv-agent:", err)
+			return 1
+		}
+		return 0
 	case "version", "--version", "-v":
 		fmt.Println("portenv-agent", version.String())
 		return 0

@@ -8,6 +8,7 @@ import (
 	"crypto/subtle"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"regexp"
 	"sync"
@@ -84,6 +85,9 @@ type apiServer struct {
 	// one as its agent (agentAs; plain tmux in tests).
 	agents    agentServers
 	agentTmux agentTmuxFunc
+	// runTeamIO runs "portenv-agent team-io" as work (teamIOAs; in this
+	// process in tests).
+	runTeamIO func(ctx context.Context, args []string, stdin io.Reader) ([]byte, error)
 }
 
 // ctlHub returns the server's control-mode clients, made on first use.
@@ -114,6 +118,7 @@ func newChannelServer(cfg Config, keys *channelKeys) *grpc.Server {
 		users: initUsers{socket: DefaultSocket}, writeAsUser: writeFileAsUser, killUID: killAgentUID}
 	s.agentTmux = agentAs
 	s.startAgentServer, s.stopAgentServer = s.StartAgentTerminals, s.StopAgentTerminals
+	s.runTeamIO = s.teamIOAs
 	srv := grpc.NewServer(
 		grpc.Creds(credentials.NewTLS(keys.tlsConfig())),
 		grpc.UnaryInterceptor(func(ctx context.Context, req any, _ *grpc.UnaryServerInfo, h grpc.UnaryHandler) (any, error) {

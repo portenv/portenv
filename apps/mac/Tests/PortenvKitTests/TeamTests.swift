@@ -309,3 +309,62 @@ struct TabLabelTests {
         }
     }
 }
+
+/// AgentInfo's status, routines and routines_off reach the row and the
+/// column (R-0256, R-0258).
+struct TeamAgentStatusMappingTests {
+    let now = Date(timeIntervalSince1970: 100_000)
+
+    func info(_ state: Portenv_Types_V1_AgentState = .running, _ edit: (inout Portenv_Daemon_V1_AgentInfo) -> Void = { _ in }) -> TeamAgent {
+        var a = Portenv_Daemon_V1_AgentInfo.with { $0.id = "builder"; $0.name = "Builder"; $0.state = state; $0.approved = true; $0.lastLine = "Board line" }
+        edit(&a)
+        return TeamAgent(a)
+    }
+
+    func status(_ text: String, done: Int32 = 0, total: Int32 = 0, blocked: String = "", minutesAgo: Double) -> Portenv_Types_V1_AgentStatus {
+        .with {
+            $0.text = text; $0.progressDone = done; $0.progressTotal = total; $0.blocked = blocked
+            $0.setAt = .init(date: now.addingTimeInterval(-minutesAgo * 60))
+        }
+    }
+
+    @Test func statusMapsOneToOne() {
+        let a = info { $0.status = status("Migrating tables", done: 3, total: 5, minutesAgo: 4) }
+        #expect(a.workStatus == AgentWorkStatus(text: "Migrating tables", progress: (3, 5), setAt: now.addingTimeInterval(-240)))
+        #expect(TeamText.rowLine(a, now: now) == ("Migrating tables (3/5) \u{00B7} 4 min ago", false))
+        #expect(TeamText.spoken(a, now: now) == "Builder, running. Migrating tables (3/5) \u{00B7} 4 min ago")
+        // No progress given is both 0: none shown.
+        #expect(info { $0.status = status("Reading", minutesAgo: 1) }.workStatus?.progress == nil)
+        let b = info { $0.status = status("Deploying", blocked: "needs the staging key", minutesAgo: 2) }
+        #expect(TeamText.rowLine(b, now: now).text == "blocked: needs the staging key \u{00B7} 2 min ago")
+        #expect(TeamText.rowLine(info { $0.status = status("Old", minutesAgo: 35) }, now: now) == ("no status for 35 min", true))
+    }
+
+    @Test func noStatusKeepsTheBoardLine() {
+        let a = info()
+        #expect(a.workStatus == nil && a.routines.isEmpty && a.routinesOff.isEmpty)
+        #expect(TeamText.rowLine(a, now: now) == ("Board line", false))
+        // A stopped agent's old status isn't its row's line; nor does it
+        // hide why an agent can't start.
+        #expect(TeamText.rowLine(info(.stopped) { $0.status = status("Was testing", minutesAgo: 1) }, now: now).text == "Board line")
+        let invalid = info(.invalid) { $0.problem = "Unknown key"; $0.status = status("x", minutesAgo: 1) }
+        #expect(TeamText.rowLine(invalid, now: now).text == "Unknown key")
+    }
+
+    @Test func routinesAndWhyTheyreOff() {
+        let r = info {
+            $0.routines = [.with { $0.everyMinutes = 30; $0.note = "Status round" }, .with { $0.everyMinutes = 120; $0.note = "Tidy\nup"; $0.paused = true }]
+        }
+        #expect(r.routines == [AgentRoutine(every: 1800, note: "Status round"), AgentRoutine(every: 7200, note: "Tidy up", paused: true)])
+        #expect(TeamText.routinesLine(r) == "Routines: every 30 min, every 2 hours")
+        let paused = info { $0.routines = [.with { $0.everyMinutes = 60; $0.note = "a"; $0.paused = true }] }
+        #expect(TeamText.routinesLine(paused) == "Routines: every 1 hour (paused)")
+        let off = info {
+            $0.routines = [.with { $0.everyMinutes = 30; $0.note = "a" }]
+            $0.routinesOff = "Routines are off: Portenv doesn\u{2019}t know when my-agent is idle.\n\u{1b}[2J"
+        }
+        #expect(off.routinesOff == "Routines are off: Portenv doesn\u{2019}t know when my-agent is idle. [2J")
+        #expect(TeamText.routinesLine(off) == off.routinesOff)
+        #expect(TeamText.routinesLine(info()) == nil)
+    }
+}

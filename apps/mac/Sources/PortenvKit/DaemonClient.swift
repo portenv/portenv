@@ -541,7 +541,18 @@ extension TeamAgent {
         self.init(id: a.id, name: a.name, role: a.role, avatar: a.avatar, remote: a.remote, via: a.via, status: status,
                   problem: a.problem, fileSHA256: a.fileSha256, approved: a.approved, tabIDs: a.tabIds, lastLine: a.lastLine,
                   pendingDecisions: Int(a.pendingDecisions), homeBytes: a.homeBytes, homeQuotaBytes: a.homeQuotaBytes,
-                  runner: a.runner, grant: TeamGrant(a.grant))
+                  runner: a.runner, grant: TeamGrant(a.grant),
+                  workStatus: a.hasStatus ? AgentWorkStatus(a.status) : nil,
+                  routines: a.routines.map { AgentRoutine(every: TimeInterval($0.everyMinutes) * 60, note: $0.note, paused: $0.paused) },
+                  routinesOff: a.routinesOff)
+    }
+}
+
+extension AgentWorkStatus {
+    init(_ s: Portenv_Types_V1_AgentStatus) {
+        // Both 0 when not given; the kit drops any progress that isn't N of M.
+        self.init(text: s.text, progress: (Int(s.progressDone), Int(s.progressTotal)), blocked: s.blocked,
+                  setAt: s.hasSetAt ? s.setAt.date : nil)
     }
 }
 

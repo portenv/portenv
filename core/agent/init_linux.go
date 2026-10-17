@@ -18,6 +18,9 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+// reapRetryDelay is how soon a skipped reap is tried again.
+const reapRetryDelay = 50 * time.Millisecond
+
 // shutdownGrace is how long processes get between SIGTERM and SIGKILL.
 // Docker's default stop timeout is 10 seconds; stay below it.
 const shutdownGrace = 8 * time.Second
@@ -83,6 +86,7 @@ func Init(ctx context.Context, cfg Config, log *slog.Logger) error {
 		go retryPackages(ctx, cfg, ExecRunner{Mu: &mu}, readiness, log)
 	}()
 
+	reaper := newChildReaper(&mu, func() { servePid = restartIfReaped(reap(), servePid, log) }, reapRetryDelay)
 	bootDone := booted
 	for {
 		select {
@@ -93,15 +97,14 @@ func Init(ctx context.Context, cfg Config, log *slog.Logger) error {
 			mu.Lock()
 			servePid = restartIfReaped(reap(), servePid, log)
 			mu.Unlock()
+		case <-reaper.retry:
+			reaper.child()
 		case sig := <-sigs:
 			switch sig {
 			case unix.SIGCHLD:
 				// Never block the signal loop behind a long command such as
-				// apt-get: skip now, catch up when the start sequence ends.
-				if mu.TryLock() {
-					servePid = restartIfReaped(reap(), servePid, log)
-					mu.Unlock()
-				}
+				// apt-get: skip now, and try again shortly (childReaper).
+				reaper.child()
 			case unix.SIGTERM, unix.SIGINT:
 				log.Info("stopping box", "signal", sig.String())
 				cancel()

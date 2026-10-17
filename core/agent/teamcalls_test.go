@@ -89,6 +89,8 @@ func teamCall(t *testing.T, h *teamHub, id, line string) *agentv1.TeamCallsReque
 	if _, err := io.WriteString(conn, line+"\n"); err != nil {
 		t.Fatal(err)
 	}
+	// As the CLI does: the line, then the write side closed.
+	_ = conn.(*net.UnixConn).CloseWrite()
 	reply, err := bufio.NewReader(conn).ReadString('\n')
 	if err != nil {
 		t.Fatalf("reading the reply: %v", err)

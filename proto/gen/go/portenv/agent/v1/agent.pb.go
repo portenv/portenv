@@ -4182,8 +4182,13 @@ func (x *SimulatePackageResponse) GetLine() string {
 type InstallPackagesRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The requested name, appended to apt-packages.txt on success.
-	Name          string            `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Approved      []*v1.PackagePlan `protobuf:"bytes,2,rep,name=approved,proto3" json:"approved,omitempty"`
+	Name     string            `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Approved []*v1.PackagePlan `protobuf:"bytes,2,rep,name=approved,proto3" json:"approved,omitempty"`
+	// The package decision (R-0254): init reads it from the board itself,
+	// and installs only if it is approved and not expired, and a fresh
+	// simulation equals its packages exactly (names, versions, sources).
+	// Otherwise nothing is installed.
+	DecisionId    string `protobuf:"bytes,3,opt,name=decision_id,json=decisionId,proto3" json:"decision_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4230,6 +4235,13 @@ func (x *InstallPackagesRequest) GetApproved() []*v1.PackagePlan {
 		return x.Approved
 	}
 	return nil
+}
+
+func (x *InstallPackagesRequest) GetDecisionId() string {
+	if x != nil {
+		return x.DecisionId
+	}
+	return ""
 }
 
 type InstallPackagesResponse struct {
@@ -4956,10 +4968,12 @@ const file_portenv_agent_v1_agent_proto_rawDesc = "" +
 	"\x04name\x18\x01 \x01(\tR\x04name\"h\n" +
 	"\x17SimulatePackageResponse\x129\n" +
 	"\bpackages\x18\x01 \x03(\v2\x1d.portenv.types.v1.PackagePlanR\bpackages\x12\x12\n" +
-	"\x04line\x18\x02 \x01(\tR\x04line\"g\n" +
+	"\x04line\x18\x02 \x01(\tR\x04line\"\x88\x01\n" +
 	"\x16InstallPackagesRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x129\n" +
-	"\bapproved\x18\x02 \x03(\v2\x1d.portenv.types.v1.PackagePlanR\bapproved\"=\n" +
+	"\bapproved\x18\x02 \x03(\v2\x1d.portenv.types.v1.PackagePlanR\bapproved\x12\x1f\n" +
+	"\vdecision_id\x18\x03 \x01(\tR\n" +
+	"decisionId\"=\n" +
 	"\x17InstallPackagesResponse\x12\x0e\n" +
 	"\x02ok\x18\x01 \x01(\bR\x02ok\x12\x12\n" +
 	"\x04line\x18\x02 \x01(\tR\x04line\"\x86\x02\n" +

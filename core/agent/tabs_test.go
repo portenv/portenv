@@ -173,6 +173,29 @@ func TestTabNamesAreChecked(t *testing.T) {
 	}
 }
 
+// A tab's name reaches tmux as plain text, in a new tab and a rename: a
+// final ";" doesn't end the tmux command, and "#{…}" or "#(…)" isn't a
+// format (which would run a command).
+func TestTabNamesAreNeverTmuxSyntax(t *testing.T) {
+	tb, _ := testTabs(t)
+	ctx := context.Background()
+	for _, name := range []string{"C# #{pane_id};", "#(echo ran)"} {
+		tab, err := tb.open(ctx, name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := tb.rename(ctx, tab.GetId(), name+";"); err != nil {
+			t.Fatal(err)
+		}
+		ts := mustList(t, tb)
+		if got := ts[len(ts)-1].GetName(); got != name+";" {
+			t.Errorf("named %q, tmux has %q", name+";", got)
+		}
+	}
+	_, err := tb.open(ctx, `x\;`)
+	wantCode(t, err, codes.InvalidArgument)
+}
+
 // TestCloseTab: closing removes the tab; the last tab can't be closed (the
 // session, and with it the terminal, would end).
 func TestCloseTab(t *testing.T) {

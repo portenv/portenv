@@ -72,6 +72,20 @@ service AgentService {
   rpc SimulatePackage(SimulatePackageRequest) returns (SimulatePackageResponse);
   // Installs exactly the approved set, pinned, or nothing.
   rpc InstallPackages(InstallPackagesRequest) returns (InstallPackagesResponse);
+  // Opens, focuses or closes a pane on an agent's own tmux server, as that
+  // agent. portenvd calls it only after its grant check (at once for
+  // panes: allow, on the owner's Approve for panes: ask).
+  rpc AgentPaneAction(AgentPaneActionRequest) returns (AgentPaneActionResponse);
+  // The board's lines from the start, for portenvd after a restart.
+  rpc ReadBoard(ReadBoardRequest) returns (stream ReadBoardResponse);
+  // The project's agent files (.portenv/agents/*.md), read by the helper.
+  rpc ReadAgentFiles(ReadAgentFilesRequest) returns (ReadAgentFilesResponse);
+  // Served only by init: opens the project to the team at team start
+  // (ADR 0022 §2): /home/work 0711 with its dotfiles 0700, the project's
+  // group team, setgid folders and default ACLs, with .git/hooks,
+  // .git/config and .portenv/ never group-writable. Refuses with a plain
+  // line when the filesystem won't keep ACLs.
+  rpc PrepareTeamProject(PrepareTeamProjectRequest) returns (PrepareTeamProjectResponse);
 }
 
 message RunResticRequest {
@@ -477,6 +491,11 @@ message StartTeamAgentRequest {
   // Repository paths copied into its home on first start (§2).
   repeated string home_seed = 4;
   int64 home_quota_bytes = 5;
+  // The runner's idle-input pattern (RE2, matched against the main pane's
+  // last line) from portenvd's runner table: DeliverRoutine types only
+  // when it matches, with no question on screen, 5 s of quiet and not the
+  // alternate screen. Empty: routines are off for this runner (R-0258).
+  string idle_pattern = 6;
 }
 
 message StartTeamAgentResponse {
@@ -563,10 +582,66 @@ message InstallPackagesRequest {
   // The requested name, appended to apt-packages.txt on success.
   string name = 1;
   repeated portenv.types.v1.PackagePlan approved = 2;
+  // The package decision (R-0254): init reads it from the board itself,
+  // and installs only if it is approved and not expired, and a fresh
+  // simulation equals its packages exactly (names, versions, sources).
+  // Otherwise nothing is installed.
+  string decision_id = 3;
 }
 
 message InstallPackagesResponse {
   bool ok = 1;
   // The result, or the failing line, for the agent's inbox.
   string line = 2;
+}
+
+message AgentPaneActionRequest {
+  string agent_id = 1;
+  oneof action {
+    Split split = 2;
+    NewTeamTab tab = 3;
+    PaneRef focus = 4;
+    PaneRef close = 5;
+  }
+}
+
+message AgentPaneActionResponse {
+  // The pane made or acted on.
+  PaneRef pane = 1;
+}
+
+message ReadBoardRequest {}
+
+// One board line, in the order written.
+message ReadBoardResponse {
+  oneof line {
+    portenv.types.v1.BoardMessage message = 1;
+    portenv.types.v1.Decision decision = 2;
+  }
+}
+
+message ReadAgentFilesRequest {
+  // The project folder inside the box, e.g. /home/work/<workspace>.
+  string project_dir = 1;
+}
+
+message ReadAgentFilesResponse {
+  repeated AgentFileContent files = 1;
+}
+
+// One agent file as the helper read it: its name (id.md) and its bytes.
+message AgentFileContent {
+  string name = 1;
+  bytes content = 2;
+}
+
+message PrepareTeamProjectRequest {
+  // The project folder, /home/work/<workspace>.
+  string project_dir = 1;
+}
+
+message PrepareTeamProjectResponse {
+  // What was made private in the owner's home (R-0262), since the last
+  // team start, as plain lines for the owner's board notice.
+  repeated string fixed = 1;
 }

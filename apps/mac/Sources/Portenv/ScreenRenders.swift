@@ -188,6 +188,9 @@ enum ScreenRenders {
             // (R-0131): with the inspector open, and closed.
             try await MainWindowRender.render(to: dir, terminal: { sampleTerminal() })
             try await MainWindowRender.render(to: dir, name: "main-window-no-inspector", inspector: false, terminal: { sampleTerminal() })
+            // With a team, Builder selected: the sidebar, Builder's tabs and
+            // its column in the inspector's place (GUIDELINES 6.2).
+            try await MainWindowRender.render(to: dir, name: "main-window-team", team: true, terminal: { sampleTerminal() })
             // A closed workspace's window: Open, and a failed open with Try
             // Again (R-0211).
             try snapshot(ClosedWorkspace(box: "acme-api", failure: nil) {}, name: "closed", size: NSSize(width: 720, height: 360), in: dir)

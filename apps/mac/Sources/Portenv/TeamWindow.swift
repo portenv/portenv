@@ -55,9 +55,9 @@ private struct SidebarMenuItem: View {
 }
 
 /// The selected agent's column, in the inspector's place (R-0240, the
-/// team-agent-selected mockup): who it runs as, then its messages with
-/// you as plain text. Decisions, Message and its files come with the
-/// column's next part.
+/// team-agent-selected mockup): who it runs as, its messages with you as
+/// plain text, what it asks you, then its file to approve and Start
+/// (R-0285). Message and its files come with the column's next part.
 struct TeamColumn: View {
     let agent: TeamAgent
     @Bindable var team: TeamController
@@ -89,6 +89,18 @@ struct TeamColumn: View {
                     if let id { proxy.scrollTo(id, anchor: .bottom) }
                 }
             }
+            // What it asks you, and the team's first start while you're
+            // starting it, answered here (GUIDELINES 6.2).
+            ForEach(team.decisions(for: agent.id)) { d in
+                DecisionCard(decision: d, asker: TeamText.asker(d, team: team.state.agents)) { approve, note in
+                    Task { await team.answer(d, approve: approve, note: note) }
+                }
+                .padding(.horizontal, 14).padding(.top, 10)
+            }
+            Divider().padding(.top, 10)
+            ScrollView { TeamControls(agent: agent, team: team) }
+                .frame(maxHeight: agent.approved ? 120 : 460)
+                .fixedSize(horizontal: false, vertical: agent.approved)
         }
         .frame(maxHeight: .infinity, alignment: .top)
     }

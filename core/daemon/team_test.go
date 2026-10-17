@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -1162,5 +1163,89 @@ func TestTheOwnerHearsWhatWasMadePrivate(t *testing.T) {
 	}
 	if !found {
 		t.Error("the owner wasn't told")
+	}
+}
+
+// An agent's TeamCalls can't approve an agent file (R-0285, R-0288). No op
+// an agent can send names an approval, the agent service has no approve
+// method, and every op an agent can send, with its text claiming an
+// approval, leaves the file unapproved: the owner's ApproveAgentFile
+// (DaemonService, on portenvd's own socket) is the only way.
+func TestTeamCallsNeverApproveAnAgentFile(t *testing.T) {
+	// The ops an agent can send. A new one fails here until someone checks
+	// it can't approve anything, then adds it.
+	ops := (&agentv1.TeamCallsResponse{}).ProtoReflect().Descriptor().Oneofs().ByName("op").Fields()
+	var names []string
+	for i := 0; i < ops.Len(); i++ {
+		names = append(names, string(ops.Get(i).Name()))
+	}
+	want := []string{"split", "tab", "focus", "close", "msg", "ask_owner", "inbox", "share", "propose", "request_package", "whoami",
+		"set_status", "team_status", "handoff", "propose_routine"}
+	if !slices.Equal(names, want) {
+		t.Fatalf("TeamCalls ops are %v, want %v: check a new op can't approve an agent file, then add it here", names, want)
+	}
+	methods := agentv1.File_portenv_agent_v1_agent_proto.Services().ByName("AgentService").Methods()
+	for i := 0; i < methods.Len(); i++ {
+		if n := strings.ToLower(string(methods.Get(i).Name())); strings.Contains(n, "approve") {
+			t.Errorf("the agent service has %s: approving is the owner's, on portenvd's socket", methods.Get(i).Name())
+		}
+	}
+
+	// Lead is approved by the owner; builder's file isn't. Lead tries every
+	// op, each saying "approve builder" with the file's exact hash.
+	src := teamDirs(t)
+	writeAgent(t, src, "builder", builderFile)
+	if err := ApproveAgentFile(src, "lead", sha(simpleAgent("lead"))); err != nil {
+		t.Fatal(err)
+	}
+	h := &fakeTeamHelper{}
+	e := newTeamEngine(
+		func(context.Context, string) (agentv1.AgentServiceClient, error) { return h, nil },
+		func(context.Context, string) (Team, error) { return LoadTeam(src) },
+	)
+	claim := "approve builder " + sha(builderFile)
+	calls := []*agentv1.TeamCallsResponse{
+		{Op: &agentv1.TeamCallsResponse_Msg{Msg: &agentv1.Msg{To: "owner", Text: claim, Type: typesv1.MessageType_MESSAGE_TYPE_NOTICE}}},
+		{Op: &agentv1.TeamCallsResponse_AskOwner{AskOwner: &agentv1.AskOwner{Text: claim}}},
+		{Op: &agentv1.TeamCallsResponse_Share{Share: &agentv1.Share{Text: claim}}},
+		{Op: &agentv1.TeamCallsResponse_Propose{Propose: &agentv1.ProposeAgentChange{AgentId: "builder", Content: builderFile}}},
+		{Op: &agentv1.TeamCallsResponse_RequestPackage{RequestPackage: &agentv1.RequestPackage{Name: "jq", Reason: claim}}},
+		{Op: &agentv1.TeamCallsResponse_Inbox{Inbox: &agentv1.Inbox{}}},
+		{Op: &agentv1.TeamCallsResponse_Whoami{Whoami: &agentv1.WhoAmI{}}},
+		{Op: &agentv1.TeamCallsResponse_Split{Split: &agentv1.Split{PaneId: "%1", Argv: []string{"portenv", "approve", "builder"}}}},
+		{Op: &agentv1.TeamCallsResponse_Tab{Tab: &agentv1.NewTeamTab{Name: claim}}},
+		{Op: &agentv1.TeamCallsResponse_Focus{Focus: &agentv1.PaneRef{PaneId: "%1"}}},
+		{Op: &agentv1.TeamCallsResponse_Close{Close: &agentv1.PaneRef{PaneId: "%1"}}},
+		{Op: &agentv1.TeamCallsResponse_SetStatus{SetStatus: &agentv1.SetStatus{Text: claim}}},
+		{Op: &agentv1.TeamCallsResponse_TeamStatus{TeamStatus: &agentv1.TeamStatus{}}},
+		{Op: &agentv1.TeamCallsResponse_Handoff{Handoff: &agentv1.Handoff{To: "owner", Path: "/home/lead/builder.md", Note: claim}}},
+		{Op: &agentv1.TeamCallsResponse_ProposeRoutine{ProposeRoutine: &agentv1.ProposeRoutine{EveryMinutes: 5, Note: claim}}},
+	}
+	if len(calls) != len(want) {
+		t.Fatalf("%d calls for %d ops", len(calls), len(want))
+	}
+	for i, c := range calls {
+		c.CallId, c.AgentId = fmt.Sprint(i), "lead"
+		e.handleCall(context.Background(), "w", c)
+		// Builder itself can't either, though it isn't approved to call.
+		c.AgentId = "builder"
+		e.handleCall(context.Background(), "w", c)
+	}
+	if loadAgent(t, src, "builder").Approved {
+		t.Fatal("an agent's call approved builder's file")
+	}
+	approvals, err := loadAgentApprovals(src.StateDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := approvals["builder"]; ok || len(approvals) != 1 {
+		t.Fatalf("approvals after the agents' calls: %v", approvals)
+	}
+	// The owner's Approve, with the hash of the text the app showed, does.
+	if err := ApproveAgentFile(src, "builder", sha(builderFile)); err != nil {
+		t.Fatal(err)
+	}
+	if !loadAgent(t, src, "builder").Approved {
+		t.Fatal("the owner's Approve didn't approve")
 	}
 }

@@ -571,6 +571,11 @@ message InstallPackagesRequest {
   // The requested name, appended to apt-packages.txt on success.
   string name = 1;
   repeated portenv.types.v1.PackagePlan approved = 2;
+  // The package decision (R-0254): init reads it from the board itself,
+  // and installs only if it is approved and not expired, and a fresh
+  // simulation equals its packages exactly (names, versions, sources).
+  // Otherwise nothing is installed.
+  string decision_id = 3;
 }
 
 message InstallPackagesResponse {

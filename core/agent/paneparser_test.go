@@ -5,11 +5,15 @@ package agent
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	"net"
+	"os"
 	"runtime"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -30,6 +34,9 @@ func newPaneHarness(t *testing.T, shell string) *paneHarness {
 	t.Helper()
 	tb, raw, cmdf := testTabsCmd(t)
 	cmd := newShellCommand(t, shell)
+	// Registered after the shell's TempDir, so it runs before that dir is
+	// removed (Cleanup is last in, first out).
+	t.Cleanup(func() { stopTmuxServer(t, tb.tmux) })
 	raw("new-session", "-d", "-s", "boot", "sleep 600")
 	raw("set-option", "-g", "default-command", cmd)
 	raw("set-option", "-g", "history-limit", "100000")
@@ -99,6 +106,64 @@ func (h *paneHarness) run(cmd string) {
 		}
 	}
 	time.Sleep(50 * time.Millisecond)
+}
+
+// stopTmuxServer kills the test's tmux server and waits, for a bounded
+// time, for the server and its shells to exit and its socket to go dead
+// (tmux leaves the file behind; it is removed here). A shell still exiting
+// writes into its home (bash saves its history on SIGHUP), which raced
+// TempDir's RemoveAll: "directory not empty" (R-0269).
+func stopTmuxServer(t *testing.T, tmux tmuxFunc) {
+	t.Helper()
+	ctx := context.Background()
+	out, err := tmux(ctx, "list-panes", "-a", "-F", "#{socket_path} #{pid} #{pane_pid}")
+	if err != nil {
+		return // no server is running
+	}
+	var sock string
+	pids := map[int]bool{}
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		f := strings.Fields(line)
+		if len(f) != 3 {
+			continue
+		}
+		sock = f[0]
+		for _, s := range f[1:] {
+			if pid, err := strconv.Atoi(s); err == nil && pid > 0 {
+				pids[pid] = true
+			}
+		}
+	}
+	_, _ = tmux(ctx, "kill-server")
+	const limit = 10 * time.Second
+	deadline := time.Now().Add(limit)
+	for {
+		var alive []int
+		for pid := range pids {
+			if err := syscall.Kill(pid, 0); !errors.Is(err, syscall.ESRCH) {
+				alive = append(alive, pid)
+			}
+		}
+		sockGone := sock == ""
+		if !sockGone {
+			c, err := net.Dial("unix", sock)
+			if err == nil {
+				_ = c.Close()
+			}
+			sockGone = err != nil
+		}
+		if len(alive) == 0 && sockGone {
+			if sock != "" {
+				_ = os.Remove(sock)
+			}
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Errorf("tmux server still not gone %v after kill-server: processes %v alive, socket %q dead: %v", limit, alive, sock, sockGone)
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
 }
 
 // check compares every prompt mark with tmux's own history: aligned at the

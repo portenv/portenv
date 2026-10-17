@@ -543,38 +543,79 @@ func TestTheWriteCheckSkipsOnlyHomebrewsLogs(t *testing.T) {
 	}
 }
 
-// homeTop is the person's real home, where ssh runs the probe: the names
+// homeTop is the server user's home, where ssh runs the probe: the names
 // one level deep (a stray write would add one, such as ~/.docker), and the
 // files the probe's tools could write to. Times of everything else there
 // change with whatever else this Mac is doing.
-func homeTop(t *testing.T) map[string]string {
-	t.Helper()
-	me, err := user.Current()
-	if err != nil {
-		t.Fatal(err)
-	}
+func homeTop(home string) map[string]string {
 	st := map[string]string{}
-	ents, _ := os.ReadDir(me.HomeDir)
+	ents, _ := os.ReadDir(home)
 	for _, e := range ents {
 		st[e.Name()] = "present"
 	}
 	for _, f := range []string{".docker", ".sudo_as_admin_successful", ".bash_history", ".lesshst", ".wget-hsts", ".curlrc", ".portenv"} {
-		if fi, err := os.Stat(filepath.Join(me.HomeDir, f)); err == nil {
+		if fi, err := os.Stat(filepath.Join(home, f)); err == nil {
 			st[f] = fmt.Sprintf("%d %d", fi.Size(), fi.ModTime().UnixNano())
 		}
 	}
 	return st
 }
 
+// checkTouches are the paths outside the home that check.sh names, or
+// whose tools keep their state in (sudo's rules), with root in front: the
+// only places Check could write (R-0267). Walking all of /etc, /usr/local
+// and /opt instead saw the CI runner's own logs change mid-test.
+func checkTouches(root string) []string {
+	var ps []string
+	for _, p := range []string{"/etc/os-release", "/etc/sudoers", "/etc/sudoers.d", "/usr/local/bin/portenv"} {
+		ps = append(ps, filepath.Join(root, p))
+	}
+	return ps
+}
+
+// TestTheWriteCheckSeesWatchedPaths (R-0267): a write into the server
+// user's home, or into a path the probe names, still shows.
+func TestTheWriteCheckSeesWatchedPaths(t *testing.T) {
+	home, root := t.TempDir(), t.TempDir()
+	top := homeTop(home)
+	for _, f := range []string{".docker", ".bash_history"} {
+		if err := os.WriteFile(filepath.Join(home, f), []byte("written"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if after := homeTop(home); after[f] == top[f] {
+			t.Fatalf("a write to ~/%s went unseen", f)
+		}
+	}
+	if err := os.MkdirAll(filepath.Join(root, "etc", "sudoers.d"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "usr", "local", "bin"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []string{"etc/sudoers.d/portenv", "usr/local/bin/portenv"} {
+		if err := os.WriteFile(filepath.Join(root, f), []byte("written"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if _, ok := fsState(t, checkTouches(root)...)[filepath.Join(root, f)]; !ok {
+			t.Fatalf("a write to /%s went unseen", f)
+		}
+	}
+}
+
 // TestCheckWritesNothing (ADR 0021 §3): Check runs on a real server (a real
-// sshd on 127.0.0.1, as this user) and nothing on it changes: the home
-// it runs in, /etc, /usr/local and /opt are the same before and after.
+// sshd on 127.0.0.1, as this user) and nothing it could touch changes: the
+// home it runs in and the paths the probe names are the same before and
+// after.
 func TestCheckWritesNothing(t *testing.T) {
 	_, target, _, _ := madeKeyServer(t)
 	// The server's side: ssh runs the probe in the account's real home
 	// (homeTop), not the test's HOME, which holds the Mac side's own files.
-	roots := []string{"/etc", "/usr/local", "/opt"}
-	before, top := fsState(t, roots...), homeTop(t)
+	me, err := user.Current()
+	if err != nil {
+		t.Fatal(err)
+	}
+	roots := checkTouches("/")
+	before, top := fsState(t, roots...), homeTop(me.HomeDir)
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	lines, err := CheckServer(ctx, target)
@@ -584,7 +625,7 @@ func TestCheckWritesNothing(t *testing.T) {
 	if len(lines) == 0 {
 		t.Fatal("no lines")
 	}
-	after, top2 := fsState(t, roots...), homeTop(t)
+	after, top2 := fsState(t, roots...), homeTop(me.HomeDir)
 	for p, v := range after {
 		if before[p] != v {
 			t.Errorf("Check changed %s", p)
@@ -600,12 +641,27 @@ func TestCheckWritesNothing(t *testing.T) {
 			t.Errorf("Check changed ~/%s", n)
 		}
 	}
-	// On CI's Ubuntu runner the server is a real one: it passes but for
-	// what a runner can't have.
+	// This test is about writing nothing. On CI's Ubuntu runner it also
+	// checks the lines that are the runner's own (its system, its sudo, its
+	// clock) pass. Lines that depend on the network or the runner's size
+	// (ghcr.io and download.docker.com answering, free disk) need only have
+	// run: passed, or failed with their fix (a runner's network once
+	// refused ghcr.io, and the test failed on that).
 	if os.Getenv("CI") != "" {
+		mayFail := map[string]bool{"https-ghcr": true, "https-docker": true, "disk": true}
 		for _, l := range lines {
-			if l.State == CheckFailed && l.ID != "disk" && l.ID != "https-docker" {
+			switch {
+			case l.State == 0:
+				t.Errorf("on the CI runner, a line didn't run: %+v", l)
+			case l.State == CheckFailed && !mayFail[l.ID]:
 				t.Errorf("on the CI runner: %+v", l)
+			case l.State == CheckFailed && l.Fix == "":
+				t.Errorf("a failure with no fix: %+v", l)
+			}
+		}
+		for _, id := range []string{"system", "sudo", "clock", "https-ghcr", "https-docker"} {
+			if !slices.ContainsFunc(lines, func(l CheckLine) bool { return l.ID == id }) {
+				t.Errorf("no %s line", id)
 			}
 		}
 	}

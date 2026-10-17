@@ -46,6 +46,8 @@ type Server struct {
 	daemonv1.UnimplementedDaemonServiceServer
 	env *local.Env
 	log *slog.Logger
+	// pulling: the first open's image pull, for the box's state (R-0211).
+	pulling pulls
 
 	// KeepBoxesOnStop leaves boxes running when the daemon stops (the
 	// runner on a server: a runner restart must not stop anyone's box).
@@ -352,6 +354,8 @@ func (s *Server) OpenBox(ctx context.Context, req *daemonv1.OpenBoxRequest) (_ *
 		return nil, err
 	}
 	defer done()
+	ctx, pulled := s.followPull(ctx, req.GetName())
+	defer pulled()
 	ob, res, err := s.openBox(ctx, req.GetName(), req.GetTakeOver())
 	if err != nil {
 		var held *boxsync.LeaseHeldError

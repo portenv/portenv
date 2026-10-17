@@ -10,6 +10,9 @@ import SwiftUI
 /// hidden; the app owns names and order.
 struct TabBar: View {
     @Bindable var tabs: TabsController
+    /// What the Team sidebar selects: every tab, yours, or one agent's
+    /// (lane D, ADR 0022 §12; GUIDELINES 6.2).
+    var selection: TeamSelection = .allTabs
     /// The tab being renamed, and the name being typed.
     @State private var renaming: String?
     @State private var draft = ""
@@ -18,7 +21,7 @@ struct TabBar: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            ForEach(tabs.tabs) { tab in
+            ForEach(tabs.shown(for: selection)) { tab in
                 TabItem(tab: tab, canClose: tabs.canClose, renaming: renaming == tab.id, draft: $draft,
                         select: { Task { await tabs.select(tab.id) } },
                         close: { Task { _ = await tabs.requestClose(id: tab.id) } },

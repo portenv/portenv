@@ -188,6 +188,9 @@ enum ScreenRenders {
             // (R-0131): with the inspector open, and closed.
             try await MainWindowRender.render(to: dir, terminal: { sampleTerminal() })
             try await MainWindowRender.render(to: dir, name: "main-window-no-inspector", inspector: false, terminal: { sampleTerminal() })
+            // With a team, Builder selected: the sidebar, Builder's tabs and
+            // its column in the inspector's place (GUIDELINES 6.2).
+            try await MainWindowRender.render(to: dir, name: "main-window-team", team: true, terminal: { sampleTerminal() })
             // A closed workspace's window: Open, and a failed open with Try
             // Again (R-0211).
             try snapshot(ClosedWorkspace(box: "acme-api", failure: nil) {}, name: "closed", size: NSSize(width: 720, height: 360), in: dir)
@@ -197,6 +200,13 @@ enum ScreenRenders {
                          name: "closed-open-failed", size: NSSize(width: 720, height: 360), in: dir)
             // Command blocks, folded by default and opened (R-0139, R-0174).
             try BlockRenders.render(to: dir) { view, name, size in
+                for (suffix, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] where name.hasSuffix(suffix) {
+                    try snapshotOne(view, name: String(name.dropLast(suffix.count + 1)), suffix: suffix, size: size, appearance: appearance, in: dir)
+                }
+            }
+            // The Team sidebar (GUIDELINES 6.2): All tabs, an agent
+            // selected, and compact.
+            try TeamRenders.render(to: dir) { view, name, size in
                 for (suffix, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] where name.hasSuffix(suffix) {
                     try snapshotOne(view, name: String(name.dropLast(suffix.count + 1)), suffix: suffix, size: size, appearance: appearance, in: dir)
                 }

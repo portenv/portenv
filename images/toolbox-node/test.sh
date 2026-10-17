@@ -80,6 +80,14 @@ check "python 3" as_work 'python3 --version'
 check "shell integration (OSC 133) in login shells" as_work 'bash -lic "declare -F __portenv_osc133_precmd"'
 check "skeleton .zshrc sources the zsh integration" in_box grep -q osc133.zsh /home/work/.zshrc
 check "claude code" as_work 'claude --version'
+# The portenv CLI, for agents' own commands inside the workspace (ADR 0022 §4).
+check "portenv on PATH at /usr/local/bin, root's, 755" in_box sh -c 'test "$(command -v portenv)" = /usr/local/bin/portenv && test "$(stat -c %U:%G:%a /usr/local/bin/portenv)" = root:root:755'
+check "portenv whoami in a plain shell exits 2 and says why" as_work \
+	'out=$(portenv whoami 2>&1); rc=$?; test "$rc" -eq 2 && grep -q "works only for an agent inside a workspace (PORTENV_SOCKET isn.t set)" <<<"$out"'
+check "portenv guide" as_work 'out=$(portenv guide) && test -n "$out"'
+check "portenv team init writes the starter agent files" as_work \
+	'd=$(mktemp -d) && portenv team init --dir "$d" >/dev/null && test "$(ls "$d/.portenv/agents" | tr "\n" " ")" = "builder.md lead.md reviewer.md " && rm -rf "$d"'
+check "the in-box portenv commands write nothing in the home" as_work 'test ! -e ~/.config/Portenv'
 
 # An orphan that exits must be reaped by PID 1, not left as a zombie.
 in_box bash -c '(sleep 1 &) ; exit 0'

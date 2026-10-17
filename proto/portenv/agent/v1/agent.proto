@@ -80,6 +80,12 @@ service AgentService {
   rpc ReadBoard(ReadBoardRequest) returns (stream ReadBoardResponse);
   // The project's agent files (.portenv/agents/*.md), read by the helper.
   rpc ReadAgentFiles(ReadAgentFilesRequest) returns (ReadAgentFilesResponse);
+  // Served only by init: opens the project to the team at team start
+  // (ADR 0022 §2): /home/work 0711 with its dotfiles 0700, the project's
+  // group team, setgid folders and default ACLs, with .git/hooks,
+  // .git/config and .portenv/ never group-writable. Refuses with a plain
+  // line when the filesystem won't keep ACLs.
+  rpc PrepareTeamProject(PrepareTeamProjectRequest) returns (PrepareTeamProjectResponse);
 }
 
 message RunResticRequest {
@@ -485,6 +491,11 @@ message StartTeamAgentRequest {
   // Repository paths copied into its home on first start (§2).
   repeated string home_seed = 4;
   int64 home_quota_bytes = 5;
+  // The runner's idle-input pattern (RE2, matched against the main pane's
+  // last line) from portenvd's runner table: DeliverRoutine types only
+  // when it matches, with no question on screen, 5 s of quiet and not the
+  // alternate screen. Empty: routines are off for this runner (R-0258).
+  string idle_pattern = 6;
 }
 
 message StartTeamAgentResponse {
@@ -622,4 +633,15 @@ message ReadAgentFilesResponse {
 message AgentFileContent {
   string name = 1;
   bytes content = 2;
+}
+
+message PrepareTeamProjectRequest {
+  // The project folder, /home/work/<workspace>.
+  string project_dir = 1;
+}
+
+message PrepareTeamProjectResponse {
+  // What was made private in the owner's home (R-0262), since the last
+  // team start, as plain lines for the owner's board notice.
+  repeated string fixed = 1;
 }

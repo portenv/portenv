@@ -15,3 +15,9 @@ func runAsMainUser(_ context.Context, _ Config, _ []string, _ io.Reader, local f
 	err := local(&out)
 	return out.Bytes(), err
 }
+
+func runAsAgent(_ context.Context, _ int, _ []string, _ io.Reader, local func(io.Writer) error) ([]byte, error) {
+	var out bytes.Buffer
+	err := local(&out)
+	return out.Bytes(), err
+}

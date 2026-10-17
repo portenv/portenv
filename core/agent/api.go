@@ -88,6 +88,9 @@ type apiServer struct {
 	// runTeamIO runs "portenv-agent team-io" as work (teamIOAs; in this
 	// process in tests).
 	runTeamIO func(ctx context.Context, args []string, stdin io.Reader) ([]byte, error)
+	// runHomeIO runs team-io as an agent, for its home's files (nil: as
+	// the agent's uid, runAsAgent).
+	runHomeIO func(ctx context.Context, uid int, args []string, stdin io.Reader) ([]byte, error)
 }
 
 // ctlHub returns the server's control-mode clients, made on first use.

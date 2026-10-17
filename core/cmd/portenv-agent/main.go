@@ -70,6 +70,12 @@ func run(args []string) int {
 			return 1
 		}
 		return 0
+	case "as-agent":
+		// Hidden: the helper's switch to an agent's user for its tmux
+		// server (ADR 0022 §1). It returns only on failure.
+		err := agent.RunAsAgent(args[1:])
+		fmt.Fprintln(os.Stderr, "portenv-agent as-agent:", err)
+		return 126
 	case "path-info":
 		if len(args) != 2 {
 			fmt.Fprintln(os.Stderr, "usage: portenv-agent path-info PATH")

@@ -28,6 +28,20 @@ public enum StateLine {
     /// the list shows (WindowClose), so the wait reads as work (R-0061).
     public static let closing = "Saving before closing…"
 
+    public static let opening = "Opening\u{2026}"
+
+    /// The first open's image pull (R-0211): "Getting the workspace image…
+    /// 312 MB of 900 MB", in MB below a gigabyte, decimal (as Finder).
+    public static let gettingImagePrefix = "Getting the workspace image\u{2026}"
+
+    public static func gettingImage(done: Int64, total: Int64) -> String {
+        guard total > 0 else { return gettingImagePrefix }
+        func size(_ b: Int64) -> String {
+            b < 1_000_000_000 ? "\(Int((Double(b) / 1_000_000).rounded())) MB" : String(format: "%.1f GB", Double(b) / 1_000_000_000)
+        }
+        return "\(gettingImagePrefix) \(size(done)) of \(size(total))"
+    }
+
     public static func reverted(to time: Date, timeZone: TimeZone = .current, locale: Locale = .current) -> String {
         "Reverted to \(clock(time, timeZone: timeZone, locale: locale)) · your changes were kept"
     }
@@ -176,7 +190,7 @@ public struct TitleLook: Equatable, Sendable {
 
     /// A symbol spins only while the line says something is in progress.
     public var consistent: Bool {
-        let inProgress = line.contains("Saving…") || line.contains("Moving to") || line.contains("Opening…")
+        let inProgress = line.contains("Saving…") || line.contains("Moving to") || line.contains("Opening…") || line.hasPrefix(StateLine.gettingImagePrefix)
             || line == StateLine.closing || line.hasSuffix("· retrying")
         return spins == inProgress && (!spins || symbol == "arrow.triangle.2.circlepath")
     }

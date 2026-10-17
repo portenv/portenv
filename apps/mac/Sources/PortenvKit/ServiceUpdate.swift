@@ -109,8 +109,9 @@ public final class ServiceUpdate {
     }
 
     private func cameBack(at build: String, within limit: Duration) async -> Bool {
-        let deadline = ContinuousClock.now + limit
-        while ContinuousClock.now < deadline {
+        // Time awake: a Mac asleep meanwhile mustn't spend the wait.
+        let deadline = SuspendingClock.now + limit
+        while SuspendingClock.now < deadline {
             if await service.running()?.buildID == build { return true }
             try? await Task.sleep(for: poll)
         }

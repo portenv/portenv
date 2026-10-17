@@ -70,6 +70,9 @@ check "git" as_work 'git --version'
 # The helper's control mode was measured on tmux 3.4 and refuses older
 # (ADR 0020, decision 10); the Dockerfile pins it.
 check "tmux 3.4" as_work 'test "$(tmux -V)" = "tmux 3.4"'
+# The switch to an agent's user runs tmux by this path only, and only when
+# root owns it and no one else can write to it (R-0265).
+check "tmux at /usr/bin/tmux, root's, writable by root only" in_box sh -c 'test "$(stat -L -c %U:%a /usr/bin/tmux)" = root:755 && test "$(stat -c %F /usr/bin/tmux)" = "regular file"'
 check "ripgrep" as_work 'rg --version'
 check "jq" as_work 'jq --version'
 check "build-essential" as_work 'gcc --version && make --version'

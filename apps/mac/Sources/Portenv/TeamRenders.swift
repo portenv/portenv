@@ -54,6 +54,50 @@ enum TeamRenders {
             try snapshot(sidebar(.allTabs), "team-sidebar-\(appearance)", NSSize(width: TeamSidebar.width, height: 640))
             try snapshot(sidebar(.agent("builder")), "team-sidebar-builder-\(appearance)", NSSize(width: TeamSidebar.width, height: 640))
             try snapshot(sidebar(.agent("builder"), compact: true), "team-sidebar-compact-\(appearance)", NSSize(width: TeamSidebar.compactWidth, height: 640))
+            // Approve and Start (R-0285): a new file, a changed one, and the
+            // team's first start.
+            for (name, review) in approvals() {
+                try snapshot(AnyView(AgentFileReviewCard(agent: approvalAgent, review: review) {}
+                        .padding(14).frame(width: 340).frame(maxHeight: .infinity, alignment: .top).background(SwiftUI.Color(nsColor: .windowBackgroundColor))
+                        .environment(\.controlActiveState, .key)),
+                    "team-approve-\(name)-\(appearance)", NSSize(width: 340, height: 520))
+            }
+            try snapshot(AnyView(DecisionCard(decision: firstStart(now: now), asker: "Portenv") { _, _ in }
+                    .padding(14).frame(width: 340).frame(maxHeight: .infinity, alignment: .top).background(SwiftUI.Color(nsColor: .windowBackgroundColor))
+                        .environment(\.controlActiveState, .key)),
+                "team-first-start-\(appearance)", NSSize(width: 340, height: 260))
         }
+    }
+
+    static let leadFile = """
+        ---
+        name: Lead
+        role: Splits the work and hands it out
+        runner: claude --continue
+        grant:
+          panes: ask
+          max_panes: 2
+          message: [builder, reviewer]
+        ---
+        Split each task in two and hand the halves to Builder and Reviewer.
+
+        """
+
+    static let approvalAgent = TeamAgent(id: "lead", name: "Lead", status: .stopped, approved: false, runner: "claude --continue",
+                                         grant: TeamGrant(panes: .ask, maxPanes: 2, message: ["builder", "reviewer"]))
+
+    static func approvals() -> [(String, AgentFileReview)] {
+        func review(_ content: String, approved: String) -> AgentFileReview? {
+            let sha = SHA256Text.of(content)
+            return AgentFileReview(agentID: "lead", file: AgentFileContent(content: content, sha256: sha, approvedContent: approved, runner: "claude --continue"))
+        }
+        let before = leadFile.replacingOccurrences(of: "max_panes: 2", with: "max_panes: 1")
+        return [("new", review(leadFile, approved: "")), ("changed", review(leadFile, approved: before))].compactMap { n, r in r.map { (n, $0) } }
+    }
+
+    static func firstStart(now: Date) -> TeamDecision {
+        TeamDecision(id: "d-start", from: "portenv", kind: .teamStart, summary: "Start this workspace\u{2019}s agent team?",
+                     detail: "Each agent runs as its own user in this workspace, with its own terminals and files, and asks you before it opens a pane in your window. Agents can change your project\u{2019}s files. Check their changes before you run them.",
+                     createdAt: now)
     }
 }

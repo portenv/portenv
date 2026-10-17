@@ -25,7 +25,9 @@ struct TeamSidebar: View {
                 Section(compact ? "" : TeamText.needsYouHeading(state.needsYou.count)) {
                     ForEach(state.needsYou) { d in
                         NeedsYouRow(decision: d, asker: state.agent(d.from), now: now, compact: compact)
-                            .tag(TeamSelection.agent(d.from))
+                            // An agent's question opens its column; one
+                            // Portenv asks (the first start) opens on its own.
+                            .tag(state.agent(d.from) == nil ? TeamSelection.decision(d.id) : TeamSelection.agent(d.from))
                     }
                 }
             }
@@ -178,7 +180,8 @@ struct AgentRow: View {
                             Spacer(minLength: 4)
                             TeamStatus(status: agent.status)
                         }
-                        let line = agent.status == .invalid ? agent.problem : agent.lastLine
+                        let line = agent.status == .invalid ? agent.problem
+                            : agent.lastLine.isEmpty && !agent.approved && !agent.remote ? TeamText.approval(agent, review: nil) : agent.lastLine
                         if !line.isEmpty {
                             Text(verbatim: line).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.tail)
                         }
@@ -225,7 +228,7 @@ struct NeedsYouRow: View {
     var compact = false
 
     var body: some View {
-        let who = asker?.name ?? decision.from
+        let who = asker?.name ?? TeamText.asker(decision, team: [])
         let waited = TeamText.waiting(since: decision.createdAt, now: now)
         Group {
             if compact {

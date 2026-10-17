@@ -74,6 +74,11 @@ public protocol DaemonAPI: Sendable {
     func sendMessage(_ box: String, to agent: String, thread: String, text: String) async throws -> TeamMessage
     func startAgent(_ box: String, id: String) async throws -> TeamAgent
     func stopAgent(_ box: String, id: String) async throws -> TeamAgent
+    /// An agent file as portenvd has it, for Approve.
+    func getAgentFile(_ box: String, id: String) async throws -> AgentFileContent
+    /// Pins the agent file whose text hashes to `sha256`; only the owner's
+    /// app calls it (R-0285).
+    func approveAgentFile(_ box: String, id: String, sha256: String) async throws -> TeamAgent
 }
 
 public extension DaemonAPI {
@@ -97,6 +102,8 @@ public extension DaemonAPI {
     }
     func startAgent(_: String, id _: String) async throws -> TeamAgent { throw DaemonError(DaemonError.outOfDate) }
     func stopAgent(_: String, id _: String) async throws -> TeamAgent { throw DaemonError(DaemonError.outOfDate) }
+    func getAgentFile(_: String, id _: String) async throws -> AgentFileContent { throw DaemonError(DaemonError.outOfDate) }
+    func approveAgentFile(_: String, id _: String, sha256 _: String) async throws -> TeamAgent { throw DaemonError(DaemonError.outOfDate) }
 }
 
 /// A box saved in the background after Quit Anyway.

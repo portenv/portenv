@@ -243,4 +243,15 @@ final class FakeDaemon: DaemonAPI, @unchecked Sendable {
         try await record(["app", "stop-agent", box, id])
         return TeamAgent(id: id, name: id, status: .stopped)
     }
+    /// Each agent's file as getAgentFile returns it.
+    var agentFiles: [String: AgentFileContent] = [:]
+    func getAgentFile(_ box: String, id: String) async throws -> AgentFileContent {
+        try await record(["app", "get-agent-file", box, id])
+        guard let f = lock.withLock({ agentFiles[id] }) else { throw DaemonError("this workspace has no agent \"\(id)\"") }
+        return f
+    }
+    func approveAgentFile(_ box: String, id: String, sha256: String) async throws -> TeamAgent {
+        try await record(["app", "approve-agent-file", box, id, sha256])
+        return TeamAgent(id: id, name: id, status: .stopped, fileSHA256: sha256, approved: true)
+    }
 }

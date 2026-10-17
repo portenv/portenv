@@ -216,7 +216,7 @@ public final class TabsController {
     /// tab, the owner's own, or one agent's.
     public func shown(for selection: TeamSelection) -> [TabInfo] {
         switch selection {
-        case .allTabs: tabs
+        case .allTabs, .decision: tabs
         case .you: tabs.filter { $0.agentID.isEmpty }
         case .agent(let id): tabs.filter { $0.agentID == id }
         }

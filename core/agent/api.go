@@ -81,6 +81,10 @@ type apiServer struct {
 	// (lane A's terminal code; nil until a build has them).
 	startAgentServer func(ctx context.Context, spec AgentServerSpec) ([]*typesv1.Tab, error)
 	stopAgentServer  func(ctx context.Context, id string) error
+	// agents are the running agents' own tmux servers; agentTmux reaches
+	// one as its agent (agentAs; plain tmux in tests).
+	agents    agentServers
+	agentTmux agentTmuxFunc
 	// runTeamIO runs "portenv-agent team-io" as work (teamIOAs; in this
 	// process in tests).
 	runTeamIO func(ctx context.Context, args []string, stdin io.Reader) ([]byte, error)
@@ -115,6 +119,8 @@ func (s *apiServer) ctlHub() (*ctlHub, error) {
 func newChannelServer(cfg Config, keys *channelKeys) *grpc.Server {
 	s := &apiServer{cfg: cfg, keys: keys, tmux: tmuxAs, tmuxCmd: tmuxCmdAs, team: newTeamHub(TeamRunDir),
 		users: initUsers{socket: DefaultSocket}, writeAsUser: writeFileAsUser, killUID: killAgentUID}
+	s.agentTmux = agentAs
+	s.startAgentServer, s.stopAgentServer = s.StartAgentTerminals, s.StopAgentTerminals
 	s.runTeamIO = s.teamIOAs
 	srv := grpc.NewServer(
 		grpc.Creds(credentials.NewTLS(keys.tlsConfig())),

@@ -131,6 +131,25 @@ func TestAnAgentsTerminalRunsItsRunnerInItsFirstTab(t *testing.T) {
 	}
 }
 
+// The runner starts in its spec's work dir (R-0323).
+func TestAnAgentsRunnerStartsInItsWorkDir(t *testing.T) {
+	s := testAgentServers(t)
+	work := t.TempDir()
+	out := filepath.Join(t.TempDir(), "out")
+	spec := testSpec(t, "builder", "sh", "-c", `pwd -P > "$0"; exec sleep 100`, out)
+	spec.WorkDir = work
+	if _, err := s.StartAgentTerminals(context.Background(), spec); err != nil {
+		t.Fatal(err)
+	}
+	want, err := filepath.EvalSymlinks(work)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.TrimSpace(waitFile(t, out)); got != want {
+		t.Errorf("the runner started in %q, want %q", got, want)
+	}
+}
+
 func TestAgentPaneActionsActOnTheAgentsOwnServer(t *testing.T) {
 	s := testAgentServers(t)
 	ctx := context.Background()
@@ -277,6 +296,13 @@ func TestAnAgentsSpecIsItsOwn(t *testing.T) {
 	if err := checkAgentSpec(ok()); err != nil {
 		t.Fatalf("an agent was refused: %v", err)
 	}
+	for _, w := range []string{"/home/work/acme", "/home/builder/acme"} {
+		sp := ok()
+		sp.WorkDir = w
+		if err := checkAgentSpec(sp); err != nil {
+			t.Errorf("work dir %q refused: %v", w, err)
+		}
+	}
 	for name, change := range map[string]func(s *AgentServerSpec){
 		"another agent's home":         func(s *AgentServerSpec) { s.Home = "/home/reviewer" },
 		"another agent's tmux folder":  func(s *AgentServerSpec) { s.SocketDir = "/run/portenv-team/reviewer/tmux" },
@@ -285,7 +311,11 @@ func TestAnAgentsSpecIsItsOwn(t *testing.T) {
 		"work": func(s *AgentServerSpec) {
 			s.ID, s.Home, s.SocketDir = "work", "/home/work", "/run/portenv-team/work/tmux"
 		},
-		"root's uid": func(s *AgentServerSpec) { s.UID, s.GID = 0, 0 },
+		"root's uid":             func(s *AgentServerSpec) { s.UID, s.GID = 0, 0 },
+		"another agent's folder": func(s *AgentServerSpec) { s.WorkDir = "/home/reviewer/acme" },
+		"the owner's home":       func(s *AgentServerSpec) { s.WorkDir = "/home/work" },
+		"a folder under /tmp":    func(s *AgentServerSpec) { s.WorkDir = "/tmp/acme" },
+		"a work dir not cleaned": func(s *AgentServerSpec) { s.WorkDir = "/home/builder/../work/acme" },
 	} {
 		s := ok()
 		change(&s)

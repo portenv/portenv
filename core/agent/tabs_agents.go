@@ -306,7 +306,11 @@ func (s *apiServer) StartAgentTerminals(ctx context.Context, spec AgentServerSpe
 	}
 	// The session, sealed as the owner's is (tmuxHidden, tmuxOwned,
 	// tmuxSealed), with the runner in its first tab, run with no shell.
-	args := append([]string{"new-session", "-d", "-s", agentSession, "-n", spec.ID, "-P", "-F", "#{pane_id}", "--"}, argv...)
+	args := []string{"new-session", "-d", "-s", agentSession, "-n", spec.ID, "-P", "-F", "#{pane_id}"}
+	if spec.WorkDir != "" {
+		args = append(args, "-c", spec.WorkDir)
+	}
+	args = append(append(args, "--"), argv...)
 	args = append(args, tmuxHidden...)
 	args = append(args, tmuxOwned...)
 	args = append(args, tmuxSealed...)
@@ -556,6 +560,9 @@ func checkAgentSpec(spec AgentServerSpec) error {
 	}
 	if spec.SocketDir != filepath.Join(TeamRunDir, spec.ID, "tmux") {
 		return fmt.Errorf("%q isn't %s's tmux folder", spec.SocketDir, spec.ID)
+	}
+	if err := checkWorkDir(spec.WorkDir, "work", spec.Home); err != nil {
+		return err
 	}
 	_, err := checkAsAgent(spec.UID, spec.GID, spec.Home)
 	return err

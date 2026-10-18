@@ -519,6 +519,12 @@ message StartTeamAgentRequest {
   // when it matches, with no question on screen, 5 s of quiet and not the
   // alternate screen. Empty: routines are off for this runner (R-0258).
   string idle_pattern = 6;
+  // Where the runner starts: the agent's working copy (R-0323). The
+  // owner's project folder (/home/<main user>/<workspace>) until agents
+  // have their own clones, then a folder directly in the agent's home
+  // (its clone, ADR 0022 §2a). The helper refuses anything else. Empty:
+  // its home.
+  string work_dir = 8;
 }
 
 message StartTeamAgentResponse {

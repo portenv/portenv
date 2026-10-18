@@ -1431,3 +1431,19 @@ func TestSyncAgentsFollowsTheFiles(t *testing.T) {
 		t.Fatalf("removed: %v", evs)
 	}
 }
+
+// An agent's runner starts in its working copy, the project, not its home
+// (R-0323), so Claude Code needs no --add-dir for it.
+func TestAnAgentStartsInTheProject(t *testing.T) {
+	e, h, _ := newTestEngine(t, defaultTeam()...)
+	approveFirstStart(t, e)
+	if _, err := e.startAgent(context.Background(), "w", "builder"); err != nil {
+		t.Fatal(err)
+	}
+	if len(h.started) != 1 || h.started[0].GetWorkDir() != "/home/work/w" {
+		t.Fatalf("started %v, want work_dir /home/work/w", h.started)
+	}
+	if slices.Contains(h.started[0].GetArgv(), "--add-dir") {
+		t.Errorf("the runner got --add-dir: %v", h.started[0].GetArgv())
+	}
+}

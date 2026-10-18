@@ -11,7 +11,8 @@
 //     (TEAM_START) naming lead; approved, portenvd starts lead itself,
 //     with no second StartAgent, and a second Start is a no-op; its runner
 //     is "bash <script>", a script in the project;
-//  4. whoami in lead's pane says lead;
+//  4. whoami in lead's pane says lead, and its runner started in the
+//     project, its working copy (R-0323);
 //  5. the script's "portenv ask-owner", over lead's own socket, reaches
 //     portenvd's decision list (the WatchTeam stream the app reads);
 //  6. lead makes a file in the project and runs git there, so the file and
@@ -60,6 +61,7 @@ const (
 // firstStart is lead's runner: what it prints is what step 4 and 5 read.
 const firstStart = `#!/bin/bash
 echo "first-start whoami=$(whoami)"
+echo "first-start cwd=$(pwd)"
 if out=$(portenv ask-owner "` + question + `" 2>&1); then
   echo "first-start ask-owner ok: $out"
 else
@@ -221,6 +223,9 @@ git -c user.name=Owner -c user.email=owner@example.invalid commit -q -m "first c
 	pane := h.waitPane(ctx, "lead", "first-start ask-owner", time.Minute)
 	if !strings.Contains(pane, "first-start whoami=lead") {
 		h.fatal("step 4: lead's pane doesn't show whoami=lead:\n%s", pane)
+	}
+	if !strings.Contains(pane, "first-start cwd="+project+"\n") {
+		h.fatal("step 4: lead's runner didn't start in %s (R-0323):\n%s", project, pane)
 	}
 	out, code = h.box(ctx, "root", `sock=$(find /run/portenv-team/lead -type s -name default | head -n 1)
 ps -o user= -p "$(tmux -S "$sock" display-message -p -t main '#{pane_pid}')"`)

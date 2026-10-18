@@ -1208,6 +1208,29 @@ It comes after 1.2's blocks, wherever they land (Phase 1 if the spike succeeds, 
   - The in-shell features come from shell integration, so they work in every pane there too.
 - **The launch demo** uses split view at the moment the laptop reopens: Claude Code, Grok Bot and the tests side by side, all still working on the server.
 
+**First version (the owner, 2026-10-18: split view ships tonight; demo note `docs/milestones/1.2b.md`).**
+
+- [x] Up to 4 panes in one window, each its own `MainTabTerminal` on one of the box's tabs (ADR 0020), with its own Reconnecting and Disconnected. A tab shows in at most one pane; an agent typing in one tab never moves a pane.
+- [x] Split Right (⌘D) and Split Down (⇧⌘D), as title-bar buttons and Window menu commands. A new pane shows the first tab the tab bar shows (so an agent's, with that agent selected) that no pane shows; when every one is in a pane, a new shell tab, owned by you, as `+` makes.
+- [x] ⌘⌥ and the arrows move the focus between panes (also in the Window menu); Close Pane in the Window menu.
+- [x] ⌘W closes the focused pane first, and closes tabs only when one pane is left. Closing a pane never stops its tab.
+- [x] The slim pane header: the tab picker (the tab's name with a chevron, listing the tabs no other pane shows), the program running in it, and a close button.
+- [x] The focused pane's 1 px accent outline; keystrokes go to it. VoiceOver reads each pane as "Pane: grok tab".
+- [x] The tab bar: choosing a tab (a click, ⌘1–9, ⌃Tab, ⌘⇧]) shows it in the focused pane, or focuses the pane already showing it; the current tab is always the focused pane's. A small glyph marks the tabs in a pane, showing where.
+- [x] Each pane asks its own tab for its own size; a tab has one size, the latest asked for.
+- [x] Works with the Team sidebar and agent columns: selecting an agent filters the tab bar as before, and the panes stay as they are.
+- [x] Tests: `SplitControllerTests`, `SplitLayoutTests`, `SplitPanesLayoutTests` (four panes fit the window's minimum).
+
+**Still to do after the first version:**
+
+- [ ] The header's status ("asking you", "watching", "quiet since 15:41") and who is active ("Grok Bot is typing"), and VoiceOver's status after the tab name: the tab list doesn't carry `waiting`, `typingAuthor`, `watchers` or `lastOutputAt` from portenvd yet, so the header shows only the running program. `PaneHeader` already writes the words.
+- [ ] The split layout remembered per workspace; today each open starts with one pane.
+- [ ] Drag to rearrange panes.
+- [ ] "Opened by <agent> · <command>" for a pane an agent opened (GUIDELINES 6.2).
+- [ ] The Warp-style features per pane beyond what each terminal already does, inline answers per pane, and narrow-pane block headers.
+- [ ] When another viewer has a tab larger, the pane keeps the cursor's row in sight.
+- [ ] Renders of the board redone from the shipped panes (`docs/screenshots/split-view/` is from the draft).
+
 **5. 1.3: the `apple` driver**
 
 The Containerization shim, with `docker` as the fallback. The agent drops the forbidden capabilities itself (a VM's root holds them). Gate item: the restic probe passes inside an `apple` box.

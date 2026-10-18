@@ -63,6 +63,13 @@ func run(ctx context.Context, args []string) int {
 		fmt.Println("portenv", version.String())
 		return 0
 	}
+	// Inside a workspace only the in-box commands run. The owner's would
+	// make a Portenv folder in the home, which every save carries; portenv
+	// init would write a box's repository key there (CC-0453).
+	if ownersCommand(args[0], os.Getenv) && insideWorkspace() {
+		fmt.Fprintln(os.Stderr, "This is the owner's command; run it on your Mac.")
+		return 2
+	}
 	// This machine's ID, as a save's lease names it: a Mac asks its servers
 	// so the lease sheet can say which one holds a workspace (2.3). Not
 	// secret.
@@ -139,6 +146,17 @@ Inside a workspace, for agents (each through Portenv's grant check):
   split, tab new, focus, close, msg, ask-owner, inbox, share,
   propose-agent-change, request-package, whoami     add --json for data
 `)
+}
+
+// ownersCommand is whether a command is the owner's, for a Mac or a
+// server: machine-id and every command in commands that isn't an agent's
+// in-box one ("status" with PORTENV_SOCKET set is the agent's).
+func ownersCommand(name string, getenv func(string) string) bool {
+	if isAgentCommand(name, getenv) {
+		return false
+	}
+	_, ok := commands[name]
+	return ok || name == "machine-id"
 }
 
 // promptsAllowed is whether a command may ask the person to approve a

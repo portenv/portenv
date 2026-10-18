@@ -44,7 +44,10 @@
 //     lead's start moves it and waits for the owner: .git is work's alone,
 //     the settings are gone, builder's clone holds its file uncommitted,
 //     nothing is deleted; Approve removes the hook and the worktree and
-//     keeps lead's file, lead starts, and the earlier checks pass again.
+//     keeps lead's file, lead starts, and the earlier checks pass again;
+//  11. a hand-off (CC-0507): lead hands a file to builder, and builder finds
+//     it in ~/inbox/lead/…, builder's, readable only by builder, its home
+//     still closed to others.
 //
 // The harness's own docker exec only sets the project up (step 1, as work),
 // tries what each agent may and may not do (as that agent), and reads the
@@ -608,6 +611,30 @@ git -c user.name=Builder -c user.email=builder@example.invalid -c core.hooksPath
 		h.fatal("step 10: builder's branch after the move, or a marker of work's:\n%s", out)
 	}
 	t.Log("step 10: after the move every check passes again: lead refused, team reads only, builder's branch fetched, no marker of work's")
+
+	// Step 11: lead hands a file to builder (CC-0507): the unpack runs as
+	// builder, into builder's 0700 home.
+	out, code = h.box(ctx, "lead", `set -eu
+mkdir -p ~/handoff && echo "for builder" > ~/handoff/note.txt
+PORTENV_AGENT=lead PORTENV_SOCKET=/run/portenv-team/lead/portenv.sock portenv handoff builder /home/lead/handoff/note.txt --note "the gate's hand-off"`)
+	if code != 0 {
+		h.fatal("step 11: lead's hand-off to builder: exit %d:\n%s", code, out)
+	}
+	t.Logf("step 11: lead's hand-off: %s", out)
+	out, code = h.box(ctx, "builder", `set -eu
+f=$(ls -d ~/inbox/lead/*/note.txt)
+cat "$f"
+stat -c '%U %a %n' "$f"`)
+	if code != 0 || !strings.HasPrefix(out, "for builder") || !strings.Contains(out, "builder 600 /home/builder/inbox/lead/") {
+		h.fatal("step 11: builder's inbox: exit %d:\n%s", code, out)
+	}
+	t.Logf("step 11: builder's inbox:\n%s", out)
+	out, _ = h.box(ctx, "root", `stat -c '%U %a' /home/builder; getfacl -cp /home/builder 2>/dev/null | grep -v '^#'
+for who in lead reviewer work; do runuser -u $who -- sh -c 'cat /home/builder/inbox/lead/*/note.txt' >/dev/null 2>&1; echo "$who reads it: $?"; done`)
+	if !strings.HasPrefix(out, "builder 7") || !strings.Contains(out, "other::---") || strings.Contains(out, "reads it: 0") {
+		h.fatal("step 11: builder's home isn't closed to others, or another user read the hand-off:\n%s", out)
+	}
+	t.Logf("step 11: builder's home and the hand-off are builder's alone:\n%s", out)
 }
 
 // waitRunning waits for portenvd to list the agent as running (or needing

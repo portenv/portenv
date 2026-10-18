@@ -99,6 +99,7 @@ func NewGuide() Guide {
 			"Only the owner answers decisions, in Portenv. A decision you asked for is pending until then.",
 			"You reach only your own terminals and files. Opening a pane in the owner's window goes through portenv split or portenv tab new, and your grant.",
 			"Run portenv whoami for what you can do now.",
+			ShareLoginOff,
 		},
 		Etiquette: []string{
 			"One topic per thread; reply in the thread (--thread).",

@@ -199,28 +199,38 @@ struct SplitCommands: Commands {
 
     var body: some Commands {
         CommandGroup(before: .windowArrangement) {
-            Button(SplitText.splitRight) { Task { await split?.split(.right) } }
-                .keyboardShortcut("d", modifiers: .command)
-                .disabled(!(split?.canSplit(.right) ?? false))
-            Button(SplitText.splitDown) { Task { await split?.split(.down) } }
-                .keyboardShortcut("d", modifiers: [.command, .shift])
-                .disabled(!(split?.canSplit(.down) ?? false))
-            Button(SplitText.closePane) { split?.closePane() }
-                .disabled(!(split?.isSplit ?? false))
-            Button(SplitText.focusLeft) { split?.moveFocus(.left) }
-                .keyboardShortcut(.leftArrow, modifiers: [.command, .option])
-                .disabled(!(split?.isSplit ?? false))
-            Button(SplitText.focusRight) { split?.moveFocus(.right) }
-                .keyboardShortcut(.rightArrow, modifiers: [.command, .option])
-                .disabled(!(split?.isSplit ?? false))
-            Button(SplitText.focusUp) { split?.moveFocus(.up) }
-                .keyboardShortcut(.upArrow, modifiers: [.command, .option])
-                .disabled(!(split?.isSplit ?? false))
-            Button(SplitText.focusDown) { split?.moveFocus(.down) }
-                .keyboardShortcut(.downArrow, modifiers: [.command, .option])
-                .disabled(!(split?.isSplit ?? false))
+            // A view, so the items follow the panes as they change.
+            SplitMenuItems(split: split)
             Divider()
         }
+    }
+}
+
+private struct SplitMenuItems: View {
+    let split: SplitController?
+
+    var body: some View {
+        let isSplit = split?.isSplit ?? false
+        Button(SplitText.splitRight) { Task { await split?.split(.right) } }
+            .keyboardShortcut("d", modifiers: .command)
+            .disabled(!(split?.canSplit(.right) ?? false))
+        Button(SplitText.splitDown) { Task { await split?.split(.down) } }
+            .keyboardShortcut("d", modifiers: [.command, .shift])
+            .disabled(!(split?.canSplit(.down) ?? false))
+        Button(SplitText.closePane) { split?.closePane() }
+            .disabled(!isSplit)
+        Button(SplitText.focusLeft) { split?.moveFocus(.left) }
+            .keyboardShortcut(.leftArrow, modifiers: [.command, .option])
+            .disabled(!isSplit)
+        Button(SplitText.focusRight) { split?.moveFocus(.right) }
+            .keyboardShortcut(.rightArrow, modifiers: [.command, .option])
+            .disabled(!isSplit)
+        Button(SplitText.focusUp) { split?.moveFocus(.up) }
+            .keyboardShortcut(.upArrow, modifiers: [.command, .option])
+            .disabled(!isSplit)
+        Button(SplitText.focusDown) { split?.moveFocus(.down) }
+            .keyboardShortcut(.downArrow, modifiers: [.command, .option])
+            .disabled(!isSplit)
     }
 }
 

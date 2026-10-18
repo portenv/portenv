@@ -389,13 +389,15 @@ ls /tmp/portenv-markers`, workspace))
 	t.Logf("step 8: builder tampered with its clone, committed and shared:\n%s", out)
 	// work's everyday git in the project, then the owner's Fetch, then
 	// work's git again with builder's branch in the repository.
-	everyday := fmt.Sprintf(`set -eu
+	everyday := func(when string) string {
+		return fmt.Sprintf(`set -eu
 cd %s
 git status --short
 git log -1 --format=%%s
 git diff --stat HEAD
-git -c user.name=Owner -c user.email=owner@example.invalid commit -q --allow-empty -m "owner, %%s"`, project)
-	if out, code = h.box(ctx, "work", fmt.Sprintf(everyday, "before the fetch")); code != 0 {
+git -c user.name=Owner -c user.email=owner@example.invalid commit -q --allow-empty -m "owner, %s"`, project, when)
+	}
+	if out, code = h.box(ctx, "work", everyday("before the fetch")); code != 0 {
 		h.fatal("step 8: work's git before the fetch: exit %d: %s", code, out)
 	}
 	fetched := h.portenv(ctx, "app", "fetch-agent", workspace, "builder")
@@ -411,7 +413,7 @@ git show --stat refs/remotes/agents/builder >/dev/null`, project))
 	if code != 0 || !strings.HasPrefix(out, "from builder") {
 		h.fatal("step 8: builder's commit isn't refs/remotes/agents/builder in work's repository: exit %d:\n%s", code, out)
 	}
-	if out, code = h.box(ctx, "work", fmt.Sprintf(everyday, "after the fetch")); code != 0 {
+	if out, code = h.box(ctx, "work", everyday("after the fetch")); code != 0 {
 		h.fatal("step 8: work's git after the fetch: exit %d: %s", code, out)
 	}
 	t.Logf("step 8: the owner's Fetch: %s", fetched)

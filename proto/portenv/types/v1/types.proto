@@ -271,6 +271,9 @@ message BoardMessage {
   google.protobuf.Timestamp created_at = 7;
   // For MESSAGE_TYPE_HANDOFF: what landed in the recipient's inbox.
   repeated HandoffFile files = 8;
+  // For Portenv's notices about one agent (a start that failed): its id,
+  // so the app shows the notice in that agent's column. Empty otherwise.
+  string about = 9;
 }
 
 // A request for the owner (ADR 0022 §6). Only the app answers it.

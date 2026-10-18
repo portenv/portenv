@@ -141,11 +141,10 @@ struct DaemonRestartTests {
         for _ in 0 ..< 200 where !cli.calls.contains(["app", "watch", "acme-api"]) { try? await Task.sleep(for: .milliseconds(5)) }
         let opensBefore = cli.calls.filter { $0.count > 1 && $0[1] == "open" }.count
         cli.push(#"{"state":"SAVE_STATE_CLOSED","saved_at":"\#(savedAt)"}"#)
-        // Up to 3 s for the closed state to arrive (a busy main actor, with
-        // the other suites running, once took longer than a fixed 200 ms),
-        // then 200 ms more for a reopen that shouldn't come.
-        for _ in 0 ..< 300 where c.location != .closed { try? await Task.sleep(for: .milliseconds(10)) }
-        try? await Task.sleep(for: .milliseconds(200))
+        // Waits for the closed state rather than a fixed time: a loaded CI
+        // runner took longer than 200 ms (the 2026-10-18 flake).
+        for _ in 0 ..< 500 where c.location != .closed { try? await Task.sleep(for: .milliseconds(10)) }
+        try? await Task.sleep(for: .milliseconds(200)) // time for a wrong reopen to show
         #expect(c.location == .closed)
         #expect(cli.calls.filter { $0.count > 1 && $0[1] == "open" }.count == opensBefore)
     }

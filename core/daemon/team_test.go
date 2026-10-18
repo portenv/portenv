@@ -580,10 +580,30 @@ func TestATeamStartThatCantStartSaysWhy(t *testing.T) {
 	for _, ev := range e.box("w").events {
 		if m := ev.msg; m != nil && m.GetTo() == boardOwner && strings.Contains(m.GetText(), "Lead couldn't start") && strings.Contains(m.GetText(), ".ssh") {
 			told = true
+			// About Lead, so the app shows it in Lead's column (R-0302).
+			if m.GetAbout() != "lead" {
+				t.Errorf("the notice is about %q, want lead", m.GetAbout())
+			}
 		}
 	}
 	if !told {
 		t.Error("the owner wasn't told why Lead didn't start")
+	}
+	// Lead's row carries the reason as its one line (R-0302).
+	if p := e.agentInfos(ctx, "w")["lead"].GetProblem(); p != "Couldn't start: ~/.ssh can be read by others in this workspace." {
+		t.Errorf("lead's problem after a failed start: %q", p)
+	}
+	if p := e.agentInfos(ctx, "w")["builder"].GetProblem(); p != "" {
+		t.Errorf("builder's problem: %q, want none", p)
+	}
+
+	// The next start that works clears it.
+	h.prepareErr = ""
+	if _, err := e.startAgent(ctx, "w", "lead"); err != nil {
+		t.Fatal(err)
+	}
+	if p := e.agentInfos(ctx, "w")["lead"].GetProblem(); p != "" {
+		t.Errorf("lead's problem after a start that worked: %q", p)
 	}
 }
 

@@ -95,6 +95,7 @@ type teamBox struct {
 	active      map[string]time.Time                       // agent → its last board line or status
 	routines    map[string][]*routineState                 // running agent → its routines (R-0258)
 	routinesOff map[string]string                          // agent → why its routines are off
+	startErr    map[string]string                          // agent → why its last background start failed, until one succeeds (R-0302)
 	listed      map[string]string                          // agent → its files as syncAgents last saw them
 	changed     chan struct{}
 }
@@ -124,6 +125,7 @@ func (e *teamEngine) box(name string) *teamBox {
 			active:      map[string]time.Time{},
 			routines:    map[string][]*routineState{},
 			routinesOff: map[string]string{},
+			startErr:    map[string]string{},
 			changed:     make(chan struct{}),
 		}
 		e.boxes[name] = b
@@ -188,7 +190,13 @@ func (e *teamEngine) appendLocked(ctx context.Context, name string, b *teamBox, 
 }
 
 func (e *teamEngine) noticeLocked(ctx context.Context, name string, b *teamBox, to, thread, text string) {
-	m := &typesv1.BoardMessage{Id: newULID(e.now()), From: boardFrom, To: to, ThreadId: thread, Type: typesv1.MessageType_MESSAGE_TYPE_NOTICE, Text: text, CreatedAt: timestamppb.New(e.now())}
+	e.noticeAboutLocked(ctx, name, b, to, thread, "", text)
+}
+
+// noticeAboutLocked is a notice about one agent, which the app shows in
+// that agent's column (R-0302).
+func (e *teamEngine) noticeAboutLocked(ctx context.Context, name string, b *teamBox, to, thread, about, text string) {
+	m := &typesv1.BoardMessage{Id: newULID(e.now()), From: boardFrom, To: to, ThreadId: thread, Type: typesv1.MessageType_MESSAGE_TYPE_NOTICE, Text: text, CreatedAt: timestamppb.New(e.now()), About: about}
 	_ = e.appendLocked(ctx, name, b, &agentv1.AppendBoardRequest{Line: &agentv1.AppendBoardRequest_Message{Message: m}})
 }
 
@@ -693,6 +701,7 @@ func (e *teamEngine) startAgentAs(ctx context.Context, name, agentID string, app
 		return nil, err
 	}
 	b.states[agentID] = typesv1.AgentState_AGENT_STATE_RUNNING
+	delete(b.startErr, agentID)
 	b.routines[agentID] = nil
 	idle := runnerIdlePattern(a.Runner)
 	delete(b.routinesOff, agentID)
@@ -813,7 +822,8 @@ func (e *teamEngine) startApprovedLocked(ctx context.Context, name string, b *te
 }
 
 // startFailed puts an agent an approval was starting back to stopped, and
-// tells the owner why.
+// tells the owner why: in its row and column until a start succeeds, and
+// on the board in its column (R-0302).
 func (e *teamEngine) startFailed(ctx context.Context, name, agentID, decisionID string, cause error) {
 	team, err := e.loadTeam(ctx, name)
 	if err != nil {
@@ -827,6 +837,7 @@ func (e *teamEngine) startFailed(ctx context.Context, name, agentID, decisionID 
 	if b.states[agentID] == typesv1.AgentState_AGENT_STATE_STARTING {
 		b.states[agentID] = typesv1.AgentState_AGENT_STATE_STOPPED
 	}
+	b.startErr[agentID] = "Couldn't start: " + cause.Error()
 	who := agentID
 	if a := team.agent(agentID); a != nil {
 		b.events = append(b.events, teamEvent{agent: e.infoLocked(b, a)})
@@ -835,7 +846,7 @@ func (e *teamEngine) startFailed(ctx context.Context, name, agentID, decisionID 
 			who = a.Spec.Name
 		}
 	}
-	e.noticeLocked(ctx, name, b, boardOwner, decisionID, who+" couldn't start: "+cause.Error())
+	e.noticeAboutLocked(ctx, name, b, boardOwner, decisionID, agentID, who+" couldn't start: "+cause.Error())
 }
 
 func (b *teamBox) teamStartApprovedLocked() bool {
@@ -882,6 +893,8 @@ func (e *teamEngine) infoLocked(b *teamBox, a *TeamAgent) *daemonv1.AgentInfo {
 	}
 	if len(a.Problems) > 0 {
 		info.Problem = a.Problems[0]
+	} else if state == typesv1.AgentState_AGENT_STATE_STOPPED {
+		info.Problem = b.startErr[a.ID]
 	}
 	info.Status = b.status[a.ID]
 	info.RoutinesOff = b.routinesOff[a.ID]

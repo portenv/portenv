@@ -13,11 +13,15 @@
 //     is "bash <script>", a script in the project;
 //  4. whoami in lead's pane says lead;
 //  5. the script's "portenv ask-owner", over lead's own socket, reaches
-//     portenvd's decision list (the WatchTeam stream the app reads).
+//     portenvd's decision list (the WatchTeam stream the app reads);
+//  6. lead makes a file in the project and runs git there, so the file and
+//     .git/index are lead's (CC-0494);
+//  7. approve and start builder: its start opens the project again, past
+//     lead's files, and whoami in builder's pane says builder.
 //
-// The harness's own docker exec only sets the project up (step 1, as work)
-// and reads lead's pane as root; portenvd reaches the box only through the
-// agent channel.
+// The harness's own docker exec only sets the project up (step 1, as work;
+// step 6, as lead) and reads the panes as root; portenvd reaches the box
+// only through the agent channel.
 package teamstart
 
 import (
@@ -46,6 +50,7 @@ const (
 	namespace = "teamstart"
 	project   = "/home/work/" + workspace
 	script    = project + "/first-start.sh"
+	script2   = project + "/second-start.sh"
 	question  = "R-0296 first start: may lead begin?"
 )
 
@@ -57,6 +62,12 @@ if out=$(portenv ask-owner "` + question + `" 2>&1); then
 else
   echo "first-start ask-owner failed: $out"
 fi
+exec sleep 1000000
+`
+
+// secondStart is builder's runner.
+const secondStart = `#!/bin/bash
+echo "second-start whoami=$(whoami)"
 exec sleep 1000000
 `
 
@@ -127,23 +138,31 @@ func TestTeamFirstStart(t *testing.T) {
 	defer func() { _ = conn.Close() }()
 	c := daemonv1.NewDaemonServiceClient(conn)
 
-	// Step 1: portenv team init in the project, as the owner (work) in the
-	// box; lead's runner becomes the script.
+	// Step 1: portenv team init in the project, a git repository, as the
+	// owner (work) in the box; lead's and builder's runners become the
+	// scripts.
 	out, code := h.box(ctx, "work", fmt.Sprintf(`set -eu
 mkdir -p %[1]s && cd %[1]s
+git init -q
 portenv team init
 cat > %[2]s <<'EOF'
 %[3]sEOF
-chmod 0755 %[2]s
+cat > %[4]s <<'EOF'
+%[5]sEOF
+chmod 0755 %[2]s %[4]s
 sed -i 's|^runner: .*$|runner: bash %[2]s|' .portenv/agents/lead.md
-grep -q '^runner: bash %[2]s$' .portenv/agents/lead.md`, project, script, firstStart))
+grep -q '^runner: bash %[2]s$' .portenv/agents/lead.md
+sed -i 's|^runner: .*$|runner: bash %[4]s|' .portenv/agents/builder.md
+grep -q '^runner: bash %[4]s$' .portenv/agents/builder.md
+git add -A
+git -c user.name=Owner -c user.email=owner@example.invalid commit -q -m "first commit"`, project, script, firstStart, script2, secondStart))
 	if code != 0 {
 		h.fatal("step 1 (portenv team init in %s): exit %d: %s", project, code, out)
 	}
 	t.Logf("step 1: %s", out)
 
 	// Step 2: approve lead, with the sha the app shows.
-	lead := h.lead(ctx, c)
+	lead := h.agent(ctx, c, "lead")
 	if lead.GetRunner() != "bash "+script {
 		h.fatal("step 2: lead's runner is %q, not the script", lead.GetRunner())
 	}
@@ -179,7 +198,7 @@ grep -q '^runner: bash %[2]s$' .portenv/agents/lead.md`, project, script, firstS
 	if _, err := c.AnswerDecision(ctx, &daemonv1.AnswerDecisionRequest{Name: workspace, DecisionId: ts.GetId(), Approve: true}); err != nil {
 		h.fatal("step 3 (approve the team's first start): %v", err)
 	}
-	running := h.waitRunning(ctx, c, 30*time.Second)
+	running := h.waitRunning(ctx, c, "lead", 30*time.Second)
 	t.Logf("step 3: portenvd started lead on Approve, tabs %v", running.GetTabIds())
 	// Start on an agent already started is a no-op: no error, still
 	// running, the same tabs (not started again).
@@ -196,7 +215,7 @@ grep -q '^runner: bash %[2]s$' .portenv/agents/lead.md`, project, script, firstS
 	t.Log("step 3: a second Start on lead is a no-op")
 
 	// Step 4: whoami in lead's pane, and the pane's process is lead's.
-	pane := h.waitPane(ctx, "first-start ask-owner", time.Minute)
+	pane := h.waitPane(ctx, "lead", "first-start ask-owner", time.Minute)
 	if !strings.Contains(pane, "first-start whoami=lead") {
 		h.fatal("step 4: lead's pane doesn't show whoami=lead:\n%s", pane)
 	}
@@ -220,12 +239,54 @@ ps -o user= -p "$(tmux -S "$sock" display-message -p -t main '#{pane_pid}')"`)
 		h.fatal("step 5: lead's pane doesn't name decision %s:\n%s", ask.GetId(), pane)
 	}
 	t.Logf("step 5: lead's ask-owner is decision %s in the list", ask.GetId())
+
+	// Step 6: lead makes a file in the project and runs git there; git add
+	// rewrites .git/index, so both are lead's, which work (who opens the
+	// project at each start) can't change (CC-0494).
+	out, code = h.box(ctx, "lead", fmt.Sprintf(`set -eu
+cd %s
+echo "from lead" > from-lead.txt
+git status --short
+git add from-lead.txt
+stat -c '%%U %%n' from-lead.txt .git/index`, project))
+	if code != 0 {
+		h.fatal("step 6 (lead writes a file and runs git): exit %d: %s", code, out)
+	}
+	if !strings.Contains(out, "lead from-lead.txt") || !strings.Contains(out, "lead .git/index") {
+		h.fatal("step 6: lead's file or .git/index isn't lead's:\n%s", out)
+	}
+	t.Logf("step 6: lead wrote a file and ran git:\n%s", out)
+
+	// Step 7: start builder. Its start opens the project to the team again,
+	// past lead's files, and must succeed.
+	builder := h.agent(ctx, c, "builder")
+	if builder.GetRunner() != "bash "+script2 {
+		h.fatal("step 7: builder's runner is %q, not the script", builder.GetRunner())
+	}
+	if _, err := c.ApproveAgentFile(ctx, &daemonv1.ApproveAgentFileRequest{Name: workspace, AgentId: "builder", FileSha256: builder.GetFileSha256()}); err != nil {
+		h.fatal("step 7 (approve builder): %v", err)
+	}
+	if _, err := c.StartAgent(ctx, &daemonv1.StartAgentRequest{Name: workspace, AgentId: "builder"}); err != nil {
+		h.fatal("step 7 (start builder after lead wrote files): %v", err)
+	}
+	h.waitRunning(ctx, c, "builder", 30*time.Second)
+	if bp := h.waitPane(ctx, "builder", "second-start whoami=", time.Minute); !strings.Contains(bp, "second-start whoami=builder") {
+		h.fatal("step 7: builder's pane doesn't show whoami=builder:\n%s", bp)
+	}
+	// Lead's file is still lead's, and the team can read it.
+	out, code = h.box(ctx, "builder", fmt.Sprintf(`set -eu
+cd %s
+stat -c '%%U %%n' from-lead.txt
+cat from-lead.txt`, project))
+	if code != 0 || !strings.Contains(out, "lead from-lead.txt") || !strings.Contains(out, "from lead") {
+		h.fatal("step 7: builder can't read lead's file, or it changed hands: exit %d: %s", code, out)
+	}
+	t.Log("step 7: builder started after lead wrote files, and reads lead's file")
 }
 
-// waitRunning waits for portenvd to list lead as running (or needing
-// you: its ask-owner may already be waiting), after the owner approved the
-// team's first start.
-func (h *harness) waitRunning(ctx context.Context, c daemonv1.DaemonServiceClient, within time.Duration) *daemonv1.AgentInfo {
+// waitRunning waits for portenvd to list the agent as running (or needing
+// you: its ask-owner may already be waiting), after it was started.
+func (h *harness) waitRunning(ctx context.Context, c daemonv1.DaemonServiceClient, id string, within time.Duration) *daemonv1.AgentInfo {
 	end := time.Now().Add(within)
 	var last string
 	for time.Now().Before(end) {
@@ -234,7 +295,7 @@ func (h *harness) waitRunning(ctx context.Context, c daemonv1.DaemonServiceClien
 		cancel()
 		if err == nil {
 			for _, a := range r.GetAgents() {
-				if a.GetId() != "lead" {
+				if a.GetId() != id {
 					continue
 				}
 				switch a.GetState() {
@@ -248,18 +309,18 @@ func (h *harness) waitRunning(ctx context.Context, c daemonv1.DaemonServiceClien
 		}
 		time.Sleep(500 * time.Millisecond)
 	}
-	h.fatal("step 3: lead isn't running %v after Approve, with no second Start: %s", within, last)
+	h.fatal("%s isn't running %v after it was started: %s", id, within, last)
 	return nil
 }
 
-// lead is lead's row, once portenvd reads the files team init wrote.
-func (h *harness) lead(ctx context.Context, c daemonv1.DaemonServiceClient) *daemonv1.AgentInfo {
+// agent is the agent's row, once portenvd reads the files team init wrote.
+func (h *harness) agent(ctx context.Context, c daemonv1.DaemonServiceClient, id string) *daemonv1.AgentInfo {
 	var last string
 	for range 60 {
 		r, err := c.ListAgents(ctx, &daemonv1.ListAgentsRequest{Name: workspace})
 		if err == nil {
 			for _, a := range r.GetAgents() {
-				if a.GetId() == "lead" && a.GetFileSha256() != "" {
+				if a.GetId() == id && a.GetFileSha256() != "" {
 					return a
 				}
 			}
@@ -269,7 +330,7 @@ func (h *harness) lead(ctx context.Context, c daemonv1.DaemonServiceClient) *dae
 		}
 		time.Sleep(500 * time.Millisecond)
 	}
-	h.fatal("step 2: portenvd doesn't list lead: %s", last)
+	h.fatal("portenvd doesn't list %s: %s", id, last)
 	return nil
 }
 
@@ -311,21 +372,22 @@ func (h *harness) waitDecision(match func(*typesv1.Decision) bool, within time.D
 	return nil
 }
 
-// waitPane reads lead's pane, as root in the harness, until it shows want.
-func (h *harness) waitPane(ctx context.Context, want string, within time.Duration) string {
+// waitPane reads the agent's pane, as root in the harness, until it shows
+// want.
+func (h *harness) waitPane(ctx context.Context, id, want string, within time.Duration) string {
 	var out string
 	end := time.Now().Add(within)
 	for time.Now().Before(end) {
 		var code int
-		out, code = h.box(ctx, "root", `sock=$(find /run/portenv-team/lead -type s -name default | head -n 1)
-[ -n "$sock" ] || { echo "no tmux socket under /run/portenv-team/lead"; exit 1; }
-tmux -S "$sock" capture-pane -p -J -t main -S -200`)
+		out, code = h.box(ctx, "root", fmt.Sprintf(`sock=$(find /run/portenv-team/%[1]s -type s -name default | head -n 1)
+[ -n "$sock" ] || { echo "no tmux socket under /run/portenv-team/%[1]s"; exit 1; }
+tmux -S "$sock" capture-pane -p -J -t main -S -200`, id))
 		if code == 0 && strings.Contains(out, want) {
 			return out
 		}
 		time.Sleep(time.Second)
 	}
-	h.fatal("step 4: lead's pane never showed %q:\n%s", want, out)
+	h.fatal("%s's pane never showed %q:\n%s", id, want, out)
 	return ""
 }
 
@@ -411,6 +473,7 @@ func (h *harness) fatal(format string, a ...any) {
 echo "--- id work; getent group team"; id work; getent group team
 echo "--- agents"; getent passwd | awk -F: '$3>=2000 && $3<3000'
 echo "--- /home/work"; stat -c '%A %U:%G %n' /home/work /home/work/`+workspace+` 2>&1
+echo "--- the project's git"; stat -c '%A %U:%G %n' `+project+`/.git `+project+`/.git/config `+project+`/.git/index `+project+`/.git/hooks 2>&1; getfacl -cp `+project+`/.git/config 2>&1
 echo "--- /run/portenv-team"; ls -laR /run/portenv-team 2>&1 | head -n 60
 echo "--- processes"; ps -eo user:12,pid,args | grep -v ' \[' | head -n 60`)
 		h.t.Logf("the workspace:\n%s", out)

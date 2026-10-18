@@ -132,7 +132,8 @@ This closes every item of lane A's list:
 
 **How it's done (`PrepareTeamProject`, before each agent start):**
 - init (root) only checks: real folders, the project is `/home/work/<name>`, and the owner's private folders and logins aren't readable by others (else the team is refused with a line naming the one to fix).
-- The work on the tree runs as `work`, inside an `os.Root`, so a link an agent swaps in mid-walk reaches nothing `work` couldn't change: default ACLs, the group and setgid, the protected paths closed, `core.sharedRepository`, and `/home/work` 0711.
+- The work on the tree runs as `work`: default ACLs, the group and setgid, the protected paths closed, `core.sharedRepository`, and `/home/work` 0711. It walks the tree through descriptors: each entry is opened from its folder's descriptor without following a link, checked to be the file it looked at, and changed through that descriptor (the ACLs too, as extended attributes, not `setfacl` over paths), so a link or a swap an agent makes mid-walk reaches nothing.
+- It changes only what `work` owns (CC-0494). Whatever an agent made was made in the team's setgid folders under their default ACLs, so it's already the team's, and `work` couldn't change it anyway; an agent's folder is skipped with all it holds. Doing that step as root instead was rejected: root walking a tree agents can change is the one place a link race would reach anything on the box. A protected path `work` doesn't own, or one that's a link (git would follow it), stops the team's start with a line naming it, since an agent could have changed it. A hard link to a protected file elsewhere in the project stays closed too.
 - init adds the project as a system git `safe.directory`, so agents can use `work`'s repository.
 - It happens only when a team starts, never in a workspace without one. Stop Team doesn't revert it, and the team-start decision says so (R-0261).
 

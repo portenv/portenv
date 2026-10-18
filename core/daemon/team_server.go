@@ -28,6 +28,7 @@ import (
 func (s *Server) teamEng() *teamEngine {
 	s.teamOnce.Do(func() {
 		s.team = newTeamEngine(s.agentFor, s.loadTeam)
+		s.team.log = s.log
 		s.team.readBoard = s.readBoard
 		// Routines' timers (R-0258), while portenvd runs.
 		go func() {

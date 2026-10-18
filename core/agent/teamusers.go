@@ -135,7 +135,7 @@ func (t *TeamUsers) Ensure(ctx context.Context, id string) (AgentUser, error) {
 		return AgentUser{}, err
 	}
 	if t.restoreErr != nil {
-		return AgentUser{}, fmt.Errorf("agent users weren't restored when the workspace started: %w", t.restoreErr)
+		return AgentUser{}, fmt.Errorf("%s: %w", restoreRefusal, t.restoreErr)
 	}
 	store, err := t.load()
 	if err != nil {

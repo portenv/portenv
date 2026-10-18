@@ -7,9 +7,10 @@
 //
 //  1. portenv team init in /home/work/<workspace>, as work;
 //  2. approve lead's file (ApproveAgentFile, with the sha the app shows);
-//  3. start lead (StartAgent), answer the team's first-start decision
-//     (TEAM_START) approved, and start it again; its runner is
-//     "bash <script>", a script in the project;
+//  3. start lead (StartAgent), which asks the team's first-start decision
+//     (TEAM_START) naming lead; approved, portenvd starts lead itself,
+//     with no second StartAgent, and a second Start is a no-op; its runner
+//     is "bash <script>", a script in the project;
 //  4. whoami in lead's pane says lead;
 //  5. the script's "portenv ask-owner", over lead's own socket, reaches
 //     portenvd's decision list (the WatchTeam stream the app reads).
@@ -158,8 +159,9 @@ grep -q '^runner: bash %[2]s$' .portenv/agents/lead.md`, project, script, firstS
 	// The app's decision list.
 	go h.watch(ctx, c)
 
-	// Step 3: the first start asks the owner (TEAM_START); approved, the
-	// next start runs lead.
+	// Step 3: the first start asks the owner (TEAM_START), naming lead;
+	// approved, portenvd starts lead itself, with no second StartAgent
+	// (R-0296, R-0300).
 	if _, err := c.StartAgent(ctx, &daemonv1.StartAgentRequest{Name: workspace, AgentId: "lead"}); err == nil {
 		h.fatal("step 3: the team's first start didn't wait for the owner's approval")
 	} else {
@@ -171,17 +173,27 @@ grep -q '^runner: bash %[2]s$' .portenv/agents/lead.md`, project, script, firstS
 	if ts == nil {
 		h.fatal("step 3: no pending TEAM_START decision in the decision list")
 	}
+	if ids := ts.GetStartAgentIds(); len(ids) != 1 || ids[0] != "lead" {
+		h.fatal("step 3: TEAM_START names %v, not [lead]", ids)
+	}
 	if _, err := c.AnswerDecision(ctx, &daemonv1.AnswerDecisionRequest{Name: workspace, DecisionId: ts.GetId(), Approve: true}); err != nil {
 		h.fatal("step 3 (approve the team's first start): %v", err)
 	}
+	running := h.waitRunning(ctx, c, 30*time.Second)
+	t.Logf("step 3: portenvd started lead on Approve, tabs %v", running.GetTabIds())
+	// Start on an agent already started is a no-op: no error, still
+	// running, the same tabs (not started again).
 	sr, err := c.StartAgent(ctx, &daemonv1.StartAgentRequest{Name: workspace, AgentId: "lead"})
 	if err != nil {
-		h.fatal("step 3 (start lead after TEAM_START was approved): %v", err)
+		h.fatal("step 3 (Start on lead once it runs): %v", err)
 	}
-	if st := sr.GetAgent().GetState(); st != typesv1.AgentState_AGENT_STATE_RUNNING {
-		h.fatal("step 3: lead is %v after its start, not running", st)
+	if st := sr.GetAgent().GetState(); st != typesv1.AgentState_AGENT_STATE_RUNNING && st != typesv1.AgentState_AGENT_STATE_NEEDS_YOU {
+		h.fatal("step 3: a second Start left lead %v, not running", st)
 	}
-	t.Logf("step 3: lead started, tabs %v", sr.GetAgent().GetTabIds())
+	if got, want := fmt.Sprint(sr.GetAgent().GetTabIds()), fmt.Sprint(running.GetTabIds()); got != want {
+		h.fatal("step 3: a second Start started lead again: tabs %s, were %s", got, want)
+	}
+	t.Log("step 3: a second Start on lead is a no-op")
 
 	// Step 4: whoami in lead's pane, and the pane's process is lead's.
 	pane := h.waitPane(ctx, "first-start ask-owner", time.Minute)
@@ -208,6 +220,36 @@ ps -o user= -p "$(tmux -S "$sock" display-message -p -t main '#{pane_pid}')"`)
 		h.fatal("step 5: lead's pane doesn't name decision %s:\n%s", ask.GetId(), pane)
 	}
 	t.Logf("step 5: lead's ask-owner is decision %s in the list", ask.GetId())
+}
+
+// waitRunning waits for portenvd to list lead as running (or needing
+// you: its ask-owner may already be waiting), after the owner approved the
+// team's first start.
+func (h *harness) waitRunning(ctx context.Context, c daemonv1.DaemonServiceClient, within time.Duration) *daemonv1.AgentInfo {
+	end := time.Now().Add(within)
+	var last string
+	for time.Now().Before(end) {
+		cctx, cancel := context.WithDeadline(ctx, end)
+		r, err := c.ListAgents(cctx, &daemonv1.ListAgentsRequest{Name: workspace})
+		cancel()
+		if err == nil {
+			for _, a := range r.GetAgents() {
+				if a.GetId() != "lead" {
+					continue
+				}
+				switch a.GetState() {
+				case typesv1.AgentState_AGENT_STATE_RUNNING, typesv1.AgentState_AGENT_STATE_NEEDS_YOU, typesv1.AgentState_AGENT_STATE_IDLE:
+					return a
+				}
+				last = a.GetState().String()
+			}
+		} else {
+			last = err.Error()
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	h.fatal("step 3: lead isn't running %v after Approve, with no second Start: %s", within, last)
+	return nil
 }
 
 // lead is lead's row, once portenvd reads the files team init wrote.

@@ -975,6 +975,11 @@ public nonisolated struct Portenv_Types_V1_Decision: Sendable {
   /// Clears the value of `expiresAt`. Subsequent reads from it will return its default value.
   public mutating func clearExpiresAt() {self._expiresAt = nil}
 
+  /// For DECISION_KIND_TEAM_START: the agents the owner clicked Start on,
+  /// in that order. portenvd starts them itself on Approve, so the answer
+  /// works after the app or portenvd restarts (R-0296).
+  public var startAgentIds: [String] = []
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -1589,7 +1594,7 @@ nonisolated extension Portenv_Types_V1_BoardMessage: SwiftProtobuf.Message, Swif
 
 nonisolated extension Portenv_Types_V1_Decision: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Decision"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}from\0\u{1}kind\0\u{1}summary\0\u{1}detail\0\u{1}state\0\u{3}answer_note\0\u{3}created_at\0\u{3}answered_at\0\u{1}packages\0\u{3}expires_at\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}from\0\u{1}kind\0\u{1}summary\0\u{1}detail\0\u{1}state\0\u{3}answer_note\0\u{3}created_at\0\u{3}answered_at\0\u{1}packages\0\u{3}expires_at\0\u{3}start_agent_ids\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1608,6 +1613,7 @@ nonisolated extension Portenv_Types_V1_Decision: SwiftProtobuf.Message, SwiftPro
       case 9: try { try decoder.decodeSingularMessageField(value: &self._answeredAt) }()
       case 10: try { try decoder.decodeRepeatedMessageField(value: &self.packages) }()
       case 11: try { try decoder.decodeSingularMessageField(value: &self._expiresAt) }()
+      case 12: try { try decoder.decodeRepeatedStringField(value: &self.startAgentIds) }()
       default: break
       }
     }
@@ -1651,6 +1657,9 @@ nonisolated extension Portenv_Types_V1_Decision: SwiftProtobuf.Message, SwiftPro
     try { if let v = self._expiresAt {
       try visitor.visitSingularMessageField(value: v, fieldNumber: 11)
     } }()
+    if !self.startAgentIds.isEmpty {
+      try visitor.visitRepeatedStringField(value: self.startAgentIds, fieldNumber: 12)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -1666,6 +1675,7 @@ nonisolated extension Portenv_Types_V1_Decision: SwiftProtobuf.Message, SwiftPro
     if lhs._answeredAt != rhs._answeredAt {return false}
     if lhs.packages != rhs.packages {return false}
     if lhs._expiresAt != rhs._expiresAt {return false}
+    if lhs.startAgentIds != rhs.startAgentIds {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

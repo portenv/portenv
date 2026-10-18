@@ -118,7 +118,7 @@ private struct NoKeychain: KeychainReading {
 
 /// portenvd as the main-window board shows it: acme-api open on this Mac,
 /// saved a few minutes ago, with the board's three tabs.
-private final class SampleDaemon: DaemonAPI, @unchecked Sendable {
+final class SampleDaemon: DaemonAPI, @unchecked Sendable {
     private let savedAt: Date
     /// The sample team and its tabs, for the team renders.
     private let team: (TeamState, [TabInfo])?

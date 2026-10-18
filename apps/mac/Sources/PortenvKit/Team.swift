@@ -157,10 +157,13 @@ public struct TeamDecision: Equatable, Sendable, Identifiable {
     public var answeredAt: Date?
     public var expiresAt: Date?
     public var packages: [Package]
+    /// For the team's first start: the agents Approve starts, in
+    /// portenvd, in the order the owner chose Start (R-0296).
+    public var startAgents: [String]
 
     public init(id: String, from: String, kind: Kind, summary: String, detail: String = "", state: State = .pending,
                 answerNote: String = "", createdAt: Date? = nil, answeredAt: Date? = nil, expiresAt: Date? = nil,
-                packages: [Package] = []) {
+                packages: [Package] = [], startAgents: [String] = []) {
         self.id = id
         self.from = from
         self.kind = kind
@@ -172,6 +175,7 @@ public struct TeamDecision: Equatable, Sendable, Identifiable {
         self.answeredAt = answeredAt
         self.expiresAt = expiresAt
         self.packages = packages
+        self.startAgents = startAgents.map { TeamText.line($0, max: 64) }
     }
 
     /// Approve and Decline show only while it's pending; an expired

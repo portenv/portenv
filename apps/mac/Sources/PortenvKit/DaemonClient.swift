@@ -743,6 +743,7 @@ extension TeamDecision {
         self.init(id: d.id, from: d.from, kind: kind, summary: d.summary, detail: d.detail, state: state,
                   answerNote: d.answerNote, createdAt: d.hasCreatedAt ? d.createdAt.date : nil,
                   answeredAt: d.hasAnsweredAt ? d.answeredAt.date : nil, expiresAt: d.hasExpiresAt ? d.expiresAt.date : nil,
-                  packages: d.packages.map { Package(name: $0.name, version: $0.version, source: $0.source, dependency: $0.dependency) })
+                  packages: d.packages.map { Package(name: $0.name, version: $0.version, source: $0.source, dependency: $0.dependency) },
+                  startAgents: d.startAgentIds)
     }
 }

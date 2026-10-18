@@ -1379,7 +1379,11 @@ type Decision struct {
 	// For DECISION_KIND_PACKAGE: exactly what Approve installs.
 	Packages []*PackagePlan `protobuf:"bytes,10,rep,name=packages,proto3" json:"packages,omitempty"`
 	// When a pending decision expires (24 hours after created_at).
-	ExpiresAt     *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	ExpiresAt *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	// For DECISION_KIND_TEAM_START: the agents the owner clicked Start on,
+	// in that order. portenvd starts them itself on Approve, so the answer
+	// works after the app or portenvd restarts (R-0296).
+	StartAgentIds []string `protobuf:"bytes,12,rep,name=start_agent_ids,json=startAgentIds,proto3" json:"start_agent_ids,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1487,6 +1491,13 @@ func (x *Decision) GetPackages() []*PackagePlan {
 func (x *Decision) GetExpiresAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.ExpiresAt
+	}
+	return nil
+}
+
+func (x *Decision) GetStartAgentIds() []string {
+	if x != nil {
+		return x.StartAgentIds
 	}
 	return nil
 }
@@ -1991,7 +2002,7 @@ const file_portenv_types_v1_types_proto_rawDesc = "" +
 	"\x04text\x18\x06 \x01(\tR\x04text\x129\n" +
 	"\n" +
 	"created_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x123\n" +
-	"\x05files\x18\b \x03(\v2\x1d.portenv.types.v1.HandoffFileR\x05files\"\xda\x03\n" +
+	"\x05files\x18\b \x03(\v2\x1d.portenv.types.v1.HandoffFileR\x05files\"\x82\x04\n" +
 	"\bDecision\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04from\x18\x02 \x01(\tR\x04from\x122\n" +
@@ -2008,7 +2019,8 @@ const file_portenv_types_v1_types_proto_rawDesc = "" +
 	"\bpackages\x18\n" +
 	" \x03(\v2\x1d.portenv.types.v1.PackagePlanR\bpackages\x129\n" +
 	"\n" +
-	"expires_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\"s\n" +
+	"expires_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\x12&\n" +
+	"\x0fstart_agent_ids\x18\f \x03(\tR\rstartAgentIds\"s\n" +
 	"\vPackagePlan\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12\x16\n" +

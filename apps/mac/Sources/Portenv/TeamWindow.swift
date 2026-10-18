@@ -86,23 +86,25 @@ struct TeamColumn: View {
                             TeamMessageRow(message: m, sender: team.state.agent(m.from), team: team.state.agents)
                                 .id(m.id)
                         }
+                        // What it asks you, and the team's first start
+                        // while it names this agent, answered here
+                        // (GUIDELINES 6.2). Inside the scroll: a long card
+                        // never sets the column's (and window's) height.
+                        ForEach(team.decisions(for: agent.id)) { d in
+                            DecisionCard(decision: d, asker: TeamText.asker(d, team: team.state.agents)) { approve, note in
+                                Task { await team.answer(d, approve: approve, note: note) }
+                            }
+                            .id(d.id)
+                        }
                     }
                     .padding(14)
                 }
                 .defaultScrollAnchor(.bottom)
-                .onChange(of: team.state.conversation(with: agent.id).last?.id) { _, id in
+                .onChange(of: (team.decisions(for: agent.id).last?.id ?? team.state.conversation(with: agent.id).last?.id)) { _, id in
                     if let id { proxy.scrollTo(id, anchor: .bottom) }
                 }
             }
-            // What it asks you, and the team's first start while you're
-            // starting it, answered here (GUIDELINES 6.2).
-            ForEach(team.decisions(for: agent.id)) { d in
-                DecisionCard(decision: d, asker: TeamText.asker(d, team: team.state.agents)) { approve, note in
-                    Task { await team.answer(d, approve: approve, note: note) }
-                }
-                .padding(.horizontal, 14).padding(.top, 10)
-            }
-            Divider().padding(.top, 10)
+            Divider()
             ScrollView { TeamControls(agent: agent, team: team) }
                 .frame(maxHeight: agent.approved ? 120 : 460)
                 .fixedSize(horizontal: false, vertical: agent.approved)

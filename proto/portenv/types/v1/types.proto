@@ -292,6 +292,10 @@ message Decision {
   repeated PackagePlan packages = 10;
   // When a pending decision expires (24 hours after created_at).
   google.protobuf.Timestamp expires_at = 11;
+  // For DECISION_KIND_TEAM_START: the agents the owner clicked Start on,
+  // in that order. portenvd starts them itself on Approve, so the answer
+  // works after the app or portenvd restarts (R-0296).
+  repeated string start_agent_ids = 12;
 }
 
 // One package apt-get -s would install, run by init (root), never by the

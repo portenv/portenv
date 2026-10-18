@@ -121,6 +121,8 @@ struct AgentFileReviewCard: View {
 struct DecisionCard: View {
     let decision: TeamDecision
     let asker: String
+    /// Once answered: when, and what it's doing (R-0296).
+    var answered: String?
     let answer: (_ approve: Bool, _ note: String) -> Void
     @State private var declining = false
     @State private var reason = ""
@@ -143,6 +145,9 @@ struct DecisionCard: View {
                     Button(TeamText.approve) { answer(true, "") }
                         .accessibilityLabel("Approve: \(decision.summary)")
                 }
+            } else if let answered {
+                Text(verbatim: answered).font(.system(size: 12, weight: .semibold))
+                    .fixedSize(horizontal: false, vertical: true)
             }
             Text(TeamText.answeredOnlyHere).font(.system(size: 11)).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -168,7 +173,8 @@ struct DecisionColumn: View {
 
     var body: some View {
         ScrollView {
-            DecisionCard(decision: decision, asker: TeamText.asker(decision, team: team.state.agents)) { approve, note in
+            DecisionCard(decision: decision, asker: TeamText.asker(decision, team: team.state.agents),
+                         answered: TeamText.answered(decision, team: team.state.agents)) { approve, note in
                 Task { await team.answer(decision, approve: approve, note: note) }
             }
             .padding(14)

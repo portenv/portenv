@@ -45,10 +45,15 @@ const (
 )
 
 // teamHub holds the agents' sockets and portenvd's TeamCalls stream.
+//
+// It runs in the unprivileged API process: it makes no folders and gives
+// nothing to another uid. init makes each agent's run folder
+// (TeamUsers.ensureRunDir) before the hub serves the agent's socket in it.
 type teamHub struct {
 	dir     string
-	chown   func(path string, uid, gid int) error
 	peerUID func(*net.UnixConn) (int, error)
+	// groupOf reads a path's group without following a link (-1: unknown).
+	groupOf func(path string) int
 
 	mu        sync.Mutex
 	agents    map[string]*teamAgent
@@ -75,8 +80,8 @@ type teamStream struct {
 func newTeamHub(dir string) *teamHub {
 	return &teamHub{
 		dir:       dir,
-		chown:     os.Lchown,
 		peerUID:   socketPeerUID,
+		groupOf:   fileGroup,
 		agents:    map[string]*teamAgent{},
 		byUID:     map[int]string{},
 		streamSet: make(chan struct{}),
@@ -86,38 +91,21 @@ func newTeamHub(dir string) *teamHub {
 // TMPDIR is the agent's own temporary folder (R-0245 item 1).
 func (h *teamHub) TMPDIR(id string) string { return filepath.Join(h.dir, id, "tmp") }
 
-// addAgent makes the agent's folder and starts serving its socket:
+// addAgent serves the agent's socket in the run folder init made for it:
 //
-//	<dir>/<id>/              the helper's, the agent's group, 0710
+//	<dir>/<id>/              the helper's, the agent's group, setgid, 0710 (init)
 //	<dir>/<id>/portenv.sock  the helper's, the agent's group, 0660
-//	<dir>/<id>/tmux/         the agent's, 0700: its tmux server's socket
-//	<dir>/<id>/tmp/          the agent's, 0700: its TMPDIR
+//
+// The socket takes the agent's group from the folder's setgid bit as it's
+// made; the hub checks it, and serves nothing if it's any other group.
 func (h *teamHub) addAgent(id string, uid, gid int) error {
 	if !agentIDRE.MatchString(id) {
 		return fmt.Errorf("%q %w", id, ErrInvalidAgentID)
 	}
 	h.removeAgent(id)
 	base := filepath.Join(h.dir, id)
-	if err := os.MkdirAll(base, 0o710); err != nil {
-		return fmt.Errorf("make %s: %w", base, err)
-	}
-	if err := h.chown(base, -1, gid); err != nil {
-		return fmt.Errorf("set %s's group: %w", base, err)
-	}
-	if err := os.Chmod(base, 0o710); err != nil { // #nosec G302 -- the agent passes through to its socket
-		return err
-	}
-	for _, sub := range []string{"tmux", "tmp"} {
-		p := filepath.Join(base, sub)
-		if err := os.MkdirAll(p, 0o700); err != nil {
-			return fmt.Errorf("make %s: %w", p, err)
-		}
-		if err := h.chown(p, uid, gid); err != nil {
-			return fmt.Errorf("give %s to %s: %w", p, id, err)
-		}
-		if err := os.Chmod(p, 0o700); err != nil { // #nosec G302 -- a directory: the agent's own, owner-only
-			return err
-		}
+	if err := checkRealDir(base); err != nil {
+		return fmt.Errorf("%s's run folder isn't ready (init makes it): %w", id, err)
 	}
 	sock := filepath.Join(base, "portenv.sock")
 	if err := os.Remove(sock); err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -127,13 +115,16 @@ func (h *teamHub) addAgent(id string, uid, gid int) error {
 	if err != nil {
 		return fmt.Errorf("listen on %s: %w", sock, err)
 	}
-	if err := h.chown(sock, -1, gid); err != nil {
+	fail := func(err error) error {
 		_ = lis.Close()
-		return fmt.Errorf("set %s's group: %w", sock, err)
+		_ = os.Remove(sock)
+		return err
 	}
 	if err := os.Chmod(sock, 0o660); err != nil { // #nosec G302 -- the helper and this agent only
-		_ = lis.Close()
-		return err
+		return fail(err)
+	}
+	if g := h.groupOf(sock); g != gid {
+		return fail(fmt.Errorf("%s has group %d, not %s's %d; is its folder's setgid bit missing?", sock, g, id, gid))
 	}
 	a := &teamAgent{id: id, uid: uid, gid: gid, lis: lis}
 	h.mu.Lock()

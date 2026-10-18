@@ -161,6 +161,10 @@ func newTestTeam(t *testing.T) (*TeamUsers, *fakeSystem, *[]chownCall) {
 			return nil
 		},
 		RunDir: filepath.Join(root, "run", "portenv-team"),
+		fchown: func(f *os.File, uid, gid int) error {
+			chowns = append(chowns, chownCall{f.Name(), uid, gid})
+			return nil
+		},
 	}
 	if err := os.MkdirAll(filepath.Join(team.Cfg.HomeRoot, "work"), 0o700); err != nil {
 		t.Fatal(err)
@@ -505,8 +509,8 @@ func TestRestoreBringsAgentsBackInANewBox(t *testing.T) {
 	if !slices.Contains(*chowns, chownCall{teamDir, 1000, TeamGID}) {
 		t.Errorf("/home/team not work:team: %v", *chowns)
 	}
-	if info, err := os.Stat(team.RunDir); err != nil || info.Mode().Perm() != 0o755 {
-		t.Errorf("run dir: %v, %v; want 0755", info, err)
+	if info, err := os.Stat(team.RunDir); err != nil || info.Mode().Perm() != 0o711 {
+		t.Errorf("run dir: %v, %v; want 0711", info, err)
 	}
 	// The removed agent's uid is still taken.
 	got, err := team.Ensure(ctx, "designer")
@@ -703,5 +707,87 @@ func TestTheStoresFolderAndLinksInTheWay(t *testing.T) {
 				t.Error("the run dir as a symlink: Restore accepted it")
 			}
 		}
+	}
+}
+
+// The agent's run folder is made by init, as root, at every Ensure
+// (ADR 0022 §1; the owner demo, 2026-10-18: the helper couldn't make it).
+func TestEnsureMakesTheAgentsRunFolder(t *testing.T) {
+	ctx := context.Background()
+	team, _, chowns := newTestTeam(t)
+	got, err := team.Ensure(ctx, "builder")
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := filepath.Join(team.RunDir, "builder")
+	if got.RunDir != base || got.TmuxDir != filepath.Join(base, "tmux") || got.TmpDir != filepath.Join(base, "tmp") {
+		t.Fatalf("Ensure = %+v, want the run folder %s", got, base)
+	}
+	for path, want := range map[string]os.FileMode{
+		team.RunDir: os.ModeDir | 0o711,
+		base:        os.ModeDir | os.ModeSetgid | 0o710,
+		got.TmuxDir: os.ModeDir | 0o700,
+		got.TmpDir:  os.ModeDir | 0o700,
+	} {
+		info, err := os.Lstat(path)
+		if err != nil {
+			t.Errorf("%s: %v", path, err)
+			continue
+		}
+		if info.Mode() != want {
+			t.Errorf("%s: mode %v, want %v", path, info.Mode(), want)
+		}
+	}
+	for _, want := range []chownCall{
+		{base, ServeUID, 2001},
+		{got.TmuxDir, 2001, 2001},
+		{got.TmpDir, 2001, 2001},
+	} {
+		if !slices.Contains(*chowns, want) {
+			t.Errorf("missing chown %v in %v", want, *chowns)
+		}
+	}
+	// Lost with /run when the box stops, and made again at the next start.
+	if err := os.RemoveAll(team.RunDir); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := team.Ensure(ctx, "builder"); err != nil {
+		t.Fatal(err)
+	}
+	if info, err := os.Lstat(got.TmpDir); err != nil || info.Mode() != os.ModeDir|0o700 {
+		t.Errorf("tmp after /run was lost: %v, %v", info, err)
+	}
+}
+
+// A link in place of any of the agent's run folders is refused, never
+// followed or chowned.
+func TestEnsureRefusesALinkedRunFolder(t *testing.T) {
+	for _, rel := range []string{"builder", "builder/tmux", "builder/tmp"} {
+		t.Run(rel, func(t *testing.T) {
+			team, _, chowns := newTestTeam(t)
+			target := t.TempDir()
+			before, err := os.Stat(target)
+			if err != nil {
+				t.Fatal(err)
+			}
+			link := filepath.Join(team.RunDir, rel)
+			if err := os.MkdirAll(filepath.Dir(link), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(target, link); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := team.Ensure(context.Background(), "builder"); err == nil {
+				t.Fatalf("Ensure accepted %s as a link", rel)
+			}
+			for _, c := range *chowns {
+				if c.path == link || strings.HasPrefix(c.path, target) {
+					t.Errorf("chowned through the link: %v", c)
+				}
+			}
+			if info, err := os.Stat(target); err != nil || info.Mode() != before.Mode() {
+				t.Errorf("the link's target changed: %v, %v", info, err)
+			}
+		})
 	}
 }

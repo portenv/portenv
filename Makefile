@@ -120,6 +120,7 @@ test: $(TOOLS_STAMP)
 	scripts/test-notarize.sh
 	scripts/test-workspace-word.sh
 	scripts/test-check-terminal-views.sh
+	scripts/test-attached-terminal.sh
 	scripts/test-check-ssh-keygen.sh
 	scripts/test-check-dev-previews.sh
 
@@ -224,6 +225,19 @@ APP_BUILD := $(HOME)/Library/Caches/Portenv/app-build-$(INSTANCE)
 # never reads PORTENV_INSTANCE, a dev one refuses any other value.
 LDFLAGS += -X github.com/portenv/portenv/core/internal/instance.stamp=$(INSTANCE)
 endif
+# ATTACHED_TERMINAL=1 (a dev lane only, ADR 0020 decision 12): the main
+# window shows the old attached terminal instead of the control-mode tab
+# terminal, until the latency gate passes. The app carries a marker
+# (PortenvAttachedTerminal in Info.plist, and a string in its binary) that
+# check-app-identity.sh and release-local.sh refuse in a release build.
+ATTACHED_TERMINAL ?=
+ifneq ($(ATTACHED_TERMINAL),)
+ifeq ($(LANE),)
+$(error ATTACHED_TERMINAL=1 is for a dev lane's build only: add LANE=X)
+endif
+APP_SWIFTFLAGS := -Xswiftc -DPORTENV_ATTACHED_TERMINAL
+APP_BUILD := $(APP_BUILD)-attached
+endif
 # Swift builds run with a clean environment: SwiftPM's plugin caches record
 # the environment they ran in, so a session token or other secret in the
 # shell would end up on disk under .build (scripts/check-swift-env.sh).
@@ -232,7 +246,7 @@ app: build $(TOOLS_STAMP)
 	# Source paths remapped: a release build never carries this machine's paths.
 	# A lane build also compiles the dev-only previews (R-0220); a release
 	# build never does, and check-dev-previews.sh checks its binary below.
-	cd apps/mac && $(SWIFT) build -c release --scratch-path "$(APP_BUILD)" $(if $(LANE),-Xswiftc -DPORTENV_DEV_PREVIEWS) \
+	cd apps/mac && $(SWIFT) build -c release --scratch-path "$(APP_BUILD)" $(if $(LANE),-Xswiftc -DPORTENV_DEV_PREVIEWS) $(APP_SWIFTFLAGS) \
 		-Xswiftc -file-prefix-map -Xswiftc "$(CURDIR)/=" -Xcc -ffile-prefix-map="$(CURDIR)/=" \
 		-Xswiftc -file-prefix-map -Xswiftc "$(APP_BUILD)/=build/" -Xcc -ffile-prefix-map="$(APP_BUILD)/=build/"
 	rm -rf $(BIN)/Portenv.app && mkdir -p $(BIN)/Portenv.app/Contents/MacOS
@@ -246,6 +260,7 @@ app: build $(TOOLS_STAMP)
 	for f in portenv portenvd restic; do codesign --force --sign - $(BIN)/Portenv.app/Contents/Helpers/$$f; done
 	cp apps/mac/Info.plist $(BIN)/Portenv.app/Contents/Info.plist
 	/usr/libexec/PlistBuddy -c "Add :PortenvBuildID string $(BUILD_ID)" $(BIN)/Portenv.app/Contents/Info.plist
+	$(if $(ATTACHED_TERMINAL),/usr/libexec/PlistBuddy -c "Add :PortenvAttachedTerminal bool true" $(BIN)/Portenv.app/Contents/Info.plist)
 	# The app icon (R-0128); a dev lane's carries its letter, so it's never
 	# mistaken for the release app.
 	scripts/make-app-icon.sh apps/mac/Resources/Assets.xcassets/AppIcon.appiconset \

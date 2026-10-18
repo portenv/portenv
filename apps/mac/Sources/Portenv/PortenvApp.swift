@@ -13,6 +13,7 @@ struct PortenvApp: App {
     @State private var model = AppModel()
 
     init() {
+        AppTerminal.announce()
         // A dev lane's build refuses an environment naming another lane, before
         // it touches a login item, keys or a folder (Instance, gmake app LANE=X).
         if let problem = Instance.current.mismatch(environment: ProcessInfo.processInfo.environment) {

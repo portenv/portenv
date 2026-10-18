@@ -346,8 +346,16 @@ func (t *tabStream) input(b []byte) (map[uint64]int, error) {
 		n := min(len(b), inputChunk)
 		chunk := b[:n]
 		b = b[n:]
+		// An Enter's author is recorded once tmux has the keys, in the
+		// pane's lane: a prompt drawn before them can't end it (R-0177).
+		var after ctlPending
 		if strings.ContainsAny(string(chunk), "\r\n") {
-			c.typed(t.pane, t.author, t.agentID)
+			pane, name, agentID := t.pane, t.author, t.agentID
+			after = ctlPending{lanePane: pane, onReply: func(failed bool) {
+				if !failed {
+					c.typed(pane, name, agentID)
+				}
+			}}
 		}
 		var sb strings.Builder
 		sb.WriteString("copy-mode -q -t " + t.pane + " ; send-keys -t " + t.pane + " -H")
@@ -355,7 +363,7 @@ func (t *tabStream) input(b []byte) (map[uint64]int, error) {
 		for i := 0; i < len(h); i += 2 {
 			sb.WriteString(" " + h[i:i+2])
 		}
-		id, err := c.send(sb.String(), "", nil)
+		id, err := c.sendWith(sb.String(), after)
 		if err != nil {
 			return nil, err
 		}

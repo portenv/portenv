@@ -387,6 +387,140 @@ extension BoxState {
     }
 }
 
+/// Each tab's terminal through portenvd's TabTerminal (ADR 0020).
+extension DaemonClient: TabTerminalTransport {
+    public func tabTerminal(box: String, session: String, tab: String, size: TabTerminalSize) -> TabTerminalConnection {
+        let api = self.api
+        let (requests, outbox) = AsyncStream.makeStream(of: Portenv_Daemon_V1_TabTerminalRequest.self)
+        outbox.yield(.with {
+            $0.open = .with {
+                $0.box = box
+                $0.session = session
+                $0.tab = tab
+                $0.size = .init(size)
+            }
+        })
+        let running = RunningCall()
+        let messages = AsyncThrowingStream<TabTerminalMessage, Error> { continuation in
+            let task = Task {
+                do {
+                    let request = StreamingClientRequest(of: Portenv_Daemon_V1_TabTerminalRequest.self) { writer in
+                        for await r in requests { try await writer.write(r) }
+                    }
+                    try await api.tabTerminal(request: request) { response in
+                        for try await m in response.messages {
+                            if let message = TabTerminalMessage(m) { continuation.yield(message) }
+                        }
+                    }
+                    continuation.finish()
+                } catch let e as RPCError {
+                    continuation.finish(throwing: TabTerminalStreamError(rpc: e))
+                } catch {
+                    continuation.finish(throwing: TabTerminalStreamError(error.localizedDescription, permanent: false))
+                }
+            }
+            running.set(task)
+            continuation.onTermination = { _ in
+                task.cancel()
+                outbox.finish()
+            }
+        }
+        return TabTerminalConnection(
+            messages: messages,
+            send: { r in
+                switch r {
+                case let .input(bytes): outbox.yield(.with { $0.input = Data(bytes) })
+                case let .resize(size): outbox.yield(.with { $0.resize = .init(size) })
+                }
+            },
+            close: {
+                outbox.finish()
+                running.cancel()
+            }
+        )
+    }
+}
+
+/// The task running a stream, for its close.
+private final class RunningCall: @unchecked Sendable {
+    private let lock = NSLock()
+    private var task: Task<Void, Never>?
+    private var cancelled = false
+
+    func set(_ t: Task<Void, Never>) {
+        let cancel = lock.withLock { () -> Bool in
+            task = t
+            return cancelled
+        }
+        if cancel { t.cancel() }
+    }
+
+    func cancel() {
+        lock.withLock {
+            cancelled = true
+            return task
+        }?.cancel()
+    }
+}
+
+extension Portenv_Daemon_V1_TerminalSize {
+    init(_ s: TabTerminalSize) {
+        self.init()
+        cols = UInt32(clamping: s.cols)
+        rows = UInt32(clamping: s.rows)
+    }
+}
+
+extension TabTerminalSize {
+    init(_ s: Portenv_Daemon_V1_TerminalSize) {
+        self.init(cols: Int(s.cols), rows: Int(s.rows))
+    }
+}
+
+extension TabTerminalMessage {
+    /// portenvd's message, or nil for one this app doesn't know (a newer
+    /// portenvd's).
+    init?(_ m: Portenv_Daemon_V1_TabTerminalResponse) {
+        switch m.msg {
+        case let .reset(r):
+            self = .reset(TabTerminalSize(r.size), seed: [UInt8](r.seed), skipped: r.skipped)
+        case let .output(d):
+            self = .output([UInt8](d))
+        case let .resized(s):
+            self = .resized(TabTerminalSize(s))
+        case let .author(a):
+            self = .author(line: a.line, name: a.name, isYou: a.isYou, agentID: a.agentID)
+        case let .end(e):
+            switch e {
+            case .boxStopping: self = .boxStopping
+            default: self = .tabClosed
+            }
+        case .none:
+            return nil
+        }
+    }
+}
+
+extension TabTerminalStreamError {
+    /// portenvd's refusal, as the view shows it. A call this portenvd
+    /// doesn't have, a workspace that can't show the app's terminal, or a
+    /// request it refuses won't change by trying again.
+    init(rpc e: RPCError) {
+        switch e.code {
+        case .unimplemented:
+            self.init(DaemonError.outOfDate, permanent: true)
+        case .failedPrecondition where e.message.contains("is not open on this Mac"):
+            // portenvd restarted and hasn't reopened the workspace yet: the
+            // app reopens it, so this passes (R-0242).
+            self.init(e.message, permanent: false)
+        case .failedPrecondition, .invalidArgument, .permissionDenied, .unauthenticated, .notFound:
+            self.init(e.message, permanent: true)
+        default:
+            self.init(e.message, permanent: false)
+        }
+    }
+}
+
 extension DaemonClient: ServerKeys {
     public func serverKeys() async throws -> [ServerKeyInfo] {
         try await call { try await api.listServers(.init()).infos.map { Self.info($0) } }

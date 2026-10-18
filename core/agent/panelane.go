@@ -3,9 +3,11 @@
 package agent
 
 import (
-	"strings"
+	"regexp"
 	"sync"
 )
+
+var paneIDRE = regexp.MustCompile(`^%[0-9]+$`)
 
 // The tmux reader never waits on a parser or a stream (R-0178): it decodes
 // each line and hands a pane's events to that pane's lane, a goroutine that
@@ -170,10 +172,20 @@ func (c *ctlClient) stopLanes() {
 
 // pruneLanes takes the session's pane list and ends the lanes of panes not
 // in it, with their parsers.
-func (c *ctlClient) pruneLanes(lines []string) {
+//
+// A reply that failed, or holds anything but pane IDs, is ignored: ending
+// every lane on an error's text would start fresh parsers with no reset,
+// losing marks and the pen silently (R-0180).
+func (c *ctlClient) pruneLanes(lines []string, failed bool) {
+	if failed {
+		return
+	}
 	live := map[string]bool{}
 	for _, l := range lines {
-		live[strings.TrimSpace(l)] = true
+		if !paneIDRE.MatchString(l) {
+			return
+		}
+		live[l] = true
 	}
 	c.lmu.Lock()
 	var gone []*paneLane

@@ -194,22 +194,25 @@ public struct BackgroundServiceProblem: Equatable, Sendable {
     public let message: String
     public let opensLoginItems: Bool
     public let offersTryAgain: Bool
-    public init(message: String, opensLoginItems: Bool, offersTryAgain: Bool) {
+    /// Whether the wait for portenvd should end (a refusal); approval keeps
+    /// waiting, with Try Again too (R-0250).
+    public let endsWait: Bool
+    public init(message: String, opensLoginItems: Bool, offersTryAgain: Bool, endsWait: Bool? = nil) {
         self.message = message
         self.opensLoginItems = opensLoginItems
         self.offersTryAgain = offersTryAgain
+        self.endsWait = endsWait ?? offersTryAgain
     }
-
-    /// Whether the wait for portenvd should end (a refusal); approval keeps
-    /// waiting.
-    public var endsWait: Bool { offersTryAgain }
 
     public static func of(status: ServiceStatus, launchdJob: String, placement _: AppPlacement) -> BackgroundServiceProblem? {
         if LaunchdJob.refused(in: launchdJob) {
             return BackgroundServiceProblem(message: ServiceText.notStarted, opensLoginItems: true, offersTryAgain: true)
         }
         if status != .enabled {
-            return BackgroundServiceProblem(message: ServiceText.needsApproval, opensLoginItems: true, offersTryAgain: false)
+            // Try Again too: after the person turns Portenv on, it checks
+            // again at once, and again whenever the app comes to the front
+            // (R-0250).
+            return BackgroundServiceProblem(message: ServiceText.needsApproval, opensLoginItems: true, offersTryAgain: true, endsWait: false)
         }
         return nil
     }

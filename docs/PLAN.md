@@ -1143,6 +1143,10 @@ In this order:
                 - a reset clears the filter too;
                 - dropped text and Services are refused;
                 - the lint fails on any delegate assignment outside the factory and the tab view, and the runtime check also runs in the relay's paths.
+            - **Built (PR 6, 2026-10-14, awaiting review):** the main window shows the current tab's own terminal through portenvd's `TabTerminal`.
+              - **Losing the stream:** "Reconnecting…" while it comes back, then "Disconnected" with Reconnect.
+              - **The dev-only switch:** `gmake app LANE=X ATTACHED_TERMINAL=1` brings back the attached terminal. Each of its four release guards has a test that fails without it.
+              - **Also in the helper:** a pending Enter's author ends at the next prompt (R-0177). Failed replies are never read as data, so a failed pane list ends no lane (R-0180).
           - **the latency gate:** keystroke to echo no worse than the attached client by more than 5 ms at p95 locally (within ±0.25 ms at tmux, measured), and the same run on the us-west-2 tester server once it exists. Until it passes, a dev-only switch back to the attached client, which never reaches a release build;
           - tmux pinned in the image (3.4) and checked at attach;
           - #73's and #75's no-loss guarantees carried over, with tests.

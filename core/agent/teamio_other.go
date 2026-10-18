@@ -21,3 +21,7 @@ func runAsAgent(_ context.Context, _ int, _ []string, _ io.Reader, local func(io
 	err := local(&out)
 	return out.Bytes(), err
 }
+
+func runAsAgentInTeam(ctx context.Context, uid int, args []string, stdin io.Reader, local func(io.Writer) error) ([]byte, error) {
+	return runAsAgent(ctx, uid, args, stdin, local)
+}

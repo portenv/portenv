@@ -3377,14 +3377,20 @@ type StartTeamAgentRequest struct {
 	// AGENTS.md in its home: the generated block (R-0246), then the file's
 	// instructions.
 	AgentsMd string `protobuf:"bytes,3,opt,name=agents_md,json=agentsMd,proto3" json:"agents_md,omitempty"`
-	// Repository paths copied into its home on first start (§2).
+	// Repository paths copied into its home on first start (§2), from
+	// project_dir: regular files and folders only, never through a link,
+	// at most 100 MB together, new files only; ~/.portenv-seeded records it.
 	HomeSeed       []string `protobuf:"bytes,4,rep,name=home_seed,json=homeSeed,proto3" json:"home_seed,omitempty"`
 	HomeQuotaBytes int64    `protobuf:"varint,5,opt,name=home_quota_bytes,json=homeQuotaBytes,proto3" json:"home_quota_bytes,omitempty"`
 	// The runner's idle-input pattern (RE2, matched against the main pane's
 	// last line) from portenvd's runner table: DeliverRoutine types only
 	// when it matches, with no question on screen, 5 s of quiet and not the
 	// alternate screen. Empty: routines are off for this runner (R-0258).
-	IdlePattern   string `protobuf:"bytes,6,opt,name=idle_pattern,json=idlePattern,proto3" json:"idle_pattern,omitempty"`
+	IdlePattern string `protobuf:"bytes,6,opt,name=idle_pattern,json=idlePattern,proto3" json:"idle_pattern,omitempty"`
+	// The owner's project, /home/<main user>/<workspace>, that home_seed's
+	// paths are copied from, as the agent with the team group, on its first
+	// start (ADR 0022 §2). Required when home_seed isn't empty.
+	ProjectDir    string `protobuf:"bytes,9,opt,name=project_dir,json=projectDir,proto3" json:"project_dir,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3457,6 +3463,13 @@ func (x *StartTeamAgentRequest) GetHomeQuotaBytes() int64 {
 func (x *StartTeamAgentRequest) GetIdlePattern() string {
 	if x != nil {
 		return x.IdlePattern
+	}
+	return ""
+}
+
+func (x *StartTeamAgentRequest) GetProjectDir() string {
+	if x != nil {
+		return x.ProjectDir
 	}
 	return ""
 }
@@ -5662,14 +5675,16 @@ const file_portenv_agent_v1_agent_proto_rawDesc = "" +
 	"\x05state\x18\x04 \x01(\x0e2\x1c.portenv.types.v1.AgentStateR\x05state\x125\n" +
 	"\x06status\x18\x05 \x01(\v2\x1d.portenv.types.v1.AgentStatusR\x06status\x12+\n" +
 	"\x11pending_decisions\x18\x06 \x01(\x05R\x10pendingDecisions\x12!\n" +
-	"\fidle_seconds\x18\a \x01(\x03R\vidleSeconds\"\xcd\x01\n" +
+	"\fidle_seconds\x18\a \x01(\x03R\vidleSeconds\"\xee\x01\n" +
 	"\x15StartTeamAgentRequest\x12\x19\n" +
 	"\bagent_id\x18\x01 \x01(\tR\aagentId\x12\x12\n" +
 	"\x04argv\x18\x02 \x03(\tR\x04argv\x12\x1b\n" +
 	"\tagents_md\x18\x03 \x01(\tR\bagentsMd\x12\x1b\n" +
 	"\thome_seed\x18\x04 \x03(\tR\bhomeSeed\x12(\n" +
 	"\x10home_quota_bytes\x18\x05 \x01(\x03R\x0ehomeQuotaBytes\x12!\n" +
-	"\fidle_pattern\x18\x06 \x01(\tR\vidlePattern\"C\n" +
+	"\fidle_pattern\x18\x06 \x01(\tR\vidlePattern\x12\x1f\n" +
+	"\vproject_dir\x18\t \x01(\tR\n" +
+	"projectDir\"C\n" +
 	"\x16StartTeamAgentResponse\x12)\n" +
 	"\x04tabs\x18\x01 \x03(\v2\x15.portenv.types.v1.TabR\x04tabs\"1\n" +
 	"\x14StopTeamAgentRequest\x12\x19\n" +

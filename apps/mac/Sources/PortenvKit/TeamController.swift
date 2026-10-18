@@ -28,9 +28,6 @@ public final class TeamController {
     public private(set) var supported = true
     /// The agent file on show for Approve, fetched from portenvd.
     public private(set) var review: AgentFileReview?
-    /// The agent the owner is starting, while the team's first start waits
-    /// for their decision.
-    public private(set) var pendingStart: String?
     private let daemon: DaemonAPI
     private let retry: Duration
 
@@ -66,21 +63,19 @@ public final class TeamController {
     }
 
     /// Approve or Decline (with the owner's reason); only a pending
-    /// decision can be answered.
+    /// decision can be answered. The team's first start is portenvd's to
+    /// carry out: its Approve starts the agents the decision names, there,
+    /// so it works whatever this app remembers (R-0296). An answered
+    /// decision shown on its own closes, to the first agent it starts.
     public func answer(_ decision: TeamDecision, approve: Bool, note: String = "") async {
         guard decision.answerable else { return }
         await perform {
             let d = try await self.daemon.answerDecision(self.box, id: decision.id, approve: approve, note: note)
             self.state.apply(.decision(d))
-        }
-        // The team's first start: Approve starts the agent the owner was
-        // starting; Decline starts nothing.
-        guard decision.kind == .teamStart, let agent = pendingStart,
-              state.decisions.first(where: { $0.id == decision.id })?.state != .pending else { return }
-        if approve, state.decisions.first(where: { $0.id == decision.id })?.state == .approved {
-            await start(agent)
-        } else {
-            pendingStart = nil
+            if self.selection == .decision(d.id), !d.answerable {
+                let next = d.state == .approved ? d.startAgents.first { self.state.agent($0) != nil } : nil
+                self.selection = next.map { .agent($0) } ?? .allTabs
+            }
         }
     }
 
@@ -99,28 +94,26 @@ public final class TeamController {
     public func canStart(_ a: TeamAgent) -> Bool { a.approved && !a.remote && a.status == .stopped }
 
     /// Starts an agent whose file is approved. The team's first start waits
-    /// for the owner's team-start decision; approving it starts this agent.
+    /// for the owner's team-start decision, which names this agent;
+    /// approving it starts the agent in portenvd.
     public func start(_ agent: String) async {
         if let a = state.agent(agent), !a.approved {
             error = TeamText.approveFirst(a.name)
             return
         }
-        pendingStart = agent
         await perform {
             self.state.apply(.agent(try await self.daemon.startAgent(self.box, id: agent)))
-            self.pendingStart = nil
         }
     }
 
     public func stop(_ agent: String) async {
-        if pendingStart == agent { pendingStart = nil }
         await perform { self.state.apply(.agent(try await self.daemon.stopAgent(self.box, id: agent))) }
     }
 
     /// The decisions shown in an agent's column: what it asks, and the
-    /// team's first start while it's the agent the owner is starting.
+    /// team's first start while it names this agent.
     public func decisions(for agent: String) -> [TeamDecision] {
-        state.needsYou.filter { $0.from == agent || ($0.kind == .teamStart && pendingStart == agent) }
+        state.needsYou.filter { $0.from == agent || ($0.kind == .teamStart && $0.startAgents.contains(agent)) }
     }
 
     /// The decision selected on its own (one Portenv asks).

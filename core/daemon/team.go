@@ -70,6 +70,10 @@ type teamEngine struct {
 
 	flightMu sync.Mutex
 	inflight map[string]int // "<box>/<agent>" → calls in flight
+
+	// starts is the agent starts an approved team_start set going, so
+	// tests can wait for them.
+	starts sync.WaitGroup
 }
 
 func newTeamEngine(helper func(context.Context, string) (agentv1.AgentServiceClient, error), loadTeam func(context.Context, string) (Team, error)) *teamEngine {
@@ -365,7 +369,8 @@ func (e *teamEngine) msgLocked(ctx context.Context, name string, b *teamBox, tea
 }
 
 // decideLocked makes a pending decision for the owner.
-func (e *teamEngine) decideLocked(ctx context.Context, name string, b *teamBox, from string, kind typesv1.DecisionKind, summary, detail string, action *agentv1.AgentPaneActionRequest, id string) *agentv1.TeamCallsRequest {
+// startIDs is what a team_start's Approve starts.
+func (e *teamEngine) decideLocked(ctx context.Context, name string, b *teamBox, from string, kind typesv1.DecisionKind, summary, detail string, action *agentv1.AgentPaneActionRequest, id string, startIDs ...string) *agentv1.TeamCallsRequest {
 	if from != boardFrom && len(b.pendingLocked(from)) >= pendingDecisionsPerAgent {
 		return refuse(id, "%s has %d requests waiting for the owner, its limit. Wait for an answer first.", from, pendingDecisionsPerAgent)
 	}
@@ -379,7 +384,7 @@ func (e *teamEngine) decideLocked(ctx context.Context, name string, b *teamBox, 
 	d := &typesv1.Decision{
 		Id: newULID(now), From: from, Kind: kind, Summary: summary, Detail: detail,
 		State: typesv1.DecisionState_DECISION_STATE_PENDING, CreatedAt: timestamppb.New(now),
-		ExpiresAt: timestamppb.New(now.Add(decisionExpiry)),
+		ExpiresAt: timestamppb.New(now.Add(decisionExpiry)), StartAgentIds: startIDs,
 	}
 	if err := e.appendLocked(ctx, name, b, &agentv1.AppendBoardRequest{Line: &agentv1.AppendBoardRequest_Decision{Decision: d}}); err != nil {
 		return refuse(id, "%v", err)
@@ -550,6 +555,9 @@ func (e *teamEngine) answerLocked(ctx context.Context, name string, b *teamBox, 
 		return nil, err
 	}
 	delete(b.actions, decisionID)
+	if approve && x.GetKind() == typesv1.DecisionKind_DECISION_KIND_TEAM_START {
+		e.startApprovedLocked(ctx, name, b, x)
+	}
 	if approve && action != nil {
 		pane, err := e.doPaneLocked(ctx, name, b, action)
 		if err != nil {
@@ -615,8 +623,16 @@ func (t *Team) agent(id string) *TeamAgent {
 }
 
 // startAgent starts an approved, valid agent. A team's first start waits
-// for the owner's team_start approval, which carries §2's residual risk.
+// for the owner's team_start approval, which carries §2's residual risk;
+// the decision names the agent, and Approve starts it (R-0296). An agent
+// already starting or running isn't started again.
 func (e *teamEngine) startAgent(ctx context.Context, name, agentID string) (*daemonv1.AgentInfo, error) {
+	return e.startAgentAs(ctx, name, agentID, false)
+}
+
+// startAgentAs is startAgent; approved is a start the owner's team_start
+// Approve set going, which answerLocked already showed as starting.
+func (e *teamEngine) startAgentAs(ctx context.Context, name, agentID string, approved bool) (*daemonv1.AgentInfo, error) {
 	team, err := e.loadTeam(ctx, name)
 	if err != nil {
 		return nil, err
@@ -641,16 +657,13 @@ func (e *teamEngine) startAgent(ctx context.Context, name, agentID string) (*dae
 	}
 	defer b.mu.Unlock()
 	if !b.teamStartApprovedLocked() {
-		if !b.teamStartPendingLocked() {
-			r := e.decideLocked(ctx, name, b, boardFrom, typesv1.DecisionKind_DECISION_KIND_TEAM_START,
-				"Start this workspace's agent team?",
-				"Each agent runs as its own user in this workspace, with its own terminals and files, and asks you before it opens a pane in your window. "+
-					"Agents can pass through your home folder to reach the project (it becomes 0711); your logins and private folders stay yours, and Stop Team doesn't change it back. "+residualRisk, nil, "")
-			if !r.GetOk() {
-				return nil, errors.New(r.GetLine())
-			}
+		if err := e.askTeamStartLocked(ctx, name, b, agentID); err != nil {
+			return nil, err
 		}
 		return nil, errors.New("approve the team's first start in Portenv first")
+	}
+	if s := b.states[agentID]; !approved && (s == typesv1.AgentState_AGENT_STATE_STARTING || s == typesv1.AgentState_AGENT_STATE_RUNNING) {
+		return e.infoLocked(b, a), nil
 	}
 	h, err := e.helper(ctx, name)
 	if err != nil {
@@ -734,6 +747,97 @@ func (e *teamEngine) stopAgent(ctx context.Context, name, agentID string) (*daem
 	return info, nil
 }
 
+// askTeamStartLocked makes the team_start decision naming the agent, or
+// adds the agent to the one already waiting (R-0296).
+func (e *teamEngine) askTeamStartLocked(ctx context.Context, name string, b *teamBox, agentID string) error {
+	if d := b.teamStartPendingLocked(); d != nil {
+		if slices.Contains(d.GetStartAgentIds(), agentID) {
+			return nil
+		}
+		x := proto.CloneOf(d)
+		x.StartAgentIds = append(x.StartAgentIds, agentID)
+		return e.appendLocked(ctx, name, b, &agentv1.AppendBoardRequest{Line: &agentv1.AppendBoardRequest_Decision{Decision: x}})
+	}
+	r := e.decideLocked(ctx, name, b, boardFrom, typesv1.DecisionKind_DECISION_KIND_TEAM_START,
+		"Start this workspace's agent team?",
+		"Each agent runs as its own user in this workspace, with its own terminals and files, and asks you before it opens a pane in your window. "+
+			"Agents can pass through your home folder to reach the project (it becomes 0711); your logins and private folders stay yours, and Stop Team doesn't change it back. "+residualRisk,
+		nil, "", agentID)
+	if !r.GetOk() {
+		return errors.New(r.GetLine())
+	}
+	return nil
+}
+
+// startApprovedLocked starts the agents an approved team_start names, in
+// portenvd, whatever the app remembers (R-0296): each shows as starting
+// now, then starts in the background; one that can't start goes back to
+// stopped, and the owner is told why on the board.
+func (e *teamEngine) startApprovedLocked(ctx context.Context, name string, b *teamBox, d *typesv1.Decision) {
+	ids := d.GetStartAgentIds()
+	if len(ids) == 0 {
+		return
+	}
+	team, err := e.loadTeam(ctx, name)
+	if err != nil {
+		e.noticeLocked(ctx, name, b, boardOwner, d.GetId(), "Portenv couldn't start the team: "+err.Error()+". Click Start again.")
+		return
+	}
+	var starting []string
+	for _, id := range ids {
+		a := team.agent(id)
+		if a == nil {
+			continue
+		}
+		if s := b.states[id]; s == typesv1.AgentState_AGENT_STATE_STARTING || s == typesv1.AgentState_AGENT_STATE_RUNNING {
+			continue
+		}
+		b.states[id] = typesv1.AgentState_AGENT_STATE_STARTING
+		b.events = append(b.events, teamEvent{agent: e.infoLocked(b, a)})
+		starting = append(starting, id)
+	}
+	if len(starting) == 0 {
+		return
+	}
+	b.changedLocked()
+	bg := context.WithoutCancel(ctx)
+	e.starts.Add(1)
+	go func() {
+		defer e.starts.Done()
+		for _, id := range starting {
+			if _, err := e.startAgentAs(bg, name, id, true); err != nil {
+				e.startFailed(bg, name, id, d.GetId(), err)
+			}
+		}
+	}()
+}
+
+// startFailed puts an agent an approval was starting back to stopped, and
+// tells the owner why.
+func (e *teamEngine) startFailed(ctx context.Context, name, agentID, decisionID string, cause error) {
+	team, err := e.loadTeam(ctx, name)
+	if err != nil {
+		return
+	}
+	b, err := e.lockBox(ctx, name)
+	if err != nil {
+		return
+	}
+	defer b.mu.Unlock()
+	if b.states[agentID] == typesv1.AgentState_AGENT_STATE_STARTING {
+		b.states[agentID] = typesv1.AgentState_AGENT_STATE_STOPPED
+	}
+	who := agentID
+	if a := team.agent(agentID); a != nil {
+		b.events = append(b.events, teamEvent{agent: e.infoLocked(b, a)})
+		b.changedLocked()
+		if a.Spec != nil && a.Spec.Name != "" {
+			who = a.Spec.Name
+		}
+	}
+	e.noticeLocked(ctx, name, b, boardOwner, decisionID, who+" couldn't start: "+cause.Error())
+}
+
 func (b *teamBox) teamStartApprovedLocked() bool {
 	for _, d := range b.decisions {
 		if d.GetKind() == typesv1.DecisionKind_DECISION_KIND_TEAM_START && d.GetState() == typesv1.DecisionState_DECISION_STATE_APPROVED {
@@ -743,13 +847,15 @@ func (b *teamBox) teamStartApprovedLocked() bool {
 	return false
 }
 
-func (b *teamBox) teamStartPendingLocked() bool {
+// teamStartPendingLocked is the team_start decision waiting for the
+// owner, if there is one.
+func (b *teamBox) teamStartPendingLocked() *typesv1.Decision {
 	for _, d := range b.pendingLocked(boardFrom) {
 		if d.GetKind() == typesv1.DecisionKind_DECISION_KIND_TEAM_START {
-			return true
+			return d
 		}
 	}
-	return false
+	return nil
 }
 
 // infoLocked is an agent's row for the Team sidebar.

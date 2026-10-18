@@ -119,9 +119,10 @@ struct TeamApprovalTests {
         #expect(!team.canStart(invalid))
     }
 
-    /// The team's first start raises portenvd's team-start decision: it
-    /// shows in the agent's column, the owner answers it there, and
-    /// Approve starts the agent they asked for.
+    /// The team's first start raises portenvd's team-start decision, which
+    /// names the agent: it shows in that agent's column, the owner answers
+    /// it there, and portenvd starts the agent (R-0296); the app doesn't
+    /// start it again.
     @Test func theFirstStartIsTheOwnersDecision() async {
         let daemon = FakeDaemon()
         var approved = lead
@@ -131,17 +132,18 @@ struct TeamApprovalTests {
         await team.start("lead")
         #expect(team.error == "approve the team's first start in Portenv first")
         let ask = TeamDecision(id: "d-start", from: "portenv", kind: .teamStart, summary: "Start this workspace's agent team?",
-                               detail: "Each agent runs as its own user. Agents can change your project's files.")
+                               detail: "Each agent runs as its own user. Agents can change your project's files.", startAgents: ["lead"])
         team.receive(.decision(ask))
         #expect(team.decisions(for: "lead").map(\.id) == ["d-start"])
+        #expect(team.decisions(for: "builder").isEmpty)
         #expect(TeamText.asker(ask, team: team.state.agents) == "Portenv")
         var yes = ask
         yes.state = .approved
         daemon.answered = ["d-start": yes]
         await team.answer(ask, approve: true)
         #expect(daemon.calls.filter { ["answer-decision", "start-agent"].contains($0[1]) }.map { $0[1] }
-            == ["start-agent", "answer-decision", "start-agent"])
-        #expect(team.state.agent("lead")?.status == .starting)
+            == ["start-agent", "answer-decision"])
+        #expect(team.error == nil)
         #expect(team.decisions(for: "lead").isEmpty)
     }
 
@@ -153,13 +155,59 @@ struct TeamApprovalTests {
         let team = await controller(daemon, agents: [approved])
         daemon.failingOnce["start-agent"] = "approve the team's first start in Portenv first"
         await team.start("lead")
-        let ask = TeamDecision(id: "d-start", from: "portenv", kind: .teamStart, summary: "Start this workspace's agent team?")
+        let ask = TeamDecision(id: "d-start", from: "portenv", kind: .teamStart, summary: "Start this workspace's agent team?", startAgents: ["lead"])
         team.receive(.decision(ask))
         var no = ask
         no.state = .declined
         daemon.answered = ["d-start": no]
         await team.answer(ask, approve: false)
         #expect(daemon.calls.filter { $0[1] == "start-agent" }.count == 1)
+    }
+
+    /// R-0296: after a relaunch the app has no memory of the Start click;
+    /// the decision, from portenvd, names Lead. Approve on the card shown
+    /// on its own closes it to Lead's column, and Lead's state comes from
+    /// portenvd: the card never stays without its buttons.
+    @Test func anAnsweredTeamStartCardClosesToTheAgent() async {
+        let daemon = FakeDaemon()
+        var approved = lead
+        approved.approved = true
+        let ask = TeamDecision(id: "d-start", from: "portenv", kind: .teamStart, summary: "Start this workspace's agent team?",
+                               startAgents: ["lead"])
+        daemon.teamScripts = [.init(events: [(.agent(approved), "c1"), (.decision(ask), "c2")], failure: DaemonError.outOfDate)]
+        let team = TeamController(box: "acme", daemon: daemon)
+        await team.follow()
+        team.selection = .decision("d-start")
+        #expect(team.selectedDecision?.answerable == true)
+        var yes = ask
+        yes.state = .approved
+        yes.answeredAt = Date()
+        daemon.answered = ["d-start": yes]
+        await team.answer(ask, approve: true)
+        #expect(team.selection == .agent("lead"))
+        #expect(team.selectedDecision == nil)
+        #expect(team.state.needsYou.isEmpty)
+        #expect(!daemon.calls.contains { $0[1] == "start-agent" })
+        // What the card says once answered, until Lead runs.
+        let line = TeamText.answered(yes, team: team.state.agents) ?? ""
+        #expect(line.hasPrefix("Approved at "))
+        #expect(line.hasSuffix(" \u{00B7} starting Lead\u{2026}"))
+        var running = approved
+        running.status = .running
+        team.receive(.agent(running))
+        #expect(TeamText.answered(yes, team: team.state.agents)?.contains("starting") == false)
+        #expect(TeamText.answered(ask, team: team.state.agents) == nil)
+
+        // Declined on its own: the card closes too, and starts nothing.
+        let again = TeamDecision(id: "d-start2", from: "portenv", kind: .teamStart, summary: "Start?", startAgents: ["lead"])
+        team.receive(.decision(again))
+        team.selection = .decision("d-start2")
+        var no = again
+        no.state = .declined
+        daemon.answered["d-start2"] = no
+        await team.answer(again, approve: false)
+        #expect(team.selection == .allTabs)
+        #expect(TeamText.answered(no, team: team.state.agents) == "Declined")
     }
 
     /// Only the owner's app approves an agent file. Everything an agent can

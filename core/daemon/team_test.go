@@ -296,6 +296,7 @@ func approveTeamStart(t *testing.T, e *teamEngine) {
 			if _, err := e.answer(context.Background(), "w", d.GetId(), true, ""); err != nil {
 				t.Fatal(err)
 			}
+			e.starts.Wait()
 			return
 		}
 	}
@@ -452,12 +453,138 @@ func TestStartAgentNeedsAnApprovedValidFile(t *testing.T) {
 	}
 }
 
-// approveFirstStart asks for a start, which makes the team_start decision,
-// and approves it.
+// approveFirstStart makes a team_start decision that names no agent, and
+// approves it: the team may start, and nothing has started yet.
 func approveFirstStart(t *testing.T, e *teamEngine) {
 	t.Helper()
-	_, _ = e.startAgent(context.Background(), "w", "lead")
+	ctx := context.Background()
+	b, err := e.lockBox(ctx, "w")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := e.decideLocked(ctx, "w", b, boardFrom, typesv1.DecisionKind_DECISION_KIND_TEAM_START, "Start this workspace's agent team?", residualRisk, nil, "")
+	b.mu.Unlock()
+	if !r.GetOk() {
+		t.Fatal(r.GetLine())
+	}
 	approveTeamStart(t, e)
+}
+
+// boardLines is what the helper's board holds, read back as a restarted
+// portenvd reads it.
+func (f *fakeTeamHelper) boardLines() []*agentv1.ReadBoardResponse {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var out []*agentv1.ReadBoardResponse
+	for _, l := range f.board {
+		switch {
+		case l.GetMessage() != nil:
+			out = append(out, &agentv1.ReadBoardResponse{Line: &agentv1.ReadBoardResponse_Message{Message: l.GetMessage()}})
+		case l.GetDecision() != nil:
+			out = append(out, &agentv1.ReadBoardResponse{Line: &agentv1.ReadBoardResponse_Decision{Decision: l.GetDecision()}})
+		}
+	}
+	return out
+}
+
+func (f *fakeTeamHelper) startedIDs() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var ids []string
+	for _, r := range f.started {
+		ids = append(ids, r.GetAgentId())
+	}
+	return ids
+}
+
+// R-0296: the team_start decision names the agents the owner clicked Start
+// on, and portenvd starts them itself on Approve, even when it (or the
+// app) restarted in between: the start never hangs on the app's memory.
+func TestApprovingTheTeamStartStartsTheNamedAgents(t *testing.T) {
+	e, h, _ := newTestEngine(t, defaultTeam()...)
+	ctx := context.Background()
+	if _, err := e.startAgent(ctx, "w", "lead"); err == nil {
+		t.Fatal("started without the team's first-start approval")
+	}
+	_, _ = e.startAgent(ctx, "w", "builder")
+	_, _ = e.startAgent(ctx, "w", "lead") // named once
+	d := e.box("w").teamStartPendingLocked()
+	if d == nil || !slices.Equal(d.GetStartAgentIds(), []string{"lead", "builder"}) {
+		t.Fatalf("team_start names %v, want [lead builder]", d.GetStartAgentIds())
+	}
+
+	// A fresh portenvd: only the board remembers.
+	fresh := newTeamEngine(
+		func(context.Context, string) (agentv1.AgentServiceClient, error) { return h, nil },
+		func(context.Context, string) (Team, error) { return Team{Agents: defaultTeam()}, nil },
+	)
+	fresh.now = e.now
+	fresh.readBoard = func(context.Context, string) ([]*agentv1.ReadBoardResponse, error) { return h.boardLines(), nil }
+	x, err := fresh.answer(ctx, "w", d.GetId(), true, "")
+	if err != nil || x.GetState() != typesv1.DecisionState_DECISION_STATE_APPROVED {
+		t.Fatalf("answer = %v, %v", x, err)
+	}
+	// Starting at once, so the app shows it while the helper works.
+	if s := fresh.agentInfos(ctx, "w")["lead"].GetState(); s != typesv1.AgentState_AGENT_STATE_STARTING && s != typesv1.AgentState_AGENT_STATE_RUNNING {
+		t.Errorf("lead right after Approve: %v", s)
+	}
+	fresh.starts.Wait()
+	if got := h.startedIDs(); !slices.Equal(got, []string{"lead", "builder"}) {
+		t.Fatalf("the helper started %v, want [lead builder]", got)
+	}
+	infos := fresh.agentInfos(ctx, "w")
+	for _, id := range []string{"lead", "builder"} {
+		if s := infos[id].GetState(); s != typesv1.AgentState_AGENT_STATE_RUNNING {
+			t.Errorf("%s: %v, want running", id, s)
+		}
+	}
+	if s := infos["reviewer"].GetState(); s != typesv1.AgentState_AGENT_STATE_STOPPED {
+		t.Errorf("reviewer, never asked for: %v", s)
+	}
+	// An app that still starts the agent itself after Approve starts
+	// nothing twice.
+	if _, err := fresh.startAgent(ctx, "w", "lead"); err != nil || len(h.startedIDs()) != 2 {
+		t.Errorf("a second Start: %v, started %v", err, h.startedIDs())
+	}
+}
+
+// Declining the team's first start starts nothing; an approved start that
+// fails goes back to stopped and tells the owner why.
+func TestATeamStartThatCantStartSaysWhy(t *testing.T) {
+	e, h, _ := newTestEngine(t, defaultTeam()...)
+	ctx := context.Background()
+	_, _ = e.startAgent(ctx, "w", "lead")
+	d := e.box("w").teamStartPendingLocked()
+	if _, err := e.answer(ctx, "w", d.GetId(), false, "not today"); err != nil {
+		t.Fatal(err)
+	}
+	e.starts.Wait()
+	if len(h.startedIDs()) != 0 || len(h.prepared) != 0 {
+		t.Fatalf("Decline started %v", h.startedIDs())
+	}
+
+	_, _ = e.startAgent(ctx, "w", "lead")
+	d = e.box("w").teamStartPendingLocked()
+	h.prepareErr = "~/.ssh can be read by others in this workspace."
+	if _, err := e.answer(ctx, "w", d.GetId(), true, ""); err != nil {
+		t.Fatal(err)
+	}
+	e.starts.Wait()
+	if len(h.startedIDs()) != 0 {
+		t.Fatal("an agent started over an unprepared project")
+	}
+	if s := e.agentInfos(ctx, "w")["lead"].GetState(); s != typesv1.AgentState_AGENT_STATE_STOPPED {
+		t.Errorf("lead after a failed start: %v, want stopped", s)
+	}
+	told := false
+	for _, ev := range e.box("w").events {
+		if m := ev.msg; m != nil && m.GetTo() == boardOwner && strings.Contains(m.GetText(), "Lead couldn't start") && strings.Contains(m.GetText(), ".ssh") {
+			told = true
+		}
+	}
+	if !told {
+		t.Error("the owner wasn't told why Lead didn't start")
+	}
 }
 
 func TestTheFirstStartAsksOnceWithTheResidualRisk(t *testing.T) {

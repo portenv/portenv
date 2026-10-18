@@ -144,6 +144,24 @@ public extension TeamText {
         return [panes, messages, g.askOwner ? "Asks you questions" : "Doesn\u{2019}t ask you questions", packages]
     }
 
+    /// An answered decision's line, in place of Approve and Decline
+    /// (R-0296): when it was answered and, for the team's first start, the
+    /// agents still starting. Nil while it's pending.
+    static func answered(_ d: TeamDecision, team: [TeamAgent]) -> String? {
+        let at = d.answeredAt.map { " at " + $0.formatted(date: .omitted, time: .shortened) } ?? ""
+        switch d.state {
+        case .pending: return nil
+        case .expired: return "Expired"
+        case .declined: return "Declined" + at
+        case .approved:
+            let starting = d.kind == .teamStart
+                ? d.startAgents.compactMap { id in team.first { $0.id == id } }.filter { [.stopped, .starting].contains($0.status) }.map(\.name)
+                : []
+            guard !starting.isEmpty else { return "Approved" + at }
+            return "Approved" + at + " \u{00B7} starting " + ListFormatter.localizedString(byJoining: starting) + "\u{2026}"
+        }
+    }
+
     /// Who asks a decision: the agent's name, or Portenv for its own.
     static func asker(_ d: TeamDecision, team: [TeamAgent]) -> String {
         if let a = team.first(where: { $0.id == d.from }) { return a.name }

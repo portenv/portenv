@@ -267,3 +267,39 @@ type elsewhereUsers struct{}
 func (elsewhereUsers) EnsureAgentUser(context.Context, string) (AgentUser, error) {
 	return AgentUser{UID: 2001, Home: "/home/builder", RunDir: "/tmp/x", TmuxDir: "/tmp/x/tmux", TmpDir: "/tmp/x/tmp"}, nil
 }
+
+// The runner starts where the request says, within what checkWorkDir
+// allows (R-0323).
+func TestStartTeamAgentStartsTheRunnerInItsWorkDir(t *testing.T) {
+	s, users, _, started, _ := newStartServer(t)
+	s.cfg.User = "work"
+	for _, dir := range []string{"", "/home/work/acme", "/home/builder/acme"} {
+		*started = nil
+		if _, err := s.StartTeamAgent(context.Background(), &agentv1.StartTeamAgentRequest{AgentId: "builder", Argv: []string{"claude"}, WorkDir: dir}); err != nil {
+			t.Fatalf("%q: %v", dir, err)
+		}
+		if len(*started) != 1 || (*started)[0].WorkDir != dir {
+			t.Errorf("%q: started %+v", dir, *started)
+		}
+		_, _ = s.StopTeamAgent(context.Background(), &agentv1.StopTeamAgentRequest{AgentId: "builder"})
+	}
+	users.got = nil
+	*started = nil
+	for _, dir := range []string{
+		"/home/work",              // the owner's home itself
+		"/home/work/acme/src",     // deeper than the project
+		"/home/work/.ssh",         // a dotfile folder
+		"/home/reviewer/acme",     // another agent's home
+		"/home/builder/../work/x", // not clean
+		"/tmp/acme",
+		"acme",
+		"/home/builder", // its home is "" (no -c)
+	} {
+		if _, err := s.StartTeamAgent(context.Background(), &agentv1.StartTeamAgentRequest{AgentId: "builder", Argv: []string{"claude"}, WorkDir: dir}); status.Code(err) != codes.InvalidArgument {
+			t.Errorf("%q: %v, want InvalidArgument", dir, err)
+		}
+	}
+	if len(users.got) != 0 || len(*started) != 0 {
+		t.Errorf("a refused work dir still asked init %v or started %d", users.got, len(*started))
+	}
+}

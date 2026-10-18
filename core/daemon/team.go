@@ -695,6 +695,12 @@ func (e *teamEngine) startAgentAs(ctx context.Context, name, agentID string, app
 		HomeSeed:       a.Spec.HomeSeed,
 		HomeQuotaBytes: defaultHomeQuota,
 		IdlePattern:    runnerIdlePattern(a.Runner),
+		// It starts in its working copy, not its home (R-0323), so a
+		// runner like Claude Code works on the project without --add-dir.
+		// With per-agent clones (ADR 0022 §2a) this becomes its clone,
+		// /home/<id>/<workspace>, and stays the project for an agent
+		// with no clone.
+		WorkDir: projectDir(name),
 	})
 	if err != nil {
 		b.states[agentID] = typesv1.AgentState_AGENT_STATE_STOPPED

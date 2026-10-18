@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"regexp"
+	"strings"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -35,6 +36,9 @@ type AgentServerSpec struct {
 	SocketDir string
 	Argv      []string
 	Env       []string
+	// WorkDir is where the runner starts: its working copy (the owner's
+	// project, or its clone in its home), or its home when empty.
+	WorkDir string
 }
 
 // errNoAgentServers is what StartTeamAgent says until a build has the
@@ -85,6 +89,9 @@ func (s *apiServer) StartTeamAgent(ctx context.Context, req *agentv1.StartTeamAg
 	} else if _, err := regexp.Compile(p); err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "%s's idle pattern: %v", id, err)
 	}
+	if err := checkWorkDir(req.GetWorkDir(), s.cfg.User, "/home/"+id); err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "%s: %v", id, err)
+	}
 	if len(req.GetAgentsMd()) > maxAgentsMD {
 		return nil, status.Errorf(codes.InvalidArgument, "%s's AGENTS.md is over %d KB", id, maxAgentsMD>>10)
 	}
@@ -110,6 +117,7 @@ func (s *apiServer) StartTeamAgent(ctx context.Context, req *agentv1.StartTeamAg
 		ID: id, UID: u.UID, GID: u.UID, Home: u.Home,
 		SocketDir: u.TmuxDir,
 		Argv:      argv,
+		WorkDir:   req.GetWorkDir(),
 		Env: []string{
 			"HOME=" + u.Home,
 			"USER=" + id,
@@ -177,6 +185,23 @@ func (s *apiServer) StopTeamAgent(ctx context.Context, req *agentv1.StopTeamAgen
 func checkKillableUID(uid int) error {
 	if uid < AgentUIDFirst || uid > AgentUIDLast {
 		return fmt.Errorf("uid %d isn't an agent's", uid)
+	}
+	return nil
+}
+
+// checkWorkDir allows where an agent's runner may start (R-0323): its home
+// (empty), a folder directly in its home (its clone, ADR 0022 §2a), or the
+// owner's project folder, /home/<mainUser>/<name>. The runner runs as the
+// agent, so this is about starting where the agent works, not a boundary:
+// the agent can't reach more from there than it could anyway.
+func checkWorkDir(dir, mainUser, home string) error {
+	if dir == "" {
+		return nil
+	}
+	parent, name := filepath.Dir(dir), filepath.Base(dir)
+	if filepath.Clean(dir) != dir || !filepath.IsAbs(dir) || strings.HasPrefix(name, ".") ||
+		(parent != home && (mainUser == "" || parent != "/home/"+mainUser)) {
+		return fmt.Errorf("%q isn't the project folder or a folder in its home", dir)
 	}
 	return nil
 }

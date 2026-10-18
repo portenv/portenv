@@ -9,6 +9,11 @@ import Observation
 ///   the same tab and generation again does nothing.
 /// - A lost stream is `.reconnecting` until its next reset, and
 ///   `.disconnected` (with why, and Reconnect) when it gives up.
+/// - Trouble that lasts past `deadline` (time awake) shows Disconnected
+///   whatever else holds, even while portenvd is said to be coming back
+///   (R-0294). Only a stream that stays up for `settle` after its reset
+///   ends the trouble: a reconnect blip shorter than that doesn't start
+///   the clock over.
 @MainActor
 @Observable
 public final class TabTerminalShown {
@@ -20,12 +25,41 @@ public final class TabTerminalShown {
     /// workspace is being reopened (`serviceComing`), whatever the stream
     /// said last.
     public func showsReconnecting(serviceComing: Bool) -> Bool {
+        overlay(serviceComing: serviceComing) == .reconnecting
+    }
+
+    /// What the view shows over the terminal.
+    public enum Overlay: Equatable, Sendable {
+        case none
+        /// The capsule: "Reconnecting to Portenv's background service…".
+        case reconnecting
+        /// The card: "Disconnected", why, and Reconnect.
+        case disconnected(String?)
+    }
+
+    /// Said on the card when portenvd is away (R-0294): never a modal on
+    /// top (GUIDELINES.md), and it says nothing is being saved.
+    public static let serviceAwayLine = "Portenv\u{2019}s background service isn\u{2019}t answering, so nothing is being saved. It\u{2019}s started again automatically; if this lasts, quit and reopen Portenv."
+    /// Said on the card when the trouble lasts and nothing better is known.
+    public static let notAnsweringLine = "This tab\u{2019}s terminal isn\u{2019}t answering. Portenv keeps trying; click Reconnect to try now."
+
+    public func overlay(serviceComing: Bool) -> Overlay {
+        if overdue {
+            if serviceComing { return .disconnected(Self.serviceAwayLine) }
+            if case let .disconnected(why) = connection, let why { return .disconnected(why) }
+            return .disconnected(failure ?? Self.notAnsweringLine)
+        }
         switch connection {
-        case .reconnecting: true
-        case .disconnected: serviceComing
-        case .connecting, .live: false
+        case .connecting, .live: return .none
+        case .reconnecting: return .reconnecting
+        case let .disconnected(why): return serviceComing ? .reconnecting : .disconnected(why)
         }
     }
+
+    /// How long trouble may last before the card shows.
+    public static let deadline: Duration = .seconds(25)
+    /// How long a stream must stay up after its reset to end the trouble.
+    public static let settle: Duration = .seconds(2)
 
     public enum Connection: Equatable, Sendable {
         case connecting, live, reconnecting
@@ -36,11 +70,33 @@ public final class TabTerminalShown {
     public private(set) var connection = Connection.connecting
     /// The size the last reset gave: the next stream opens at it.
     public private(set) var size = TabTerminalSize(cols: 80, rows: 24)
+    /// The trouble has lasted past the deadline: the card shows.
+    public private(set) var overdue = false
     @ObservationIgnored private let provider: any TabTerminalProvider
     @ObservationIgnored private var shown: (tab: String, generation: Int)?
+    @ObservationIgnored private let deadline: Duration
+    @ObservationIgnored private let settle: Duration
+    /// The stream is in trouble and hasn't settled since (tests read it).
+    @ObservationIgnored private(set) var inTrouble = false
+    @ObservationIgnored private var overdueTimer: Task<Void, Never>?
+    @ObservationIgnored private var settling: Task<Void, Never>?
+    /// Waits time awake: SuspendingClock, so time asleep doesn't count
+    /// (the 2026-10-16 sleep flake). Tests replace it.
+    @ObservationIgnored private let sleep: @Sendable (Duration) async -> Void
 
-    public init(provider: any TabTerminalProvider) {
+    public init(provider: any TabTerminalProvider, deadline: Duration = TabTerminalShown.deadline,
+                settle: Duration = TabTerminalShown.settle,
+                sleep: @escaping @Sendable (Duration) async -> Void = { try? await Task.sleep(for: $0, clock: .suspending) }) {
         self.provider = provider
+        self.deadline = deadline
+        self.settle = settle
+        self.sleep = sleep
+    }
+
+    /// Why the stream itself last failed, in plain words.
+    private var failure: String? {
+        guard let why = (source as? ControlModeTabSource)?.failure else { return nil }
+        return DaemonErrorText.isTransport(why) ? nil : why
     }
 
     public func show(tab: String, generation: Int) {
@@ -49,31 +105,69 @@ public final class TabTerminalShown {
         open()
     }
 
-    /// Reconnect: the shown tab's stream again.
-    public func reconnect() { open() }
+    /// Reconnect: the shown tab's stream again. The person asked, so the
+    /// card goes and the deadline starts again.
+    public func reconnect() {
+        clearTrouble()
+        open()
+        troubleBegan()
+    }
 
     public func stop() {
         source?.close()
         source = nil
         shown = nil
+        clearTrouble()
     }
 
     public func reset(_ size: TabTerminalSize) {
         self.size = size
         connection = .live
+        guard inTrouble, settling == nil else { return }
+        settling = Task { [weak self, settle, sleep] in
+            await sleep(settle)
+            guard !Task.isCancelled, let self else { return }
+            self.settling = nil
+            if self.connection == .live { self.clearTrouble() }
+        }
     }
 
     public func ended(_ why: TabTerminalEnd) {
         switch why {
         case .lost(retrying: true):
             connection = .reconnecting
+            troubleBegan()
         case .lost(retrying: false):
-            connection = .disconnected((source as? ControlModeTabSource)?.failure)
+            connection = .disconnected(failure)
+            troubleBegan()
         case .tabClosed, .boxStopped:
             // The tab bar moves to another tab, or the window shows the
             // stopped workspace: either replaces this stream.
             break
         }
+    }
+
+    /// The stream is in trouble: the clock starts, unless it's already
+    /// running (a blip doesn't start it over).
+    private func troubleBegan() {
+        settling?.cancel()
+        settling = nil
+        guard !inTrouble else { return }
+        inTrouble = true
+        overdueTimer = Task { [weak self, deadline, sleep] in
+            await sleep(deadline)
+            guard !Task.isCancelled, let self, self.inTrouble else { return }
+            self.overdue = true
+        }
+    }
+
+    private func clearTrouble() {
+        inTrouble = false
+        overdue = false
+        overdueTimer?.cancel()
+        overdueTimer = nil
+        settling?.cancel()
+        settling = nil
     }
 
     private func open() {

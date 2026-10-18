@@ -56,6 +56,10 @@ let package = Package(
             "PortenvKit", .product(name: "SwiftTerm", package: "SwiftTerm"),
             // The client's gRPC status codes (BoxMakerTests).
             .product(name: "GRPCCore", package: "grpc-swift-2"),
+            // A fake portenvd that stops answering (DaemonLivenessTests).
+            .product(name: "GRPCNIOTransportHTTP2", package: "grpc-swift-nio-transport"),
+            .product(name: "PortenvProto", package: "swift"),
+            .product(name: "SwiftProtobuf", package: "swift-protobuf"),
         ]),
         .testTarget(
             name: "PortenvTermTests",

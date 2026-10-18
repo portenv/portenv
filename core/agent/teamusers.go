@@ -91,6 +91,8 @@ type TeamUsers struct {
 	// fake in tests).
 	homeFixes []string
 	groupOf   func(string) int
+	// ownerOf reads a path's owner (a fake in tests).
+	ownerOf func(string) int
 }
 
 type agentUserRecord struct {

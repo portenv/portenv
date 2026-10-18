@@ -136,9 +136,11 @@ func asAgentMessage(s string) string {
 	return strings.Join(strings.Fields(strings.ReplaceAll(msg, "\n", " · ")), " ")
 }
 
-// runAsAgent runs the plain portenv-agent binary as an agent's uid (its
-// own group only), for the Agent files view. Outside the API process it
-// runs local in this process.
+// runAsAgent runs the plain portenv-agent binary as an agent's uid, with
+// its own group and group team, for the Agent files view and hand-offs.
+// Group team is how an agent reads the project (ADR 0022 §2a), so a
+// hand-off of a project file needs it (CC-0507). Outside the API process
+// it runs local in this process.
 func runAsAgent(ctx context.Context, uid int, args []string, stdin io.Reader, local func(io.Writer) error) ([]byte, error) {
 	if _, err := os.Stat(ServeBinary); err != nil || os.Getuid() != ServeUID {
 		var out bytes.Buffer
@@ -154,7 +156,7 @@ func runAsAgent(ctx context.Context, uid int, args []string, stdin io.Reader, lo
 	cmd := exec.CommandContext(ctx, PlainBinary, args...) // #nosec G204 -- fixed binary; arguments made by the API process
 	cmd.Env = []string{"PATH=/usr/bin:/bin"}
 	u := uint32(uid) // #nosec G115 -- an agent's uid, 2001..2008
-	cmd.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: u, Gid: u, Groups: []uint32{u}}}
+	cmd.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: u, Gid: u, Groups: []uint32{u, TeamGID}}}
 	if stdin != nil {
 		cmd.Stdin = stdin
 	}

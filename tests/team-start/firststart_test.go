@@ -23,7 +23,14 @@
 //     in the project still works;
 //  7. approve and start builder: its start checks the project again, and
 //     whoami in builder's pane says builder; builder reads the project,
-//     has its own clone, and can't read lead's.
+//     has its own clone, and can't read lead's;
+//  8. builder tampers with its own clone's config and hooks (each would
+//     leave a marker naming the uid that ran it), commits on agent/builder
+//     and runs portenv share; work runs git status, log, diff and a commit
+//     in the project, and the owner's Fetch (portenv app fetch-agent)
+//     brings refs/remotes/agents/builder with builder's commit, by the
+//     bundle; no marker of work's uid appears, work's git in builder's
+//     clone is refused, and the bundle is gone (ADR 0022 §2a points 3, 5).
 //
 // The harness's own docker exec only sets the project up (step 1, as work),
 // tries what each agent may and may not do (as that agent), and reads the
@@ -344,6 +351,82 @@ if ls /home/lead/%[2]s >/dev/null 2>&1; then echo "READ lead's clone"; else echo
 		h.fatal("step 7: builder's reads: exit %d:\n%s", code, out)
 	}
 	t.Log("step 7: builder started; it reads the project, has its own clone on agent/builder, and can't read lead's")
+
+	// Step 8: builder tampers with its own clone, so that anything git
+	// honoured from it, for whoever runs git, would leave a marker named
+	// after that uid; builder's own commit runs them, as builder.
+	out, code = h.box(ctx, "root", `mkdir -p /tmp/portenv-markers && chmod 1777 /tmp/portenv-markers && id -u builder && id -u work`)
+	ids := strings.Fields(out)
+	if code != 0 || len(ids) != 2 {
+		h.fatal("step 8: the markers folder: exit %d: %s", code, out)
+	}
+	builderUID, workUID := ids[0], ids[1]
+	out, code = h.box(ctx, "builder", fmt.Sprintf(`set -eu
+cd /home/builder/%[1]s
+mk='touch /tmp/portenv-markers/$(id -u)'
+mkdir -p ~/hooks
+for hk in pre-commit post-commit reference-transaction post-checkout post-merge post-rewrite pre-auto-gc fsmonitor-watchman; do
+  printf '#!/bin/sh\n%%s-hook-%%s\n' "$mk" "$hk" > ~/hooks/$hk
+  chmod 0755 ~/hooks/$hk
+done
+git config core.hooksPath ~/hooks
+for k in core.fsmonitor core.pager diff.external core.sshCommand uploadpack.packObjectsHook; do
+  git config "$k" "$mk-config-$k; false"
+done
+for k in filter.evil.clean filter.evil.smudge; do
+  git config "$k" "$mk-config-$k; cat"
+done
+echo '* filter=evil' > .gitattributes
+echo "from builder" > from-builder.txt
+git add .gitattributes from-builder.txt
+git -c user.name=Builder -c user.email=builder@example.invalid commit -q -m "from builder" || git -c user.name=Builder -c user.email=builder@example.invalid -c core.hooksPath=/dev/null commit -q -m "from builder"
+git log -1 --format=%%s
+PORTENV_AGENT=builder PORTENV_SOCKET=/run/portenv-team/builder/portenv.sock portenv share --text "the gate's tampered branch"
+ls /tmp/portenv-markers`, workspace))
+	if code != 0 || !strings.Contains(out, "from builder") || !strings.Contains(out, builderUID+"-hook-pre-commit") {
+		h.fatal("step 8: builder's tampered commit and share (its own hooks must run, as builder): exit %d:\n%s", code, out)
+	}
+	t.Logf("step 8: builder tampered with its clone, committed and shared:\n%s", out)
+	// work's everyday git in the project, then the owner's Fetch, then
+	// work's git again with builder's branch in the repository.
+	everyday := fmt.Sprintf(`set -eu
+cd %s
+git status --short
+git log -1 --format=%%s
+git diff --stat HEAD
+git -c user.name=Owner -c user.email=owner@example.invalid commit -q --allow-empty -m "owner, %%s"`, project)
+	if out, code = h.box(ctx, "work", fmt.Sprintf(everyday, "before the fetch")); code != 0 {
+		h.fatal("step 8: work's git before the fetch: exit %d: %s", code, out)
+	}
+	fetched := h.portenv(ctx, "app", "fetch-agent", workspace, "builder")
+	if !strings.Contains(fetched, "refs/remotes/agents/builder") {
+		h.fatal("step 8: the owner's Fetch said %q", fetched)
+	}
+	out, code = h.box(ctx, "work", fmt.Sprintf(`set -eu
+cd %s
+git log -1 --format=%%s refs/remotes/agents/builder
+git log --all -p >/dev/null
+git diff --stat HEAD refs/remotes/agents/builder
+git show --stat refs/remotes/agents/builder >/dev/null`, project))
+	if code != 0 || !strings.HasPrefix(out, "from builder") {
+		h.fatal("step 8: builder's commit isn't refs/remotes/agents/builder in work's repository: exit %d:\n%s", code, out)
+	}
+	if out, code = h.box(ctx, "work", fmt.Sprintf(everyday, "after the fetch")); code != 0 {
+		h.fatal("step 8: work's git after the fetch: exit %d: %s", code, out)
+	}
+	t.Logf("step 8: the owner's Fetch: %s", fetched)
+	// No marker of work's: nothing of builder's ran for work. work's git
+	// in builder's clone is refused; no system safe.directory names it;
+	// the bundle is gone.
+	out, _ = h.box(ctx, "root", fmt.Sprintf(`ls /tmp/portenv-markers
+echo "---"
+runuser -u work -- git -C /home/builder/%[1]s status >/dev/null 2>&1; echo "work in builder's clone: $?"
+git config --system --get-all safe.directory | grep -F /home/builder; echo "safe.directory: $?"
+test -e /home/work/.portenv/team/handoff/builder.bundle; echo "bundle: $?"`, workspace))
+	if strings.Contains(out, workUID+"-") || strings.Contains(out, "work in builder's clone: 0") || !strings.Contains(out, "safe.directory: 1") || !strings.Contains(out, "bundle: 1") {
+		h.fatal("step 8: something of builder's ran for work, work's git opened builder's clone, or the bundle stayed:\n%s", out)
+	}
+	t.Logf("step 8: no marker of work's (uid %s), work's git refused in builder's clone, bundle gone:\n%s", workUID, out)
 }
 
 // waitRunning waits for portenvd to list the agent as running (or needing

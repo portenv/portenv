@@ -316,6 +316,20 @@ func TeamIO(args []string, stdin io.Reader, stdout io.Writer) error {
 			return errors.New("clone-own PROJECT HOME ID QUOTA")
 		}
 		return cloneOwn(context.Background(), dir, args[2], args[3], args[4], homeGit(args[2]), stdout)
+	case "bundle-own":
+		// As the agent, through as-agent (ADR 0022 §2a point 3): its
+		// branch's bundle on stdout.
+		if len(args) != 5 {
+			return errors.New("bundle-own HOME NAME ID thin|full")
+		}
+		return bundleOwn(context.Background(), dir, args[2], args[3], args[4], streamGit(dir), stdout)
+	case "fetch-agent":
+		// As work (ADR 0022 §2a point 3): the bundle on stdin, fetched
+		// into the project from that file only.
+		if len(args) != 4 {
+			return errors.New("fetch-agent PROJECT ID MAXBYTES")
+		}
+		return fetchAgent(context.Background(), dir, args[2], args[3], homeGit(filepath.Dir(dir)), stdin, stdout)
 	case "handoff-pack":
 		if len(args) != 3 {
 			return errors.New("handoff-pack BASE PATH")

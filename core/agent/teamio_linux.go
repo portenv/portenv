@@ -89,13 +89,51 @@ func runTeamIOAsAgent(ctx context.Context, uid int, home string, args []string, 
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
 	if err != nil {
-		if msg := strings.TrimSpace(stderr.String()); msg != "" {
-			msg = strings.TrimPrefix(strings.TrimPrefix(msg, "portenv-agent: "), "portenv-agent as-agent: ")
-			return nil, errors.New(strings.Join(strings.Fields(strings.ReplaceAll(msg, "\n", " · ")), " "))
+		if msg := asAgentMessage(stderr.String()); msg != "" {
+			return nil, errors.New(msg)
 		}
 		return nil, fmt.Errorf("%s: %w", args[0], err)
 	}
 	return out, nil
+}
+
+// streamTeamIOAsAgent starts team-io as an agent with its standard output
+// on the returned reader, which the caller closes; wait reaps it and
+// returns what it said went wrong.
+func streamTeamIOAsAgent(ctx context.Context, uid int, home string, args []string) (io.ReadCloser, func() error, error) {
+	cmd, err := asAgentCommand(ctx, uid, home, args)
+	if err != nil {
+		return nil, nil, err
+	}
+	pr, pw, err := os.Pipe()
+	if err != nil {
+		return nil, nil, err
+	}
+	var stderr strings.Builder
+	cmd.Stdout, cmd.Stderr = pw, &stderr
+	if err := cmd.Start(); err != nil {
+		_ = pr.Close()
+		_ = pw.Close()
+		return nil, nil, err
+	}
+	_ = pw.Close()
+	wait := func() error {
+		if err := cmd.Wait(); err != nil {
+			if msg := asAgentMessage(stderr.String()); msg != "" {
+				return errors.New(msg)
+			}
+			return fmt.Errorf("%s: %w", args[0], err)
+		}
+		return nil
+	}
+	return pr, wait, nil
+}
+
+// asAgentMessage is what as-agent's team-io said on stderr, on one line.
+func asAgentMessage(s string) string {
+	msg := strings.TrimSpace(s)
+	msg = strings.TrimPrefix(strings.TrimPrefix(msg, "portenv-agent: "), "portenv-agent as-agent: ")
+	return strings.Join(strings.Fields(strings.ReplaceAll(msg, "\n", " · ")), " ")
 }
 
 // runAsAgent runs the plain portenv-agent binary as an agent's uid (its

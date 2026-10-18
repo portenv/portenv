@@ -23,6 +23,10 @@ func runAsAgent(_ context.Context, _ int, _ []string, _ io.Reader, local func(io
 	return out.Bytes(), err
 }
 
+func streamTeamIOAsAgent(context.Context, int, string, []string) (io.ReadCloser, func() error, error) {
+	return nil, nil, errors.New("an agent's files are reached only in the workspace")
+}
+
 func runTeamIOAsAgent(context.Context, int, string, []string, io.Reader) ([]byte, error) {
 	return nil, errors.New("an agent's files are reached only in the workspace")
 }

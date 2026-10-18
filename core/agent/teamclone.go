@@ -49,14 +49,21 @@ type gitFunc func(ctx context.Context, dir string, args ...string) ([]byte, erro
 // home's environment only: no terminal, no inherited variables.
 func homeGit(home string) gitFunc {
 	return func(ctx context.Context, dir string, args ...string) ([]byte, error) {
-		cmd := exec.CommandContext(ctx, agentGitPath, args...) // #nosec G204 -- git by its path; arguments made here
-		cmd.Dir = dir
-		cmd.Env = []string{"HOME=" + home, "PATH=/usr/bin:/bin", "LANG=C.UTF-8", "LC_ALL=C", "GIT_TERMINAL_PROMPT=0"}
+		cmd := gitCommand(ctx, home, dir, args...)
 		var out bytes.Buffer
 		cmd.Stdout, cmd.Stderr = &out, &out
 		err := cmd.Run()
 		return out.Bytes(), err
 	}
+}
+
+// gitCommand is git by its absolute path in dir, with home's fixed
+// environment and no terminal (stdin is /dev/null).
+func gitCommand(ctx context.Context, home, dir string, args ...string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, agentGitPath, args...) // #nosec G204 -- git by its path; arguments made here
+	cmd.Dir = dir
+	cmd.Env = gitEnv(home)
+	return cmd
 }
 
 // AgentBranch is an agent's branch in its clone.

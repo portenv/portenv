@@ -97,6 +97,13 @@ func TestTeamFirstStart(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(root, "mac"), 0o700); err != nil {
 		t.Fatal(err)
 	}
+	// This machine's ID, written before anything starts: portenvd and the
+	// first portenv call would each make one at once, and one can read the
+	// other's file before it's written (an empty ID, which sync refuses:
+	// "invalid machine ID").
+	if err := os.WriteFile(filepath.Join(root, "mac", "machine-id"), []byte("teamstart-ci\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	t.Cleanup(h.cleanup)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)

@@ -765,6 +765,31 @@ func TestStartNamesTheProjectForTheClone(t *testing.T) {
 	if got["reviewer"].GetCloneProjectDir() != "" || strings.Contains(got["reviewer"].GetAgentsMd(), "own copy") {
 		t.Errorf("reviewer (checkout: none) got a clone: %v", got["reviewer"])
 	}
+	if got["reviewer"].GetProjectDir() != "/home/work/w" {
+		t.Errorf("reviewer's start doesn't name the project for lenses: %v", got["reviewer"])
+	}
+}
+
+// ADR 0022 §2a point 4: every agent with its own clone is listed with the
+// approved, valid lenses that read it, or none.
+func TestCloneReadersAtStart(t *testing.T) {
+	team := defaultTeam()
+	team[2].Spec.Checkout = CheckoutNone
+	team[2].Grant.ReadClones = []string{"builder"}
+	team = append(team, testAgent("design", grant(typesv1.GrantMode_GRANT_MODE_NEVER, 1, nil, false)))
+	team[3].Grant.ReadClones = []string{"builder", "lead"}
+	team[3].Approved = false // not approved: no grant yet
+	got := cloneReaders(&Team{Agents: team})
+	var lines []string
+	for _, cr := range got {
+		lines = append(lines, cr.GetWriter()+":"+strings.Join(cr.GetReaders(), ","))
+	}
+	if want := []string{"lead:", "builder:reviewer", "design:"}; !slices.Equal(lines, want) {
+		t.Errorf("clone readers %q, want %q", lines, want)
+	}
+	if !strings.Contains(agentsMDBlock(&Team{Agents: team}, &team[2], "w"), "read, never change, /home/builder/w") {
+		t.Errorf("reviewer's AGENTS.md doesn't say what it reads")
+	}
 }
 
 // R-0260 item 2: pending pane requests count, and Approve rechecks.

@@ -1598,7 +1598,12 @@ type AgentGrant struct {
 	// team_status: read (R-0257 item 1): teammates' state, status, pending
 	// count and last activity in whoami and portenv team status. Off by
 	// default; never terminals or homes.
-	TeamStatus    bool `protobuf:"varint,6,opt,name=team_status,json=teamStatus,proto3" json:"team_status,omitempty"`
+	TeamStatus bool `protobuf:"varint,6,opt,name=team_status,json=teamStatus,proto3" json:"team_status,omitempty"`
+	// read_clones (ADR 0022 §2a, lenses): team agents with their own clone
+	// whose clone this agent may read, never write: a named-user read ACL
+	// on the clone and traverse on that agent's home, never through group
+	// team.
+	ReadClones    []string `protobuf:"bytes,7,rep,name=read_clones,json=readClones,proto3" json:"read_clones,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1673,6 +1678,13 @@ func (x *AgentGrant) GetTeamStatus() bool {
 		return x.TeamStatus
 	}
 	return false
+}
+
+func (x *AgentGrant) GetReadClones() []string {
+	if x != nil {
+		return x.ReadClones
+	}
+	return nil
 }
 
 // A file or folder in an agent's home, for the Agent files view (§2).
@@ -2038,7 +2050,7 @@ const file_portenv_types_v1_types_proto_rawDesc = "" +
 	"\x06source\x18\x03 \x01(\tR\x06source\x12\x1e\n" +
 	"\n" +
 	"dependency\x18\x04 \x01(\bR\n" +
-	"dependency\"\xed\x01\n" +
+	"dependency\"\x8e\x02\n" +
 	"\n" +
 	"AgentGrant\x121\n" +
 	"\x05panes\x18\x01 \x01(\x0e2\x1b.portenv.types.v1.GrantModeR\x05panes\x12\x1b\n" +
@@ -2047,7 +2059,9 @@ const file_portenv_types_v1_types_proto_rawDesc = "" +
 	"\task_owner\x18\x04 \x01(\bR\baskOwner\x127\n" +
 	"\bpackages\x18\x05 \x01(\x0e2\x1b.portenv.types.v1.GrantModeR\bpackages\x12\x1f\n" +
 	"\vteam_status\x18\x06 \x01(\bR\n" +
-	"teamStatus\"}\n" +
+	"teamStatus\x12\x1f\n" +
+	"\vread_clones\x18\a \x03(\tR\n" +
+	"readClones\"}\n" +
 	"\tAgentFile\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x10\n" +
 	"\x03dir\x18\x02 \x01(\bR\x03dir\x12\x12\n" +

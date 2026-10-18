@@ -9,6 +9,7 @@ grant:
   max_panes: 2
   message: [lead, builder, design]
   ask_owner: true
+  read_clones: [builder]
 ---
 You review what the builder shares.
 - Read the diff, run the tests and checks of the parts it touches, and try

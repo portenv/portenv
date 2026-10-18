@@ -120,6 +120,13 @@ func (s *apiServer) StartTeamAgent(ctx context.Context, req *agentv1.StartTeamAg
 		}
 		workDir = dir
 	}
+	// Each clone readable by exactly the lenses granted on it now.
+	if p := req.GetProjectDir(); p != "" {
+		if err := s.applyLensGrants(ctx, p, req.GetCloneReaders()); err != nil {
+			s.team.removeAgent(id)
+			return nil, err
+		}
+	}
 	spec := AgentServerSpec{
 		ID: id, UID: u.UID, GID: u.UID, Home: u.Home,
 		SocketDir: u.TmuxDir,

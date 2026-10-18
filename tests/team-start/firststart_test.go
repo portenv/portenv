@@ -30,7 +30,12 @@
 //     in the project, and the owner's Fetch (portenv app fetch-agent)
 //     brings refs/remotes/agents/builder with builder's commit, by the
 //     bundle; no marker of work's uid appears, work's git in builder's
-//     clone is refused, and the bundle is gone (ADR 0022 §2a points 3, 5).
+//     clone is refused, and the bundle is gone (ADR 0022 §2a points 3, 5);
+//  9. approve and start reviewer, a lens with read_clones: [builder] (the
+//     template's): it reads builder's files, can't write any, can't list
+//     builder's home, and its git in builder's clone is refused; lead,
+//     without the grant, can't read them; the grant is a named-user ACL,
+//     never group team's (ADR 0022 §2a point 4).
 //
 // The harness's own docker exec only sets the project up (step 1, as work),
 // tries what each agent may and may not do (as that agent), and reads the
@@ -64,6 +69,7 @@ const (
 	project   = "/home/work/" + workspace
 	script    = project + "/first-start.sh"
 	script2   = project + "/second-start.sh"
+	script3   = project + "/third-start.sh"
 	question  = "R-0296 first start: may lead begin?"
 )
 
@@ -76,6 +82,12 @@ if out=$(portenv ask-owner "` + question + `" 2>&1); then
 else
   echo "first-start ask-owner failed: $out"
 fi
+exec sleep 1000000
+`
+
+// thirdStart is reviewer's runner.
+const thirdStart = `#!/bin/bash
+echo "third-start whoami=$(whoami)"
 exec sleep 1000000
 `
 
@@ -163,13 +175,18 @@ cat > %[2]s <<'EOF'
 %[3]sEOF
 cat > %[4]s <<'EOF'
 %[5]sEOF
-chmod 0755 %[2]s %[4]s
+cat > %[6]s <<'EOF'
+%[7]sEOF
+chmod 0755 %[2]s %[4]s %[6]s
 sed -i 's|^runner: .*$|runner: bash %[2]s|' .portenv/agents/lead.md
 grep -q '^runner: bash %[2]s$' .portenv/agents/lead.md
 sed -i 's|^runner: .*$|runner: bash %[4]s|' .portenv/agents/builder.md
 grep -q '^runner: bash %[4]s$' .portenv/agents/builder.md
+sed -i 's|^runner: .*$|runner: bash %[6]s|' .portenv/agents/reviewer.md
+grep -q '^runner: bash %[6]s$' .portenv/agents/reviewer.md
+grep -q '^  read_clones: \[builder\]$' .portenv/agents/reviewer.md
 git add -A
-git -c user.name=Owner -c user.email=owner@example.invalid commit -q -m "first commit"`, project, script, firstStart, script2, secondStart))
+git -c user.name=Owner -c user.email=owner@example.invalid commit -q -m "first commit"`, project, script, firstStart, script2, secondStart, script3, thirdStart))
 	if code != 0 {
 		h.fatal("step 1 (portenv team init in %s): exit %d: %s", project, code, out)
 	}
@@ -429,6 +446,40 @@ test -e /home/work/.portenv/team/handoff/builder.bundle; echo "bundle: $?"`, wor
 		h.fatal("step 8: something of builder's ran for work, work's git opened builder's clone, or the bundle stayed:\n%s", out)
 	}
 	t.Logf("step 8: no marker of work's (uid %s), work's git refused in builder's clone, bundle gone:\n%s", workUID, out)
+
+	// Step 9: reviewer, a lens on builder's clone (the template's
+	// read_clones: [builder]).
+	reviewer := h.agent(ctx, c, "reviewer")
+	if _, err := c.ApproveAgentFile(ctx, &daemonv1.ApproveAgentFileRequest{Name: workspace, AgentId: "reviewer", FileSha256: reviewer.GetFileSha256()}); err != nil {
+		h.fatal("step 9 (approve reviewer): %v", err)
+	}
+	if _, err := c.StartAgent(ctx, &daemonv1.StartAgentRequest{Name: workspace, AgentId: "reviewer"}); err != nil {
+		h.fatal("step 9 (start reviewer): %v", err)
+	}
+	h.waitRunning(ctx, c, "reviewer", 30*time.Second)
+	out, code = h.box(ctx, "reviewer", fmt.Sprintf(`cd / || exit 2
+clone=/home/builder/%s
+try() { if "$@" >/dev/null 2>&1; then echo "DID: $*"; else echo "refused: $*"; fi; }
+cat $clone/from-builder.txt
+try ls /home/builder
+try touch $clone/from-reviewer.txt
+try sh -c "echo x >> $clone/from-builder.txt"
+try mkdir $clone/.git/refs/heads/from-reviewer
+try git -C $clone log -1
+true`, workspace))
+	if code != 0 || !strings.HasPrefix(out, "from builder") || strings.Contains(out, "DID:") || strings.Count(out, "refused:") != 5 {
+		h.fatal("step 9: reviewer must read builder's files and nothing more: exit %d:\n%s", code, out)
+	}
+	t.Logf("step 9: reviewer reads builder's clone, and nothing more:\n%s", out)
+	out, _ = h.box(ctx, "lead", fmt.Sprintf(`cat /home/builder/%s/from-builder.txt >/dev/null 2>&1; echo "lead reads builder's clone: $?"`, workspace))
+	if !strings.Contains(out, "lead reads builder's clone: 1") {
+		h.fatal("step 9: lead, without the grant, read builder's clone:\n%s", out)
+	}
+	out, _ = h.box(ctx, "root", fmt.Sprintf(`getfacl -cp /home/builder /home/builder/%[1]s/from-builder.txt 2>&1`, workspace))
+	if !strings.Contains(out, "user:reviewer:--x") || !strings.Contains(out, "user:reviewer:r--") || strings.Contains(out, "group:team") || strings.Contains(out, "user:reviewer:rw") || strings.Contains(out, "user:lead") {
+		h.fatal("step 9: builder's home and clone must give reviewer (by name) traverse and read only:\n%s", out)
+	}
+	t.Logf("step 9: lead can't read builder's clone; the ACLs:\n%s", out)
 }
 
 // waitRunning waits for portenvd to list the agent as running (or needing

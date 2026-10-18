@@ -535,6 +535,20 @@ message StartTeamAgentRequest {
   // missing, and starts the runner there. Empty: no clone, and the runner
   // starts in the agent's home.
   string clone_project_dir = 7;
+  // Lenses (ADR 0022 §2a point 4): for each agent of the team with its own
+  // clone, the agents that may read it. At every start the helper makes
+  // every agent's clone readable by exactly these, as that agent, and by
+  // no one else (an agent missing here: by no one). Applied only with
+  // project_dir.
+  repeated CloneReaders clone_readers = 8;
+  // The owner's project, /home/work/<workspace>, for clone_readers.
+  string project_dir = 9;
+}
+
+// One writer's clone and the lenses that may read it.
+message CloneReaders {
+  string writer = 1;
+  repeated string readers = 2;
 }
 
 message StartTeamAgentResponse {

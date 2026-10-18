@@ -74,7 +74,7 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN userdel --remove ubuntu \
  && apt-get update \
  && apt-get install -y --no-install-recommends \
-      build-essential ca-certificates curl git gnupg jq less libcap2-bin locales \
+      acl build-essential ca-certificates curl git gnupg jq less libcap2-bin locales \
       openssh-client postgresql-client procps python3 python3-pip \
       python3-venv ripgrep sudo 'tmux=3.4-*' unzip xz-utils \
  && rm -rf /var/lib/apt/lists/*

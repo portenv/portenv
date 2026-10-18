@@ -6,11 +6,13 @@ import (
 	"bufio"
 	"context"
 	"errors"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"io"
 	"net"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -22,27 +24,57 @@ import (
 )
 
 // newTestHub returns a hub in a short temporary folder (Unix socket paths
-// are limited to about 100 bytes), with chown recorded and the peer's uid
-// taken from peer.
-func newTestHub(t *testing.T, peer *int) (*teamHub, *[]chownCall) {
+// are limited to about 100 bytes), with the peer's uid taken from peer.
+// Its agents' run folders are made by addTestAgent, as init makes them
+// but without the chown (tests don't run as root), and a socket's group
+// reads as the agent's when it's its folder's group (the setgid bit's
+// effect); TestTheSocketTakesItsFoldersGroup checks the real thing.
+func newTestHub(t *testing.T, peer *int) *teamHub {
 	t.Helper()
 	dir, err := os.MkdirTemp("/tmp", "pt")
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
-	var mu sync.Mutex
-	var chowns []chownCall
 	h := newTeamHub(dir)
-	h.chown = func(path string, uid, gid int) error {
-		mu.Lock()
-		defer mu.Unlock()
-		chowns = append(chowns, chownCall{path, uid, gid})
-		return nil
-	}
 	h.peerUID = func(*net.UnixConn) (int, error) { return *peer, nil }
+	h.groupOf = func(p string) int {
+		if g, ok := testRunGIDs.Load(filepath.Dir(p)); ok && fileGroup(p) == fileGroup(filepath.Dir(p)) {
+			return g.(int)
+		}
+		return -1
+	}
 	t.Cleanup(h.close)
-	return h, &chowns
+	return h
+}
+
+// testRunGIDs is each test run folder's agent gid, for newTestHub.
+var testRunGIDs sync.Map
+
+// makeTestRunDir makes an agent's run folder in dir as init does
+// (ensureRunDir), with chown recorded, not performed.
+func makeTestRunDir(t *testing.T, dir, id string, uid int) []chownCall {
+	t.Helper()
+	var chowns []chownCall
+	tu := &TeamUsers{RunDir: dir, fchown: func(f *os.File, uid, gid int) error {
+		chowns = append(chowns, chownCall{f.Name(), uid, gid})
+		return nil
+	}}
+	base, err := tu.ensureRunDir(agentUserRecord{ID: id, UID: uid})
+	if err != nil {
+		t.Fatal(err)
+	}
+	testRunGIDs.Store(base, uid)
+	return chowns
+}
+
+// addTestAgent makes the agent's run folder, then has the hub serve it.
+func addTestAgent(t *testing.T, h *teamHub, id string, uid int) error {
+	t.Helper()
+	if agentIDRE.MatchString(id) {
+		makeTestRunDir(t, h.dir, id, uid)
+	}
+	return h.addAgent(id, uid, uid)
 }
 
 // fakePortenvd attaches to the hub as portenvd's TeamCalls stream would,
@@ -104,8 +136,8 @@ func teamCall(t *testing.T, h *teamHub, id, line string) *agentv1.TeamCallsReque
 
 func TestAnAgentsCallReachesPortenvdAsThatAgent(t *testing.T) {
 	uid := 2001
-	h, _ := newTestHub(t, &uid)
-	if err := h.addAgent("builder", 2001, 2001); err != nil {
+	h := newTestHub(t, &uid)
+	if err := addTestAgent(t, h, "builder", 2001); err != nil {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -132,8 +164,8 @@ func TestAnAgentsCallReachesPortenvdAsThatAgent(t *testing.T) {
 
 func TestAnUnknownUIDIsRefused(t *testing.T) {
 	uid := 4242 // not builder's
-	h, _ := newTestHub(t, &uid)
-	if err := h.addAgent("builder", 2001, 2001); err != nil {
+	h := newTestHub(t, &uid)
+	if err := addTestAgent(t, h, "builder", 2001); err != nil {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -152,9 +184,9 @@ func TestAnUnknownUIDIsRefused(t *testing.T) {
 
 func TestAnotherAgentsUIDOnThisSocketIsRefused(t *testing.T) {
 	uid := 2002 // reviewer, on builder's socket
-	h, _ := newTestHub(t, &uid)
+	h := newTestHub(t, &uid)
 	for id, n := range map[string]int{"builder": 2001, "reviewer": 2002} {
-		if err := h.addAgent(id, n, n); err != nil {
+		if err := addTestAgent(t, h, id, n); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -174,8 +206,8 @@ func TestAnotherAgentsUIDOnThisSocketIsRefused(t *testing.T) {
 
 func TestACallWithoutPortenvdSaysSo(t *testing.T) {
 	uid := 2001
-	h, _ := newTestHub(t, &uid)
-	if err := h.addAgent("builder", 2001, 2001); err != nil {
+	h := newTestHub(t, &uid)
+	if err := addTestAgent(t, h, "builder", 2001); err != nil {
 		t.Fatal(err)
 	}
 	start := time.Now()
@@ -190,8 +222,8 @@ func TestACallWithoutPortenvdSaysSo(t *testing.T) {
 
 func TestACallInFlightWhenPortenvdGoesAwayIsAnswered(t *testing.T) {
 	uid := 2001
-	h, _ := newTestHub(t, &uid)
-	if err := h.addAgent("builder", 2001, 2001); err != nil {
+	h := newTestHub(t, &uid)
+	if err := addTestAgent(t, h, "builder", 2001); err != nil {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -208,8 +240,8 @@ func TestACallInFlightWhenPortenvdGoesAwayIsAnswered(t *testing.T) {
 
 func TestBadRequestsAreRefused(t *testing.T) {
 	uid := 2001
-	h, _ := newTestHub(t, &uid)
-	if err := h.addAgent("builder", 2001, 2001); err != nil {
+	h := newTestHub(t, &uid)
+	if err := addTestAgent(t, h, "builder", 2001); err != nil {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -232,54 +264,121 @@ func TestBadRequestsAreRefused(t *testing.T) {
 	}
 }
 
-func TestAnAgentsFoldersAreItsOwn(t *testing.T) {
+func TestTheHubServesTheSocketInInitsFolder(t *testing.T) {
 	uid := 2001
-	h, chowns := newTestHub(t, &uid)
-	if err := h.addAgent("builder", 2001, 2001); err != nil {
+	h := newTestHub(t, &uid)
+	if err := addTestAgent(t, h, "builder", 2001); err != nil {
 		t.Fatal(err)
 	}
-	modes := map[string]os.FileMode{
-		"builder":              0o710,
-		"builder/portenv.sock": 0o660,
-		"builder/tmux":         0o700,
-		"builder/tmp":          0o700,
-	}
-	for rel, want := range modes {
-		info, err := os.Lstat(filepath.Join(h.dir, rel))
-		if err != nil {
-			t.Errorf("%s: %v", rel, err)
-			continue
-		}
-		if info.Mode().Perm() != want {
-			t.Errorf("%s: mode %o, want %o", rel, info.Mode().Perm(), want)
-		}
-	}
-	for _, want := range []chownCall{
-		{filepath.Join(h.dir, "builder"), -1, 2001},
-		{filepath.Join(h.dir, "builder", "portenv.sock"), -1, 2001},
-		{filepath.Join(h.dir, "builder", "tmux"), 2001, 2001},
-		{filepath.Join(h.dir, "builder", "tmp"), 2001, 2001},
-	} {
-		if !slices.Contains(*chowns, want) {
-			t.Errorf("missing chown %v in %v", want, *chowns)
-		}
+	info, err := os.Lstat(filepath.Join(h.dir, "builder", "portenv.sock"))
+	if err != nil || info.Mode().Type() != os.ModeSocket || info.Mode().Perm() != 0o660 {
+		t.Errorf("socket: %v, %v; want a 0660 socket", info, err)
 	}
 	if got := h.TMPDIR("builder"); got != filepath.Join(h.dir, "builder", "tmp") {
 		t.Errorf("TMPDIR = %q", got)
 	}
 }
 
+// The helper makes no folders: without init's run folder, it serves nothing
+// and leaves nothing behind (the owner demo, 2026-10-18: it tried, and had
+// no right to, in root's /run/portenv-team).
+func TestTheHubMakesNoFolders(t *testing.T) {
+	uid := 2001
+	h := newTestHub(t, &uid)
+	err := h.addAgent("builder", 2001, 2001)
+	if err == nil || !strings.Contains(err.Error(), "init makes it") {
+		t.Errorf("addAgent without a run folder = %v, want a refusal naming init", err)
+	}
+	if _, err := os.Lstat(filepath.Join(h.dir, "builder")); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("the hub made a folder: %v", err)
+	}
+}
+
+// A socket whose group isn't the agent's is never served.
+func TestTheHubRefusesASocketWithAnotherGroup(t *testing.T) {
+	uid := 2001
+	h := newTestHub(t, &uid)
+	makeTestRunDir(t, h.dir, "builder", 2001)
+	h.groupOf = func(string) int { return 2002 }
+	if err := h.addAgent("builder", 2001, 2001); err == nil || !strings.Contains(err.Error(), "setgid") {
+		t.Errorf("addAgent = %v, want a refusal", err)
+	}
+	if _, err := os.Lstat(filepath.Join(h.dir, "builder", "portenv.sock")); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("the refused socket is still there: %v", err)
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if len(h.agents) != 0 || len(h.byUID) != 0 {
+		t.Errorf("serving %v", h.agents)
+	}
+}
+
+// The real setgid effect, with a group this test's user may give a
+// folder: the socket the hub makes takes the folder's group with no chown,
+// and the hub's real group check accepts it.
+func TestTheSocketTakesItsFoldersGroup(t *testing.T) {
+	groups, err := os.Getgroups()
+	if err != nil {
+		t.Fatal(err)
+	}
+	gid := -1
+	for _, g := range groups {
+		if g != os.Getgid() {
+			gid = g
+			break
+		}
+	}
+	if gid < 0 {
+		t.Skip("this user has no second group to give a folder")
+	}
+	uid := 2001
+	h := newTestHub(t, &uid)
+	makeTestRunDir(t, h.dir, "builder", 2001)
+	base := filepath.Join(h.dir, "builder")
+	if err := os.Lchown(base, -1, gid); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(base, os.ModeSetgid|0o710); err != nil {
+		t.Fatal(err)
+	}
+	h.groupOf = fileGroup
+	if err := h.addAgent("builder", 2001, gid); err != nil {
+		t.Fatal(err)
+	}
+	if g := fileGroup(filepath.Join(base, "portenv.sock")); g != gid {
+		t.Errorf("socket group %d, want %d", g, gid)
+	}
+}
+
+// The API process gives nothing to another uid and makes no folders: its
+// team files call no chown, mkdir or lchown at all (init does that work).
+func TestTheAPIProcessTeamCodeNeverChowns(t *testing.T) {
+	banned := map[string]bool{"Chown": true, "Lchown": true, "Fchown": true, "Mkdir": true, "MkdirAll": true, "Fchownat": true}
+	for _, file := range []string{"teamcalls.go", "teamstart.go", "teamstart_linux.go"} {
+		f, err := parser.ParseFile(token.NewFileSet(), file, nil, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ast.Inspect(f, func(n ast.Node) bool {
+			if sel, ok := n.(*ast.SelectorExpr); ok && banned[sel.Sel.Name] {
+				t.Errorf("%s uses %s: the API process may not; init makes and owns the agent's folders", file, sel.Sel.Name)
+			}
+			return true
+		})
+	}
+}
+
 func TestRemovingAnAgentClosesItsSocket(t *testing.T) {
 	uid := 2001
-	h, _ := newTestHub(t, &uid)
-	if err := h.addAgent("builder", 2001, 2001); err != nil {
+	h := newTestHub(t, &uid)
+	if err := addTestAgent(t, h, "builder", 2001); err != nil {
 		t.Fatal(err)
 	}
 	h.removeAgent("builder")
 	if _, err := net.Dial("unix", filepath.Join(h.dir, "builder", "portenv.sock")); err == nil {
 		t.Error("the socket still answers")
 	}
-	if err := h.addAgent("bad/id", 2002, 2002); !errors.Is(err, ErrInvalidAgentID) {
+	if err := addTestAgent(t, h, "bad/id", 2002); !errors.Is(err, ErrInvalidAgentID) {
 		t.Errorf("addAgent(bad/id) = %v, want ErrInvalidAgentID", err)
 	}
 }

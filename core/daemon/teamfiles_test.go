@@ -150,6 +150,19 @@ func TestAgentFileDefaults(t *testing.T) {
 	}
 }
 
+// ADR 0022 §2a: checkout is own by default, or none.
+func TestAgentFileCheckout(t *testing.T) {
+	src := teamDirs(t)
+	writeAgent(t, src, "builder", with())
+	if a := loadAgent(t, src, "builder"); len(a.Problems) != 0 || a.Spec.Checkout != CheckoutOwn || !a.OwnClone() {
+		t.Errorf("default: %+v", a)
+	}
+	writeAgent(t, src, "builder", with("checkout: none"))
+	if a := loadAgent(t, src, "builder"); len(a.Problems) != 0 || a.Spec.Checkout != CheckoutNone || a.OwnClone() {
+		t.Errorf("none: %+v", a)
+	}
+}
+
 func TestAgentFileRemoteRunner(t *testing.T) {
 	src := teamDirs(t)
 	writeAgent(t, src, "dots", "---\nid: dots\nname: Dots\nrunner: remote\nvia: mcp\n---\n")
@@ -227,6 +240,8 @@ func TestAgentFileRules(t *testing.T) {
 		{"share_login item", "builder", with("share_login: [Claude]"), `builder: share_login "Claude" must be a tool name: a lowercase letter, then lowercase letters, digits or hyphens.`},
 		{"panes", "builder", with("grant:", "  panes: maybe"), `builder: grant.panes is "maybe"; it must be ask, allow or never.`},
 		{"packages allow", "builder", with("grant:", "  packages: allow"), `builder: grant.packages is "allow"; it must be ask or never.`},
+		{"checkout", "builder", with("checkout: shared"), `builder: checkout is "shared"; it must be own or none.`},
+		{"checkout list", "builder", with("checkout: [own]"), `builder: checkout must be a single value, not a list.`},
 		{"max_panes high", "builder", with("grant:", "  max_panes: 12"), `builder: grant.max_panes is 12; it must be 1 to 8.`},
 		{"max_panes zero", "builder", with("grant:", "  max_panes: 0"), `builder: grant.max_panes is 0; it must be 1 to 8.`},
 		{"max_panes words", "builder", with("grant:", "  max_panes: four"), `builder: grant.max_panes is "four"; it must be a whole number from 1 to 8.`},
@@ -475,6 +490,7 @@ func TestOverrideCantWiden(t *testing.T) {
 		{"team_status", ofm("grant:", "  team_status: read"), `builder's override: grant.team_status is read, wider than the repository file's none; an override may only narrow a grant.`},
 		{"home_seed", ofm("home_seed: [secrets]"), `builder's override: it sets home_seed; an override can't add home_seed.`},
 		{"name", ofm("name: Boss"), `builder's override: it sets name; an override may change only runner, via, avatar, share_login and grant.`},
+		{"checkout", ofm("checkout: none"), `builder's override: it sets checkout; an override may change only runner, via, avatar, share_login and grant.`},
 		{"unknown key", ofm("colour: red"), `builder's override: "colour" isn't a key an agent file may have.`},
 		{"other id", ofm("id: lead"), `builder's override: id is "lead"; it must match the file's name, builder.`},
 		{"instructions", "---\navatar: blue\n---\nDo more.\n", `builder's override: it has instructions; only the repository file's are used.`},

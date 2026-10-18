@@ -54,7 +54,7 @@ const (
 )
 
 // residualRisk is §2's sentence, shown when a team first starts (R-0245).
-const residualRisk = "Agents can change your project's files. Check their changes before you run them."
+const residualRisk = "Agents work in their own copies of your project and can't change yours: their work comes back as branches you fetch. Check their branches before you run them."
 
 // teamEngine holds every workspace's team state in portenvd.
 type teamEngine struct {
@@ -298,13 +298,16 @@ func (e *teamEngine) handleCall(ctx context.Context, name string, c *agentv1.Tea
 		return &agentv1.TeamCallsRequest{CallId: id, Ok: true, Result: &agentv1.TeamCallsRequest_Inbox{Inbox: in}}
 	case *agentv1.TeamCallsResponse_Share:
 		// A share is a message to the owner, and to the lead when the
-		// grant names it: the same checks and limit (R-0260 item 1).
-		text := "Work is ready"
-		if br := op.Share.GetBranch(); br != "" {
-			text += " on " + br
-		} else {
-			text += " in the shared checkout"
+		// grant names it: the same checks and limit (R-0260 item 1). The
+		// work is on the agent's branch in its own clone (ADR 0022 §2a).
+		if !me.OwnClone() {
+			return refuse(id, "%s has no copy of the project (checkout: none), so it has no branch to share.", me.ID)
 		}
+		branch := agentBranch(me.ID)
+		if br := op.Share.GetBranch(); br != "" && br != branch {
+			return refuse(id, "%s shares its own branch, %s, not %s.", me.ID, branch, br)
+		}
+		text := "Work is ready on " + branch
 		if s := strings.TrimSpace(op.Share.GetText()); s != "" {
 			text += ": " + s
 		}
@@ -677,8 +680,9 @@ func (e *teamEngine) startAgentAs(ctx context.Context, name, agentID string, app
 	if err != nil {
 		return nil, err
 	}
-	// The project is the team's before each start (ADR 0022 §2): init
-	// checks it again every time, and refuses with a plain line.
+	// The project is readable by the team and writable by no agent before
+	// each start (ADR 0022 §2a): init checks it again every time, and
+	// refuses with a plain line.
 	pr, err := h.PrepareTeamProject(ctx, &agentv1.PrepareTeamProjectRequest{ProjectDir: "/home/work/" + name})
 	if err != nil {
 		return nil, errors.New(status.Convert(err).Message())
@@ -688,13 +692,18 @@ func (e *teamEngine) startAgentAs(ctx context.Context, name, agentID string, app
 		e.noticeLocked(ctx, name, b, boardOwner, "", "Portenv made these private in your home, since agents can pass through it: "+strings.Join(fixed, "; ")+".")
 	}
 	b.states[agentID] = typesv1.AgentState_AGENT_STATE_STARTING
+	clone := ""
+	if a.OwnClone() {
+		clone = "/home/work/" + name
+	}
 	r, err := h.StartTeamAgent(ctx, &agentv1.StartTeamAgentRequest{
-		AgentId:        agentID,
-		Argv:           a.Runner,
-		AgentsMd:       agentsMDBlock(&team, a) + "\n" + a.Spec.Instructions,
-		HomeSeed:       a.Spec.HomeSeed,
-		HomeQuotaBytes: defaultHomeQuota,
-		IdlePattern:    runnerIdlePattern(a.Runner),
+		AgentId:         agentID,
+		CloneProjectDir: clone,
+		Argv:            a.Runner,
+		AgentsMd:        agentsMDBlock(&team, a, name) + "\n" + a.Spec.Instructions,
+		HomeSeed:        a.Spec.HomeSeed,
+		HomeQuotaBytes:  defaultHomeQuota,
+		IdlePattern:     runnerIdlePattern(a.Runner),
 	})
 	if err != nil {
 		b.states[agentID] = typesv1.AgentState_AGENT_STATE_STOPPED
@@ -1119,7 +1128,7 @@ func (e *teamEngine) whoamiLocked(name string, b *teamBox, team *Team, me *TeamA
 
 // agentsMDBlock is the generated block at the top of an agent's AGENTS.md
 // (R-0246), written from its grant so it can't drift from what's enforced.
-func agentsMDBlock(team *Team, a *TeamAgent) string {
+func agentsMDBlock(team *Team, a *TeamAgent, workspace string) string {
 	g := a.Grant
 	name := a.ID
 	if a.Spec != nil && a.Spec.Name != "" {
@@ -1144,6 +1153,10 @@ func agentsMDBlock(team *Team, a *TeamAgent) string {
 	} else {
 		cant = append(cant, "ask the owner for decisions")
 	}
+	if a.OwnClone() {
+		can = append(can, fmt.Sprintf("work in your own copy of the project, ~/%s, on branch %s, and say it's ready with portenv share once you've committed", workspace, agentBranch(a.ID)))
+		cant = append(cant, fmt.Sprintf("change the owner's project in /home/work/%s (you can read it, and git fetch owner brings its new commits)", workspace))
+	}
 	cant = append(cant, "reach the owner's terminals or other agents' files", "use sudo")
 	var mates []string
 	for i := range team.Agents {
@@ -1163,6 +1176,9 @@ func agentsMDBlock(team *Team, a *TeamAgent) string {
 	s.WriteString(" Run portenv guide for the board, and portenv whoami for what you can do now.\n")
 	return s.String()
 }
+
+// agentBranch is an agent's branch in its clone (ADR 0022 §2a).
+func agentBranch(id string) string { return "agent/" + id }
 
 // newULID is a ULID: 48 bits of milliseconds, then 80 random bits, in
 // Crockford's base 32, so ids sort by time.

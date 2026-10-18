@@ -716,7 +716,7 @@ extension TeamMessage {
         case .answer, .unspecified, .UNRECOGNIZED: .answer
         }
         self.init(id: m.id, from: m.from, to: m.to, threadID: m.threadID, kind: kind, text: m.text,
-                  createdAt: m.hasCreatedAt ? m.createdAt.date : nil)
+                  createdAt: m.hasCreatedAt ? m.createdAt.date : nil, about: m.about)
     }
 }
 

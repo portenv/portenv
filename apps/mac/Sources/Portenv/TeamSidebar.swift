@@ -182,9 +182,12 @@ struct AgentRow: View {
                             TeamStatus(status: agent.status)
                         }
                         // Its status while it runs (R-0256), else its latest line.
+                        // Why its start failed, in red (R-0302).
                         let line = TeamText.rowLine(agent, now: now).text
                         if !line.isEmpty {
-                            Text(verbatim: line).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.tail)
+                            Text(verbatim: line).font(.system(size: 11))
+                                .foregroundStyle(TeamText.startFailure(agent) == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(SwiftUI.Color(nsColor: .systemRed)))
+                                .lineLimit(1).truncationMode(.tail)
                         }
                     }
                 }

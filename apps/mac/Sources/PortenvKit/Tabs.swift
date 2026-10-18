@@ -243,15 +243,24 @@ public final class TabsController {
         }
     }
 
-    /// `+`: a new tab at the end, shown at once.
-    public func newTab() async {
+    /// `+`: a new tab at the end, shown at once. The new tab, or nil when
+    /// it couldn't be made (the problem is in `error`).
+    @discardableResult
+    public func newTab() async -> TabInfo? {
         let name = TabNames.next(after: tabs.map(\.name))
+        var made: TabInfo?
         await perform {
             let t = try await self.daemon.newTab(self.box, name: name)
             if !self.tabs.contains(where: { $0.id == t.id }) { self.tabs.append(t) }
             self.show(t.id)
+            made = t
         }
+        return made
     }
+
+    /// Takes the tabs as the box agent reported them, as `follow` does
+    /// (renders and tests).
+    public func receive(_ ts: [TabInfo]) { tabs = ts }
 
     /// Closes a tab, never the last one.
     public func close(_ id: String) async {
@@ -333,15 +342,26 @@ public final class TabsController {
 
     /// Shows a tab in the terminal.
     public func select(_ id: String) async {
-        guard tabs.contains(where: { $0.id == id && !$0.active }) else { return }
+        await choose(id)?.value
+    }
+
+    /// Marks a tab current at once, and tells portenvd after (split view's
+    /// focus, which can't wait for the answer). Nil when there's nothing to
+    /// do: the tab is current already, or gone. A refusal puts the tabs
+    /// back as they were.
+    @discardableResult
+    public func choose(_ id: String) -> Task<Void, Never>? {
+        guard tabs.contains(where: { $0.id == id && !$0.active }) else { return nil }
         let before = tabs
         show(id)
-        await perform {
-            do {
-                try await self.daemon.selectTab(self.box, id: id)
-            } catch {
-                self.tabs = before
-                throw error
+        return Task {
+            await perform {
+                do {
+                    try await self.daemon.selectTab(self.box, id: id)
+                } catch {
+                    self.tabs = before
+                    throw error
+                }
             }
         }
     }

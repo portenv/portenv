@@ -34,7 +34,9 @@ struct TeamControls: View {
                         Text(TeamText.word(agent.status)).font(.system(size: 11)).foregroundStyle(.secondary)
                     }
                 }
-                if let error = team.error {
+                // A failed Start, or why the start Approve set going
+                // failed (R-0302).
+                if let error = team.error ?? TeamText.startFailure(agent) {
                     Text(verbatim: error).font(.system(size: 11)).foregroundStyle(SwiftUI.Color(nsColor: .systemRed))
                         .fixedSize(horizontal: false, vertical: true)
                 }

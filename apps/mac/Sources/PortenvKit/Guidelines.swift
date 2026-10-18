@@ -288,6 +288,8 @@ public enum TerminalLayout {
 
 /// §12: what VoiceOver says for the window's controls.
 public enum A11y {
+    /// Split view's panes, as a group (each pane reads "Pane: grok tab").
+    public static let splitPanes = "Panes"
     public static func titleLabel(box: String) -> String { "\(box), workspace menu" }
 
     /// The recovery key read one character at a time, group by group, so it

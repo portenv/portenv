@@ -70,7 +70,8 @@ struct PortenvApp: App {
                     BoxMenu(controller: controller)
                 }
             }
-            TabCommands(tabs: model.tabs)
+            TabCommands(tabs: model.tabs, split: model.split)
+            SplitCommands(split: model.split)
             InspectorToggle(box: model.controller?.box)
             TeamSidebarToggle(box: model.controller?.box, team: model.team)
             FindCommands()

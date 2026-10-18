@@ -913,6 +913,10 @@ public nonisolated struct Portenv_Types_V1_BoardMessage: Sendable {
   /// For MESSAGE_TYPE_HANDOFF: what landed in the recipient's inbox.
   public var files: [Portenv_Types_V1_HandoffFile] = []
 
+  /// For Portenv's notices about one agent (a start that failed): its id,
+  /// so the app shows the notice in that agent's column. Empty otherwise.
+  public var about: String = String()
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -1525,7 +1529,7 @@ nonisolated extension Portenv_Types_V1_Tab: SwiftProtobuf.Message, SwiftProtobuf
 
 nonisolated extension Portenv_Types_V1_BoardMessage: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".BoardMessage"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}from\0\u{1}to\0\u{3}thread_id\0\u{1}type\0\u{1}text\0\u{3}created_at\0\u{1}files\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}from\0\u{1}to\0\u{3}thread_id\0\u{1}type\0\u{1}text\0\u{3}created_at\0\u{1}files\0\u{1}about\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1541,6 +1545,7 @@ nonisolated extension Portenv_Types_V1_BoardMessage: SwiftProtobuf.Message, Swif
       case 6: try { try decoder.decodeSingularStringField(value: &self.text) }()
       case 7: try { try decoder.decodeSingularMessageField(value: &self._createdAt) }()
       case 8: try { try decoder.decodeRepeatedMessageField(value: &self.files) }()
+      case 9: try { try decoder.decodeSingularStringField(value: &self.about) }()
       default: break
       }
     }
@@ -1575,6 +1580,9 @@ nonisolated extension Portenv_Types_V1_BoardMessage: SwiftProtobuf.Message, Swif
     if !self.files.isEmpty {
       try visitor.visitRepeatedMessageField(value: self.files, fieldNumber: 8)
     }
+    if !self.about.isEmpty {
+      try visitor.visitSingularStringField(value: self.about, fieldNumber: 9)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -1587,6 +1595,7 @@ nonisolated extension Portenv_Types_V1_BoardMessage: SwiftProtobuf.Message, Swif
     if lhs.text != rhs.text {return false}
     if lhs._createdAt != rhs._createdAt {return false}
     if lhs.files != rhs.files {return false}
+    if lhs.about != rhs.about {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

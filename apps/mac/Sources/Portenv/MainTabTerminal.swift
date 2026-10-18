@@ -18,6 +18,10 @@ struct MainTabTerminal: View {
     let label: String
     /// portenvd is away or the workspace is being reopened (R-0242).
     var serviceComing = false
+    /// Split view: whether this is the focused pane, whose terminal takes
+    /// the keys; and what to do when a click in the terminal focuses it.
+    var isActive = true
+    var onFocus: () -> Void = {}
     @State private var focused = true
 
     var body: some View {
@@ -57,7 +61,12 @@ struct MainTabTerminal: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(nsColor: .textBackgroundColor))
-        .onAppear { shown.show(tab: tab, generation: generation) }
+        .onAppear {
+            focused = isActive
+            shown.show(tab: tab, generation: generation)
+        }
+        .onChange(of: isActive) { focused = isActive }
+        .onChange(of: focused) { if focused { onFocus() } }
         .onChange(of: "\(generation)/\(tab)") { shown.show(tab: tab, generation: generation) }
         .onDisappear { shown.stop() }
     }

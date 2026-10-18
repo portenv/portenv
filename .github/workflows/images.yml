@@ -131,8 +131,12 @@ jobs:
       # An agent team's first start on a fresh workspace, as the owner
       # makes it in the app (R-0296): a real portenvd, portenv team init,
       # approve lead, the TEAM_START decision, start lead, whoami in its
-      # pane, and its ask-owner in the decision list. No fixtures. After the
-      # other tests, so a failure here never hides theirs.
+      # pane, and its ask-owner in the decision list; then lead writes a
+      # file and runs git, and builder's start must get past them (CC-0494);
+      # builder runs git in the project and in a worktree, and can't write
+      # .git/config or .git/hooks (CC-0493).
+      # No fixtures. After the other tests, so a failure here never hides
+      # theirs.
       - name: Agent team first start
         run: make team-start IMAGE=toolbox-node:test
       - name: Publish ${{ matrix.arch }}

@@ -565,7 +565,7 @@ func TestATeamStartThatCantStartSaysWhy(t *testing.T) {
 
 	_, _ = e.startAgent(ctx, "w", "lead")
 	d = e.box("w").teamStartPendingLocked()
-	h.prepareErr = "~/.ssh can be read by others in this workspace."
+	h.prepareErr = hooksLinkRaw
 	if _, err := e.answer(ctx, "w", d.GetId(), true, ""); err != nil {
 		t.Fatal(err)
 	}
@@ -578,7 +578,7 @@ func TestATeamStartThatCantStartSaysWhy(t *testing.T) {
 	}
 	told := false
 	for _, ev := range e.box("w").events {
-		if m := ev.msg; m != nil && m.GetTo() == boardOwner && strings.Contains(m.GetText(), "Lead couldn't start") && strings.Contains(m.GetText(), ".ssh") {
+		if m := ev.msg; m != nil && m.GetTo() == boardOwner && strings.Contains(m.GetText(), "Lead couldn't start: "+hooksLinkLine) && !strings.Contains(m.GetText(), "exit status") {
 			told = true
 			// About Lead, so the app shows it in Lead's column (R-0302).
 			if m.GetAbout() != "lead" {
@@ -590,7 +590,7 @@ func TestATeamStartThatCantStartSaysWhy(t *testing.T) {
 		t.Error("the owner wasn't told why Lead didn't start")
 	}
 	// Lead's row carries the reason as its one line (R-0302).
-	if p := e.agentInfos(ctx, "w")["lead"].GetProblem(); p != "Couldn't start: ~/.ssh can be read by others in this workspace." {
+	if p := e.agentInfos(ctx, "w")["lead"].GetProblem(); p != "Couldn't start: "+hooksLinkLine {
 		t.Errorf("lead's problem after a failed start: %q", p)
 	}
 	if p := e.agentInfos(ctx, "w")["builder"].GetProblem(); p != "" {
@@ -1146,15 +1146,22 @@ func (f *fakeTeamHelper) PrepareTeamProject(_ context.Context, in *agentv1.Prepa
 	return &agentv1.PrepareTeamProjectResponse{Fixed: f.fixed}, nil
 }
 
+// hooksLinkRaw is the helper's refusal as it arrives (team-io's words
+// inside the command's failure); hooksLinkLine is what the owner sees.
+const (
+	hooksLinkRaw  = "open the project to the team: exit status 1: portenv-agent: .git/hooks in the project is a link; Portenv won't open the project to the team until it's a real file or folder"
+	hooksLinkLine = ".git/hooks in the project is a link, so Portenv won't share the project with the team. Make it a real file or folder, then click Start again."
+)
+
 // ADR 0022 §2: the project is opened to the team before its first agent
 // starts, and a refusal (open dotfiles, no ACLs) stops the start.
 func TestTheProjectIsPreparedBeforeAgentsStart(t *testing.T) {
 	e, h, _ := newTestEngine(t, defaultTeam()...)
 	approveFirstStart(t, e)
 	ctx := context.Background()
-	h.prepareErr = "~/.ssh can be read by others in this workspace."
-	if _, err := e.startAgent(ctx, "w", "lead"); err == nil || !strings.Contains(err.Error(), ".ssh") {
-		t.Fatalf("start = %v, want the helper's line", err)
+	h.prepareErr = hooksLinkRaw
+	if _, err := e.startAgent(ctx, "w", "lead"); err == nil || err.Error() != hooksLinkLine {
+		t.Fatalf("start = %v, want the helper's refusal as a plain line", err)
 	}
 	if len(h.started) != 0 {
 		t.Fatal("an agent started over an unprepared project")

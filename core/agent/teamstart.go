@@ -86,7 +86,7 @@ func (s *apiServer) StartTeamAgent(ctx context.Context, req *agentv1.StartTeamAg
 		return nil, status.Errorf(codes.InvalidArgument, "%s's idle pattern: %v", id, err)
 	}
 	if len(req.GetAgentsMd()) > maxAgentsMD {
-		return nil, status.Errorf(codes.InvalidArgument, "%s's AGENTS.md is over %d KB", id, maxAgentsMD>>10)
+		return nil, status.Errorf(codes.InvalidArgument, "%s%s%d KB", id, agentsMDRefusal, maxAgentsMD>>10)
 	}
 	u, err := s.users.EnsureAgentUser(ctx, id)
 	if err != nil {

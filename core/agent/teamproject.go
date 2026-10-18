@@ -111,7 +111,7 @@ func openProject(ctx context.Context, project string, run Runner, ops projectOps
 		return err
 	}
 	if uid := ops.uidOf(".", &st); uid != ops.self {
-		return fmt.Errorf("%s belongs to uid %d, not to you", project, uid)
+		return refuseTopNotYours(project, uid)
 	}
 	w := &projectWalk{ops: ops, protected: map[fileID]bool{}}
 	if err := w.collectProtected(top); err != nil {
@@ -228,7 +228,7 @@ func (w *projectWalk) collectPath(top *os.File, p string) error {
 		}
 		switch typ := statType(&st); {
 		case typ == unix.S_IFLNK:
-			return fmt.Errorf("%s in the project is a link; Portenv won't open the project to the team until it's a real file or folder", path.Join(parts[:i+1]...))
+			return refuseLink(path.Join(parts[:i+1]...))
 		case i == len(parts)-1:
 			w.protected[idOf(&st)] = true
 			if typ != unix.S_IFDIR {
@@ -242,7 +242,7 @@ func (w *projectWalk) collectPath(top *os.File, p string) error {
 			return fmt.Errorf("check %s: %w", p, err)
 		}
 		if !ok {
-			return fmt.Errorf("%s changed while Portenv opened the project to the team; try again", p)
+			return refuseChanged(p)
 		}
 		opened = append(opened, f)
 		dir = f
@@ -306,7 +306,7 @@ func (w *projectWalk) walk(dir *os.File, rel string, protected bool) error {
 		p := protected || protectedPath(child) || w.protected[idOf(&st)]
 		if uid := w.ops.uidOf(child, &st); uid != w.ops.self {
 			if p {
-				return fmt.Errorf("%s in the project belongs to uid %d, not to you, so an agent could have changed it. Portenv won't open the project to the team until you check it and make it yours again", child, uid)
+				return refuseNotYours(child, uid)
 			}
 			continue // an agent's, made in the team's folders: already the team's
 		}
@@ -319,7 +319,7 @@ func (w *projectWalk) walk(dir *os.File, rel string, protected bool) error {
 		}
 		if !ok {
 			if p {
-				return fmt.Errorf("%s changed while Portenv opened the project to the team; try again", child)
+				return refuseChanged(child)
 			}
 			continue // replaced mid-walk: the next team start sees what's there
 		}

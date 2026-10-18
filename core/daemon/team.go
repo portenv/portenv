@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"maps"
 	"path"
 	"regexp"
@@ -18,7 +19,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -74,6 +74,10 @@ type teamEngine struct {
 	// starts is the agent starts an approved team_start set going, so
 	// tests can wait for them.
 	starts sync.WaitGroup
+
+	// log is portenvd's log, where a failed start's raw detail goes; nil
+	// discards it (tests).
+	log *slog.Logger
 }
 
 func newTeamEngine(helper func(context.Context, string) (agentv1.AgentServiceClient, error), loadTeam func(context.Context, string) (Team, error)) *teamEngine {
@@ -643,7 +647,7 @@ func (e *teamEngine) startAgent(ctx context.Context, name, agentID string) (*dae
 func (e *teamEngine) startAgentAs(ctx context.Context, name, agentID string, approved bool) (*daemonv1.AgentInfo, error) {
 	team, err := e.loadTeam(ctx, name)
 	if err != nil {
-		return nil, err
+		return nil, e.startError(name, agentID, stepLoadTeam, err)
 	}
 	a := team.agent(agentID)
 	switch {
@@ -675,13 +679,13 @@ func (e *teamEngine) startAgentAs(ctx context.Context, name, agentID string, app
 	}
 	h, err := e.helper(ctx, name)
 	if err != nil {
-		return nil, err
+		return nil, e.startError(name, agentID, stepHelper, err)
 	}
 	// The project is the team's before each start (ADR 0022 §2): init
-	// checks it again every time, and refuses with a plain line.
+	// checks it again every time; the owner sees one plain line.
 	pr, err := h.PrepareTeamProject(ctx, &agentv1.PrepareTeamProjectRequest{ProjectDir: "/home/work/" + name})
 	if err != nil {
-		return nil, errors.New(status.Convert(err).Message())
+		return nil, e.startError(name, agentID, stepProject, err)
 	}
 	// What init made private in the owner's home, told once (R-0262).
 	if fixed := pr.GetFixed(); len(fixed) > 0 {
@@ -698,7 +702,7 @@ func (e *teamEngine) startAgentAs(ctx context.Context, name, agentID string, app
 	})
 	if err != nil {
 		b.states[agentID] = typesv1.AgentState_AGENT_STATE_STOPPED
-		return nil, err
+		return nil, e.startError(name, agentID, stepStart, err)
 	}
 	b.states[agentID] = typesv1.AgentState_AGENT_STATE_RUNNING
 	delete(b.startErr, agentID)
@@ -789,7 +793,7 @@ func (e *teamEngine) startApprovedLocked(ctx context.Context, name string, b *te
 	}
 	team, err := e.loadTeam(ctx, name)
 	if err != nil {
-		e.noticeLocked(ctx, name, b, boardOwner, d.GetId(), "Portenv couldn't start the team: "+err.Error()+". Click Start again.")
+		e.noticeLocked(ctx, name, b, boardOwner, d.GetId(), "Portenv couldn't start the team: "+e.startError(name, "", stepLoadTeam, err).Error())
 		return
 	}
 	var starting []string

@@ -50,9 +50,10 @@ Facts about today's workspace that decide the design:
 - **Names:** the app and every message show the agent's display name ("Builder").
 
 **The helper's user switch.**
-- **Sockets.** init makes `/run/portenv-team/` (root, 0755). For each agent, the helper makes `/run/portenv-team/<id>/`, owned by the helper (991) with the agent's group, 0710, so only that agent and the helper can pass through. Inside it:
-  - `portenv.sock`: the agent's `portenv` socket (section 4), 991 with the agent's group, 0660;
-  - `tmux/`: the agent's own, 0700, for its tmux server's socket.
+- **Sockets.** init makes `/run/portenv-team/` (root, 0711). For each agent, init (root) also makes `/run/portenv-team/<id>/`, owned by the helper (991) with the agent's group, setgid, 0710, so only that agent and the helper can pass through and only the helper writes in it. It does this in `EnsureAgentUser`, again at every start (`/run` is lost when the box stops), opening each folder without following a link, and returns the paths. The helper has no `cap_dac_override` and makes no folders there, and gives nothing to another uid. Inside it:
+  - `portenv.sock`: the agent's `portenv` socket (section 4), 991 with the agent's group, 0660. The helper makes it by listening; the folder's setgid bit gives it the agent's group, which the helper checks before serving;
+  - `tmux/`: the agent's own, 0700, for its tmux server's socket;
+  - `tmp/`: the agent's own, 0700, its `TMPDIR` (below).
 - **Processes.** The helper's API process (uid 991) already holds `cap_setuid`, `cap_setgid`, `cap_chown` and `cap_kill` (ADR 0010), and needs no new capability. For each agent it starts two processes as the agent's user. Each runs in a forked child that calls `setgroups([its group, team])`, `setgid` and `setuid`, clears the ambient capability set and sets `no_new_privs` before `exec`. So nothing an agent runs can gain a capability or use a set-uid binary, `sudo` included. The two processes are:
   - the agent's own tmux server, on `/run/portenv-team/<id>/tmux/default`;
   - one control client (ADR 0020's control mode) attached to that server, which talks to the helper over pipes. It runs as the agent because tmux accepts only clients with the server's own uid.

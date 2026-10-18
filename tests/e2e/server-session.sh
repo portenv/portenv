@@ -67,7 +67,7 @@ expect "sudo for portenv runs /usr/local/bin/portenv" "${ssh_cmd[@]}" -- "$targe
 
 echo "== a box on this Mac with storage on the server"
 mkdir -p "$root/mac"
-printf '{"servers": ["%s"]}\n' "$target" > "$root/mac/machine.json"
+"$portenv" app trust-server "$target" "$host_key" # the server's own SSH host key, pinned (ADR 0021)
 "$portenv" init "$box" --image "$image" --storage "sftp:portenv-storage@$host:/storage" --storage-host-key "$host_key" --storage-rest 127.0.0.1:7422 > "$root/init.txt"
 A sudo bash /tmp/portenv-setup.sh --only storage-account --storage-key "'$(grep '^ssh-ed25519 ' "$root/init.txt")'" --rest-user "'$(sed -n 's/^rest-user //p' "$root/init.txt")'" >/dev/null
 "$repo/bin/portenvd" 2>"$root/portenvd.log" &

@@ -25,18 +25,36 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	AgentService_GetVersion_FullMethodName    = "/portenv.agent.v1.AgentService/GetVersion"
-	AgentService_GetReadiness_FullMethodName  = "/portenv.agent.v1.AgentService/GetReadiness"
-	AgentService_RetryPackages_FullMethodName = "/portenv.agent.v1.AgentService/RetryPackages"
-	AgentService_RunRestic_FullMethodName     = "/portenv.agent.v1.AgentService/RunRestic"
-	AgentService_GetPathInfo_FullMethodName   = "/portenv.agent.v1.AgentService/GetPathInfo"
-	AgentService_Terminal_FullMethodName      = "/portenv.agent.v1.AgentService/Terminal"
-	AgentService_ListTabs_FullMethodName      = "/portenv.agent.v1.AgentService/ListTabs"
-	AgentService_NewTab_FullMethodName        = "/portenv.agent.v1.AgentService/NewTab"
-	AgentService_CloseTab_FullMethodName      = "/portenv.agent.v1.AgentService/CloseTab"
-	AgentService_RenameTab_FullMethodName     = "/portenv.agent.v1.AgentService/RenameTab"
-	AgentService_SelectTab_FullMethodName     = "/portenv.agent.v1.AgentService/SelectTab"
-	AgentService_WatchTabs_FullMethodName     = "/portenv.agent.v1.AgentService/WatchTabs"
+	AgentService_GetVersion_FullMethodName         = "/portenv.agent.v1.AgentService/GetVersion"
+	AgentService_GetReadiness_FullMethodName       = "/portenv.agent.v1.AgentService/GetReadiness"
+	AgentService_RetryPackages_FullMethodName      = "/portenv.agent.v1.AgentService/RetryPackages"
+	AgentService_RunRestic_FullMethodName          = "/portenv.agent.v1.AgentService/RunRestic"
+	AgentService_GetPathInfo_FullMethodName        = "/portenv.agent.v1.AgentService/GetPathInfo"
+	AgentService_Terminal_FullMethodName           = "/portenv.agent.v1.AgentService/Terminal"
+	AgentService_ListTabs_FullMethodName           = "/portenv.agent.v1.AgentService/ListTabs"
+	AgentService_NewTab_FullMethodName             = "/portenv.agent.v1.AgentService/NewTab"
+	AgentService_CloseTab_FullMethodName           = "/portenv.agent.v1.AgentService/CloseTab"
+	AgentService_RenameTab_FullMethodName          = "/portenv.agent.v1.AgentService/RenameTab"
+	AgentService_SelectTab_FullMethodName          = "/portenv.agent.v1.AgentService/SelectTab"
+	AgentService_WatchTabs_FullMethodName          = "/portenv.agent.v1.AgentService/WatchTabs"
+	AgentService_TabTerminal_FullMethodName        = "/portenv.agent.v1.AgentService/TabTerminal"
+	AgentService_TeamCalls_FullMethodName          = "/portenv.agent.v1.AgentService/TeamCalls"
+	AgentService_StartTeamAgent_FullMethodName     = "/portenv.agent.v1.AgentService/StartTeamAgent"
+	AgentService_StopTeamAgent_FullMethodName      = "/portenv.agent.v1.AgentService/StopTeamAgent"
+	AgentService_AppendBoard_FullMethodName        = "/portenv.agent.v1.AgentService/AppendBoard"
+	AgentService_ListHomeFiles_FullMethodName      = "/portenv.agent.v1.AgentService/ListHomeFiles"
+	AgentService_ReadHomeFile_FullMethodName       = "/portenv.agent.v1.AgentService/ReadHomeFile"
+	AgentService_WriteHomeFiles_FullMethodName     = "/portenv.agent.v1.AgentService/WriteHomeFiles"
+	AgentService_EnsureAgentUser_FullMethodName    = "/portenv.agent.v1.AgentService/EnsureAgentUser"
+	AgentService_RemoveAgentUser_FullMethodName    = "/portenv.agent.v1.AgentService/RemoveAgentUser"
+	AgentService_SimulatePackage_FullMethodName    = "/portenv.agent.v1.AgentService/SimulatePackage"
+	AgentService_InstallPackages_FullMethodName    = "/portenv.agent.v1.AgentService/InstallPackages"
+	AgentService_AgentPaneAction_FullMethodName    = "/portenv.agent.v1.AgentService/AgentPaneAction"
+	AgentService_ReadBoard_FullMethodName          = "/portenv.agent.v1.AgentService/ReadBoard"
+	AgentService_ReadAgentFiles_FullMethodName     = "/portenv.agent.v1.AgentService/ReadAgentFiles"
+	AgentService_DeliverRoutine_FullMethodName     = "/portenv.agent.v1.AgentService/DeliverRoutine"
+	AgentService_HandoffFiles_FullMethodName       = "/portenv.agent.v1.AgentService/HandoffFiles"
+	AgentService_PrepareTeamProject_FullMethodName = "/portenv.agent.v1.AgentService/PrepareTeamProject"
 )
 
 // AgentServiceClient is the client API for AgentService service.
@@ -74,6 +92,61 @@ type AgentServiceClient interface {
 	SelectTab(ctx context.Context, in *SelectTabRequest, opts ...grpc.CallOption) (*SelectTabResponse, error)
 	// The tabs at once, then again whenever they change.
 	WatchTabs(ctx context.Context, in *WatchTabsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[WatchTabsResponse], error)
+	// One tab's terminal (ADR 0020): its own output from the session's
+	// control-mode client, and input and size to it. The first message from
+	// the client must be open. portenvd relays it as it relays Terminal, and
+	// sets the stream's author from its caller (R-0133 item 4); the app's own
+	// request to portenvd has no author field.
+	TabTerminal(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[TabTerminalRequest, TabTerminalResponse], error)
+	// ADR 0022: the agent team.
+	// In-box portenv calls, relayed up. portenvd opens the stream; the helper
+	// sends each call with the caller it read from the socket (SO_PEERCRED),
+	// and portenvd, after its grant check, answers. The helper has no say in
+	// grants.
+	TeamCalls(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[TeamCallsRequest, TeamCallsResponse], error)
+	// Starts an agent's tmux server and control client as its user, and its
+	// runner in the first tab.
+	StartTeamAgent(ctx context.Context, in *StartTeamAgentRequest, opts ...grpc.CallOption) (*StartTeamAgentResponse, error)
+	// Ends an agent's tmux server and every process of its user.
+	StopTeamAgent(ctx context.Context, in *StopTeamAgentRequest, opts ...grpc.CallOption) (*StopTeamAgentResponse, error)
+	// The board's one writer: appends a line, on portenvd's instruction only.
+	AppendBoard(ctx context.Context, in *AppendBoardRequest, opts ...grpc.CallOption) (*AppendBoardResponse, error)
+	// The Agent files view, each done in a process with the agent's uid.
+	ListHomeFiles(ctx context.Context, in *ListHomeFilesRequest, opts ...grpc.CallOption) (*ListHomeFilesResponse, error)
+	ReadHomeFile(ctx context.Context, in *ReadHomeFileRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ReadHomeFileResponse], error)
+	WriteHomeFiles(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[WriteHomeFilesRequest, WriteHomeFilesResponse], error)
+	// Served only by init (root) on its local socket, which only the API
+	// process reaches; the channel's server answers Unimplemented. init checks
+	// every id and package name itself.
+	EnsureAgentUser(ctx context.Context, in *EnsureAgentUserRequest, opts ...grpc.CallOption) (*EnsureAgentUserResponse, error)
+	RemoveAgentUser(ctx context.Context, in *RemoveAgentUserRequest, opts ...grpc.CallOption) (*RemoveAgentUserResponse, error)
+	// apt-get -s for one requested package: the exact set, versions and sources.
+	SimulatePackage(ctx context.Context, in *SimulatePackageRequest, opts ...grpc.CallOption) (*SimulatePackageResponse, error)
+	// Installs exactly the approved set, pinned, or nothing.
+	InstallPackages(ctx context.Context, in *InstallPackagesRequest, opts ...grpc.CallOption) (*InstallPackagesResponse, error)
+	// Opens, focuses or closes a pane on an agent's own tmux server, as that
+	// agent. portenvd calls it only after its grant check (at once for
+	// panes: allow, on the owner's Approve for panes: ask).
+	AgentPaneAction(ctx context.Context, in *AgentPaneActionRequest, opts ...grpc.CallOption) (*AgentPaneActionResponse, error)
+	// The board's lines from the start, for portenvd after a restart.
+	ReadBoard(ctx context.Context, in *ReadBoardRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ReadBoardResponse], error)
+	// The project's agent files (.portenv/agents/*.md), read by the helper.
+	ReadAgentFiles(ctx context.Context, in *ReadAgentFilesRequest, opts ...grpc.CallOption) (*ReadAgentFilesResponse, error)
+	// Types a routine's note into the agent's own main pane, prefixed
+	// "[Portenv routine] ", then Enter (R-0258). portenvd calls it only when
+	// the agent is idle; the helper checks the text again and types only into
+	// the agent's recorded main pane.
+	DeliverRoutine(ctx context.Context, in *DeliverRoutineRequest, opts ...grpc.CallOption) (*DeliverRoutineResponse, error)
+	// Copies files from the sender's home or the project into the
+	// recipient's ~/inbox/<sender>/<timestamp>/ as the recipient (R-0257
+	// item 3): regular files only, no links, at most 100 MB, within quota.
+	HandoffFiles(ctx context.Context, in *HandoffFilesRequest, opts ...grpc.CallOption) (*HandoffFilesResponse, error)
+	// Served only by init: opens the project to the team at team start
+	// (ADR 0022 §2): /home/work 0711 with its dotfiles 0700, the project's
+	// group team, setgid folders and default ACLs, with .git/hooks,
+	// .git/config and .portenv/ never group-writable. Refuses with a plain
+	// line when the filesystem won't keep ACLs.
+	PrepareTeamProject(ctx context.Context, in *PrepareTeamProjectRequest, opts ...grpc.CallOption) (*PrepareTeamProjectResponse, error)
 }
 
 type agentServiceClient struct {
@@ -216,6 +289,213 @@ func (c *agentServiceClient) WatchTabs(ctx context.Context, in *WatchTabsRequest
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type AgentService_WatchTabsClient = grpc.ServerStreamingClient[WatchTabsResponse]
 
+func (c *agentServiceClient) TabTerminal(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[TabTerminalRequest, TabTerminalResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &AgentService_ServiceDesc.Streams[2], AgentService_TabTerminal_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[TabTerminalRequest, TabTerminalResponse]{ClientStream: stream}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type AgentService_TabTerminalClient = grpc.BidiStreamingClient[TabTerminalRequest, TabTerminalResponse]
+
+func (c *agentServiceClient) TeamCalls(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[TeamCallsRequest, TeamCallsResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &AgentService_ServiceDesc.Streams[3], AgentService_TeamCalls_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[TeamCallsRequest, TeamCallsResponse]{ClientStream: stream}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type AgentService_TeamCallsClient = grpc.BidiStreamingClient[TeamCallsRequest, TeamCallsResponse]
+
+func (c *agentServiceClient) StartTeamAgent(ctx context.Context, in *StartTeamAgentRequest, opts ...grpc.CallOption) (*StartTeamAgentResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(StartTeamAgentResponse)
+	err := c.cc.Invoke(ctx, AgentService_StartTeamAgent_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *agentServiceClient) StopTeamAgent(ctx context.Context, in *StopTeamAgentRequest, opts ...grpc.CallOption) (*StopTeamAgentResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(StopTeamAgentResponse)
+	err := c.cc.Invoke(ctx, AgentService_StopTeamAgent_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *agentServiceClient) AppendBoard(ctx context.Context, in *AppendBoardRequest, opts ...grpc.CallOption) (*AppendBoardResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AppendBoardResponse)
+	err := c.cc.Invoke(ctx, AgentService_AppendBoard_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *agentServiceClient) ListHomeFiles(ctx context.Context, in *ListHomeFilesRequest, opts ...grpc.CallOption) (*ListHomeFilesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListHomeFilesResponse)
+	err := c.cc.Invoke(ctx, AgentService_ListHomeFiles_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *agentServiceClient) ReadHomeFile(ctx context.Context, in *ReadHomeFileRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ReadHomeFileResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &AgentService_ServiceDesc.Streams[4], AgentService_ReadHomeFile_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[ReadHomeFileRequest, ReadHomeFileResponse]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type AgentService_ReadHomeFileClient = grpc.ServerStreamingClient[ReadHomeFileResponse]
+
+func (c *agentServiceClient) WriteHomeFiles(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[WriteHomeFilesRequest, WriteHomeFilesResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &AgentService_ServiceDesc.Streams[5], AgentService_WriteHomeFiles_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[WriteHomeFilesRequest, WriteHomeFilesResponse]{ClientStream: stream}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type AgentService_WriteHomeFilesClient = grpc.ClientStreamingClient[WriteHomeFilesRequest, WriteHomeFilesResponse]
+
+func (c *agentServiceClient) EnsureAgentUser(ctx context.Context, in *EnsureAgentUserRequest, opts ...grpc.CallOption) (*EnsureAgentUserResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(EnsureAgentUserResponse)
+	err := c.cc.Invoke(ctx, AgentService_EnsureAgentUser_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *agentServiceClient) RemoveAgentUser(ctx context.Context, in *RemoveAgentUserRequest, opts ...grpc.CallOption) (*RemoveAgentUserResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RemoveAgentUserResponse)
+	err := c.cc.Invoke(ctx, AgentService_RemoveAgentUser_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *agentServiceClient) SimulatePackage(ctx context.Context, in *SimulatePackageRequest, opts ...grpc.CallOption) (*SimulatePackageResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SimulatePackageResponse)
+	err := c.cc.Invoke(ctx, AgentService_SimulatePackage_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *agentServiceClient) InstallPackages(ctx context.Context, in *InstallPackagesRequest, opts ...grpc.CallOption) (*InstallPackagesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(InstallPackagesResponse)
+	err := c.cc.Invoke(ctx, AgentService_InstallPackages_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *agentServiceClient) AgentPaneAction(ctx context.Context, in *AgentPaneActionRequest, opts ...grpc.CallOption) (*AgentPaneActionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AgentPaneActionResponse)
+	err := c.cc.Invoke(ctx, AgentService_AgentPaneAction_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *agentServiceClient) ReadBoard(ctx context.Context, in *ReadBoardRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ReadBoardResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &AgentService_ServiceDesc.Streams[6], AgentService_ReadBoard_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[ReadBoardRequest, ReadBoardResponse]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type AgentService_ReadBoardClient = grpc.ServerStreamingClient[ReadBoardResponse]
+
+func (c *agentServiceClient) ReadAgentFiles(ctx context.Context, in *ReadAgentFilesRequest, opts ...grpc.CallOption) (*ReadAgentFilesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ReadAgentFilesResponse)
+	err := c.cc.Invoke(ctx, AgentService_ReadAgentFiles_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *agentServiceClient) DeliverRoutine(ctx context.Context, in *DeliverRoutineRequest, opts ...grpc.CallOption) (*DeliverRoutineResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeliverRoutineResponse)
+	err := c.cc.Invoke(ctx, AgentService_DeliverRoutine_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *agentServiceClient) HandoffFiles(ctx context.Context, in *HandoffFilesRequest, opts ...grpc.CallOption) (*HandoffFilesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(HandoffFilesResponse)
+	err := c.cc.Invoke(ctx, AgentService_HandoffFiles_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *agentServiceClient) PrepareTeamProject(ctx context.Context, in *PrepareTeamProjectRequest, opts ...grpc.CallOption) (*PrepareTeamProjectResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PrepareTeamProjectResponse)
+	err := c.cc.Invoke(ctx, AgentService_PrepareTeamProject_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AgentServiceServer is the server API for AgentService service.
 // All implementations must embed UnimplementedAgentServiceServer
 // for forward compatibility.
@@ -251,6 +531,61 @@ type AgentServiceServer interface {
 	SelectTab(context.Context, *SelectTabRequest) (*SelectTabResponse, error)
 	// The tabs at once, then again whenever they change.
 	WatchTabs(*WatchTabsRequest, grpc.ServerStreamingServer[WatchTabsResponse]) error
+	// One tab's terminal (ADR 0020): its own output from the session's
+	// control-mode client, and input and size to it. The first message from
+	// the client must be open. portenvd relays it as it relays Terminal, and
+	// sets the stream's author from its caller (R-0133 item 4); the app's own
+	// request to portenvd has no author field.
+	TabTerminal(grpc.BidiStreamingServer[TabTerminalRequest, TabTerminalResponse]) error
+	// ADR 0022: the agent team.
+	// In-box portenv calls, relayed up. portenvd opens the stream; the helper
+	// sends each call with the caller it read from the socket (SO_PEERCRED),
+	// and portenvd, after its grant check, answers. The helper has no say in
+	// grants.
+	TeamCalls(grpc.BidiStreamingServer[TeamCallsRequest, TeamCallsResponse]) error
+	// Starts an agent's tmux server and control client as its user, and its
+	// runner in the first tab.
+	StartTeamAgent(context.Context, *StartTeamAgentRequest) (*StartTeamAgentResponse, error)
+	// Ends an agent's tmux server and every process of its user.
+	StopTeamAgent(context.Context, *StopTeamAgentRequest) (*StopTeamAgentResponse, error)
+	// The board's one writer: appends a line, on portenvd's instruction only.
+	AppendBoard(context.Context, *AppendBoardRequest) (*AppendBoardResponse, error)
+	// The Agent files view, each done in a process with the agent's uid.
+	ListHomeFiles(context.Context, *ListHomeFilesRequest) (*ListHomeFilesResponse, error)
+	ReadHomeFile(*ReadHomeFileRequest, grpc.ServerStreamingServer[ReadHomeFileResponse]) error
+	WriteHomeFiles(grpc.ClientStreamingServer[WriteHomeFilesRequest, WriteHomeFilesResponse]) error
+	// Served only by init (root) on its local socket, which only the API
+	// process reaches; the channel's server answers Unimplemented. init checks
+	// every id and package name itself.
+	EnsureAgentUser(context.Context, *EnsureAgentUserRequest) (*EnsureAgentUserResponse, error)
+	RemoveAgentUser(context.Context, *RemoveAgentUserRequest) (*RemoveAgentUserResponse, error)
+	// apt-get -s for one requested package: the exact set, versions and sources.
+	SimulatePackage(context.Context, *SimulatePackageRequest) (*SimulatePackageResponse, error)
+	// Installs exactly the approved set, pinned, or nothing.
+	InstallPackages(context.Context, *InstallPackagesRequest) (*InstallPackagesResponse, error)
+	// Opens, focuses or closes a pane on an agent's own tmux server, as that
+	// agent. portenvd calls it only after its grant check (at once for
+	// panes: allow, on the owner's Approve for panes: ask).
+	AgentPaneAction(context.Context, *AgentPaneActionRequest) (*AgentPaneActionResponse, error)
+	// The board's lines from the start, for portenvd after a restart.
+	ReadBoard(*ReadBoardRequest, grpc.ServerStreamingServer[ReadBoardResponse]) error
+	// The project's agent files (.portenv/agents/*.md), read by the helper.
+	ReadAgentFiles(context.Context, *ReadAgentFilesRequest) (*ReadAgentFilesResponse, error)
+	// Types a routine's note into the agent's own main pane, prefixed
+	// "[Portenv routine] ", then Enter (R-0258). portenvd calls it only when
+	// the agent is idle; the helper checks the text again and types only into
+	// the agent's recorded main pane.
+	DeliverRoutine(context.Context, *DeliverRoutineRequest) (*DeliverRoutineResponse, error)
+	// Copies files from the sender's home or the project into the
+	// recipient's ~/inbox/<sender>/<timestamp>/ as the recipient (R-0257
+	// item 3): regular files only, no links, at most 100 MB, within quota.
+	HandoffFiles(context.Context, *HandoffFilesRequest) (*HandoffFilesResponse, error)
+	// Served only by init: opens the project to the team at team start
+	// (ADR 0022 §2): /home/work 0711 with its dotfiles 0700, the project's
+	// group team, setgid folders and default ACLs, with .git/hooks,
+	// .git/config and .portenv/ never group-writable. Refuses with a plain
+	// line when the filesystem won't keep ACLs.
+	PrepareTeamProject(context.Context, *PrepareTeamProjectRequest) (*PrepareTeamProjectResponse, error)
 	mustEmbedUnimplementedAgentServiceServer()
 }
 
@@ -296,6 +631,60 @@ func (UnimplementedAgentServiceServer) SelectTab(context.Context, *SelectTabRequ
 }
 func (UnimplementedAgentServiceServer) WatchTabs(*WatchTabsRequest, grpc.ServerStreamingServer[WatchTabsResponse]) error {
 	return status.Error(codes.Unimplemented, "method WatchTabs not implemented")
+}
+func (UnimplementedAgentServiceServer) TabTerminal(grpc.BidiStreamingServer[TabTerminalRequest, TabTerminalResponse]) error {
+	return status.Error(codes.Unimplemented, "method TabTerminal not implemented")
+}
+func (UnimplementedAgentServiceServer) TeamCalls(grpc.BidiStreamingServer[TeamCallsRequest, TeamCallsResponse]) error {
+	return status.Error(codes.Unimplemented, "method TeamCalls not implemented")
+}
+func (UnimplementedAgentServiceServer) StartTeamAgent(context.Context, *StartTeamAgentRequest) (*StartTeamAgentResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method StartTeamAgent not implemented")
+}
+func (UnimplementedAgentServiceServer) StopTeamAgent(context.Context, *StopTeamAgentRequest) (*StopTeamAgentResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method StopTeamAgent not implemented")
+}
+func (UnimplementedAgentServiceServer) AppendBoard(context.Context, *AppendBoardRequest) (*AppendBoardResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AppendBoard not implemented")
+}
+func (UnimplementedAgentServiceServer) ListHomeFiles(context.Context, *ListHomeFilesRequest) (*ListHomeFilesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListHomeFiles not implemented")
+}
+func (UnimplementedAgentServiceServer) ReadHomeFile(*ReadHomeFileRequest, grpc.ServerStreamingServer[ReadHomeFileResponse]) error {
+	return status.Error(codes.Unimplemented, "method ReadHomeFile not implemented")
+}
+func (UnimplementedAgentServiceServer) WriteHomeFiles(grpc.ClientStreamingServer[WriteHomeFilesRequest, WriteHomeFilesResponse]) error {
+	return status.Error(codes.Unimplemented, "method WriteHomeFiles not implemented")
+}
+func (UnimplementedAgentServiceServer) EnsureAgentUser(context.Context, *EnsureAgentUserRequest) (*EnsureAgentUserResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method EnsureAgentUser not implemented")
+}
+func (UnimplementedAgentServiceServer) RemoveAgentUser(context.Context, *RemoveAgentUserRequest) (*RemoveAgentUserResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RemoveAgentUser not implemented")
+}
+func (UnimplementedAgentServiceServer) SimulatePackage(context.Context, *SimulatePackageRequest) (*SimulatePackageResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SimulatePackage not implemented")
+}
+func (UnimplementedAgentServiceServer) InstallPackages(context.Context, *InstallPackagesRequest) (*InstallPackagesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method InstallPackages not implemented")
+}
+func (UnimplementedAgentServiceServer) AgentPaneAction(context.Context, *AgentPaneActionRequest) (*AgentPaneActionResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AgentPaneAction not implemented")
+}
+func (UnimplementedAgentServiceServer) ReadBoard(*ReadBoardRequest, grpc.ServerStreamingServer[ReadBoardResponse]) error {
+	return status.Error(codes.Unimplemented, "method ReadBoard not implemented")
+}
+func (UnimplementedAgentServiceServer) ReadAgentFiles(context.Context, *ReadAgentFilesRequest) (*ReadAgentFilesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ReadAgentFiles not implemented")
+}
+func (UnimplementedAgentServiceServer) DeliverRoutine(context.Context, *DeliverRoutineRequest) (*DeliverRoutineResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeliverRoutine not implemented")
+}
+func (UnimplementedAgentServiceServer) HandoffFiles(context.Context, *HandoffFilesRequest) (*HandoffFilesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method HandoffFiles not implemented")
+}
+func (UnimplementedAgentServiceServer) PrepareTeamProject(context.Context, *PrepareTeamProjectRequest) (*PrepareTeamProjectResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method PrepareTeamProject not implemented")
 }
 func (UnimplementedAgentServiceServer) mustEmbedUnimplementedAgentServiceServer() {}
 func (UnimplementedAgentServiceServer) testEmbeddedByValue()                      {}
@@ -516,6 +905,283 @@ func _AgentService_WatchTabs_Handler(srv interface{}, stream grpc.ServerStream) 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type AgentService_WatchTabsServer = grpc.ServerStreamingServer[WatchTabsResponse]
 
+func _AgentService_TabTerminal_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(AgentServiceServer).TabTerminal(&grpc.GenericServerStream[TabTerminalRequest, TabTerminalResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type AgentService_TabTerminalServer = grpc.BidiStreamingServer[TabTerminalRequest, TabTerminalResponse]
+
+func _AgentService_TeamCalls_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(AgentServiceServer).TeamCalls(&grpc.GenericServerStream[TeamCallsRequest, TeamCallsResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type AgentService_TeamCallsServer = grpc.BidiStreamingServer[TeamCallsRequest, TeamCallsResponse]
+
+func _AgentService_StartTeamAgent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StartTeamAgentRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentServiceServer).StartTeamAgent(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentService_StartTeamAgent_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentServiceServer).StartTeamAgent(ctx, req.(*StartTeamAgentRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AgentService_StopTeamAgent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StopTeamAgentRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentServiceServer).StopTeamAgent(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentService_StopTeamAgent_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentServiceServer).StopTeamAgent(ctx, req.(*StopTeamAgentRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AgentService_AppendBoard_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AppendBoardRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentServiceServer).AppendBoard(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentService_AppendBoard_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentServiceServer).AppendBoard(ctx, req.(*AppendBoardRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AgentService_ListHomeFiles_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListHomeFilesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentServiceServer).ListHomeFiles(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentService_ListHomeFiles_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentServiceServer).ListHomeFiles(ctx, req.(*ListHomeFilesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AgentService_ReadHomeFile_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(ReadHomeFileRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(AgentServiceServer).ReadHomeFile(m, &grpc.GenericServerStream[ReadHomeFileRequest, ReadHomeFileResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type AgentService_ReadHomeFileServer = grpc.ServerStreamingServer[ReadHomeFileResponse]
+
+func _AgentService_WriteHomeFiles_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(AgentServiceServer).WriteHomeFiles(&grpc.GenericServerStream[WriteHomeFilesRequest, WriteHomeFilesResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type AgentService_WriteHomeFilesServer = grpc.ClientStreamingServer[WriteHomeFilesRequest, WriteHomeFilesResponse]
+
+func _AgentService_EnsureAgentUser_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(EnsureAgentUserRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentServiceServer).EnsureAgentUser(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentService_EnsureAgentUser_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentServiceServer).EnsureAgentUser(ctx, req.(*EnsureAgentUserRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AgentService_RemoveAgentUser_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RemoveAgentUserRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentServiceServer).RemoveAgentUser(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentService_RemoveAgentUser_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentServiceServer).RemoveAgentUser(ctx, req.(*RemoveAgentUserRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AgentService_SimulatePackage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SimulatePackageRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentServiceServer).SimulatePackage(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentService_SimulatePackage_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentServiceServer).SimulatePackage(ctx, req.(*SimulatePackageRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AgentService_InstallPackages_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(InstallPackagesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentServiceServer).InstallPackages(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentService_InstallPackages_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentServiceServer).InstallPackages(ctx, req.(*InstallPackagesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AgentService_AgentPaneAction_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AgentPaneActionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentServiceServer).AgentPaneAction(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentService_AgentPaneAction_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentServiceServer).AgentPaneAction(ctx, req.(*AgentPaneActionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AgentService_ReadBoard_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(ReadBoardRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(AgentServiceServer).ReadBoard(m, &grpc.GenericServerStream[ReadBoardRequest, ReadBoardResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type AgentService_ReadBoardServer = grpc.ServerStreamingServer[ReadBoardResponse]
+
+func _AgentService_ReadAgentFiles_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReadAgentFilesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentServiceServer).ReadAgentFiles(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentService_ReadAgentFiles_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentServiceServer).ReadAgentFiles(ctx, req.(*ReadAgentFilesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AgentService_DeliverRoutine_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeliverRoutineRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentServiceServer).DeliverRoutine(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentService_DeliverRoutine_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentServiceServer).DeliverRoutine(ctx, req.(*DeliverRoutineRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AgentService_HandoffFiles_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(HandoffFilesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentServiceServer).HandoffFiles(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentService_HandoffFiles_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentServiceServer).HandoffFiles(ctx, req.(*HandoffFilesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AgentService_PrepareTeamProject_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PrepareTeamProjectRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentServiceServer).PrepareTeamProject(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentService_PrepareTeamProject_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentServiceServer).PrepareTeamProject(ctx, req.(*PrepareTeamProjectRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AgentService_ServiceDesc is the grpc.ServiceDesc for AgentService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -563,6 +1229,58 @@ var AgentService_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "SelectTab",
 			Handler:    _AgentService_SelectTab_Handler,
 		},
+		{
+			MethodName: "StartTeamAgent",
+			Handler:    _AgentService_StartTeamAgent_Handler,
+		},
+		{
+			MethodName: "StopTeamAgent",
+			Handler:    _AgentService_StopTeamAgent_Handler,
+		},
+		{
+			MethodName: "AppendBoard",
+			Handler:    _AgentService_AppendBoard_Handler,
+		},
+		{
+			MethodName: "ListHomeFiles",
+			Handler:    _AgentService_ListHomeFiles_Handler,
+		},
+		{
+			MethodName: "EnsureAgentUser",
+			Handler:    _AgentService_EnsureAgentUser_Handler,
+		},
+		{
+			MethodName: "RemoveAgentUser",
+			Handler:    _AgentService_RemoveAgentUser_Handler,
+		},
+		{
+			MethodName: "SimulatePackage",
+			Handler:    _AgentService_SimulatePackage_Handler,
+		},
+		{
+			MethodName: "InstallPackages",
+			Handler:    _AgentService_InstallPackages_Handler,
+		},
+		{
+			MethodName: "AgentPaneAction",
+			Handler:    _AgentService_AgentPaneAction_Handler,
+		},
+		{
+			MethodName: "ReadAgentFiles",
+			Handler:    _AgentService_ReadAgentFiles_Handler,
+		},
+		{
+			MethodName: "DeliverRoutine",
+			Handler:    _AgentService_DeliverRoutine_Handler,
+		},
+		{
+			MethodName: "HandoffFiles",
+			Handler:    _AgentService_HandoffFiles_Handler,
+		},
+		{
+			MethodName: "PrepareTeamProject",
+			Handler:    _AgentService_PrepareTeamProject_Handler,
+		},
 	},
 	Streams: []grpc.StreamDesc{
 		{
@@ -574,6 +1292,33 @@ var AgentService_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "WatchTabs",
 			Handler:       _AgentService_WatchTabs_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "TabTerminal",
+			Handler:       _AgentService_TabTerminal_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
+		},
+		{
+			StreamName:    "TeamCalls",
+			Handler:       _AgentService_TeamCalls_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
+		},
+		{
+			StreamName:    "ReadHomeFile",
+			Handler:       _AgentService_ReadHomeFile_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "WriteHomeFiles",
+			Handler:       _AgentService_WriteHomeFiles_Handler,
+			ClientStreams: true,
+		},
+		{
+			StreamName:    "ReadBoard",
+			Handler:       _AgentService_ReadBoard_Handler,
 			ServerStreams: true,
 		},
 	},

@@ -29,6 +29,9 @@ check() { # check NAME COMMAND...
 }
 in_box() { docker exec "$new" "$@"; }
 as_work() { docker exec -u work -w /home/work "$new" bash -lc "$1"; }
+# as_agent: a team agent's user, made the way init makes one (core/agent/teamusers.go).
+agent=tester
+as_agent() { docker exec -u "$agent" -w "/home/$agent" "$new" bash -lc "$1"; }
 
 # wait_health CONTAINER WANT: wait for Docker's health status, up to 10 minutes.
 wait_health() {
@@ -50,6 +53,8 @@ fi
 
 check "portenv-agent is PID 1" test "$(in_box ps -p 1 -o comm=)" = portenv-agent
 check "work has uid 1000" test "$(in_box id -u work)" = 1000
+# A workspace with no agent team: /home/team and agents' homes appear only
+# with a team's first agent (ADR 0022 §1), never at a plain start.
 check "/home holds only work" test "$(in_box ls -A /home)" = work
 check "home is 0700 and owned by work" test "$(in_box stat -c '%a %U' /home/work)" = "700 work"
 check "skeleton apt-packages.txt" in_box test -f /home/work/.portenv/apt-packages.txt
@@ -58,6 +63,8 @@ check "skeleton shell files" in_box test -f /home/work/.bashrc
 check "agent socket reaches root and portenv-agent only" test "$(in_box stat -c '%a %U:%G' /run/portenv /run/portenv/agent.sock | tr '\n' ' ')" = "710 root:portenv-agent 660 root:portenv-agent "
 check "the agent channel copy carries only setuid, setgid, chown and kill" test "$(in_box getcap /usr/local/libexec/portenv/agent-serve | awk '{print $2}')" = "cap_chown,cap_kill,cap_setgid,cap_setuid=ep"
 check "work has passwordless sudo" as_work 'sudo -n true'
+# R-0262: what work makes at the top of its home is private.
+check "work's login shells use umask 077" as_work 'test "$(umask)" = 0077'
 check "node 22" as_work 'node --version | grep -q "^v22\."'
 check "npm installs globals into the home" as_work 'test "$(npm config get prefix)" = /home/work/.local'
 check "~/.local/bin on PATH" as_work 'case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) false ;; esac'
@@ -66,13 +73,49 @@ check "git" as_work 'git --version'
 # The helper's control mode was measured on tmux 3.4 and refuses older
 # (ADR 0020, decision 10); the Dockerfile pins it.
 check "tmux 3.4" as_work 'test "$(tmux -V)" = "tmux 3.4"'
+# The switch to an agent's user runs tmux by this path only, and only when
+# root owns it and no one else can write to it (R-0265).
+check "tmux at /usr/bin/tmux, root's, writable by root only" in_box sh -c 'test "$(stat -L -c %U:%a /usr/bin/tmux)" = root:755 && test "$(stat -c %F /usr/bin/tmux)" = "regular file"'
 check "ripgrep" as_work 'rg --version'
 check "jq" as_work 'jq --version'
+# Agents share files through default ACLs (ADR 0022 §2): the tools, and a
+# /home that keeps a default ACL and applies it to new files.
+check "setfacl and getfacl" in_box sh -c 'command -v setfacl && command -v getfacl'
+check "/home takes default ACLs" in_box sh -c '
+	d=$(mktemp -d /home/.acl-check.XXXXXX) || exit 1
+	setfacl -d -m g:work:rwX "$d" && touch "$d/f" &&
+		getfacl -cp "$d" | grep -qx "default:group:work:rwx" &&
+		getfacl -cp "$d/f" | grep -q "^group:work:rw" &&
+		getfacl -cp "$d/f" | grep -qx "mask::rw-"
+	rc=$?; rm -rf "$d"; exit $rc'
 check "build-essential" as_work 'gcc --version && make --version'
 check "python 3" as_work 'python3 --version'
 check "shell integration (OSC 133) in login shells" as_work 'bash -lic "declare -F __portenv_osc133_precmd"'
 check "skeleton .zshrc sources the zsh integration" in_box grep -q osc133.zsh /home/work/.zshrc
 check "claude code" as_work 'claude --version'
+# The portenv CLI, for agents' own commands inside the workspace (ADR 0022 §4).
+check "portenv on PATH at /usr/local/bin, root's, 755" in_box sh -c 'test "$(command -v portenv)" = /usr/local/bin/portenv && test "$(stat -c %U:%G:%a /usr/local/bin/portenv)" = root:root:755'
+check "portenv whoami in a plain shell exits 2 and says why" as_work \
+	'out=$(portenv whoami 2>&1); rc=$?; test "$rc" -eq 2 && grep -q "works only for an agent inside a workspace (PORTENV_SOCKET isn.t set)" <<<"$out"'
+check "portenv guide" as_work 'out=$(portenv guide) && test -n "$out"'
+check "portenv team init writes the starter agent files" as_work \
+	'd=$(mktemp -d) && portenv team init --dir "$d" >/dev/null && test "$(ls "$d/.portenv/agents" | tr "\n" " ")" = "builder.md lead.md reviewer.md " && rm -rf "$d"'
+# The owner's commands are refused inside: portenv init would write a box's
+# repository key in the home (CC-0453).
+check "portenv init is refused inside a workspace" as_work \
+	'out=$(portenv init x 2>&1); rc=$?; test "$rc" -eq 2 && grep -qx "This is the owner.s command; run it on your Mac." <<<"$out"'
+check "the in-box portenv commands write nothing in the home" as_work 'test ! -e ~/.config/Portenv'
+# The same for an agent's user (uid 2001), made as init makes one: the team
+# group, the agent's own group, then the user and its 0700 home. Removed
+# after, so the rest of the run sees a box with no team.
+check "make an agent's user, uid 2001" in_box sh -c "groupadd --gid 2000 team && groupadd --gid 2001 $agent &&
+	useradd --uid 2001 --gid 2001 --groups team --no-create-home --home-dir /home/$agent --shell /bin/bash $agent &&
+	install -d -m 0700 -o 2001 -g 2001 /home/$agent && test \"\$(id -u $agent)\" = 2001"
+check "portenv init is refused for an agent's user" as_agent \
+	'out=$(portenv init x 2>&1); rc=$?; test "$rc" -eq 2 && grep -qx "This is the owner.s command; run it on your Mac." <<<"$out"'
+check "nothing written in the agent's home" as_agent 'test "$HOME" = "/home/$(id -un)" && test "$(id -u)" = 2001 && test ! -e ~/.config/Portenv'
+check "remove the agent's user" in_box sh -c "userdel $agent && { ! getent group $agent >/dev/null || groupdel $agent; } &&
+	groupdel team && rm -rf /home/$agent && test \"\$(ls -A /home)\" = work"
 
 # An orphan that exits must be reaped by PID 1, not left as a zombie.
 in_box bash -c '(sleep 1 &) ; exit 0'

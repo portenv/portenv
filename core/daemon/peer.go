@@ -17,6 +17,9 @@ type ownerOnly struct {
 	net.Listener
 	// peerUID returns the uid on the other end of a Unix socket connection.
 	peerUID func(fd int) (int, error)
+	// identify is the caller of an accepted connection (nil: the owner).
+	// Tests set another to stand in for ADR 0016's agents.
+	identify func(net.Conn) caller
 }
 
 func (l ownerOnly) Accept() (net.Conn, error) {
@@ -27,7 +30,11 @@ func (l ownerOnly) Accept() (net.Conn, error) {
 		}
 		if uc, ok := c.(*net.UnixConn); ok {
 			if uid, err := connPeerUID(uc, l.peerUID); err == nil && uid == os.Getuid() {
-				return c, nil
+				who := ownerCaller()
+				if l.identify != nil {
+					who = l.identify(c)
+				}
+				return identifiedConn{Conn: c, who: who}, nil
 			}
 		}
 		_ = c.Close()

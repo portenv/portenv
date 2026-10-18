@@ -60,6 +60,27 @@ const (
 	DaemonService_DiscardCreation_FullMethodName       = "/portenv.daemon.v1.DaemonService/DiscardCreation"
 	DaemonService_RecoverBox_FullMethodName            = "/portenv.daemon.v1.DaemonService/RecoverBox"
 	DaemonService_CheckRecoveryKey_FullMethodName      = "/portenv.daemon.v1.DaemonService/CheckRecoveryKey"
+	DaemonService_GetPlacement_FullMethodName          = "/portenv.daemon.v1.DaemonService/GetPlacement"
+	DaemonService_TabTerminal_FullMethodName           = "/portenv.daemon.v1.DaemonService/TabTerminal"
+	DaemonService_ScanServerKey_FullMethodName         = "/portenv.daemon.v1.DaemonService/ScanServerKey"
+	DaemonService_TrustServerKey_FullMethodName        = "/portenv.daemon.v1.DaemonService/TrustServerKey"
+	DaemonService_ForgetServerKey_FullMethodName       = "/portenv.daemon.v1.DaemonService/ForgetServerKey"
+	DaemonService_ProvideServerKey_FullMethodName      = "/portenv.daemon.v1.DaemonService/ProvideServerKey"
+	DaemonService_CheckServer_FullMethodName           = "/portenv.daemon.v1.DaemonService/CheckServer"
+	DaemonService_GetEngine_FullMethodName             = "/portenv.daemon.v1.DaemonService/GetEngine"
+	DaemonService_ListAgents_FullMethodName            = "/portenv.daemon.v1.DaemonService/ListAgents"
+	DaemonService_WatchTeam_FullMethodName             = "/portenv.daemon.v1.DaemonService/WatchTeam"
+	DaemonService_StartAgent_FullMethodName            = "/portenv.daemon.v1.DaemonService/StartAgent"
+	DaemonService_StopAgent_FullMethodName             = "/portenv.daemon.v1.DaemonService/StopAgent"
+	DaemonService_AnswerDecision_FullMethodName        = "/portenv.daemon.v1.DaemonService/AnswerDecision"
+	DaemonService_GetAgentFile_FullMethodName          = "/portenv.daemon.v1.DaemonService/GetAgentFile"
+	DaemonService_ApproveAgentFile_FullMethodName      = "/portenv.daemon.v1.DaemonService/ApproveAgentFile"
+	DaemonService_SendMessage_FullMethodName           = "/portenv.daemon.v1.DaemonService/SendMessage"
+	DaemonService_RemoveAgent_FullMethodName           = "/portenv.daemon.v1.DaemonService/RemoveAgent"
+	DaemonService_ListAgentFiles_FullMethodName        = "/portenv.daemon.v1.DaemonService/ListAgentFiles"
+	DaemonService_ReadAgentFile_FullMethodName         = "/portenv.daemon.v1.DaemonService/ReadAgentFile"
+	DaemonService_AddAgentFiles_FullMethodName         = "/portenv.daemon.v1.DaemonService/AddAgentFiles"
+	DaemonService_SetRoutinePaused_FullMethodName      = "/portenv.daemon.v1.DaemonService/SetRoutinePaused"
 )
 
 // DaemonServiceClient is the client API for DaemonService service.
@@ -172,6 +193,73 @@ type DaemonServiceClient interface {
 	// against the boxes here that carry a recovery key. Read-only. Never
 	// logged.
 	CheckRecoveryKey(ctx context.Context, in *CheckRecoveryKeyRequest, opts ...grpc.CallOption) (*CheckRecoveryKeyResponse, error)
+	// Where a box is open when it isn't this Mac (2.3, the lease sheet): the
+	// place, its newest save, and whether it answers. A known server is asked
+	// with `portenv app ping`, within 2 s; another machine can't be asked.
+	// OpenBox's refusal for a box open elsewhere carries the trailer
+	// portenv-refusal: open-elsewhere, and the app asks this then.
+	GetPlacement(ctx context.Context, in *GetPlacementRequest, opts ...grpc.CallOption) (*GetPlacementResponse, error)
+	// One tab's terminal (ADR 0020), relayed to the workspace helper's
+	// TabTerminal as Terminal is: same socket, same box routing, on this Mac
+	// or on a server. The first message must be open. portenvd sets the
+	// stream's author from the connection's caller; nothing in the request
+	// can, and the open has no author field.
+	TabTerminal(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[TabTerminalRequest, TabTerminalResponse], error)
+	// A server's host key (2.9, ADR 0021, R-0180), found through ssh itself
+	// and compared, read only, with this Mac's SSH known hosts: the same key
+	// confirms the server; a different one marks it changed. A server that
+	// isn't confirmed is never contacted.
+	ScanServerKey(ctx context.Context, in *ScanServerKeyRequest, opts ...grpc.CallOption) (*ScanServerKeyResponse, error)
+	// Pin the key the last scan found, given the fingerprint the person saw.
+	// A changed key can't be trusted: only Forget gets past it.
+	TrustServerKey(ctx context.Context, in *TrustServerKeyRequest, opts ...grpc.CallOption) (*TrustServerKeyResponse, error)
+	// Drop the server's pinned key: it is unconfirmed again.
+	ForgetServerKey(ctx context.Context, in *ForgetServerKeyRequest, opts ...grpc.CallOption) (*ForgetServerKeyResponse, error)
+	// A made key's private half (2.9 1b, ADR 0021), read by the app from the
+	// Keychain and held in portenvd's memory only, like ProvideKeys: never
+	// written, never logged. It signs in once per shared connection, through
+	// an agent of portenvd's own for that one run.
+	ProvideServerKey(ctx context.Context, in *ProvideServerKeyRequest, opts ...grpc.CallOption) (*ProvideServerKeyResponse, error)
+	// Add a Server's Check (2.9, ADR 0021 §3): a read-only probe over the
+	// server's pinned SSH connection, one line per question; each failure
+	// says what to do, in Portenv's words, never the server's. It changes
+	// nothing on the server.
+	CheckServer(ctx context.Context, in *CheckServerRequest, opts ...grpc.CallOption) (*CheckServerResponse, error)
+	// Whether this Mac's box engine answers (Docker Desktop is running), for
+	// Welcome's Docker card and the state line (R-0098). It only asks the
+	// engine: it never starts anything. portenvd gives the engine 1.5 s;
+	// the app waits 3 s for the answer.
+	GetEngine(ctx context.Context, in *GetEngineRequest, opts ...grpc.CallOption) (*GetEngineResponse, error)
+	// ADR 0022: the agent team. Every call names the workspace; only the app,
+	// in front of the person, makes them.
+	// A workspace's agents, from its project's agent files.
+	ListAgents(ctx context.Context, in *ListAgentsRequest, opts ...grpc.CallOption) (*ListAgentsResponse, error)
+	// The agents, then every change, board message and decision, from a
+	// cursor.
+	WatchTeam(ctx context.Context, in *WatchTeamRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[WatchTeamResponse], error)
+	// Starts an agent whose file is approved and valid.
+	StartAgent(ctx context.Context, in *StartAgentRequest, opts ...grpc.CallOption) (*StartAgentResponse, error)
+	// Stops an agent at once: its tmux server and every process of its user.
+	StopAgent(ctx context.Context, in *StopAgentRequest, opts ...grpc.CallOption) (*StopAgentResponse, error)
+	// Approve or Decline, the owner's answer to a pending decision.
+	AnswerDecision(ctx context.Context, in *AnswerDecisionRequest, opts ...grpc.CallOption) (*AnswerDecisionResponse, error)
+	// An agent file's content and the content last approved, for Approve's
+	// diff and its runner line.
+	GetAgentFile(ctx context.Context, in *GetAgentFileRequest, opts ...grpc.CallOption) (*GetAgentFileResponse, error)
+	// Pins an agent file's content (§3): the hash must be what the app showed.
+	ApproveAgentFile(ctx context.Context, in *ApproveAgentFileRequest, opts ...grpc.CallOption) (*ApproveAgentFileResponse, error)
+	// The owner's message to an agent.
+	SendMessage(ctx context.Context, in *SendMessageRequest, opts ...grpc.CallOption) (*SendMessageResponse, error)
+	// Removes an agent. Its files stay until the owner approves a
+	// DECISION_KIND_DELETE_AGENT_FILES decision (§1).
+	RemoveAgent(ctx context.Context, in *RemoveAgentRequest, opts ...grpc.CallOption) (*RemoveAgentResponse, error)
+	// The Agent files view (§2): list, open and add, done as the agent's user.
+	ListAgentFiles(ctx context.Context, in *ListAgentFilesRequest, opts ...grpc.CallOption) (*ListAgentFilesResponse, error)
+	ReadAgentFile(ctx context.Context, in *ReadAgentFileRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ReadAgentFileResponse], error)
+	// Drag and drop. Refused past the agent's quota.
+	AddAgentFiles(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[AddAgentFilesRequest, AddAgentFilesResponse], error)
+	// Pauses or resumes one of an agent's routines (R-0258).
+	SetRoutinePaused(ctx context.Context, in *SetRoutinePausedRequest, opts ...grpc.CallOption) (*SetRoutinePausedResponse, error)
 }
 
 type daemonServiceClient struct {
@@ -553,6 +641,240 @@ func (c *daemonServiceClient) CheckRecoveryKey(ctx context.Context, in *CheckRec
 	return out, nil
 }
 
+func (c *daemonServiceClient) GetPlacement(ctx context.Context, in *GetPlacementRequest, opts ...grpc.CallOption) (*GetPlacementResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetPlacementResponse)
+	err := c.cc.Invoke(ctx, DaemonService_GetPlacement_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) TabTerminal(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[TabTerminalRequest, TabTerminalResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &DaemonService_ServiceDesc.Streams[3], DaemonService_TabTerminal_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[TabTerminalRequest, TabTerminalResponse]{ClientStream: stream}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type DaemonService_TabTerminalClient = grpc.BidiStreamingClient[TabTerminalRequest, TabTerminalResponse]
+
+func (c *daemonServiceClient) ScanServerKey(ctx context.Context, in *ScanServerKeyRequest, opts ...grpc.CallOption) (*ScanServerKeyResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ScanServerKeyResponse)
+	err := c.cc.Invoke(ctx, DaemonService_ScanServerKey_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) TrustServerKey(ctx context.Context, in *TrustServerKeyRequest, opts ...grpc.CallOption) (*TrustServerKeyResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(TrustServerKeyResponse)
+	err := c.cc.Invoke(ctx, DaemonService_TrustServerKey_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) ForgetServerKey(ctx context.Context, in *ForgetServerKeyRequest, opts ...grpc.CallOption) (*ForgetServerKeyResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ForgetServerKeyResponse)
+	err := c.cc.Invoke(ctx, DaemonService_ForgetServerKey_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) ProvideServerKey(ctx context.Context, in *ProvideServerKeyRequest, opts ...grpc.CallOption) (*ProvideServerKeyResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ProvideServerKeyResponse)
+	err := c.cc.Invoke(ctx, DaemonService_ProvideServerKey_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) CheckServer(ctx context.Context, in *CheckServerRequest, opts ...grpc.CallOption) (*CheckServerResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CheckServerResponse)
+	err := c.cc.Invoke(ctx, DaemonService_CheckServer_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) GetEngine(ctx context.Context, in *GetEngineRequest, opts ...grpc.CallOption) (*GetEngineResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetEngineResponse)
+	err := c.cc.Invoke(ctx, DaemonService_GetEngine_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) ListAgents(ctx context.Context, in *ListAgentsRequest, opts ...grpc.CallOption) (*ListAgentsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListAgentsResponse)
+	err := c.cc.Invoke(ctx, DaemonService_ListAgents_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) WatchTeam(ctx context.Context, in *WatchTeamRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[WatchTeamResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &DaemonService_ServiceDesc.Streams[4], DaemonService_WatchTeam_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[WatchTeamRequest, WatchTeamResponse]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type DaemonService_WatchTeamClient = grpc.ServerStreamingClient[WatchTeamResponse]
+
+func (c *daemonServiceClient) StartAgent(ctx context.Context, in *StartAgentRequest, opts ...grpc.CallOption) (*StartAgentResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(StartAgentResponse)
+	err := c.cc.Invoke(ctx, DaemonService_StartAgent_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) StopAgent(ctx context.Context, in *StopAgentRequest, opts ...grpc.CallOption) (*StopAgentResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(StopAgentResponse)
+	err := c.cc.Invoke(ctx, DaemonService_StopAgent_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) AnswerDecision(ctx context.Context, in *AnswerDecisionRequest, opts ...grpc.CallOption) (*AnswerDecisionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AnswerDecisionResponse)
+	err := c.cc.Invoke(ctx, DaemonService_AnswerDecision_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) GetAgentFile(ctx context.Context, in *GetAgentFileRequest, opts ...grpc.CallOption) (*GetAgentFileResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetAgentFileResponse)
+	err := c.cc.Invoke(ctx, DaemonService_GetAgentFile_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) ApproveAgentFile(ctx context.Context, in *ApproveAgentFileRequest, opts ...grpc.CallOption) (*ApproveAgentFileResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ApproveAgentFileResponse)
+	err := c.cc.Invoke(ctx, DaemonService_ApproveAgentFile_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) SendMessage(ctx context.Context, in *SendMessageRequest, opts ...grpc.CallOption) (*SendMessageResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SendMessageResponse)
+	err := c.cc.Invoke(ctx, DaemonService_SendMessage_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) RemoveAgent(ctx context.Context, in *RemoveAgentRequest, opts ...grpc.CallOption) (*RemoveAgentResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RemoveAgentResponse)
+	err := c.cc.Invoke(ctx, DaemonService_RemoveAgent_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) ListAgentFiles(ctx context.Context, in *ListAgentFilesRequest, opts ...grpc.CallOption) (*ListAgentFilesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListAgentFilesResponse)
+	err := c.cc.Invoke(ctx, DaemonService_ListAgentFiles_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) ReadAgentFile(ctx context.Context, in *ReadAgentFileRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ReadAgentFileResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &DaemonService_ServiceDesc.Streams[5], DaemonService_ReadAgentFile_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[ReadAgentFileRequest, ReadAgentFileResponse]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type DaemonService_ReadAgentFileClient = grpc.ServerStreamingClient[ReadAgentFileResponse]
+
+func (c *daemonServiceClient) AddAgentFiles(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[AddAgentFilesRequest, AddAgentFilesResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &DaemonService_ServiceDesc.Streams[6], DaemonService_AddAgentFiles_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[AddAgentFilesRequest, AddAgentFilesResponse]{ClientStream: stream}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type DaemonService_AddAgentFilesClient = grpc.ClientStreamingClient[AddAgentFilesRequest, AddAgentFilesResponse]
+
+func (c *daemonServiceClient) SetRoutinePaused(ctx context.Context, in *SetRoutinePausedRequest, opts ...grpc.CallOption) (*SetRoutinePausedResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetRoutinePausedResponse)
+	err := c.cc.Invoke(ctx, DaemonService_SetRoutinePaused_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DaemonServiceServer is the server API for DaemonService service.
 // All implementations must embed UnimplementedDaemonServiceServer
 // for forward compatibility.
@@ -663,6 +985,73 @@ type DaemonServiceServer interface {
 	// against the boxes here that carry a recovery key. Read-only. Never
 	// logged.
 	CheckRecoveryKey(context.Context, *CheckRecoveryKeyRequest) (*CheckRecoveryKeyResponse, error)
+	// Where a box is open when it isn't this Mac (2.3, the lease sheet): the
+	// place, its newest save, and whether it answers. A known server is asked
+	// with `portenv app ping`, within 2 s; another machine can't be asked.
+	// OpenBox's refusal for a box open elsewhere carries the trailer
+	// portenv-refusal: open-elsewhere, and the app asks this then.
+	GetPlacement(context.Context, *GetPlacementRequest) (*GetPlacementResponse, error)
+	// One tab's terminal (ADR 0020), relayed to the workspace helper's
+	// TabTerminal as Terminal is: same socket, same box routing, on this Mac
+	// or on a server. The first message must be open. portenvd sets the
+	// stream's author from the connection's caller; nothing in the request
+	// can, and the open has no author field.
+	TabTerminal(grpc.BidiStreamingServer[TabTerminalRequest, TabTerminalResponse]) error
+	// A server's host key (2.9, ADR 0021, R-0180), found through ssh itself
+	// and compared, read only, with this Mac's SSH known hosts: the same key
+	// confirms the server; a different one marks it changed. A server that
+	// isn't confirmed is never contacted.
+	ScanServerKey(context.Context, *ScanServerKeyRequest) (*ScanServerKeyResponse, error)
+	// Pin the key the last scan found, given the fingerprint the person saw.
+	// A changed key can't be trusted: only Forget gets past it.
+	TrustServerKey(context.Context, *TrustServerKeyRequest) (*TrustServerKeyResponse, error)
+	// Drop the server's pinned key: it is unconfirmed again.
+	ForgetServerKey(context.Context, *ForgetServerKeyRequest) (*ForgetServerKeyResponse, error)
+	// A made key's private half (2.9 1b, ADR 0021), read by the app from the
+	// Keychain and held in portenvd's memory only, like ProvideKeys: never
+	// written, never logged. It signs in once per shared connection, through
+	// an agent of portenvd's own for that one run.
+	ProvideServerKey(context.Context, *ProvideServerKeyRequest) (*ProvideServerKeyResponse, error)
+	// Add a Server's Check (2.9, ADR 0021 §3): a read-only probe over the
+	// server's pinned SSH connection, one line per question; each failure
+	// says what to do, in Portenv's words, never the server's. It changes
+	// nothing on the server.
+	CheckServer(context.Context, *CheckServerRequest) (*CheckServerResponse, error)
+	// Whether this Mac's box engine answers (Docker Desktop is running), for
+	// Welcome's Docker card and the state line (R-0098). It only asks the
+	// engine: it never starts anything. portenvd gives the engine 1.5 s;
+	// the app waits 3 s for the answer.
+	GetEngine(context.Context, *GetEngineRequest) (*GetEngineResponse, error)
+	// ADR 0022: the agent team. Every call names the workspace; only the app,
+	// in front of the person, makes them.
+	// A workspace's agents, from its project's agent files.
+	ListAgents(context.Context, *ListAgentsRequest) (*ListAgentsResponse, error)
+	// The agents, then every change, board message and decision, from a
+	// cursor.
+	WatchTeam(*WatchTeamRequest, grpc.ServerStreamingServer[WatchTeamResponse]) error
+	// Starts an agent whose file is approved and valid.
+	StartAgent(context.Context, *StartAgentRequest) (*StartAgentResponse, error)
+	// Stops an agent at once: its tmux server and every process of its user.
+	StopAgent(context.Context, *StopAgentRequest) (*StopAgentResponse, error)
+	// Approve or Decline, the owner's answer to a pending decision.
+	AnswerDecision(context.Context, *AnswerDecisionRequest) (*AnswerDecisionResponse, error)
+	// An agent file's content and the content last approved, for Approve's
+	// diff and its runner line.
+	GetAgentFile(context.Context, *GetAgentFileRequest) (*GetAgentFileResponse, error)
+	// Pins an agent file's content (§3): the hash must be what the app showed.
+	ApproveAgentFile(context.Context, *ApproveAgentFileRequest) (*ApproveAgentFileResponse, error)
+	// The owner's message to an agent.
+	SendMessage(context.Context, *SendMessageRequest) (*SendMessageResponse, error)
+	// Removes an agent. Its files stay until the owner approves a
+	// DECISION_KIND_DELETE_AGENT_FILES decision (§1).
+	RemoveAgent(context.Context, *RemoveAgentRequest) (*RemoveAgentResponse, error)
+	// The Agent files view (§2): list, open and add, done as the agent's user.
+	ListAgentFiles(context.Context, *ListAgentFilesRequest) (*ListAgentFilesResponse, error)
+	ReadAgentFile(*ReadAgentFileRequest, grpc.ServerStreamingServer[ReadAgentFileResponse]) error
+	// Drag and drop. Refused past the agent's quota.
+	AddAgentFiles(grpc.ClientStreamingServer[AddAgentFilesRequest, AddAgentFilesResponse]) error
+	// Pauses or resumes one of an agent's routines (R-0258).
+	SetRoutinePaused(context.Context, *SetRoutinePausedRequest) (*SetRoutinePausedResponse, error)
 	mustEmbedUnimplementedDaemonServiceServer()
 }
 
@@ -777,6 +1166,69 @@ func (UnimplementedDaemonServiceServer) RecoverBox(context.Context, *RecoverBoxR
 }
 func (UnimplementedDaemonServiceServer) CheckRecoveryKey(context.Context, *CheckRecoveryKeyRequest) (*CheckRecoveryKeyResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CheckRecoveryKey not implemented")
+}
+func (UnimplementedDaemonServiceServer) GetPlacement(context.Context, *GetPlacementRequest) (*GetPlacementResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetPlacement not implemented")
+}
+func (UnimplementedDaemonServiceServer) TabTerminal(grpc.BidiStreamingServer[TabTerminalRequest, TabTerminalResponse]) error {
+	return status.Error(codes.Unimplemented, "method TabTerminal not implemented")
+}
+func (UnimplementedDaemonServiceServer) ScanServerKey(context.Context, *ScanServerKeyRequest) (*ScanServerKeyResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ScanServerKey not implemented")
+}
+func (UnimplementedDaemonServiceServer) TrustServerKey(context.Context, *TrustServerKeyRequest) (*TrustServerKeyResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method TrustServerKey not implemented")
+}
+func (UnimplementedDaemonServiceServer) ForgetServerKey(context.Context, *ForgetServerKeyRequest) (*ForgetServerKeyResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ForgetServerKey not implemented")
+}
+func (UnimplementedDaemonServiceServer) ProvideServerKey(context.Context, *ProvideServerKeyRequest) (*ProvideServerKeyResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ProvideServerKey not implemented")
+}
+func (UnimplementedDaemonServiceServer) CheckServer(context.Context, *CheckServerRequest) (*CheckServerResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CheckServer not implemented")
+}
+func (UnimplementedDaemonServiceServer) GetEngine(context.Context, *GetEngineRequest) (*GetEngineResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetEngine not implemented")
+}
+func (UnimplementedDaemonServiceServer) ListAgents(context.Context, *ListAgentsRequest) (*ListAgentsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListAgents not implemented")
+}
+func (UnimplementedDaemonServiceServer) WatchTeam(*WatchTeamRequest, grpc.ServerStreamingServer[WatchTeamResponse]) error {
+	return status.Error(codes.Unimplemented, "method WatchTeam not implemented")
+}
+func (UnimplementedDaemonServiceServer) StartAgent(context.Context, *StartAgentRequest) (*StartAgentResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method StartAgent not implemented")
+}
+func (UnimplementedDaemonServiceServer) StopAgent(context.Context, *StopAgentRequest) (*StopAgentResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method StopAgent not implemented")
+}
+func (UnimplementedDaemonServiceServer) AnswerDecision(context.Context, *AnswerDecisionRequest) (*AnswerDecisionResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AnswerDecision not implemented")
+}
+func (UnimplementedDaemonServiceServer) GetAgentFile(context.Context, *GetAgentFileRequest) (*GetAgentFileResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetAgentFile not implemented")
+}
+func (UnimplementedDaemonServiceServer) ApproveAgentFile(context.Context, *ApproveAgentFileRequest) (*ApproveAgentFileResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ApproveAgentFile not implemented")
+}
+func (UnimplementedDaemonServiceServer) SendMessage(context.Context, *SendMessageRequest) (*SendMessageResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SendMessage not implemented")
+}
+func (UnimplementedDaemonServiceServer) RemoveAgent(context.Context, *RemoveAgentRequest) (*RemoveAgentResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RemoveAgent not implemented")
+}
+func (UnimplementedDaemonServiceServer) ListAgentFiles(context.Context, *ListAgentFilesRequest) (*ListAgentFilesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListAgentFiles not implemented")
+}
+func (UnimplementedDaemonServiceServer) ReadAgentFile(*ReadAgentFileRequest, grpc.ServerStreamingServer[ReadAgentFileResponse]) error {
+	return status.Error(codes.Unimplemented, "method ReadAgentFile not implemented")
+}
+func (UnimplementedDaemonServiceServer) AddAgentFiles(grpc.ClientStreamingServer[AddAgentFilesRequest, AddAgentFilesResponse]) error {
+	return status.Error(codes.Unimplemented, "method AddAgentFiles not implemented")
+}
+func (UnimplementedDaemonServiceServer) SetRoutinePaused(context.Context, *SetRoutinePausedRequest) (*SetRoutinePausedResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetRoutinePaused not implemented")
 }
 func (UnimplementedDaemonServiceServer) mustEmbedUnimplementedDaemonServiceServer() {}
 func (UnimplementedDaemonServiceServer) testEmbeddedByValue()                       {}
@@ -1404,6 +1856,348 @@ func _DaemonService_CheckRecoveryKey_Handler(srv interface{}, ctx context.Contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _DaemonService_GetPlacement_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetPlacementRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).GetPlacement(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_GetPlacement_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).GetPlacement(ctx, req.(*GetPlacementRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_TabTerminal_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(DaemonServiceServer).TabTerminal(&grpc.GenericServerStream[TabTerminalRequest, TabTerminalResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type DaemonService_TabTerminalServer = grpc.BidiStreamingServer[TabTerminalRequest, TabTerminalResponse]
+
+func _DaemonService_ScanServerKey_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ScanServerKeyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).ScanServerKey(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_ScanServerKey_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).ScanServerKey(ctx, req.(*ScanServerKeyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_TrustServerKey_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(TrustServerKeyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).TrustServerKey(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_TrustServerKey_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).TrustServerKey(ctx, req.(*TrustServerKeyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_ForgetServerKey_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ForgetServerKeyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).ForgetServerKey(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_ForgetServerKey_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).ForgetServerKey(ctx, req.(*ForgetServerKeyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_ProvideServerKey_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ProvideServerKeyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).ProvideServerKey(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_ProvideServerKey_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).ProvideServerKey(ctx, req.(*ProvideServerKeyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_CheckServer_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CheckServerRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).CheckServer(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_CheckServer_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).CheckServer(ctx, req.(*CheckServerRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_GetEngine_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetEngineRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).GetEngine(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_GetEngine_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).GetEngine(ctx, req.(*GetEngineRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_ListAgents_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListAgentsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).ListAgents(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_ListAgents_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).ListAgents(ctx, req.(*ListAgentsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_WatchTeam_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(WatchTeamRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(DaemonServiceServer).WatchTeam(m, &grpc.GenericServerStream[WatchTeamRequest, WatchTeamResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type DaemonService_WatchTeamServer = grpc.ServerStreamingServer[WatchTeamResponse]
+
+func _DaemonService_StartAgent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StartAgentRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).StartAgent(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_StartAgent_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).StartAgent(ctx, req.(*StartAgentRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_StopAgent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StopAgentRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).StopAgent(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_StopAgent_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).StopAgent(ctx, req.(*StopAgentRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_AnswerDecision_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AnswerDecisionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).AnswerDecision(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_AnswerDecision_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).AnswerDecision(ctx, req.(*AnswerDecisionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_GetAgentFile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetAgentFileRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).GetAgentFile(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_GetAgentFile_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).GetAgentFile(ctx, req.(*GetAgentFileRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_ApproveAgentFile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ApproveAgentFileRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).ApproveAgentFile(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_ApproveAgentFile_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).ApproveAgentFile(ctx, req.(*ApproveAgentFileRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_SendMessage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SendMessageRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).SendMessage(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_SendMessage_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).SendMessage(ctx, req.(*SendMessageRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_RemoveAgent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RemoveAgentRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).RemoveAgent(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_RemoveAgent_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).RemoveAgent(ctx, req.(*RemoveAgentRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_ListAgentFiles_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListAgentFilesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).ListAgentFiles(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_ListAgentFiles_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).ListAgentFiles(ctx, req.(*ListAgentFilesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_ReadAgentFile_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(ReadAgentFileRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(DaemonServiceServer).ReadAgentFile(m, &grpc.GenericServerStream[ReadAgentFileRequest, ReadAgentFileResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type DaemonService_ReadAgentFileServer = grpc.ServerStreamingServer[ReadAgentFileResponse]
+
+func _DaemonService_AddAgentFiles_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(DaemonServiceServer).AddAgentFiles(&grpc.GenericServerStream[AddAgentFilesRequest, AddAgentFilesResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type DaemonService_AddAgentFilesServer = grpc.ClientStreamingServer[AddAgentFilesRequest, AddAgentFilesResponse]
+
+func _DaemonService_SetRoutinePaused_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetRoutinePausedRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).SetRoutinePaused(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_SetRoutinePaused_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).SetRoutinePaused(ctx, req.(*SetRoutinePausedRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // DaemonService_ServiceDesc is the grpc.ServiceDesc for DaemonService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1539,6 +2333,74 @@ var DaemonService_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "CheckRecoveryKey",
 			Handler:    _DaemonService_CheckRecoveryKey_Handler,
 		},
+		{
+			MethodName: "GetPlacement",
+			Handler:    _DaemonService_GetPlacement_Handler,
+		},
+		{
+			MethodName: "ScanServerKey",
+			Handler:    _DaemonService_ScanServerKey_Handler,
+		},
+		{
+			MethodName: "TrustServerKey",
+			Handler:    _DaemonService_TrustServerKey_Handler,
+		},
+		{
+			MethodName: "ForgetServerKey",
+			Handler:    _DaemonService_ForgetServerKey_Handler,
+		},
+		{
+			MethodName: "ProvideServerKey",
+			Handler:    _DaemonService_ProvideServerKey_Handler,
+		},
+		{
+			MethodName: "CheckServer",
+			Handler:    _DaemonService_CheckServer_Handler,
+		},
+		{
+			MethodName: "GetEngine",
+			Handler:    _DaemonService_GetEngine_Handler,
+		},
+		{
+			MethodName: "ListAgents",
+			Handler:    _DaemonService_ListAgents_Handler,
+		},
+		{
+			MethodName: "StartAgent",
+			Handler:    _DaemonService_StartAgent_Handler,
+		},
+		{
+			MethodName: "StopAgent",
+			Handler:    _DaemonService_StopAgent_Handler,
+		},
+		{
+			MethodName: "AnswerDecision",
+			Handler:    _DaemonService_AnswerDecision_Handler,
+		},
+		{
+			MethodName: "GetAgentFile",
+			Handler:    _DaemonService_GetAgentFile_Handler,
+		},
+		{
+			MethodName: "ApproveAgentFile",
+			Handler:    _DaemonService_ApproveAgentFile_Handler,
+		},
+		{
+			MethodName: "SendMessage",
+			Handler:    _DaemonService_SendMessage_Handler,
+		},
+		{
+			MethodName: "RemoveAgent",
+			Handler:    _DaemonService_RemoveAgent_Handler,
+		},
+		{
+			MethodName: "ListAgentFiles",
+			Handler:    _DaemonService_ListAgentFiles_Handler,
+		},
+		{
+			MethodName: "SetRoutinePaused",
+			Handler:    _DaemonService_SetRoutinePaused_Handler,
+		},
 	},
 	Streams: []grpc.StreamDesc{
 		{
@@ -1556,6 +2418,27 @@ var DaemonService_ServiceDesc = grpc.ServiceDesc{
 			StreamName:    "WatchTabs",
 			Handler:       _DaemonService_WatchTabs_Handler,
 			ServerStreams: true,
+		},
+		{
+			StreamName:    "TabTerminal",
+			Handler:       _DaemonService_TabTerminal_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
+		},
+		{
+			StreamName:    "WatchTeam",
+			Handler:       _DaemonService_WatchTeam_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "ReadAgentFile",
+			Handler:       _DaemonService_ReadAgentFile_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "AddAgentFiles",
+			Handler:       _DaemonService_AddAgentFiles_Handler,
+			ClientStreams: true,
 		},
 	},
 	Metadata: "portenv/daemon/v1/daemon.proto",

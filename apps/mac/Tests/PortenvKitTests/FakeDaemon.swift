@@ -45,6 +45,9 @@ final class FakeDaemon: DaemonAPI, @unchecked Sendable {
         }
     }
 
+    /// How many watch streams are open.
+    var watching: Int { lock.withLock { watchers.count } }
+
     /// Pushes a state (JSON) to every watcher.
     func push(_ json: String) {
         guard let s = BoxState.parse(json) else { return }
@@ -58,11 +61,44 @@ final class FakeDaemon: DaemonAPI, @unchecked Sendable {
     }
 
     func ping() async -> Bool { (try? await record(["app", "ping"])) != nil }
+    /// What engineRunning answers (nil: portenvd doesn't).
+    var engine: Bool? {
+        get { lock.withLock { _engine } }
+        set { lock.withLock { _engine = newValue } }
+    }
+    private var _engine: Bool? = true
+    func engineRunning() async -> Bool? {
+        guard (try? await record(["app", "engine"])) != nil else { return nil }
+        return engine
+    }
     /// The boxes ListBoxes reports.
     var boxNames: [String] = ["acme-api"]
     func boxes() async throws -> [String] { try await record(["app", "boxes"]); return boxNames }
     func servers() async throws -> [String] { try await record(["app", "servers"]); return ["portenv@server-a"] }
-    func open(_ box: String) async throws { try await record(["app", "open", box]) }
+    /// While set, open answers as portenvd does for a workspace open
+    /// somewhere else, and placement gives this (answers withheld without
+    /// the probe).
+    var openElsewhere: Placement? {
+        get { lock.withLock { _openElsewhere } }
+        set { lock.withLock { _openElsewhere = newValue } }
+    }
+    private var _openElsewhere: Placement?
+    /// Runs at each placement call, with whether it probes.
+    var onPlacement: (@Sendable (Bool) async -> Void)?
+
+    func open(_ box: String) async throws {
+        try await record(["app", "open", box])
+        if openElsewhere != nil { throw DaemonError("open elsewhere", openElsewhere: true) }
+    }
+    func open(_ box: String, takeOver: Bool) async throws { try await record(["app", "open", box] + (takeOver ? ["--take-over"] : [])) }
+    func connectThere(_ box: String) async throws { try await record(["app", "open", box, "--connect-there"]) }
+    func placement(_ box: String, probe: Bool) async throws -> Placement {
+        try await record(["app", "placement", box] + (probe ? ["--probe"] : []))
+        await onPlacement?(probe)
+        guard let p = openElsewhere else { return Placement(holder: .none, newestSaveAt: nil, answers: nil) }
+        if case .knownServer = p.holder, !probe { return Placement(holder: p.holder, newestSaveAt: p.newestSaveAt, answers: nil) }
+        return p
+    }
     func close(_ box: String) async throws { try await record(["app", "close", box]) }
     func makeSavePoint(_ box: String) async throws { try await record(["app", "point", box]) }
     func revert(_ box: String) async throws -> Date? { try await record(["app", "revert", box]); return revertedTo }
@@ -165,5 +201,57 @@ final class FakeDaemon: DaemonAPI, @unchecked Sendable {
     func takeSavedAfterQuit() async throws -> [SavedAfterQuit] {
         try await record(["app", "take-saved-after-quit"])
         return lock.withLock { let s = savedAfterQuit; savedAfterQuit = []; return s }
+    }
+
+    // MARK: The team (ADR 0022)
+
+    /// One watch of the team: its events, then it ends, or fails with
+    /// `failure` (a message; DaemonError.outOfDate for an older portenvd).
+    struct TeamScript: Sendable {
+        var events: [(TeamEvent, String)]
+        var failure: String?
+    }
+    /// Each watchTeam plays the next script; after the last, it waits.
+    var teamScripts: [TeamScript] = []
+    /// The decision answerDecision returns, keyed by id.
+    var answered: [String: TeamDecision] = [:]
+    func watchTeam(_ box: String, cursor: String) -> AsyncThrowingStream<(TeamEvent, String), Error> {
+        let script: TeamScript? = lock.withLock {
+            _calls.append(["app", "watch-team", box, cursor])
+            return teamScripts.isEmpty ? nil : teamScripts.removeFirst()
+        }
+        return AsyncThrowingStream { continuation in
+            guard let script else { return }
+            for e in script.events { continuation.yield(e) }
+            if let f = script.failure { continuation.finish(throwing: DaemonError(f)) } else { continuation.finish() }
+        }
+    }
+    func answerDecision(_ box: String, id: String, approve: Bool, note: String) async throws -> TeamDecision {
+        try await record(["app", "answer-decision", box, id, approve ? "approve" : "decline", note])
+        guard let d = lock.withLock({ answered[id] }) else { throw DaemonError("No decision \(id).") }
+        return d
+    }
+    func sendMessage(_ box: String, to agent: String, thread: String, text: String) async throws -> TeamMessage {
+        try await record(["app", "send-message", box, agent, text])
+        return TeamMessage(id: "m-\(lock.withLock { _calls.count })", from: TeamText.owner, to: agent, threadID: thread, text: text)
+    }
+    func startAgent(_ box: String, id: String) async throws -> TeamAgent {
+        try await record(["app", "start-agent", box, id])
+        return TeamAgent(id: id, name: id, status: .starting)
+    }
+    func stopAgent(_ box: String, id: String) async throws -> TeamAgent {
+        try await record(["app", "stop-agent", box, id])
+        return TeamAgent(id: id, name: id, status: .stopped)
+    }
+    /// Each agent's file as getAgentFile returns it.
+    var agentFiles: [String: AgentFileContent] = [:]
+    func getAgentFile(_ box: String, id: String) async throws -> AgentFileContent {
+        try await record(["app", "get-agent-file", box, id])
+        guard let f = lock.withLock({ agentFiles[id] }) else { throw DaemonError("this workspace has no agent \"\(id)\"") }
+        return f
+    }
+    func approveAgentFile(_ box: String, id: String, sha256: String) async throws -> TeamAgent {
+        try await record(["app", "approve-agent-file", box, id, sha256])
+        return TeamAgent(id: id, name: id, status: .stopped, fileSHA256: sha256, approved: true)
     }
 }

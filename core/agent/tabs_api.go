@@ -26,7 +26,8 @@ func (s *apiServer) tabsFor(session, viewer string) (tabs, error) {
 	if err != nil {
 		return tabs{}, status.Error(codes.FailedPrecondition, err.Error())
 	}
-	return tabs{tmux: run, session: session, viewer: viewer}, nil
+	return tabs{tmux: run, session: session, viewer: viewer,
+		merge: s.mergeAgents(viewKey(session, viewer)), changed: s.agents.changed}, nil
 }
 
 func (s *apiServer) ListTabs(ctx context.Context, req *agentv1.ListTabsRequest) (*agentv1.ListTabsResponse, error) {
@@ -34,7 +35,7 @@ func (s *apiServer) ListTabs(ctx context.Context, req *agentv1.ListTabsRequest) 
 	if err != nil {
 		return nil, err
 	}
-	ts, err := tb.list(ctx)
+	ts, err := tb.watchList(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -58,6 +59,13 @@ func (s *apiServer) CloseTab(ctx context.Context, req *agentv1.CloseTabRequest) 
 	if err != nil {
 		return nil, err
 	}
+	if a, window, ok, err := s.agentTab(ctx, req.GetId()); ok {
+		if err == nil {
+			err = a.closeTab(ctx, window)
+			s.agents.touch()
+		}
+		return &agentv1.CloseTabResponse{}, err
+	}
 	return &agentv1.CloseTabResponse{}, tb.close(ctx, req.GetId())
 }
 
@@ -65,6 +73,13 @@ func (s *apiServer) RenameTab(ctx context.Context, req *agentv1.RenameTabRequest
 	tb, err := s.tabsFor(req.GetSession(), req.GetViewer())
 	if err != nil {
 		return nil, err
+	}
+	if a, window, ok, err := s.agentTab(ctx, req.GetId()); ok {
+		if err == nil {
+			err = a.renameTab(ctx, window, req.GetName())
+			s.agents.touch()
+		}
+		return &agentv1.RenameTabResponse{}, err
 	}
 	return &agentv1.RenameTabResponse{}, tb.rename(ctx, req.GetId(), req.GetName())
 }
@@ -74,7 +89,18 @@ func (s *apiServer) SelectTab(ctx context.Context, req *agentv1.SelectTabRequest
 	if err != nil {
 		return nil, err
 	}
-	return &agentv1.SelectTabResponse{}, tb.selectTab(ctx, req.GetId())
+	key := viewKey(req.GetSession(), req.GetViewer())
+	if _, _, ok, err := s.agentTab(ctx, req.GetId()); ok {
+		if err == nil {
+			s.selectAgentTab(key, req.GetId())
+		}
+		return &agentv1.SelectTabResponse{}, err
+	}
+	if err := tb.selectTab(ctx, req.GetId()); err != nil {
+		return nil, err
+	}
+	s.selectAgentTab(key, "")
+	return &agentv1.SelectTabResponse{}, nil
 }
 
 func (s *apiServer) WatchTabs(req *agentv1.WatchTabsRequest, stream agentv1.AgentService_WatchTabsServer) error {

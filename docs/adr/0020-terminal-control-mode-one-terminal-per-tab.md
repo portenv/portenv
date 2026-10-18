@@ -118,6 +118,23 @@ Also checked on tmux 3.4 in the image:
 
    The existing `Terminal` RPC stays for `portenv attach` (decision 8).
 
+   **As built (1.2c PR 3a):** `proto/portenv/agent/v1/agent.proto` is the source of truth.
+   - `TabTerminalResponse` also carries `CommandAuthor author = 5`, and `TabTerminalReset` carries `repeated CommandAuthor authors = 3`. Who ran each command is agreed with lane D for the blocks' attribution chip.
+   - The author never travels inside output bytes.
+   - `GetVersionResponse` carries `box_id` (R-0172, R-0173). The driver passes the box ID as `PORTENV_BOX_ID` when it makes the container, not in the secrets line, which older helpers refuse when it has a field they don't know.
+
+   **As built (1.2c PR 4):** `DaemonService.TabTerminal` in `proto/portenv/daemon/v1/daemon.proto`.
+   - Its messages are appended after the file's others, the RPC is last in the service, and `TabTerminalEnd` lives in `types/v1/types.proto`, so the regenerated code renumbers none of the existing types (the owner's merge guard).
+   - Its `TabTerminalOpen` has no author: field 4, the helper's `author`, is reserved, and portenvd builds the helper's open field by field, so a stray field 4 is never copied through.
+   - The author is the caller fixed when the connection was accepted (R-0178):
+     - **the owner** on the owner-only socket, named by the first word of the account's full name (`id -F` on a Mac), else the login name. It's never empty and never "You", and it's read once at start;
+     - **an agent,** once one can reach portenvd (2.4): its grant's name, with `author_agent_id` its ID.
+   - The helper's open carries `author` and `author_agent_id` as #115 defines them. The app sees `CommandAuthor`, whose `is_you` portenvd sets for each recipient.
+   - **Checking the helper's authors:** the helper lives in the workspace, so portenvd drops a `CommandAuthor` whose name or agent ID is over 64 characters or has control or bidi characters (U+202A–202E, U+2066–2069). It never repairs one.
+   - **`skipped`** on a reset is passed through. The end value is mapped value by value, with an unknown one becoming UNSPECIFIED.
+   - A caller limited to one workspace is refused any other before a helper is contacted (R-0162).
+   - The helper must answer `GetVersion` with the box ID portenvd reached it for. Another box, or none, is refused before anything is relayed (R-0172, R-0173). None is refused here because `TabTerminal` and `box_id` arrived in the same helper.
+
    - **Opening a tab that's gone** ends promptly with `TAB_CLOSED`: within one control-client round trip, and never by waiting for a timeout.
    - **Tab events** (`WatchTabs`, `portenv.types.v1.Tab`) gain what split view's pane header needs. The stream itself stays bytes only.
      - **`waiting`:** the question text from ADR 0017's detector, empty and `secret` for a password prompt. It feeds "asking you", the answer card and the badge.
@@ -160,7 +177,7 @@ Also checked on tmux 3.4 in the image:
        - the scroll region (`#{scroll_region_upper}`/`lower`), origin mode (`#{origin_flag}`), autowrap (`#{wrap_flag}`), insert mode;
        - cursor keys and keypad (`#{keypad_cursor_flag}`, `#{keypad_flag}`), mouse modes (`#{mouse_*_flag}`);
        - the cursor position and visibility;
-       - bracketed paste, which the helper's parser tracks (tmux 3.4 has no format for it);
+       - bracketed paste (`#{bracket_paste_flag}` where tmux has it; tmux 3.4 doesn't, so there the helper's parser tracks it);
        - the current SGR: the pen the program left set, from the helper's parser, so the next output draws in the right colours.
 
        Each is written as the escape sequence that sets it, after the captured text.
@@ -183,6 +200,28 @@ Also checked on tmux 3.4 in the image:
      - **What's dropped:** a mark whose line has left the history (trimmed) or was cleared.
      - **The rule:** a replayed mark is never on the wrong line, and a missing one costs only a block header in old history.
      - **The test:** identical prompts (`$ ` twenty times, same text, which a text match can't tell apart). Every replayed mark lands on its own line.
+   - **As built (1.2c PR 3):** `core/agent/tabterm.go`.
+     - **The tab's pane (R-0228, R-0231):** the one the window was made with, the window's oldest pane (tmux numbers panes in order and never reuses an ID), never its active pane. A pane split into the window by anything in the workspace can't take the tab over on screen; it only shrinks the tab's pane, which shows.
+     - **Order:** the helper asks for the tab's pane, then sends one command list: the size, if the view gave one, then the state read and both captures. It drops the pane's output until the last reply, whose parser snapshot is taken as the reply is read. Output after it follows the seed, and a test reopens a printing counter ten times to check nothing is lost or repeated.
+     - **Mark lines:** the parser's line of the cursor at the snapshot is matched to the capture's cursor line. That gives every mark's line in the seed without `history_size`.
+     - **Epochs:** only the current epoch's marks are replayed. Older epochs (before a full-screen erase or a width change) can't be aligned, so their marks are left out rather than risk a wrong line. Their commands lose their block headers in old history.
+     - **Unfinished sequences:** the helper follows where the output stands between sequences. A seed taken mid-escape or mid-UTF-8 ends with that sequence's start, so the output after it completes it.
+     - **The pen:** the parser knows the pen only from output it has seen. A pen set before the session's control client started is unknown, and the next output may draw in the default colour until the program sets one. The app's tab watch keeps the control client up while the app is open.
+     - **Authors:** an Enter sent through a stream with an author records it for the pane. The next command mark (C) on that pane takes it, and the author is sent just before the output chunk holding the mark. A command typed through any other client gets none.
+     - **Input:** `copy-mode -q` then `send-keys -H` in 512-byte pieces, in order. A failed piece ends the stream, saying how many bytes weren't delivered.
+     - **Falling behind:** a stream more than 4 MB or 4096 events behind, or a pane tmux paused, gets a new `reset` with `skipped` set.
+     - **Restarts:** the control client broadcasts `ctlReady` when it first takes commands and `ctlRestart` after each later start. A stream that opens or resets before then waits for it.
+     - **Floods (R-0178):** the tmux reader never waits on a parser or a stream.
+       - It hands each pane's events to that pane's own queue, which holds at most 4 MB of output (`core/agent/panelane.go`).
+       - Past that limit, the waiting output is dropped and the pane's parser starts afresh. Its tab terminals then reset with `skipped`, from a capture taken after the drop.
+       - Each tab terminal takes only its own pane's output, so another tab's flood never fills its queue.
+       - **The memory bound:** 4 MB per pane, so 20 flooding tabs could hold 80 MB in the helper. If PR 7's latency gate shows no gain above 1 MB, the cap drops to 1 MB.
+       - **Lanes end with their panes:** after each window closes, the helper lists the session's panes and ends the lanes of panes that are gone, whether or not their layouts were seen.
+       - Tests:
+         - a 200,000-line flood to a reader that stops reading;
+         - another tab's output keeps arriving less than 1 s apart while a pane floods;
+         - the control client never restarts during it.
+     - **Resets:** a full reset (RIS) or a soft reset (DECSTR) clears the parser's pen and bracketed paste, so a seed after `reset` sets neither again.
    - **The app's side:** after a reconnect (portenvd or the agent restarting, a move, the Mac waking), the app opens the stream again and draws the new `reset`. The tab's history is the box's, so nothing depends on what the app had kept.
 7. **The app's per-tab terminal interface** (`apps/mac/Sources/PortenvKit/TabTerminal.swift`, in this PR, so split view can build on it now). See "The interface" below.
 8. **The CLI stays a plain attach.** `portenv attach` and `portenv open --tab` keep the `Terminal` RPC and #41's per-viewer grouped sessions, for a person in Terminal, Ghostty or a tiling terminal; their shells get the same OSC 133 marks directly. Agents' terminal access (2.4) is unchanged.
@@ -266,6 +305,17 @@ Also checked on tmux 3.4 in the image:
       - It's a Swift compilation condition (`PORTENV_ATTACHED_TERMINAL`) set only for lane builds. The Makefile refuses it without `LANE`.
       - `scripts/release-local.sh` and `check-app-identity.sh` refuse an app built with it, read from a marker in its Info.plist.
       - It never reaches a release build, and it's deleted once the gate passes.
+    - **As built (1.2c PR 6):**
+      - **The guards:**
+        - `release-local.sh` calls `refuse_attached_terminal` (`scripts/release-guards.sh`).
+        - `check-app-identity.sh` refuses a release app that has the Info.plist marker, or the string `PORTENV_ATTACHED_TERMINAL_BUILD` in its binary.
+        - `scripts/test-attached-terminal.sh` checks each guard, and each guard is mutation-checked.
+      - **The main window:**
+        - It shows the current tab's own terminal (`MainTabTerminal`, `TabTerminalShown`) through `ControlModeTabProvider` over portenvd's `TabTerminal` (`DaemonClient`).
+        - **Reconnecting:** a lost stream says "Reconnecting…" while it opens again (waits from 0.25 s, doubling to 4 s).
+        - **Giving up:** after 8 attempts in a row with no reset, or a permanent refusal, it says "Disconnected", with portenvd's reason, and offers Reconnect.
+        - **Permanent refusals:** a tmux too old, an unknown call, or a refused request.
+        - **Typing:** nothing typed before a reset is sent, then or later.
 13. **Agents' terminal access is unchanged in what it permits.** Agents (2.4) keep today's paths and limits: the attached `Terminal` RPC through their own viewer, `portenv screen`/`send`/`wait`, and ADR 0016's grants.
     - `TabTerminal` is opened by the app over portenvd's socket, which only the Mac's user can reach (ADR 0014). This decision gives agents nothing new.
     - Whether agents later move to `TabTerminal`, for per-author attribution of their keystrokes, is an open question (PLAN.md). It would be a separate decision, with the same grants.

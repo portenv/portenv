@@ -40,7 +40,7 @@ cleanup() {
 trap cleanup EXIT
 
 mkdir -p "$root/mac"
-printf '{"servers": ["%s"]}\n' "$target" > "$root/mac/machine.json"
+"$portenv" app trust-server "$target" "$host_key" # the server's own SSH host key, pinned (ADR 0021)
 "$portenv" init "$box" --image "$image" --storage "sftp:portenv-storage@${target#*@}:/storage" --storage-host-key "$host_key" --storage-rest 127.0.0.1:7422 > "$root/init.txt"
 pub=$(grep '^ssh-ed25519 ' "$root/init.txt")
 rest_user=$(sed -n 's/^rest-user //p' "$root/init.txt")

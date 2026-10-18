@@ -9,44 +9,87 @@ import SwiftUI
 struct MainWindow: View {
     @Bindable var controller: BoxController
     @Bindable var tabs: TabsController
+    /// The workspace's agent team; nil in renders without one.
+    let team: TeamController?
     /// The inspector's open state, remembered for this box's window (§6).
     @AppStorage private var inspectorOpen: Bool
+    /// The sidebar as the person chose it with ⌘0, for this box; "" until
+    /// they do (TeamSidebarToggle).
+    @AppStorage private var sidebarChoice: String
+    /// Below 900 pt the sidebar is compact (GUIDELINES 6.2).
+    @State private var narrow = false
     /// Renders only (ScreenRenders): a sample terminal in place of
     /// `portenv attach`.
     private let renderTerminal: (() -> NSView)?
 
-    init(controller: BoxController, tabs: TabsController, renderTerminal: (() -> NSView)? = nil) {
+    init(controller: BoxController, tabs: TabsController, team: TeamController? = nil, renderTerminal: (() -> NSView)? = nil) {
         self.controller = controller
         self.tabs = tabs
+        self.team = team
         self.renderTerminal = renderTerminal
         _inspectorOpen = AppStorage(wrappedValue: false, InspectorToggle.key(controller.box))
+        _sidebarChoice = AppStorage(wrappedValue: "", TeamSidebarToggle.key(controller.box))
+    }
+
+    /// The selected agent, whose column takes the inspector's place
+    /// (R-0240).
+    private var agent: TeamAgent? { team?.selectedAgent }
+
+    /// Open while an agent is selected, whatever the person last chose.
+    private var columnOpen: Binding<Bool> {
+        Binding(get: { inspectorOpen || agent != nil || team?.selectedDecision != nil }, set: { inspectorOpen = $0 })
     }
 
     var body: some View {
-        content
+        HStack(spacing: 0) {
+            if TeamSidebarToggle.shows(choice: sidebarChoice, team: team), let team {
+                TeamSidebar(state: team.state, tabs: tabs.tabs, selection: Bindable(team).selection, compact: narrow)
+                Divider()
+            }
+            content
+        }
+            // The team while the window is open; it watches again after a
+            // restart or a move.
+            .task(id: controller.box) { await team?.follow() }
+            .onGeometryChange(for: Bool.self) { $0.size.width < 900 } action: { narrow = $0 }
             // The terminal side and the inspector share the window's width;
             // only the window has a minimum width (R-0073, R-0075).
-            .boxWindowColumns(inspectorOpen: $inspectorOpen) {
-                InspectorView(
-                    content: InspectorContent(box: controller, tabs: tabs),
-                    yourInitial: String(NSFullUserName().prefix(1)).uppercased(),
-                    moveMenu: controller.moveMenu,
-                    move: { target in Task { await controller.move(to: target) } },
-                    run: { action in Task { await controller.run(action) } },
-                    retryPackages: { Task { await controller.retryPackages() } },
-                    revert: { Task { await controller.revertToLastSavePoint() } },
-                    retrySaves: { Task { await controller.refreshSaves() } }
-                )
-                // Read the saves while open and wherever the box runs,
-                // quietly trying again if that fails. A new save reads them
-                // again from the controller (savedAtChanged).
-                .task(id: controller.location) {
-                    await controller.keepSavesLoaded()
+            .boxWindowColumns(inspectorOpen: columnOpen) {
+                if let agent, let team {
+                    TeamColumn(agent: agent, team: team)
+                        .inspectorToggle(isOpen: columnOpen)
+                } else if let team, let decision = team.selectedDecision {
+                    DecisionColumn(decision: decision, team: team)
+                        .inspectorToggle(isOpen: columnOpen)
+                } else {
+                    inspectorView
                 }
-                // The toggle at the toolbar's trailing edge, open or closed.
-                .inspectorToggle(isOpen: $inspectorOpen)
             }
             .navigationTitle(controller.box)
+            // Keep Waiting's way out (R-0178), next to "Waiting for …".
+            .toolbar {
+                if let place = controller.waitingFor {
+                    ToolbarItem(placement: .primaryAction) {
+                        Button(StopWaiting.title) { controller.stopWaiting() }
+                            .keyboardShortcut(StopWaiting.shortcut)
+                            .help("Stop trying to open it while \(place) holds it")
+                    }
+                }
+            }
+            // The window closing ends the wait too; the view merely leaving
+            // the window (another state) doesn't (R-0179).
+            .background(EndsWithWindow { controller.stopWaiting() })
+            // 2.3: open somewhere else, and Move To's confirmation.
+            .sheet(isPresented: Binding(get: { controller.leaseSheet != nil }, set: { if !$0 { controller.cancelLeaseSheet() } })) {
+                if let sheet = controller.leaseSheet {
+                    LeaseSheetView(sheet: sheet, choose: { a in Task { await controller.choose(a) } }, cancel: { controller.cancelLeaseSheet() })
+                }
+            }
+            .sheet(isPresented: Binding(get: { controller.moveConfirmation != nil }, set: { if !$0 { controller.cancelMove() } })) {
+                if let m = controller.moveConfirmation {
+                    MoveConfirmationView(confirmation: m, move: { Task { await controller.confirmMove() } }, cancel: { controller.cancelMove() })
+                }
+            }
             // The title is the box's menu (Apple's document-menu pattern):
             // the system title is replaced by BoxTitle, the box's name and
             // sync symbol over its state line, on the toolbar itself with no
@@ -68,6 +111,35 @@ struct MainWindow: View {
             } message: {
                 Text(controller.error ?? "")
             }
+            // Told once (R-0201): portenvd restarted the workspace to apply
+            // a security update.
+            .alert("Workspace Restarted", isPresented: Binding(get: { controller.notice != nil }, set: { if !$0 { controller.dismissNotice() } })) {
+                Button("OK") { controller.dismissNotice() }
+            } message: {
+                Text(controller.notice ?? "")
+            }
+    }
+
+    private var inspectorView: some View {
+                InspectorView(
+                    content: InspectorContent(box: controller, tabs: tabs),
+                    hasTeam: team?.state.hasTeam ?? false,
+                    yourInitial: String(NSFullUserName().prefix(1)).uppercased(),
+                    moveMenu: controller.moveMenu,
+                    move: { target in Task { await controller.requestMove(to: target) } },
+                    run: { action in Task { await controller.run(action) } },
+                    retryPackages: { Task { await controller.retryPackages() } },
+                    revert: { Task { await controller.revertToLastSavePoint() } },
+                    retrySaves: { Task { await controller.refreshSaves() } }
+                )
+                // Read the saves while open and wherever the box runs,
+                // quietly trying again if that fails. A new save reads them
+                // again from the controller (savedAtChanged).
+                .task(id: controller.location) {
+                    await controller.keepSavesLoaded()
+                }
+                // The toggle at the toolbar's trailing edge, open or closed.
+                .inspectorToggle(isOpen: columnOpen)
     }
 
     @ViewBuilder private var content: some View {
@@ -81,6 +153,20 @@ struct MainWindow: View {
                 Button("Cancel") { controller.cancelKeychainWait() }
                     .keyboardShortcut(.cancelAction)
                     .accessibilityLabel("Cancel opening \(controller.box)")
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(.background)
+        // Docker Desktop stopped (R-0098): the same words and button as
+        // Welcome's card; Restart Box comes back once Docker answers.
+        case _ where controller.engineDown:
+            VStack(spacing: 10) {
+                Text(DockerText.notRunningTitle).font(.title3)
+                Text(DockerText.notRunningLine)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 420)
+                Button(DockerText.openButton) { DockerDesktop.perform(.openDockerDesktop) }
+                    .keyboardShortcut(.defaultAction)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(.background)
@@ -104,13 +190,30 @@ struct MainWindow: View {
             // bar sits above it (§3); choosing a tab shows that tmux window
             // in this same terminal.
             VStack(spacing: 0) {
-                TabBar(tabs: tabs)
+                HStack(spacing: 0) {
+                    TabBar(tabs: tabs, selection: team?.selection ?? .allTabs, team: team?.state.agents ?? [])
+                    // An agent's tabs only: All tabs at the trailing end
+                    // brings back every tab (R-0241).
+                    if let team, team.selection != .allTabs {
+                        Button(TeamText.allTabs) { team.selection = .allTabs }
+                            .buttonStyle(.link)
+                            .padding(.horizontal, 12)
+                    }
+                }
                     // Follows the tabs while the box is open here or on a
                     // server; watches again after a restart or a move.
                     .task { await tabs.follow() }
                 Group {
                     if let renderTerminal {
                         RenderedView(make: renderTerminal)
+                    } else if !AppTerminal.attached, let provider = controller.tabTerminals, let tab = tabs.current {
+                        // Each tab's own terminal (ADR 0020).
+                        MainTabTerminal(shown: TabTerminalShown(provider: provider), tab: tab.id,
+                                        generation: controller.terminalGeneration, label: A11y.terminal(box: controller.box),
+                                        serviceComing: controller.reconnectingToService)
+                    } else if !AppTerminal.attached, controller.tabTerminals != nil {
+                        // The tabs aren't known yet.
+                        Color(nsColor: .textBackgroundColor)
                     } else {
                         BoxTerminal(box: controller.box, generation: controller.terminalGeneration,
                                     onEnded: { Task { await controller.terminalEnded() } },
@@ -120,7 +223,13 @@ struct MainWindow: View {
                 .accessibilityLabel(A11y.terminal(box: controller.box))
             }
         case .closed:
-            placeholder(controller.busy ? controller.subtitle : "\(controller.box) is closed", "")
+            if controller.busy {
+                placeholder(controller.subtitle, "")
+            } else {
+                ClosedWorkspace(box: controller.box, failure: controller.openFailure) {
+                    Task { await controller.open() }
+                }
+            }
         }
     }
 
@@ -241,5 +350,33 @@ struct SyncSymbol: View {
             .help(look.line)
             .accessibilityLabel(A11y.symbolLabel(controller.state))
         }
+    }
+}
+
+/// A closed workspace's window (R-0211): its name, why it isn't open when
+/// an open failed (portenvd's plain line), and Open, or Try Again after a
+/// failure, as the default button (Return).
+struct ClosedWorkspace: View {
+    let box: String
+    let failure: String?
+    let open: () -> Void
+
+    var body: some View {
+        VStack(spacing: 10) {
+            Text(ClosedText.title(box)).font(.title3)
+            if let failure {
+                Text(failure)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 420)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Button(failure == nil ? ClosedText.open : ClosedText.tryAgain, action: open)
+                .keyboardShortcut(.defaultAction)
+                .accessibilityLabel(ClosedText.buttonLabel(box, failed: failure != nil))
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(.background)
+        .accessibilityElement(children: .contain)
     }
 }

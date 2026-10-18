@@ -33,8 +33,23 @@ const (
 	// be missing; whoever tracks pane state starts again (ADR 0020, §11).
 	ctlOverflow
 	// ctlRestart: the control client exited and was started again; events
-	// between the two were never seen (ADR 0020, decision 2).
+	// between the two were never seen (ADR 0020, decision 2). It comes once
+	// the new client takes commands.
 	ctlRestart
+	// ctlReady: the session's first client takes commands; a subscriber
+	// that couldn't send one before it can now.
+	ctlReady
+	// ctlSessionGone: the session no longer exists, so its client stopped
+	// for good (R-0167); the next subscriber starts one again.
+	ctlSessionGone
+	// ctlLayout: a window's layout changed (%layout-change); for a tab's
+	// single pane, its size.
+	ctlLayout
+	// ctlPause: tmux paused a pane's output for this client, which falls
+	// too far behind (pause-after); output was skipped (ADR 0020, §11).
+	ctlPause
+	// ctlReply: the reply to a command this client sent (send).
+	ctlReply
 )
 
 // maxCtlLine is the longest control-mode line the helper buffers (R-0162).
@@ -46,9 +61,24 @@ const maxCtlLine = 1 << 20
 type ctlEvent struct {
 	kind   ctlKind
 	window string // @N
-	pane   string // %N, for output
+	pane   string // %N, for output, a layout or a pause
 	name   string // for a rename
 	data   []byte // for output, decoded
+	// For ctlLayout: the pane's size.
+	cols, rows int
+	// For ctlOutput, from the pane's parser: the marks in this chunk, the
+	// authors of the commands they start, and whether the parser had to
+	// start afresh (its marks are gone).
+	marks   []paneMark
+	authors []recordedAuthor
+	lost    bool
+	// For ctlReply: the command's ID, its output lines, whether tmux said
+	// %error, and the pane's parser as it stood when the reply came, if the
+	// command asked for it (snapPane).
+	id     uint64
+	lines  []string
+	failed bool
+	snap   *paneSnapshot
 }
 
 func parseControlLine(line string) ctlEvent {
@@ -62,8 +92,24 @@ func parseControlLine(line string) ctlEvent {
 		id, name, _ := strings.Cut(rest, " ")
 		return ctlEvent{kind: ctlWindowRenamed, window: id, name: name}
 	case "%unlinked-window-add", "%unlinked-window-renamed", "%session-window-changed", "%window-pane-changed",
-		"%sessions-changed", "%session-changed", "%session-renamed", "%layout-change":
+		"%sessions-changed", "%session-changed", "%session-renamed":
 		return ctlEvent{kind: ctlTabsChanged}
+	case "%layout-change":
+		// %layout-change @N <layout> <visible layout> <flags>; a one-pane
+		// layout is "<checksum>,<cols>x<rows>,<x>,<y>,<pane number>".
+		window, rest, _ := strings.Cut(rest, " ")
+		layout, _, _ := strings.Cut(rest, " ")
+		e := ctlEvent{kind: ctlLayout, window: window}
+		if f := strings.Split(layout, ","); len(f) == 5 {
+			if c, r, ok := strings.Cut(f[1], "x"); ok {
+				e.cols, _ = strconv.Atoi(c)
+				e.rows, _ = strconv.Atoi(r)
+				e.pane = "%" + f[4]
+			}
+		}
+		return e
+	case "%pause":
+		return ctlEvent{kind: ctlPause, pane: rest}
 	case "%output":
 		pane, data, _ := strings.Cut(rest, " ")
 		return ctlEvent{kind: ctlOutput, pane: pane, data: decodeControlOutput(data)}

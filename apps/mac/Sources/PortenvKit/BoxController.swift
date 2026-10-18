@@ -33,6 +33,20 @@ public struct BoxState: Equatable, Sendable {
     public var storagePlace: String?
     /// When portenvd opened the box (the inspector's "Since").
     public var openedAt: Date?
+    /// This open stopped and started the box again to apply a security
+    /// update (R-0201): the window tells the person once.
+    public var restartedForSecurityUpdate = false
+    /// The first open's image pull, while it runs (R-0211).
+    public struct ImagePull: Equatable, Sendable {
+        public let done: Int64
+        public let total: Int64
+        public init(done: Int64, total: Int64) {
+            self.done = done
+            self.total = total
+        }
+    }
+
+    public var imagePull: ImagePull?
 
     public init(save: Save, savedAt: Date? = nil, location: String? = nil) {
         self.save = save
@@ -50,6 +64,21 @@ public struct BoxState: Equatable, Sendable {
             let interrupted: Bool?
             let storage_place: String?
             let opened_at: Date?
+            let restarted_for_security_update: Bool?
+            let image_pull: Pull?
+            struct Pull: Decodable {
+                // protojson writes int64 as a string; tests write numbers.
+                let done_bytes: Flex?
+                let total_bytes: Flex?
+            }
+
+            struct Flex: Decodable {
+                let value: Int64
+                init(from decoder: Decoder) throws {
+                    let c = try decoder.singleValueContainer()
+                    if let n = try? c.decode(Int64.self) { value = n } else { value = Int64(try c.decode(String.self)) ?? 0 }
+                }
+            }
         }
         let d = JSONDecoder()
         d.dateDecodingStrategy = .custom { dec in
@@ -67,6 +96,8 @@ public struct BoxState: Equatable, Sendable {
         s.interrupted = w.interrupted ?? false
         s.storagePlace = (w.storage_place?.isEmpty ?? true) ? nil : w.storage_place
         s.openedAt = w.opened_at
+        s.restartedForSecurityUpdate = w.restarted_for_security_update ?? false
+        if let p = w.image_pull { s.imagePull = ImagePull(done: p.done_bytes?.value ?? 0, total: p.total_bytes?.value ?? 0) }
         return s
     }
 
@@ -104,6 +135,24 @@ public final class BoxController {
     public private(set) var busy = false
     /// The last failure, shown in a sheet; cleared by dismissError.
     public private(set) var error: String?
+    /// Something to tell the person once, in an alert with OK (the security
+    /// restart, R-0201); cleared by dismissNotice.
+    public private(set) var notice: String?
+    private var securityRestartTold = false
+    /// What the window says after portenvd restarted the workspace to apply
+    /// a security update (R-0201).
+    public static let securityRestartNotice = "Portenv restarted this workspace to apply a security update. Your files and saves are as you left them; programs that were running were stopped."
+    /// The workspace is open somewhere else: the sheet that asks what to do
+    /// (2.3, the move-and-lease board).
+    public private(set) var leaseSheet: LeaseSheet?
+    /// Move To asks first: what will stop, and where it goes.
+    public private(set) var moveConfirmation: MoveConfirmation?
+    /// Keep Waiting: the place being waited for, while the open is tried
+    /// again.
+    public private(set) var waitingFor: String?
+    /// How often Keep Waiting tries the open again.
+    public var keepWaitingEvery: Duration = .seconds(30)
+    private var waiting: Task<Void, Never>?
     /// Changes whenever the box starts again (here or on a server), so the
     /// terminal reattaches to the new start.
     public private(set) var terminalGeneration = 0
@@ -132,6 +181,9 @@ public final class BoxController {
     public private(set) var movingTo: String?
 
     private let daemon: DaemonAPI
+    /// The window's tab terminals (ADR 0020): one stream per tab through
+    /// portenvd, when the daemon client can open them.
+    @ObservationIgnored public let tabTerminals: (any TabTerminalProvider)?
     private let keychain: KeychainReading
     private let notifier: KeychainWaitNotifying?
     private let keychainThreshold: Duration
@@ -141,13 +193,24 @@ public final class BoxController {
     private let ensureDaemon: (@Sendable () async -> String?)?
     /// How long portenvd may be away before the window says so plainly.
     private let daemonDeadline: Duration
-    private var daemonGoneSince: ContinuousClock.Instant?
+    private var daemonGoneSince: SuspendingClock.Instant?
+    /// Time awake: a Mac asleep while portenvd is away mustn't spend the
+    /// deadline (a wall clock did, on 2026-10-16).
+    private let awake: @Sendable () -> SuspendingClock.Instant
 
     /// What the window says when portenvd has been away past the deadline.
     public static let daemonGone = "Portenv's background service isn't running, so nothing is being saved. It's started again automatically; if this lasts, quit and reopen Portenv."
     /// Reopening after portenvd restarted: the state line keeps the real
     /// state instead of "Opening…".
     private var resuming = false
+    /// portenvd went away while this window had the workspace open here:
+    /// whatever the new portenvd says first (interrupted, or closed), the
+    /// window reopens it by itself, never showing "closed" (R-0250).
+    private var lostWhileOpenHere = false
+    /// portenvd is away, or the workspace is being reopened after it came
+    /// back: the tab view says it's reconnecting, never "disconnected" with
+    /// a Reconnect that can't work yet (R-0242).
+    public var reconnectingToService: Bool { daemonGoneSince != nil || resuming }
     /// One reopen per restart, so a failing one doesn't read the Keychain
     /// every few seconds.
     private var resumeTried = false
@@ -165,25 +228,32 @@ public final class BoxController {
     /// A secondary line under a progress line (the Keychain wait's hint).
     public private(set) var progressDetail: String?
     private var cancelKeychain: (@MainActor () -> Void)?
+    /// Brings this window forward before a read that may prompt (R-0214).
+    private let bringForward: @Sendable () -> Void
 
     public init(box: String, daemon: DaemonAPI, keychain: KeychainReading = SystemKeychain(),
                 notifier: KeychainWaitNotifying? = nil, keychainThreshold: Duration = KeychainWait.threshold,
                 ensureDaemon: (@Sendable () async -> String?)? = nil, followRetry: Duration = .seconds(1),
                 daemonDeadline: Duration = .seconds(30), savesRetry: Duration = .seconds(5),
+                awake: @escaping @Sendable () -> SuspendingClock.Instant = { .now },
                 now: @escaping @Sendable () -> Date = { Date() },
-                sleep: @escaping @Sendable (Duration) async -> Void = { try? await Task.sleep(for: $0) }) {
+                sleep: @escaping @Sendable (Duration) async -> Void = { try? await Task.sleep(for: $0) },
+                bringForward: @escaping @Sendable () -> Void = { KeychainWait.front.bringForward() }) {
         self.box = box
+        self.bringForward = bringForward
         self.savesRetry = savesRetry
         self.now = now
         self.sleep = sleep
         // Set from the clock when a save is first recorded (savedAtChanged).
         self.savedTimeNow = .distantPast
         self.daemon = daemon
+        tabTerminals = (daemon as? any TabTerminalTransport).map { ControlModeTabProvider(box: box, transport: $0) }
         self.keychain = keychain
         self.notifier = notifier
         self.keychainThreshold = keychainThreshold
         self.ensureDaemon = ensureDaemon
         self.daemonDeadline = daemonDeadline
+        self.awake = awake
         self.followRetry = followRetry
     }
 
@@ -203,7 +273,31 @@ public final class BoxController {
 
     /// The state line as it reads at a time: the title draws it at the time
     /// it's drawn (and again when savedAtChangesAt comes).
-    public func subtitle(at time: Date) -> String { progress ?? transient ?? state?.line(now: time) ?? "" }
+    public func subtitle(at time: Date) -> String {
+        progress ?? transient ?? (engineDown ? DockerText.stateLine : state?.line(now: time)) ?? ""
+    }
+
+    /// Docker Desktop stopped while the box is open on this Mac (R-0098):
+    /// the state line and the window say so, with Open Docker Desktop.
+    public private(set) var engineDown = false
+
+    /// Asks portenvd whether Docker answers, only while the box is open
+    /// here and its agent is unavailable (a working box never asks).
+    public func checkEngine() async {
+        guard isOpen, location == .thisMac, agentUnavailable else {
+            engineDown = false
+            return
+        }
+        engineDown = await daemon.engineRunning() == false
+    }
+
+    /// checkEngine every 2 s until cancelled (alongside follow).
+    public func watchEngine() async {
+        while !Task.isCancelled {
+            await checkEngine()
+            await sleep(DockerText.interval)
+        }
+    }
 
     /// A new save was recorded: the words roll over a minute later, and the
     /// saves list (once read) is read again now, not on a later state.
@@ -280,7 +374,8 @@ public final class BoxController {
     public func run(_ action: BoxMenuItem.Action) async {
         switch action {
         case .none: break
-        case .move(let target): await move(to: target)
+        case .open: await open()
+        case .move(let target): await requestMove(to: target)
         case .revertToLastSavePoint: await revertToLastSavePoint()
         case .makeSavePoint: await makeSavePoint()
         case .restartBox: await restartBox()
@@ -313,18 +408,31 @@ public final class BoxController {
         }
     }
 
+    /// Why the last open failed, in portenvd's plain words (DaemonErrorText):
+    /// the closed window shows it with Try Again, instead of an alert alone
+    /// or a silent "is closed" (R-0211). Cleared when an open starts.
+    public private(set) var openFailure: String?
+
     /// Opens the box (on this Mac, or shows it where it runs).
     public func open() async {
+        stopWaiting() // a new open ends Keep Waiting (R-0178)
+        openFailure = nil
         progress = resuming ? nil : "Opening…"
-        await perform {
+        var elsewhere = false
+        await perform(failure: { [weak self] in self?.openFailure = $0 }) {
             self.servers = (try? await self.daemon.servers()) ?? []
             do {
                 try await self.daemon.open(self.box)
+            } catch let e as DaemonError where e.openElsewhere {
+                // Open somewhere else: the sheet, not an error line.
+                elsewhere = true
+                return
             } catch let e as DaemonError where e.message.contains(KeychainWait.daemonError) {
                 // portenvd never prompts: read the keys here, in front of
                 // the person, and hand them over. Cancelled: nothing opened.
                 guard try await self.approveKeys() else {
                     self.location = .closed
+                    self.openFailure = KeychainWait.cancelled
                     return
                 }
                 try await self.daemon.open(self.box)
@@ -336,8 +444,159 @@ public final class BoxController {
         }
         progress = nil
         progressDetail = nil
+        if elsewhere {
+            await showWhereItIsOpen()
+            return
+        }
         if location == .closed { await refresh() }
     }
+
+    // MARK: Open somewhere else, and Move To (2.3)
+
+    /// The sheet at once, naming the place; then the probe (up to 2 s)
+    /// fills it in (R-0140). Never an error line.
+    private func showWhereItIsOpen(retried: Bool = false) async {
+        guard let first = try? await daemon.placement(box, probe: false) else {
+            openFailure = "\(box) is open somewhere else."
+            return
+        }
+        // The other place let go meanwhile: open it once more (R-0178).
+        if first.holder == .none {
+            await openOnceMore(retried: retried)
+            return
+        }
+        leaseSheet = LeaseSheet(box: box, placement: first, now: now())
+        guard case .knownServer = first.holder else { return }
+        if let probed = try? await daemon.placement(box, probe: true), leaseSheet != nil {
+            if probed.holder == .none {
+                leaseSheet = nil
+                await openOnceMore(retried: retried)
+                return
+            }
+            leaseSheet = LeaseSheet(box: box, placement: probed, now: now())
+        }
+    }
+
+    /// One more open after the other place let go; refused again, the
+    /// sheet as usual (never a second retry).
+    private func openOnceMore(retried: Bool) async {
+        guard !retried else {
+            openFailure = "\(box) is open somewhere else."
+            return
+        }
+        var elsewhere = false
+        await perform {
+            do {
+                try await self.daemon.open(self.box)
+            } catch let e as DaemonError where e.openElsewhere {
+                elsewhere = true
+                return
+            }
+            self.terminalGeneration += 1
+            await self.refresh()
+        }
+        if elsewhere { await showWhereItIsOpen(retried: true) }
+    }
+
+    /// Stop Waiting, or anything else that ends the wait: no further open
+    /// is tried (R-0178).
+    public func stopWaiting() {
+        waiting?.cancel()
+        waiting = nil
+        if waitingFor != nil {
+            waitingFor = nil
+            progress = nil
+        }
+    }
+
+    /// What the person chose on the sheet.
+    public func choose(_ action: LeaseSheet.Action) async {
+        let placeName = leaseSheet?.place ?? ""
+        leaseSheet = nil
+        switch action {
+        case .connect:
+            progress = "Opening…"
+            await perform {
+                try await self.daemon.connectThere(self.box)
+                self.terminalGeneration += 1
+                await self.refresh()
+            }
+            progress = nil
+        case .moveHere:
+            await move(to: "this-mac")
+        case .moveHereTakingOver:
+            progress = "Opening…"
+            await perform {
+                try await self.daemon.open(self.box, takeOver: true)
+                self.terminalGeneration += 1
+                await self.refresh()
+            }
+            progress = nil
+        case .keepWaiting:
+            keepWaiting(for: placeName)
+        }
+    }
+
+    public func cancelLeaseSheet() { leaseSheet = nil }
+
+    /// Keep Waiting: try the open again every keepWaitingEvery until it
+    /// works (the other place let go), or until the place answers: then
+    /// the sheet comes back, now offering Connect (the board's "tells you
+    /// when it answers").
+    private func keepWaiting(for place: String) {
+        waiting?.cancel()
+        waitingFor = place
+        progress = "Waiting for \(place)\u{2026}"
+        waiting = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self else { return }
+                try? await Task.sleep(for: self.keepWaitingEvery)
+                if Task.isCancelled { return }
+                do {
+                    try await self.daemon.open(self.box)
+                    self.waitingFor = nil
+                    self.progress = nil
+                    self.terminalGeneration += 1
+                    await self.refresh()
+                    return
+                } catch let e as DaemonError where e.openElsewhere {
+                    if let p = try? await self.daemon.placement(self.box, probe: true), p.answers == .yes {
+                        self.waitingFor = nil
+                        self.progress = nil
+                        self.leaseSheet = LeaseSheet(box: self.box, placement: p, now: self.now())
+                        return
+                    }
+                    continue
+                } catch {
+                    // Anything else (the Keychain, the server removed) ends
+                    // the wait and is said (R-0178).
+                    if Task.isCancelled { return }
+                    self.waitingFor = nil
+                    self.progress = nil
+                    // A failed open: in the window, with Try Again (R-0211).
+                    self.openFailure = error.localizedDescription
+                    return
+                }
+            }
+        }
+    }
+
+    /// Move To asks first, naming every command that will stop.
+    public func requestMove(to target: String) async {
+        guard !isCurrent(target) else { return }
+        stopWaiting()
+        // nil when they can't be read: then nothing is claimed (R-0178).
+        let tabs = try? await daemon.tabs(box)
+        moveConfirmation = MoveConfirmation(box: box, target: target, tabs: tabs, now: now())
+    }
+
+    public func confirmMove() async {
+        guard let m = moveConfirmation else { return }
+        moveConfirmation = nil
+        await move(to: m.target)
+    }
+
+    public func cancelMove() { moveConfirmation = nil }
 
     /// portenvd isn't answering while the box is open (it crashed, is being
     /// updated or relaunched): the line shows the box's real state, "Not
@@ -347,11 +606,11 @@ public final class BoxController {
     private func daemonEnded() async {
         guard !leaving, location != .closed, !(await daemon.ping()) else { return }
         state = BoxState(save: .notSaved, savedAt: state?.savedAt, location: state?.location)
-        let since = daemonGoneSince ?? .now
+        let since = daemonGoneSince ?? awake()
         daemonGoneSince = since
         if let problem = await ensureDaemon?() {
             error = problem
-        } else if ContinuousClock.now - since >= daemonDeadline {
+        } else if awake() - since >= daemonDeadline {
             error = Self.daemonGone
         }
     }
@@ -359,11 +618,11 @@ public final class BoxController {
     /// Waits for portenvd at launch (launchd starts it with the login item),
     /// saying so plainly if it doesn't come within the deadline.
     public func waitForDaemon() async {
-        let start = ContinuousClock.now
+        let start = awake()
         while !(await daemon.ping()) {
             if let problem = await ensureDaemon?() {
                 error = problem
-            } else if ContinuousClock.now - start >= daemonDeadline {
+            } else if awake() - start >= daemonDeadline {
                 error = Self.daemonGone
                 return
             }
@@ -404,6 +663,8 @@ public final class BoxController {
     /// might be answering. Returns false when cancelled.
     private func approveKeys() async throws -> Bool {
         let ids = try await daemon.keyIDs(box)
+        // Its prompt comes up over this window (R-0214).
+        bringForward()
         let reader = keychain
         let once = Once<Result<[String: Data], Error>?>()
         let result = await withCheckedContinuation { (done: CheckedContinuation<Result<[String: Data], Error>?, Never>) in
@@ -463,6 +724,9 @@ public final class BoxController {
                 }
             } catch {}
             if Task.isCancelled { return }
+            // The stream ended: portenvd went away. A workspace this window
+            // had open here is reattached when it's back (R-0250).
+            if location == .thisMac { lostWhileOpenHere = true }
             await daemonEnded()
             try? await Task.sleep(for: followRetry)
         }
@@ -474,21 +738,33 @@ public final class BoxController {
     private func apply(_ st: BoxState, pushed: Bool) async {
         let newSave = st.savedAt != state?.savedAt
         state = st
+        // Once for this window, however often the state says it again.
+        if st.restartedForSecurityUpdate && !securityRestartTold {
+            securityRestartTold = true
+            notice = Self.securityRestartNotice
+        }
         if newSave { savedAtChanged() }
+        // The first open's pull: the line says how far it has got, and
+        // goes back to "Opening…" when it's done (R-0211).
+        if busy, let line = progress, line == StateLine.opening || line.hasPrefix(StateLine.gettingImagePrefix) {
+            progress = st.imagePull.map { StateLine.gettingImage(done: $0.done, total: $0.total) } ?? StateLine.opening
+        }
         // portenvd answers again: whatever said it was away no longer holds.
         daemonGoneSince = nil
         if error == Self.daemonGone { error = nil }
         if pushed && busy { return }
-        if st.interrupted {
+        if st.interrupted || (lostWhileOpenHere && st.save == .closed) {
             // portenvd restarted while this window had the box open: open it
             // again, handing the keys over (the window stays on the box).
             if location != .closed && !busy && !resumeTried {
                 resumeTried = true
+                lostWhileOpenHere = false
                 await resume()
             }
             return
         }
         resumeTried = false
+        lostWhileOpenHere = false
         switch st.save {
         case .closed: location = .closed
         default: location = st.location.map { .server($0) } ?? .thisMac
@@ -565,6 +841,7 @@ public final class BoxController {
 
     /// Closing the window saves and releases a box open on this Mac.
     public func close() async {
+        stopWaiting()
         guard location == .thisMac else { return }
         await perform { try await self.daemon.close(self.box) }
         location = .closed
@@ -584,6 +861,8 @@ public final class BoxController {
     }
 
     public func dismissError() { error = nil }
+
+    public func dismissNotice() { notice = nil }
 
     /// What quitting needs: this box, and whether it is open on this Mac.
     public var quitFlow: QuitFlow { QuitFlow(daemon: daemon, box: box, openHere: location == .thisMac) }
@@ -620,14 +899,16 @@ public final class BoxController {
         await refresh()
     }
 
-    private func perform(_ action: @escaping @MainActor () async throws -> Void) async {
+    /// Runs an action while busy. A failure goes to `failure` when given
+    /// (an open's failure stays in the window), otherwise to the alert.
+    private func perform(failure: ((String) -> Void)? = nil, _ action: @escaping @MainActor () async throws -> Void) async {
         guard !busy else { return }
         busy = true
         defer { busy = false }
         do {
             try await action()
         } catch {
-            self.error = error.localizedDescription
+            if let failure { failure(error.localizedDescription) } else { self.error = error.localizedDescription }
         }
     }
 }

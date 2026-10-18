@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sync"
 	"time"
 
@@ -107,11 +108,15 @@ func (r *Readiness) set(s agentv1.ReadinessState, detail string) {
 type server struct {
 	agentv1.UnimplementedAgentServiceServer
 	readiness *Readiness
+	// team makes and removes agent users (ADR 0022 §1); nil where init
+	// doesn't serve them.
+	team *TeamUsers
 }
 
 func (s *server) GetVersion(context.Context, *agentv1.GetVersionRequest) (*agentv1.GetVersionResponse, error) {
 	return &agentv1.GetVersionResponse{
 		Build: &typesv1.BuildInfo{Version: version.Version, Commit: version.Commit},
+		BoxId: BoxID(),
 	}, nil
 }
 
@@ -129,6 +134,13 @@ func (s *server) RetryPackages(context.Context, *agentv1.RetryPackagesRequest) (
 // Serve serves the agent API on a Unix socket until ctx is done. The socket's
 // directory is created root-only (0700) and the socket itself is 0600.
 func Serve(ctx context.Context, socket string, r *Readiness) error {
+	return ServeWithTeam(ctx, socket, r, nil)
+}
+
+// ServeWithTeam is Serve, and also answers EnsureAgentUser and
+// RemoveAgentUser with team: init, as root, on the socket only the API
+// process reaches.
+func ServeWithTeam(ctx context.Context, socket string, r *Readiness, team *TeamUsers) error {
 	// root:portenv-agent 0710: the API process (portenv-agent) reaches the
 	// socket; nothing else in the box does.
 	dir := filepath.Dir(socket)
@@ -162,7 +174,7 @@ func Serve(ctx context.Context, socket string, r *Readiness) error {
 		return fmt.Errorf("agent socket permissions: %w", err)
 	}
 	srv := grpc.NewServer()
-	agentv1.RegisterAgentServiceServer(srv, &server{readiness: r})
+	agentv1.RegisterAgentServiceServer(srv, &server{readiness: r, team: team})
 	go func() {
 		<-ctx.Done()
 		srv.Stop()
@@ -210,4 +222,17 @@ func AskRetryPackages(ctx context.Context, socket string) error {
 	defer cancel()
 	_, err = agentv1.NewAgentServiceClient(conn).RetryPackages(ctx, &agentv1.RetryPackagesRequest{})
 	return err
+}
+
+// boxIDRE is what a box ID may look like: the app's "box-" IDs and the
+// drivers' test IDs. Anything else is reported as no ID.
+var boxIDRE = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,63}$`)
+
+// BoxID is the box this helper runs in, as the driver told it (BoxIDEnv),
+// or "" when it wasn't told or the value isn't a box ID.
+func BoxID() string {
+	if id := os.Getenv(BoxIDEnv); boxIDRE.MatchString(id) {
+		return id
+	}
+	return ""
 }

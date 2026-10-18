@@ -18,14 +18,25 @@ SHELL := $(CURDIR)/scripts/make-shell
 
 BIN := $(CURDIR)/bin
 GO_MODULES := core proto/gen/go
+# The image tests (team boundary, team first start) are their own modules,
+# outside go.work: the toolbox image's build copies go.work, and the tests
+# don't belong in it.
+TEST_MODULES := tests/team-boundary tests/team-start
 CMDS := portenvd portenv-runner portenv-agent portenv
 AGENT_ARCHES := arm64 amd64
 
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
+# One build of the app and its helpers, the same in both (R-0198): the app
+# restarts a portenvd of another build after an in-place update. Made once
+# per make run, so a rebuild of the same commit (a lane's, a dev one) differs.
+ifndef BUILD_ID
+BUILD_ID := $(shell uuidgen 2>/dev/null || od -An -N16 -tx1 /dev/urandom | tr -d ' \n')
+endif
 LDFLAGS := -s -w \
 	-X github.com/portenv/portenv/core/internal/version.Version=$(VERSION) \
-	-X github.com/portenv/portenv/core/internal/version.Commit=$(COMMIT)
+	-X github.com/portenv/portenv/core/internal/version.Commit=$(COMMIT) \
+	-X github.com/portenv/portenv/core/internal/version.BuildID=$(BUILD_ID)
 
 # Pinned developer tools. Each is installed with its own module graph
 # (go install pkg@version), so their dependencies never conflict.
@@ -54,7 +65,7 @@ SWIFT_PROTOBUF := 1.38.1
 GRPC_SWIFT_PROTOBUF := 2.4.1
 SWIFT_PLUGINS := $(BIN)/protoc-gen-swift $(BIN)/protoc-gen-grpc-swift-2
 
-.PHONY: all build app release-local unregister-service test fuzz lint fmt proto proto-go proto-swift proto-check proto-check-go agent-linux cli-linux cli-darwin swift-test swift-env-check \
+.PHONY: team-boundary team-start all build app release-local unregister-service test fuzz lint fmt proto proto-go proto-swift proto-check proto-check-go agent-linux cli-linux cli-darwin swift-test swift-env-check \
 	secrets spdx-check check tools clean image image-test driver-test e2e
 
 all: build test lint proto-check
@@ -110,27 +121,43 @@ test: $(TOOLS_STAMP)
 	scripts/test-notarize.sh
 	scripts/test-workspace-word.sh
 	scripts/test-check-terminal-views.sh
+	scripts/test-attached-terminal.sh
+	scripts/test-check-ssh-keygen.sh
+	scripts/test-check-dev-previews.sh
 
-## fuzz: the workspace helper's control-mode decoder and line reader, briefly (R-0162; FUZZTIME=15s)
-FUZZTIME ?= 15s
+## fuzz: the workspace helper's control-mode decoder, line reader and pane parser, briefly (R-0162, R-0142)
+# Counts of runs, not durations: with a duration, go test fails with
+# "context deadline exceeded" when the time runs out while a worker is still
+# minimizing a new input, which a slow runner hits now and then. The
+# decoders are fast; the parser runs a terminal per input.
+FUZZRUNS ?= 500000x
+FUZZRUNS_PARSER ?= 30000x
 fuzz:
 	for f in FuzzDecodeControlOutput FuzzReadControlLines; do \
-		(cd core && go test -run '^$$' -fuzz "^$$f$$" -fuzztime $(FUZZTIME) ./agent/) || exit 1; \
+		(cd core && go test -run '^$$' -fuzz "^$$f$$" -fuzztime $(FUZZRUNS) -timeout 10m ./agent/) || exit 1; \
 	done
+	cd core && go test -run '^$$' -fuzz '^FuzzPaneParser$$' -fuzztime $(FUZZRUNS_PARSER) -timeout 10m ./agent/
 
-## lint: formatting, vet, golangci-lint, buf lint, workflow lint, SPDX headers, terminal views made only by TerminalViews, "workspace" in what people read
+## lint: formatting, vet, golangci-lint, buf lint, workflow lint, SPDX headers, terminal views made only by TerminalViews, ssh-keygen only on files of its own, "workspace" in what people read
 lint: $(TOOLS_STAMP) $(SHELLCHECK) spdx-check
 	test -z "$$(gofmt -l core proto/gen/go | tee /dev/stderr)"
 	for m in $(GO_MODULES); do go vet ./$$m/...; done
+	# Every module's go.sum matches what's in the module cache (pinned
+	# dependencies, R-0142).
+	for m in $(GO_MODULES); do (cd $$m && go mod verify) || exit 1; done
 	for m in $(GO_MODULES); do \
 		(cd $$m && $(BIN)/golangci-lint run --config $(CURDIR)/.golangci.yml ./...); \
 	done
+	test -z "$$(gofmt -l $(TEST_MODULES) | tee /dev/stderr)"
+	for m in $(TEST_MODULES); do (cd $$m && GOWORK=off go vet ./... && GOWORK=off go mod verify && GOWORK=off $(BIN)/golangci-lint run --config $(CURDIR)/.golangci.yml ./...) || exit 1; done
 	cd proto && $(BIN)/buf lint && $(BIN)/buf format --diff --exit-code
 	scripts/install-shellcheck.sh --check
 	$(BIN)/actionlint -shellcheck=$(SHELLCHECK)
 	scripts/check-no-binaries.sh
 	scripts/check-terminal-views.sh
+	scripts/check-ssh-keygen.sh
 	python3 -I scripts/check-workspace-word.py
+	scripts/check-dev-previews.sh
 
 ## fmt: format Go and proto sources
 fmt: $(TOOLS_STAMP)
@@ -199,13 +226,28 @@ APP_BUILD := $(HOME)/Library/Caches/Portenv/app-build-$(INSTANCE)
 # never reads PORTENV_INSTANCE, a dev one refuses any other value.
 LDFLAGS += -X github.com/portenv/portenv/core/internal/instance.stamp=$(INSTANCE)
 endif
+# ATTACHED_TERMINAL=1 (a dev lane only, ADR 0020 decision 12): the main
+# window shows the old attached terminal instead of the control-mode tab
+# terminal, until the latency gate passes. The app carries a marker
+# (PortenvAttachedTerminal in Info.plist, and a string in its binary) that
+# check-app-identity.sh and release-local.sh refuse in a release build.
+ATTACHED_TERMINAL ?=
+ifneq ($(ATTACHED_TERMINAL),)
+ifeq ($(LANE),)
+$(error ATTACHED_TERMINAL=1 is for a dev lane's build only: add LANE=X)
+endif
+APP_SWIFTFLAGS := -Xswiftc -DPORTENV_ATTACHED_TERMINAL
+APP_BUILD := $(APP_BUILD)-attached
+endif
 # Swift builds run with a clean environment: SwiftPM's plugin caches record
 # the environment they ran in, so a session token or other secret in the
 # shell would end up on disk under .build (scripts/check-swift-env.sh).
 SWIFT := env -i PATH="$(PATH)" HOME="$(HOME)" TMPDIR="$(or $(TMPDIR),/tmp)" LANG=en_US.UTF-8 swift
 app: build $(TOOLS_STAMP)
 	# Source paths remapped: a release build never carries this machine's paths.
-	cd apps/mac && $(SWIFT) build -c release --scratch-path "$(APP_BUILD)" \
+	# A lane build also compiles the dev-only previews (R-0220); a release
+	# build never does, and check-dev-previews.sh checks its binary below.
+	cd apps/mac && $(SWIFT) build -c release --scratch-path "$(APP_BUILD)" $(if $(LANE),-Xswiftc -DPORTENV_DEV_PREVIEWS) $(APP_SWIFTFLAGS) \
 		-Xswiftc -file-prefix-map -Xswiftc "$(CURDIR)/=" -Xcc -ffile-prefix-map="$(CURDIR)/=" \
 		-Xswiftc -file-prefix-map -Xswiftc "$(APP_BUILD)/=build/" -Xcc -ffile-prefix-map="$(APP_BUILD)/=build/"
 	rm -rf $(BIN)/Portenv.app && mkdir -p $(BIN)/Portenv.app/Contents/MacOS
@@ -218,10 +260,13 @@ app: build $(TOOLS_STAMP)
 	mkdir -p $(BIN)/Portenv.app/Contents/Helpers && cp $(BIN)/portenv $(BIN)/portenvd $(BIN)/restic $(BIN)/Portenv.app/Contents/Helpers/
 	for f in portenv portenvd restic; do codesign --force --sign - $(BIN)/Portenv.app/Contents/Helpers/$$f; done
 	cp apps/mac/Info.plist $(BIN)/Portenv.app/Contents/Info.plist
+	/usr/libexec/PlistBuddy -c "Add :PortenvBuildID string $(BUILD_ID)" $(BIN)/Portenv.app/Contents/Info.plist
+	$(if $(ATTACHED_TERMINAL),/usr/libexec/PlistBuddy -c "Add :PortenvAttachedTerminal bool true" $(BIN)/Portenv.app/Contents/Info.plist)
 	# The app icon (R-0128); a dev lane's carries its letter, so it's never
 	# mistaken for the release app.
 	scripts/make-app-icon.sh apps/mac/Resources/Assets.xcassets/AppIcon.appiconset \
 		$(BIN)/Portenv.app/Contents/Resources/AppIcon.icns $(LANE) $(if $(LANE),$(SWIFT))
+	test -s $(BIN)/Portenv.app/Contents/Resources/AppIcon.icns || { echo "Portenv.app has no AppIcon.icns" >&2; exit 1; }
 	# portenvd's launch agent (the login item; SMAppService.agent registers it).
 	mkdir -p $(BIN)/Portenv.app/Contents/Library/LaunchAgents
 	cp apps/mac/LaunchAgents/com.portenv.portenvd.plist $(BIN)/Portenv.app/Contents/Library/LaunchAgents/
@@ -237,6 +282,7 @@ app: build $(TOOLS_STAMP)
 	go run ./core/tools/notices check --app $(BIN)/Portenv.app --resolved apps/mac/Package.resolved
 	$(if $(INSTANCE),scripts/stamp-instance.sh $(BIN)/Portenv.app $(INSTANCE))
 	scripts/check-app-identity.sh $(BIN)/Portenv.app $(INSTANCE)
+	$(if $(LANE),,scripts/check-dev-previews.sh --binary $(BIN)/Portenv.app/Contents/MacOS/Portenv)
 	scripts/check-build-paths.sh $(BIN)/Portenv.app/Contents/MacOS/Portenv $(addprefix $(BIN)/Portenv.app/Contents/Helpers/,portenv portenvd restic)
 	codesign --force --sign - $(BIN)/Portenv.app
 
@@ -266,6 +312,14 @@ image-test: image
 ## driver-test: run the driver conformance suite against Docker with $(IMAGE)
 driver-test:
 	PORTENV_TEST_IMAGE=$(IMAGE) go test -count=1 -timeout 20m ./core/driver/docker/
+
+## team-boundary: the per-agent user boundary (ADR 0022) against $(IMAGE): every row as an agent, then with its mutation, which must fail it. TEAM_SETUP=fixture (the ADR's layout, built by the test) or real (the helper's team start; what the preview is gated on)
+team-boundary:
+	cd tests/team-boundary && GOWORK=off PORTENV_TEST_IMAGE=$(IMAGE) PORTENV_TEAM_SETUP=$(or $(TEAM_SETUP),fixture) go test -count=1 -timeout 20m -v ./...
+
+## team-start: an agent team's first start on a fresh workspace (R-0296) against $(IMAGE): a real portenvd, team init, approve lead, the TEAM_START decision, start lead, whoami in its pane, its ask-owner in the decision list
+team-start: build
+	cd tests/team-start && GOWORK=off PORTENV_TEST_IMAGE=$(IMAGE) go test -count=1 -timeout 15m -v ./...
 
 ## e2e: restic isolation probe, two machines, SFTP storage and portenvd against $(IMAGE)
 e2e: build $(TOOLS_STAMP)

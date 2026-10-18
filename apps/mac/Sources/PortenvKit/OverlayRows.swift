@@ -24,6 +24,9 @@ public struct OverlayRows: Sendable {
         public fileprivate(set) var row: Int
         public let line: ObjectIdentifier
         public let kind: Kind
+        /// When the mark arrived, for a block's times; nil for marks
+        /// replayed in a seed, whose times the app never saw.
+        public let at: Date?
     }
 
     /// Where a mark shows: its row on screen (0 is the top visible row).
@@ -33,27 +36,37 @@ public struct OverlayRows: Sendable {
     }
 
     public private(set) var marks: [Mark] = []
+    /// Marks whose lines were trimmed off the top of the scrollback, newest
+    /// last: their rows still say where a block began, so a block that
+    /// outgrew the scrollback keeps its start, and Copy Output can say how
+    /// many of its lines are gone (R-0171). Never placed on screen.
+    public private(set) var trimmed: [Mark] = []
+    static let trimmedKept = 64
 
     /// How far a lost mark is searched for after a reflow, in rows each way.
     public static let searchRadius = 400
 
     public init() {}
 
-    public mutating func add(row: Int, line: ObjectIdentifier, kind: Kind) {
+    public mutating func add(row: Int, line: ObjectIdentifier, kind: Kind, at: Date? = nil) {
         // One mark of each kind per line: a redrawn prompt doesn't stack.
         marks.removeAll { $0.line == line && $0.kind == kind }
-        marks.append(Mark(row: row, line: line, kind: kind))
+        marks.append(Mark(row: row, line: line, kind: kind, at: at))
     }
 
-    public mutating func removeAll() { marks.removeAll() }
+    public mutating func removeAll() {
+        marks.removeAll()
+        trimmed.removeAll()
+    }
 
     /// Brings every mark up to date with the buffer: drops marks whose rows
     /// were trimmed away, and finds marks whose line moved (a reflow).
     /// `lineAt` gives the identity of the line at a scroll-invariant row, or
     /// nil outside `valid`.
     public mutating func resolve(valid: ClosedRange<Int>, lineAt: (Int) -> ObjectIdentifier?) {
+        var gone: [Mark] = []
         marks = marks.compactMap { mark in
-            if mark.row < valid.lowerBound { return nil }
+            if mark.row < valid.lowerBound { gone.append(mark); return nil }
             if mark.row <= valid.upperBound, lineAt(mark.row) == mark.line { return mark }
             for d in 1 ... Self.searchRadius {
                 for r in [mark.row - d, mark.row + d] where valid.contains(r) {
@@ -65,6 +78,9 @@ public struct OverlayRows: Sendable {
                 }
             }
             return nil
+        }
+        if !gone.isEmpty {
+            trimmed = Array((trimmed + gone.sorted { $0.row < $1.row }).suffix(Self.trimmedKept))
         }
     }
 

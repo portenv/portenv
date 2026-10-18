@@ -13,6 +13,7 @@ struct PortenvApp: App {
     @State private var model = AppModel()
 
     init() {
+        AppTerminal.announce()
         // A dev lane's build refuses an environment naming another lane, before
         // it touches a login item, keys or a folder (Instance, gmake app LANE=X).
         if let problem = Instance.current.mismatch(environment: ProcessInfo.processInfo.environment) {
@@ -34,6 +35,19 @@ struct PortenvApp: App {
         if let i = CommandLine.arguments.firstIndex(of: "--render-screens"), i + 1 < CommandLine.arguments.count {
             exit(MainActor.assumeIsolated { ScreenRenders.write(to: CommandLine.arguments[i + 1]) })
         }
+        #if PORTENV_DEV_PREVIEWS
+        // Lane builds only (R-0220): the command blocks in a window of their
+        // own, with no portenvd; closing it quits.
+        if CommandLine.arguments.contains(BlocksPreview.argument) {
+            MainActor.assumeIsolated {
+                let app = NSApplication.shared
+                app.setActivationPolicy(.regular)
+                BlocksPreview.show()
+                app.run()
+            }
+            exit(0)
+        }
+        #endif
     }
 
     var body: some Scene {
@@ -41,7 +55,8 @@ struct PortenvApp: App {
             AppRoot(model: model)
                 .task {
                     model.onOpen = { [delegate] controller in delegate.controller = controller }
-                    await model.start()
+                    // One launch wait at a time; Try Again restarts it.
+                    model.begin()
                 }
         }
         .windowToolbarStyle(.unified(showsTitle: true))
@@ -57,6 +72,7 @@ struct PortenvApp: App {
             }
             TabCommands(tabs: model.tabs)
             InspectorToggle(box: model.controller?.box)
+            TeamSidebarToggle(box: model.controller?.box, team: model.team)
             FindCommands()
             FeedbackCommands()
             // Portenv › Settings… (⌘,): the toolbar window (R-0137).
@@ -79,6 +95,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var relaunchingForUpdate = false
 
     func applicationWillFinishLaunching(_: Notification) {
+        // The display Portenv was launched from: first run opens there.
+        FirstRunLaunch.pointer = NSEvent.mouseLocation
         // Portenv's tab bar is the only tabs: no native window tabs.
         WindowCloseHook.turnOffNativeTabs()
     }
@@ -90,6 +108,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate()
         // Windows restored from a display that's gone come back on screen.
         OnScreen.watch()
+        // A read that may raise macOS's Keychain or Touch ID prompt brings
+        // the window that asked to the front first, so the prompt comes up
+        // over it, never unseen behind "Opening…" (R-0214).
+        KeychainWait.front.handler = {
+            DispatchQueue.main.async {
+                NSApp.activate()
+                (NSApp.keyWindow ?? NSApp.mainWindow ?? NSApp.windows.first { $0.isVisible })?.makeKeyAndOrderFront(nil)
+            }
+        }
         OnScreen.fixAll()
         // SIGTERM (Xcode's Stop, logout, kill) and SIGINT (Ctrl-C in the
         // Terminal that started it) quit like ⌘Q, so open boxes are saved

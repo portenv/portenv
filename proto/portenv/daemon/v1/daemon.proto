@@ -116,6 +116,73 @@ service DaemonService {
   // against the boxes here that carry a recovery key. Read-only. Never
   // logged.
   rpc CheckRecoveryKey(CheckRecoveryKeyRequest) returns (CheckRecoveryKeyResponse);
+  // Where a box is open when it isn't this Mac (2.3, the lease sheet): the
+  // place, its newest save, and whether it answers. A known server is asked
+  // with `portenv app ping`, within 2 s; another machine can't be asked.
+  // OpenBox's refusal for a box open elsewhere carries the trailer
+  // portenv-refusal: open-elsewhere, and the app asks this then.
+  rpc GetPlacement(GetPlacementRequest) returns (GetPlacementResponse);
+  // One tab's terminal (ADR 0020), relayed to the workspace helper's
+  // TabTerminal as Terminal is: same socket, same box routing, on this Mac
+  // or on a server. The first message must be open. portenvd sets the
+  // stream's author from the connection's caller; nothing in the request
+  // can, and the open has no author field.
+  rpc TabTerminal(stream TabTerminalRequest) returns (stream TabTerminalResponse);
+  // A server's host key (2.9, ADR 0021, R-0180), found through ssh itself
+  // and compared, read only, with this Mac's SSH known hosts: the same key
+  // confirms the server; a different one marks it changed. A server that
+  // isn't confirmed is never contacted.
+  rpc ScanServerKey(ScanServerKeyRequest) returns (ScanServerKeyResponse);
+  // Pin the key the last scan found, given the fingerprint the person saw.
+  // A changed key can't be trusted: only Forget gets past it.
+  rpc TrustServerKey(TrustServerKeyRequest) returns (TrustServerKeyResponse);
+  // Drop the server's pinned key: it is unconfirmed again.
+  rpc ForgetServerKey(ForgetServerKeyRequest) returns (ForgetServerKeyResponse);
+  // A made key's private half (2.9 1b, ADR 0021), read by the app from the
+  // Keychain and held in portenvd's memory only, like ProvideKeys: never
+  // written, never logged. It signs in once per shared connection, through
+  // an agent of portenvd's own for that one run.
+  rpc ProvideServerKey(ProvideServerKeyRequest) returns (ProvideServerKeyResponse);
+  // Add a Server's Check (2.9, ADR 0021 §3): a read-only probe over the
+  // server's pinned SSH connection, one line per question; each failure
+  // says what to do, in Portenv's words, never the server's. It changes
+  // nothing on the server.
+  rpc CheckServer(CheckServerRequest) returns (CheckServerResponse);
+  // Whether this Mac's box engine answers (Docker Desktop is running), for
+  // Welcome's Docker card and the state line (R-0098). It only asks the
+  // engine: it never starts anything. portenvd gives the engine 1.5 s;
+  // the app waits 3 s for the answer.
+  rpc GetEngine(GetEngineRequest) returns (GetEngineResponse);
+  // ADR 0022: the agent team. Every call names the workspace; only the app,
+  // in front of the person, makes them.
+  // A workspace's agents, from its project's agent files.
+  rpc ListAgents(ListAgentsRequest) returns (ListAgentsResponse);
+  // The agents, then every change, board message and decision, from a
+  // cursor.
+  rpc WatchTeam(WatchTeamRequest) returns (stream WatchTeamResponse);
+  // Starts an agent whose file is approved and valid.
+  rpc StartAgent(StartAgentRequest) returns (StartAgentResponse);
+  // Stops an agent at once: its tmux server and every process of its user.
+  rpc StopAgent(StopAgentRequest) returns (StopAgentResponse);
+  // Approve or Decline, the owner's answer to a pending decision.
+  rpc AnswerDecision(AnswerDecisionRequest) returns (AnswerDecisionResponse);
+  // An agent file's content and the content last approved, for Approve's
+  // diff and its runner line.
+  rpc GetAgentFile(GetAgentFileRequest) returns (GetAgentFileResponse);
+  // Pins an agent file's content (§3): the hash must be what the app showed.
+  rpc ApproveAgentFile(ApproveAgentFileRequest) returns (ApproveAgentFileResponse);
+  // The owner's message to an agent.
+  rpc SendMessage(SendMessageRequest) returns (SendMessageResponse);
+  // Removes an agent. Its files stay until the owner approves a
+  // DECISION_KIND_DELETE_AGENT_FILES decision (§1).
+  rpc RemoveAgent(RemoveAgentRequest) returns (RemoveAgentResponse);
+  // The Agent files view (§2): list, open and add, done as the agent's user.
+  rpc ListAgentFiles(ListAgentFilesRequest) returns (ListAgentFilesResponse);
+  rpc ReadAgentFile(ReadAgentFileRequest) returns (stream ReadAgentFileResponse);
+  // Drag and drop. Refused past the agent's quota.
+  rpc AddAgentFiles(stream AddAgentFilesRequest) returns (AddAgentFilesResponse);
+  // Pauses or resumes one of an agent's routines (R-0258).
+  rpc SetRoutinePaused(SetRoutinePausedRequest) returns (SetRoutinePausedResponse);
 }
 
 message CheckBoxRequest {
@@ -143,6 +210,10 @@ message OpenBoxRequest {
   // explicit choice). That machine's unsaved work is kept as a separate
   // save (resume rule 4).
   bool take_over = 2;
+  // Connect to it where it runs (the lease sheet's Connect to it there):
+  // one of this Mac's servers holds it. Nothing stops there. Refused when
+  // no known server holds it or it's no longer open there.
+  bool connect_there = 3;
 }
 
 message OpenBoxResponse {
@@ -312,6 +383,13 @@ message GetBoxStateResponse {
   string storage_place = 7;
   // When this portenvd opened the box (the inspector's "Since <time>").
   google.protobuf.Timestamp opened_at = 8;
+  // This open stopped and started the box again to apply a security update
+  // (it was left running with mounts it shouldn't have; R-0201). The app
+  // tells the person once. Only for the open that did it.
+  bool restarted_for_security_update = 9;
+  // While this open pulls the workspace's toolbox image (the first open):
+  // how far it has got (R-0211). Unset otherwise.
+  ImagePull image_pull = 10;
 }
 
 enum NetworkPath {
@@ -378,6 +456,9 @@ message ListServersRequest {}
 
 message ListServersResponse {
   repeated string servers = 1;
+  // Each server's host key, in the order of servers, by ID and name (never
+  // its address).
+  repeated ServerInfo infos = 2;
 }
 
 message GetKeyIDsRequest {
@@ -573,4 +654,405 @@ message CheckRecoveryKeyResponse {
   int32 checked = 1;
   // The key opened one of them.
   bool opened = 2;
+}
+
+message GetPlacementRequest {
+  string name = 1;
+  // Ask a known server whether it answers (up to 2 s). Without it, the
+  // answer comes at once with answers unspecified for a known server, so
+  // the sheet can name the place before the probe ends.
+  bool probe = 2;
+}
+
+// Who holds a box open.
+enum Holder {
+  HOLDER_UNSPECIFIED = 0;
+  // Nobody, or this Mac: OpenBox opens it here.
+  HOLDER_NONE = 1;
+  // One of this Mac's servers (server_id, server_name).
+  HOLDER_KNOWN_SERVER = 2;
+  // A machine this Mac can't reach: another Mac, or a server it doesn't
+  // know (machine is its machine ID).
+  HOLDER_OTHER_MACHINE = 3;
+}
+
+// Whether the holder answers.
+enum Answers {
+  ANSWERS_UNSPECIFIED = 0;
+  ANSWERS_YES = 1;
+  // A known server whose portenv app ping failed or took over 2 s.
+  ANSWERS_NO = 2;
+  // Another machine: Portenv can't ask it. Never a reason to take over by
+  // default (R-0168).
+  ANSWERS_CANNOT_ASK = 3;
+}
+
+message GetPlacementResponse {
+  // Servers show by name, never by address (GUIDELINES §2, R-0172): the
+  // address stays in portenvd.
+  reserved 2;
+  reserved "server";
+  Holder holder = 1;
+  // For HOLDER_KNOWN_SERVER: a stable ID for the server (it doesn't carry
+  // the address) and the name it shows by.
+  string server_id = 6;
+  string server_name = 7;
+  // The holder's machine ID, as the lease names it.
+  string machine = 3;
+  // The newest save, which carries the lease.
+  google.protobuf.Timestamp newest_save_at = 4;
+  Answers answers = 5;
+}
+
+message TabTerminalRequest {
+  oneof msg {
+    TabTerminalOpen open = 1;
+    // Keystrokes, pastes, clicks and IME input, as the app's terminal
+    // produced them (never the emulator's replies; ADR 0020, decision 4).
+    bytes input = 2;
+    // The size this view can show, in cells.
+    TerminalSize resize = 3;
+  }
+}
+
+message TabTerminalOpen {
+  // The tmux session, for example "main".
+  string session = 1;
+  // A tab ID, "@N".
+  string tab = 2;
+  TerminalSize size = 3;
+  // The helper's TabTerminalOpen has author at 4. Here it's reserved, so
+  // no client can send one, and a stray field 4 is never copied through:
+  // portenvd builds the helper's open from the fields below and its caller.
+  reserved 4;
+  reserved "author";
+  string box = 5;
+}
+
+message TabTerminalResponse {
+  oneof msg {
+    // Always first, and again after the helper's control client restarts
+    // or output had to be skipped.
+    TabTerminalReset reset = 1;
+    // The tab's own output, in order.
+    bytes output = 2;
+    // The tab's size changed elsewhere (another viewer).
+    TerminalSize resized = 3;
+    // Nothing follows.
+    portenv.types.v1.TabTerminalEnd end = 4;
+    // Who ran a command, for its block's attribution chip.
+    CommandAuthor author = 5;
+  }
+}
+
+message TabTerminalReset {
+  TerminalSize size = 1;
+  // The tab's history and screen, cursor and modes, with its OSC 133
+  // marks replayed on their lines.
+  bytes seed = 2;
+  // Every command still in the seed that has a recorded author.
+  repeated CommandAuthor authors = 3;
+  // Output was skipped since the last reset (the helper or its reader fell
+  // too far behind; ADR 0020, decision 11): the app tells the person and
+  // marks the block that was running as skipped, never complete.
+  bool skipped = 4;
+}
+
+// Who sent the Enter that started a command: the helper's CommandAuthor
+// (agent.v1), as portenvd hands it to one recipient. Response-only, and
+// never inside output bytes. A command with no recorded author has none.
+message CommandAuthor {
+  // The command's OSC 133;C line, counted from the tab's first line ever.
+  uint64 line = 1;
+  // The author's own name, as people read it: the owner's first name, or
+  // "Grok Bot". Never "You": is_you is what makes the app say "You".
+  // portenvd drops an author whose name is over 64 characters or has
+  // control or bidi characters; it never repairs one.
+  string name = 2;
+  // True when the author is the caller receiving this stream. Set by
+  // portenvd for each recipient; whatever the helper sent is replaced.
+  bool is_you = 3;
+  // Empty for a person; the agent's ID from its grant (ADR 0016) otherwise.
+  string agent_id = 4;
+  reserved 5;
+}
+
+message ServerInfo {
+  string id = 1;
+  string name = 2;
+  portenv.types.v1.ServerKeyState state = 3;
+  // The pinned key's fingerprint (SHA256:..., as OpenSSH shows it), or the
+  // last scan's while it waits to be trusted.
+  string fingerprint = 4;
+  // Confirmed because this Mac's SSH known hosts had the same key.
+  bool from_known_hosts = 5;
+  // Its key changed and was forgotten: the next confirmation says so
+  // first. Cleared on Trust (R-0185).
+  bool was_changed = 6;
+  // It signs in with a key Portenv made for it: the app hands that key
+  // over (ProvideServerKey).
+  bool made_key = 7;
+}
+
+message ScanServerKeyRequest {
+  string server_id = 1;
+}
+
+message ScanServerKeyResponse {
+  ServerInfo info = 1;
+  // ssh-ed25519, ecdsa-sha2-nistp256, ...; never a certificate.
+  string key_type = 2;
+}
+
+message TrustServerKeyRequest {
+  string server_id = 1;
+  string fingerprint = 2;
+}
+
+message TrustServerKeyResponse {
+  ServerInfo info = 1;
+}
+
+message ForgetServerKeyRequest {
+  string server_id = 1;
+}
+
+message ForgetServerKeyResponse {
+  ServerInfo info = 1;
+}
+
+message ProvideServerKeyRequest {
+  string server_id = 1;
+  // The Ed25519 private key's 32-byte seed.
+  bytes key = 2;
+}
+
+message ProvideServerKeyResponse {}
+
+message CheckServerRequest {
+  string server_id = 1;
+}
+
+message CheckLine {
+  string id = 1;
+  string title = 2;
+  portenv.types.v1.CheckState state = 3;
+  // What Portenv found, in its own words.
+  string detail = 4;
+  // For a failure: what to do, one plain line.
+  string fix = 5;
+}
+
+message CheckServerResponse {
+  repeated CheckLine lines = 1;
+  // No line failed: Set Up may install.
+  bool passed = 2;
+}
+
+message GetEngineRequest {}
+
+message GetEngineResponse {
+  // The engine answered.
+  bool running = 1;
+}
+
+// A toolbox image's pull: bytes fetched of the bytes known so far (the
+// total grows as Docker starts each layer).
+message ImagePull {
+  int64 done_bytes = 1;
+  int64 total_bytes = 2;
+}
+
+// ADR 0022: the agent team.
+
+message ListAgentsRequest {
+  // The workspace.
+  string name = 1;
+}
+
+message ListAgentsResponse {
+  repeated AgentInfo agents = 1;
+}
+
+// One agent, as the Team sidebar shows it.
+message AgentInfo {
+  // Its id, which is also its login name in the workspace.
+  string id = 1;
+  string name = 2;
+  string role = 3;
+  // An SF Symbol name, or one of GUIDELINES §11's agent colours.
+  string avatar = 4;
+  // Remote agents (§10), after the owner's run.
+  bool remote = 5;
+  // "ssh", "mcp" or "web" when remote.
+  string via = 6;
+  portenv.types.v1.AgentState state = 7;
+  // One plain line when it's invalid or a start failed.
+  string problem = 8;
+  // The agent file's content hash, and whether it's the approved one.
+  string file_sha256 = 9;
+  bool approved = 10;
+  // Its tabs, in the order of ListTabs.
+  repeated string tab_ids = 11;
+  // Its last board line, plain text.
+  string last_line = 12;
+  int32 pending_decisions = 13;
+  // Its home's size and limit (§2's quota).
+  int64 home_bytes = 14;
+  int64 home_quota_bytes = 15;
+  // The runner line from its file, which Approve shows prominently
+  // (R-0245 item 4).
+  string runner = 16;
+  portenv.types.v1.AgentGrant grant = 17;
+  // What it says it's working on (R-0256); empty when it hasn't said.
+  portenv.types.v1.AgentStatus status = 18;
+  // Its routines (R-0258).
+  repeated portenv.types.v1.Routine routines = 19;
+  // Why its routines are off, if they are (R-0258).
+  string routines_off = 20;
+}
+
+message WatchTeamRequest {
+  string name = 1;
+  // Empty for everything from the start of the board.
+  string cursor = 2;
+}
+
+message WatchTeamResponse {
+  oneof event {
+    AgentInfo agent = 1;
+    portenv.types.v1.BoardMessage message = 2;
+    portenv.types.v1.Decision decision = 3;
+    string removed_agent_id = 5;
+  }
+  string cursor = 4;
+}
+
+message StartAgentRequest {
+  string name = 1;
+  string agent_id = 2;
+}
+
+message StartAgentResponse {
+  AgentInfo agent = 1;
+}
+
+message StopAgentRequest {
+  string name = 1;
+  string agent_id = 2;
+}
+
+message StopAgentResponse {
+  AgentInfo agent = 1;
+}
+
+message AnswerDecisionRequest {
+  string name = 1;
+  string decision_id = 2;
+  bool approve = 3;
+  string note = 4;
+}
+
+message AnswerDecisionResponse {
+  portenv.types.v1.Decision decision = 1;
+}
+
+message GetAgentFileRequest {
+  string name = 1;
+  string agent_id = 2;
+}
+
+message GetAgentFileResponse {
+  // The file as it is now, and its hash.
+  string content = 1;
+  string file_sha256 = 2;
+  // The content last approved, empty if none was.
+  string approved_content = 3;
+  string runner = 4;
+}
+
+message ApproveAgentFileRequest {
+  string name = 1;
+  string agent_id = 2;
+  // Must match the content the app showed, or nothing is approved.
+  string file_sha256 = 3;
+}
+
+message ApproveAgentFileResponse {
+  AgentInfo agent = 1;
+}
+
+message SendMessageRequest {
+  string name = 1;
+  // An agent id. From is always "owner".
+  string to = 2;
+  string thread_id = 3;
+  string text = 4;
+  // NOTICE (the default) or STATUS_REQUEST (Ask for Status, R-0256).
+  portenv.types.v1.MessageType type = 5;
+}
+
+message SendMessageResponse {
+  portenv.types.v1.BoardMessage message = 1;
+}
+
+message RemoveAgentRequest {
+  string name = 1;
+  string agent_id = 2;
+}
+
+message RemoveAgentResponse {
+  // The decision to delete its files, if the owner wants that.
+  portenv.types.v1.Decision delete_files = 1;
+}
+
+message ListAgentFilesRequest {
+  string name = 1;
+  string agent_id = 2;
+  // A folder relative to the agent's home; empty for the home.
+  string dir = 3;
+}
+
+message ListAgentFilesResponse {
+  repeated portenv.types.v1.AgentFile files = 1;
+  int64 home_bytes = 2;
+  int64 home_quota_bytes = 3;
+}
+
+message ReadAgentFileRequest {
+  string name = 1;
+  string agent_id = 2;
+  string path = 3;
+}
+
+// A piece of the file, in order.
+message ReadAgentFileResponse {
+  bytes data = 1;
+}
+
+message AddAgentFilesRequest {
+  // name and agent_id on the first message only.
+  string name = 1;
+  string agent_id = 2;
+  // Relative to the agent's home; a new path starts a new file.
+  string path = 3;
+  bytes data = 4;
+  // The last piece of this file.
+  bool last = 5;
+}
+
+message AddAgentFilesResponse {
+  repeated portenv.types.v1.AgentFile added = 1;
+}
+
+message SetRoutinePausedRequest {
+  string name = 1;
+  string agent_id = 2;
+  // The routine's place in the agent file's list.
+  int32 index = 3;
+  bool paused = 4;
+}
+
+message SetRoutinePausedResponse {
+  AgentInfo agent = 1;
 }

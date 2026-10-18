@@ -18,6 +18,9 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+// reapRetryDelay is how soon a skipped reap is tried again.
+const reapRetryDelay = 50 * time.Millisecond
+
 // shutdownGrace is how long processes get between SIGTERM and SIGKILL.
 // Docker's default stop timeout is 10 seconds; stay below it.
 const shutdownGrace = 8 * time.Second
@@ -40,8 +43,12 @@ func Init(ctx context.Context, cfg Config, log *slog.Logger) error {
 	defer signal.Stop(sigs)
 
 	readiness := NewReadiness()
+	// The reaper and the start sequence's commands share this lock, so the
+	// reaper never collects a child that ExecRunner is still waiting for.
+	var mu sync.Mutex
+	team := &TeamUsers{Cfg: cfg, Run: ExecRunner{Mu: &mu}, Chown: os.Lchown, RunDir: TeamRunDir}
 	go func() {
-		if err := Serve(ctx, DefaultSocket, readiness); err != nil {
+		if err := ServeWithTeam(ctx, DefaultSocket, readiness, team); err != nil {
 			log.Error("agent API stopped", "err", err)
 		}
 	}()
@@ -57,9 +64,6 @@ func Init(ctx context.Context, cfg Config, log *slog.Logger) error {
 		}
 	}
 
-	// The reaper and the start sequence's commands share this lock, so the
-	// reaper never collects a child that ExecRunner is still waiting for.
-	var mu sync.Mutex
 	booted := make(chan struct{})
 	go func() {
 		defer close(booted)
@@ -67,6 +71,12 @@ func Init(ctx context.Context, cfg Config, log *slog.Logger) error {
 			readiness.Fail(err)
 			log.Error("start sequence failed", "err", err)
 			return
+		}
+		// Agent users come back before the box is ready; a failure never
+		// stops the box, and the next EnsureAgentUser reports it.
+		team.Restore(ctx)
+		if err := team.RestoreErr(); err != nil {
+			log.Error("agent users couldn't be restored", "err", err)
 		}
 		readiness.Ready()
 		log.Info("box ready")
@@ -76,6 +86,7 @@ func Init(ctx context.Context, cfg Config, log *slog.Logger) error {
 		go retryPackages(ctx, cfg, ExecRunner{Mu: &mu}, readiness, log)
 	}()
 
+	reaper := newChildReaper(&mu, func() { servePid = restartIfReaped(reap(), servePid, log) }, reapRetryDelay)
 	bootDone := booted
 	for {
 		select {
@@ -86,15 +97,14 @@ func Init(ctx context.Context, cfg Config, log *slog.Logger) error {
 			mu.Lock()
 			servePid = restartIfReaped(reap(), servePid, log)
 			mu.Unlock()
+		case <-reaper.retry:
+			reaper.child()
 		case sig := <-sigs:
 			switch sig {
 			case unix.SIGCHLD:
 				// Never block the signal loop behind a long command such as
-				// apt-get: skip now, catch up when the start sequence ends.
-				if mu.TryLock() {
-					servePid = restartIfReaped(reap(), servePid, log)
-					mu.Unlock()
-				}
+				// apt-get: skip now, and try again shortly (childReaper).
+				reaper.child()
 			case unix.SIGTERM, unix.SIGINT:
 				log.Info("stopping box", "signal", sig.String())
 				cancel()
@@ -141,7 +151,7 @@ func startServe(log *slog.Logger) int {
 	// from its first instruction (ADR 0010, conditions).
 	p, err := os.StartProcess(ServeBinary, []string{"portenv-agent", "serve"}, &os.ProcAttr{
 		Files: []*os.File{os.Stdin, os.Stdout, os.Stderr},
-		Env:   []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"},
+		Env:   []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", BoxIDEnv + "=" + BoxID()},
 		// portenv-sync as a supplementary group only to read and run the
 		// restic binary (root:portenv-sync, 0750).
 		Sys: &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: ServeUID, Gid: ServeUID, Groups: []uint32{syncGID}}},

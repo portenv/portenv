@@ -18,6 +18,12 @@ final class FakeFirstRunService: FirstRunService, @unchecked Sendable {
     private var _keysMade = 0
     var keysMade: Int { lock.withLock { _keysMade } }
     var failure: String?
+    /// The first this many createBox calls find portenvd down (R-0202).
+    var serviceDownFor = 0
+    private var _creates = 0
+    var creates: Int { lock.withLock { _creates } }
+    /// Runs before each createBox (to look at the flow mid-call).
+    var onCreate: (@Sendable () async -> Void)?
     /// Fails as "not built yet" (a notice, not an error).
     var notBuilt: String?
 
@@ -30,6 +36,9 @@ final class FakeFirstRunService: FirstRunService, @unchecked Sendable {
 
     func createBox(_ box: NewBox) async throws {
         if let failure { throw FirstRunError(failure) }
+        await onCreate?()
+        let n = lock.withLock { _creates += 1; return _creates }
+        if n <= serviceDownFor { throw DaemonError(DaemonErrorText.starting, unavailable: true) }
         lock.withLock { _created.append(box) }
     }
 }
@@ -72,8 +81,8 @@ struct FirstRunTests {
     }
 
     /// Storage (the first-run-4-storage-this-mac board, R-0132): this Mac
-    /// is already chosen, and it's the only choice; a server or a bucket
-    /// comes later and can't go on.
+    /// is already chosen, and it's the only choice; a server comes later and
+    /// can't go on, and there's no bucket at all (R-0196).
     @Test func storageIsThisMacForNow() {
         let flow = FirstRunFlow(service: FakeFirstRunService(), at: .storage)
         #expect(flow.storage == .thisMac)
@@ -84,8 +93,22 @@ struct FirstRunTests {
         flow.storage = nil
         #expect(flow.whyNot == FirstRunText.chooseStorage)
         #expect(FirstRunText.storageThisMac == "Keep on this Mac for now")
-        #expect(FirstRunText.thisMacOnly == "Saves stay on this Mac only. If this Mac is lost, they\u{2019}re lost too. You can add a server or bucket later.")
+        #expect(FirstRunText.thisMacOnly == "Saves stay on this Mac only. If this Mac is lost, they\u{2019}re lost too. You can add a server later.")
+        #expect(FirstRunText.storageLater == "Saving to a server comes later. Keep your saves on this Mac for now.")
         #expect(FirstRunText.later == "LATER")
+    }
+
+    /// The owner dropped "bring your own bucket" as too technical (R-0196):
+    /// no word of first run mentions one, and no row offers Portenv storage
+    /// either (R-0197: no upsell during first run).
+    @Test func storageOffersNoBucketAndNoUpsell() {
+        let words = [FirstRunText.storageTitle, FirstRunText.storageLine, FirstRunText.storageThisMac,
+                     FirstRunText.thisMacOnly, FirstRunText.storageServer, FirstRunText.storageServerLine,
+                     FirstRunText.storageLater, FirstRunText.chooseStorage]
+        for w in words {
+            #expect(!w.lowercased().contains("bucket") && !w.contains("S3"), "a bucket in: \(w)")
+            #expect(!w.contains("Portenv storage"), "an upsell in: \(w)")
+        }
     }
 
     /// The first box's name follows the CLI's rule (local.NameRE) and can't
@@ -185,8 +208,8 @@ struct FirstRunTests {
                    FirstRunText.recoveryTitle, FirstRunText.recoveryLine, FirstRunText.recoverySavedCheck,
                    FirstRunText.noKeyYet, FirstRunText.tickSaved, FirstRunText.chooseStorage, FirstRunText.storageLater,
                    FirstRunText.typeName, FirstRunText.replacedKey, FirstRunText.makingKey, FirstRunText.storageLine,
-                   FirstRunText.storageServerLine, FirstRunText.storageBucketLine,
-                   FirstRunText.storageTitle, FirstRunText.storageServer, FirstRunText.storageBucket,
+                   FirstRunText.storageServerLine,
+                   FirstRunText.storageTitle, FirstRunText.storageServer,
                    FirstRunText.storageThisMac, FirstRunText.thisMacOnly, FirstRunText.firstBoxTitle,
                    FirstRunText.firstBoxLine, FirstRunText.gettingReadyTitle, FirstRunText.countMeIn,
                    FirstRunText.neverCounted, FirstRunText.turnOff, FirstRunText.whatsCounted,
@@ -402,4 +425,70 @@ struct FirstRunTests {
             #expect(flow2.refusals == n)
         }
     }
+
+    /// portenvd isn't up yet (or restarts): first run says it's starting it
+    /// and tries again, rather than failing on the first refused
+    /// connection; never a socket path (R-0202).
+    @Test func firstRunWaitsForTheServiceToComeUp() async {
+        let service = FakeFirstRunService()
+        service.serviceDownFor = 3
+        let flow = FirstRunFlow(service: service, at: .firstBox, retryEvery: .milliseconds(5), retryFor: .seconds(600)) // room: on CI, other suites hold the main actor for a minute
+        flow.boxName = "acme-api"
+        final class Said: @unchecked Sendable { var lines: Set<String> = [] }
+        let said = Said()
+        service.onCreate = { @MainActor in if let n = flow.notice { said.lines.insert(n) } }
+        await flow.next()
+        #expect(flow.step == .gettingReady)
+        #expect(service.creates == 4)
+        #expect(flow.error == nil)
+        #expect(said.lines.contains(DaemonErrorText.starting))
+    }
+
+    /// One that never comes up: the plain line, as an error, once the wait
+    /// is over.
+    @Test func aServiceThatNeverComesUpSaysSoPlainly() async {
+        let service = FakeFirstRunService()
+        service.serviceDownFor = 1_000
+        let flow = FirstRunFlow(service: service, at: .firstBox, retryEvery: .milliseconds(5), retryFor: .milliseconds(100))
+        flow.boxName = "acme-api"
+        await flow.next()
+        #expect(flow.step == .firstBox)
+        #expect(flow.error == DaemonErrorText.starting)
+    }
+
+    /// The wait counts time awake, not wall time (the flake in lane A's run
+    /// on 2026-10-16: the Mac slept about 15 minutes mid-wait, and a wall
+    /// clock spent the whole wait while nothing ran). Here the awake clock
+    /// stands still across a long gap: the wait carries on.
+    @Test func timeAsleepDoesntSpendTheWait() async {
+        let service = FakeFirstRunService()
+        service.serviceDownFor = 3
+        let awake = FakeAwakeClock()
+        let flow = FirstRunFlow(service: service, at: .firstBox, retryEvery: .milliseconds(1), retryFor: .seconds(10), awake: { awake.now })
+        flow.boxName = "acme-api"
+        await flow.next()
+        #expect(flow.step == .gettingReady && service.creates == 4 && flow.error == nil)
+    }
+
+    /// Time awake does run the wait out: past it, the plain line.
+    @Test func timeAwakeEndsTheWait() async {
+        let service = FakeFirstRunService()
+        service.serviceDownFor = 1_000
+        let awake = FakeAwakeClock()
+        service.onCreate = { awake.advance(by: .seconds(4)) }
+        let flow = FirstRunFlow(service: service, at: .firstBox, retryEvery: .milliseconds(1), retryFor: .seconds(10), awake: { awake.now })
+        flow.boxName = "acme-api"
+        await flow.next()
+        #expect(flow.step == .firstBox && flow.error == DaemonErrorText.starting)
+        #expect(service.creates == 4) // at 4, 8, 12 and 16 s awake: the wait began at 4, so 16 is past it
+    }
+}
+
+/// An awake clock the test moves by hand.
+final class FakeAwakeClock: @unchecked Sendable {
+    private let lock = NSLock()
+    private let base = SuspendingClock.now
+    private var offset: Duration = .zero
+    var now: SuspendingClock.Instant { lock.withLock { base.advanced(by: offset) } }
+    func advance(by d: Duration) { lock.withLock { offset += d } }
 }

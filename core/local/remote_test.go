@@ -21,6 +21,7 @@ func TestRunRemoteNeverForwardsStdin(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("PORTENV_SSH", fake)
+	confirmedServers(t, "host")
 
 	r, w, err := os.Pipe()
 	if err != nil {

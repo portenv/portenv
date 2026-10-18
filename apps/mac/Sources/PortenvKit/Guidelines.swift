@@ -28,6 +28,20 @@ public enum StateLine {
     /// the list shows (WindowClose), so the wait reads as work (R-0061).
     public static let closing = "Saving before closing…"
 
+    public static let opening = "Opening\u{2026}"
+
+    /// The first open's image pull (R-0211): "Getting the workspace image…
+    /// 312 MB of 900 MB", in MB below a gigabyte, decimal (as Finder).
+    public static let gettingImagePrefix = "Getting the workspace image\u{2026}"
+
+    public static func gettingImage(done: Int64, total: Int64) -> String {
+        guard total > 0 else { return gettingImagePrefix }
+        func size(_ b: Int64) -> String {
+            b < 1_000_000_000 ? "\(Int((Double(b) / 1_000_000).rounded())) MB" : String(format: "%.1f GB", Double(b) / 1_000_000_000)
+        }
+        return "\(gettingImagePrefix) \(size(done)) of \(size(total))"
+    }
+
     public static func reverted(to time: Date, timeZone: TimeZone = .current, locale: Locale = .current) -> String {
         "Reverted to \(clock(time, timeZone: timeZone, locale: locale)) · your changes were kept"
     }
@@ -176,7 +190,7 @@ public struct TitleLook: Equatable, Sendable {
 
     /// A symbol spins only while the line says something is in progress.
     public var consistent: Bool {
-        let inProgress = line.contains("Saving…") || line.contains("Moving to") || line.contains("Opening…")
+        let inProgress = line.contains("Saving…") || line.contains("Moving to") || line.contains("Opening…") || line.hasPrefix(StateLine.gettingImagePrefix)
             || line == StateLine.closing || line.hasSuffix("· retrying")
         return spins == inProgress && (!spins || symbol == "arrow.triangle.2.circlepath")
     }
@@ -186,7 +200,7 @@ public struct TitleLook: Equatable, Sendable {
 /// menu are built from the same list, in the same order. "—" is a separator.
 public struct BoxMenuItem: Equatable, Sendable {
     public enum Action: Equatable, Sendable {
-        case none, move(String), revertToLastSavePoint, makeSavePoint, restartBox
+        case none, open, move(String), revertToLastSavePoint, makeSavePoint, restartBox
     }
     public var title: String
     public var enabled = true
@@ -222,7 +236,12 @@ public enum BoxMenuModel {
                              lastSavePoint: Date? = nil, savesKnown: Bool = false, now: Date = Date()) -> [BoxMenuItem] {
         let act = open && !busy
         let move = moveSubmenu(busy: busy, location: location, servers: servers)
-        var items: [BoxMenuItem] = [
+        var items: [BoxMenuItem] = []
+        // A closed workspace's menu starts with Open (R-0211).
+        if !open {
+            items += [BoxMenuItem(title: "Open", enabled: !busy, action: .open), .separator]
+        }
+        items += [
             BoxMenuItem(title: "Rename…", enabled: false),
             BoxMenuItem(title: "Move To", enabled: !busy, submenu: move),
             .separator,
@@ -312,5 +331,15 @@ public enum A11y {
     /// A tab in Running now, and what runs in it.
     public static func runningTab(_ name: String, program: String?) -> String {
         program.map { "\(name) tab, running \($0)" } ?? "\(name) tab, idle"
+    }
+}
+
+/// A closed workspace's window (R-0211).
+public enum ClosedText {
+    public static func title(_ box: String) -> String { "\(box) is closed" }
+    public static let open = "Open"
+    public static let tryAgain = "Try Again"
+    public static func buttonLabel(_ box: String, failed: Bool) -> String {
+        failed ? "Try opening \(box) again" : "Open \(box)"
     }
 }

@@ -7,11 +7,21 @@ import Foundation
 public protocol DaemonAPI: Sendable {
     /// Whether portenvd answers.
     func ping() async -> Bool
+    /// Whether this Mac's box engine answers (Docker Desktop is running);
+    /// nil when portenvd doesn't answer (R-0098).
+    func engineRunning() async -> Bool?
     /// The boxes on this Mac, by name (ListBoxes).
     func boxes() async throws -> [String]
     /// The servers a box can move to (user@host).
     func servers() async throws -> [String]
     func open(_ box: String) async throws
+    /// Opens it here; takeOver: from a place that doesn't answer (rule 4).
+    func open(_ box: String, takeOver: Bool) async throws
+    /// Connect to it there: on the known server that holds it.
+    func connectThere(_ box: String) async throws
+    /// Where the workspace is open when it isn't this Mac (GetPlacement):
+    /// at once without the probe, then with it (up to 2 s).
+    func placement(_ box: String, probe: Bool) async throws -> Placement
     func close(_ box: String) async throws
     func makeSavePoint(_ box: String) async throws
     /// Reverts to the last save point and returns its time.
@@ -55,6 +65,45 @@ public protocol DaemonAPI: Sendable {
     /// The tabs at once, then on every change. Ends (or throws) when the box
     /// closes, its agent goes away, or portenvd does.
     func watchTabs(_ box: String) -> AsyncThrowingStream<[TabInfo], Error>
+    /// The team (ADR 0022): every agent, then each change, board message
+    /// and decision from `cursor` on, each with the cursor after it.
+    func watchTeam(_ box: String, cursor: String) -> AsyncThrowingStream<(TeamEvent, String), Error>
+    /// Approve or Decline a pending decision; the app alone answers them.
+    func answerDecision(_ box: String, id: String, approve: Bool, note: String) async throws -> TeamDecision
+    /// The owner's message to an agent.
+    func sendMessage(_ box: String, to agent: String, thread: String, text: String) async throws -> TeamMessage
+    func startAgent(_ box: String, id: String) async throws -> TeamAgent
+    func stopAgent(_ box: String, id: String) async throws -> TeamAgent
+    /// An agent file as portenvd has it, for Approve.
+    func getAgentFile(_ box: String, id: String) async throws -> AgentFileContent
+    /// Pins the agent file whose text hashes to `sha256`; only the owner's
+    /// app calls it (R-0285).
+    func approveAgentFile(_ box: String, id: String, sha256: String) async throws -> TeamAgent
+}
+
+public extension DaemonAPI {
+    // Defaults for the conformers that don't need them (renders, the
+    // unreachable stand-in): an older portenvd.
+    func placement(_: String, probe _: Bool) async throws -> Placement { throw DaemonError(DaemonError.outOfDate) }
+    func open(_ box: String, takeOver: Bool) async throws {
+        guard takeOver else { return try await open(box) }
+        throw DaemonError(DaemonError.outOfDate)
+    }
+    func connectThere(_: String) async throws { throw DaemonError(DaemonError.outOfDate) }
+    // The team (ADR 0022): a portenvd without it, or a render.
+    func watchTeam(_: String, cursor _: String) -> AsyncThrowingStream<(TeamEvent, String), Error> {
+        AsyncThrowingStream { $0.finish(throwing: DaemonError(DaemonError.outOfDate)) }
+    }
+    func answerDecision(_: String, id _: String, approve _: Bool, note _: String) async throws -> TeamDecision {
+        throw DaemonError(DaemonError.outOfDate)
+    }
+    func sendMessage(_: String, to _: String, thread _: String, text _: String) async throws -> TeamMessage {
+        throw DaemonError(DaemonError.outOfDate)
+    }
+    func startAgent(_: String, id _: String) async throws -> TeamAgent { throw DaemonError(DaemonError.outOfDate) }
+    func stopAgent(_: String, id _: String) async throws -> TeamAgent { throw DaemonError(DaemonError.outOfDate) }
+    func getAgentFile(_: String, id _: String) async throws -> AgentFileContent { throw DaemonError(DaemonError.outOfDate) }
+    func approveAgentFile(_: String, id _: String, sha256 _: String) async throws -> TeamAgent { throw DaemonError(DaemonError.outOfDate) }
 }
 
 /// A box saved in the background after Quit Anyway.
@@ -72,9 +121,14 @@ public struct DaemonError: Error, LocalizedError, Equatable {
     public let message: String
     /// portenvd isn't there (not running, or it went away).
     public let unavailable: Bool
-    public init(_ message: String, unavailable: Bool = false) {
+    /// OpenBox refused because the workspace is open somewhere else
+    /// (portenvd's trailer portenv-refusal: open-elsewhere): the lease
+    /// sheet, never an error line.
+    public let openElsewhere: Bool
+    public init(_ message: String, unavailable: Bool = false, openElsewhere: Bool = false) {
         self.message = message
         self.unavailable = unavailable
+        self.openElsewhere = openElsewhere
     }
     public var errorDescription: String? { message }
 

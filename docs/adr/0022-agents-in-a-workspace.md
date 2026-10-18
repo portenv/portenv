@@ -129,6 +129,7 @@ This closes every item of lane A's list:
 - init (root) only checks: real folders, the project is `/home/work/<name>`, and the owner's private folders and logins aren't readable by others (else the team is refused with a line naming the one to fix).
 - The project, `.git` included, is `work`'s, readable by `team` and writable by no agent (section 2a's checks, at every team start).
 - ~~init adds the project as a system git `safe.directory`, so agents can use `work`'s repository.~~ **Removed (R-0315):** Portenv adds no system `safe.directory` entry, and removes the ones it added before (section 2a, migration).
+- **Interim, until the clone code lands (main today):** the walk runs through descriptors and changes only what `work` owns (#196, CC-0494); `.git/config` and `.git/hooks` stay readable by `team`, never writable, and `work`'s worktrees inside the project are trusted by name (#197, CC-0493). Section 2a replaces both: `.git` goes back to `work` alone and those `safe.directory` entries are removed.
 - It happens only when a team starts, never in a workspace without one. Stop Team doesn't revert it, and the team-start decision says so (R-0261).
 
 **Rejected: a bind mount of the project into each agent's home.** The uids still differ, so a plain bind mount changes no permission: the agent needs group write anyway. Making an agent's writes land as `work` needs an idmapped mount, which needs `CAP_SYS_ADMIN` in the box. The box doesn't have it, and this ADR won't add it. It would also make an agent's writes look like the owner's.

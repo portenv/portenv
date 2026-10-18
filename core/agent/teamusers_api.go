@@ -12,7 +12,8 @@ import (
 	agentv1 "github.com/portenv/portenv/proto/gen/go/portenv/agent/v1"
 )
 
-// EnsureAgentUser makes an agent's user, group and home (ADR 0022 §1). Only
+// EnsureAgentUser makes an agent's user, group and home, and its run
+// folder (ADR 0022 §1). Only
 // init serves it, on the socket only the API process reaches; init checks
 // the id itself.
 func (s *server) EnsureAgentUser(ctx context.Context, req *agentv1.EnsureAgentUserRequest) (*agentv1.EnsureAgentUserResponse, error) {
@@ -23,7 +24,10 @@ func (s *server) EnsureAgentUser(ctx context.Context, req *agentv1.EnsureAgentUs
 	if err != nil {
 		return nil, teamStatus(err)
 	}
-	return &agentv1.EnsureAgentUserResponse{Uid: uint32(u.UID), Home: u.Home, Created: u.Created}, nil // #nosec G115 -- 2001..2008
+	return &agentv1.EnsureAgentUserResponse{
+		Uid: uint32(u.UID), Home: u.Home, Created: u.Created, // #nosec G115 -- 2001..2008
+		RunDir: u.RunDir, TmuxDir: u.TmuxDir, TmpDir: u.TmpDir,
+	}, nil
 }
 
 // RemoveAgentUser takes an agent's user out; its files go only with

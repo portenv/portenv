@@ -65,6 +65,10 @@ type AgentUser struct {
 	Home string
 	// Created is true when Ensure made the user now.
 	Created bool
+	// RunDir, TmuxDir and TmpDir are the agent's run folder and the two
+	// folders in it that are its own (§1), made by Ensure as root. Empty
+	// where TeamUsers has no RunDir.
+	RunDir, TmuxDir, TmpDir string
 }
 
 // TeamUsers makes, removes and restores agent users. Its methods are safe
@@ -74,8 +78,11 @@ type TeamUsers struct {
 	Run Runner
 	// Chown sets a path's owner without following a symlink (os.Lchown).
 	Chown func(path string, uid, gid int) error
-	// RunDir is /run/portenv-team: the agents' socket folders (§1).
+	// RunDir is /run/portenv-team: the agents' run folders (§1).
 	RunDir string
+	// fchown sets an open folder's owner (f.Chown; a recorder in tests,
+	// which don't run as root).
+	fchown func(f *os.File, uid, gid int) error
 
 	mu         sync.Mutex
 	restoreErr error
@@ -171,7 +178,15 @@ func (t *TeamUsers) Ensure(ctx context.Context, id string) (AgentUser, error) {
 	if err := t.ensureHome(*rec); err != nil {
 		return AgentUser{}, err
 	}
-	return AgentUser{UID: rec.UID, Home: t.home(id), Created: created}, nil
+	u := AgentUser{UID: rec.UID, Home: t.home(id), Created: created}
+	if t.RunDir != "" {
+		// Again at every start: /run is lost when the box stops.
+		if u.RunDir, err = t.ensureRunDir(*rec); err != nil {
+			return AgentUser{}, err
+		}
+		u.TmuxDir, u.TmpDir = filepath.Join(u.RunDir, "tmux"), filepath.Join(u.RunDir, "tmp")
+	}
+	return u, nil
 }
 
 // Remove takes the agent's user and group out. Its home and uid stay,
@@ -236,10 +251,7 @@ func (t *TeamUsers) restore(ctx context.Context) error {
 		return err
 	}
 	if t.RunDir != "" {
-		if err := os.MkdirAll(filepath.Dir(t.RunDir), 0o755); err != nil { // #nosec G301 -- /run
-			return fmt.Errorf("make %s: %w", filepath.Dir(t.RunDir), err)
-		}
-		if err := secureDir(t.RunDir, 0o755); err != nil {
+		if err := t.ensureRunRoot(); err != nil {
 			return err
 		}
 	}
@@ -526,8 +538,50 @@ func (t *TeamUsers) deleteHome(id string) error {
 	return nil
 }
 
-// TeamRunDir holds each agent's socket folder (ADR 0022 §1).
+// TeamRunDir holds each agent's run folder (ADR 0022 §1).
 const TeamRunDir = "/run/portenv-team"
+
+// ensureRunRoot makes /run/portenv-team: root's, 0711. Everyone may pass
+// through to their own folder; no one but root lists or writes it.
+func (t *TeamUsers) ensureRunRoot() error {
+	if err := os.MkdirAll(filepath.Dir(t.RunDir), 0o755); err != nil { // #nosec G301 -- /run
+		return fmt.Errorf("make %s: %w", filepath.Dir(t.RunDir), err)
+	}
+	return secureDir(t.RunDir, 0o711)
+}
+
+// ensureRunDir makes the agent's run folder, as root, and returns it. The
+// helper (uid 991, without cap_dac_override) can't make folders in
+// /run/portenv-team, and never gives a file to another uid:
+//
+//	<RunDir>/<id>/       the helper's, the agent's group, setgid, 0710
+//	<RunDir>/<id>/tmux/  the agent's, 0700: its tmux server's socket
+//	<RunDir>/<id>/tmp/   the agent's, 0700: its TMPDIR
+//
+// The helper listens on <id>/portenv.sock; the setgid bit gives the socket
+// the agent's group as it's made, so the helper needs no chown. Only the
+// helper writes <id>, so the agent can't replace its socket or folders;
+// another agent isn't in the group and can't pass through. Each folder is
+// checked and set through a descriptor opened without following a link.
+func (t *TeamUsers) ensureRunDir(rec agentUserRecord) (string, error) {
+	if err := t.ensureRunRoot(); err != nil {
+		return "", err
+	}
+	fchown := t.fchown
+	if fchown == nil {
+		fchown = func(f *os.File, uid, gid int) error { return f.Chown(uid, gid) }
+	}
+	base := filepath.Join(t.RunDir, rec.ID)
+	if err := ownedDir(base, os.ModeSetgid|0o710, func(f *os.File) error { return fchown(f, ServeUID, rec.UID) }); err != nil {
+		return "", err
+	}
+	for _, sub := range []string{"tmux", "tmp"} {
+		if err := ownedDir(filepath.Join(base, sub), 0o700, func(f *os.File) error { return fchown(f, rec.UID, rec.UID) }); err != nil {
+			return "", err
+		}
+	}
+	return base, nil
+}
 
 // realDirs makes /home/.portenv and /home/.portenv/team, root's, 0755:
 // work can read the map but never write next to it (R-0260 item 9).
@@ -559,6 +613,16 @@ func checkRealDir(dir string) error {
 // sets its mode through a descriptor of the folder itself (and, as root,
 // gives it to root), so a link swapped in between is never changed.
 func secureDir(dir string, mode os.FileMode) error {
+	var chown func(*os.File) error
+	if os.Geteuid() == 0 {
+		chown = func(f *os.File) error { return f.Chown(0, 0) }
+	}
+	return ownedDir(dir, mode, chown)
+}
+
+// ownedDir is secureDir with the owner set by chown (nil: left as it is)
+// through the folder's own descriptor, before its mode.
+func ownedDir(dir string, mode os.FileMode, chown func(*os.File) error) error {
 	if _, err := os.Lstat(dir); errors.Is(err, fs.ErrNotExist) {
 		if err := os.Mkdir(dir, mode); err != nil && !errors.Is(err, fs.ErrExist) {
 			return fmt.Errorf("make %s: %w", dir, err)
@@ -580,9 +644,9 @@ func secureDir(dir string, mode os.FileMode) error {
 	if err != nil || !os.SameFile(before, after) {
 		return fmt.Errorf("%s changed while it was checked", dir)
 	}
-	if os.Geteuid() == 0 {
-		if err := f.Chown(0, 0); err != nil {
-			return fmt.Errorf("give %s to root: %w", dir, err)
+	if chown != nil {
+		if err := chown(f); err != nil {
+			return fmt.Errorf("set %s's owner: %w", dir, err)
 		}
 	}
 	if err := f.Chmod(mode); err != nil {

@@ -4073,7 +4073,15 @@ type EnsureAgentUserResponse struct {
 	Uid   uint32                 `protobuf:"varint,1,opt,name=uid,proto3" json:"uid,omitempty"`
 	Home  string                 `protobuf:"bytes,2,opt,name=home,proto3" json:"home,omitempty"`
 	// Made now, rather than already there.
-	Created       bool `protobuf:"varint,3,opt,name=created,proto3" json:"created,omitempty"`
+	Created bool `protobuf:"varint,3,opt,name=created,proto3" json:"created,omitempty"`
+	// The agent's run folder, /run/portenv-team/<id> (ADR 0022 section 1):
+	// the helper's, the agent's group, setgid, 0710. init makes it, and
+	// tmux_dir and tmp_dir in it (the agent's, 0700), at every call, since
+	// /run is lost when the box stops. The helper listens on
+	// run_dir/portenv.sock.
+	RunDir        string `protobuf:"bytes,4,opt,name=run_dir,json=runDir,proto3" json:"run_dir,omitempty"`
+	TmuxDir       string `protobuf:"bytes,5,opt,name=tmux_dir,json=tmuxDir,proto3" json:"tmux_dir,omitempty"`
+	TmpDir        string `protobuf:"bytes,6,opt,name=tmp_dir,json=tmpDir,proto3" json:"tmp_dir,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4127,6 +4135,27 @@ func (x *EnsureAgentUserResponse) GetCreated() bool {
 		return x.Created
 	}
 	return false
+}
+
+func (x *EnsureAgentUserResponse) GetRunDir() string {
+	if x != nil {
+		return x.RunDir
+	}
+	return ""
+}
+
+func (x *EnsureAgentUserResponse) GetTmuxDir() string {
+	if x != nil {
+		return x.TmuxDir
+	}
+	return ""
+}
+
+func (x *EnsureAgentUserResponse) GetTmpDir() string {
+	if x != nil {
+		return x.TmpDir
+	}
+	return ""
 }
 
 type RemoveAgentUserRequest struct {
@@ -5672,11 +5701,14 @@ const file_portenv_agent_v1_agent_proto_rawDesc = "" +
 	"\x16WriteHomeFilesResponse\x121\n" +
 	"\x05added\x18\x01 \x03(\v2\x1b.portenv.types.v1.AgentFileR\x05added\"3\n" +
 	"\x16EnsureAgentUserRequest\x12\x19\n" +
-	"\bagent_id\x18\x01 \x01(\tR\aagentId\"Y\n" +
+	"\bagent_id\x18\x01 \x01(\tR\aagentId\"\xa6\x01\n" +
 	"\x17EnsureAgentUserResponse\x12\x10\n" +
 	"\x03uid\x18\x01 \x01(\rR\x03uid\x12\x12\n" +
 	"\x04home\x18\x02 \x01(\tR\x04home\x12\x18\n" +
-	"\acreated\x18\x03 \x01(\bR\acreated\"V\n" +
+	"\acreated\x18\x03 \x01(\bR\acreated\x12\x17\n" +
+	"\arun_dir\x18\x04 \x01(\tR\x06runDir\x12\x19\n" +
+	"\btmux_dir\x18\x05 \x01(\tR\atmuxDir\x12\x17\n" +
+	"\atmp_dir\x18\x06 \x01(\tR\x06tmpDir\"V\n" +
 	"\x16RemoveAgentUserRequest\x12\x19\n" +
 	"\bagent_id\x18\x01 \x01(\tR\aagentId\x12!\n" +
 	"\fdelete_files\x18\x02 \x01(\bR\vdeleteFiles\"\x19\n" +

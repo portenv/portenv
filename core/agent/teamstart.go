@@ -59,11 +59,14 @@ func (u initUsers) EnsureAgentUser(ctx context.Context, id string) (AgentUser, e
 	if err != nil {
 		return AgentUser{}, errors.New(status.Convert(err).Message())
 	}
-	return AgentUser{UID: int(r.GetUid()), Home: r.GetHome(), Created: r.GetCreated()}, nil
+	return AgentUser{
+		UID: int(r.GetUid()), Home: r.GetHome(), Created: r.GetCreated(),
+		RunDir: r.GetRunDir(), TmuxDir: r.GetTmuxDir(), TmpDir: r.GetTmpDir(),
+	}, nil
 }
 
 // StartTeamAgent starts one agent (ADR 0022 §8): init makes its user if
-// it's new; the helper serves its socket, writes AGENTS.md as the agent,
+// it's new, and its run folder; the helper serves its socket in that folder, writes AGENTS.md as the agent,
 // and starts its own tmux server with the runner in its first tab.
 func (s *apiServer) StartTeamAgent(ctx context.Context, req *agentv1.StartTeamAgentRequest) (*agentv1.StartTeamAgentResponse, error) {
 	if s.team == nil || s.users == nil {
@@ -89,6 +92,10 @@ func (s *apiServer) StartTeamAgent(ctx context.Context, req *agentv1.StartTeamAg
 	if err != nil {
 		return nil, status.Errorf(codes.FailedPrecondition, "%s: %v", id, err)
 	}
+	base := filepath.Join(s.team.dir, id)
+	if u.RunDir != base || u.TmuxDir != filepath.Join(base, "tmux") || u.TmpDir != s.team.TMPDIR(id) {
+		return nil, status.Errorf(codes.Internal, "%s: init made its run folder at %q, not %s", id, u.RunDir, base)
+	}
 	if err := s.team.addAgent(id, u.UID, u.UID); err != nil {
 		return nil, status.Errorf(codes.Internal, "%s's socket: %v", id, err)
 	}
@@ -99,10 +106,9 @@ func (s *apiServer) StartTeamAgent(ctx context.Context, req *agentv1.StartTeamAg
 	if err := s.writeAsUser(u.UID, u.UID, filepath.Join(u.Home, "AGENTS.md"), []byte(req.GetAgentsMd())); err != nil {
 		return nil, fail(codes.Internal, "write %s's AGENTS.md: %v", id, err)
 	}
-	base := filepath.Join(s.team.dir, id)
 	spec := AgentServerSpec{
 		ID: id, UID: u.UID, GID: u.UID, Home: u.Home,
-		SocketDir: filepath.Join(base, "tmux"),
+		SocketDir: u.TmuxDir,
 		Argv:      argv,
 		Env: []string{
 			"HOME=" + u.Home,
@@ -112,7 +118,7 @@ func (s *apiServer) StartTeamAgent(ctx context.Context, req *agentv1.StartTeamAg
 			"PATH=/home/" + id + "/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
 			"PORTENV_AGENT=" + id,
 			"PORTENV_SOCKET=" + filepath.Join(base, "portenv.sock"),
-			"TMPDIR=" + s.team.TMPDIR(id),
+			"TMPDIR=" + u.TmpDir,
 		},
 	}
 	start := s.startAgentServer

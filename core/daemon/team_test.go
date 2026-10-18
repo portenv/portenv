@@ -5,6 +5,7 @@ package daemon
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -18,7 +19,9 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/portenv/portenv/core/internal/teamkit"
 	agentv1 "github.com/portenv/portenv/proto/gen/go/portenv/agent/v1"
+	daemonv1 "github.com/portenv/portenv/proto/gen/go/portenv/daemon/v1"
 	typesv1 "github.com/portenv/portenv/proto/gen/go/portenv/types/v1"
 )
 
@@ -38,6 +41,9 @@ type fakeTeamHelper struct {
 	busy       bool
 	prepared   []string
 	prepareErr string
+	fixed      []string
+	listed     []*agentv1.ListHomeFilesRequest
+	written    []*agentv1.WriteHomeFilesRequest
 }
 
 func (f *fakeTeamHelper) AppendBoard(_ context.Context, in *agentv1.AppendBoardRequest, _ ...grpc.CallOption) (*agentv1.AppendBoardResponse, error) {
@@ -990,7 +996,7 @@ func (f *fakeTeamHelper) PrepareTeamProject(_ context.Context, in *agentv1.Prepa
 	if f.prepareErr != "" {
 		return nil, status.Error(codes.FailedPrecondition, f.prepareErr)
 	}
-	return &agentv1.PrepareTeamProjectResponse{}, nil
+	return &agentv1.PrepareTeamProjectResponse{Fixed: f.fixed}, nil
 }
 
 // ADR 0022 §2: the project is opened to the team before its first agent
@@ -1032,6 +1038,131 @@ func TestWhoAmIListsOnlyWhatWorks(t *testing.T) {
 		if d.GetKind() == typesv1.DecisionKind_DECISION_KIND_TEAM_START && !strings.Contains(d.GetDetail(), "Stop Team doesn't change it back") {
 			t.Errorf("team_start detail: %q", d.GetDetail())
 		}
+	}
+}
+
+type readHomeClient struct {
+	agentv1.AgentService_ReadHomeFileClient
+	chunks [][]byte
+}
+
+func (r *readHomeClient) Recv() (*agentv1.ReadHomeFileResponse, error) {
+	if len(r.chunks) == 0 {
+		return nil, io.EOF
+	}
+	c := r.chunks[0]
+	r.chunks = r.chunks[1:]
+	return &agentv1.ReadHomeFileResponse{Data: c}, nil
+}
+
+type writeHomeClient struct {
+	agentv1.AgentService_WriteHomeFilesClient
+	f *fakeTeamHelper
+}
+
+func (w *writeHomeClient) Send(m *agentv1.WriteHomeFilesRequest) error {
+	w.f.mu.Lock()
+	defer w.f.mu.Unlock()
+	w.f.written = append(w.f.written, m)
+	return nil
+}
+
+func (w *writeHomeClient) CloseAndRecv() (*agentv1.WriteHomeFilesResponse, error) {
+	return &agentv1.WriteHomeFilesResponse{Added: []*typesv1.AgentFile{{Path: "brief.md", Size: 5}}}, nil
+}
+
+func (f *fakeTeamHelper) ListHomeFiles(_ context.Context, in *agentv1.ListHomeFilesRequest, _ ...grpc.CallOption) (*agentv1.ListHomeFilesResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.listed = append(f.listed, in)
+	return &agentv1.ListHomeFilesResponse{Files: []*typesv1.AgentFile{{Path: "notes.md", Size: 3}}, HomeBytes: 3}, nil
+}
+
+func (f *fakeTeamHelper) ReadHomeFile(_ context.Context, in *agentv1.ReadHomeFileRequest, _ ...grpc.CallOption) (agentv1.AgentService_ReadHomeFileClient, error) {
+	return &readHomeClient{chunks: [][]byte{[]byte("he"), []byte("llo")}}, nil
+}
+
+func (f *fakeTeamHelper) WriteHomeFiles(_ context.Context, _ ...grpc.CallOption) (agentv1.AgentService_WriteHomeFilesClient, error) {
+	return &writeHomeClient{f: f}, nil
+}
+
+// The Agent files view (ADR 0022 §2): only for agents of the team, with
+// the quota from portenvd, relayed to the helper (which does the file work
+// as the agent, R-0254 rule 1).
+func TestTheAgentFilesView(t *testing.T) {
+	e, h, _ := newTestEngine(t, defaultTeam()...)
+	ctx := context.Background()
+	files, used, quota, err := e.listAgentFiles(ctx, "w", "builder", "")
+	if err != nil || len(files) != 1 || used != 3 || quota != teamkit.DefaultHomeQuota {
+		t.Fatalf("list: %v %d %d %v", files, used, quota, err)
+	}
+	if h.listed[0].GetAgentId() != "builder" {
+		t.Errorf("listed %v", h.listed[0])
+	}
+	var got []byte
+	if err := e.readAgentFile(ctx, "w", "builder", "notes.md", func(b []byte) error { got = append(got, b...); return nil }); err != nil || string(got) != "hello" {
+		t.Errorf("read: %q, %v", got, err)
+	}
+	in := []*daemonv1.AddAgentFilesRequest{
+		{Name: "w", AgentId: "builder", Path: "brief.md", Data: []byte("brief"), Last: true},
+	}
+	added, err := e.addAgentFiles(ctx, "w", "builder", func() (*daemonv1.AddAgentFilesRequest, error) {
+		if len(in) == 0 {
+			return nil, io.EOF
+		}
+		m := in[0]
+		in = in[1:]
+		return m, nil
+	})
+	if err != nil || len(added) != 1 {
+		t.Fatalf("add: %v, %v", added, err)
+	}
+	first := h.written[0]
+	if first.GetAgentId() != "builder" || first.GetHomeQuotaBytes() != teamkit.DefaultHomeQuota || first.GetPath() != "brief.md" {
+		t.Errorf("sent %v", first)
+	}
+	for _, bad := range []string{"nobody", "../x", "owner"} {
+		if _, _, _, err := e.listAgentFiles(ctx, "w", bad, ""); err == nil {
+			t.Errorf("listed %q's files", bad)
+		}
+	}
+}
+
+func TestADragAndDropGoesToOneAgent(t *testing.T) {
+	e, _, _ := newTestEngine(t, defaultTeam()...)
+	in := []*daemonv1.AddAgentFilesRequest{
+		{Name: "w", AgentId: "builder", Path: "a.md", Data: []byte("a"), Last: true},
+		{AgentId: "lead", Path: "b.md", Data: []byte("b"), Last: true},
+	}
+	_, err := e.addAgentFiles(context.Background(), "w", "builder", func() (*daemonv1.AddAgentFilesRequest, error) {
+		if len(in) == 0 {
+			return nil, io.EOF
+		}
+		m := in[0]
+		in = in[1:]
+		return m, nil
+	})
+	if err == nil {
+		t.Error("a second agent mid-stream was accepted")
+	}
+}
+
+// R-0262: what init made private in the owner's home reaches the owner.
+func TestTheOwnerHearsWhatWasMadePrivate(t *testing.T) {
+	e, h, _ := newTestEngine(t, defaultTeam()...)
+	approveFirstStart(t, e)
+	h.fixed = []string{"~/.npmrc: 644 → 640"}
+	if _, err := e.startAgent(context.Background(), "w", "lead"); err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, ev := range e.box("w").events {
+		if ev.msg != nil && ev.msg.GetTo() == "owner" && strings.Contains(ev.msg.GetText(), "~/.npmrc") {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("the owner wasn't told")
 	}
 }
 

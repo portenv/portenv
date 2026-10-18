@@ -370,3 +370,43 @@ func (s *Server) SetRoutinePaused(ctx context.Context, req *daemonv1.SetRoutineP
 	}
 	return &daemonv1.SetRoutinePausedResponse{Agent: info}, nil
 }
+
+// ListAgentFiles is the Agent files view's listing.
+func (s *Server) ListAgentFiles(ctx context.Context, req *daemonv1.ListAgentFilesRequest) (*daemonv1.ListAgentFilesResponse, error) {
+	files, used, quota, err := s.teamEng().listAgentFiles(ctx, req.GetName(), req.GetAgentId(), req.GetDir())
+	if err != nil {
+		return nil, teamStatus(err)
+	}
+	return &daemonv1.ListAgentFilesResponse{Files: files, HomeBytes: used, HomeQuotaBytes: quota}, nil
+}
+
+// ReadAgentFile streams a file from an agent's home to the app.
+func (s *Server) ReadAgentFile(req *daemonv1.ReadAgentFileRequest, stream daemonv1.DaemonService_ReadAgentFileServer) error {
+	err := s.teamEng().readAgentFile(stream.Context(), req.GetName(), req.GetAgentId(), req.GetPath(), func(b []byte) error {
+		return stream.Send(&daemonv1.ReadAgentFileResponse{Data: b})
+	})
+	if err != nil {
+		return teamStatus(err)
+	}
+	return nil
+}
+
+// AddAgentFiles is the owner's drag and drop into an agent's home.
+func (s *Server) AddAgentFiles(stream daemonv1.DaemonService_AddAgentFilesServer) error {
+	first, err := stream.Recv()
+	if err != nil {
+		return err
+	}
+	sent := false
+	added, err := s.teamEng().addAgentFiles(stream.Context(), first.GetName(), first.GetAgentId(), func() (*daemonv1.AddAgentFilesRequest, error) {
+		if !sent {
+			sent = true
+			return first, nil
+		}
+		return stream.Recv()
+	})
+	if err != nil {
+		return teamStatus(err)
+	}
+	return stream.SendAndClose(&daemonv1.AddAgentFilesResponse{Added: added})
+}

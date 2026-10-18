@@ -191,7 +191,7 @@ struct MainWindow: View {
             // in this same terminal.
             VStack(spacing: 0) {
                 HStack(spacing: 0) {
-                    TabBar(tabs: tabs, selection: team?.selection ?? .allTabs)
+                    TabBar(tabs: tabs, selection: team?.selection ?? .allTabs, team: team?.state.agents ?? [])
                     // An agent's tabs only: All tabs at the trailing end
                     // brings back every tab (R-0241).
                     if let team, team.selection != .allTabs {

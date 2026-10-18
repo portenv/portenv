@@ -43,7 +43,6 @@ struct PortenvApp: App {
                 let app = NSApplication.shared
                 app.setActivationPolicy(.regular)
                 BlocksPreview.show()
-                NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: nil, queue: .main) { _ in exit(0) }
                 app.run()
             }
             exit(0)
@@ -73,6 +72,7 @@ struct PortenvApp: App {
             }
             TabCommands(tabs: model.tabs)
             InspectorToggle(box: model.controller?.box)
+            TeamSidebarToggle(box: model.controller?.box, team: model.team)
             FindCommands()
             FeedbackCommands()
             // Portenv › Settings… (⌘,): the toolbar window (R-0137).

@@ -25,7 +25,7 @@ RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache
       github.com/restic/restic/cmd/restic@$RESTIC_VERSION \
  && install -D "$(find /go/bin -type f -name restic)" /out/restic
 
-# --- portenv-agent, built natively for the target architecture -------------
+# --- portenv-agent and portenv, built natively for the target architecture -
 FROM --platform=$BUILDPLATFORM mirror.gcr.io/library/golang:1.26.7-bookworm@sha256:e8c859f5632dcfde7b32d2012b4351728f6437930887c2f6a91ea242459e5514 AS agent
 ARG TARGETARCH
 ARG VERSION=dev
@@ -36,7 +36,7 @@ COPY core/go.mod core/go.sum core/
 COPY proto/gen/go/go.mod proto/gen/go/go.sum proto/gen/go/
 # Downloaded into this layer, not a cache mount, so CI's layer cache (type=gha)
 # keeps the modules while go.mod and go.sum are unchanged; go.sum still checks
-# every one. Only the built agent leaves this stage.
+# every one. Only the built agent and CLI leave this stage.
 RUN cd core && go mod download
 COPY core core
 COPY proto/gen/go proto/gen/go
@@ -47,6 +47,14 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
  && CGO_ENABLED=0 GOOS=linux GOARCH=$TARGETARCH go build -trimpath \
       -ldflags "-s -w -X github.com/portenv/portenv/core/internal/version.Version=$VERSION -X github.com/portenv/portenv/core/internal/version.Commit=$COMMIT -X github.com/portenv/portenv/core/agent.ResticSHA256=$restic_sha256" \
       -o /out/portenv-agent ./core/cmd/portenv-agent
+# The portenv CLI, for an agent's own commands inside the workspace (split,
+# msg, ask-owner, whoami, …; ADR 0022 §4) and the owner's team init. Built as
+# make cli-linux builds it: static, CGO off, -trimpath. Without cgo it has
+# no Keychain code at all.
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=linux GOARCH=$TARGETARCH go build -trimpath \
+      -ldflags "-s -w -X github.com/portenv/portenv/core/internal/version.Version=$VERSION -X github.com/portenv/portenv/core/internal/version.Commit=$COMMIT" \
+      -o /out/portenv ./core/cmd/portenv
 
 # --- the toolbox ------------------------------------------------------------
 FROM mirror.gcr.io/library/ubuntu:24.04@sha256:534baea6a22c03a63003dbc8dbe78fe34bc0d7e595d9a9dc9834884ff530eb55
@@ -74,7 +82,7 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN userdel --remove ubuntu \
  && apt-get update \
  && apt-get install -y --no-install-recommends \
-      build-essential ca-certificates curl git gnupg jq less libcap2-bin locales \
+      acl build-essential ca-certificates curl git gnupg jq less libcap2-bin locales \
       openssh-client postgresql-client procps python3 python3-pip \
       python3-venv ripgrep sudo 'tmux=3.4-*' unzip xz-utils \
  && rm -rf /var/lib/apt/lists/*
@@ -119,6 +127,7 @@ RUN chmod 0440 /etc/sudoers.d/work \
  && cp -an /etc/skel/. /usr/share/portenv/skel/
 
 COPY --from=agent /out/portenv-agent /usr/local/bin/portenv-agent
+COPY --from=agent --chown=root:root --chmod=0755 /out/portenv /usr/local/bin/portenv
 
 # restic runs only as portenv-sync, a dedicated system user, with just the
 # capabilities saving and restoring every home needs. Gaining them at exec

@@ -15,6 +15,8 @@ final class AppModel {
     private(set) var boxes: [String] = []
     private(set) var controller: BoxController?
     private(set) var tabs: TabsController?
+    /// The open workspace's agent team (ADR 0022).
+    private(set) var team: TeamController?
     private(set) var firstRun: FirstRunFlow?
     /// Why portenvd isn't there, said plainly: with Open Login Items when it
     /// waits for approval, with Try Again otherwise.
@@ -219,6 +221,7 @@ final class AppModel {
             Task { await Notifier.shared.commandFinished(box: box, finished: f, location: place) }
         }
         self.tabs = tabs
+        team = TeamController(box: box, daemon: daemon)
         launch = .open(box)
         defaults.set(box, forKey: Self.lastBoxKey)
         onOpen?(controller)
@@ -386,7 +389,7 @@ struct AppRoot: View {
                     }
                 case .open:
                     if let controller = model.controller, let tabs = model.tabs {
-                        MainWindow(controller: controller, tabs: tabs)
+                        MainWindow(controller: controller, tabs: tabs, team: model.team)
                     }
                 }
             }

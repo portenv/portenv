@@ -36,6 +36,17 @@ public struct BoxState: Equatable, Sendable {
     /// This open stopped and started the box again to apply a security
     /// update (R-0201): the window tells the person once.
     public var restartedForSecurityUpdate = false
+    /// The first open's image pull, while it runs (R-0211).
+    public struct ImagePull: Equatable, Sendable {
+        public let done: Int64
+        public let total: Int64
+        public init(done: Int64, total: Int64) {
+            self.done = done
+            self.total = total
+        }
+    }
+
+    public var imagePull: ImagePull?
 
     public init(save: Save, savedAt: Date? = nil, location: String? = nil) {
         self.save = save
@@ -54,6 +65,20 @@ public struct BoxState: Equatable, Sendable {
             let storage_place: String?
             let opened_at: Date?
             let restarted_for_security_update: Bool?
+            let image_pull: Pull?
+            struct Pull: Decodable {
+                // protojson writes int64 as a string; tests write numbers.
+                let done_bytes: Flex?
+                let total_bytes: Flex?
+            }
+
+            struct Flex: Decodable {
+                let value: Int64
+                init(from decoder: Decoder) throws {
+                    let c = try decoder.singleValueContainer()
+                    if let n = try? c.decode(Int64.self) { value = n } else { value = Int64(try c.decode(String.self)) ?? 0 }
+                }
+            }
         }
         let d = JSONDecoder()
         d.dateDecodingStrategy = .custom { dec in
@@ -72,6 +97,7 @@ public struct BoxState: Equatable, Sendable {
         s.storagePlace = (w.storage_place?.isEmpty ?? true) ? nil : w.storage_place
         s.openedAt = w.opened_at
         s.restartedForSecurityUpdate = w.restarted_for_security_update ?? false
+        if let p = w.image_pull { s.imagePull = ImagePull(done: p.done_bytes?.value ?? 0, total: p.total_bytes?.value ?? 0) }
         return s
     }
 
@@ -167,7 +193,10 @@ public final class BoxController {
     private let ensureDaemon: (@Sendable () async -> String?)?
     /// How long portenvd may be away before the window says so plainly.
     private let daemonDeadline: Duration
-    private var daemonGoneSince: ContinuousClock.Instant?
+    private var daemonGoneSince: SuspendingClock.Instant?
+    /// Time awake: a Mac asleep while portenvd is away mustn't spend the
+    /// deadline (a wall clock did, on 2026-10-16).
+    private let awake: @Sendable () -> SuspendingClock.Instant
 
     /// What the window says when portenvd has been away past the deadline.
     public static let daemonGone = "Portenv's background service isn't running, so nothing is being saved. It's started again automatically; if this lasts, quit and reopen Portenv."
@@ -206,6 +235,7 @@ public final class BoxController {
                 notifier: KeychainWaitNotifying? = nil, keychainThreshold: Duration = KeychainWait.threshold,
                 ensureDaemon: (@Sendable () async -> String?)? = nil, followRetry: Duration = .seconds(1),
                 daemonDeadline: Duration = .seconds(30), savesRetry: Duration = .seconds(5),
+                awake: @escaping @Sendable () -> SuspendingClock.Instant = { .now },
                 now: @escaping @Sendable () -> Date = { Date() },
                 sleep: @escaping @Sendable (Duration) async -> Void = { try? await Task.sleep(for: $0) },
                 bringForward: @escaping @Sendable () -> Void = { KeychainWait.front.bringForward() }) {
@@ -223,6 +253,7 @@ public final class BoxController {
         self.keychainThreshold = keychainThreshold
         self.ensureDaemon = ensureDaemon
         self.daemonDeadline = daemonDeadline
+        self.awake = awake
         self.followRetry = followRetry
     }
 
@@ -575,11 +606,11 @@ public final class BoxController {
     private func daemonEnded() async {
         guard !leaving, location != .closed, !(await daemon.ping()) else { return }
         state = BoxState(save: .notSaved, savedAt: state?.savedAt, location: state?.location)
-        let since = daemonGoneSince ?? .now
+        let since = daemonGoneSince ?? awake()
         daemonGoneSince = since
         if let problem = await ensureDaemon?() {
             error = problem
-        } else if ContinuousClock.now - since >= daemonDeadline {
+        } else if awake() - since >= daemonDeadline {
             error = Self.daemonGone
         }
     }
@@ -587,11 +618,11 @@ public final class BoxController {
     /// Waits for portenvd at launch (launchd starts it with the login item),
     /// saying so plainly if it doesn't come within the deadline.
     public func waitForDaemon() async {
-        let start = ContinuousClock.now
+        let start = awake()
         while !(await daemon.ping()) {
             if let problem = await ensureDaemon?() {
                 error = problem
-            } else if ContinuousClock.now - start >= daemonDeadline {
+            } else if awake() - start >= daemonDeadline {
                 error = Self.daemonGone
                 return
             }
@@ -713,6 +744,11 @@ public final class BoxController {
             notice = Self.securityRestartNotice
         }
         if newSave { savedAtChanged() }
+        // The first open's pull: the line says how far it has got, and
+        // goes back to "Opening…" when it's done (R-0211).
+        if busy, let line = progress, line == StateLine.opening || line.hasPrefix(StateLine.gettingImagePrefix) {
+            progress = st.imagePull.map { StateLine.gettingImage(done: $0.done, total: $0.total) } ?? StateLine.opening
+        }
         // portenvd answers again: whatever said it was away no longer holds.
         daemonGoneSince = nil
         if error == Self.daemonGone { error = nil }

@@ -9,42 +9,61 @@ import SwiftUI
 struct MainWindow: View {
     @Bindable var controller: BoxController
     @Bindable var tabs: TabsController
+    /// The workspace's agent team; nil in renders without one.
+    let team: TeamController?
     /// The inspector's open state, remembered for this box's window (§6).
     @AppStorage private var inspectorOpen: Bool
+    /// The sidebar as the person chose it with ⌘0, for this box; "" until
+    /// they do (TeamSidebarToggle).
+    @AppStorage private var sidebarChoice: String
+    /// Below 900 pt the sidebar is compact (GUIDELINES 6.2).
+    @State private var narrow = false
     /// Renders only (ScreenRenders): a sample terminal in place of
     /// `portenv attach`.
     private let renderTerminal: (() -> NSView)?
 
-    init(controller: BoxController, tabs: TabsController, renderTerminal: (() -> NSView)? = nil) {
+    init(controller: BoxController, tabs: TabsController, team: TeamController? = nil, renderTerminal: (() -> NSView)? = nil) {
         self.controller = controller
         self.tabs = tabs
+        self.team = team
         self.renderTerminal = renderTerminal
         _inspectorOpen = AppStorage(wrappedValue: false, InspectorToggle.key(controller.box))
+        _sidebarChoice = AppStorage(wrappedValue: "", TeamSidebarToggle.key(controller.box))
+    }
+
+    /// The selected agent, whose column takes the inspector's place
+    /// (R-0240).
+    private var agent: TeamAgent? { team?.selectedAgent }
+
+    /// Open while an agent is selected, whatever the person last chose.
+    private var columnOpen: Binding<Bool> {
+        Binding(get: { inspectorOpen || agent != nil || team?.selectedDecision != nil }, set: { inspectorOpen = $0 })
     }
 
     var body: some View {
-        content
+        HStack(spacing: 0) {
+            if TeamSidebarToggle.shows(choice: sidebarChoice, team: team), let team {
+                TeamSidebar(state: team.state, tabs: tabs.tabs, selection: Bindable(team).selection, compact: narrow)
+                Divider()
+            }
+            content
+        }
+            // The team while the window is open; it watches again after a
+            // restart or a move.
+            .task(id: controller.box) { await team?.follow() }
+            .onGeometryChange(for: Bool.self) { $0.size.width < 900 } action: { narrow = $0 }
             // The terminal side and the inspector share the window's width;
             // only the window has a minimum width (R-0073, R-0075).
-            .boxWindowColumns(inspectorOpen: $inspectorOpen) {
-                InspectorView(
-                    content: InspectorContent(box: controller, tabs: tabs),
-                    yourInitial: String(NSFullUserName().prefix(1)).uppercased(),
-                    moveMenu: controller.moveMenu,
-                    move: { target in Task { await controller.requestMove(to: target) } },
-                    run: { action in Task { await controller.run(action) } },
-                    retryPackages: { Task { await controller.retryPackages() } },
-                    revert: { Task { await controller.revertToLastSavePoint() } },
-                    retrySaves: { Task { await controller.refreshSaves() } }
-                )
-                // Read the saves while open and wherever the box runs,
-                // quietly trying again if that fails. A new save reads them
-                // again from the controller (savedAtChanged).
-                .task(id: controller.location) {
-                    await controller.keepSavesLoaded()
+            .boxWindowColumns(inspectorOpen: columnOpen) {
+                if let agent, let team {
+                    TeamColumn(agent: agent, team: team)
+                        .inspectorToggle(isOpen: columnOpen)
+                } else if let team, let decision = team.selectedDecision {
+                    DecisionColumn(decision: decision, team: team)
+                        .inspectorToggle(isOpen: columnOpen)
+                } else {
+                    inspectorView
                 }
-                // The toggle at the toolbar's trailing edge, open or closed.
-                .inspectorToggle(isOpen: $inspectorOpen)
             }
             .navigationTitle(controller.box)
             // Keep Waiting's way out (R-0178), next to "Waiting for …".
@@ -101,6 +120,28 @@ struct MainWindow: View {
             }
     }
 
+    private var inspectorView: some View {
+                InspectorView(
+                    content: InspectorContent(box: controller, tabs: tabs),
+                    hasTeam: team?.state.hasTeam ?? false,
+                    yourInitial: String(NSFullUserName().prefix(1)).uppercased(),
+                    moveMenu: controller.moveMenu,
+                    move: { target in Task { await controller.requestMove(to: target) } },
+                    run: { action in Task { await controller.run(action) } },
+                    retryPackages: { Task { await controller.retryPackages() } },
+                    revert: { Task { await controller.revertToLastSavePoint() } },
+                    retrySaves: { Task { await controller.refreshSaves() } }
+                )
+                // Read the saves while open and wherever the box runs,
+                // quietly trying again if that fails. A new save reads them
+                // again from the controller (savedAtChanged).
+                .task(id: controller.location) {
+                    await controller.keepSavesLoaded()
+                }
+                // The toggle at the toolbar's trailing edge, open or closed.
+                .inspectorToggle(isOpen: columnOpen)
+    }
+
     @ViewBuilder private var content: some View {
         switch controller.location {
         // Also while reopening after portenvd restarted, so Cancel is
@@ -149,7 +190,16 @@ struct MainWindow: View {
             // bar sits above it (§3); choosing a tab shows that tmux window
             // in this same terminal.
             VStack(spacing: 0) {
-                TabBar(tabs: tabs)
+                HStack(spacing: 0) {
+                    TabBar(tabs: tabs, selection: team?.selection ?? .allTabs, team: team?.state.agents ?? [])
+                    // An agent's tabs only: All tabs at the trailing end
+                    // brings back every tab (R-0241).
+                    if let team, team.selection != .allTabs {
+                        Button(TeamText.allTabs) { team.selection = .allTabs }
+                            .buttonStyle(.link)
+                            .padding(.horizontal, 12)
+                    }
+                }
                     // Follows the tabs while the box is open here or on a
                     // server; watches again after a restart or a move.
                     .task { await tabs.follow() }

@@ -35,7 +35,8 @@ func TestCheckSwitchAllowsOnlyWorkLanesAndResticsUser(t *testing.T) {
 
 // TestNoAmbientCapabilities: nothing in the core ever sets ambient
 // capabilities, which would carry capabilities into processes started for
-// users.
+// users. Clearing them all (the switch to an agent's user) is the one use
+// allowed.
 func TestNoAmbientCapabilities(t *testing.T) {
 	root := filepath.Join("..")
 	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
@@ -46,8 +47,9 @@ func TestNoAmbientCapabilities(t *testing.T) {
 		if err != nil {
 			return err
 		}
+		text := strings.ReplaceAll(string(src), "unix.PR_CAP_AMBIENT, unix.PR_CAP_AMBIENT_CLEAR_ALL", "")
 		for _, banned := range []string{"PR_CAP_AMBIENT", "AmbientCaps"} {
-			if strings.Contains(string(src), banned) {
+			if strings.Contains(text, banned) {
 				t.Errorf("%s uses %s", path, banned)
 			}
 		}

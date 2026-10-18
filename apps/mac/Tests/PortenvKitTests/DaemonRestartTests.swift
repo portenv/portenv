@@ -229,4 +229,23 @@ struct DaemonRestartTests {
         await c.waitForDaemon()
         #expect(c.error == BoxController.daemonGone)
     }
+
+    /// The deadline counts time awake (the 2026-10-16 sleep flake): a Mac
+    /// asleep while portenvd was away doesn't wake to "isn't running" at
+    /// once; time awake past the deadline does say it.
+    @Test func theDeadlineCountsTimeAwake() async {
+        let cli = FakeDaemon()
+        let awake = FakeAwakeClock()
+        let c = BoxController(box: "acme-api", daemon: cli, ensureDaemon: { nil }, daemonDeadline: .seconds(30), awake: { awake.now })
+        await c.open()
+        cli.failing["state"] = "portenvd is not running"
+        cli.failing["ping"] = "portenvd is not running"
+        await c.refresh()
+        awake.advance(by: .seconds(10)) // asleep for hours meanwhile: never counted
+        await c.refresh()
+        #expect(c.error == nil)
+        awake.advance(by: .seconds(21))
+        await c.refresh()
+        #expect(c.error == BoxController.daemonGone)
+    }
 }

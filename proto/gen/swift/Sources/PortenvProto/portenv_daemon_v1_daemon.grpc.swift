@@ -581,6 +581,175 @@ public enum Portenv_Daemon_V1_DaemonService: Sendable {
                 type: .unary
             )
         }
+        /// Namespace for "ListAgents" metadata.
+        public enum ListAgents: Sendable {
+            /// Request type for "ListAgents".
+            public typealias Input = Portenv_Daemon_V1_ListAgentsRequest
+            /// Response type for "ListAgents".
+            public typealias Output = Portenv_Daemon_V1_ListAgentsResponse
+            /// Descriptor for "ListAgents".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "ListAgents",
+                type: .unary
+            )
+        }
+        /// Namespace for "WatchTeam" metadata.
+        public enum WatchTeam: Sendable {
+            /// Request type for "WatchTeam".
+            public typealias Input = Portenv_Daemon_V1_WatchTeamRequest
+            /// Response type for "WatchTeam".
+            public typealias Output = Portenv_Daemon_V1_WatchTeamResponse
+            /// Descriptor for "WatchTeam".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "WatchTeam",
+                type: .serverStreaming
+            )
+        }
+        /// Namespace for "StartAgent" metadata.
+        public enum StartAgent: Sendable {
+            /// Request type for "StartAgent".
+            public typealias Input = Portenv_Daemon_V1_StartAgentRequest
+            /// Response type for "StartAgent".
+            public typealias Output = Portenv_Daemon_V1_StartAgentResponse
+            /// Descriptor for "StartAgent".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "StartAgent",
+                type: .unary
+            )
+        }
+        /// Namespace for "StopAgent" metadata.
+        public enum StopAgent: Sendable {
+            /// Request type for "StopAgent".
+            public typealias Input = Portenv_Daemon_V1_StopAgentRequest
+            /// Response type for "StopAgent".
+            public typealias Output = Portenv_Daemon_V1_StopAgentResponse
+            /// Descriptor for "StopAgent".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "StopAgent",
+                type: .unary
+            )
+        }
+        /// Namespace for "AnswerDecision" metadata.
+        public enum AnswerDecision: Sendable {
+            /// Request type for "AnswerDecision".
+            public typealias Input = Portenv_Daemon_V1_AnswerDecisionRequest
+            /// Response type for "AnswerDecision".
+            public typealias Output = Portenv_Daemon_V1_AnswerDecisionResponse
+            /// Descriptor for "AnswerDecision".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "AnswerDecision",
+                type: .unary
+            )
+        }
+        /// Namespace for "GetAgentFile" metadata.
+        public enum GetAgentFile: Sendable {
+            /// Request type for "GetAgentFile".
+            public typealias Input = Portenv_Daemon_V1_GetAgentFileRequest
+            /// Response type for "GetAgentFile".
+            public typealias Output = Portenv_Daemon_V1_GetAgentFileResponse
+            /// Descriptor for "GetAgentFile".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "GetAgentFile",
+                type: .unary
+            )
+        }
+        /// Namespace for "ApproveAgentFile" metadata.
+        public enum ApproveAgentFile: Sendable {
+            /// Request type for "ApproveAgentFile".
+            public typealias Input = Portenv_Daemon_V1_ApproveAgentFileRequest
+            /// Response type for "ApproveAgentFile".
+            public typealias Output = Portenv_Daemon_V1_ApproveAgentFileResponse
+            /// Descriptor for "ApproveAgentFile".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "ApproveAgentFile",
+                type: .unary
+            )
+        }
+        /// Namespace for "SendMessage" metadata.
+        public enum SendMessage: Sendable {
+            /// Request type for "SendMessage".
+            public typealias Input = Portenv_Daemon_V1_SendMessageRequest
+            /// Response type for "SendMessage".
+            public typealias Output = Portenv_Daemon_V1_SendMessageResponse
+            /// Descriptor for "SendMessage".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "SendMessage",
+                type: .unary
+            )
+        }
+        /// Namespace for "RemoveAgent" metadata.
+        public enum RemoveAgent: Sendable {
+            /// Request type for "RemoveAgent".
+            public typealias Input = Portenv_Daemon_V1_RemoveAgentRequest
+            /// Response type for "RemoveAgent".
+            public typealias Output = Portenv_Daemon_V1_RemoveAgentResponse
+            /// Descriptor for "RemoveAgent".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "RemoveAgent",
+                type: .unary
+            )
+        }
+        /// Namespace for "ListAgentFiles" metadata.
+        public enum ListAgentFiles: Sendable {
+            /// Request type for "ListAgentFiles".
+            public typealias Input = Portenv_Daemon_V1_ListAgentFilesRequest
+            /// Response type for "ListAgentFiles".
+            public typealias Output = Portenv_Daemon_V1_ListAgentFilesResponse
+            /// Descriptor for "ListAgentFiles".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "ListAgentFiles",
+                type: .unary
+            )
+        }
+        /// Namespace for "ReadAgentFile" metadata.
+        public enum ReadAgentFile: Sendable {
+            /// Request type for "ReadAgentFile".
+            public typealias Input = Portenv_Daemon_V1_ReadAgentFileRequest
+            /// Response type for "ReadAgentFile".
+            public typealias Output = Portenv_Daemon_V1_ReadAgentFileResponse
+            /// Descriptor for "ReadAgentFile".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "ReadAgentFile",
+                type: .serverStreaming
+            )
+        }
+        /// Namespace for "AddAgentFiles" metadata.
+        public enum AddAgentFiles: Sendable {
+            /// Request type for "AddAgentFiles".
+            public typealias Input = Portenv_Daemon_V1_AddAgentFilesRequest
+            /// Response type for "AddAgentFiles".
+            public typealias Output = Portenv_Daemon_V1_AddAgentFilesResponse
+            /// Descriptor for "AddAgentFiles".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "AddAgentFiles",
+                type: .clientStreaming
+            )
+        }
+        /// Namespace for "SetRoutinePaused" metadata.
+        public enum SetRoutinePaused: Sendable {
+            /// Request type for "SetRoutinePaused".
+            public typealias Input = Portenv_Daemon_V1_SetRoutinePausedRequest
+            /// Response type for "SetRoutinePaused".
+            public typealias Output = Portenv_Daemon_V1_SetRoutinePausedResponse
+            /// Descriptor for "SetRoutinePaused".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "SetRoutinePaused",
+                type: .unary
+            )
+        }
         /// Descriptors for all methods in the "portenv.daemon.v1.DaemonService" service.
         public static let descriptors: [GRPCCore.MethodDescriptor] = [
             GetVersion.descriptor,
@@ -625,7 +794,20 @@ public enum Portenv_Daemon_V1_DaemonService: Sendable {
             ForgetServerKey.descriptor,
             ProvideServerKey.descriptor,
             CheckServer.descriptor,
-            GetEngine.descriptor
+            GetEngine.descriptor,
+            ListAgents.descriptor,
+            WatchTeam.descriptor,
+            StartAgent.descriptor,
+            StopAgent.descriptor,
+            AnswerDecision.descriptor,
+            GetAgentFile.descriptor,
+            ApproveAgentFile.descriptor,
+            SendMessage.descriptor,
+            RemoveAgent.descriptor,
+            ListAgentFiles.descriptor,
+            ReadAgentFile.descriptor,
+            AddAgentFiles.descriptor,
+            SetRoutinePaused.descriptor
         ]
     }
 }
@@ -1673,6 +1855,306 @@ extension Portenv_Daemon_V1_DaemonService {
             deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_GetEngineResponse>,
             options: GRPCCore.CallOptions,
             onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_GetEngineResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "ListAgents" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > ADR 0022: the agent team. Every call names the workspace; only the app,
+        /// > in front of the person, makes them.
+        /// > A workspace's agents, from its project's agent files.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_ListAgentsRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_ListAgentsRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_ListAgentsResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func listAgents<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_ListAgentsRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_ListAgentsRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_ListAgentsResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ListAgentsResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "WatchTeam" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > The agents, then every change, board message and decision, from a
+        /// > cursor.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_WatchTeamRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_WatchTeamRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_WatchTeamResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func watchTeam<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_WatchTeamRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_WatchTeamRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_WatchTeamResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.StreamingClientResponse<Portenv_Daemon_V1_WatchTeamResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "StartAgent" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Starts an agent whose file is approved and valid.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_StartAgentRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_StartAgentRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_StartAgentResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func startAgent<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_StartAgentRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_StartAgentRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_StartAgentResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_StartAgentResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "StopAgent" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Stops an agent at once: its tmux server and every process of its user.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_StopAgentRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_StopAgentRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_StopAgentResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func stopAgent<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_StopAgentRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_StopAgentRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_StopAgentResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_StopAgentResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "AnswerDecision" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Approve or Decline, the owner's answer to a pending decision.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_AnswerDecisionRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_AnswerDecisionRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_AnswerDecisionResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func answerDecision<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_AnswerDecisionRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_AnswerDecisionRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_AnswerDecisionResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_AnswerDecisionResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "GetAgentFile" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > An agent file's content and the content last approved, for Approve's
+        /// > diff and its runner line.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_GetAgentFileRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_GetAgentFileRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_GetAgentFileResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func getAgentFile<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_GetAgentFileRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_GetAgentFileRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_GetAgentFileResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_GetAgentFileResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "ApproveAgentFile" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Pins an agent file's content (§3): the hash must be what the app showed.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_ApproveAgentFileRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_ApproveAgentFileRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_ApproveAgentFileResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func approveAgentFile<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_ApproveAgentFileRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_ApproveAgentFileRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_ApproveAgentFileResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ApproveAgentFileResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "SendMessage" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > The owner's message to an agent.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_SendMessageRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_SendMessageRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_SendMessageResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func sendMessage<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_SendMessageRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_SendMessageRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_SendMessageResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_SendMessageResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "RemoveAgent" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Removes an agent. Its files stay until the owner approves a
+        /// > DECISION_KIND_DELETE_AGENT_FILES decision (§1).
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_RemoveAgentRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_RemoveAgentRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_RemoveAgentResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func removeAgent<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_RemoveAgentRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_RemoveAgentRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_RemoveAgentResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_RemoveAgentResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "ListAgentFiles" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > The Agent files view (§2): list, open and add, done as the agent's user.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_ListAgentFilesRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_ListAgentFilesRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_ListAgentFilesResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func listAgentFiles<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_ListAgentFilesRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_ListAgentFilesRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_ListAgentFilesResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ListAgentFilesResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "ReadAgentFile" method.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_ReadAgentFileRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_ReadAgentFileRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_ReadAgentFileResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func readAgentFile<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_ReadAgentFileRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_ReadAgentFileRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_ReadAgentFileResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.StreamingClientResponse<Portenv_Daemon_V1_ReadAgentFileResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "AddAgentFiles" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Drag and drop. Refused past the agent's quota.
+        ///
+        /// - Parameters:
+        ///   - request: A streaming request producing `Portenv_Daemon_V1_AddAgentFilesRequest` messages.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_AddAgentFilesRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_AddAgentFilesResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func addAgentFiles<Result>(
+            request: GRPCCore.StreamingClientRequest<Portenv_Daemon_V1_AddAgentFilesRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_AddAgentFilesRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_AddAgentFilesResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_AddAgentFilesResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "SetRoutinePaused" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Pauses or resumes one of an agent's routines (R-0258).
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_SetRoutinePausedRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_SetRoutinePausedRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_SetRoutinePausedResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func setRoutinePaused<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_SetRoutinePausedRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_SetRoutinePausedRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_SetRoutinePausedResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_SetRoutinePausedResponse>) async throws -> Result
         ) async throws -> Result where Result: Sendable
     }
 
@@ -3186,6 +3668,445 @@ extension Portenv_Daemon_V1_DaemonService {
                 onResponse: handleResponse
             )
         }
+
+        /// Call the "ListAgents" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > ADR 0022: the agent team. Every call names the workspace; only the app,
+        /// > in front of the person, makes them.
+        /// > A workspace's agents, from its project's agent files.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_ListAgentsRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_ListAgentsRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_ListAgentsResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func listAgents<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_ListAgentsRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_ListAgentsRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_ListAgentsResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ListAgentsResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.ListAgents.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
+
+        /// Call the "WatchTeam" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > The agents, then every change, board message and decision, from a
+        /// > cursor.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_WatchTeamRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_WatchTeamRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_WatchTeamResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func watchTeam<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_WatchTeamRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_WatchTeamRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_WatchTeamResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.StreamingClientResponse<Portenv_Daemon_V1_WatchTeamResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.serverStreaming(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.WatchTeam.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
+
+        /// Call the "StartAgent" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Starts an agent whose file is approved and valid.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_StartAgentRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_StartAgentRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_StartAgentResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func startAgent<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_StartAgentRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_StartAgentRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_StartAgentResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_StartAgentResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.StartAgent.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
+
+        /// Call the "StopAgent" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Stops an agent at once: its tmux server and every process of its user.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_StopAgentRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_StopAgentRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_StopAgentResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func stopAgent<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_StopAgentRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_StopAgentRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_StopAgentResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_StopAgentResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.StopAgent.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
+
+        /// Call the "AnswerDecision" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Approve or Decline, the owner's answer to a pending decision.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_AnswerDecisionRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_AnswerDecisionRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_AnswerDecisionResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func answerDecision<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_AnswerDecisionRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_AnswerDecisionRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_AnswerDecisionResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_AnswerDecisionResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.AnswerDecision.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
+
+        /// Call the "GetAgentFile" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > An agent file's content and the content last approved, for Approve's
+        /// > diff and its runner line.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_GetAgentFileRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_GetAgentFileRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_GetAgentFileResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func getAgentFile<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_GetAgentFileRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_GetAgentFileRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_GetAgentFileResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_GetAgentFileResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.GetAgentFile.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
+
+        /// Call the "ApproveAgentFile" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Pins an agent file's content (§3): the hash must be what the app showed.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_ApproveAgentFileRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_ApproveAgentFileRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_ApproveAgentFileResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func approveAgentFile<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_ApproveAgentFileRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_ApproveAgentFileRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_ApproveAgentFileResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ApproveAgentFileResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.ApproveAgentFile.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
+
+        /// Call the "SendMessage" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > The owner's message to an agent.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_SendMessageRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_SendMessageRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_SendMessageResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func sendMessage<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_SendMessageRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_SendMessageRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_SendMessageResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_SendMessageResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.SendMessage.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
+
+        /// Call the "RemoveAgent" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Removes an agent. Its files stay until the owner approves a
+        /// > DECISION_KIND_DELETE_AGENT_FILES decision (§1).
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_RemoveAgentRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_RemoveAgentRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_RemoveAgentResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func removeAgent<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_RemoveAgentRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_RemoveAgentRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_RemoveAgentResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_RemoveAgentResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.RemoveAgent.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
+
+        /// Call the "ListAgentFiles" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > The Agent files view (§2): list, open and add, done as the agent's user.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_ListAgentFilesRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_ListAgentFilesRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_ListAgentFilesResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func listAgentFiles<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_ListAgentFilesRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_ListAgentFilesRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_ListAgentFilesResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ListAgentFilesResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.ListAgentFiles.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
+
+        /// Call the "ReadAgentFile" method.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_ReadAgentFileRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_ReadAgentFileRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_ReadAgentFileResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func readAgentFile<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_ReadAgentFileRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_ReadAgentFileRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_ReadAgentFileResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.StreamingClientResponse<Portenv_Daemon_V1_ReadAgentFileResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.serverStreaming(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.ReadAgentFile.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
+
+        /// Call the "AddAgentFiles" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Drag and drop. Refused past the agent's quota.
+        ///
+        /// - Parameters:
+        ///   - request: A streaming request producing `Portenv_Daemon_V1_AddAgentFilesRequest` messages.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_AddAgentFilesRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_AddAgentFilesResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func addAgentFiles<Result>(
+            request: GRPCCore.StreamingClientRequest<Portenv_Daemon_V1_AddAgentFilesRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_AddAgentFilesRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_AddAgentFilesResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_AddAgentFilesResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.clientStreaming(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.AddAgentFiles.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
+
+        /// Call the "SetRoutinePaused" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Pauses or resumes one of an agent's routines (R-0258).
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_SetRoutinePausedRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_SetRoutinePausedRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_SetRoutinePausedResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func setRoutinePaused<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_SetRoutinePausedRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_SetRoutinePausedRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_SetRoutinePausedResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_SetRoutinePausedResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.SetRoutinePaused.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
     }
 }
 
@@ -4463,6 +5384,380 @@ extension Portenv_Daemon_V1_DaemonService.ClientProtocol {
             request: request,
             serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_GetEngineRequest>(),
             deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_GetEngineResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "ListAgents" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > ADR 0022: the agent team. Every call names the workspace; only the app,
+    /// > in front of the person, makes them.
+    /// > A workspace's agents, from its project's agent files.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_ListAgentsRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func listAgents<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_ListAgentsRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ListAgentsResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.listAgents(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_ListAgentsRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_ListAgentsResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "WatchTeam" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > The agents, then every change, board message and decision, from a
+    /// > cursor.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_WatchTeamRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func watchTeam<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_WatchTeamRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.StreamingClientResponse<Portenv_Daemon_V1_WatchTeamResponse>) async throws -> Result
+    ) async throws -> Result where Result: Sendable {
+        try await self.watchTeam(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_WatchTeamRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_WatchTeamResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "StartAgent" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Starts an agent whose file is approved and valid.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_StartAgentRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func startAgent<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_StartAgentRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_StartAgentResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.startAgent(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_StartAgentRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_StartAgentResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "StopAgent" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Stops an agent at once: its tmux server and every process of its user.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_StopAgentRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func stopAgent<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_StopAgentRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_StopAgentResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.stopAgent(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_StopAgentRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_StopAgentResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "AnswerDecision" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Approve or Decline, the owner's answer to a pending decision.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_AnswerDecisionRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func answerDecision<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_AnswerDecisionRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_AnswerDecisionResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.answerDecision(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_AnswerDecisionRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_AnswerDecisionResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "GetAgentFile" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > An agent file's content and the content last approved, for Approve's
+    /// > diff and its runner line.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_GetAgentFileRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func getAgentFile<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_GetAgentFileRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_GetAgentFileResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.getAgentFile(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_GetAgentFileRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_GetAgentFileResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "ApproveAgentFile" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Pins an agent file's content (§3): the hash must be what the app showed.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_ApproveAgentFileRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func approveAgentFile<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_ApproveAgentFileRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ApproveAgentFileResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.approveAgentFile(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_ApproveAgentFileRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_ApproveAgentFileResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "SendMessage" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > The owner's message to an agent.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_SendMessageRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func sendMessage<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_SendMessageRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_SendMessageResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.sendMessage(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_SendMessageRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_SendMessageResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "RemoveAgent" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Removes an agent. Its files stay until the owner approves a
+    /// > DECISION_KIND_DELETE_AGENT_FILES decision (§1).
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_RemoveAgentRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func removeAgent<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_RemoveAgentRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_RemoveAgentResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.removeAgent(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_RemoveAgentRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_RemoveAgentResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "ListAgentFiles" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > The Agent files view (§2): list, open and add, done as the agent's user.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_ListAgentFilesRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func listAgentFiles<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_ListAgentFilesRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ListAgentFilesResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.listAgentFiles(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_ListAgentFilesRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_ListAgentFilesResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "ReadAgentFile" method.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_ReadAgentFileRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func readAgentFile<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_ReadAgentFileRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.StreamingClientResponse<Portenv_Daemon_V1_ReadAgentFileResponse>) async throws -> Result
+    ) async throws -> Result where Result: Sendable {
+        try await self.readAgentFile(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_ReadAgentFileRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_ReadAgentFileResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "AddAgentFiles" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Drag and drop. Refused past the agent's quota.
+    ///
+    /// - Parameters:
+    ///   - request: A streaming request producing `Portenv_Daemon_V1_AddAgentFilesRequest` messages.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func addAgentFiles<Result>(
+        request: GRPCCore.StreamingClientRequest<Portenv_Daemon_V1_AddAgentFilesRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_AddAgentFilesResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.addAgentFiles(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_AddAgentFilesRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_AddAgentFilesResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "SetRoutinePaused" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Pauses or resumes one of an agent's routines (R-0258).
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_SetRoutinePausedRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func setRoutinePaused<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_SetRoutinePausedRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_SetRoutinePausedResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.setRoutinePaused(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_SetRoutinePausedRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_SetRoutinePausedResponse>(),
             options: options,
             onResponse: handleResponse
         )
@@ -5916,6 +7211,433 @@ extension Portenv_Daemon_V1_DaemonService.ClientProtocol {
             metadata: metadata
         )
         return try await self.getEngine(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "ListAgents" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > ADR 0022: the agent team. Every call names the workspace; only the app,
+    /// > in front of the person, makes them.
+    /// > A workspace's agents, from its project's agent files.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func listAgents<Result>(
+        _ message: Portenv_Daemon_V1_ListAgentsRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ListAgentsResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_ListAgentsRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.listAgents(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "WatchTeam" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > The agents, then every change, board message and decision, from a
+    /// > cursor.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func watchTeam<Result>(
+        _ message: Portenv_Daemon_V1_WatchTeamRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.StreamingClientResponse<Portenv_Daemon_V1_WatchTeamResponse>) async throws -> Result
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_WatchTeamRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.watchTeam(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "StartAgent" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Starts an agent whose file is approved and valid.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func startAgent<Result>(
+        _ message: Portenv_Daemon_V1_StartAgentRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_StartAgentResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_StartAgentRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.startAgent(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "StopAgent" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Stops an agent at once: its tmux server and every process of its user.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func stopAgent<Result>(
+        _ message: Portenv_Daemon_V1_StopAgentRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_StopAgentResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_StopAgentRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.stopAgent(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "AnswerDecision" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Approve or Decline, the owner's answer to a pending decision.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func answerDecision<Result>(
+        _ message: Portenv_Daemon_V1_AnswerDecisionRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_AnswerDecisionResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_AnswerDecisionRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.answerDecision(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "GetAgentFile" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > An agent file's content and the content last approved, for Approve's
+    /// > diff and its runner line.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func getAgentFile<Result>(
+        _ message: Portenv_Daemon_V1_GetAgentFileRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_GetAgentFileResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_GetAgentFileRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.getAgentFile(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "ApproveAgentFile" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Pins an agent file's content (§3): the hash must be what the app showed.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func approveAgentFile<Result>(
+        _ message: Portenv_Daemon_V1_ApproveAgentFileRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ApproveAgentFileResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_ApproveAgentFileRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.approveAgentFile(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "SendMessage" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > The owner's message to an agent.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func sendMessage<Result>(
+        _ message: Portenv_Daemon_V1_SendMessageRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_SendMessageResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_SendMessageRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.sendMessage(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "RemoveAgent" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Removes an agent. Its files stay until the owner approves a
+    /// > DECISION_KIND_DELETE_AGENT_FILES decision (§1).
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func removeAgent<Result>(
+        _ message: Portenv_Daemon_V1_RemoveAgentRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_RemoveAgentResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_RemoveAgentRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.removeAgent(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "ListAgentFiles" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > The Agent files view (§2): list, open and add, done as the agent's user.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func listAgentFiles<Result>(
+        _ message: Portenv_Daemon_V1_ListAgentFilesRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ListAgentFilesResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_ListAgentFilesRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.listAgentFiles(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "ReadAgentFile" method.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func readAgentFile<Result>(
+        _ message: Portenv_Daemon_V1_ReadAgentFileRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.StreamingClientResponse<Portenv_Daemon_V1_ReadAgentFileResponse>) async throws -> Result
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_ReadAgentFileRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.readAgentFile(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "AddAgentFiles" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Drag and drop. Refused past the agent's quota.
+    ///
+    /// - Parameters:
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - producer: A closure producing request messages to send to the server. Returning
+    ///       from the closure closes the request stream.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func addAgentFiles<Result>(
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        requestProducer producer: @Sendable @escaping (GRPCCore.RPCWriter<Portenv_Daemon_V1_AddAgentFilesRequest>) async throws -> Void,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_AddAgentFilesResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.StreamingClientRequest<Portenv_Daemon_V1_AddAgentFilesRequest>(
+            metadata: metadata,
+            producer: producer
+        )
+        return try await self.addAgentFiles(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "SetRoutinePaused" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Pauses or resumes one of an agent's routines (R-0258).
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func setRoutinePaused<Result>(
+        _ message: Portenv_Daemon_V1_SetRoutinePausedRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_SetRoutinePausedResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_SetRoutinePausedRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.setRoutinePaused(
             request: request,
             options: options,
             onResponse: handleResponse

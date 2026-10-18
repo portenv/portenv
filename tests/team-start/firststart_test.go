@@ -635,6 +635,20 @@ for who in lead reviewer work; do runuser -u $who -- sh -c 'cat /home/builder/in
 		h.fatal("step 11: builder's home isn't closed to others, or another user read the hand-off:\n%s", out)
 	}
 	t.Logf("step 11: builder's home and the hand-off are builder's alone:\n%s", out)
+	// A file from the project, with the project closed to other users (as
+	// the app makes it: agents reach it through group team only).
+	if out, code = h.box(ctx, "root", fmt.Sprintf(`chmod o-rwx %s && stat -c '%%A %%U:%%G' %s`, project, project)); code != 0 {
+		h.fatal("step 11: closing the project to other users: exit %d: %s", code, out)
+	}
+	out, code = h.box(ctx, "lead", fmt.Sprintf(`PORTENV_AGENT=lead PORTENV_SOCKET=/run/portenv-team/lead/portenv.sock portenv handoff builder %s`, script))
+	if code != 0 {
+		h.fatal("step 11: lead's hand-off of a project file to builder: exit %d:\n%s", code, out)
+	}
+	out, code = h.box(ctx, "builder", `stat -c '%U %a %n' ~/inbox/lead/*/first-start.sh`)
+	if code != 0 || !strings.HasPrefix(out, "builder 600 ") {
+		h.fatal("step 11: the project file in builder's inbox: exit %d:\n%s", code, out)
+	}
+	t.Logf("step 11: a project file handed over, with the project closed to others:\n%s", out)
 }
 
 // waitRunning waits for portenvd to list the agent as running (or needing

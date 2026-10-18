@@ -19,6 +19,7 @@ func fileProjectOps() projectOps {
 		self:     os.Getuid(),
 		chown:    func(f *os.File, gid int) error { return f.Chown(-1, gid) },
 		addACL:   func(*os.File, bool) error { return errors.ErrUnsupported },
+		readACL:  func(*os.File, bool) error { return errors.ErrUnsupported },
 		clearACL: func(*os.File, bool) (fs.FileMode, bool, error) { return 0, false, errors.ErrUnsupported },
 	}
 }

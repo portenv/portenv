@@ -23,14 +23,17 @@ import (
 // a test can't chown to group team, own another uid's file, or count on
 // ACLs. foreign marks paths (relative to the project) another uid owns.
 type projectRunner struct {
-	calls   []string
-	noACL   bool
-	aclErr  error
-	open    func(project string) error
-	sys     *fakeSystem
-	acls    []string // paths given g:team:rwX
-	cleared []string // paths whose ACLs were removed
-	foreign map[string]int
+	calls    []string
+	noACL    bool
+	aclErr   error
+	open     func(project string) error
+	sys      *fakeSystem
+	acls     []string // paths given g:team:rwX
+	readable []string // paths given g:team:rX
+	cleared  []string // paths whose ACLs were removed
+	foreign  map[string]int
+	git      func(args []string) // what a git call does, if anything
+	safeDirs string              // git config --system --get-all safe.directory
 }
 
 func (r *projectRunner) Run(_ context.Context, _ []string, name string, args ...string) ([]byte, error) {
@@ -43,6 +46,12 @@ func (r *projectRunner) Run(_ context.Context, _ []string, name string, args ...
 		}
 		return nil, nil
 	case "git":
+		if r.git != nil {
+			r.git(args)
+		}
+		if slices.Contains(args, "--get-all") {
+			return []byte(r.safeDirs), nil
+		}
 		return nil, nil
 	}
 	return r.sys.Run(context.Background(), nil, name, args...)
@@ -70,6 +79,10 @@ func (r *projectRunner) ops(chowns *[]chownCall) projectOps {
 				return r.aclErr
 			}
 			r.acls = append(r.acls, f.Name())
+			return nil
+		},
+		readACL: func(f *os.File, _ bool) error {
+			r.readable = append(r.readable, f.Name())
 			return nil
 		},
 		clearACL: func(f *os.File, _ bool) (fs.FileMode, bool, error) {
@@ -114,6 +127,8 @@ func newProjectTeam(t *testing.T) (*TeamUsers, *projectRunner, *[]chownCall, str
 		Cfg:   Config{User: "work", UID: 1000, HomeRoot: root},
 		Run:   run,
 		Chown: func(p string, uid, gid int) error { chowns = append(chowns, chownCall{p, uid, gid}); return nil },
+		// The test's files are the test user's: call them work's.
+		ownerOf: func(string) int { return 1000 },
 	}
 	// team-io open-project, as work, in this process.
 	run.open = func(project string) error {
@@ -150,17 +165,23 @@ func TestPrepareTeamProjectOpensTheProjectToTheTeam(t *testing.T) {
 		t.Errorf("run.sh is %o, want 775 (group gets what the owner has)", m)
 	}
 	for _, p := range []string{".git/hooks", ".git/hooks/pre-commit", ".git/config", ".portenv", ".portenv/agents", ".portenv/agents/lead.md"} {
-		if m := mode(t, filepath.Join(project, p)).Perm(); m&0o020 != 0 {
-			t.Errorf("%s is %o: group-writable", p, m)
+		m := mode(t, filepath.Join(project, p)).Perm()
+		if m&0o022 != 0 {
+			t.Errorf("%s is %o: writable by others than work", p, m)
 		}
+		if m&0o040 == 0 {
+			t.Errorf("%s is %o: the team can't read it (CC-0493)", p, m)
+		}
+	}
+	if m := mode(t, filepath.Join(project, ".git", "hooks", "pre-commit")).Perm(); m != 0o755 {
+		t.Errorf("pre-commit is %o, want 755 (the team reads and runs it)", m)
 	}
 	if !slices.Contains(*chowns, chownCall{filepath.Join(project, "src", "app.ts"), -1, TeamGID}) {
 		t.Errorf("app.ts not given to group team: %v", *chowns)
 	}
-	for _, c := range *chowns {
-		if strings.Contains(c.path, "/.git/hooks") || strings.HasSuffix(c.path, "/.git/config") || strings.Contains(c.path, "/.portenv") {
-			t.Errorf("a protected path was given to team: %v", c)
-		}
+	// Protected paths are the team's group to read, never given rwX.
+	if !slices.Contains(*chowns, chownCall{filepath.Join(project, ".git", "config"), -1, TeamGID}) {
+		t.Errorf(".git/config isn't in group team: %v", *chowns)
 	}
 	for _, p := range []string{".", "src", "src/app.ts", "run.sh", ".git"} {
 		if !slices.Contains(run.acls, filepath.Join(project, p)) {
@@ -175,10 +196,14 @@ func TestPrepareTeamProjectOpensTheProjectToTheTeam(t *testing.T) {
 		if !slices.Contains(run.cleared, full) {
 			t.Errorf("protected %s's ACL wasn't removed; removed %q", p, run.cleared)
 		}
+		if !slices.Contains(run.readable, full) {
+			t.Errorf("protected %s wasn't given g:team:rX; gave %q", p, run.readable)
+		}
 	}
 	for _, want := range []string{
 		"runuser -u work -- " + teamIOBinary + " team-io open-project " + project,
 		"git -C " + project + " config core.sharedRepository group",
+		"git config --system --get-all safe.directory",
 		"git config --system --add safe.directory " + "/home/work/shop",
 	} {
 		if !run.ran(want) {
@@ -440,8 +465,11 @@ func TestOpenProjectProtectsByIdentity(t *testing.T) {
 		if err := openProject(context.Background(), project, run, run.ops(chowns)); err != nil {
 			t.Fatal(err)
 		}
-		if slices.Contains(run.acls, other) || slices.ContainsFunc(*chowns, func(c chownCall) bool { return c.path == other }) {
-			t.Error("a hard link to .git/config was given to the team")
+		if slices.Contains(run.acls, other) {
+			t.Error("a hard link to .git/config was given g:team:rwX")
+		}
+		if !slices.Contains(run.readable, other) {
+			t.Error("a hard link to .git/config wasn't closed like it")
 		}
 		if m := mode(t, other).Perm(); m&0o022 != 0 {
 			t.Errorf("the hard link is %o: writable by others than work", m)
@@ -584,4 +612,174 @@ func TestBoxStartFixesReachTheNextTeamStart(t *testing.T) {
 		t.Error("reported twice")
 	}
 	_ = project
+}
+
+// CC-0493: git's core.sharedRepository write makes a new .git/config (the
+// owner's session saw 0600, with a --- mask for the team); it's closed
+// again after, readable by the team and not writable.
+func TestOpenProjectLetsTheTeamReadGitConfig(t *testing.T) {
+	_, run, chowns, project := newProjectTeam(t)
+	cfg := filepath.Join(project, ".git", "config")
+	rewrote := false
+	run.git = func(args []string) {
+		if !slices.Contains(args, "core.sharedRepository") {
+			return
+		}
+		rewrote = true
+		tmp := cfg + ".lock"
+		if err := os.WriteFile(tmp, []byte("[core]\n\tsharedRepository = group\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(tmp, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Rename(tmp, cfg); err != nil {
+			t.Fatal(err)
+		}
+		run.readable = nil
+	}
+	if err := openProject(context.Background(), project, run, run.ops(chowns)); err != nil {
+		t.Fatal(err)
+	}
+	if !rewrote {
+		t.Fatal("git didn't write core.sharedRepository")
+	}
+	if m := mode(t, cfg).Perm(); m != 0o640 {
+		t.Errorf(".git/config is %o after git's write, want 640", m)
+	}
+	// run.git cleared the list: this is the pass after git's write.
+	if !slices.Contains(run.readable, cfg) {
+		t.Errorf(".git/config wasn't given g:team:r after git's write: %q", run.readable)
+	}
+}
+
+// makeWorktree lays out what "git worktree add .worktrees/<name>" makes in
+// the project, with the paths git writes in the box (/home/work/shop).
+func makeWorktree(t *testing.T, project, name string) {
+	t.Helper()
+	wt := filepath.Join(project, ".worktrees", name)
+	reg := filepath.Join(project, ".git", "worktrees", name)
+	for _, d := range []string{wt, reg} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for f, b := range map[string]string{
+		filepath.Join(reg, "gitdir"): "/home/work/shop/.worktrees/" + name + "/.git\n",
+		filepath.Join(wt, ".git"):    "gitdir: /home/work/shop/.git/worktrees/" + name + "\n",
+	} {
+		if err := os.WriteFile(f, []byte(b), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// CC-0493: work's worktrees inside the project are trusted for agents'
+// git, each by name and once; nothing else under the project is.
+func TestPrepareTeamProjectTrustsWorksWorktrees(t *testing.T) {
+	ctx := context.Background()
+	added := func(run *projectRunner) []string {
+		var out []string
+		for _, c := range run.calls {
+			if d, ok := strings.CutPrefix(c, "git config --system --add safe.directory "); ok {
+				out = append(out, d)
+			}
+		}
+		return out
+	}
+	t.Run("a worktree work made", func(t *testing.T) {
+		tu, run, _, project := newProjectTeam(t)
+		makeWorktree(t, project, "writer")
+		if _, err := tu.PrepareProject(ctx, "/home/work/shop"); err != nil {
+			t.Fatal(err)
+		}
+		if got := added(run); !slices.Equal(got, []string{"/home/work/shop", "/home/work/shop/.worktrees/writer"}) {
+			t.Errorf("added %q", got)
+		}
+		for _, c := range run.calls {
+			if strings.Contains(c, "safe.directory") && strings.Contains(c, "*") {
+				t.Errorf("a wildcard: %q", c)
+			}
+		}
+	})
+	t.Run("already trusted: not added again", func(t *testing.T) {
+		tu, run, _, project := newProjectTeam(t)
+		makeWorktree(t, project, "writer")
+		run.safeDirs = "/home/work/shop\n/home/work/shop/.worktrees/writer\n"
+		if _, err := tu.PrepareProject(ctx, "/home/work/shop"); err != nil {
+			t.Fatal(err)
+		}
+		if got := added(run); len(got) != 0 {
+			t.Errorf("added again: %q", got)
+		}
+	})
+	for name, spoil := range map[string]func(t *testing.T, tu *TeamUsers, project string){
+		"an agent's folder": func(t *testing.T, tu *TeamUsers, project string) {
+			wt := filepath.Join(project, ".worktrees", "writer")
+			tu.ownerOf = func(p string) int {
+				if p == wt {
+					return 2001
+				}
+				return 1000
+			}
+		},
+		"an agent's .git file": func(t *testing.T, tu *TeamUsers, project string) {
+			f := filepath.Join(project, ".worktrees", "writer", ".git")
+			tu.ownerOf = func(p string) int {
+				if p == f {
+					return 2001
+				}
+				return 1000
+			}
+		},
+		"an agent's registration": func(t *testing.T, tu *TeamUsers, project string) {
+			reg := filepath.Join(project, ".git", "worktrees", "writer")
+			tu.ownerOf = func(p string) int {
+				if p == reg {
+					return 2001
+				}
+				return 1000
+			}
+		},
+		"registered outside the project": func(t *testing.T, _ *TeamUsers, project string) {
+			writeFile(t, filepath.Join(project, ".git", "worktrees", "writer", "gitdir"), "/home/work/.ssh/.git\n")
+		},
+		"registered inside .git": func(t *testing.T, _ *TeamUsers, project string) {
+			writeFile(t, filepath.Join(project, ".git", "worktrees", "writer", "gitdir"), "/home/work/shop/.git/hooks/.git\n")
+		},
+		"a path with ..": func(t *testing.T, _ *TeamUsers, project string) {
+			writeFile(t, filepath.Join(project, ".git", "worktrees", "writer", "gitdir"), "/home/work/shop/../shop/.worktrees/writer/.git\n")
+		},
+		"a .git file pointing elsewhere": func(t *testing.T, _ *TeamUsers, project string) {
+			writeFile(t, filepath.Join(project, ".worktrees", "writer", ".git"), "gitdir: /home/team/evil\n")
+		},
+		"a link on the way": func(t *testing.T, _ *TeamUsers, project string) {
+			wts := filepath.Join(project, ".worktrees")
+			if err := os.Rename(wts, project+"-wts"); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(project+"-wts", wts); err != nil {
+				t.Fatal(err)
+			}
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			tu, run, _, project := newProjectTeam(t)
+			makeWorktree(t, project, "writer")
+			spoil(t, tu, project)
+			if _, err := tu.PrepareProject(ctx, "/home/work/shop"); err != nil {
+				t.Fatal(err)
+			}
+			if got := added(run); !slices.Equal(got, []string{"/home/work/shop"}) {
+				t.Errorf("added %q, want the project only", got)
+			}
+		})
+	}
+}
+
+func writeFile(t *testing.T, p, s string) {
+	t.Helper()
+	if err := os.WriteFile(p, []byte(s), 0o644); err != nil {
+		t.Fatal(err)
+	}
 }

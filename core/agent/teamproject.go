@@ -14,6 +14,8 @@ import (
 	"strings"
 	"syscall"
 
+	"golang.org/x/sys/unix"
+
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
@@ -29,9 +31,9 @@ import (
 // (.git/hooks, .git/config) or change agent files (.portenv/).
 //
 // init (root) only checks paths and adds the system git setting; the work
-// on the tree runs as work ("portenv-agent team-io open-project"), inside
-// an os.Root, so a link an agent swaps in mid-walk can reach nothing work
-// couldn't change anyway.
+// on the tree runs as work ("portenv-agent team-io open-project"), through
+// a descriptor of each file, never a path, so a link an agent swaps in
+// mid-walk reaches nothing.
 
 // teamIOBinary is the plain portenv-agent, which runs team-io.
 const teamIOBinary = "/usr/local/bin/portenv-agent"
@@ -85,71 +87,45 @@ func (t *TeamUsers) PrepareProject(ctx context.Context, projectDir string) ([]st
 // errNoACL is the plain line when the filesystem won't keep ACLs.
 var errNoACL = errors.New("this workspace's files don't keep ACLs, so agents can't share the project. Portenv won't start the team")
 
-// openProject is team-io open-project, run as work: default ACLs, group
-// team and setgid on the project, the protected paths closed again, git's
-// shared repository, and /home/work made passable (0711). lchown is
-// root.Lchown (a fake in tests).
-func openProject(ctx context.Context, project string, run Runner, lchown func(r *os.Root, rel string, uid, gid int) error) error {
-	if out, err := run.Run(ctx, nil, "setfacl", "-R", "-P", "-m", "g:"+TeamGroup+":rwX,d:g:"+TeamGroup+":rwX", project); err != nil {
-		// Only a filesystem that refuses ACLs gets the no-ACL line; an
-		// unknown group (an invalid argument) or anything else is said as
-		// setfacl said it.
-		if strings.Contains(string(out), "Operation not supported") {
+// openProject is team-io open-project, run as work: group team, setgid
+// and default ACLs on the project, the protected paths closed again, git's
+// shared repository, and /home/work made passable (0711).
+//
+// It walks the tree through descriptors: each entry is opened from its
+// folder's descriptor without following a link, checked to be the file
+// it looked at, and changed through that descriptor, so a link or a swap
+// an agent makes mid-walk reaches nothing. It changes only what work owns
+// (CC-0494). What an agent made was made in the team's setgid folders,
+// under their default ACLs, so it's already the team's, and work couldn't
+// change it anyway; an agent's folder is skipped with all it holds. The
+// one exception is a protected path: if work doesn't own it, an agent
+// could have changed it, and the team isn't started.
+func openProject(ctx context.Context, project string, run Runner, ops projectOps) error {
+	top, err := os.OpenFile(project, os.O_RDONLY|syscall.O_DIRECTORY|syscall.O_NOFOLLOW, 0) // #nosec G304 -- init checked it's /home/work/<name>
+	if err != nil {
+		return err
+	}
+	defer func() { _ = top.Close() }()
+	var st unix.Stat_t
+	if err := unix.Fstat(fdOf(top), &st); err != nil {
+		return err
+	}
+	if uid := ops.uidOf(".", &st); uid != ops.self {
+		return fmt.Errorf("%s belongs to uid %d, not to you", project, uid)
+	}
+	w := &projectWalk{ops: ops, protected: map[fileID]bool{}}
+	if err := w.collectProtected(top); err != nil {
+		return err
+	}
+	// The project folder first: a filesystem without ACLs stops here.
+	if err := w.change(top, ".", true, false); err != nil {
+		if errors.Is(err, errors.ErrUnsupported) {
 			return errNoACL
 		}
-		return cmdError("give the project to group "+TeamGroup, out, err)
-	}
-	out, err := run.Run(ctx, nil, "getfacl", "-c", "-p", project)
-	if err != nil || !strings.Contains(string(out), "default:group:"+TeamGroup+":rwx") {
-		return errNoACL
-	}
-	root, err := os.OpenRoot(project)
-	if err != nil {
 		return err
 	}
-	defer func() { _ = root.Close() }()
-	err = fs.WalkDir(root.FS(), ".", func(rel string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.Type()&os.ModeSymlink != 0 || (!d.IsDir() && !d.Type().IsRegular()) {
-			return nil // links and special files are left as they are
-		}
-		fi, err := root.Lstat(rel)
-		if err != nil {
-			return err
-		}
-		perm := fi.Mode().Perm()
-		if protectedPath(rel) {
-			return root.Chmod(rel, perm&^0o022)
-		}
-		if err := lchown(root, rel, -1, TeamGID); err != nil {
-			return fmt.Errorf("give %s to the team: %w", rel, err)
-		}
-		if d.IsDir() {
-			return root.Chmod(rel, perm|0o070|os.ModeSetgid)
-		}
-		return root.Chmod(rel, perm&^0o070|(perm&0o700)>>3)
-	})
-	if err != nil {
+	if err := w.walk(top, ".", false); err != nil {
 		return err
-	}
-	for _, p := range protectedInProject {
-		full := filepath.Join(project, filepath.FromSlash(p))
-		fi, err := os.Lstat(full)
-		if errors.Is(err, fs.ErrNotExist) {
-			continue
-		}
-		if err != nil {
-			return err
-		}
-		args := []string{"-b", full}
-		if fi.IsDir() {
-			args = []string{"-R", "-P", "-b", full}
-		}
-		if out, err := run.Run(ctx, nil, "setfacl", args...); err != nil {
-			return cmdError("close "+p+" to the team", out, err)
-		}
 	}
 	if fi, err := os.Lstat(filepath.Join(project, ".git")); err == nil && fi.IsDir() {
 		if out, err := run.Run(ctx, nil, "git", "-C", project, "config", "core.sharedRepository", "group"); err != nil {
@@ -157,6 +133,241 @@ func openProject(ctx context.Context, project string, run Runner, lchown func(r 
 		}
 	}
 	return chmodNoFollow(filepath.Dir(project), 0o711)
+}
+
+// projectOps are open-project's changes to one open file, and whose it is
+// (fakes in tests: a test can't chown to group team, or own another uid's
+// file).
+type projectOps struct {
+	self     int // work's uid
+	owner    func(rel string, st *unix.Stat_t) int
+	chown    func(f *os.File, gid int) error
+	addACL   func(f *os.File, dir bool) error                      // setfacl -m g:team:rwX (and d:g:team:rwX on a folder)
+	clearACL func(f *os.File, dir bool) (fs.FileMode, bool, error) // setfacl -b: the owning group's bits, and whether it had an ACL
+}
+
+func (o projectOps) uidOf(rel string, st *unix.Stat_t) int {
+	if o.owner != nil {
+		return o.owner(rel, st)
+	}
+	return int(st.Uid)
+}
+
+type fileID struct{ dev, ino uint64 }
+
+func idOf(st *unix.Stat_t) fileID {
+	return fileID{statDev(st), st.Ino}
+}
+
+type projectWalk struct {
+	ops       projectOps
+	protected map[fileID]bool // everything at or under a protected path
+}
+
+// fdOf is f's descriptor, for the *at calls.
+func fdOf(f *os.File) int {
+	return int(f.Fd()) // #nosec G115 -- a descriptor
+}
+
+// openEntry opens name in dir without following a link, as the file
+// fstatat saw (st); ok is false if it's gone or isn't that file any more.
+func openEntry(dir *os.File, name, full string, st *unix.Stat_t) (f *os.File, ok bool, err error) {
+	flags := unix.O_RDONLY | unix.O_NOFOLLOW | unix.O_CLOEXEC | unix.O_NONBLOCK
+	if statType(st) == unix.S_IFDIR {
+		flags |= unix.O_DIRECTORY
+	}
+	fd, err := unix.Openat(fdOf(dir), name, flags, 0)
+	if errors.Is(err, unix.ENOENT) || errors.Is(err, unix.ELOOP) || errors.Is(err, unix.ENOTDIR) || errors.Is(err, unix.ENXIO) {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	f = os.NewFile(uintptr(fd), full) // #nosec G115 -- a descriptor
+	var now unix.Stat_t
+	if err := unix.Fstat(fd, &now); err != nil {
+		_ = f.Close()
+		return nil, false, err
+	}
+	if idOf(&now) != idOf(st) || now.Uid != st.Uid || statType(&now) != statType(st) {
+		_ = f.Close()
+		return nil, false, nil
+	}
+	return f, true, nil
+}
+
+// collectProtected notes every file at or under the protected paths, so
+// a hard link to one elsewhere in the project stays closed too. A
+// protected path, or a folder on the way to one, that's a link is
+// refused: git would follow it.
+func (w *projectWalk) collectProtected(top *os.File) error {
+	for _, p := range protectedInProject {
+		if err := w.collectPath(top, p); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (w *projectWalk) collectPath(top *os.File, p string) error {
+	var opened []*os.File
+	defer func() {
+		for _, f := range opened {
+			_ = f.Close()
+		}
+	}()
+	dir, parts := top, strings.Split(p, "/")
+	for i, name := range parts {
+		var st unix.Stat_t
+		err := unix.Fstatat(fdOf(dir), name, &st, unix.AT_SYMLINK_NOFOLLOW)
+		if errors.Is(err, unix.ENOENT) || errors.Is(err, unix.ENOTDIR) {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("check %s: %w", p, err)
+		}
+		switch typ := statType(&st); {
+		case typ == unix.S_IFLNK:
+			return fmt.Errorf("%s in the project is a link; Portenv won't open the project to the team until it's a real file or folder", path.Join(parts[:i+1]...))
+		case i == len(parts)-1:
+			w.protected[idOf(&st)] = true
+			if typ != unix.S_IFDIR {
+				return nil
+			}
+		case typ != unix.S_IFDIR:
+			return nil // .git as a file (a worktree's): nothing to protect under it
+		}
+		f, ok, err := openEntry(dir, name, filepath.Join(dir.Name(), name), &st)
+		if err != nil {
+			return fmt.Errorf("check %s: %w", p, err)
+		}
+		if !ok {
+			return fmt.Errorf("%s changed while Portenv opened the project to the team; try again", p)
+		}
+		opened = append(opened, f)
+		dir = f
+	}
+	return w.collectUnder(dir)
+}
+
+func (w *projectWalk) collectUnder(dir *os.File) error {
+	names, err := dir.Readdirnames(-1)
+	if err != nil {
+		return err
+	}
+	for _, name := range names {
+		var st unix.Stat_t
+		if err := unix.Fstatat(fdOf(dir), name, &st, unix.AT_SYMLINK_NOFOLLOW); err != nil {
+			if errors.Is(err, unix.ENOENT) {
+				continue
+			}
+			return err
+		}
+		w.protected[idOf(&st)] = true
+		if statType(&st) != unix.S_IFDIR {
+			continue
+		}
+		f, ok, err := openEntry(dir, name, filepath.Join(dir.Name(), name), &st)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			continue
+		}
+		err = w.collectUnder(f)
+		_ = f.Close()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// walk changes what's in dir (rel in the project), then what's under it.
+func (w *projectWalk) walk(dir *os.File, rel string, protected bool) error {
+	names, err := dir.Readdirnames(-1)
+	if err != nil {
+		return fmt.Errorf("read %s: %w", rel, err)
+	}
+	for _, name := range names {
+		child := path.Join(rel, name)
+		var st unix.Stat_t
+		if err := unix.Fstatat(fdOf(dir), name, &st, unix.AT_SYMLINK_NOFOLLOW); err != nil {
+			if errors.Is(err, unix.ENOENT) {
+				continue // gone
+			}
+			return fmt.Errorf("check %s: %w", child, err)
+		}
+		typ := statType(&st)
+		if typ != unix.S_IFDIR && typ != unix.S_IFREG {
+			continue // links and special files are left as they are
+		}
+		isDir := typ == unix.S_IFDIR
+		p := protected || protectedPath(child) || w.protected[idOf(&st)]
+		if uid := w.ops.uidOf(child, &st); uid != w.ops.self {
+			if p {
+				return fmt.Errorf("%s in the project belongs to uid %d, not to you, so an agent could have changed it. Portenv won't open the project to the team until you check it and make it yours again", child, uid)
+			}
+			continue // an agent's, made in the team's folders: already the team's
+		}
+		f, ok, err := openEntry(dir, name, filepath.Join(dir.Name(), name), &st)
+		if err != nil {
+			if errors.Is(err, unix.EACCES) && !p {
+				continue // work's own file that work can't read: it stays work's
+			}
+			return fmt.Errorf("open %s: %w", child, err)
+		}
+		if !ok {
+			if p {
+				return fmt.Errorf("%s changed while Portenv opened the project to the team; try again", child)
+			}
+			continue // replaced mid-walk: the next team start sees what's there
+		}
+		err = w.change(f, child, isDir, p)
+		if err == nil && isDir {
+			err = w.walk(f, child, p)
+		}
+		_ = f.Close()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// change makes one file the team's, or, if it's protected, closes it to
+// the team's writes.
+func (w *projectWalk) change(f *os.File, rel string, dir, protected bool) error {
+	fi, err := f.Stat()
+	if err != nil {
+		return err
+	}
+	perm := fi.Mode().Perm()
+	if protected {
+		g, had, err := w.ops.clearACL(f, dir)
+		if err != nil {
+			return fmt.Errorf("close %s to the team: %w", rel, err)
+		}
+		if had {
+			perm = perm&^0o070 | g
+		}
+		return f.Chmod(perm &^ 0o022)
+	}
+	if err := w.ops.chown(f, TeamGID); err != nil {
+		return fmt.Errorf("give %s to the team: %w", rel, err)
+	}
+	if dir {
+		err = f.Chmod(perm | 0o070 | os.ModeSetgid)
+	} else {
+		err = f.Chmod(perm&^0o070 | (perm&0o700)>>3)
+	}
+	if err != nil {
+		return err
+	}
+	if err := w.ops.addACL(f, dir); err != nil {
+		return fmt.Errorf("give %s to group %s: %w", rel, TeamGroup, err)
+	}
+	return nil
 }
 
 func protectedPath(rel string) bool {

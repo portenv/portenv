@@ -317,7 +317,7 @@ driver-test:
 team-boundary:
 	cd tests/team-boundary && GOWORK=off PORTENV_TEST_IMAGE=$(IMAGE) PORTENV_TEAM_SETUP=$(or $(TEAM_SETUP),fixture) go test -count=1 -timeout 20m -v ./...
 
-## team-start: an agent team's first start on a fresh workspace (R-0296) against $(IMAGE): a real portenvd, team init, approve lead, the TEAM_START decision, start lead, whoami in its pane, its ask-owner in the decision list
+## team-start: an agent team's first start on a fresh workspace (R-0296) against $(IMAGE): a real portenvd, team init, approve lead, the TEAM_START decision, start lead, whoami in its pane, its ask-owner in the decision list; lead writes a file and runs git, then builder starts past them (CC-0494)
 team-start: build
 	cd tests/team-start && GOWORK=off PORTENV_TEST_IMAGE=$(IMAGE) go test -count=1 -timeout 15m -v ./...
 

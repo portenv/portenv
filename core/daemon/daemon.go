@@ -100,6 +100,9 @@ type Server struct {
 	alive   func(pid int) bool // whether a reporting app still runs
 	// engine asks the box engine whether it answers (tests set it).
 	engine func(ctx context.Context) error
+	// freeBytes is the space free to this user on dir's volume (tests
+	// set it).
+	freeBytes func(dir string) (uint64, error)
 }
 
 // openBox is a box this daemon opened: its session, sync engine and agent
@@ -186,7 +189,8 @@ func New(env *local.Env, log *slog.Logger) *Server {
 	bg, cancel := context.WithCancel(context.Background())
 	return &Server{env: env, log: log, open: map[string]*openBox{}, remote: map[string]*remoteBox{}, gen: map[string]uint64{},
 		now: time.Now, alive: processAlive, bgCtx: bg, bgCancel: cancel,
-		engine: func(ctx context.Context) error { return env.EngineAnswers(ctx) }}
+		engine:    func(ctx context.Context) error { return env.EngineAnswers(ctx) },
+		freeBytes: freeBytes}
 }
 
 // Serve listens on the socket in the Portenv directory (mode 0600 in a 0700

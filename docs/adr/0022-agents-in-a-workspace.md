@@ -1,6 +1,6 @@
 # 0022. Agents in a workspace: a team the owner approves, each agent its own user, one grant check for every way in
 
-Date: 2026-10-16 · Status: Accepted (the reviewer, R-0245), with R-0245's six additions, R-0246 and R-0247 in this text. Per-agent users are the owner's decision (13:19, R-0231; R-0235). Built from lane A's tmux findings (CC-0345), R-0226, R-0227 and R-0231 to R-0237.
+Date: 2026-10-16 · Status: Accepted (the reviewer, R-0245), with R-0245's six additions, R-0246 and R-0247 in this text. Per-agent users are the owner's decision (13:19, R-0231; R-0235). Built from lane A's tmux findings (CC-0345), R-0226, R-0227 and R-0231 to R-0237. Amended 2026-10-18 (the owner's security decision, R-0315): each coding agent works in its own clone and the owner's repository is never agent-writable; see "2a. Amended 2026-10-18 (R-0315)" below, which wins where it differs.
 
 ## Context
 
@@ -98,7 +98,8 @@ This closes every item of lane A's list:
 | --- | --- | --- |
 | `/home/<id>`, the agent's home | that agent; the owner through the app | 0700, the agent's |
 | `/home/team`, the team folder | every agent and the owner | `work:team`, 2770, default ACL `g:team:rwX` |
-| the project, `/home/work/<workspace>` | every agent and the owner | the shared group, below |
+| the project, `/home/work/<workspace>`, `.git` included | the owner writes; agents read | `work`'s; agents get `g:team:rX`, never write (section 2a) |
+| an agent's clone, `/home/<id>/<workspace>` | that agent writes; the lenses the owner approves read it (section 2a) | in the agent's 0700 home |
 | the rest of `/home/work` | the owner | `/home/work` 0711; dotfiles and logins 0700 |
 
 **Agents' homes are workspace state (R-0234).**
@@ -117,35 +118,96 @@ This closes every item of lane A's list:
 
 **The team folder, `/home/team`:** files every agent shares. init makes it, and it persists like the homes. It has the group `team`, setgid, and a default ACL, so files stay group-writable whatever the umask. The helper never runs anything from it.
 
-**How agents change the project (the coordinator's question 1). Chosen: a shared group with setgid directories.**
-- **Everyone works in the owner's checkout,** which is what a lead, builder and reviewer working on one tree expect.
-- **The project's group becomes `team`.** At team start the helper sets the group on the tree (`cap_chown`) and the setgid bit on every directory, so new files and folders stay in `team`.
-- **Group write comes from default ACLs** (`g:team:rwX`) on the tree, not from each tool's umask: a default ACL applies whatever umask an editor, a package manager or `git` uses. The agents' login environment also sets umask 002, for files made outside the project. If the filesystem refuses ACLs, the helper refuses to start the team, with a plain line; it never falls back to `chmod -R g+w`.
-- **git works as a shared repository:** the helper sets `core.sharedRepository = group` in the owner's `.git/config`, so objects, refs and the index stay group-writable.
-- **Never group-writable (owned by `work`, 0755 or 0644, no default ACL, checked at every team start):**
-  - `.git/hooks/` and `.git/config` (a hook, `core.hooksPath`, `core.fsmonitor` or a filter would be code the owner runs);
-  - the project's `.portenv/` (agent files, section 3).
-
-  An agent's git commands that write config (`git remote add`, `branch --set-upstream-to`) fail; the agent asks the owner.
+**How agents change the project (the coordinator's question 1). Chosen (amended 2026-10-18, R-0315): each coding agent works in its own clone; the owner's checkout and its `.git` are never agent-writable.** Section 2a has the decision and how it's done. What follows was the first design, and stays here so the change is clear:
+- ~~Everyone works in the owner's checkout, with the project's group `team`, setgid directories and default ACLs `g:team:rwX`, and `core.sharedRepository = group` in the owner's `.git/config`.~~ **Superseded:** a shared, writable `.git` lets agents influence what the owner's git runs. Protecting `.git/hooks/` and `.git/config` alone doesn't close that: git reads more than those two paths for the person who runs it, and the system `safe.directory` entries that let agents use `work`'s repository (and the worktrees under it) apply to `work` too.
+- **Still true:** the project's `.portenv/` (agent files, section 3) is `work`'s, and agents can't change it.
+- **Corrected (this line said agents' config writes fail, which was true only of `.git/config` itself):** agents don't write to the owner's repository at all. An agent's git commands, config writes included (`git remote add`, `branch --set-upstream-to`), work in its own clone and change nothing the owner's git reads.
 - **The owner's home:** `/home/work` becomes 0711 (agents can pass through, not list). The owner's dotfiles and logins (`~/.config`, `~/.claude`, `~/.ssh`) stay 0700. The helper refuses to start a team over a home whose modes would expose them, with a plain line.
-- **The residual risk, stated plainly:** an agent can change any project file (or file in `/home/team`) the owner later runs, such as a `Makefile`, a test or a `package.json` script. When the owner runs it, it runs as `work`, with sudo. That is the same trust as merging an agent's pull request without reading it, and the app says so in the decision the owner approves when a team first starts (`team_start`, R-0245), and again in the Team section's header ("Agents can change your project's files. Check their changes before you run them."). File ownership shows who made a new file; git shows every change.
+- **The residual risk, stated plainly:** an agent's work reaches the owner only as a branch the owner fetches (section 2a). Once the owner checks out or merges that branch and runs its `Makefile`, a test or a `package.json` script, it runs as `work`, with sudo. That is the same trust as merging an agent's pull request without reading it, and the app says so in the decision the owner approves when a team first starts (`team_start`, R-0245), and again in the Team section's header ("Agents work in their own copies. Check their branches before you run them."). Files in `/home/team` are shared too, and the same holds for any of them the owner runs. git shows every change on an agent's branch.
 
-**How it's done (`PrepareTeamProject`, before each agent start):**
+**How it's done (`PrepareTeamProject`, before each agent start; amended by section 2a):**
 - init (root) only checks: real folders, the project is `/home/work/<name>`, and the owner's private folders and logins aren't readable by others (else the team is refused with a line naming the one to fix).
-- The work on the tree runs as `work`, inside an `os.Root`, so a link an agent swaps in mid-walk reaches nothing `work` couldn't change: default ACLs, the group and setgid, the protected paths closed, `core.sharedRepository`, and `/home/work` 0711.
-- init adds the project as a system git `safe.directory`, so agents can use `work`'s repository.
+- The project, `.git` included, is `work`'s, readable by `team` and writable by no agent (section 2a's checks, at every team start).
+- ~~init adds the project as a system git `safe.directory`, so agents can use `work`'s repository.~~ **Removed (R-0315):** Portenv adds no system `safe.directory` entry, and removes the ones it added before (section 2a, migration).
 - It happens only when a team starts, never in a workspace without one. Stop Team doesn't revert it, and the team-start decision says so (R-0261).
 
 **Rejected: a bind mount of the project into each agent's home.** The uids still differ, so a plain bind mount changes no permission: the agent needs group write anyway. Making an agent's writes land as `work` needs an idmapped mount, which needs `CAP_SYS_ADMIN` in the box. The box doesn't have it, and this ADR won't add it. It would also make an agent's writes look like the owner's.
 
-**Considered, a later option: each agent in its own clone** (`git clone --shared` into its home, committing on `agent/<id>`, the owner fetching). It keeps agents out of the owner's files entirely, but changes how a team works (no shared tree, a fetch for every hand-off). It can come later as an agent-file option (`checkout: own`) on top of this design.
+**~~Considered, a later option~~ Adopted (R-0315): each agent in its own clone.** The first text offered it as a later agent-file option (`checkout: own`). It is now how every coding agent works, made as a full local clone rather than `git clone --shared` (section 2a says why).
 
-**The owner's secrets (question 2):** an agent doesn't have `work`'s home, so it has none of the owner's logins: Claude Code's sign-in, git credentials, SSH keys, cloud tokens. It also has no sudo: a system package it needs is a package decision for the owner (section 6), which Portenv installs on Approve. User-level installs need no decision: `npm`, `pip`, `uv` and the like, in the project or in the agent's own home. That's the point, and it has a cost:
+**The owner's secrets (question 2):** an agent doesn't have `work`'s home, so it has none of the owner's logins: Claude Code's sign-in, git credentials, SSH keys, cloud tokens. It also has no sudo: a system package it needs is a package decision for the owner (section 6), which Portenv installs on Approve. User-level installs need no decision: `npm`, `pip`, `uv` and the like, in the agent's clone or elsewhere in its own home. That's the point, and it has a cost:
 - **Each agent signs in once,** in its own tab (Claude Code prints its sign-in link there). The login stays in that agent's home and travels with the workspace like everything else in `/home`.
 - **Or the owner shares one login, explicitly, per agent:** an agent file may ask `share_login: [claude]`. `portenvd` asks the owner once ("Let builder use your Claude Code sign-in?"), and the helper copies only that tool's credential file into the agent's home, 0600. The prompt says plainly that a shared login can't be taken back by removing the agent: the owner signs out of that login to end it.
-- **git pushes:** agents don't get the owner's git credentials. They commit in the shared checkout; a push to the remote is the owner's (or the lead's, if the owner grants `push` and shares a login for it).
+- **git pushes:** agents don't get the owner's git credentials. They commit on `agent/<id>` in their own clone (section 2a); a push to the remote is the owner's, after fetching the branch (or the lead's, from its own clone, if the owner grants `push` and shares a login for it).
 
 **Identity (question 3):** see section 5. Every way in, local or remote, lands on the same per-agent user.
+
+### 2a. Amended 2026-10-18 (R-0315): each coding agent works in its own clone
+
+**The owner's security decision (2026-10-18, relayed in R-0315).** A shared, writable `.git` lets agents influence what the owner's git runs. File modes on a few paths in `.git` don't close that, and a system `safe.directory` that lets agents use `work`'s repository widens it, because `work`'s git reads the same system config. So the boundary moves: agents never write the owner's repository, and their work comes back as branches. This supersedes R-0280's worktrees for agents under the owner's project, and the interim system `safe.directory` entries for them (PR #197) go away.
+
+**1. `work`'s repository is never agent-writable.**
+- The project folder, its `.git`, and everything git reads for `work` there stay `work`'s alone: owned by `work`, with no group or ACL write for `team` or any agent, and no default ACL that would give one.
+- Agents may read the project (`g:team:rX` on the tree, which they need to clone and to fetch the owner's new commits). Read is all.
+- No `core.sharedRepository`, and no system (`/etc/gitconfig`) `safe.directory` entry from Portenv, for the project or anything under it. git's own ownership check then refuses, for `work`, any repository under the project that an agent made.
+- **Checked at every team start, before any agent process runs:** the helper walks the project as `work`, through descriptors, never following a link. Anything under `.git` that isn't `work`'s, or is writable by another uid, stops the team's start with a plain line naming it; the migration below is the only thing that fixes it for the owner.
+
+**2. Each coding agent has its own clone.**
+- **Where: `/home/<id>/<workspace>`,** in the agent's own 0700 home, owned by the agent. Chosen over a per-agent folder inside the project because nothing agent-writable then sits in the owner's tree, where the owner's git, editors and build tools walk; and the clone travels, saves and is measured with the rest of the agent's home (section 2's quota).
+- **How: a full local clone, made by the helper as the agent's user** (a forked process with the agent's uid, groups, no capabilities and `no_new_privs`, as section 1's user switch), at the agent's first start:
+  ```sh
+  git -c safe.directory=/home/work/<workspace> clone --no-hardlinks --origin owner \
+      /home/work/<workspace> /home/<id>/<workspace>
+  git -C /home/<id>/<workspace> switch -c agent/<id>   # from the owner's current branch, or the existing agent/<id> if the owner's repository has one
+  ```
+  The `safe.directory` is given for that command only, and written once into the agent's own `~/.gitconfig` for its later `git fetch owner`; only that agent's git reads either. Portenv never writes one into the system config, which `work`'s git also reads.
+- **Not `git clone --shared`,** which the first text suggested: a shared clone borrows the owner's object store, so the owner's `git gc` can remove objects the agent's branch still needs, and the clone stays tied to reading the owner's `.git` for its whole life. A full clone costs disk (it counts toward the agent's home limit, section 7), and stands alone. If the project is larger than the agent's free space, the start is refused with a plain line ("builder's files can't hold a copy of the project (3.1 GB; its limit is 2 GB). Raise its limit in Settings.").
+- **Its branch is `agent/<id>`.** The clone's remote `owner` is the owner's project, readable and never writable, so `git fetch owner` brings the owner's new commits and a push to it fails. Agents have no credentials for the project's real remote (section 2), so nothing else receives their pushes either.
+- **What a clone doesn't have:** the owner's untracked files (dependencies, build output, local settings such as `.env`). The agent installs its own dependencies in its clone. Files the owner wants it to have go through `home_seed` or the Agent files view (section 2).
+- **Agent file:** `checkout: own` (the default, and the only choice for an agent that writes code) or `checkout: none` (a lens, point 4, or an agent that doesn't need one). A `checkout: none` agent can't run `portenv share`.
+
+**3. Hand-back is by branch, and `work`'s git never opens an agent's repository.**
+- An agent says its work is ready with `portenv share [agent/<id>]` (section 4). The owner chooses Fetch in the app (or Portenv fetches on `share`, open question), and the branch appears in the owner's repository as `refs/remotes/agents/<id>`. The owner looks at it, merges it, or deletes it, with ordinary git.
+- **The fetch, exactly.** It has two halves, each run by the helper in its own forked process, with no terminal (stdin `/dev/null`), a fixed environment and no shell:
+  1. **As the agent's user, in the agent's clone:** `git -C /home/<id>/<workspace> bundle create - refs/heads/agent/<id> --not --remotes=owner`, streamed to the helper (without the `--not` part if the owner's repository lacks a prerequisite), at most the agent's home limit in size. Whatever the agent's clone's config does here, it does as the agent.
+  2. **As `work`, in the owner's project:** the helper writes the bundle to `/home/work/.portenv/team/handoff/<id>.bundle` (`work`'s, 0600, in a 0700 folder), then runs
+     ```sh
+     git -C /home/work/<workspace> \
+         -c protocol.allow=never -c protocol.file.allow=always \
+         -c core.hooksPath=/dev/null -c core.fsmonitor=false \
+         -c transfer.fsckObjects=true -c fetch.fsckObjects=true \
+         fetch --no-tags --no-recurse-submodules --no-write-fetch-head \
+         /home/work/.portenv/team/handoff/<id>.bundle \
+         +refs/heads/agent/<id>:refs/remotes/agents/<id>
+     ```
+     and deletes the bundle. A bundle is data: refs and a pack, checked object by object. `work`'s git reads only its own repository's config and that file, never the agent's config, hooks or metadata; the overrides make the one command allow only a local file, run no hook or monitor, and refuse a malformed object.
+- **Rejected: fetching straight from the agent's clone** (`git fetch /home/<id>/<workspace>` with hooks and config overridden on the command line, and `file://` allowed only for that path). The process that reads the agent's repository still runs as `work` and still parses the agent's config; command-line overrides cover only the settings someone thought of. git's ownership check refuses that repository for `work` by default, and Portenv never adds the `safe.directory` that would let it through.
+- **The owner never needs to run git inside an agent's clone,** and Portenv never makes that possible: no system `safe.directory` for agents' homes, and `work`'s git refuses them by ownership. Reading an agent's files (the Agent files view, or `sudo` from a terminal) is reading, not running its config.
+
+**4. Read-only lenses (reviewer, design, trust-safety) read clones and never write.**
+- A lens's agent file names the clones it reads: `grant.read_clones: [builder, lead]` (only team agents with `checkout: own`; an override can only narrow it). The owner approves it with the rest of the file.
+- **The grant:** the helper gives the lens a named-user ACL on the writer's clone, `u:<lens>:rX` with the matching default ACL, so new files stay readable to it, and `u:<lens>:x` on the writer's home, so it can pass through to the clone and list nothing else there. Never `w`, and never through the group `team`, which every agent is in. It's reapplied at every team start and taken away when the grant goes.
+- **A lens reads files; it doesn't run git in another agent's clone.** git refuses it there by ownership, Portenv never adds a `safe.directory` for it, and `portenv guide` tells lenses not to add one themselves: that would let the writer's config run as the lens. To read a writer's history, a lens has its own clone (`checkout: own` with nothing to share) and fetches the writer's branch with the same two-half fetch as point 3, into `refs/remotes/agents/<id>` (open question: whether lenses need this in the first build).
+
+**5. The gate (`make team-start`, for the code PR; each step with a mutation that makes it fail, lane E's rule):**
+- `work` makes a commit in the project; builder starts and has `/home/builder/<workspace>` on `agent/builder`, its own, 0700 home, with remote `owner`.
+- Builder can't create, change or remove anything under the project's `.git`, or anything in the project's tree.
+- **Builder tampers with its own clone's config:** it sets, in its clone, settings that would run a command (writing a marker file) if git honoured them for whoever runs git there. Builder commits on `agent/builder` and runs `portenv share`.
+- `work` then runs `git status`, `git log`, `git diff` and a commit in the project, and the owner's Fetch brings `refs/remotes/agents/builder` with builder's commit. **The marker never appears, and no process of `work`'s uid ran one of builder's commands.**
+- `work`'s git run inside builder's clone is refused by ownership, and the system git config has no `safe.directory` from Portenv.
+- A lens with `read_clones: [builder]` reads builder's files, can't write any, can't list builder's home, and its git in builder's clone is refused; a lens without the grant can't read them.
+- The migration below, from a workspace set up the old way, ends with every check above passing and nothing of the agents' lost.
+
+**6. Migration: a workspace whose team used the shared project.** It runs at the next team start, before any agent process runs; it's a data-loss path, so its tests come first.
+- **Stop first:** the helper checks that no process of an agent's uid is running (Stop kills them all, section 8), so nothing an agent runs can race what follows.
+- **Record what git reads for `work`, before anything changes:**
+  - every config file, hook and worktree registration under `.git` that isn't `work`'s, or that another uid could write;
+  - every repository or worktree under the project that an agent made or worked in: a `.git` folder or file that isn't `work`'s, and the worktrees made for agents under R-0280, whoever owns them.
+- **Each agent gets its clone,** made as in point 2 from the owner's repository, on its existing branch if it had one (its commits are already in the owner's repository). Its old worktree's uncommitted changes are copied, as the agent, into the new clone (not committed). Nothing is deleted.
+- **`.git` back to `work` alone.** init (root, which alone can change an owner) walks `.git` through descriptors, never following a link: everything becomes `work`'s, the `team` ACL entries and default ACLs go, and the modes lose group write. `core.sharedRepository` comes out of the owner's config, and Portenv's own `safe.directory` entries come out of the system config. A link inside `.git` that `work` didn't make stops the migration with a line naming it, for the owner to look at.
+- **The rest of the tree back to read-only for agents:** the same walk makes the project's agent-owned files `work`'s, with ACLs `g:team:rX`, except the repositories and worktrees recorded above, which it leaves as they are (git refuses them for `work` by ownership until the owner decides).
+- **The owner decides on the record before the team starts again:** the team-start decision lists it ("Agents could have changed these: …"). For each entry the owner keeps it (it becomes `work`'s, and the owner takes its content as their own) or removes it; an old worktree's removal shows its size and says its uncommitted changes are already in the agent's clone. Nothing is deleted without that answer, and the team doesn't start until the owner gives it.
+- The team-start decision says once that the team now works in its own copies, and that agents' changes come back as branches.
 
 ### 3. Agent files
 
@@ -165,12 +227,14 @@ via: mcp                    # only with runner: remote — ssh | mcp | web
 avatar: hammer              # an SF Symbol name, or a colour from GUIDELINES §11's agent colours
 share_login: []             # tools whose sign-in the owner may share (section 2); asked, never assumed
 home_seed: [docs/style-guide.md]   # repository paths copied into its home on first start (section 2)
+checkout: own               # own | none — its own clone on agent/<id> (section 2a); default own
 grant:
   panes: ask                # ask | allow | never — may it open panes and tabs
   max_panes: 4              # 1–8
   message: [lead, reviewer] # agent ids it may message; the owner is always allowed
   ask_owner: true           # may it ask the owner (portenv ask-owner)
   packages: ask             # ask | never — may it request system packages (section 6); default ask
+  read_clones: []           # agent ids whose clones it may read, never write (section 2a, lenses)
 ---
 You build what the lead asks for. …
 ```
@@ -178,7 +242,7 @@ You build what the lead asks for. …
 **Validation, by `portenvd`, before anything starts:**
 - only the keys above, with the types and ranges shown; the file at most 64 KB, its instructions at most 32 KB, UTF-8 without control or bidi characters (ADR 0020's rule) in `id`, `name` and `role`;
 - a local `runner`'s first word must be on the agent user's `PATH` in the box (the helper checks; `portenvd` never runs it to find out);
-- `message` names only agents in the team; `max_panes` within the owner's limit (section 7);
+- `message` and `read_clones` name only agents in the team (`read_clones` only ones with `checkout: own`); `max_panes` within the owner's limit (section 7);
 - `id` isn't a reserved name (section 1); `home_seed` paths are inside the project (section 2);
 - each problem is one plain line the app shows by the agent's row ("builder: runner `claude` isn't installed in this workspace. Install it, then choose Start.").
 
@@ -206,7 +270,7 @@ You build what the lead asks for. …
 | `portenv ask-owner "<text>"` | `ask_owner` | a decision for the owner (section 6), which the agent waits for or polls |
 | `portenv request-package <name> [--reason "<text>"]` | `packages` | a package decision for the owner (section 6); the result comes to the agent's inbox |
 | `portenv inbox [--wait] [--since <cursor>]` | always, own messages only | JSON lines |
-| `portenv share [<branch>]` | always | a message to the owner and the lead that its work is ready (a branch, or changes in the shared checkout) |
+| `portenv share [<branch>]` | `checkout: own` | a message to the owner and the lead that its branch (`agent/<id>` in its own clone) is ready for the owner to fetch (section 2a) |
 | `portenv propose-agent-change <file>` | always | a decision for the owner, with the diff |
 
 - **Never:** keys into a pane the agent didn't open; anything in the owner's panes; another workspace; anything about keys, saves, Move To or the workspace's lifecycle.
@@ -322,7 +386,7 @@ Past a limit, the call is refused with a plain line ("builder has 4 panes open, 
 
 ### 8. `portenvd` runs the team
 
-- **Start:** the owner chooses Start on an agent (or Start Team). `portenvd` checks the file is approved and valid, then asks the helper to have init make the agent's user if it's new (section 1), seed its home on first start, check the project's and homes' modes (section 2), and start the agent's tmux server and control client. The helper runs the `runner` argv in the agent's first tab, as its user, with `PORTENV_AGENT=<id>`, `PORTENV_SOCKET=/run/portenv-team/<id>/portenv.sock` and `AGENTS.md` in its home.
+- **Start:** the owner chooses Start on an agent (or Start Team). `portenvd` checks the file is approved and valid, then asks the helper to have init make the agent's user if it's new (section 1), seed its home and make its clone on first start (section 2a), check the project's and homes' modes (sections 2 and 2a), and start the agent's tmux server and control client. The helper runs the `runner` argv in the agent's first tab, as its user, with `PORTENV_AGENT=<id>`, `PORTENV_SOCKET=/run/portenv-team/<id>/portenv.sock` and `AGENTS.md` in its home.
 - **The team's first start** waits for the owner's `team_start` decision. The decision names the agents the owner chose Start on (`start_agent_ids`, added as they click), and on Approve `portenvd` starts them itself, from the board, not from the app's memory, so it works after the app or `portenvd` restarts (R-0296). Each shows `starting` at once; one that can't start goes back to `stopped`, with the reason ("Couldn't start: …") as its row's line and under Start until a start works, and as a board notice in its column (the notice's `about` names the agent, R-0302).
 - **Stop:** the helper ends the agent's tmux server and every process of its uid. Stop is immediate and needs no agent's agreement.
 - **Restart policy for the tester build:** none. An agent that exits shows Stopped, with its last line; the owner starts it again.
@@ -507,7 +571,7 @@ One lane owns each file; another lane that needs a change asks the owner of the 
 **Lane E's boundary tests (its offer, taken):** each rule is one row, run as an agent's user, and each row has a mutation that must make it fail. The rows:
 - reaching the owner's or another agent's tmux;
 - the homes (another agent's, the owner's dotfiles);
-- `/home/team`'s setgid and group-write rule, and the project's never-group-writable paths;
+- `/home/team`'s setgid and group-write rule; the project and its `.git` writable by no agent; another agent's clone readable only with `read_clones`, never writable (section 2a);
 - `portenvd`'s socket, the SSH-agent socket and the agent channel's sockets;
 - `sudo` and set-uid binaries;
 - installing a system package without an approved decision (`apt-get`, `dpkg`, writing under `/etc/apt` or `/var/lib/dpkg`);
@@ -521,10 +585,10 @@ They gate the Saturday preview: a red row means the preview doesn't ship.
 
 - The tester build gets a team that the grants actually hold: each agent its own user, its own tmux, no sudo, and only `portenvd`'s checked calls can touch what the owner sees.
 - **Agents lose the owner's logins.** Each signs in, or the owner shares one login per agent, with a warning that sharing can't be undone by removing the agent. Testers will notice the extra sign-in; first-run copy for the Team should say why.
-- **Agents share the owner's checkout.** That's what a team on one tree expects, and it means the owner runs files agents changed (section 2's residual risk, which the app states once). Own clones per agent stay a later option.
+- ~~**Agents share the owner's checkout.**~~ **Amended (R-0315): each agent works in its own clone,** and its work comes back as a branch the owner fetches (section 2a). A team no longer shares one tree: a hand-off between agents is a branch or a `portenv handoff`, and the owner runs agents' changes only after fetching them (section 2's residual risk, which the app states once).
 - **New code, all after approval:**
   - **init:** making and removing agent users, and writing them again at every box start.
-  - **The helper:** the user switch, one tmux server and control client per agent, per-agent sockets with `SO_PEERCRED`, the board writer, home seeding, the quota and home file I/O, and the shared-group and home-mode checks.
+  - **The helper:** the user switch, one tmux server and control client per agent, per-agent sockets with `SO_PEERCRED`, the board writer, home seeding, the quota and home file I/O, and the clones, the safe fetch, the read grants for lenses, the project and home mode checks, and the migration (section 2a).
   - **`portenvd`:** agent-file validation and the content pin, the grant checks, the board and decisions, `TeamCalls`, the RPCs above, and `portenv mcp`.
   - **The app:** the Team section (lane D's mockups), Approve and Decline, approving a file with its diff, the Agent files view, and (after the owner's run) issuing and revoking MCP tokens.
   - **Templates and docs:** the Orchestrate team template and the owner's run sheet (section 11).
@@ -533,8 +597,10 @@ They gate the Saturday preview: a red row means the preview doesn't ship.
   - a request naming another agent is attributed to its socket's uid;
   - `send-keys` into a pane the agent didn't open is refused;
   - a changed agent file doesn't start until approved, with the diff;
-  - an agent's uid can write the project (new files stay in `team`, whatever its umask) but can't write `.git/hooks`, `.git/config` or the project's `.portenv/`, or read the owner's dotfiles;
-  - the team won't start over a project or home whose modes are wrong, or a filesystem without ACLs;
+  - ~~an agent's uid can write the project (new files stay in `team`, whatever its umask) but can't write `.git/hooks`, `.git/config` or the project's `.portenv/`~~ (amended, R-0315) an agent's uid can read the project but can't write anything in it or its `.git`, and can't read the owner's dotfiles;
+  - section 2a's gate: an agent that tampers with its own clone's config makes `work`'s git in the project run nothing, and its branch still arrives by the safe fetch;
+  - the migration (section 2a) loses no agent commit and no uncommitted file, and deletes nothing without the owner's decision;
+  - the team won't start over a project or home whose modes are wrong, a `.git` with anything not `work`'s, or a filesystem without ACLs;
   - an agent's process can't gain a capability or use `sudo` (`no_new_privs`, no ambient set);
   - a removed agent's home stays until the owner deletes it, and its uid stays taken; init refuses a reserved or malformed id even when the helper sends one;
   - `users.json` brings every agent back with the same uid after a restore;
@@ -545,12 +611,13 @@ They gate the Saturday preview: a red row means the preview doesn't ship.
   - a secret prompt's text never reaches the board;
   - `request-package` refuses options, URLs, paths and `.deb` files; init installs exactly the approved set or nothing, refuses a simulation that removes or downgrades, and the package comes back from `apt-packages.txt` after a restore;
   - a revoked MCP token is refused at once;
-  - the team's users, homes, `/home/team` and the project's group and ACLs survive a save, a Move To and a restore.
+  - the team's users, homes (clones included), `/home/team`, the project's read-only ACLs and the lenses' read grants survive a save, a Move To and a restore.
 - **PLAN.md** gains the team in Phase 1's tester-build scope (R-0226) when this is approved. 2.4's stand-in mode stays as designed. Lanes (4.1) now arrive early, in this team form, for team agents.
 - **Open questions** for PLAN when approved:
   - whether stand-in agents (the owner's access, ADR 0006 B) still make sense once team agents exist, or become a team agent with wider grants;
   - per-agent CPU and memory limits (cgroups need the engine's delegation, which the box lacks today; see the rootless spike, R-0223);
-  - whether restic keeps the project's ACLs and setgid bits on restore, or the helper reapplies them at team start (the tests above decide);
-  - when to offer `checkout: own` (per-agent clones);
+  - whether restic keeps `/home/team`'s and the clones' ACLs and setgid bits on restore, or the helper reapplies them at team start (the tests above decide);
+  - ~~when to offer `checkout: own` (per-agent clones)~~ answered by R-0315: always, for coding agents (section 2a);
+  - R-0315's open questions, in PLAN: how the owner sees an agent's branch in the app, and whether Portenv fetches on `share`; whether lenses need their own clone to read a writer's history in the first build; whether agents keep read access to the owner's untracked files (`.env`) in the project; clone size against an agent's home limit;
   - kernel quotas for agents' homes (today the limit is measured, not enforced);
   - Google Drive connectors for agents' files (after the tester build).

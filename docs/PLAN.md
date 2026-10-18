@@ -164,7 +164,7 @@ A box is a toolbox image plus a home. The image is rebuilt or pulled on each mac
     apt-packages.txt         system packages reinstalled on every start
     excludes                 restic exclude patterns, user-editable
 /home/<agent>/               one lane per connected agent (uid 2000+)
-  <project>/                 a git worktree on branch agent/<agent>
+  <project>/                 its own clone, on branch agent/<agent> (ADR 0022)
 ```
 
 **Users and privileges**
@@ -344,7 +344,7 @@ The user owns every box; agents are guests the user invites (ADR 0006). Any agen
 | Mode | The agent | Access |
 | --- | --- | --- |
 | Continue my work (stand-in) | Acts as the user, in the user's sessions: drives existing tabs, starts Claude Code, Codex or anything else in the same codebase, and relays questions back to the user | The user's access to that box. The app says so plainly when the agent is connected |
-| Lane | Has its own user (`/home/<agent>`), tmux session, git worktree on branch `agent/<name>`, and its own limits | No access to the user's files or sessions. For agents the user wants kept separate |
+| Lane | Has its own user (`/home/<agent>`), tmux session, its own clone of the project on branch `agent/<name>` (ADR 0022, R-0315), and its own limits | No access to the user's files or sessions. For agents the user wants kept separate |
 
 In both modes every session is recorded and tagged with the agent's name, there is one writer per terminal with explicit Take Over, and Revoke ends access and live sessions immediately.
 
@@ -360,7 +360,7 @@ Approvals are opt-in, per action (for example `git push`, deleting, production s
 
 **Lanes**
 
-- One Linux user per agent (`/home/<agent>`), its own tmux session, and its own git worktree on branch `agent/<agent>`. A read-only view of the main checkout is mounted at `/home/<agent>/main`.
+- One Linux user per agent (`/home/<agent>`), its own tmux session, and its own clone of the project on branch `agent/<agent>` in its home. It reads the main checkout and never writes it, or its `.git`; its work comes back as a branch the owner fetches, without `work`'s git ever opening the agent's repository (ADR 0022 section 2a, the owner's decision of 2026-10-18, R-0315).
 - An agent's SSH session lands in its tmux session, so dropped connections resume. One writer per terminal; others attach read-only; Take Over is explicit.
 - Per-lane limits: CPU, memory, process count, network egress rules (production hosts blocked unless granted).
 - Agent keystrokes count as activity, so idle sleep does not cut off a working agent. A maximum session length still applies.
@@ -774,7 +774,7 @@ portenv/
     sync/                 restic saves and restores, leases, invariants
     keys/                 key handling, Keychain and server key stores
     relay/                port relay, tunnels (yamux over WebSocket)
-    lanes/                agent users, worktrees, approvals, audit
+    lanes/                agent users, clones, approvals, audit
   shims/
     containerization/     Swift process implementing the apple driver
   images/
@@ -1406,6 +1406,7 @@ Slow uplinks are a real user condition, not an edge case (the Phase 0 gate ran o
 - **Keys:** the Developer ID certificate and the Sparkle EdDSA private key live only in CI secrets and the owner's Keychain, never in the repository.
 - **Design testers need Docker Desktop** (the owner, 2026-10-14 19:37, R-0211): it runs their workspaces on the Mac. Apple's Containerization engine (ADR 0004) comes later. First run checks that Docker Desktop is installed and ready before "Make your first workspace", waits while it starts ("Docker Desktop is starting…"), and says what to do when it isn't there.
 - **No Docker inside a workspace yet** (the owner, 2026-10-16 08:30, R-0223): the workspace image ships no container engine, and nothing is mounted from the Mac's engine (its socket is root on the Mac: never). A tester may install an engine in a workspace, but it won't start today: the workspace helper refuses the privileges a nested engine asks for. Testers are told "Docker isn't available inside a workspace yet. Use Docker Desktop on your Mac for containers." (`docs/testers.md`). Whether a self-installed rootless engine can run is a spike (lane C), and any change to the helper or the box profile it suggests is the owner's security decision.
+- **Agents in a workspace work in their own clones** (ADR 0022, amended by the owner's security decision of 2026-10-18, R-0315): each coding agent in a team has its own Unix user and a full clone of the project in its home, on branch `agent/<id>`. The owner's checkout and its `.git` are never agent-writable, Portenv adds no system git `safe.directory` (the interim entries from PR #197 go away), and an agent's branch comes back by a fetch that never opens the agent's repository as `work`. Read-only lenses get a read grant on a writer's clone, never write. A workspace whose team used the shared project is moved over at its next team start: `.git` back to `work` alone, a clone per agent with its branch and uncommitted files, and nothing deleted without the owner's decision. **The code PR's gate:** the team-start step in which an agent tampers with its own clone's config and `work`'s git in the project runs nothing (ADR 0022 section 2a, point 5).
 - **An owner preview uses the image CI published for its commit** (found in the owner's demo, 2026-10-18, R-0302): a dev preview (`gmake app LANE=Z`) can be current while its workspace runs an old helper, because `portenv-agent` comes from the toolbox image, the Docker driver pulls only when the tag is missing, and a new workspace pins whatever `:main` the Mac has. Before a preview, check that `docker buildx imagetools inspect ghcr.io/portenv/toolbox-node:sha-<12>` (the commit's first 12 characters) shows the same digest as `:main`, `docker pull` it, and test in a new workspace: existing ones keep their pinned image.
 - **Design-tester builds are signed and notarized on the owner's Mac, not in CI** (decided by the reviewer, on the owner's delegation, R-0089, 2026-10-11). `gmake release-local` (`scripts/release-local.sh`):
   - builds the release app with `gmake app` (no lane), and refuses it unless its third-party notices cover every Go module in its helpers and every Swift pin;
@@ -1564,7 +1565,7 @@ Milestones: 3.1 accounts (Apple, GitHub, email) · 3.2 device enrollment and wra
 
 ### Phase 4: Agent access
 
-Milestones: 4.1 lanes (users, tmux, worktrees, limits) everywhere a box runs, and stand-in mode on local and cloud boxes · 4.2 opt-in approval helper (push, delete, secrets, protected scripts, sudo in a lane) · 4.3 secrets vault · 4.4 full command audit (auditd or eBPF) on top of 2.4's session recording · 4.5 remaining doors, only if usage shows the need: GitHub bridge, chat or email bridges, A2A (ADR 0006) · 4.6 iPhone companion for approvals.
+Milestones: 4.1 lanes (users, tmux, clones, limits) everywhere a box runs, and stand-in mode on local and cloud boxes · 4.2 opt-in approval helper (push, delete, secrets, protected scripts, sudo in a lane) · 4.3 secrets vault · 4.4 full command audit (auditd or eBPF) on top of 2.4's session recording · 4.5 remaining doors, only if usage shows the need: GitHub bridge, chat or email bridges, A2A (ADR 0006) · 4.6 iPhone companion for approvals.
 
 - [ ] An agent in a third-party sandbox connects with a device code and works in its lane
 - [ ] A lane agent cannot read the user's home
@@ -1626,6 +1627,10 @@ These need an owner decision; Claude Code should add new ones here instead of gu
 - [ ] Approval timeout default (30 minutes assumed) and what happens when it expires.
 - [ ] A stale toolbox image (R-0302): the Docker driver pulls only when the tag is missing locally, so a Mac with an old `:main` silently creates workspaces with an old helper. Should the driver compare the local `:main` digest with the registry's before a create, or should the app build pin the image digest CI published for its commit?
 - [ ] machine-id race (R-0299): `core/local` writes `machine-id` with a plain `os.WriteFile`, so two processes starting together on a fresh Mac can read it empty ("sync: invalid machine ID"). The fix is a temporary file and a rename; a small fix after the 2026-10-18 demo.
+- [ ] Agents' clones (ADR 0022 section 2a, R-0315): how the owner sees an agent's branch in the app. A Fetch button on the agent's row, a fetch Portenv makes on every `portenv share`, or both; and whether the app shows the branch's diff itself or leaves it to the owner's git tools.
+- [ ] Agents' clones (R-0315): do read-only lenses (reviewer, design, trust-safety) need their own clone in the first build, to read a writer's history with the safe fetch, or is reading the writer's files through `read_clones` enough for now?
+- [ ] Agents' clones (R-0315): agents keep read access to the owner's checkout, which they need to clone and fetch from it, so they can still read untracked files there (`.env`, local settings). Keep that, or seed clones from a bundle `work` makes, so agents need no read access to the project at all?
+- [ ] Agents' clones (R-0315): a full clone counts toward the agent's home limit (2 GB by default). Raise the default for agents with `checkout: own`, give clones their own allowance, or keep one limit and let the start's plain line ask the owner to raise it?
 - [ ] Anthropic's terms for agents driving Claude Code with a subscription login versus a Console API key.
 - [ ] Open-source boundary in detail: this repository is Apache-2.0 and `portenv/cloud` is private (decided), but confirm before going public whether the Mac app, the File Provider and the iPhone companion stay in the public repository or move to a private one.
 - [ ] Phase 3 control-plane milestones now live in `portenv/cloud`: how its CI pins and tests against `proto/gen/go` versions from this repository (tags, or a pseudo-version per merge).

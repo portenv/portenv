@@ -521,12 +521,131 @@ func (e *teamEngine) inboxWait(ctx context.Context, name, me, since, id string) 
 
 // answer is the owner's Approve or Decline, from the app only.
 func (e *teamEngine) answer(ctx context.Context, name, decisionID string, approve bool, note string) (*typesv1.Decision, error) {
+	return e.answerWith(ctx, name, decisionID, approve, note, nil)
+}
+
+// answerWith is answer with the items of a move's team_start decision the
+// owner removes (ADR 0022 §2a point 6).
+func (e *teamEngine) answerWith(ctx context.Context, name, decisionID string, approve bool, note string, remove []string) (*typesv1.Decision, error) {
 	b, err := e.lockBox(ctx, name)
 	if err != nil {
 		return nil, err
 	}
 	defer b.mu.Unlock()
+	if d := b.decisions[decisionID]; d != nil && len(d.GetMigrationItems()) > 0 && d.GetState() == typesv1.DecisionState_DECISION_STATE_PENDING && approve {
+		if err := e.resolveMigrationLocked(ctx, name, b, d, remove); err != nil {
+			return nil, err
+		}
+	} else if len(remove) > 0 {
+		return nil, errors.New("only Approve on the move's team-start decision removes items")
+	}
 	return e.answerLocked(ctx, name, b, decisionID, approve, note)
+}
+
+// askMigrationLocked puts the move's record in a team_start decision
+// naming the agent, or adds the agent to the one already waiting.
+func (e *teamEngine) askMigrationLocked(ctx context.Context, name string, b *teamBox, agentID string, items []*typesv1.MigrationItem) error {
+	for _, d := range b.pendingLocked(boardFrom) {
+		if d.GetKind() != typesv1.DecisionKind_DECISION_KIND_TEAM_START || len(d.GetMigrationItems()) == 0 {
+			continue
+		}
+		if slices.Contains(d.GetStartAgentIds(), agentID) {
+			return nil
+		}
+		x := proto.CloneOf(d)
+		x.StartAgentIds = append(x.StartAgentIds, agentID)
+		return e.appendLocked(ctx, name, b, &agentv1.AppendBoardRequest{Line: &agentv1.AppendBoardRequest_Decision{Decision: x}})
+	}
+	r := e.decideLocked(ctx, name, b, boardFrom, typesv1.DecisionKind_DECISION_KIND_TEAM_START,
+		"Your agents now work in their own copies. Keep or remove what they could have changed?", migrationDetail(items), nil, "", agentID)
+	if !r.GetOk() {
+		return errors.New(r.GetLine())
+	}
+	x := proto.CloneOf(r.GetDecision())
+	x.MigrationItems = items
+	return e.appendLocked(ctx, name, b, &agentv1.AppendBoardRequest{Line: &agentv1.AppendBoardRequest_Decision{Decision: x}})
+}
+
+// migrationDetail is the move's decision text: what changed, and each
+// item, at most 32 KB.
+func migrationDetail(items []*typesv1.MigrationItem) string {
+	var s strings.Builder
+	s.WriteString("Your team used to work in your project. Each agent now works in its own copy of it, on its own branch, and its changes come back as branches you fetch. ")
+	s.WriteString("Your project's git repository is yours alone again: .git is yours, and Portenv took out core.sharedRepository and its own safe.directory entries. ")
+	s.WriteString("Agents could have changed these. Approve keeps each one, and it becomes yours, with its content taken as your own, unless you choose Remove for it. ")
+	s.WriteString("An old worktree's or an agent's uncommitted files are already in that agent's copy. Nothing is deleted until you answer, and the team doesn't start until you do.\n")
+	for _, i := range items {
+		line := "- " + i.GetPath() + " (" + i.GetKind()
+		if i.GetAgent() != "" {
+			line += ", " + i.GetAgent()
+		}
+		if i.GetSize() > 0 {
+			line += ", " + humanSize(i.GetSize())
+		}
+		line += ")"
+		if i.GetNote() != "" {
+			line += ": " + i.GetNote()
+		}
+		if s.Len()+len(line)+1 > maxDecisionDetail-64 {
+			s.WriteString("- and more, listed with this decision\n")
+			break
+		}
+		s.WriteString(line + "\n")
+	}
+	s.WriteString(residualRisk)
+	return s.String()
+}
+
+// humanSize is a size as the app writes it.
+func humanSize(n int64) string {
+	switch {
+	case n >= 1<<30:
+		return strconv.FormatFloat(float64(n)/(1<<30), 'f', 1, 64) + " GB"
+	case n >= 1<<20:
+		return strconv.FormatInt(n>>20, 10) + " MB"
+	case n >= 1<<10:
+		return strconv.FormatInt(n>>10, 10) + " KB"
+	}
+	return strconv.FormatInt(n, 10) + " bytes"
+}
+
+// resolveMigrationLocked carries out the owner's answer to the move: init
+// removes the items named, and makes the rest the owner's.
+func (e *teamEngine) resolveMigrationLocked(ctx context.Context, name string, b *teamBox, d *typesv1.Decision, remove []string) error {
+	for _, id := range remove {
+		if !slices.ContainsFunc(d.GetMigrationItems(), func(i *typesv1.MigrationItem) bool { return i.GetId() == id && i.GetChoice() }) {
+			return fmt.Errorf("%q isn't an item of this decision you can remove", id)
+		}
+	}
+	h, err := e.helper(ctx, name)
+	if err != nil {
+		return err
+	}
+	if _, err := h.ResolveTeamMigration(ctx, &agentv1.ResolveTeamMigrationRequest{ProjectDir: "/home/work/" + name, RemoveItems: remove}); err != nil {
+		return errors.New(status.Convert(err).Message())
+	}
+	var kept, removed []string
+	for _, i := range d.GetMigrationItems() {
+		switch {
+		case !i.GetChoice():
+		case slices.Contains(remove, i.GetId()):
+			removed = append(removed, i.GetPath())
+		default:
+			kept = append(kept, i.GetPath())
+		}
+	}
+	text := "Your answer to the move is done."
+	if len(kept) > 0 {
+		text += " Now yours: " + strings.Join(kept, ", ") + "."
+	}
+	if len(removed) > 0 {
+		text += " Removed: " + strings.Join(removed, ", ") + "."
+	}
+	if len(text) > maxBoardMessage {
+		text = strings.ToValidUTF8(text[:maxBoardMessage-3], "") + "..."
+	}
+	e.noticeLocked(ctx, name, b, boardOwner, d.GetId(), text)
+	return nil
 }
 
 func (e *teamEngine) answerLocked(ctx context.Context, name string, b *teamBox, decisionID string, approve bool, note string) (*typesv1.Decision, error) {
@@ -683,9 +802,24 @@ func (e *teamEngine) startAgentAs(ctx context.Context, name, agentID string, app
 	// The project is readable by the team and writable by no agent before
 	// each start (ADR 0022 §2a): init checks it again every time, and
 	// refuses with a plain line.
-	pr, err := h.PrepareTeamProject(ctx, &agentv1.PrepareTeamProjectRequest{ProjectDir: "/home/work/" + name})
+	var cloneAgents []string
+	for i := range team.Agents {
+		if team.Agents[i].OwnClone() {
+			cloneAgents = append(cloneAgents, team.Agents[i].ID)
+		}
+	}
+	pr, err := h.PrepareTeamProject(ctx, &agentv1.PrepareTeamProjectRequest{ProjectDir: "/home/work/" + name, CloneAgents: cloneAgents, HomeQuotaBytes: defaultHomeQuota})
 	if err != nil {
 		return nil, errors.New(status.Convert(err).Message())
+	}
+	// A team that used the shared project was just moved to its own
+	// clones (ADR 0022 §2a point 6): the owner keeps or removes what was
+	// recorded before any agent starts.
+	if items := pr.GetMigration(); len(items) > 0 {
+		if err := e.askMigrationLocked(ctx, name, b, agentID, items); err != nil {
+			return nil, err
+		}
+		return nil, errors.New("your agents now work in their own copies of the project. Answer the team's start decision in Portenv first: keep or remove what they could have changed")
 	}
 	// What init made private in the owner's home, told once (R-0262).
 	if fixed := pr.GetFixed(); len(fixed) > 0 {

@@ -984,6 +984,12 @@ public nonisolated struct Portenv_Types_V1_Decision: Sendable {
   /// works after the app or portenvd restarts (R-0296).
   public var startAgentIds: [String] = []
 
+  /// For DECISION_KIND_TEAM_START after the move to agents' own clones
+  /// (ADR 0022 §2a point 6): what agents could have changed, for the owner
+  /// to keep or remove, one by one. Approve keeps every item not named in
+  /// AnswerDecisionRequest.remove_items.
+  public var migrationItems: [Portenv_Types_V1_MigrationItem] = []
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -991,6 +997,42 @@ public nonisolated struct Portenv_Types_V1_Decision: Sendable {
   fileprivate var _createdAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
   fileprivate var _answeredAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
   fileprivate var _expiresAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
+}
+
+/// One thing the move to agents' own clones recorded (ADR 0022 §2a point
+/// 6): something agents could have changed in what work's git reads, or a
+/// repository, worktree or file an agent made in the project.
+public nonisolated struct Portenv_Types_V1_MigrationItem: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// Stable within the record: what remove_items names.
+  public var id: String = String()
+
+  /// Relative to the project; for a setting, what it was.
+  public var path: String = String()
+
+  /// "git" (a config file, hook or worktree registration in .git), "repo"
+  /// (a repository an agent made in the project), "worktree", "file", or
+  /// "setting" (core.sharedRepository or a system safe.directory, already
+  /// removed).
+  public var kind: String = String()
+
+  /// The agent whose it was, when Portenv can tell.
+  public var agent: String = String()
+
+  public var size: Int64 = 0
+
+  /// Whether the owner chooses: settings are removed either way.
+  public var choice: Bool = false
+
+  /// A plain line: what was copied into the agent's clone, or why not.
+  public var note: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
 }
 
 /// One package apt-get -s would install, run by init (root), never by the
@@ -1609,7 +1651,7 @@ nonisolated extension Portenv_Types_V1_BoardMessage: SwiftProtobuf.Message, Swif
 
 nonisolated extension Portenv_Types_V1_Decision: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Decision"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}from\0\u{1}kind\0\u{1}summary\0\u{1}detail\0\u{1}state\0\u{3}answer_note\0\u{3}created_at\0\u{3}answered_at\0\u{1}packages\0\u{3}expires_at\0\u{3}start_agent_ids\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}from\0\u{1}kind\0\u{1}summary\0\u{1}detail\0\u{1}state\0\u{3}answer_note\0\u{3}created_at\0\u{3}answered_at\0\u{1}packages\0\u{3}expires_at\0\u{3}start_agent_ids\0\u{3}migration_items\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1629,6 +1671,7 @@ nonisolated extension Portenv_Types_V1_Decision: SwiftProtobuf.Message, SwiftPro
       case 10: try { try decoder.decodeRepeatedMessageField(value: &self.packages) }()
       case 11: try { try decoder.decodeSingularMessageField(value: &self._expiresAt) }()
       case 12: try { try decoder.decodeRepeatedStringField(value: &self.startAgentIds) }()
+      case 13: try { try decoder.decodeRepeatedMessageField(value: &self.migrationItems) }()
       default: break
       }
     }
@@ -1675,6 +1718,9 @@ nonisolated extension Portenv_Types_V1_Decision: SwiftProtobuf.Message, SwiftPro
     if !self.startAgentIds.isEmpty {
       try visitor.visitRepeatedStringField(value: self.startAgentIds, fieldNumber: 12)
     }
+    if !self.migrationItems.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.migrationItems, fieldNumber: 13)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -1691,6 +1737,67 @@ nonisolated extension Portenv_Types_V1_Decision: SwiftProtobuf.Message, SwiftPro
     if lhs.packages != rhs.packages {return false}
     if lhs._expiresAt != rhs._expiresAt {return false}
     if lhs.startAgentIds != rhs.startAgentIds {return false}
+    if lhs.migrationItems != rhs.migrationItems {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Portenv_Types_V1_MigrationItem: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".MigrationItem"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}path\0\u{1}kind\0\u{1}agent\0\u{1}size\0\u{1}choice\0\u{1}note\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.id) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.path) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.kind) }()
+      case 4: try { try decoder.decodeSingularStringField(value: &self.agent) }()
+      case 5: try { try decoder.decodeSingularInt64Field(value: &self.size) }()
+      case 6: try { try decoder.decodeSingularBoolField(value: &self.choice) }()
+      case 7: try { try decoder.decodeSingularStringField(value: &self.note) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.id.isEmpty {
+      try visitor.visitSingularStringField(value: self.id, fieldNumber: 1)
+    }
+    if !self.path.isEmpty {
+      try visitor.visitSingularStringField(value: self.path, fieldNumber: 2)
+    }
+    if !self.kind.isEmpty {
+      try visitor.visitSingularStringField(value: self.kind, fieldNumber: 3)
+    }
+    if !self.agent.isEmpty {
+      try visitor.visitSingularStringField(value: self.agent, fieldNumber: 4)
+    }
+    if self.size != 0 {
+      try visitor.visitSingularInt64Field(value: self.size, fieldNumber: 5)
+    }
+    if self.choice != false {
+      try visitor.visitSingularBoolField(value: self.choice, fieldNumber: 6)
+    }
+    if !self.note.isEmpty {
+      try visitor.visitSingularStringField(value: self.note, fieldNumber: 7)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Portenv_Types_V1_MigrationItem, rhs: Portenv_Types_V1_MigrationItem) -> Bool {
+    if lhs.id != rhs.id {return false}
+    if lhs.path != rhs.path {return false}
+    if lhs.kind != rhs.kind {return false}
+    if lhs.agent != rhs.agent {return false}
+    if lhs.size != rhs.size {return false}
+    if lhs.choice != rhs.choice {return false}
+    if lhs.note != rhs.note {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

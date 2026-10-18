@@ -25,37 +25,38 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	AgentService_GetVersion_FullMethodName         = "/portenv.agent.v1.AgentService/GetVersion"
-	AgentService_GetReadiness_FullMethodName       = "/portenv.agent.v1.AgentService/GetReadiness"
-	AgentService_RetryPackages_FullMethodName      = "/portenv.agent.v1.AgentService/RetryPackages"
-	AgentService_RunRestic_FullMethodName          = "/portenv.agent.v1.AgentService/RunRestic"
-	AgentService_GetPathInfo_FullMethodName        = "/portenv.agent.v1.AgentService/GetPathInfo"
-	AgentService_Terminal_FullMethodName           = "/portenv.agent.v1.AgentService/Terminal"
-	AgentService_ListTabs_FullMethodName           = "/portenv.agent.v1.AgentService/ListTabs"
-	AgentService_NewTab_FullMethodName             = "/portenv.agent.v1.AgentService/NewTab"
-	AgentService_CloseTab_FullMethodName           = "/portenv.agent.v1.AgentService/CloseTab"
-	AgentService_RenameTab_FullMethodName          = "/portenv.agent.v1.AgentService/RenameTab"
-	AgentService_SelectTab_FullMethodName          = "/portenv.agent.v1.AgentService/SelectTab"
-	AgentService_WatchTabs_FullMethodName          = "/portenv.agent.v1.AgentService/WatchTabs"
-	AgentService_TabTerminal_FullMethodName        = "/portenv.agent.v1.AgentService/TabTerminal"
-	AgentService_TeamCalls_FullMethodName          = "/portenv.agent.v1.AgentService/TeamCalls"
-	AgentService_StartTeamAgent_FullMethodName     = "/portenv.agent.v1.AgentService/StartTeamAgent"
-	AgentService_StopTeamAgent_FullMethodName      = "/portenv.agent.v1.AgentService/StopTeamAgent"
-	AgentService_AppendBoard_FullMethodName        = "/portenv.agent.v1.AgentService/AppendBoard"
-	AgentService_ListHomeFiles_FullMethodName      = "/portenv.agent.v1.AgentService/ListHomeFiles"
-	AgentService_ReadHomeFile_FullMethodName       = "/portenv.agent.v1.AgentService/ReadHomeFile"
-	AgentService_WriteHomeFiles_FullMethodName     = "/portenv.agent.v1.AgentService/WriteHomeFiles"
-	AgentService_EnsureAgentUser_FullMethodName    = "/portenv.agent.v1.AgentService/EnsureAgentUser"
-	AgentService_RemoveAgentUser_FullMethodName    = "/portenv.agent.v1.AgentService/RemoveAgentUser"
-	AgentService_SimulatePackage_FullMethodName    = "/portenv.agent.v1.AgentService/SimulatePackage"
-	AgentService_InstallPackages_FullMethodName    = "/portenv.agent.v1.AgentService/InstallPackages"
-	AgentService_AgentPaneAction_FullMethodName    = "/portenv.agent.v1.AgentService/AgentPaneAction"
-	AgentService_ReadBoard_FullMethodName          = "/portenv.agent.v1.AgentService/ReadBoard"
-	AgentService_ReadAgentFiles_FullMethodName     = "/portenv.agent.v1.AgentService/ReadAgentFiles"
-	AgentService_DeliverRoutine_FullMethodName     = "/portenv.agent.v1.AgentService/DeliverRoutine"
-	AgentService_HandoffFiles_FullMethodName       = "/portenv.agent.v1.AgentService/HandoffFiles"
-	AgentService_PrepareTeamProject_FullMethodName = "/portenv.agent.v1.AgentService/PrepareTeamProject"
-	AgentService_FetchAgentBranch_FullMethodName   = "/portenv.agent.v1.AgentService/FetchAgentBranch"
+	AgentService_GetVersion_FullMethodName           = "/portenv.agent.v1.AgentService/GetVersion"
+	AgentService_GetReadiness_FullMethodName         = "/portenv.agent.v1.AgentService/GetReadiness"
+	AgentService_RetryPackages_FullMethodName        = "/portenv.agent.v1.AgentService/RetryPackages"
+	AgentService_RunRestic_FullMethodName            = "/portenv.agent.v1.AgentService/RunRestic"
+	AgentService_GetPathInfo_FullMethodName          = "/portenv.agent.v1.AgentService/GetPathInfo"
+	AgentService_Terminal_FullMethodName             = "/portenv.agent.v1.AgentService/Terminal"
+	AgentService_ListTabs_FullMethodName             = "/portenv.agent.v1.AgentService/ListTabs"
+	AgentService_NewTab_FullMethodName               = "/portenv.agent.v1.AgentService/NewTab"
+	AgentService_CloseTab_FullMethodName             = "/portenv.agent.v1.AgentService/CloseTab"
+	AgentService_RenameTab_FullMethodName            = "/portenv.agent.v1.AgentService/RenameTab"
+	AgentService_SelectTab_FullMethodName            = "/portenv.agent.v1.AgentService/SelectTab"
+	AgentService_WatchTabs_FullMethodName            = "/portenv.agent.v1.AgentService/WatchTabs"
+	AgentService_TabTerminal_FullMethodName          = "/portenv.agent.v1.AgentService/TabTerminal"
+	AgentService_TeamCalls_FullMethodName            = "/portenv.agent.v1.AgentService/TeamCalls"
+	AgentService_StartTeamAgent_FullMethodName       = "/portenv.agent.v1.AgentService/StartTeamAgent"
+	AgentService_StopTeamAgent_FullMethodName        = "/portenv.agent.v1.AgentService/StopTeamAgent"
+	AgentService_AppendBoard_FullMethodName          = "/portenv.agent.v1.AgentService/AppendBoard"
+	AgentService_ListHomeFiles_FullMethodName        = "/portenv.agent.v1.AgentService/ListHomeFiles"
+	AgentService_ReadHomeFile_FullMethodName         = "/portenv.agent.v1.AgentService/ReadHomeFile"
+	AgentService_WriteHomeFiles_FullMethodName       = "/portenv.agent.v1.AgentService/WriteHomeFiles"
+	AgentService_EnsureAgentUser_FullMethodName      = "/portenv.agent.v1.AgentService/EnsureAgentUser"
+	AgentService_RemoveAgentUser_FullMethodName      = "/portenv.agent.v1.AgentService/RemoveAgentUser"
+	AgentService_SimulatePackage_FullMethodName      = "/portenv.agent.v1.AgentService/SimulatePackage"
+	AgentService_InstallPackages_FullMethodName      = "/portenv.agent.v1.AgentService/InstallPackages"
+	AgentService_AgentPaneAction_FullMethodName      = "/portenv.agent.v1.AgentService/AgentPaneAction"
+	AgentService_ReadBoard_FullMethodName            = "/portenv.agent.v1.AgentService/ReadBoard"
+	AgentService_ReadAgentFiles_FullMethodName       = "/portenv.agent.v1.AgentService/ReadAgentFiles"
+	AgentService_DeliverRoutine_FullMethodName       = "/portenv.agent.v1.AgentService/DeliverRoutine"
+	AgentService_HandoffFiles_FullMethodName         = "/portenv.agent.v1.AgentService/HandoffFiles"
+	AgentService_PrepareTeamProject_FullMethodName   = "/portenv.agent.v1.AgentService/PrepareTeamProject"
+	AgentService_FetchAgentBranch_FullMethodName     = "/portenv.agent.v1.AgentService/FetchAgentBranch"
+	AgentService_ResolveTeamMigration_FullMethodName = "/portenv.agent.v1.AgentService/ResolveTeamMigration"
 )
 
 // AgentServiceClient is the client API for AgentService service.
@@ -158,6 +159,11 @@ type AgentServiceClient interface {
 	// checked, no tags and no submodules. work's git never opens the agent's
 	// repository.
 	FetchAgentBranch(ctx context.Context, in *FetchAgentBranchRequest, opts ...grpc.CallOption) (*FetchAgentBranchResponse, error)
+	// Served only by init (relayed by the helper): the owner's answer to the
+	// move to agents' own clones (ADR 0022 §2a point 6). Each recorded item
+	// is removed or becomes work's; nothing is deleted without it. Refused
+	// while any agent process runs.
+	ResolveTeamMigration(ctx context.Context, in *ResolveTeamMigrationRequest, opts ...grpc.CallOption) (*ResolveTeamMigrationResponse, error)
 }
 
 type agentServiceClient struct {
@@ -517,6 +523,16 @@ func (c *agentServiceClient) FetchAgentBranch(ctx context.Context, in *FetchAgen
 	return out, nil
 }
 
+func (c *agentServiceClient) ResolveTeamMigration(ctx context.Context, in *ResolveTeamMigrationRequest, opts ...grpc.CallOption) (*ResolveTeamMigrationResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ResolveTeamMigrationResponse)
+	err := c.cc.Invoke(ctx, AgentService_ResolveTeamMigration_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AgentServiceServer is the server API for AgentService service.
 // All implementations must embed UnimplementedAgentServiceServer
 // for forward compatibility.
@@ -617,6 +633,11 @@ type AgentServiceServer interface {
 	// checked, no tags and no submodules. work's git never opens the agent's
 	// repository.
 	FetchAgentBranch(context.Context, *FetchAgentBranchRequest) (*FetchAgentBranchResponse, error)
+	// Served only by init (relayed by the helper): the owner's answer to the
+	// move to agents' own clones (ADR 0022 §2a point 6). Each recorded item
+	// is removed or becomes work's; nothing is deleted without it. Refused
+	// while any agent process runs.
+	ResolveTeamMigration(context.Context, *ResolveTeamMigrationRequest) (*ResolveTeamMigrationResponse, error)
 	mustEmbedUnimplementedAgentServiceServer()
 }
 
@@ -719,6 +740,9 @@ func (UnimplementedAgentServiceServer) PrepareTeamProject(context.Context, *Prep
 }
 func (UnimplementedAgentServiceServer) FetchAgentBranch(context.Context, *FetchAgentBranchRequest) (*FetchAgentBranchResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method FetchAgentBranch not implemented")
+}
+func (UnimplementedAgentServiceServer) ResolveTeamMigration(context.Context, *ResolveTeamMigrationRequest) (*ResolveTeamMigrationResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ResolveTeamMigration not implemented")
 }
 func (UnimplementedAgentServiceServer) mustEmbedUnimplementedAgentServiceServer() {}
 func (UnimplementedAgentServiceServer) testEmbeddedByValue()                      {}
@@ -1234,6 +1258,24 @@ func _AgentService_FetchAgentBranch_Handler(srv interface{}, ctx context.Context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AgentService_ResolveTeamMigration_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ResolveTeamMigrationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentServiceServer).ResolveTeamMigration(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentService_ResolveTeamMigration_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentServiceServer).ResolveTeamMigration(ctx, req.(*ResolveTeamMigrationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AgentService_ServiceDesc is the grpc.ServiceDesc for AgentService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1336,6 +1378,10 @@ var AgentService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "FetchAgentBranch",
 			Handler:    _AgentService_FetchAgentBranch_Handler,
+		},
+		{
+			MethodName: "ResolveTeamMigration",
+			Handler:    _AgentService_ResolveTeamMigration_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

@@ -35,6 +35,7 @@ type projectRunner struct {
 	shared   string   // what git config --get core.sharedRepository says
 	safeDirs []string // the system config's safe.directory entries
 	project  string
+	found    string // open-project's last JSON line
 }
 
 func (r *projectRunner) Run(_ context.Context, _ []string, name string, args ...string) ([]byte, error) {
@@ -44,6 +45,9 @@ func (r *projectRunner) Run(_ context.Context, _ []string, name string, args ...
 	case "runuser":
 		if i := slices.Index(args, "open-project"); i >= 0 && r.open != nil {
 			return r.open(args[i+1])
+		}
+		if slices.Contains(args, "--unset-all") && slices.Contains(args, "core.sharedRepository") && r.shared == "" {
+			return nil, errors.New("exit status 5") // not set
 		}
 		return nil, nil
 	case "git":
@@ -62,6 +66,15 @@ func (r *projectRunner) Run(_ context.Context, _ []string, name string, args ...
 		return nil, nil
 	}
 	return r.sys.Run(context.Background(), nil, name, args...)
+}
+
+// lastFound is open-project's last JSON line.
+func (r *projectRunner) lastFound(t *testing.T) string {
+	t.Helper()
+	if r.found == "" {
+		t.Fatal("open-project didn't run")
+	}
+	return r.found
 }
 
 func (r *projectRunner) rel(f *os.File) string {
@@ -140,9 +153,21 @@ func newProjectTeam(t *testing.T) (*TeamUsers, *projectRunner, *[]chownCall, str
 		if err != nil {
 			return nil, err
 		}
-		return json.Marshal(found)
+		b, err := json.Marshal(found)
+		run.found = string(b)
+		return b, err
 	}
 	return tu, run, &chowns, project
+}
+
+// prepare is PrepareProject for a team whose move to its own clones
+// isn't what the test is about: no agents.
+func prepare(tu *TeamUsers, ctx context.Context, dir string) ([]string, error) { //nolint:revive // the test's order
+	fixed, items, err := tu.PrepareProject(ctx, dir, PrepareOptions{HomeQuota: 1 << 30})
+	if err == nil && len(items) > 0 {
+		return nil, &SharedProjectError{Found: ProjectFindings{Items: []ProjectFinding{{Path: items[0].GetPath(), What: items[0].GetKind()}}}}
+	}
+	return fixed, err
 }
 
 func mode(t *testing.T, p string) os.FileMode {
@@ -160,7 +185,7 @@ func mode(t *testing.T, p string) os.FileMode {
 // system safe.directory.
 func TestPrepareTeamProjectMakesTheProjectReadOnlyForTheTeam(t *testing.T) {
 	tu, run, chowns, project := newProjectTeam(t)
-	if _, err := tu.PrepareProject(context.Background(), "/home/work/shop"); err != nil {
+	if _, err := prepare(tu, context.Background(), "/home/work/shop"); err != nil {
 		t.Fatal(err)
 	}
 	if m := mode(t, filepath.Dir(project)).Perm(); m != 0o711 {
@@ -214,15 +239,20 @@ func TestPrepareTeamProjectRefusesTheSharedProject(t *testing.T) {
 				t.Fatal(err)
 			}
 			c.set(run)
+			tu.migrate = &migrateOps{running: func() ([]int, error) { return []int{2001}, nil }}
+			var found ProjectFindings
+			tu.onMove = func(f ProjectFindings) { found = f }
 			for rel := range run.foreign {
 				if err := os.WriteFile(filepath.Join(project, rel), []byte("x"), 0o644); err != nil {
 					t.Fatal(err)
 				}
 			}
-			_, err := tu.PrepareProject(ctx, "/home/work/shop")
-			var shared *SharedProjectError
-			if !errors.As(err, &shared) || !strings.Contains(err.Error(), c.want) {
-				t.Fatalf("err = %v, want the shared project refused, naming %q", err, c.want)
+			_, err := prepare(tu, ctx, "/home/work/shop")
+			if !errors.Is(err, errAgentsRunning) {
+				t.Fatalf("err = %v, want the move to start (and wait for the agents to stop)", err)
+			}
+			if got := (&SharedProjectError{Found: found}).Error(); !strings.Contains(got, c.want) {
+				t.Errorf("found %s, want %q in it", got, c.want)
 			}
 			if len(run.readOnly) > 0 {
 				t.Errorf("changed files before refusing: %q", run.readOnly)
@@ -235,30 +265,32 @@ func TestPrepareTeamProjectRefusesTheSharedProject(t *testing.T) {
 			t.Fatal(err)
 		}
 		run.foreign = map[string]int{"notes": 2002}
-		_, err := tu.PrepareProject(ctx, "/home/work/shop")
-		var shared *SharedProjectError
-		if !errors.As(err, &shared) || len(shared.Found.Items) != 1 || shared.Found.Items[0] != (ProjectFinding{Path: "notes", What: "owner", UID: 2002, Dir: true}) {
-			t.Fatalf("err = %v, want notes alone", err)
+		tu.migrate = &migrateOps{running: func() ([]int, error) { return []int{2002}, nil }}
+		if _, err := prepare(tu, ctx, "/home/work/shop"); !errors.Is(err, errAgentsRunning) {
+			t.Fatalf("err = %v", err)
+		}
+		if found := run.lastFound(t); found != `{"items":[{"path":"notes","what":"owner","uid":2002,"dir":true}]}` {
+			t.Fatalf("found %s, want notes alone", found)
 		}
 	})
 	t.Run("a safe.directory elsewhere isn't Portenv's", func(t *testing.T) {
 		tu, run, _, _ := newProjectTeam(t)
 		run.safeDirs = []string{"/srv/repo", "/home/work/shopping"}
-		if _, err := tu.PrepareProject(ctx, "/home/work/shop"); err != nil {
+		if _, err := prepare(tu, ctx, "/home/work/shop"); err != nil {
 			t.Fatal(err)
 		}
 	})
 	t.Run("core.sharedRepository false is fine", func(t *testing.T) {
 		tu, run, _, _ := newProjectTeam(t)
 		run.shared = "false"
-		if _, err := tu.PrepareProject(ctx, "/home/work/shop"); err != nil {
+		if _, err := prepare(tu, ctx, "/home/work/shop"); err != nil {
 			t.Fatal(err)
 		}
 	})
 	t.Run("files outside .git that others can write are made read-only, not refused", func(t *testing.T) {
 		tu, run, _, _ := newProjectTeam(t)
 		run.writable = map[string]bool{"src/app.ts": true, "src": true}
-		if _, err := tu.PrepareProject(ctx, "/home/work/shop"); err != nil {
+		if _, err := prepare(tu, ctx, "/home/work/shop"); err != nil {
 			t.Fatal(err)
 		}
 		if !slices.Contains(run.readOnly, "src/app.ts") {
@@ -275,7 +307,7 @@ func TestPrepareTeamProjectRefuses(t *testing.T) {
 		if err := os.Chmod(ssh, 0o755); err != nil {
 			t.Fatal(err)
 		}
-		fixed, err := tu.PrepareProject(ctx, "/home/work/shop")
+		fixed, err := prepare(tu, ctx, "/home/work/shop")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -289,7 +321,7 @@ func TestPrepareTeamProjectRefuses(t *testing.T) {
 	t.Run("no ACLs", func(t *testing.T) {
 		tu, run, _, _ := newProjectTeam(t)
 		run.noACL = true
-		if _, err := tu.PrepareProject(ctx, "/home/work/shop"); err == nil || !strings.Contains(err.Error(), "ACL") {
+		if _, err := prepare(tu, ctx, "/home/work/shop"); err == nil || !strings.Contains(err.Error(), "ACL") {
 			t.Fatalf("err = %v, want a line about ACLs", err)
 		}
 	})
@@ -302,7 +334,7 @@ func TestPrepareTeamProjectRefuses(t *testing.T) {
 		if err := os.Symlink(real, project); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := tu.PrepareProject(ctx, "/home/work/shop"); err == nil {
+		if _, err := prepare(tu, ctx, "/home/work/shop"); err == nil {
 			t.Error("prepared a symlinked project")
 		}
 		if len(run.readOnly) > 0 {
@@ -315,7 +347,7 @@ func TestPrepareTeamProjectRefuses(t *testing.T) {
 		if err := os.Symlink(outside, filepath.Join(project, "src", "out")); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := tu.PrepareProject(ctx, "/home/work/shop"); err != nil {
+		if _, err := prepare(tu, ctx, "/home/work/shop"); err != nil {
 			t.Fatal(err)
 		}
 		for _, p := range run.readOnly {
@@ -333,7 +365,7 @@ func TestPrepareTeamProjectRefuses(t *testing.T) {
 		if err := os.Symlink("src/git", git); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := tu.PrepareProject(ctx, "/home/work/shop"); err != nil {
+		if _, err := prepare(tu, ctx, "/home/work/shop"); err != nil {
 			t.Fatal(err)
 		}
 		if slices.Contains(run.readOnly, ".git") || slices.Contains(run.readOnly, ".git/config") {
@@ -342,7 +374,7 @@ func TestPrepareTeamProjectRefuses(t *testing.T) {
 	})
 	for _, bad := range []string{"/home/work", "/home/work/../root", "/etc", "/home/work/a/b", "/home/work/.ssh", "relative"} {
 		tu, _, _, _ := newProjectTeam(t)
-		if _, err := tu.PrepareProject(ctx, bad); err == nil {
+		if _, err := prepare(tu, ctx, bad); err == nil {
 			t.Errorf("PrepareProject(%q) accepted", bad)
 		}
 	}
@@ -361,7 +393,7 @@ func TestPrepareTeamProjectMakesTheTeamGroupFirst(t *testing.T) {
 	}
 	t.Run("a new workspace", func(t *testing.T) {
 		tu, run := fresh(t)
-		if _, err := tu.PrepareProject(ctx, "/home/work/shop"); err != nil {
+		if _, err := prepare(tu, ctx, "/home/work/shop"); err != nil {
 			t.Fatal(err)
 		}
 		if gid, ok := run.sys.groups[TeamGroup]; !ok || gid != TeamGID {
@@ -393,7 +425,7 @@ func TestPrepareTeamProjectMakesTheTeamGroupFirst(t *testing.T) {
 		// Without it, open-project (as work) can't chgrp to team.
 		tu, run, _, _ := newProjectTeam(t)
 		delete(run.sys.members, TeamGroup)
-		if _, err := tu.PrepareProject(ctx, "/home/work/shop"); err != nil {
+		if _, err := prepare(tu, ctx, "/home/work/shop"); err != nil {
 			t.Fatal(err)
 		}
 		join := slices.Index(run.calls, "usermod -a -G "+TeamGroup+" work")
@@ -408,7 +440,7 @@ func TestPrepareTeamProjectMakesTheTeamGroupFirst(t *testing.T) {
 	t.Run("a group team with another gid is refused", func(t *testing.T) {
 		tu, run := fresh(t)
 		run.sys.groups[TeamGroup] = 2001
-		if _, err := tu.PrepareProject(ctx, "/home/work/shop"); err == nil || !strings.Contains(err.Error(), "gid 2001") {
+		if _, err := prepare(tu, ctx, "/home/work/shop"); err == nil || !strings.Contains(err.Error(), "gid 2001") {
 			t.Fatalf("err = %v, want the wrong gid refused", err)
 		}
 		if run.ran("runuser") || run.ran("groupadd") {
@@ -418,7 +450,7 @@ func TestPrepareTeamProjectMakesTheTeamGroupFirst(t *testing.T) {
 	t.Run("gid 2000 held by another group is refused", func(t *testing.T) {
 		tu, run := fresh(t)
 		run.sys.groups["builders"] = TeamGID
-		if _, err := tu.PrepareProject(ctx, "/home/work/shop"); err == nil || !strings.Contains(err.Error(), "builders") {
+		if _, err := prepare(tu, ctx, "/home/work/shop"); err == nil || !strings.Contains(err.Error(), "builders") {
 			t.Fatalf("err = %v, want gid 2000's owner named", err)
 		}
 		if run.ran("runuser") || run.ran("groupadd") {
@@ -442,7 +474,10 @@ func TestOpenProjectSaysWhatTheACLCallSaid(t *testing.T) {
 
 func TestTheChannelRelaysPrepareToInit(t *testing.T) {
 	var got string
-	s := &apiServer{prepareProject: func(_ context.Context, dir string) ([]string, error) { got = dir; return nil, nil }}
+	s := &apiServer{prepareProject: func(_ context.Context, r *agentv1.PrepareTeamProjectRequest) (*agentv1.PrepareTeamProjectResponse, error) {
+		got = r.GetProjectDir()
+		return &agentv1.PrepareTeamProjectResponse{}, nil
+	}}
 	if _, err := s.PrepareTeamProject(context.Background(), &agentv1.PrepareTeamProjectRequest{ProjectDir: "/home/work/shop"}); err != nil || got != "/home/work/shop" {
 		t.Errorf("relay: %q, %v", got, err)
 	}
@@ -563,14 +598,14 @@ func TestBoxStartFixesReachTheNextTeamStart(t *testing.T) {
 	tu, _, _, project := newProjectTeam(t)
 	ctx := context.Background()
 	tu.homeFixes = []string{"~/.npmrc: 644 → 640"}
-	fixed, err := tu.PrepareProject(ctx, "/home/work/shop")
+	fixed, err := prepare(tu, ctx, "/home/work/shop")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !slices.Contains(fixed, "~/.npmrc: 644 → 640") {
 		t.Errorf("fixed = %v", fixed)
 	}
-	again, _ := tu.PrepareProject(ctx, "/home/work/shop")
+	again, _ := prepare(tu, ctx, "/home/work/shop")
 	if slices.Contains(again, "~/.npmrc: 644 → 640") {
 		t.Error("reported twice")
 	}

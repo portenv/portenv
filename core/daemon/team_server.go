@@ -326,7 +326,7 @@ func (s *Server) StopAgent(ctx context.Context, req *daemonv1.StopAgentRequest) 
 // AnswerDecision is the owner's Approve or Decline. Only the app, in front
 // of the person, reaches portenvd's socket; no agent call answers one.
 func (s *Server) AnswerDecision(ctx context.Context, req *daemonv1.AnswerDecisionRequest) (*daemonv1.AnswerDecisionResponse, error) {
-	d, err := s.teamEng().answer(ctx, req.GetName(), req.GetDecisionId(), req.GetApprove(), req.GetNote())
+	d, err := s.teamEng().answerWith(ctx, req.GetName(), req.GetDecisionId(), req.GetApprove(), req.GetNote(), req.GetRemoveItems())
 	if err != nil {
 		return nil, teamStatus(err)
 	}

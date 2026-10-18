@@ -966,6 +966,9 @@ message AnswerDecisionRequest {
   string decision_id = 2;
   bool approve = 3;
   string note = 4;
+  // For a team_start decision with migration items: the items to remove
+  // (their ids). Every other item is kept: it becomes the owner's.
+  repeated string remove_items = 5;
 }
 
 message AnswerDecisionResponse {

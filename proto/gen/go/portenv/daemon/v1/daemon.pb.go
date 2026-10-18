@@ -6402,11 +6402,14 @@ func (x *StopAgentResponse) GetAgent() *AgentInfo {
 }
 
 type AnswerDecisionRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	DecisionId    string                 `protobuf:"bytes,2,opt,name=decision_id,json=decisionId,proto3" json:"decision_id,omitempty"`
-	Approve       bool                   `protobuf:"varint,3,opt,name=approve,proto3" json:"approve,omitempty"`
-	Note          string                 `protobuf:"bytes,4,opt,name=note,proto3" json:"note,omitempty"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	Name       string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	DecisionId string                 `protobuf:"bytes,2,opt,name=decision_id,json=decisionId,proto3" json:"decision_id,omitempty"`
+	Approve    bool                   `protobuf:"varint,3,opt,name=approve,proto3" json:"approve,omitempty"`
+	Note       string                 `protobuf:"bytes,4,opt,name=note,proto3" json:"note,omitempty"`
+	// For a team_start decision with migration items: the items to remove
+	// (their ids). Every other item is kept: it becomes the owner's.
+	RemoveItems   []string `protobuf:"bytes,5,rep,name=remove_items,json=removeItems,proto3" json:"remove_items,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -6467,6 +6470,13 @@ func (x *AnswerDecisionRequest) GetNote() string {
 		return x.Note
 	}
 	return ""
+}
+
+func (x *AnswerDecisionRequest) GetRemoveItems() []string {
+	if x != nil {
+		return x.RemoveItems
+	}
+	return nil
 }
 
 type AnswerDecisionResponse struct {
@@ -7792,13 +7802,14 @@ const file_portenv_daemon_v1_daemon_proto_rawDesc = "" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x19\n" +
 	"\bagent_id\x18\x02 \x01(\tR\aagentId\"G\n" +
 	"\x11StopAgentResponse\x122\n" +
-	"\x05agent\x18\x01 \x01(\v2\x1c.portenv.daemon.v1.AgentInfoR\x05agent\"z\n" +
+	"\x05agent\x18\x01 \x01(\v2\x1c.portenv.daemon.v1.AgentInfoR\x05agent\"\x9d\x01\n" +
 	"\x15AnswerDecisionRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1f\n" +
 	"\vdecision_id\x18\x02 \x01(\tR\n" +
 	"decisionId\x12\x18\n" +
 	"\aapprove\x18\x03 \x01(\bR\aapprove\x12\x12\n" +
-	"\x04note\x18\x04 \x01(\tR\x04note\"P\n" +
+	"\x04note\x18\x04 \x01(\tR\x04note\x12!\n" +
+	"\fremove_items\x18\x05 \x03(\tR\vremoveItems\"P\n" +
 	"\x16AnswerDecisionResponse\x126\n" +
 	"\bdecision\x18\x01 \x01(\v2\x1a.portenv.types.v1.DecisionR\bdecision\"D\n" +
 	"\x13GetAgentFileRequest\x12\x12\n" +

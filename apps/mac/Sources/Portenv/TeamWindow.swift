@@ -69,6 +69,11 @@ struct TeamColumn: View {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(verbatim: agent.name).font(.system(size: 13, weight: .semibold))
                     Text(verbatim: TeamText.runsAs(agent)).font(.system(size: 11)).foregroundStyle(.secondary)
+                    // Its routines, or why they're off (R-0258).
+                    if let routines = TeamText.routinesLine(agent) {
+                        Text(verbatim: routines).font(.system(size: 11)).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
             }
             .padding(.horizontal, 14).padding(.vertical, 10)

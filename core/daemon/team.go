@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"path"
 	"regexp"
 	"slices"
@@ -90,6 +91,7 @@ type teamBox struct {
 	active      map[string]time.Time                       // agent → its last board line or status
 	routines    map[string][]*routineState                 // running agent → its routines (R-0258)
 	routinesOff map[string]string                          // agent → why its routines are off
+	listed      map[string]string                          // agent → its files as syncAgents last saw them
 	changed     chan struct{}
 }
 
@@ -796,6 +798,39 @@ func (e *teamEngine) infoLocked(b *teamBox, a *TeamAgent) *daemonv1.AgentInfo {
 		}
 	}
 	return info
+}
+
+// syncAgents announces agent files added, changed or removed since it
+// last looked, so an open workspace's team follows its files (WatchTeam).
+// The first look only records them.
+func (e *teamEngine) syncAgents(ctx context.Context, name string) error {
+	team, err := e.loadTeam(ctx, name)
+	if err != nil {
+		return err
+	}
+	b, err := e.lockBox(ctx, name)
+	if err != nil {
+		return err
+	}
+	defer b.mu.Unlock()
+	seen, n := map[string]string{}, len(b.events)
+	for i := range team.Agents {
+		a := &team.Agents[i]
+		seen[a.ID] = fmt.Sprint(a.SHA256, a.Approved, a.Override, a.Problems)
+		if old, ok := b.listed[a.ID]; b.listed != nil && (!ok || old != seen[a.ID]) {
+			b.events = append(b.events, teamEvent{agent: e.infoLocked(b, a)})
+		}
+	}
+	for _, id := range slices.Sorted(maps.Keys(b.listed)) {
+		if _, ok := seen[id]; !ok {
+			b.events = append(b.events, teamEvent{removed: id})
+		}
+	}
+	b.listed = seen
+	if len(b.events) > n {
+		b.changedLocked()
+	}
+	return nil
 }
 
 // handoffPath is whether p is a plain absolute path in the agent's home or

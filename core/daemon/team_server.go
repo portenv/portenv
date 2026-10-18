@@ -232,11 +232,18 @@ func (s *Server) ListAgents(ctx context.Context, req *daemonv1.ListAgentsRequest
 	return out, nil
 }
 
+// teamSyncEvery is how often an open team looks for agent files added,
+// changed or removed.
+const teamSyncEvery = 5 * time.Second
+
 // WatchTeam sends the agents, then every board line and agent change from
-// the cursor on.
+// the cursor on, including agent files added while it watches.
 func (s *Server) WatchTeam(req *daemonv1.WatchTeamRequest, stream daemonv1.DaemonService_WatchTeamServer) error {
 	ctx, name := stream.Context(), req.GetName()
 	s.ensureTeamPump(name)
+	_ = s.teamEng().syncAgents(ctx, name) // a failed look is tried again on the next tick
+	look := time.NewTicker(teamSyncEvery)
+	defer look.Stop()
 	list, err := s.ListAgents(ctx, &daemonv1.ListAgentsRequest{Name: name})
 	if err != nil {
 		return err
@@ -283,6 +290,8 @@ func (s *Server) WatchTeam(req *daemonv1.WatchTeamRequest, stream daemonv1.Daemo
 		case <-ctx.Done():
 			return nil
 		case <-changed:
+		case <-look.C:
+			_ = eng.syncAgents(ctx, name)
 		}
 	}
 }

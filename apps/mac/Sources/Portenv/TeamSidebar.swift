@@ -36,7 +36,7 @@ struct TeamSidebar: View {
                 YouRow(tabs: tabs.filter { $0.agentID.isEmpty }.count, compact: compact)
                     .tag(TeamSelection.you)
                 ForEach(state.agents) { a in
-                    AgentRow(agent: a, team: state.agents, compact: compact)
+                    AgentRow(agent: a, team: state.agents, now: now, compact: compact)
                         .tag(TeamSelection.agent(a.id))
                     if selection == .agent(a.id), !compact {
                         ForEach(tabs.filter { $0.agentID == a.id }) { t in
@@ -157,6 +157,7 @@ private struct StatusLabelStyle: LabelStyle {
 struct AgentRow: View {
     let agent: TeamAgent
     let team: [TeamAgent]
+    var now = Date()
     var compact = false
 
     var body: some View {
@@ -180,8 +181,8 @@ struct AgentRow: View {
                             Spacer(minLength: 4)
                             TeamStatus(status: agent.status)
                         }
-                        let line = agent.status == .invalid ? agent.problem
-                            : agent.lastLine.isEmpty && !agent.approved && !agent.remote ? TeamText.approval(agent, review: nil) : agent.lastLine
+                        // Its status while it runs (R-0256), else its latest line.
+                        let line = TeamText.rowLine(agent, now: now).text
                         if !line.isEmpty {
                             Text(verbatim: line).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.tail)
                         }
@@ -191,7 +192,7 @@ struct AgentRow: View {
             }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(TeamText.spoken(agent))
+        .accessibilityLabel(TeamText.spoken(agent, now: now))
         .accessibilityAddTraits(.isButton)
     }
 }

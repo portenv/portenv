@@ -61,11 +61,17 @@ public struct TeamAgent: Equatable, Sendable, Identifiable {
     /// The runner line from its file: code that will run (R-0245 item 4).
     public var runner: String
     public var grant: TeamGrant
+    /// What it says it's working on (R-0256); nil when it hasn't said.
+    public var workStatus: AgentWorkStatus?
+    /// Its routines (R-0258), and why they're off, if they are.
+    public var routines: [AgentRoutine]
+    public var routinesOff: String
 
     public init(id: String, name: String, role: String = "", avatar: String = "", remote: Bool = false, via: String = "",
                 status: AgentStatus, problem: String = "", fileSHA256: String = "", approved: Bool = true,
                 tabIDs: [String] = [], lastLine: String = "", pendingDecisions: Int = 0,
-                homeBytes: Int64 = 0, homeQuotaBytes: Int64 = 0, runner: String = "", grant: TeamGrant = TeamGrant()) {
+                homeBytes: Int64 = 0, homeQuotaBytes: Int64 = 0, runner: String = "", grant: TeamGrant = TeamGrant(),
+                workStatus: AgentWorkStatus? = nil, routines: [AgentRoutine] = [], routinesOff: String = "") {
         self.id = id
         self.name = TeamText.line(name, max: 64)
         self.role = TeamText.line(role, max: 120)
@@ -83,6 +89,9 @@ public struct TeamAgent: Equatable, Sendable, Identifiable {
         self.homeQuotaBytes = homeQuotaBytes
         self.runner = TeamText.line(runner, max: 300)
         self.grant = grant
+        self.workStatus = workStatus
+        self.routines = routines
+        self.routinesOff = TeamText.line(routinesOff, max: 300)
     }
 }
 
@@ -267,10 +276,28 @@ public enum TeamText {
         }
     }
 
+    /// The row's line: portenvd's reason when it can't start, what to
+    /// approve, the status it set (R-0256) while it runs, or else its
+    /// latest board line. `stale` is TeamStatusText's.
+    public static func rowLine(_ a: TeamAgent, now: Date) -> (text: String, stale: Bool) {
+        if a.status == .invalid { return (a.problem, false) }
+        if a.lastLine.isEmpty && !a.approved && !a.remote { return (approval(a, review: nil), false) }
+        if let s = a.workStatus, [.running, .idle, .needsYou].contains(a.status) {
+            return TeamStatusText.line(s, since: nil, now: now)
+        }
+        return (a.lastLine, false)
+    }
+
+    /// The column's routines line (R-0258): why they're off, or
+    /// "Routines: every 30 min"; nil when the agent has none.
+    public static func routinesLine(_ a: TeamAgent) -> String? {
+        a.routinesOff.isEmpty ? TeamStatusText.routines(a.routines) : a.routinesOff
+    }
+
     /// The row as VoiceOver reads it: "Reviewer, needs you. Wants to merge
     /// #42".
-    public static func spoken(_ a: TeamAgent) -> String {
-        let line = a.status == .invalid && !a.problem.isEmpty ? a.problem : a.lastLine
+    public static func spoken(_ a: TeamAgent, now: Date = Date()) -> String {
+        let line = rowLine(a, now: now).text
         return line.isEmpty ? "\(a.name), \(word(a.status))" : "\(a.name), \(word(a.status)). \(line)"
     }
 

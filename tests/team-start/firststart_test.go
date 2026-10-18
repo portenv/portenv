@@ -13,7 +13,10 @@
 //     is "bash <script>", a script in the project;
 //  4. whoami in lead's pane says lead;
 //  5. the script's "portenv ask-owner", over lead's own socket, reaches
-//     portenvd's decision list (the WatchTeam stream the app reads);
+//     portenvd's decision list (the WatchTeam stream the app reads); then
+//     its "ask-owner --choice" (CC-0501) arrives with its choices, a
+//     forged answer is refused, the owner's answer by number and label
+//     over gRPC is taken, and lead's "portenv inbox" shows the label;
 //  6. lead makes a file in the project and runs git there, so the file and
 //     .git/index are lead's (CC-0494);
 //  7. work adds a git worktree in the project (.worktrees/x); approve and
@@ -55,6 +58,8 @@ const (
 	script    = project + "/first-start.sh"
 	script2   = project + "/second-start.sh"
 	question  = "R-0296 first start: may lead begin?"
+	asked     = "CC-0501: which way?"
+	chosen    = "Option b: install deps"
 )
 
 // firstStart is lead's runner: what it prints is what step 4 and 5 read.
@@ -65,6 +70,22 @@ if out=$(portenv ask-owner "` + question + `" 2>&1); then
 else
   echo "first-start ask-owner failed: $out"
 fi
+if out=$(portenv ask-owner "` + asked + `" --choice "Option a: wait" --choice "` + chosen + `" 2>&1); then
+  echo "first-start choice ok: $out"
+else
+  echo "first-start choice failed: $out"
+fi
+# Wait for the owner's answer, following the inbox's cursor.
+cur=""
+for i in $(seq 1 20); do
+  if [ -n "$cur" ]; then in=$(portenv inbox --wait --since "$cur" 2>&1); else in=$(portenv inbox --wait 2>&1); fi
+  if line=$(printf '%s\n' "$in" | grep 'chose "'); then
+    echo "first-start inbox: $line"
+    break
+  fi
+  cur=$(printf '%s\n' "$in" | sed -n 's/^(next: portenv inbox --since \(.*\))$/\1/p')
+  sleep 1
+done
 exec sleep 1000000
 `
 
@@ -242,6 +263,31 @@ ps -o user= -p "$(tmux -S "$sock" display-message -p -t main '#{pane_pid}')"`)
 		h.fatal("step 5: lead's pane doesn't name decision %s:\n%s", ask.GetId(), pane)
 	}
 	t.Logf("step 5: lead's ask-owner is decision %s in the list", ask.GetId())
+
+	// Step 5b: lead's ask-owner --choice (CC-0501), answered by number and
+	// label as the app answers it, and the label in lead's inbox.
+	pick := h.waitDecision(func(d *typesv1.Decision) bool {
+		return d.GetKind() == typesv1.DecisionKind_DECISION_KIND_ASK_OWNER && d.GetFrom() == "lead" &&
+			d.GetState() == typesv1.DecisionState_DECISION_STATE_PENDING && strings.Contains(d.GetDetail(), asked)
+	}, time.Minute)
+	if pick == nil {
+		h.fatal("step 5b: lead's ask-owner --choice isn't in the decision list; lead's pane:\n%s", h.waitPane(ctx, "lead", "first-start choice", time.Second))
+	}
+	if got := strings.Join(pick.GetChoices(), "|"); got != "Option a: wait|"+chosen {
+		h.fatal("step 5b: the decision's choices are %q", got)
+	}
+	if _, err := c.AnswerDecision(ctx, &daemonv1.AnswerDecisionRequest{Name: workspace, DecisionId: pick.GetId(), Approve: true, Choice: 2, ChoiceLabel: "Option a: wait"}); err == nil {
+		h.fatal("step 5b: an answer whose label isn't its choice was taken")
+	}
+	ans, err := c.AnswerDecision(ctx, &daemonv1.AnswerDecisionRequest{Name: workspace, DecisionId: pick.GetId(), Approve: true, Choice: 2, ChoiceLabel: chosen})
+	if err != nil || ans.GetDecision().GetChoice() != 2 {
+		h.fatal("step 5b (choose %q): %v, %v", chosen, ans, err)
+	}
+	inboxPane := h.waitPane(ctx, "lead", "first-start inbox:", time.Minute)
+	if !strings.Contains(inboxPane, "decision "+pick.GetId()+`: chose "`+chosen+`"`) {
+		h.fatal("step 5b: lead's inbox doesn't show the choice:\n%s", inboxPane)
+	}
+	t.Logf("step 5b: lead's ask-owner --choice %s answered with %q, shown in its inbox", pick.GetId(), chosen)
 
 	// Step 6: lead makes a file in the project and runs git there; git add
 	// rewrites .git/index, so both are lead's, which work (who opens the

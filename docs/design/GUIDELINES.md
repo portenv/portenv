@@ -253,6 +253,7 @@ The Team section is the workspace's sidebar when the workspace has a team (agent
 - A package decision lists every package with its exact version and the repository it comes from, and says "Installing runs these packages' setup scripts as root."
 - The first start of a team shows the residual-risk sentence from ADR 0022 §2.
 - An expired decision is greyed, with no Approve; it never becomes an approval.
+- A question with choices (`ask-owner --choice`, CC-0501) shows one button per choice, in order, full width and wrapping, in Approve's place, with no default button, then **Decline…**. Each label is plain text. Answered, it reads “Chose “<label>””. VoiceOver: “Choose “Option b: install deps”: <question>”.
 
 **Agent files** (R-0234): below the agent's conversation, its private home (`/home/<agent>`) with each item's size, the quota ("212 MB of 500 MB · drop files here to add"), Add Files… and drag and drop (the drop target names what will be added and its size). Full: the bar turns red, with what wasn't added and what to do.
 

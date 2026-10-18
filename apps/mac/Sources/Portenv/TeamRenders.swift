@@ -66,6 +66,12 @@ enum TeamRenders {
                     .padding(14).frame(width: 340).frame(maxHeight: .infinity, alignment: .top).background(SwiftUI.Color(nsColor: .windowBackgroundColor))
                         .environment(\.controlActiveState, .key)),
                 "team-first-start-\(appearance)", NSSize(width: 340, height: 260))
+            // A question with choices (CC-0501): one button each, no
+            // default, and Decline…, in the narrowest column.
+            try snapshot(AnyView(DecisionCard(decision: choices(now: now), asker: "Builder") { _, _ in }
+                    .padding(14).frame(width: 260).frame(maxHeight: .infinity, alignment: .top).background(SwiftUI.Color(nsColor: .windowBackgroundColor))
+                        .environment(\.controlActiveState, .key)),
+                "team-decision-choices-\(appearance)", NSSize(width: 260, height: 420))
         }
     }
 
@@ -93,6 +99,13 @@ enum TeamRenders {
         }
         let before = leadFile.replacingOccurrences(of: "max_panes: 2", with: "max_panes: 1")
         return [("new", review(leadFile, approved: "")), ("changed", review(leadFile, approved: before))].compactMap { n, r in r.map { (n, $0) } }
+    }
+
+    static func choices(now: Date) -> TeamDecision {
+        TeamDecision(id: "d-choices", from: "builder", kind: .askOwner, summary: "The payments tests need a date library. What now?",
+                     detail: "The tests fail on the date parsing. I can wait, install the library the API uses, or skip those tests for now.",
+                     createdAt: now.addingTimeInterval(-120),
+                     choices: ["Option a: wait for the API team", "Option b: install deps (date-fns 4.1, as the API uses)", "Option c: skip the date tests for now"])
     }
 
     static func firstStart(now: Date) -> TeamDecision {

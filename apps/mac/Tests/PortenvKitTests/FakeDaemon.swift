@@ -231,6 +231,11 @@ final class FakeDaemon: DaemonAPI, @unchecked Sendable {
         guard let d = lock.withLock({ answered[id] }) else { throw DaemonError("No decision \(id).") }
         return d
     }
+    func chooseDecision(_ box: String, id: String, choice: Int, label: String) async throws -> TeamDecision {
+        try await record(["app", "choose-decision", box, id, String(choice), label])
+        guard let d = lock.withLock({ answered[id] }) else { throw DaemonError("No decision \(id).") }
+        return d
+    }
     func sendMessage(_ box: String, to agent: String, thread: String, text: String) async throws -> TeamMessage {
         try await record(["app", "send-message", box, agent, text])
         return TeamMessage(id: "m-\(lock.withLock { _calls.count })", from: TeamText.owner, to: agent, threadID: thread, text: text)

@@ -313,10 +313,12 @@ func (s *Server) StopAgent(ctx context.Context, req *daemonv1.StopAgentRequest) 
 	return &daemonv1.StopAgentResponse{Agent: info}, nil
 }
 
-// AnswerDecision is the owner's Approve or Decline. Only the app, in front
-// of the person, reaches portenvd's socket; no agent call answers one.
+// AnswerDecision is the owner's Approve or Decline, or choice (CC-0501).
+// Only the app, in front of the person, reaches portenvd's socket; no
+// agent call answers one.
 func (s *Server) AnswerDecision(ctx context.Context, req *daemonv1.AnswerDecisionRequest) (*daemonv1.AnswerDecisionResponse, error) {
-	d, err := s.teamEng().answer(ctx, req.GetName(), req.GetDecisionId(), req.GetApprove(), req.GetNote())
+	d, err := s.teamEng().answerChoice(ctx, req.GetName(), req.GetDecisionId(),
+		ownerAnswer{approve: req.GetApprove(), note: req.GetNote(), choice: req.GetChoice(), label: req.GetChoiceLabel()})
 	if err != nil {
 		return nil, teamStatus(err)
 	}

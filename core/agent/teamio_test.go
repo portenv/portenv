@@ -53,6 +53,11 @@ func boardDecision(summary, detail string) *agentv1.AppendBoardRequest {
 	}}}
 }
 
+func withChoices(l *agentv1.AppendBoardRequest, choice int32, choices ...string) *agentv1.AppendBoardRequest {
+	l.GetDecision().Choices, l.GetDecision().Choice = choices, choice
+	return l
+}
+
 type readBoardStream struct {
 	agentv1.AgentService_ReadBoardServer
 	ctx   context.Context
@@ -69,7 +74,7 @@ func (r *readBoardStream) SetHeader(metadata.MD) error { return nil }
 func TestTheBoardIsWrittenAndReadBack(t *testing.T) {
 	s, home := newBoardServer(t)
 	ctx := context.Background()
-	for _, l := range []*agentv1.AppendBoardRequest{boardMsg("ready for review\nsee the diff"), boardDecision("May I add left-pad?", "It's small.")} {
+	for _, l := range []*agentv1.AppendBoardRequest{boardMsg("ready for review\nsee the diff"), withChoices(boardDecision("May I add left-pad?", "It's small."), 2, "Option a", "Option b")} {
 		if _, err := s.AppendBoard(ctx, l); err != nil {
 			t.Fatal(err)
 		}
@@ -85,7 +90,8 @@ func TestTheBoardIsWrittenAndReadBack(t *testing.T) {
 	if err := s.ReadBoard(&agentv1.ReadBoardRequest{}, st); err != nil {
 		t.Fatal(err)
 	}
-	if len(st.lines) != 2 || st.lines[0].GetMessage().GetText() != "ready for review\nsee the diff" || st.lines[1].GetDecision().GetSummary() != "May I add left-pad?" {
+	if len(st.lines) != 2 || st.lines[0].GetMessage().GetText() != "ready for review\nsee the diff" || st.lines[1].GetDecision().GetSummary() != "May I add left-pad?" ||
+		st.lines[1].GetDecision().GetChoice() != 2 || strings.Join(st.lines[1].GetDecision().GetChoices(), "|") != "Option a|Option b" {
 		t.Errorf("read back: %v", st.lines)
 	}
 }
@@ -103,6 +109,14 @@ func TestTheHelperChecksBoardLinesAgain(t *testing.T) {
 		"summary over 200":     boardDecision(strings.Repeat("s", 201), ""),
 		"newline in summary":   boardDecision("one\ntwo", ""),
 		"no line":              {},
+		"one choice":           withChoices(boardDecision("ok", ""), 0, "only"),
+		"five choices":         withChoices(boardDecision("ok", ""), 0, "a", "b", "c", "d", "e"),
+		"choice past the end":  withChoices(boardDecision("ok", ""), 3, "a", "b"),
+		"negative choice":      withChoices(boardDecision("ok", ""), -1, "a", "b"),
+		"empty choice label":   withChoices(boardDecision("ok", ""), 0, "a", ""),
+		"choice over 80":       withChoices(boardDecision("ok", ""), 0, "a", strings.Repeat("c", 81)),
+		"bidi in a choice":     withChoices(boardDecision("ok", ""), 0, "a", "b\u202Ec"),
+		"newline in a choice":  withChoices(boardDecision("ok", ""), 0, "a", "b\nc"),
 		"bad sender":           {Line: &agentv1.AppendBoardRequest_Message{Message: &typesv1.BoardMessage{Id: "1", From: "../x", To: "lead", Type: typesv1.MessageType_MESSAGE_TYPE_NOTICE, Text: "hi"}}},
 		"unspecified type":     {Line: &agentv1.AppendBoardRequest_Message{Message: &typesv1.BoardMessage{Id: "1", From: "lead", To: "owner", Text: "hi"}}},
 		"unspecified decision": {Line: &agentv1.AppendBoardRequest_Decision{Decision: &typesv1.Decision{Id: "1", From: "lead", Summary: "x", State: typesv1.DecisionState_DECISION_STATE_PENDING}}},

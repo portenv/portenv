@@ -15,11 +15,14 @@ import (
 )
 
 // projectRunner answers setfacl, getfacl, runuser and git like a box with
-// ACLs (unless noACL).
+// ACLs (unless noACL), and the user and group commands from sys. Like the
+// real setfacl, an ACL entry naming a group the box doesn't have is an
+// invalid argument.
 type projectRunner struct {
 	calls []string
 	noACL bool
 	open  func(project string) error
+	sys   *fakeSystem
 }
 
 func (r *projectRunner) Run(_ context.Context, _ []string, name string, args ...string) ([]byte, error) {
@@ -29,6 +32,9 @@ func (r *projectRunner) Run(_ context.Context, _ []string, name string, args ...
 	case "setfacl":
 		if r.noACL {
 			return []byte("setfacl: Operation not supported"), errors.New("exit status 1")
+		}
+		if _, ok := r.sys.groups[TeamGroup]; !ok && slices.Contains(args, "-m") {
+			return []byte("setfacl: Option -m: Invalid argument near character 3"), errors.New("exit status 1")
 		}
 		return nil, nil
 	case "getfacl":
@@ -44,7 +50,7 @@ func (r *projectRunner) Run(_ context.Context, _ []string, name string, args ...
 	case "git":
 		return nil, nil
 	}
-	return nil, errors.New("unexpected " + call)
+	return r.sys.Run(context.Background(), nil, name, args...)
 }
 
 func (r *projectRunner) ran(prefix string) bool {
@@ -74,7 +80,9 @@ func newProjectTeam(t *testing.T) (*TeamUsers, *projectRunner, *[]chownCall, str
 			t.Fatal(err)
 		}
 	}
-	run := &projectRunner{}
+	run := &projectRunner{sys: newFakeSystem()}
+	run.sys.groups[TeamGroup] = TeamGID
+	run.sys.members[TeamGroup] = map[string]bool{"work": true}
 	var chowns []chownCall
 	tu := &TeamUsers{
 		Cfg:   Config{User: "work", UID: 1000, HomeRoot: root},
@@ -208,6 +216,98 @@ func TestPrepareTeamProjectRefuses(t *testing.T) {
 		if _, err := tu.PrepareProject(ctx, bad); err == nil {
 			t.Errorf("PrepareProject(%q) accepted", bad)
 		}
+	}
+}
+
+// The first team start on a new workspace: group team doesn't exist yet
+// (agent users, which used to make it, come after the project is opened).
+// It is made, with its gid checks, and work joins it, before open-project.
+func TestPrepareTeamProjectMakesTheTeamGroupFirst(t *testing.T) {
+	ctx := context.Background()
+	fresh := func(t *testing.T) (*TeamUsers, *projectRunner) {
+		tu, run, _, _ := newProjectTeam(t)
+		delete(run.sys.groups, TeamGroup)
+		delete(run.sys.members, TeamGroup)
+		return tu, run
+	}
+	t.Run("a new workspace", func(t *testing.T) {
+		tu, run := fresh(t)
+		if _, err := tu.PrepareProject(ctx, "/home/work/shop"); err != nil {
+			t.Fatal(err)
+		}
+		if gid, ok := run.sys.groups[TeamGroup]; !ok || gid != TeamGID {
+			t.Fatalf("group %s = %d, %v; want gid %d", TeamGroup, gid, ok, TeamGID)
+		}
+		if !run.sys.members[TeamGroup]["work"] {
+			t.Error("work isn't in group team")
+		}
+		at := func(prefix string) int {
+			return slices.IndexFunc(run.calls, func(c string) bool { return strings.HasPrefix(c, prefix) })
+		}
+		order := []string{
+			"getent group " + TeamGroup,
+			"getent group 2000",
+			"groupadd --gid 2000 " + TeamGroup,
+			"usermod -a -G " + TeamGroup + " work",
+			"runuser -u work -- " + teamIOBinary + " team-io open-project",
+		}
+		for i, c := range order {
+			if at(c) < 0 {
+				t.Fatalf("didn't run %q; ran %q", c, run.calls)
+			}
+			if i > 0 && at(order[i-1]) > at(c) {
+				t.Errorf("%q ran after %q; ran %q", order[i-1], c, run.calls)
+			}
+		}
+	})
+	t.Run("the group exists but work isn't in it", func(t *testing.T) {
+		// Without it, open-project (as work) can't chgrp to team.
+		tu, run, _, _ := newProjectTeam(t)
+		delete(run.sys.members, TeamGroup)
+		if _, err := tu.PrepareProject(ctx, "/home/work/shop"); err != nil {
+			t.Fatal(err)
+		}
+		join := slices.Index(run.calls, "usermod -a -G "+TeamGroup+" work")
+		open := slices.IndexFunc(run.calls, func(c string) bool { return strings.Contains(c, "team-io open-project") })
+		if join < 0 || open < 0 || join > open {
+			t.Errorf("work didn't join team before open-project; ran %q", run.calls)
+		}
+		if run.ran("groupadd") {
+			t.Errorf("made the group again: %q", run.calls)
+		}
+	})
+	t.Run("a group team with another gid is refused", func(t *testing.T) {
+		tu, run := fresh(t)
+		run.sys.groups[TeamGroup] = 2001
+		if _, err := tu.PrepareProject(ctx, "/home/work/shop"); err == nil || !strings.Contains(err.Error(), "gid 2001") {
+			t.Fatalf("err = %v, want the wrong gid refused", err)
+		}
+		if run.ran("runuser") || run.ran("groupadd") {
+			t.Errorf("went on: %q", run.calls)
+		}
+	})
+	t.Run("gid 2000 held by another group is refused", func(t *testing.T) {
+		tu, run := fresh(t)
+		run.sys.groups["builders"] = TeamGID
+		if _, err := tu.PrepareProject(ctx, "/home/work/shop"); err == nil || !strings.Contains(err.Error(), "builders") {
+			t.Fatalf("err = %v, want gid 2000's owner named", err)
+		}
+		if run.ran("runuser") || run.ran("groupadd") {
+			t.Errorf("went on: %q", run.calls)
+		}
+	})
+}
+
+// setfacl refusing an unknown group isn't a filesystem without ACLs.
+func TestOpenProjectSaysWhatSetfaclSaid(t *testing.T) {
+	_, run, _, project := newProjectTeam(t)
+	delete(run.sys.groups, TeamGroup)
+	err := openProject(context.Background(), project, run, func(*os.Root, string, int, int) error { return nil })
+	if err == nil || errors.Is(err, errNoACL) || strings.Contains(err.Error(), "don't keep ACLs") {
+		t.Fatalf("err = %v, want setfacl's own words, not the no-ACL line", err)
+	}
+	if !strings.Contains(err.Error(), "Invalid argument") {
+		t.Errorf("err = %v, want setfacl's output in it", err)
 	}
 }
 

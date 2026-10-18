@@ -581,6 +581,14 @@ message EnsureAgentUserResponse {
   string home = 2;
   // Made now, rather than already there.
   bool created = 3;
+  // The agent's run folder, /run/portenv-team/<id> (ADR 0022 section 1):
+  // the helper's, the agent's group, setgid, 0710. init makes it, and
+  // tmux_dir and tmp_dir in it (the agent's, 0700), at every call, since
+  // /run is lost when the box stops. The helper listens on
+  // run_dir/portenv.sock.
+  string run_dir = 4;
+  string tmux_dir = 5;
+  string tmp_dir = 6;
 }
 
 message RemoveAgentUserRequest {

@@ -5,6 +5,7 @@ package agent
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -16,9 +17,13 @@ import (
 	typesv1 "github.com/portenv/portenv/proto/gen/go/portenv/types/v1"
 )
 
+// fakeUsers is init: it makes the agent's run folder in the hub's folder
+// as init does, without the chown.
 type fakeUsers struct {
-	got []string
-	err error
+	t      *testing.T
+	runDir string
+	got    []string
+	err    error
 }
 
 func (f *fakeUsers) EnsureAgentUser(_ context.Context, id string) (AgentUser, error) {
@@ -26,7 +31,10 @@ func (f *fakeUsers) EnsureAgentUser(_ context.Context, id string) (AgentUser, er
 	if f.err != nil {
 		return AgentUser{}, f.err
 	}
-	return AgentUser{UID: 2001, Home: "/home/" + id, Created: true}, nil
+	makeTestRunDir(f.t, f.runDir, id, 2001)
+	base := filepath.Join(f.runDir, id)
+	return AgentUser{UID: 2001, Home: "/home/" + id, Created: true,
+		RunDir: base, TmuxDir: filepath.Join(base, "tmux"), TmpDir: filepath.Join(base, "tmp")}, nil
 }
 
 type wrote struct {
@@ -40,8 +48,8 @@ type wrote struct {
 func newStartServer(t *testing.T) (*apiServer, *fakeUsers, *[]wrote, *[]AgentServerSpec, *[]int) {
 	t.Helper()
 	uid := 2001
-	h, _ := newTestHub(t, &uid)
-	users := &fakeUsers{}
+	h := newTestHub(t, &uid)
+	users := &fakeUsers{t: t, runDir: h.dir}
 	var writes []wrote
 	var started []AgentServerSpec
 	var killed []int
@@ -238,4 +246,24 @@ func TestStartTeamAgentReachesLaneAsIdleInput(t *testing.T) {
 	if re == nil || !re.MatchString("output\n> \n") || re.MatchString("thinking…") {
 		t.Errorf("builder's idle input = %v", re)
 	}
+}
+
+// A run folder init reports anywhere but where the hub serves is refused
+// before anything is served.
+func TestStartTeamAgentRefusesAnotherRunFolder(t *testing.T) {
+	s, _, _, started, _ := newStartServer(t)
+	s.users = elsewhereUsers{}
+	_, err := s.StartTeamAgent(context.Background(), &agentv1.StartTeamAgentRequest{AgentId: "builder", Argv: []string{"claude"}})
+	if status.Code(err) != codes.Internal || !strings.Contains(err.Error(), "run folder") {
+		t.Errorf("StartTeamAgent = %v, want a refusal naming the run folder", err)
+	}
+	if len(*started) != 0 {
+		t.Errorf("started %d servers", len(*started))
+	}
+}
+
+type elsewhereUsers struct{}
+
+func (elsewhereUsers) EnsureAgentUser(context.Context, string) (AgentUser, error) {
+	return AgentUser{UID: 2001, Home: "/home/builder", RunDir: "/tmp/x", TmuxDir: "/tmp/x/tmux", TmpDir: "/tmp/x/tmp"}, nil
 }

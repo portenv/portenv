@@ -55,6 +55,11 @@ func (t *TeamUsers) PrepareProject(ctx context.Context, projectDir string) ([]st
 			return nil, err
 		}
 	}
+	// On a new workspace group team doesn't exist yet (agent users come
+	// later), and setfacl can't name a group the box doesn't have.
+	if err := t.ensureTeamGroup(ctx); err != nil {
+		return nil, err
+	}
 	// Nothing directly in the owner's home is readable by others once they
 	// can pass through it (R-0262).
 	fixed, err := t.tightenHome(work, append(t.projects(), name))
@@ -86,8 +91,13 @@ var errNoACL = errors.New("this workspace's files don't keep ACLs, so agents can
 // root.Lchown (a fake in tests).
 func openProject(ctx context.Context, project string, run Runner, lchown func(r *os.Root, rel string, uid, gid int) error) error {
 	if out, err := run.Run(ctx, nil, "setfacl", "-R", "-P", "-m", "g:"+TeamGroup+":rwX,d:g:"+TeamGroup+":rwX", project); err != nil {
-		_ = out
-		return errNoACL
+		// Only a filesystem that refuses ACLs gets the no-ACL line; an
+		// unknown group (an invalid argument) or anything else is said as
+		// setfacl said it.
+		if strings.Contains(string(out), "Operation not supported") {
+			return errNoACL
+		}
+		return cmdError("give the project to group "+TeamGroup, out, err)
 	}
 	out, err := run.Run(ctx, nil, "getfacl", "-c", "-p", project)
 	if err != nil || !strings.Contains(string(out), "default:group:"+TeamGroup+":rwx") {

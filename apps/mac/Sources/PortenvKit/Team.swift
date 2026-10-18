@@ -108,9 +108,14 @@ public struct TeamMessage: Equatable, Sendable, Identifiable {
     /// Plain text: control characters removed, line breaks kept.
     public var text: String
     public var createdAt: Date?
+    /// For Portenv's notices about one agent (a start that failed): its
+    /// id, so the notice shows in that agent's column (R-0302).
+    public var about: String
 
-    public init(id: String, from: String, to: String, threadID: String = "", kind: Kind = .answer, text: String, createdAt: Date? = nil) {
+    public init(id: String, from: String, to: String, threadID: String = "", kind: Kind = .answer, text: String, createdAt: Date? = nil,
+                about: String = "") {
         self.id = id
+        self.about = about
         self.from = from
         self.to = to
         self.threadID = threadID
@@ -234,7 +239,10 @@ public struct TeamState: Equatable, Sendable {
     /// An agent's conversation with the owner: what it sent the owner, what
     /// the owner sent it, and Portenv's notices to the owner about it.
     public func conversation(with id: String) -> [TeamMessage] {
-        messages.filter { ($0.from == id && $0.to == TeamText.owner) || ($0.from == TeamText.owner && $0.to == id) }
+        messages.filter {
+            ($0.from == id && $0.to == TeamText.owner) || ($0.from == TeamText.owner && $0.to == id)
+                || ($0.from == TeamText.portenv && $0.to == TeamText.owner && $0.about == id)
+        }
     }
 
     /// An agent's decisions, newest last.
@@ -245,6 +253,8 @@ public struct TeamState: Equatable, Sendable {
 public enum TeamText {
     /// The owner's id on the board.
     public static let owner = "owner"
+    /// Portenv's own name on the board, for its notices.
+    public static let portenv = "portenv"
     public static let team = "Team"
     public static let you = "You"
     public static let addAgent = "Add Agent\u{2026}"
@@ -285,11 +295,19 @@ public enum TeamText {
     /// latest board line. `stale` is TeamStatusText's.
     public static func rowLine(_ a: TeamAgent, now: Date) -> (text: String, stale: Bool) {
         if a.status == .invalid { return (a.problem, false) }
+        if let failed = startFailure(a) { return (failed, false) }
         if a.lastLine.isEmpty && !a.approved && !a.remote { return (approval(a, review: nil), false) }
         if let s = a.workStatus, [.running, .idle, .needsYou].contains(a.status) {
             return TeamStatusText.line(s, since: nil, now: now)
         }
         return (a.lastLine, false)
+    }
+
+    /// Why its last start failed, "Couldn't start: …", while it's stopped
+    /// and until a start works (R-0302); shown in red in its row and under
+    /// Start. Nil otherwise.
+    public static func startFailure(_ a: TeamAgent) -> String? {
+        a.status == .stopped && !a.problem.isEmpty ? a.problem : nil
     }
 
     /// The column's routines line (R-0258): why they're off, or

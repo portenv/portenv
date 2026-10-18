@@ -70,6 +70,18 @@ struct TeamTextTests {
         #expect(TeamMessage(m).kind == .notice)
     }
 
+    /// A notice about one agent keeps whom it's about (R-0302).
+    @Test func aNoticeKeepsWhoItsAbout() {
+        var m = Portenv_Types_V1_BoardMessage()
+        m.id = "n1"
+        m.from = "portenv"
+        m.to = "owner"
+        m.type = .notice
+        m.text = "Lead couldn\u{2019}t start: an old toolbox"
+        m.about = "lead"
+        #expect(TeamMessage(m).about == "lead")
+    }
+
     @Test func coloursFollowTeamOrderUnlessTheFileNamesOne() {
         let team = ["lead", "builder", "reviewer", "keeper", "five", "six", "seven"].map { TeamAgent(id: $0, name: $0, status: .idle) }
         #expect(team.map { AgentColours.name(for: $0, in: team) } == ["indigo", "teal", "purple", "pink", "brown", "mint", "indigo"])
@@ -144,7 +156,11 @@ struct TeamStateTests {
         for (id, from, to) in [("1", "lead", "builder"), ("2", "builder", "owner"), ("3", "owner", "builder"), ("4", "owner", "reviewer"), ("5", "portenv", "owner")] {
             t.apply(.message(TeamMessage(id: id, from: from, to: to, text: id)))
         }
-        #expect(t.conversation(with: "builder").map(\.id) == ["2", "3"])
+        // Portenv's notice to the owner about builder (a start that
+        // failed) is in builder's column; one about lead isn't (R-0302).
+        t.apply(.message(TeamMessage(id: "6", from: "portenv", to: "owner", kind: .notice, text: "6", about: "builder")))
+        t.apply(.message(TeamMessage(id: "7", from: "portenv", to: "owner", kind: .notice, text: "7", about: "lead")))
+        #expect(t.conversation(with: "builder").map(\.id) == ["2", "3", "6"])
     }
 }
 
@@ -212,6 +228,23 @@ struct TeamControllerTests {
         daemon.failing["stop-agent"] = "builder isn\u{2019}t running."
         await team.stop("builder")
         #expect(team.error == "builder isn\u{2019}t running.")
+    }
+
+    /// Why a start Approve set going failed shows in the row and under
+    /// Start until a start works (R-0302).
+    @Test func aFailedStartShowsUntilAStartWorks() async {
+        let daemon = FakeDaemon()
+        let failed = TeamAgent(id: "builder", name: "Builder", status: .stopped, problem: "Couldn\u{2019}t start: an old toolbox", lastLine: "Board line")
+        daemon.teamScripts = [.init(events: [(.agent(failed), "c1")], failure: DaemonError.outOfDate)]
+        let team = TeamController(box: "acme", daemon: daemon)
+        await team.follow()
+        let shown = team.state.agent("builder")!
+        #expect(TeamText.startFailure(shown) == "Couldn\u{2019}t start: an old toolbox")
+        #expect(TeamText.rowLine(shown, now: Date()).text == "Couldn\u{2019}t start: an old toolbox")
+        #expect(team.canStart(shown))
+        await team.start("builder")
+        #expect(team.state.agent("builder").map(TeamText.startFailure) == .some(nil))
+        #expect(team.state.agent("builder").map { TeamText.rowLine($0, now: Date()).text } != "Couldn\u{2019}t start: an old toolbox")
     }
 
     @Test func removingTheSelectedAgentShowsAllTabs() async {
@@ -349,6 +382,13 @@ struct TeamAgentStatusMappingTests {
         #expect(TeamText.rowLine(info(.stopped) { $0.status = status("Was testing", minutesAgo: 1) }, now: now).text == "Board line")
         let invalid = info(.invalid) { $0.problem = "Unknown key"; $0.status = status("x", minutesAgo: 1) }
         #expect(TeamText.rowLine(invalid, now: now).text == "Unknown key")
+        #expect(TeamText.startFailure(invalid) == nil)
+        // A start that failed is a stopped agent's line, never a running
+        // one's (R-0302).
+        let failed = info(.stopped) { $0.problem = "Couldn\u{2019}t start: an old toolbox" }
+        #expect(TeamText.rowLine(failed, now: now).text == "Couldn\u{2019}t start: an old toolbox")
+        #expect(TeamText.spoken(failed, now: now) == "Builder, stopped. Couldn\u{2019}t start: an old toolbox")
+        #expect(TeamText.startFailure(info(.starting) { $0.problem = "Couldn\u{2019}t start: x" }) == nil)
     }
 
     @Test func routinesAndWhyTheyreOff() {

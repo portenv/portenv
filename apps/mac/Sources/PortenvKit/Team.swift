@@ -66,12 +66,16 @@ public struct TeamAgent: Equatable, Sendable, Identifiable {
     /// Its routines (R-0258), and why they're off, if they are.
     public var routines: [AgentRoutine]
     public var routinesOff: String
+    /// Set when its file asks for share_login, which this build doesn't
+    /// support: nothing is shared (R-0323).
+    public var shareLoginOff: String
 
     public init(id: String, name: String, role: String = "", avatar: String = "", remote: Bool = false, via: String = "",
                 status: AgentStatus, problem: String = "", fileSHA256: String = "", approved: Bool = true,
                 tabIDs: [String] = [], lastLine: String = "", pendingDecisions: Int = 0,
                 homeBytes: Int64 = 0, homeQuotaBytes: Int64 = 0, runner: String = "", grant: TeamGrant = TeamGrant(),
-                workStatus: AgentWorkStatus? = nil, routines: [AgentRoutine] = [], routinesOff: String = "") {
+                workStatus: AgentWorkStatus? = nil, routines: [AgentRoutine] = [], routinesOff: String = "",
+                shareLoginOff: String = "") {
         self.id = id
         self.name = TeamText.line(name, max: 64)
         self.role = TeamText.line(role, max: 120)
@@ -92,6 +96,7 @@ public struct TeamAgent: Equatable, Sendable, Identifiable {
         self.workStatus = workStatus
         self.routines = routines
         self.routinesOff = TeamText.line(routinesOff, max: 300)
+        self.shareLoginOff = TeamText.line(shareLoginOff, max: 300)
     }
 }
 

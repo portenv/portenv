@@ -136,6 +136,21 @@ func TestJSONPrintsTheResult(t *testing.T) {
 	}
 }
 
+// whoami says when share_login is off (R-0323), and nothing when it isn't
+// asked for.
+func TestWhoamiSaysShareLoginIsOff(t *testing.T) {
+	off := "share_login (claude) isn't supported in this build: nothing of the owner's was shared with you. Sign in yourself in your own terminal, or ask the owner."
+	sock, _ := fakeHelper(t, &agentv1.TeamCallsRequest{Ok: true, Result: &agentv1.TeamCallsRequest_Whoami{Whoami: &agentv1.WhoAmIResult{Id: "builder", Name: "Builder", ShareLoginOff: off}}})
+	code, out, _ := runTeamCmd(t, sock, "whoami")
+	if code != 0 || !strings.Contains(out, off+"\n") {
+		t.Errorf("exit %d, out %q", code, out)
+	}
+	sock, _ = fakeHelper(t, &agentv1.TeamCallsRequest{Ok: true, Result: &agentv1.TeamCallsRequest_Whoami{Whoami: &agentv1.WhoAmIResult{Id: "lead", Name: "Lead"}}})
+	if code, out, _ := runTeamCmd(t, sock, "whoami"); code != 0 || strings.Contains(out, "share_login") {
+		t.Errorf("exit %d, out %q", code, out)
+	}
+}
+
 func TestUsageMistakesNeverReachTheHelper(t *testing.T) {
 	sock, got := fakeHelper(t, &agentv1.TeamCallsRequest{Ok: true})
 	for _, args := range [][]string{

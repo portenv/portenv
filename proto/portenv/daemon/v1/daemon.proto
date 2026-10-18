@@ -910,6 +910,9 @@ message AgentInfo {
   repeated portenv.types.v1.Routine routines = 19;
   // Why its routines are off, if they are (R-0258).
   string routines_off = 20;
+  // Set when its file asks for share_login, which this build doesn't
+  // support: one plain line saying nothing is shared (R-0323).
+  string share_login_off = 21;
 }
 
 message WatchTeamRequest {

@@ -74,6 +74,12 @@ struct TeamColumn: View {
                         Text(verbatim: routines).font(.system(size: 11)).foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
+                    // A shared sign-in its file asks for, which this build
+                    // doesn't do (R-0323).
+                    if !agent.shareLoginOff.isEmpty {
+                        Text(verbatim: agent.shareLoginOff).font(.system(size: 11)).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
             }
             .padding(.horizontal, 14).padding(.vertical, 10)

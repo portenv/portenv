@@ -490,6 +490,9 @@ message WhoAmIResult {
   // Why its routines are off, if they are ("Portenv doesn't know when
   // this runner is idle").
   string routines_off = 16;
+  // Set when its file asks for share_login, which this build doesn't
+  // support: nothing is shared, so it signs in itself (R-0323).
+  string share_login_off = 17;
 }
 
 message Teammate {

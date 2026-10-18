@@ -4,15 +4,18 @@ import PortenvKit
 import PortenvTerm
 import SwiftUI
 
-/// Split view (PLAN 1.2b, the split-view board): up to four panes, each its
-/// own viewer showing one tab, laid out by SplitLayout. Each pane is a slim
-/// header over one tab's terminal (TabTerminalPane, ADR 0020); the focused
-/// pane has a 1 px accent outline; dividers drag within the panes' minimums.
-struct SplitView: View {
+/// Split view (PLAN 1.2b, the split-view board): up to four panes, laid out
+/// by SplitLayout, each streaming its own tab through MainTabTerminal (ADR
+/// 0020), with its own Reconnecting and Disconnected. With more than one
+/// pane, each has a slim header (the tab picker and a close button), the
+/// focused one a 1 px accent outline, and dividers drag within the panes'
+/// minimums. With one pane it is the plain terminal, as before.
+struct SplitPanes: View {
     @Bindable var split: SplitController
-    let sources: PaneSources
-    /// The time the header's "quiet since" is measured from.
-    var now: () -> Date = { Date() }
+    let provider: any TabTerminalProvider
+    let generation: Int
+    let box: String
+    var serviceComing = false
 
     var body: some View {
         GeometryReader { geo in
@@ -20,83 +23,91 @@ struct SplitView: View {
             let frames = split.layout.frames(in: size)
             ZStack(alignment: .topLeading) {
                 ForEach(split.layout.panes, id: \.self) { pane in
-                    if let frame = frames[pane] {
-                        PaneView(split: split, pane: pane, source: sources.source(for: pane), now: now())
+                    if let frame = frames[pane], let tab = split.layout.tab(in: pane) {
+                        PaneView(split: split, pane: pane, tab: tab, provider: provider, generation: generation,
+                                 box: box, serviceComing: serviceComing)
                             .frame(width: frame.width, height: frame.height)
                             .offset(x: frame.minX, y: frame.minY)
                     }
                 }
                 ForEach(split.layout.dividers(in: size), id: \.path) { divider in
                     DividerHandle(divider: divider) { fraction in
-                        split.resize(at: divider.path, to: fraction, in: size)
+                        split.resize(at: divider.path, to: fraction)
                     }
                 }
             }
             .frame(width: size.width, height: size.height, alignment: .topLeading)
-            .coordinateSpace(name: SplitView.space)
+            .coordinateSpace(name: SplitPanes.space)
+            .clipped()
         }
+        .onGeometryChange(for: CGSize.self) { $0.size } action: { split.size = $0 }
         .accessibilityElement(children: .contain)
     }
+
+    /// The coordinate space dividers measure drags in.
+    static let space = "split"
 }
 
-/// One pane: its header, then its tab's terminal.
+/// One pane: its header when split, then its tab's terminal.
 private struct PaneView: View {
     @Bindable var split: SplitController
     let pane: PaneID
-    let source: (any TabTerminalSource)?
-    let now: Date
+    let tab: String
+    let provider: any TabTerminalProvider
+    let generation: Int
+    let box: String
+    let serviceComing: Bool
 
-    private var tab: TabInfo? { split.tab(split.layout.tab(in: pane)) }
+    private var info: TabInfo? { split.tab(in: pane) }
     private var focused: Bool { split.layout.focused == pane }
-    private var header: PaneHeader { tab.map { PaneHeader($0, now: now) } ?? PaneHeader(detail: "", who: "") }
-    private var label: String { header.label(tab: tab?.name ?? "") }
+    private var name: String { info?.name ?? "" }
+    /// VoiceOver's name: "Pane: grok tab"; with one pane, the terminal's
+    /// name as before.
+    private var label: String { split.isSplit ? SplitText.paneLabel(tab: name, status: nil) : A11y.terminal(box: box) }
 
     var body: some View {
         VStack(spacing: 0) {
-            PaneHeaderBar(split: split, pane: pane, tab: tab, header: header)
-            Group {
-                if let source {
-                    TabTerminalPane(source: source, label: label,
-                                    isFocused: Binding(get: { focused }, set: { if $0 { split.focus(pane) } }))
-                } else {
-                    Color(nsColor: .textBackgroundColor)
-                }
+            if split.isSplit {
+                PaneHeaderBar(split: split, pane: pane, tab: info)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            MainTabTerminal(shown: TabTerminalShown(provider: provider), tab: tab, generation: generation,
+                            label: label, serviceComing: serviceComing,
+                            isActive: focused, onFocus: { split.focus(pane) })
         }
         // The focused pane's 1 px accent outline (only when split: one pane
         // is always the focused one).
         .overlay {
             if focused && split.isSplit {
-                Rectangle().strokeBorder(Color.accentColor, lineWidth: 1).allowsHitTesting(false)
+                Rectangle().strokeBorder(Color.accentColor, lineWidth: 1)
+                    .allowsHitTesting(false)
                     .accessibilityHidden(true)
             }
         }
-        .contentShape(Rectangle())
-        .simultaneousGesture(TapGesture().onEnded { split.focus(pane) })
         .accessibilityElement(children: .contain)
         .accessibilityLabel(label)
-        .accessibilityAddTraits(focused ? .isSelected : [])
+        .accessibilityAddTraits(focused && split.isSplit ? .isSelected : [])
     }
 }
 
-/// The pane header (the board): the tab picker (the tab's name and a
-/// chevron), what it's doing, who is typing, and the close button.
+/// The pane header (the board, slim): the tab picker (the tab's name and a
+/// chevron, listing the tabs no other pane shows), the program running in
+/// it, and the close button. Closing a pane never stops its tab.
 private struct PaneHeaderBar: View {
     @Bindable var split: SplitController
     let pane: PaneID
     let tab: TabInfo?
-    let header: PaneHeader
 
     var body: some View {
         HStack(spacing: 10) {
             Menu {
-                ForEach(split.tabs) { t in
-                    Button(t.name) { Task { await split.show(t.id) } }
+                ForEach(split.pickerTabs(for: pane)) { t in
+                    Toggle(isOn: Binding(get: { t.id == tab?.id }, set: { if $0 { split.show(t.id, in: pane) } })) {
+                        Text(verbatim: t.name)
+                    }
                 }
             } label: {
                 HStack(spacing: 4) {
-                    Text(tab?.name ?? "").font(.system(size: 12, weight: .semibold))
+                    Text(verbatim: tab?.name ?? "").font(.system(size: 12, weight: .semibold))
                     Image(systemName: "chevron.down").font(.system(size: 8, weight: .semibold))
                 }
             }
@@ -104,37 +115,33 @@ private struct PaneHeaderBar: View {
             .buttonStyle(.plain)
             .menuIndicator(.hidden)
             .fixedSize()
-            .simultaneousGesture(TapGesture().onEnded { split.focus(pane) })
             .accessibilityLabel(SplitText.pickerLabel(tab: tab?.name ?? ""))
-            Text(header.detail)
+            // What's running: the one status the tab list carries today.
+            Text(verbatim: tab?.program ?? "")
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .truncationMode(.tail)
             Spacer(minLength: 8)
-            Text(header.who)
-                .font(.system(size: 12))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-            if split.isSplit {
-                Button {
-                    split.closePane(pane)
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 9, weight: .semibold))
-                        .frame(width: 16, height: 16)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
-                .help(SplitText.closePane)
-                .accessibilityLabel(SplitText.closeLabel(tab: tab?.name ?? ""))
+            Button {
+                split.closePane(pane)
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 9, weight: .semibold))
+                    .frame(width: 16, height: 16)
+                    .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .help(SplitText.closePane)
+            .accessibilityLabel(SplitText.closeLabel(tab: tab?.name ?? ""))
         }
         .padding(.horizontal, 12)
         .frame(height: 28)
         .background(Color.primary.opacity(0.04))
         .overlay(alignment: .bottom) { Divider() }
+        .contentShape(Rectangle())
+        .onTapGesture { split.focus(pane) }
     }
 }
 
@@ -155,7 +162,7 @@ private struct DividerHandle: View {
         .onHover { inside in
             if inside { (vertical ? NSCursor.resizeLeftRight : NSCursor.resizeUpDown).push() } else { NSCursor.pop() }
         }
-        .gesture(DragGesture(coordinateSpace: .named(SplitView.space)).onChanged { g in
+        .gesture(DragGesture(coordinateSpace: .named(SplitPanes.space)).onChanged { g in
             let fraction = vertical ? (g.location.x - span.minX) / max(span.width, 1)
                 : (g.location.y - span.minY) / max(span.height, 1)
             resize(Double(fraction))
@@ -166,7 +173,71 @@ private struct DividerHandle: View {
     }
 }
 
-extension SplitView {
-    /// The coordinate space dividers measure drags in.
-    static let space = "split"
+/// The tab bar's mark for a tab in a pane: a small window with the pane's
+/// place filled in.
+struct PaneGlyph: View {
+    let frame: CGRect
+
+    var body: some View {
+        let w: CGFloat = 13, h: CGFloat = 10
+        ZStack(alignment: .topLeading) {
+            RoundedRectangle(cornerRadius: 2).strokeBorder(.secondary, lineWidth: 1)
+            Rectangle().fill(.secondary)
+                .frame(width: max(2, frame.width * (w - 4)), height: max(2, frame.height * (h - 4)))
+                .offset(x: 2 + frame.minX * (w - 4), y: 2 + frame.minY * (h - 4))
+        }
+        .frame(width: w, height: h)
+        .accessibilityHidden(true)
+    }
+}
+
+/// Split view's commands (PLAN 1.2b), in the Window menu: Split Right ⌘D,
+/// Split Down ⇧⌘D, Close Pane, and ⌘⌥ and the arrows between panes. ⌘W
+/// (Close Tab) closes the focused pane first (TabCommands).
+struct SplitCommands: Commands {
+    let split: SplitController?
+
+    var body: some Commands {
+        CommandGroup(before: .windowArrangement) {
+            Button(SplitText.splitRight) { Task { await split?.split(.right) } }
+                .keyboardShortcut("d", modifiers: .command)
+                .disabled(!(split?.canSplit(.right) ?? false))
+            Button(SplitText.splitDown) { Task { await split?.split(.down) } }
+                .keyboardShortcut("d", modifiers: [.command, .shift])
+                .disabled(!(split?.canSplit(.down) ?? false))
+            Button(SplitText.closePane) { split?.closePane() }
+                .disabled(!(split?.isSplit ?? false))
+            Button(SplitText.focusLeft) { split?.moveFocus(.left) }
+                .keyboardShortcut(.leftArrow, modifiers: [.command, .option])
+                .disabled(!(split?.isSplit ?? false))
+            Button(SplitText.focusRight) { split?.moveFocus(.right) }
+                .keyboardShortcut(.rightArrow, modifiers: [.command, .option])
+                .disabled(!(split?.isSplit ?? false))
+            Button(SplitText.focusUp) { split?.moveFocus(.up) }
+                .keyboardShortcut(.upArrow, modifiers: [.command, .option])
+                .disabled(!(split?.isSplit ?? false))
+            Button(SplitText.focusDown) { split?.moveFocus(.down) }
+                .keyboardShortcut(.downArrow, modifiers: [.command, .option])
+                .disabled(!(split?.isSplit ?? false))
+            Divider()
+        }
+    }
+}
+
+/// The title bar's Split Right and Split Down buttons (the board).
+struct SplitToolbarButtons: View {
+    @Bindable var split: SplitController
+
+    var body: some View {
+        Button { Task { await split.split(.right) } } label: {
+            Label(SplitText.splitRight, systemImage: "rectangle.split.2x1")
+        }
+        .help("\(SplitText.splitRight) (\u{2318}D)")
+        .disabled(!split.canSplit(.right))
+        Button { Task { await split.split(.down) } } label: {
+            Label(SplitText.splitDown, systemImage: "rectangle.split.1x2")
+        }
+        .help("\(SplitText.splitDown) (\u{21E7}\u{2318}D)")
+        .disabled(!split.canSplit(.down))
+    }
 }

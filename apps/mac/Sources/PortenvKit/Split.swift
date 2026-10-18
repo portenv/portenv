@@ -4,19 +4,15 @@ import CoreGraphics
 import Foundation
 import Observation
 
-/// A pane of split view (PLAN 1.2b, the split-view board): numbered 1 to 4,
-/// each its own viewer of the box's tabs, so two panes never fight over the
-/// current tab and an agent choosing a tab never moves a pane.
+/// A pane of split view (PLAN 1.2b, the split-view board): numbered 1 to 4.
+/// Each pane streams its own tab (ADR 0020), so two panes never fight over a
+/// current tab and an agent typing in a tab never moves a pane.
 public struct PaneID: Hashable, Sendable, Comparable, CustomStringConvertible {
     public let number: Int
     public init(_ number: Int) { self.number = number }
 
-    /// The viewer the pane looks through: pane 1 is the app's existing
-    /// viewer, the others `app-2` to `app-4`.
-    public var viewer: String { number == 1 ? TabViewer.app : "\(TabViewer.app)-\(number)" }
-
     public static func < (a: PaneID, b: PaneID) -> Bool { a.number < b.number }
-    public var description: String { viewer }
+    public var description: String { "pane \(number)" }
 }
 
 /// Split Right (side by side) or Split Down (one above the other).
@@ -41,6 +37,8 @@ public enum SplitText {
     public static let focusRight = "Focus Pane Right"
     public static let focusUp = "Focus Pane Above"
     public static let focusDown = "Focus Pane Below"
+    /// A tab bar tab's VoiceOver value when a pane shows it.
+    public static let inAPane = "in a pane"
 
     /// VoiceOver's name for a pane: "Pane: grok tab, Grok Bot is typing".
     public static func paneLabel(tab: String, status: String?) -> String {
@@ -330,20 +328,6 @@ public struct SplitLayout: Equatable, Sendable {
     }
 }
 
-/// What a pane's terminal can do, as split view sees it (R-0131). Today
-/// each pane attaches as its own viewer of the box's grouped tmux session;
-/// lane A's per-tab terminal can replace that behind this protocol without
-/// touching the layout, focus or commands.
-@MainActor
-public protocol PaneTerminals: AnyObject {
-    /// Shows a tab in a pane.
-    func show(tab: String, in pane: PaneID) async throws
-    /// Makes a new tab, shown in that pane only.
-    func newTab(name: String, in pane: PaneID) async throws -> TabInfo
-    /// The pane closed: its terminal ends; the tab keeps running.
-    func closed(_ pane: PaneID)
-}
-
 /// What ⌘W did.
 public enum CommandWResult: Equatable, Sendable {
     case closedPane
@@ -352,19 +336,32 @@ public enum CommandWResult: Equatable, Sendable {
 }
 
 /// Split view: the layout, and the actions on it (Split Right ⌘D, Split
-/// Down ⇧⌘D, ⌘⌥ and the arrows, ⌘W, choosing a tab).
+/// Down ⇧⌘D, ⌘⌥ and the arrows, ⌘W, choosing a tab), over the window's
+/// TabsController. Each pane draws its own tab's terminal (ADR 0020's
+/// TabTerminalSource, through MainTabTerminal); this only decides which tab
+/// each pane shows.
+///
+/// The tab bar's current tab is always the focused pane's: choosing a tab
+/// anywhere (the tab bar, ⌘1–9, ⌃Tab, ⌘T) shows it in the focused pane, or
+/// focuses the pane already showing it; moving the focus makes the focused
+/// pane's tab current.
 @MainActor
 @Observable
 public final class SplitController {
     public private(set) var layout = SplitLayout(tab: nil)
-    public private(set) var tabs: [TabInfo] = []
-    /// The last failure, said once.
-    public private(set) var error: String?
-    private let terminals: PaneTerminals
-    private var pending: Task<Void, Never>?
+    /// The panes' area, as the window last drew it.
+    public var size: CGSize = .zero
+    /// What the Team sidebar selects: a new pane takes the next tab from the
+    /// tabs the tab bar shows.
+    public var selection: TeamSelection = .allTabs
+    public let tabs: TabsController
+    /// A tab made current by a focus change, until portenvd has it: the
+    /// tab list's current tab is not followed meanwhile.
+    @ObservationIgnored private var choosing: String?
+    @ObservationIgnored private var pending: Task<Void, Never>?
 
-    public init(terminals: PaneTerminals) {
-        self.terminals = terminals
+    public init(tabs: TabsController) {
+        self.tabs = tabs
     }
 
     /// The tab the focused pane shows (the tab bar's current tab).
@@ -372,168 +369,119 @@ public final class SplitController {
 
     public var isSplit: Bool { layout.panes.count > 1 }
 
-    /// Where a tab's pane is (0 to 1), for the tab bar's glyph; nil when
-    /// no pane shows it or there's only one pane.
+    /// Where a tab's pane is (0 to 1), for the tab bar's glyph; nil when no
+    /// pane shows it or there's only one pane.
     public func paneFrame(forTab id: String) -> CGRect? {
         guard isSplit, let p = layout.pane(showing: id) else { return nil }
         return layout.unitFrame(of: p)
     }
 
-    public func tab(_ id: String?) -> TabInfo? { tabs.first { $0.id == id } }
-
-    /// The box's tabs, as the app's viewer (pane 1) sees them.
-    public func tabsChanged(_ new: [TabInfo]) {
-        tabs = new
-        if layout.tab(in: PaneID(1)) == nil || !isSplit, let active = new.first(where: \.active) {
-            // Pane 1 is the app's viewer: it shows that viewer's tab.
-            if layout.panes.contains(PaneID(1)) { layout.show(active.id, in: PaneID(1)) }
-        }
-        let changed = layout.tabsChanged(new.map(\.id))
-        guard !changed.isEmpty else { return }
-        let before = pending
-        pending = Task {
-            await before?.value
-            for (pane, tab) in changed.sorted(by: { $0.key < $1.key }) {
-                await perform { try await self.terminals.show(tab: tab, in: pane) }
-            }
-        }
+    /// The tab a pane shows.
+    public func tab(in pane: PaneID) -> TabInfo? {
+        guard let id = layout.tab(in: pane) else { return nil }
+        return tabs.tabs.first { $0.id == id }
     }
 
-    /// Waits for shows started by a change of tabs (tests).
-    public func settled() async { await pending?.value }
-
-    public func canSplit(_ axis: SplitAxis, in size: CGSize) -> Bool { layout.canSplit(axis, in: size) }
-
-    /// Splits the focused pane: the new pane shows the first tab no pane
-    /// shows, or a new tab of its own when every tab is shown.
-    public func split(_ axis: SplitAxis, in size: CGSize) async {
-        guard layout.canSplit(axis, in: size) else { return }
-        var trial = layout
-        if let tab = layout.tabForNewPane(from: tabs.map(\.id)) {
-            guard let pane = trial.split(axis, showing: tab, in: size) else { return }
-            await perform {
-                try await self.terminals.show(tab: tab, in: pane)
-                self.layout = trial
-            }
-        } else {
-            let name = TabNames.next(after: tabs.map(\.name))
-            let pane = trial.split(axis, showing: "", in: size)
-            guard let pane else { return }
-            await perform {
-                let t = try await self.terminals.newTab(name: name, in: pane)
-                trial.show(t.id, in: pane)
-                if !self.tabs.contains(where: { $0.id == t.id }) { self.tabs.append(t) }
-                self.layout = trial
-            }
-        }
+    /// A pane header's tab picker: every tab no other pane shows.
+    public func pickerTabs(for pane: PaneID) -> [TabInfo] {
+        tabs.tabs.filter { t in layout.pane(showing: t.id).map { $0 == pane } ?? true }
     }
 
-    /// Shows a tab in the focused pane; a tab another pane shows moves the
-    /// focus there instead.
-    public func show(_ id: String) async {
+    /// Follows the window's tabs (call on every change): the current tab
+    /// shows in the focused pane, or focuses the pane showing it; a pane
+    /// whose tab closed shows the next free tab, or closes.
+    public func tabsChanged() {
+        if choosing == nil, let current = tabs.current?.id, current != activeTab {
+            if let other = layout.pane(showing: current) {
+                layout.focus(other)
+            } else {
+                layout.show(current, in: layout.focused)
+            }
+        }
+        layout.tabsChanged(tabs.tabs.map(\.id))
+        followFocus()
+    }
+
+    public func canSplit(_ axis: SplitAxis) -> Bool { layout.canSplit(axis, in: size) }
+
+    /// Splits the focused pane: the new pane shows the first tab the tab bar
+    /// shows that no pane shows, or a new shell tab when every one is in a
+    /// pane, and takes the focus.
+    public func split(_ axis: SplitAxis) async {
+        guard canSplit(axis) else { return }
+        var id = layout.tabForNewPane(from: tabs.shown(for: selection).map(\.id))
+        if id == nil {
+            guard let made = await tabs.newTab() else { return }
+            id = made.id
+        }
+        guard let id, layout.split(axis, showing: id, in: size) != nil else { return }
+        followFocus()
+    }
+
+    /// The pane header's picker: shows a tab in that pane and focuses it.
+    /// A tab another pane shows focuses that pane instead.
+    public func show(_ id: String, in pane: PaneID) {
         if let other = layout.pane(showing: id) {
             layout.focus(other)
-            return
+        } else {
+            layout.show(id, in: pane)
+            layout.focus(pane)
         }
-        let pane = layout.focused
-        await perform {
-            try await self.terminals.show(tab: id, in: pane)
-            self.layout.show(id, in: pane)
-        }
+        followFocus()
     }
 
-    public func showNumber(_ n: Int) async {
-        guard n >= 1, n <= tabs.count else { return }
-        await show(tabs[n - 1].id)
+    public func focus(_ pane: PaneID) {
+        layout.focus(pane)
+        followFocus()
     }
 
-    public func showNext() async { await step(1) }
-    public func showPrevious() async { await step(-1) }
-
-    private func step(_ by: Int) async {
-        guard !tabs.isEmpty else { return }
-        let i = tabs.firstIndex { $0.id == activeTab } ?? 0
-        await show(tabs[(i + by + tabs.count) % tabs.count].id)
-    }
-
-    public func focus(_ pane: PaneID) { layout.focus(pane) }
-
+    /// ⌘⌥ and an arrow.
     @discardableResult
-    public func moveFocus(_ d: PaneDirection, in size: CGSize) -> Bool { layout.moveFocus(d, in: size) }
+    public func moveFocus(_ d: PaneDirection) -> Bool {
+        let moved = layout.moveFocus(d, in: size)
+        followFocus()
+        return moved
+    }
 
-    public func resize(at path: [Int], to fraction: Double, in size: CGSize) {
+    public func resize(at path: [Int], to fraction: Double) {
         layout.resize(at: path, to: fraction, in: size)
     }
 
-    /// Closes a pane (the focused one by default); never its tab.
+    /// Closes a pane (the focused one by default). Its tab keeps running:
+    /// only the pane's view of it ends.
     @discardableResult
     public func closePane(_ pane: PaneID? = nil) -> Bool {
-        let p = pane ?? layout.focused
-        guard layout.close(p) else { return false }
-        terminals.closed(p)
+        guard layout.close(pane ?? layout.focused) else { return false }
+        followFocus()
         return true
     }
-
-    @discardableResult
-    public func closeFocusedPane() -> Bool { closePane() }
 
     /// ⌘W: the focused pane first; the tab only when one pane is left.
     public func commandW() -> CommandWResult { closePane() ? .closedPane : .closeTab }
 
-    public func dismissError() { error = nil }
+    /// Waits until the tab made current by the last focus change is
+    /// portenvd's too (tests).
+    public func settled() async {
+        while let p = pending {
+            await p.value
+            if pending == p { pending = nil }
+        }
+    }
 
-    private func perform(_ action: @MainActor () async throws -> Void) async {
-        do {
-            try await action()
-        } catch let e as DaemonError {
-            error = e.message
-        } catch {
-            self.error = error.localizedDescription
+    /// Makes the focused pane's tab the tab bar's current tab.
+    private func followFocus() {
+        guard let id = activeTab, id != tabs.current?.id, let task = tabs.choose(id) else { return }
+        choosing = id
+        pending = Task {
+            await task.value
+            guard choosing == id else { return }
+            choosing = nil
+            tabsChanged()
         }
     }
 }
 
-/// Split view's terminals over ADR 0020's interface: each pane opens its own
-/// source from the workspace's TabTerminalProvider (ScriptedTabSource until
-/// 1.2c's provider lands, R-0171). Choosing another tab opens a new source
-/// and closes the old one; closing a pane closes its source, never the tab.
-@MainActor
-@Observable
-public final class PaneSources: PaneTerminals {
-    /// The size a source opens with; the view sends its real size at once.
-    public static let startSize = TabTerminalSize(cols: 80, rows: 24)
-
-    private let provider: TabTerminalProvider
-    private let makeTab: (String, PaneID) async throws -> TabInfo
-    private var sources: [PaneID: any TabTerminalSource] = [:]
-
-    /// - newTab: makes a tab for one pane's viewer (portenvd's NewTab).
-    public init(provider: TabTerminalProvider, newTab: @escaping (String, PaneID) async throws -> TabInfo) {
-        self.provider = provider
-        makeTab = newTab
-    }
-
-    public func source(for pane: PaneID) -> (any TabTerminalSource)? { sources[pane] }
-
-    public func show(tab: String, in pane: PaneID) async throws {
-        if sources[pane]?.tab == tab { return }
-        sources[pane]?.close()
-        sources[pane] = provider.open(tab: tab, size: Self.startSize)
-    }
-
-    public func newTab(name: String, in pane: PaneID) async throws -> TabInfo {
-        let t = try await makeTab(name, pane)
-        try await show(tab: t.id, in: pane)
-        return t
-    }
-
-    public func closed(_ pane: PaneID) {
-        sources.removeValue(forKey: pane)?.close()
-    }
-}
-
-/// Scripted terminals for split view until 1.2c's provider lands (R-0171),
-/// and for renders: each source starts with a reset seeded with the tab's
+/// Scripted terminals for split view's renders and tests: each source starts with a reset seeded with the tab's
 /// sample text.
 @MainActor
 public final class ScriptedTabProvider: TabTerminalProvider {

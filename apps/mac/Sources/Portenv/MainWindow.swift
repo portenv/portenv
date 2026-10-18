@@ -11,6 +11,8 @@ struct MainWindow: View {
     @Bindable var tabs: TabsController
     /// The workspace's agent team; nil in renders without one.
     let team: TeamController?
+    /// Split view's panes (PLAN 1.2b); nil shows one terminal (renders).
+    let split: SplitController?
     /// The inspector's open state, remembered for this box's window (§6).
     @AppStorage private var inspectorOpen: Bool
     /// The sidebar as the person chose it with ⌘0, for this box; "" until
@@ -22,10 +24,12 @@ struct MainWindow: View {
     /// `portenv attach`.
     private let renderTerminal: (() -> NSView)?
 
-    init(controller: BoxController, tabs: TabsController, team: TeamController? = nil, renderTerminal: (() -> NSView)? = nil) {
+    init(controller: BoxController, tabs: TabsController, team: TeamController? = nil, split: SplitController? = nil,
+         renderTerminal: (() -> NSView)? = nil) {
         self.controller = controller
         self.tabs = tabs
         self.team = team
+        self.split = split
         self.renderTerminal = renderTerminal
         _inspectorOpen = AppStorage(wrappedValue: false, InspectorToggle.key(controller.box))
         _sidebarChoice = AppStorage(wrappedValue: "", TeamSidebarToggle.key(controller.box))
@@ -67,6 +71,15 @@ struct MainWindow: View {
             }
             .navigationTitle(controller.box)
             // Keep Waiting's way out (R-0178), next to "Waiting for …".
+            // Split Right and Split Down, in the title bar (the board),
+            // while the workspace's terminal shows.
+            .toolbar {
+                if let split, splitShows {
+                    ToolbarItemGroup(placement: .primaryAction) {
+                        SplitToolbarButtons(split: split)
+                    }
+                }
+            }
             .toolbar {
                 if let place = controller.waitingFor {
                     ToolbarItem(placement: .primaryAction) {
@@ -118,6 +131,16 @@ struct MainWindow: View {
             } message: {
                 Text(controller.notice ?? "")
             }
+    }
+
+    /// Whether the workspace's terminal shows (so the panes can split).
+    private var splitShows: Bool {
+        switch controller.location {
+        case .thisMac, .server:
+            !controller.waitingForKeychain && !controller.engineDown && !(controller.agentUnavailable && controller.isOpen)
+                && !AppTerminal.attached && controller.tabTerminals != nil
+        case .closed: false
+        }
     }
 
     private var inspectorView: some View {
@@ -191,7 +214,8 @@ struct MainWindow: View {
             // in this same terminal.
             VStack(spacing: 0) {
                 HStack(spacing: 0) {
-                    TabBar(tabs: tabs, selection: team?.selection ?? .allTabs, team: team?.state.agents ?? [])
+                    TabBar(tabs: tabs, selection: team?.selection ?? .allTabs, team: team?.state.agents ?? [],
+                           paneFrame: { split?.paneFrame(forTab: $0) })
                     // An agent's tabs only: All tabs at the trailing end
                     // brings back every tab (R-0241).
                     if let team, team.selection != .allTabs {
@@ -203,10 +227,20 @@ struct MainWindow: View {
                     // Follows the tabs while the box is open here or on a
                     // server; watches again after a restart or a move.
                     .task { await tabs.follow() }
+                    // The panes follow the tabs: the current tab shows in the
+                    // focused pane, and a closed tab's pane moves on.
+                    .onAppear { split?.tabsChanged() }
+                    .onChange(of: tabs.tabs) { split?.tabsChanged() }
+                    .onChange(of: team?.selection, initial: true) { split?.selection = team?.selection ?? .allTabs }
                 Group {
                     if let renderTerminal {
                         RenderedView(make: renderTerminal)
-                    } else if !AppTerminal.attached, let provider = controller.tabTerminals, let tab = tabs.current {
+                    } else if !AppTerminal.attached, let provider = controller.tabTerminals, let split, split.activeTab != nil {
+                        // Split view: each pane its own tab's terminal
+                        // (PLAN 1.2b, ADR 0020).
+                        SplitPanes(split: split, provider: provider, generation: controller.terminalGeneration,
+                                   box: controller.box, serviceComing: controller.reconnectingToService)
+                    } else if !AppTerminal.attached, split == nil, let provider = controller.tabTerminals, let tab = tabs.current {
                         // Each tab's own terminal (ADR 0020).
                         MainTabTerminal(shown: TabTerminalShown(provider: provider), tab: tab.id,
                                         generation: controller.terminalGeneration, label: A11y.terminal(box: controller.box),
@@ -220,7 +254,7 @@ struct MainWindow: View {
                                     onLinkStatus: { controller.linkStatus = $0 })
                     }
                 }
-                .accessibilityLabel(A11y.terminal(box: controller.box))
+                .accessibilityLabel(split?.isSplit == true ? A11y.splitPanes : A11y.terminal(box: controller.box))
             }
         case .closed:
             if controller.busy {

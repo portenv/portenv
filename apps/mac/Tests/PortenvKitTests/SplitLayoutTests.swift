@@ -7,7 +7,7 @@ import Testing
 @testable import PortenvKit
 
 /// Split view's layout (PLAN 1.2b, the split-view board, R-0131): up to four
-/// panes, each its own viewer showing one tab; splitting, closing, focus,
+/// panes, each showing one tab; splitting, closing, focus,
 /// resizing and moving between panes.
 struct SplitLayoutTests {
     let window = CGSize(width: 1400, height: 900)
@@ -25,8 +25,6 @@ struct SplitLayoutTests {
         #expect(l.panes == [PaneID(1)])
         #expect(l.focused == PaneID(1))
         #expect(l.tab(in: PaneID(1)) == "claude")
-        #expect(PaneID(1).viewer == "app") // the app's existing viewer
-        #expect(PaneID(3).viewer == "app-3")
     }
 
     @Test func splittingFocusesTheNewPane() {

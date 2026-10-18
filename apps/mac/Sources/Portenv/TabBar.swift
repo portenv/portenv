@@ -15,6 +15,9 @@ struct TabBar: View {
     var selection: TeamSelection = .allTabs
     /// The team, for each agent tab's chip and name (R-0265 item 4).
     var team: [TeamAgent] = []
+    /// Split view: where a tab's pane is (0 to 1), for its glyph; nil for a
+    /// tab in no pane, or with one pane.
+    var paneFrame: (String) -> CGRect? = { _ in nil }
     /// The tab being renamed, and the name being typed.
     @State private var renaming: String?
     @State private var draft = ""
@@ -25,6 +28,7 @@ struct TabBar: View {
         HStack(spacing: 0) {
             ForEach(tabs.shown(for: selection)) { tab in
                 TabItem(tab: tab, label: TabLabel.of(tab, team: team) { NSImage(systemSymbolName: $0, accessibilityDescription: nil) != nil },
+                        pane: paneFrame(tab.id),
                         canClose: tabs.canClose, renaming: renaming == tab.id, draft: $draft,
                         select: { Task { await tabs.select(tab.id) } },
                         close: { Task { _ = await tabs.requestClose(id: tab.id) } },
@@ -93,6 +97,8 @@ struct TabCommands: Commands {
     /// The open box's tabs; none during first run or the box list, when the
     /// tab commands are off and ⌘W closes the window.
     let tabs: TabsController?
+    /// Split view: ⌘W closes the focused pane first.
+    var split: SplitController?
 
     /// The window the command closes, also with Portenv behind (no key
     /// window) or the menu driven through accessibility (WindowClose.target).
@@ -114,6 +120,8 @@ struct TabCommands: Commands {
             Button(TabText.closeButton) {
                 if AcknowledgementsWindow.closeIfKey() { return }
                 guard let tabs else { Self.closeCommandWindow(); return }
+                // Split view: the focused pane first; never its tab.
+                if split?.commandW() == .closedPane { return }
                 Task {
                     if await tabs.requestClose() == .closeWindow { Self.closeCommandWindow() }
                 }
@@ -145,6 +153,8 @@ private struct TabItem: View {
     let tab: TabInfo
     /// What the tab shows: an agent's tab always with its chip and name.
     let label: TabLabel
+    /// Where its split-view pane is, when it's in one.
+    let pane: CGRect?
     let canClose: Bool
     let renaming: Bool
     @Binding var draft: String
@@ -170,6 +180,7 @@ private struct TabItem: View {
                     .accessibilityLabel(A11y.renameTab(tab.name))
             } else {
                 HStack(spacing: 5) {
+                    if let pane { PaneGlyph(frame: pane) }
                     if let chip = label.chip { TeamAvatar(look: chip, size: 16) }
                     Text(verbatim: label.title)
                         .font(.system(size: 12, weight: tab.active ? .semibold : .regular))
@@ -213,6 +224,7 @@ private struct TabItem: View {
         }
         .accessibilityElement(children: renaming ? .contain : .ignore)
         .accessibilityLabel(A11y.tab(label.title))
+        .accessibilityValue(pane == nil ? "" : SplitText.inAPane)
         .accessibilityAddTraits(tab.active ? [.isButton, .isSelected] : .isButton)
         .accessibilityAction(.default, select)
         .accessibilityAction(named: "Rename", startRename)

@@ -292,12 +292,13 @@ enum ScreenRenders {
         defer { NSApp.appearance = before }
         for (suffix, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
             NSApp.appearance = NSAppearance(named: appearance)
-            let sources = PaneSources(provider: provider, newTab: { name, _ in TabInfo(id: "@9", name: name, active: false) })
-            let split = SplitController(terminals: sources)
-            split.tabsChanged(tabs)
-            try await sources.show(tab: "@1", in: PaneID(1))
-            await split.split(.right, in: size)
-            await split.split(.down, in: size)
+            let tabsController = TabsController(box: "acme-api", daemon: SampleDaemon(savedAt: at))
+            tabsController.receive(tabs)
+            let split = SplitController(tabs: tabsController)
+            split.size = size
+            split.tabsChanged()
+            await split.split(.right)
+            await split.split(.down)
             split.focus(PaneID(1)) // the board's focused pane
             let window = ActiveLookingWindow(contentRect: NSRect(origin: .zero, size: size),
                                              styleMask: [.titled, .closable, .miniaturizable, .resizable],
@@ -305,7 +306,7 @@ enum ScreenRenders {
             window.isReleasedWhenClosed = false
             window.title = "acme-api"
             window.appearance = NSAppearance(named: appearance)
-            window.contentView = NSHostingView(rootView: SplitView(split: split, sources: sources, now: { at }))
+            window.contentView = NSHostingView(rootView: SplitPanes(split: split, provider: provider, generation: 0, box: "acme-api"))
             window.setContentSize(size)
             try await WindowCapture.capture(window, to: dir.appendingPathComponent("split-view-\(suffix).png"))
         }

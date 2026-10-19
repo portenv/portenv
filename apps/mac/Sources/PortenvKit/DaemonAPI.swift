@@ -70,6 +70,10 @@ public protocol DaemonAPI: Sendable {
     func watchTeam(_ box: String, cursor: String) -> AsyncThrowingStream<(TeamEvent, String), Error>
     /// Approve or Decline a pending decision; the app alone answers them.
     func answerDecision(_ box: String, id: String, approve: Bool, note: String) async throws -> TeamDecision
+    /// Answers a decision with choices (CC-0501) with one of them: its
+    /// number, counting from 1, and its label exactly as portenvd sent it,
+    /// which portenvd checks against the decision.
+    func chooseDecision(_ box: String, id: String, choice: Int, label: String) async throws -> TeamDecision
     /// The owner's message to an agent.
     func sendMessage(_ box: String, to agent: String, thread: String, text: String) async throws -> TeamMessage
     func startAgent(_ box: String, id: String) async throws -> TeamAgent
@@ -95,6 +99,9 @@ public extension DaemonAPI {
         AsyncThrowingStream { $0.finish(throwing: DaemonError(DaemonError.outOfDate)) }
     }
     func answerDecision(_: String, id _: String, approve _: Bool, note _: String) async throws -> TeamDecision {
+        throw DaemonError(DaemonError.outOfDate)
+    }
+    func chooseDecision(_: String, id _: String, choice _: Int, label _: String) async throws -> TeamDecision {
         throw DaemonError(DaemonError.outOfDate)
     }
     func sendMessage(_: String, to _: String, thread _: String, text _: String) async throws -> TeamMessage {

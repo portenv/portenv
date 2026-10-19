@@ -299,11 +299,19 @@ message Decision {
   // in that order. portenvd starts them itself on Approve, so the answer
   // works after the app or portenvd restarts (R-0296).
   repeated string start_agent_ids = 12;
+  // For DECISION_KIND_ASK_OWNER asked with --choice (CC-0501): the 2 to 4
+  // choices, in order, each 1 to 80 characters of plain text. The app
+  // shows one button per choice in place of Approve. Empty for a yes/no
+  // question.
+  repeated string choices = 13;
+  // The owner's choice, counting from 1 (choices[choice-1]); 0 when none
+  // was chosen. Set only on an approved decision with choices.
+  int32 choice = 14;
   // For DECISION_KIND_TEAM_START after the move to agents' own clones
   // (ADR 0022 §2a point 6): what agents could have changed, for the owner
   // to keep or remove, one by one. Approve keeps every item not named in
   // AnswerDecisionRequest.remove_items.
-  repeated MigrationItem migration_items = 13;
+  repeated MigrationItem migration_items = 15;
 }
 
 // One thing the move to agents' own clones recorded (ADR 0022 §2a point

@@ -37,6 +37,9 @@ const (
 	maxBoardMessage          = teamkit.MaxMessageBytes
 	maxDecisionDetail        = teamkit.MaxDecisionDetailBytes
 	maxDecisionSummary       = teamkit.MaxDecisionSummary
+	minChoices               = teamkit.MinChoices
+	maxChoices               = teamkit.MaxChoices
+	maxChoiceCharacters      = teamkit.MaxChoiceCharacters
 	messagesPerMinute        = teamkit.MessagesPerMinute
 	pendingDecisionsPerAgent = teamkit.PendingDecisionsPerAgent
 	decisionExpiry           = teamkit.DecisionExpiry
@@ -287,7 +290,11 @@ func (e *teamEngine) handleCall(ctx context.Context, name string, c *agentv1.Tea
 		if !threadOK(op.AskOwner.GetThreadId()) {
 			return refuse(id, "A thread id is the id of a board message.")
 		}
-		return e.decideLocked(ctx, name, b, me.ID, typesv1.DecisionKind_DECISION_KIND_ASK_OWNER, text, text, nil, id)
+		choices := op.AskOwner.GetChoices()
+		if line := choicesProblem(choices); line != "" {
+			return refuse(id, "%s", line)
+		}
+		return e.decideChoicesLocked(ctx, name, b, me.ID, typesv1.DecisionKind_DECISION_KIND_ASK_OWNER, text, text, nil, id, choices)
 	case *agentv1.TeamCallsResponse_Split:
 		return e.paneLocked(ctx, name, b, me, &agentv1.AgentPaneActionRequest{AgentId: me.ID, Action: &agentv1.AgentPaneActionRequest_Split{Split: op.Split}}, op.Split.GetArgv(), id)
 	case *agentv1.TeamCallsResponse_Tab:
@@ -386,6 +393,12 @@ func (e *teamEngine) msgLocked(ctx context.Context, name string, b *teamBox, tea
 // decideLocked makes a pending decision for the owner.
 // startIDs is what a team_start's Approve starts.
 func (e *teamEngine) decideLocked(ctx context.Context, name string, b *teamBox, from string, kind typesv1.DecisionKind, summary, detail string, action *agentv1.AgentPaneActionRequest, id string, startIDs ...string) *agentv1.TeamCallsRequest {
+	return e.decideChoicesLocked(ctx, name, b, from, kind, summary, detail, action, id, nil, startIDs...)
+}
+
+// decideChoicesLocked is decideLocked with an ask-owner's choices, already
+// checked by choicesProblem (CC-0501).
+func (e *teamEngine) decideChoicesLocked(ctx context.Context, name string, b *teamBox, from string, kind typesv1.DecisionKind, summary, detail string, action *agentv1.AgentPaneActionRequest, id string, choices []string, startIDs ...string) *agentv1.TeamCallsRequest {
 	if from != boardFrom && len(b.pendingLocked(from)) >= pendingDecisionsPerAgent {
 		return refuse(id, "%s has %d requests waiting for the owner, its limit. Wait for an answer first.", from, pendingDecisionsPerAgent)
 	}
@@ -399,7 +412,7 @@ func (e *teamEngine) decideLocked(ctx context.Context, name string, b *teamBox, 
 	d := &typesv1.Decision{
 		Id: newULID(now), From: from, Kind: kind, Summary: summary, Detail: detail,
 		State: typesv1.DecisionState_DECISION_STATE_PENDING, CreatedAt: timestamppb.New(now),
-		ExpiresAt: timestamppb.New(now.Add(decisionExpiry)), StartAgentIds: startIDs,
+		ExpiresAt: timestamppb.New(now.Add(decisionExpiry)), StartAgentIds: startIDs, Choices: choices,
 	}
 	if err := e.appendLocked(ctx, name, b, &agentv1.AppendBoardRequest{Line: &agentv1.AppendBoardRequest_Decision{Decision: d}}); err != nil {
 		return refuse(id, "%v", err)
@@ -526,27 +539,72 @@ func (e *teamEngine) inboxWait(ctx context.Context, name, me, since, id string) 
 	}
 }
 
+// choicesProblem is an ask-owner's --choice rule (CC-0501): none (a yes/no
+// question), or 2 to 4 labels, each 1 to 80 characters of one-line plain
+// text, all different. It returns the plain line, or "" when they're fine.
+func choicesProblem(choices []string) string {
+	if len(choices) == 0 {
+		return ""
+	}
+	if len(choices) < minChoices || len(choices) > maxChoices {
+		return fmt.Sprintf("Give %d to %d choices, or none for a yes/no question.", minChoices, maxChoices)
+	}
+	seen := map[string]bool{}
+	for _, c := range choices {
+		n := utf8.RuneCountInString(c)
+		if strings.TrimSpace(c) == "" || n > maxChoiceCharacters || !boardText(c, false) {
+			return fmt.Sprintf("A choice is 1 to %d characters of plain text on one line.", maxChoiceCharacters)
+		}
+		if seen[c] {
+			return "Each choice must be different."
+		}
+		seen[c] = true
+	}
+	return ""
+}
+
+// ownerAnswer is the owner's answer from the app: Approve or Decline, or
+// for a decision with choices, the choice (counting from 1) and its label,
+// which must match the decision's stored choice (CC-0501); for a move's
+// team_start decision, the items the owner removes (ADR 0022 §2a point 6).
+type ownerAnswer struct {
+	approve bool
+	note    string
+	choice  int32
+	label   string
+	remove  []string
+}
+
 // answer is the owner's Approve or Decline, from the app only.
 func (e *teamEngine) answer(ctx context.Context, name, decisionID string, approve bool, note string) (*typesv1.Decision, error) {
-	return e.answerWith(ctx, name, decisionID, approve, note, nil)
+	return e.answerChoice(ctx, name, decisionID, ownerAnswer{approve: approve, note: note})
 }
 
 // answerWith is answer with the items of a move's team_start decision the
 // owner removes (ADR 0022 §2a point 6).
 func (e *teamEngine) answerWith(ctx context.Context, name, decisionID string, approve bool, note string, remove []string) (*typesv1.Decision, error) {
+	return e.answerChoice(ctx, name, decisionID, ownerAnswer{approve: approve, note: note, remove: remove})
+}
+
+// answerChoice is the owner's answer, with a choice, or with the items of
+// a move's team_start decision the owner removes.
+func (e *teamEngine) answerChoice(ctx context.Context, name, decisionID string, a ownerAnswer) (*typesv1.Decision, error) {
 	b, err := e.lockBox(ctx, name)
 	if err != nil {
 		return nil, err
 	}
 	defer b.mu.Unlock()
-	if d := b.decisions[decisionID]; d != nil && len(d.GetMigrationItems()) > 0 && d.GetState() == typesv1.DecisionState_DECISION_STATE_PENDING && approve {
-		if err := e.resolveMigrationLocked(ctx, name, b, d, remove); err != nil {
+	if d := b.decisions[decisionID]; d != nil && len(d.GetMigrationItems()) > 0 && d.GetState() == typesv1.DecisionState_DECISION_STATE_PENDING && a.approve {
+		if err := choiceProblem(d, a); err != nil {
 			return nil, err
 		}
-	} else if len(remove) > 0 {
+		if err := e.resolveMigrationLocked(ctx, name, b, d, a.remove); err != nil {
+			return nil, err
+		}
+	} else if len(a.remove) > 0 {
 		return nil, errors.New("only Approve on the move's team-start decision removes items")
 	}
-	return e.answerLocked(ctx, name, b, decisionID, approve, note)
+	return e.answerChoiceLocked(ctx, name, b, decisionID, a)
 }
 
 // askMigrationLocked puts the move's record in a team_start decision
@@ -656,6 +714,35 @@ func (e *teamEngine) resolveMigrationLocked(ctx context.Context, name string, b 
 }
 
 func (e *teamEngine) answerLocked(ctx context.Context, name string, b *teamBox, decisionID string, approve bool, note string) (*typesv1.Decision, error) {
+	return e.answerChoiceLocked(ctx, name, b, decisionID, ownerAnswer{approve: approve, note: note})
+}
+
+// choiceProblem checks an answer's choice against the decision's stored
+// choices: a decision with choices is answered with one of them or
+// declined, and one without is never answered with a choice. A choice
+// whose label isn't the stored one is refused, so a forged or stale
+// answer never picks the wrong thing.
+func choiceProblem(d *typesv1.Decision, a ownerAnswer) error {
+	choices := d.GetChoices()
+	switch {
+	case len(choices) == 0 && (a.choice != 0 || a.label != ""):
+		return errors.New("that request has no choices; approve or decline it")
+	case len(choices) == 0:
+		return nil
+	case !a.approve && (a.choice != 0 || a.label != ""):
+		return errors.New("a declined request has no choice")
+	case !a.approve:
+		return nil
+	case a.choice < 1 || int(a.choice) > len(choices):
+		return fmt.Errorf("choose one of the request's %d choices", len(choices))
+	case choices[a.choice-1] != a.label:
+		return errors.New("that choice isn't the request's; it may have changed, so look again")
+	}
+	return nil
+}
+
+func (e *teamEngine) answerChoiceLocked(ctx context.Context, name string, b *teamBox, decisionID string, a ownerAnswer) (*typesv1.Decision, error) {
+	approve, note := a.approve, a.note
 	d := b.decisions[decisionID]
 	switch {
 	case d == nil:
@@ -669,6 +756,9 @@ func (e *teamEngine) answerLocked(ctx context.Context, name string, b *teamBox, 
 	}
 	if !boardText(note, true) || len(note) > maxBoardMessage {
 		return nil, errors.New("a note is at most 8 KB of plain text")
+	}
+	if err := choiceProblem(d, a); err != nil {
+		return nil, err
 	}
 	action := b.actions[decisionID]
 	if approve && action != nil {
@@ -686,7 +776,7 @@ func (e *teamEngine) answerLocked(ctx context.Context, name string, b *teamBox, 
 	x := proto.CloneOf(d)
 	x.State, x.AnswerNote, x.AnsweredAt = typesv1.DecisionState_DECISION_STATE_DECLINED, note, timestamppb.New(e.now())
 	if approve {
-		x.State = typesv1.DecisionState_DECISION_STATE_APPROVED
+		x.State, x.Choice = typesv1.DecisionState_DECISION_STATE_APPROVED, a.choice
 	}
 	if err := e.appendLocked(ctx, name, b, &agentv1.AppendBoardRequest{Line: &agentv1.AppendBoardRequest_Decision{Decision: x}}); err != nil {
 		return nil, err
@@ -843,11 +933,11 @@ func (e *teamEngine) startAgentAs(ctx context.Context, name, agentID string, app
 		AgentId:         agentID,
 		CloneProjectDir: clone,
 		AgentName:       a.Spec.Name,
-		ProjectDir:      "/home/work/" + name,
 		CloneReaders:    cloneReaders(&team),
 		Argv:            a.Runner,
 		AgentsMd:        agentsMDBlock(&team, a, name) + "\n" + a.Spec.Instructions,
 		HomeSeed:        a.Spec.HomeSeed,
+		ProjectDir:      projectDir(name),
 		HomeQuotaBytes:  defaultHomeQuota,
 		IdlePattern:     runnerIdlePattern(a.Runner),
 	})

@@ -15,7 +15,7 @@ The tester build had no way to delete a workspace: a tester who made a throwaway
 5. **portenvd's order** (`DeleteBox`), each step idempotent, the step reached recorded in the box's config (`deleting.step`) before the next starts:
    1. checks: the caller is the person at this Mac (never an agent), the typed name equals the name, the refusals of point 2, saves elsewhere confirmed, the instance not running, and no other machine holding the lease (read with the box's key; the app supplies it as for an open when the Keychain needs approval). Nothing is written before they pass;
    2. the instance (stop, remove the container and the driver's spec);
-   3. the home storage (`DeleteHome`, a new driver call: refused while the instance exists, only volumes labelled with the box's ID, storage already gone is fine);
+   3. the home storage (`DeleteHome`, a new driver call: refused while the instance exists; the home volume only with the box's label, and the restic cache volume, which Docker makes from the mount with no label, by its name from the box's ID, never one labelled for another box; storage already gone is fine);
    4. the saves on this Mac: exactly the box's own repository folder;
    5. the key: portenvd answers with the key IDs to delete; the app deletes them from the Keychain (only the app touches the Keychain) and calls again with `keys_deleted`, which counts only once the saves are gone;
    6. the record, last: this Mac's state for the box, then its config, which takes the deletion's progress with it in one step. Keys held in memory and the team's in-memory state go too.

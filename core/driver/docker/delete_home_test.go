@@ -173,3 +173,31 @@ func TestDeleteHomeRemovesItsFolderInHomesDir(t *testing.T) {
 		t.Fatalf("another workspace's folder: %v", err)
 	}
 }
+
+// TestDeleteHomeRemovesTheUnlabelledCacheVolume: Docker makes the restic
+// cache volume from the mount itself, with no labels (found by the
+// conformance suite on CI): its name comes from the box's ID, so it goes
+// without a label; one labelled for another box is still refused. The home
+// volume always needs this box's label.
+func TestDeleteHomeRemovesTheUnlabelledCacheVolume(t *testing.T) {
+	const id = "box-0123456789ab"
+	f := &volumeEngine{containers: map[string]bool{}, volumes: map[string]string{"portenv-home-" + id: id, "portenv-cache-" + id: ""}}
+	d := volumeDriver(t, f, "")
+	if err := d.DeleteHome(context.Background(), id, driver.HomeStorage{Ref: "portenv-home-" + id}); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := f.gone(), []string{"volume portenv-home-" + id, "volume portenv-cache-" + id}; !slices.Equal(got, want) {
+		t.Fatalf("removed %v, want %v", got, want)
+	}
+
+	f = &volumeEngine{containers: map[string]bool{}, volumes: map[string]string{"portenv-home-" + id: ""}}
+	d = volumeDriver(t, f, "")
+	if err := d.DeleteHome(context.Background(), id, driver.HomeStorage{Ref: "portenv-home-" + id}); err == nil || len(f.gone()) != 0 {
+		t.Fatalf("an unlabelled home volume: %v, removed %v", err, f.gone())
+	}
+	f = &volumeEngine{containers: map[string]bool{}, volumes: map[string]string{"portenv-cache-" + id: "box-ffffffffffff"}}
+	d = volumeDriver(t, f, "")
+	if err := d.DeleteHome(context.Background(), id, driver.HomeStorage{Ref: "portenv-home-" + id}); err == nil || len(f.gone()) != 0 {
+		t.Fatalf("a cache volume labelled for another box: %v, removed %v", err, f.gone())
+	}
+}

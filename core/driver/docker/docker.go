@@ -720,10 +720,14 @@ func (d *Driver) DeleteHome(ctx context.Context, id driver.BoxID, home driver.Ho
 	case !cerrdefs.IsNotFound(err):
 		return engineErr(ctx, "inspect container", err)
 	}
-	for _, v := range []string{home.Ref, d.cacheVolume(id)} {
-		if err := d.removeVolume(ctx, id, v); err != nil {
-			return err
-		}
+	// The home volume carries the box's label (MountHome makes it). The
+	// cache volume is made by Docker from the mount, with no label; its name
+	// comes from the box's ID, so no label is fine, another box's isn't.
+	if err := d.removeVolume(ctx, id, home.Ref, false); err != nil {
+		return err
+	}
+	if err := d.removeVolume(ctx, id, d.cacheVolume(id), true); err != nil {
+		return err
 	}
 	if d.cfg.HomesDir != "" {
 		if err := os.RemoveAll(filepath.Join(d.cfg.HomesDir, home.Ref)); err != nil {
@@ -734,8 +738,8 @@ func (d *Driver) DeleteHome(ctx context.Context, id driver.BoxID, home driver.Ho
 }
 
 // removeVolume removes the named volume if it is there, and only if it is
-// labelled with this box's ID.
-func (d *Driver) removeVolume(ctx context.Context, id driver.BoxID, name string) error {
+// labelled with this box's ID (or, with unlabelledOK, has no box label).
+func (d *Driver) removeVolume(ctx context.Context, id driver.BoxID, name string, unlabelledOK bool) error {
 	vctx, cancel := call(ctx, 0)
 	v, err := d.cli.VolumeInspect(vctx, name, client.VolumeInspectOptions{})
 	cancel()
@@ -745,7 +749,7 @@ func (d *Driver) removeVolume(ctx context.Context, id driver.BoxID, name string)
 	if err != nil {
 		return engineErr(ctx, "inspect volume", err)
 	}
-	if v.Volume.Labels[labelBox] != string(id) {
+	if label := v.Volume.Labels[labelBox]; label != string(id) && (label != "" || !unlabelledOK) {
 		return fmt.Errorf("volume %s isn't this workspace's (%s): not removed", name, id)
 	}
 	rctx, cancel := call(ctx, 0)

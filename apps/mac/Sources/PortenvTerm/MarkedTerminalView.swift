@@ -41,6 +41,35 @@ public final class MarkedTerminalView: TerminalView {
     /// Lines of scrollback a tab keeps (ADR 0020, decision 9).
     public static let scrollbackLines = 10_000
 
+    /// The text's size in points (R-0362): SF Mono, 13 pt by default
+    /// (GUIDELINES.md §4.5). A new size reflows the grid, and the new size in
+    /// cells reaches the tab through `sizeChanged`, the same path a window
+    /// resize takes, so the shell and its programs redraw for it.
+    ///
+    /// SwiftTerm's font setter resizes through its public `resize`, which
+    /// also soft-resets the terminal (cursor keys, scroll region, colours: a
+    /// full-screen program would lose its modes). So the font changes while
+    /// the view is briefly zero-sized, where SwiftTerm doesn't resize, and
+    /// the frame coming back does it, exactly as a window resize would.
+    public var textSize: CGFloat = TerminalTextSize.defaultPoints {
+        didSet {
+            guard textSize != oldValue else { return }
+            let size = frame.size
+            setFrameSize(.zero)
+            font = Self.font(textSize)
+            setFrameSize(size)
+        }
+    }
+
+    /// Called with ⌘= or ⌘⇧= (or ⌘+) while this terminal has the keys:
+    /// View › Bigger's other shortcuts (R-0362), which its menu item can't
+    /// also carry.
+    public var onTextSizeKey: (TerminalTextSize.Step) -> Void = { _ in }
+
+    static func font(_ points: CGFloat) -> NSFont {
+        NSFont.monospacedSystemFont(ofSize: points, weight: .regular)
+    }
+
     public override init(frame: NSRect) {
         super.init(frame: frame)
         tracker = OverlayTracker(terminal: getTerminal())
@@ -54,7 +83,23 @@ public final class MarkedTerminalView: TerminalView {
         sizes.view = self
         terminalDelegate = sizes
         changeScrollback(Self.scrollbackLines)
+        // SwiftTerm starts at the system's monospaced 13 pt, the default; set
+        // it only if that ever differs (the setter resizes the grid).
+        if font != Self.font(textSize) { font = Self.font(textSize) }
         TerminalColours.apply(to: self, for: effectiveAppearance)
+    }
+
+    /// Bigger's ⌘= and ⌘⇧= (R-0362), only in the terminal that has the keys
+    /// (every view in the window is asked). ⌘+ and ⌘− are the menu's; every
+    /// other key goes on to SwiftTerm and the program as before.
+    public override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if window?.firstResponder === self,
+           TerminalTextSize.step(charactersIgnoringModifiers: event.charactersIgnoringModifiers,
+                                 modifiers: event.modifierFlags) == .bigger {
+            onTextSizeKey(.bigger)
+            return true
+        }
+        return super.performKeyEquivalent(with: event)
     }
 
     /// Follows light and dark with the same colours as the main window's

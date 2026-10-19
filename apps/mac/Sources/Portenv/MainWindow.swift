@@ -280,7 +280,7 @@ struct MainWindow: View {
                     } else if !AppTerminal.attached, split == nil, let provider = controller.tabTerminals, let tab = tabs.terminalTab {
                         // Each tab's own terminal (ADR 0020): the tab the
                         // bar marks current, never another (R-0314).
-                        MainTabTerminal(shown: TabTerminalShown(provider: provider), tab: tab.id,
+                        MainTabTerminal(shown: TabTerminalShown(provider: provider), box: controller.box, tab: tab.id,
                                         generation: controller.terminalGeneration, label: terminalLabel,
                                         serviceComing: controller.reconnectingToService)
                     } else if !AppTerminal.attached, controller.tabTerminals != nil {

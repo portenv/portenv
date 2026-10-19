@@ -77,6 +77,8 @@ struct PortenvApp: App {
             TeamSidebarToggle(box: model.controller?.box, team: model.team)
             FindCommands()
             FeedbackCommands()
+            // View › Bigger, Smaller: the terminal's text (R-0362).
+            TextSizeCommands()
             // Portenv › Settings… (⌘,): the toolbar window (R-0137).
             CommandGroup(replacing: .appSettings) {
                 Button("Settings\u{2026}") { SettingsWindow.show() }

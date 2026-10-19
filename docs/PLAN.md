@@ -1173,6 +1173,13 @@ In this order:
 - the caret and the selection follow the system accent.
 - **Later:** View › Terminal Appearance (other themes). Built in lane B's second PR.
 
+**Terminal text size (the owner's request R-0362, for the tester build; GUIDELINES §4.5).** View › Bigger (⌘+, also ⌘= and ⌘⇧= for US and AZERTY layouts) and View › Smaller (⌘−), as in Terminal.app:
+- [x] Only the terminal's text changes. The grid reflows and the new size reaches the tab as a resize, through the same `sizeChanged` path as a window resize. SwiftTerm's own font setter soft-resets the terminal (a full-screen program would lose its cursor-key mode), so `MarkedTerminalView.textSize` changes the font while the view is briefly zero-sized and lets the frame coming back resize it.
+- [x] One point a step, from the default 13 pt, which is also the smallest, to 36 pt; the item at a limit is disabled. No Default Size command: ⌘0 stays View › Show Sidebar (the owner, R-0362).
+- [x] It applies to the focused terminal (the focused pane when split) and is remembered per workspace across restarts, in the app's defaults (`terminalTextSize.<workspace>`, like `inspectorOpen.<workspace>`; not a secret, never the Keychain). New tabs and panes in the workspace start at it.
+- [x] ⌘= and ⌘⇧= are taken only while the terminal has the keys; nothing else is taken from a program. VoiceOver labels on the menu items, and each change is announced ("Terminal text size 14 points").
+- [x] Tests: `TerminalTextSizeTests` (steps, limits, the menu's items and enabled states, key equivalents, the per-workspace round trip), `TerminalTextSizeViewTests` (the reflow reaching the tab, modes kept, only the focused terminal takes ⌘=).
+
 **4b. 1.2b: split view** (the owner, 2026-10-10; reference: docs/mockups/split-view.png)
 
 It comes after 1.2's blocks, wherever they land (Phase 1 if the spike succeeds, otherwise Phase 2), and before the launch demo. The panes themselves don't depend on blocks; the Warp-style features below apply per pane once they exist.

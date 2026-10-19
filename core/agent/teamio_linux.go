@@ -7,10 +7,13 @@ package agent
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 )
@@ -43,6 +46,54 @@ func runAsMainUser(ctx context.Context, cfg Config, args []string, stdin io.Read
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w: %s", args[0], err, strings.TrimSpace(stderr.String()))
+	}
+	return out, nil
+}
+
+// asAgentEnv is the fixed environment of team-io run as an agent.
+func asAgentEnv(home string) []string {
+	id := filepath.Base(home)
+	return []string{"HOME=" + home, "USER=" + id, "LOGNAME=" + id, "PATH=/usr/bin:/bin", "LANG=C.UTF-8"}
+}
+
+// asAgentCommand is "portenv-agent as-agent UID UID HOME -- team-io ARGS":
+// this binary switches to the agent (its group and team, no capabilities,
+// no_new_privs) and then runs the plain binary's team-io (RunAsAgent).
+// init (root) and the API process (cap_setuid, cap_setgid) can both run
+// it.
+func asAgentCommand(ctx context.Context, uid int, home string, args []string) (*exec.Cmd, error) {
+	if _, err := checkAsAgent(uid, uid, home); err != nil {
+		return nil, err
+	}
+	self, err := os.Executable()
+	if err != nil {
+		return nil, err
+	}
+	argv := append([]string{"as-agent", strconv.Itoa(uid), strconv.Itoa(uid), home, "--", "team-io"}, args...)
+	cmd := exec.CommandContext(ctx, self, argv...) // #nosec G204 -- this binary; arguments made by the caller and checked by as-agent
+	cmd.Dir = "/"
+	cmd.Env = asAgentEnv(home)
+	return cmd, nil
+}
+
+// runTeamIOAsAgent runs team-io as an agent and returns its output.
+func runTeamIOAsAgent(ctx context.Context, uid int, home string, args []string, stdin io.Reader) ([]byte, error) {
+	cmd, err := asAgentCommand(ctx, uid, home, args)
+	if err != nil {
+		return nil, err
+	}
+	if stdin != nil {
+		cmd.Stdin = stdin
+	}
+	var stderr strings.Builder
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	if err != nil {
+		if msg := strings.TrimSpace(stderr.String()); msg != "" {
+			msg = strings.TrimPrefix(strings.TrimPrefix(msg, "portenv-agent: "), "portenv-agent as-agent: ")
+			return nil, errors.New(strings.Join(strings.Fields(strings.ReplaceAll(msg, "\n", " · ")), " "))
+		}
+		return nil, fmt.Errorf("%s: %w", args[0], err)
 	}
 	return out, nil
 }

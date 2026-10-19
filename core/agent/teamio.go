@@ -300,8 +300,22 @@ func TeamIO(args []string, stdin io.Reader, stdout io.Writer) error {
 		}
 		return json.NewEncoder(stdout).Encode(files)
 	case "open-project":
-		// As work, from init at team start (ADR 0022 §2).
-		return openProject(context.Background(), dir, ExecRunner{}, fileProjectOps())
+		// As work, from init at team start (ADR 0022 §2a): one JSON line,
+		// what it found (and so didn't change).
+		if len(args) > 3 || (len(args) == 3 && args[2] != "look") {
+			return errors.New("open-project PROJECT [look]")
+		}
+		found, err := openProject(context.Background(), dir, ExecRunner{}, fileProjectOps(), len(args) == 3)
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(stdout).Encode(found)
+	case "clone-own":
+		// As the agent, through as-agent (ADR 0022 §2a point 2).
+		if len(args) != 5 {
+			return errors.New("clone-own PROJECT HOME ID QUOTA")
+		}
+		return cloneOwn(context.Background(), dir, args[2], args[3], args[4], homeGit(args[2]), stdout)
 	case "handoff-pack":
 		if len(args) != 3 {
 			return errors.New("handoff-pack BASE PATH")

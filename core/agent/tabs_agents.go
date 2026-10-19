@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -272,6 +273,38 @@ func tmuxArgv(argv []string) ([]string, error) {
 	return out, nil
 }
 
+// unknownProgramTabName names an agent's tab when what runs in it is
+// unknown.
+const unknownProgramTabName = "main"
+
+// programTabName names an agent's tab after what runs in it: the
+// program's own name, never its folder, arguments or environment, which
+// can hold secrets ("claude" for "/usr/local/bin/claude --model opus",
+// and for "env TOKEN=… claude"). It's "main" when that's unknown or
+// isn't a valid tab name. The agent is never the default: the app
+// already says whose tab it is, so "Builder · builder" repeats it
+// (R-0312).
+func programTabName(argv []string) string {
+	// env's assignments come before the program it runs.
+	if len(argv) > 0 && path.Base(argv[0]) == "env" {
+		argv = argv[1:]
+		for len(argv) > 0 && strings.Contains(argv[0], "=") && !strings.HasPrefix(argv[0], "-") {
+			argv = argv[1:]
+		}
+	}
+	if len(argv) == 0 {
+		return unknownProgramTabName
+	}
+	name := path.Base(argv[0])
+	if name == "." || name == "/" || strings.HasPrefix(name, "-") || strings.Contains(name, "=") || checkTabName(name) != nil {
+		return unknownProgramTabName
+	}
+	if _, err := tmuxName(name); err != nil {
+		return unknownProgramTabName
+	}
+	return name
+}
+
 // tmuxName escapes a tab's name: tmux expands formats in a new window's
 // name ("#{pane_id}", "#(command)"), and "##" is a plain "#".
 func tmuxName(name string) (string, error) {
@@ -306,7 +339,13 @@ func (s *apiServer) StartAgentTerminals(ctx context.Context, spec AgentServerSpe
 	}
 	// The session, sealed as the owner's is (tmuxHidden, tmuxOwned,
 	// tmuxSealed), with the runner in its first tab, run with no shell.
-	args := append([]string{"new-session", "-d", "-s", agentSession, "-n", spec.ID, "-P", "-F", "#{pane_id}", "--"}, argv...)
+	// The tab is named after the runner's program, not the agent: the app
+	// already shows whose tab it is ("Builder · claude", R-0312).
+	name, err := tmuxName(programTabName(spec.Argv))
+	if err != nil {
+		return nil, err
+	}
+	args := append([]string{"new-session", "-d", "-s", agentSession, "-n", name, "-P", "-F", "#{pane_id}", "--"}, argv...)
 	args = append(args, tmuxHidden...)
 	args = append(args, tmuxOwned...)
 	args = append(args, tmuxSealed...)
@@ -453,7 +492,7 @@ func (a *agentServer) newTab(ctx context.Context, t *agentv1.NewTeamTab) (*agent
 	}
 	name := t.GetName()
 	if name == "" {
-		name = a.user.ID
+		name = programTabName(t.GetArgv())
 	}
 	if err := checkTabName(name); err != nil {
 		return nil, err

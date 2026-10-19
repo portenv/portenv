@@ -39,7 +39,7 @@ enum SettingsWindow {
     }
 }
 
-/// The five panes as toolbar items.
+/// The six panes as toolbar items.
 final class SettingsTabs: NSTabViewController {
     init(sample: SettingsSample? = nil) {
         super.init(nibName: nil, bundle: nil)
@@ -85,6 +85,7 @@ struct SettingsPaneView: View {
             case .general: GeneralPane()
             case .servers: ServersPane(sample: sample?.servers)
             case .agents: AgentsPane()
+            case .team: TeamPane(sample: sample?.agentsAllowed)
             case .recoveryKey: RecoveryKeyPane(sample: sample?.recoveryKey)
             case .updates: UpdatesPane()
             }
@@ -98,6 +99,7 @@ struct SettingsPaneView: View {
 struct SettingsSample {
     var servers: [String]
     var recoveryKey: RecoveryKeyState
+    var agentsAllowed: Int = AgentsAllowed.defaultValue
 }
 
 /// A row: a label with the line under it, and its state or control at the
@@ -174,6 +176,53 @@ private struct AgentsPane: View {
         Form {
             Section(SettingsText.agentsWithAccess) {
                 SettingRow(label: SettingsText.noAgents)
+            }
+        }
+    }
+}
+
+/// Agents allowed (R-0347): how many agents may run at once in one
+/// workspace, kept and enforced by portenvd. Lowering it stops nothing.
+private struct TeamPane: View {
+    var sample: Int?
+    @State private var allowed: Int?
+    @State private var error: String?
+
+    var body: some View {
+        Form {
+            Section(SettingsText.teamHeading) {
+                SettingRow(label: SettingsText.agentsAllowed, line: error ?? SettingsText.agentsAllowedLine) {
+                    if let current = allowed {
+                        Picker(SettingsText.agentsAllowed, selection: Binding(get: { current }, set: { choose($0) })) {
+                            ForEach(AgentsAllowed.choices, id: \.self) { Text("\($0)").tag($0) }
+                        }
+                        .labelsHidden()
+                        .fixedSize()
+                        .accessibilityLabel(SettingsText.agentsAllowed)
+                    }
+                }
+            }
+        }
+        .task {
+            if let sample { allowed = sample; return }
+            do { allowed = try await SharedDaemon.client.agentsAllowed() } catch { self.error = SettingsText.agentsAllowedUnknown }
+        }
+    }
+
+    private func choose(_ n: Int) {
+        guard sample == nil else { allowed = n; return }
+        let before = allowed
+        allowed = n
+        Task {
+            do {
+                allowed = try await AgentsAllowed.set(n, daemon: SharedDaemon.client)
+                error = nil
+            } catch let e as DaemonError {
+                allowed = before
+                error = e.message
+            } catch {
+                allowed = before
+                self.error = error.localizedDescription
             }
         }
     }

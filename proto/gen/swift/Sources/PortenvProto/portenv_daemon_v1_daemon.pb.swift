@@ -2075,9 +2075,109 @@ public nonisolated struct Portenv_Daemon_V1_ListAgentsResponse: Sendable {
 
   public var agents: [Portenv_Daemon_V1_AgentInfo] = []
 
+  /// The team against the owner's agent limit (R-0347).
+  public var teamLimit: Portenv_Daemon_V1_TeamLimit {
+    get {_teamLimit ?? Portenv_Daemon_V1_TeamLimit()}
+    set {_teamLimit = newValue}
+  }
+  /// Returns true if `teamLimit` has been explicitly set.
+  public var hasTeamLimit: Bool {self._teamLimit != nil}
+  /// Clears the value of `teamLimit`. Subsequent reads from it will return its default value.
+  public mutating func clearTeamLimit() {self._teamLimit = nil}
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
+
+  fileprivate var _teamLimit: Portenv_Daemon_V1_TeamLimit? = nil
+}
+
+/// A team against the owner's agent limit (R-0347), for the Team section.
+public nonisolated struct Portenv_Daemon_V1_TeamLimit: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// Settings › Team › Agents allowed: 1 to 8, 4 by default.
+  public var agentsAllowed: Int32 = 0
+
+  /// The agent files in the team, and the agents starting or running.
+  public var agentsInTeam: Int32 = 0
+
+  public var agentsRunning: Int32 = 0
+
+  /// One plain line when the team is at, near or over the limit; empty
+  /// otherwise.
+  public var line: String = String()
+
+  /// When the team needs more than the limit allows: the number to raise
+  /// it to (at most 8), offered as the owner's confirmed Raise. 0 otherwise.
+  public var raiseTo: Int32 = 0
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Portenv_Daemon_V1_GetTeamSettingsRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Portenv_Daemon_V1_GetTeamSettingsResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// 1 to max_agents_allowed; default_agents_allowed until the owner sets it.
+  public var agentsAllowed: Int32 = 0
+
+  public var defaultAgentsAllowed: Int32 = 0
+
+  public var maxAgentsAllowed: Int32 = 0
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Portenv_Daemon_V1_SetAgentsAllowedRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// 1 to 8; anything else is refused.
+  public var agentsAllowed: Int32 = 0
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Portenv_Daemon_V1_SetAgentsAllowedResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var settings: Portenv_Daemon_V1_GetTeamSettingsResponse {
+    get {_settings ?? Portenv_Daemon_V1_GetTeamSettingsResponse()}
+    set {_settings = newValue}
+  }
+  /// Returns true if `settings` has been explicitly set.
+  public var hasSettings: Bool {self._settings != nil}
+  /// Clears the value of `settings`. Subsequent reads from it will return its default value.
+  public mutating func clearSettings() {self._settings = nil}
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _settings: Portenv_Daemon_V1_GetTeamSettingsResponse? = nil
 }
 
 /// One agent, as the Team sidebar shows it.
@@ -2276,6 +2376,16 @@ public nonisolated struct Portenv_Daemon_V1_WatchTeamResponse: Sendable {
     set {event = .removedAgentID(newValue)}
   }
 
+  /// The team against the owner's agent limit (R-0347): sent after the
+  /// agents, and again whenever it changes. It carries no cursor.
+  public var teamLimit: Portenv_Daemon_V1_TeamLimit {
+    get {
+      if case .teamLimit(let v)? = event {return v}
+      return Portenv_Daemon_V1_TeamLimit()
+    }
+    set {event = .teamLimit(newValue)}
+  }
+
   public var cursor: String = String()
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
@@ -2285,6 +2395,9 @@ public nonisolated struct Portenv_Daemon_V1_WatchTeamResponse: Sendable {
     case message(Portenv_Types_V1_BoardMessage)
     case decision(Portenv_Types_V1_Decision)
     case removedAgentID(String)
+    /// The team against the owner's agent limit (R-0347): sent after the
+    /// agents, and again whenever it changes. It carries no cursor.
+    case teamLimit(Portenv_Daemon_V1_TeamLimit)
 
   }
 
@@ -6298,7 +6411,7 @@ nonisolated extension Portenv_Daemon_V1_ListAgentsRequest: SwiftProtobuf.Message
 
 nonisolated extension Portenv_Daemon_V1_ListAgentsResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ListAgentsResponse"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}agents\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}agents\0\u{3}team_limit\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -6307,20 +6420,202 @@ nonisolated extension Portenv_Daemon_V1_ListAgentsResponse: SwiftProtobuf.Messag
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
       case 1: try { try decoder.decodeRepeatedMessageField(value: &self.agents) }()
+      case 2: try { try decoder.decodeSingularMessageField(value: &self._teamLimit) }()
       default: break
       }
     }
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
     if !self.agents.isEmpty {
       try visitor.visitRepeatedMessageField(value: self.agents, fieldNumber: 1)
     }
+    try { if let v = self._teamLimit {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
+    } }()
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Portenv_Daemon_V1_ListAgentsResponse, rhs: Portenv_Daemon_V1_ListAgentsResponse) -> Bool {
     if lhs.agents != rhs.agents {return false}
+    if lhs._teamLimit != rhs._teamLimit {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Portenv_Daemon_V1_TeamLimit: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".TeamLimit"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}agents_allowed\0\u{3}agents_in_team\0\u{3}agents_running\0\u{1}line\0\u{3}raise_to\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularInt32Field(value: &self.agentsAllowed) }()
+      case 2: try { try decoder.decodeSingularInt32Field(value: &self.agentsInTeam) }()
+      case 3: try { try decoder.decodeSingularInt32Field(value: &self.agentsRunning) }()
+      case 4: try { try decoder.decodeSingularStringField(value: &self.line) }()
+      case 5: try { try decoder.decodeSingularInt32Field(value: &self.raiseTo) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.agentsAllowed != 0 {
+      try visitor.visitSingularInt32Field(value: self.agentsAllowed, fieldNumber: 1)
+    }
+    if self.agentsInTeam != 0 {
+      try visitor.visitSingularInt32Field(value: self.agentsInTeam, fieldNumber: 2)
+    }
+    if self.agentsRunning != 0 {
+      try visitor.visitSingularInt32Field(value: self.agentsRunning, fieldNumber: 3)
+    }
+    if !self.line.isEmpty {
+      try visitor.visitSingularStringField(value: self.line, fieldNumber: 4)
+    }
+    if self.raiseTo != 0 {
+      try visitor.visitSingularInt32Field(value: self.raiseTo, fieldNumber: 5)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Portenv_Daemon_V1_TeamLimit, rhs: Portenv_Daemon_V1_TeamLimit) -> Bool {
+    if lhs.agentsAllowed != rhs.agentsAllowed {return false}
+    if lhs.agentsInTeam != rhs.agentsInTeam {return false}
+    if lhs.agentsRunning != rhs.agentsRunning {return false}
+    if lhs.line != rhs.line {return false}
+    if lhs.raiseTo != rhs.raiseTo {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Portenv_Daemon_V1_GetTeamSettingsRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".GetTeamSettingsRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Portenv_Daemon_V1_GetTeamSettingsRequest, rhs: Portenv_Daemon_V1_GetTeamSettingsRequest) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Portenv_Daemon_V1_GetTeamSettingsResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".GetTeamSettingsResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}agents_allowed\0\u{3}default_agents_allowed\0\u{3}max_agents_allowed\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularInt32Field(value: &self.agentsAllowed) }()
+      case 2: try { try decoder.decodeSingularInt32Field(value: &self.defaultAgentsAllowed) }()
+      case 3: try { try decoder.decodeSingularInt32Field(value: &self.maxAgentsAllowed) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.agentsAllowed != 0 {
+      try visitor.visitSingularInt32Field(value: self.agentsAllowed, fieldNumber: 1)
+    }
+    if self.defaultAgentsAllowed != 0 {
+      try visitor.visitSingularInt32Field(value: self.defaultAgentsAllowed, fieldNumber: 2)
+    }
+    if self.maxAgentsAllowed != 0 {
+      try visitor.visitSingularInt32Field(value: self.maxAgentsAllowed, fieldNumber: 3)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Portenv_Daemon_V1_GetTeamSettingsResponse, rhs: Portenv_Daemon_V1_GetTeamSettingsResponse) -> Bool {
+    if lhs.agentsAllowed != rhs.agentsAllowed {return false}
+    if lhs.defaultAgentsAllowed != rhs.defaultAgentsAllowed {return false}
+    if lhs.maxAgentsAllowed != rhs.maxAgentsAllowed {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Portenv_Daemon_V1_SetAgentsAllowedRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".SetAgentsAllowedRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}agents_allowed\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularInt32Field(value: &self.agentsAllowed) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.agentsAllowed != 0 {
+      try visitor.visitSingularInt32Field(value: self.agentsAllowed, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Portenv_Daemon_V1_SetAgentsAllowedRequest, rhs: Portenv_Daemon_V1_SetAgentsAllowedRequest) -> Bool {
+    if lhs.agentsAllowed != rhs.agentsAllowed {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Portenv_Daemon_V1_SetAgentsAllowedResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".SetAgentsAllowedResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}settings\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularMessageField(value: &self._settings) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._settings {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Portenv_Daemon_V1_SetAgentsAllowedResponse, rhs: Portenv_Daemon_V1_SetAgentsAllowedResponse) -> Bool {
+    if lhs._settings != rhs._settings {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -6573,7 +6868,7 @@ nonisolated extension Portenv_Daemon_V1_WatchTeamRequest: SwiftProtobuf.Message,
 
 nonisolated extension Portenv_Daemon_V1_WatchTeamResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".WatchTeamResponse"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}agent\0\u{1}message\0\u{1}decision\0\u{1}cursor\0\u{3}removed_agent_id\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}agent\0\u{1}message\0\u{1}decision\0\u{1}cursor\0\u{3}removed_agent_id\0\u{3}team_limit\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -6629,6 +6924,19 @@ nonisolated extension Portenv_Daemon_V1_WatchTeamResponse: SwiftProtobuf.Message
           self.event = .removedAgentID(v)
         }
       }()
+      case 6: try {
+        var v: Portenv_Daemon_V1_TeamLimit?
+        var hadOneofValue = false
+        if let current = self.event {
+          hadOneofValue = true
+          if case .teamLimit(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.event = .teamLimit(v)
+        }
+      }()
       default: break
       }
     }
@@ -6657,9 +6965,17 @@ nonisolated extension Portenv_Daemon_V1_WatchTeamResponse: SwiftProtobuf.Message
     if !self.cursor.isEmpty {
       try visitor.visitSingularStringField(value: self.cursor, fieldNumber: 4)
     }
-    try { if case .removedAgentID(let v)? = self.event {
+    switch self.event {
+    case .removedAgentID?: try {
+      guard case .removedAgentID(let v)? = self.event else { preconditionFailure() }
       try visitor.visitSingularStringField(value: v, fieldNumber: 5)
-    } }()
+    }()
+    case .teamLimit?: try {
+      guard case .teamLimit(let v)? = self.event else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 6)
+    }()
+    default: break
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 

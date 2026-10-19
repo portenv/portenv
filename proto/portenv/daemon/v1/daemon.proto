@@ -187,6 +187,11 @@ service DaemonService {
   rpc AddAgentFiles(stream AddAgentFilesRequest) returns (AddAgentFilesResponse);
   // Pauses or resumes one of an agent's routines (R-0258).
   rpc SetRoutinePaused(SetRoutinePausedRequest) returns (SetRoutinePausedResponse);
+  // The owner's team settings (R-0347): how many agents may run in one
+  // workspace (Settings › Team › Agents allowed). Set only by the app, in
+  // front of the person: from Settings, or the owner's confirmed Raise.
+  rpc GetTeamSettings(GetTeamSettingsRequest) returns (GetTeamSettingsResponse);
+  rpc SetAgentsAllowed(SetAgentsAllowedRequest) returns (SetAgentsAllowedResponse);
 }
 
 message CheckBoxRequest {
@@ -876,6 +881,41 @@ message ListAgentsRequest {
 
 message ListAgentsResponse {
   repeated AgentInfo agents = 1;
+  // The team against the owner's agent limit (R-0347).
+  TeamLimit team_limit = 2;
+}
+
+// A team against the owner's agent limit (R-0347), for the Team section.
+message TeamLimit {
+  // Settings › Team › Agents allowed: 1 to 8, 4 by default.
+  int32 agents_allowed = 1;
+  // The agent files in the team, and the agents starting or running.
+  int32 agents_in_team = 2;
+  int32 agents_running = 3;
+  // One plain line when the team is at, near or over the limit; empty
+  // otherwise.
+  string line = 4;
+  // When the team needs more than the limit allows: the number to raise
+  // it to (at most 8), offered as the owner's confirmed Raise. 0 otherwise.
+  int32 raise_to = 5;
+}
+
+message GetTeamSettingsRequest {}
+
+message GetTeamSettingsResponse {
+  // 1 to max_agents_allowed; default_agents_allowed until the owner sets it.
+  int32 agents_allowed = 1;
+  int32 default_agents_allowed = 2;
+  int32 max_agents_allowed = 3;
+}
+
+message SetAgentsAllowedRequest {
+  // 1 to 8; anything else is refused.
+  int32 agents_allowed = 1;
+}
+
+message SetAgentsAllowedResponse {
+  GetTeamSettingsResponse settings = 1;
 }
 
 // One agent, as the Team sidebar shows it.
@@ -931,6 +971,9 @@ message WatchTeamResponse {
     portenv.types.v1.BoardMessage message = 2;
     portenv.types.v1.Decision decision = 3;
     string removed_agent_id = 5;
+    // The team against the owner's agent limit (R-0347): sent after the
+    // agents, and again whenever it changes. It carries no cursor.
+    TeamLimit team_limit = 6;
   }
   string cursor = 4;
 }

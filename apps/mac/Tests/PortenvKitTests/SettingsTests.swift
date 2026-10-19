@@ -11,8 +11,9 @@ struct SettingsTests {
     let gb = Locale(identifier: "en_GB")
     let saved = ISO8601DateFormatter().date(from: "2026-10-12T19:00:00Z")!
 
-    @Test func fivePanesInTheBoardsOrder() {
-        #expect(SettingsPane.allCases.map(\.title) == ["General", "Servers", "Agents", "Recovery Key", "Updates"])
+    /// Team, after Agents, holds Agents allowed (R-0347).
+    @Test func sixPanesInTheBoardsOrder() {
+        #expect(SettingsPane.allCases.map(\.title) == ["General", "Servers", "Agents", "Team", "Recovery Key", "Updates"])
     }
 
     /// The pool's Keychain item says whether a recovery key was made and

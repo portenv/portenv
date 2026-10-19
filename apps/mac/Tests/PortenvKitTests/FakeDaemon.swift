@@ -275,4 +275,15 @@ final class FakeDaemon: DaemonAPI, @unchecked Sendable {
         try await record(["app", "approve-agent-file", box, id, sha256])
         return TeamAgent(id: id, name: id, status: .stopped, fileSHA256: sha256, approved: true)
     }
+    /// Settings › Team › Agents allowed (R-0347).
+    var allowed = 4
+    func agentsAllowed() async throws -> Int {
+        try await record(["app", "agents-allowed"])
+        return lock.withLock { allowed }
+    }
+    func setAgentsAllowed(_ n: Int) async throws -> Int {
+        try await record(["app", "set-agents-allowed", String(n)])
+        lock.withLock { allowed = n }
+        return n
+    }
 }

@@ -3,16 +3,17 @@
 import Foundation
 import Security
 
-/// Portenv › Settings… (⌘,): a toolbar window with five panes, in the
-/// settings board's order (R-0137).
+/// Portenv › Settings… (⌘,): a toolbar window with six panes, in the
+/// settings board's order (R-0137), with Team after Agents (R-0347).
 public enum SettingsPane: String, CaseIterable, Sendable {
-    case general, servers, agents, recoveryKey, updates
+    case general, servers, agents, team, recoveryKey, updates
 
     public var title: String {
         switch self {
         case .general: "General"
         case .servers: "Servers"
         case .agents: "Agents"
+        case .team: "Team"
         case .recoveryKey: "Recovery Key"
         case .updates: "Updates"
         }
@@ -24,6 +25,7 @@ public enum SettingsPane: String, CaseIterable, Sendable {
         case .general: "gearshape"
         case .servers: "server.rack"
         case .agents: "person.2"
+        case .team: "person.3"
         case .recoveryKey: "key"
         case .updates: "arrow.clockwise"
         }
@@ -47,6 +49,12 @@ public enum SettingsText {
     // Agents.
     public static let agentsWithAccess = "Agents with access now"
     public static let noAgents = "No agents have access."
+
+    // Team (R-0347).
+    public static let teamHeading = "Agent teams"
+    public static let agentsAllowed = "Agents allowed"
+    public static let agentsAllowedLine = "How many agents can run at once in one workspace, from 1 to 8. Lowering it stops no agent that\u{2019}s running."
+    public static let agentsAllowedUnknown = "Portenv\u{2019}s background service didn\u{2019}t answer. Open Settings again to try once more."
 
     // Recovery Key.
     public static let recoveryHeading = "Recovery key"

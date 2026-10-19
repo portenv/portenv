@@ -691,6 +691,15 @@ extension DaemonClient {
         let req = Portenv_Daemon_V1_ApproveAgentFileRequest.with { $0.name = box; $0.agentID = id; $0.fileSha256 = sha256 }
         return try await call { TeamAgent(try await api.approveAgentFile(req).agent) }
     }
+
+    public func agentsAllowed() async throws -> Int {
+        try await call { Int(try await api.getTeamSettings(.init()).agentsAllowed) }
+    }
+
+    public func setAgentsAllowed(_ n: Int) async throws -> Int {
+        let req = Portenv_Daemon_V1_SetAgentsAllowedRequest.with { $0.agentsAllowed = Int32(clamping: n) }
+        return try await call { Int(try await api.setAgentsAllowed(req).settings.agentsAllowed) }
+    }
 }
 
 extension TeamEvent {
@@ -700,6 +709,9 @@ extension TeamEvent {
         case .message(let m)?: self = .message(TeamMessage(m))
         case .decision(let d)?: self = .decision(TeamDecision(d))
         case .removedAgentID(let id)?: self = .removed(id)
+        case .teamLimit(let l)?:
+            self = .limit(TeamLimit(allowed: Int(l.agentsAllowed), inTeam: Int(l.agentsInTeam), running: Int(l.agentsRunning),
+                                    line: l.line, raiseTo: Int(l.raiseTo)))
         case nil: return nil
         }
     }

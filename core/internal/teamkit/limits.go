@@ -33,3 +33,7 @@ const (
 	MaxChoices          = 4
 	MaxChoiceCharacters = 80
 )
+
+// ShareLoginOff is the guide's rule while share_login isn't in the tester
+// build (ADR 0022 §2, R-0323, R-0324): nothing of the owner's is shared.
+const ShareLoginOff = "share_login isn't supported in this build: nothing of the owner's sign-ins is shared with you, whatever your agent file says. Sign in yourself in your own terminal, or ask the owner."

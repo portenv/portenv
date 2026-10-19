@@ -407,4 +407,10 @@ struct TeamAgentStatusMappingTests {
         #expect(TeamText.routinesLine(off) == off.routinesOff)
         #expect(TeamText.routinesLine(info()) == nil)
     }
+
+    @Test func shareLoginOffIsCarriedAsPlainText() {
+        #expect(info().shareLoginOff.isEmpty)
+        let a = info { $0.shareLoginOff = "Sharing your sign-in (claude) isn\u{2019}t in this build, so nothing is shared.\n\u{1b}[2J" }
+        #expect(a.shareLoginOff == "Sharing your sign-in (claude) isn\u{2019}t in this build, so nothing is shared. [2J")
+    }
 }

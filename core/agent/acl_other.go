@@ -6,7 +6,6 @@ package agent
 
 import (
 	"errors"
-	"io/fs"
 	"os"
 
 	"golang.org/x/sys/unix"
@@ -16,10 +15,11 @@ import (
 // (as a filesystem without ACLs).
 func fileProjectOps() projectOps {
 	return projectOps{
-		self:     os.Getuid(),
-		chown:    func(f *os.File, gid int) error { return f.Chown(-1, gid) },
-		addACL:   func(*os.File, bool) error { return errors.ErrUnsupported },
-		clearACL: func(*os.File, bool) (fs.FileMode, bool, error) { return 0, false, errors.ErrUnsupported },
+		self: os.Getuid(),
+		othersWrite: func(_ *os.File, st *unix.Stat_t, _ bool) (bool, error) {
+			return st.Mode&0o002 != 0 || (st.Gid != uint32(os.Getgid()) && st.Mode&0o020 != 0), nil // #nosec G115 -- a gid
+		},
+		readOnly: func(*os.File, bool) error { return errors.ErrUnsupported },
 	}
 }
 
@@ -27,3 +27,8 @@ func fileProjectOps() projectOps {
 func statType(st *unix.Stat_t) uint32 { return uint32(st.Mode) & unix.S_IFMT }
 
 func statDev(st *unix.Stat_t) uint64 { return uint64(st.Dev) } // #nosec G115 -- a device number
+
+// fileLensOps: ACLs are Linux's.
+func fileLensOps() lensOps {
+	return lensOps{set: func(*os.File, bool, []uint32, bool) error { return errors.ErrUnsupported }}
+}

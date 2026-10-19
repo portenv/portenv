@@ -148,6 +148,9 @@ type AgentSpec struct {
 	ShareLogin []string
 	// HomeSeed is cleaned, relative to the project.
 	HomeSeed []string
+	// Checkout is "own" (its own clone of the project, the default) or
+	// "none" (ADR 0022 §2a).
+	Checkout string
 	// Routines are the file's routines (R-0258).
 	Routines []AgentRoutine
 	// Grant is the file's grant, with the defaults filled in.
@@ -160,7 +163,19 @@ type AgentSpec struct {
 
 // grantSet records which grant keys a file sets, for overrides.
 type grantSet struct {
-	panes, maxPanes, message, askOwner, packages, teamStatus bool
+	panes, maxPanes, message, askOwner, packages, teamStatus, readClones bool
+}
+
+// An agent's checkout (ADR 0022 §2a): its own clone of the project, or
+// none.
+const (
+	CheckoutOwn  = "own"
+	CheckoutNone = "none"
+)
+
+// OwnClone is whether the agent works in its own clone of the project.
+func (a TeamAgent) OwnClone() bool {
+	return a.Spec != nil && a.Spec.Checkout != CheckoutNone && !a.Remote
 }
 
 // TeamAgent is one agent of a team: its repository file, the personal
@@ -300,6 +315,24 @@ func LoadTeam(src TeamSource) (Team, error) {
 		a.Problems = p.lines
 	}
 
+	// read_clones names only other team agents with their own clone
+	// (ADR 0022 §2a, lenses).
+	for i := range team.Agents {
+		a := &team.Agents[i]
+		if a.Spec == nil {
+			continue
+		}
+		for _, r := range a.Spec.Grant.GetReadClones() {
+			w := team.agent(r)
+			switch {
+			case r == a.ID || w == nil || !members[r]:
+				a.Problems = append(a.Problems, fmt.Sprintf("%s: grant.read_clones names %q, which isn't another agent in this team.", a.ID, r))
+			case w.Spec != nil && !w.OwnClone():
+				a.Problems = append(a.Problems, fmt.Sprintf("%s: grant.read_clones names %q, which has no copy of the project to read (checkout: none).", a.ID, r))
+			}
+		}
+	}
+
 	if n := len(team.Agents); n > limits.MaxAgents {
 		team.Problems = append(team.Problems, fmt.Sprintf("The team has %d agents; the owner's limit is %d.", n, limits.MaxAgents))
 	}
@@ -377,8 +410,8 @@ func pathErrText(err error) error {
 }
 
 var (
-	agentFileKeys = []string{"id", "name", "role", "runner", "via", "avatar", "share_login", "home_seed", "routine", "grant"}
-	agentListLike = map[string]string{"share_login": "[claude]", "home_seed": "[docs/style-guide.md]", "routine": `["every 30m: Status round"]`, "grant.message": "[lead]"}
+	agentFileKeys = []string{"id", "name", "role", "runner", "via", "avatar", "share_login", "home_seed", "checkout", "routine", "grant"}
+	agentListLike = map[string]string{"share_login": "[claude]", "home_seed": "[docs/style-guide.md]", "routine": `["every 30m: Status round"]`, "grant.message": "[lead]", "grant.read_clones": "[builder]"}
 )
 
 // buildAgentSpec checks one file's content. For an override, missing keys
@@ -396,7 +429,7 @@ func buildAgentSpec(content []byte, fileID string, override bool, limits TeamLim
 	if !ok {
 		return nil
 	}
-	s := &AgentSpec{set: map[string]bool{}}
+	s := &AgentSpec{set: map[string]bool{}, Checkout: CheckoutOwn}
 	if override {
 		if strings.TrimSpace(fm.body) != "" {
 			p.addf("it has instructions; only the repository file's are used.")
@@ -458,7 +491,7 @@ func buildAgentSpec(content []byte, fileID string, override bool, limits TeamLim
 			case "routine":
 				p.addf("it sets routine; only the repository file, which the owner approves, has routines.")
 				continue
-			case "name", "role":
+			case "name", "role", "checkout":
 				p.addf("it sets %s; an override may change only runner, via, avatar, share_login and grant.", key)
 				continue
 			}
@@ -564,6 +597,14 @@ func buildAgentSpec(content []byte, fileID string, override bool, limits TeamLim
 				}
 				s.Routines = append(s.Routines, rt)
 			}
+		case "checkout":
+			if c, ok := scalar(key, v); ok {
+				if c != CheckoutOwn && c != CheckoutNone {
+					p.addf("checkout is %q; it must be own or none.", c)
+				} else {
+					s.Checkout = c
+				}
+			}
 		case "home_seed":
 			items, _ := list(key, v)
 			for _, h := range items {
@@ -613,7 +654,7 @@ func buildGrant(keys *fmKeys, g *typesv1.AgentGrant, set *grantSet, override boo
 		v := keys.vals[key]
 		full := "grant." + key
 		switch key {
-		case "panes", "max_panes", "message", "ask_owner", "packages", "team_status":
+		case "panes", "max_panes", "message", "ask_owner", "packages", "team_status", "read_clones":
 		default:
 			p.addf("%q isn't a key an agent file may have.", full)
 			continue
@@ -625,13 +666,16 @@ func buildGrant(keys *fmKeys, g *typesv1.AgentGrant, set *grantSet, override boo
 			p.addf("%s has no value.", full)
 			continue
 		}
-		if key == "message" {
+		if key == "message" || key == "read_clones" {
 			if v.kind != fmList {
 				p.addf("%s must be a list, like %s.", full, agentListLike[full])
 				continue
 			}
-			g.Message = slices.Clone(v.list)
-			set.message = true
+			if key == "message" {
+				g.Message, set.message = slices.Clone(v.list), true
+			} else {
+				g.ReadClones, set.readClones = slices.Clone(v.list), true
+			}
 			continue
 		}
 		if v.kind != fmScalar {
@@ -769,6 +813,14 @@ func applyOverride(a *TeamAgent, src TeamSource, limits TeamLimits, p *problems)
 			}
 		}
 	}
+	if o.grant.readClones {
+		for _, m := range og.GetReadClones() {
+			if !slices.Contains(base.GetReadClones(), m) {
+				widerf("read_clones", "["+strings.Join(og.GetReadClones(), ", ")+"]", "["+strings.Join(base.GetReadClones(), ", ")+"]")
+				break
+			}
+		}
+	}
 	if o.grant.askOwner && og.GetAskOwner() && !base.GetAskOwner() {
 		widerf("ask_owner", "true", "false")
 	}
@@ -819,6 +871,9 @@ func applyOverride(a *TeamAgent, src TeamSource, limits TeamLimits, p *problems)
 	}
 	if o.grant.teamStatus {
 		a.Grant.TeamStatus = og.GetTeamStatus()
+	}
+	if o.grant.readClones {
+		a.Grant.ReadClones = slices.Clone(og.GetReadClones())
 	}
 }
 

@@ -299,6 +299,41 @@ message Decision {
   // in that order. portenvd starts them itself on Approve, so the answer
   // works after the app or portenvd restarts (R-0296).
   repeated string start_agent_ids = 12;
+  // For DECISION_KIND_ASK_OWNER asked with --choice (CC-0501): the 2 to 4
+  // choices, in order, each 1 to 80 characters of plain text. The app
+  // shows one button per choice in place of Approve. Empty for a yes/no
+  // question.
+  repeated string choices = 13;
+  // The owner's choice, counting from 1 (choices[choice-1]); 0 when none
+  // was chosen. Set only on an approved decision with choices.
+  int32 choice = 14;
+  // For DECISION_KIND_TEAM_START after the move to agents' own clones
+  // (ADR 0022 §2a point 6): what agents could have changed, for the owner
+  // to keep or remove, one by one. Approve keeps every item not named in
+  // AnswerDecisionRequest.remove_items.
+  repeated MigrationItem migration_items = 15;
+}
+
+// One thing the move to agents' own clones recorded (ADR 0022 §2a point
+// 6): something agents could have changed in what work's git reads, or a
+// repository, worktree or file an agent made in the project.
+message MigrationItem {
+  // Stable within the record: what remove_items names.
+  string id = 1;
+  // Relative to the project; for a setting, what it was.
+  string path = 2;
+  // "git" (a config file, hook or worktree registration in .git), "repo"
+  // (a repository an agent made in the project), "worktree", "file", or
+  // "setting" (core.sharedRepository or a system safe.directory, already
+  // removed).
+  string kind = 3;
+  // The agent whose it was, when Portenv can tell.
+  string agent = 4;
+  int64 size = 5;
+  // Whether the owner chooses: settings are removed either way.
+  bool choice = 6;
+  // A plain line: what was copied into the agent's clone, or why not.
+  string note = 7;
 }
 
 // One package apt-get -s would install, run by init (root), never by the
@@ -326,6 +361,11 @@ message AgentGrant {
   // count and last activity in whoami and portenv team status. Off by
   // default; never terminals or homes.
   bool team_status = 6;
+  // read_clones (ADR 0022 §2a, lenses): team agents with their own clone
+  // whose clone this agent may read, never write: a named-user read ACL
+  // on the clone and traverse on that agent's home, never through group
+  // team.
+  repeated string read_clones = 7;
 }
 
 // A file or folder in an agent's home, for the Agent files view (§2).

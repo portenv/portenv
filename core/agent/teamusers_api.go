@@ -60,9 +60,21 @@ func (s *server) PrepareTeamProject(ctx context.Context, req *agentv1.PrepareTea
 	if s.team == nil {
 		return nil, status.Error(codes.Unavailable, "agent users aren't available in this workspace")
 	}
-	fixed, err := s.team.PrepareProject(ctx, req.GetProjectDir())
+	fixed, items, err := s.team.PrepareProject(ctx, req.GetProjectDir(), PrepareOptions{CloneAgents: req.GetCloneAgents(), HomeQuota: req.GetHomeQuotaBytes()})
 	if err != nil {
 		return nil, status.Error(codes.FailedPrecondition, err.Error())
 	}
-	return &agentv1.PrepareTeamProjectResponse{Fixed: fixed}, nil
+	return &agentv1.PrepareTeamProjectResponse{Fixed: fixed, Migration: items}, nil
+}
+
+// ResolveTeamMigration is the owner's answer to the move to agents' own
+// clones (ADR 0022 §2a point 6); init only.
+func (s *server) ResolveTeamMigration(ctx context.Context, req *agentv1.ResolveTeamMigrationRequest) (*agentv1.ResolveTeamMigrationResponse, error) {
+	if s.team == nil {
+		return nil, status.Error(codes.Unavailable, "agent users aren't available in this workspace")
+	}
+	if err := s.team.ResolveMigration(ctx, req.GetProjectDir(), req.GetRemoveItems()); err != nil {
+		return nil, status.Error(codes.FailedPrecondition, err.Error())
+	}
+	return &agentv1.ResolveTeamMigrationResponse{}, nil
 }

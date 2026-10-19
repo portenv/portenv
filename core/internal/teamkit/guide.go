@@ -46,7 +46,7 @@ type GuideCommand struct {
 
 // guideTypes are the messages an agent reads (inbox, whoami, team status).
 var guideTypes = []protoreflect.ProtoMessage{
-	&typesv1.BoardMessage{}, &typesv1.Decision{}, &typesv1.HandoffFile{}, &typesv1.AgentStatus{},
+	&typesv1.BoardMessage{}, &typesv1.Decision{}, &typesv1.MigrationItem{}, &typesv1.HandoffFile{}, &typesv1.AgentStatus{},
 	&typesv1.AgentGrant{}, &typesv1.PackagePlan{}, &agentv1.InboxResult{}, &agentv1.WhoAmIResult{},
 	&agentv1.Teammate{}, &agentv1.TeamStatusResult{},
 }
@@ -99,6 +99,7 @@ func NewGuide() Guide {
 			"Only the owner answers decisions, in Portenv. A decision you asked for is pending until then.",
 			"You reach only your own terminals and files. Opening a pane in the owner's window goes through portenv split or portenv tab new, and your grant.",
 			"Run portenv whoami for what you can do now.",
+			ShareLoginOff,
 		},
 		Etiquette: []string{
 			"One topic per thread; reply in the thread (--thread).",
@@ -123,6 +124,8 @@ func NewGuide() Guide {
 			"routine_minimum_minutes":     MinRoutineMinutes,
 			"agents":                      MaxTeamAgents,
 			"panes":                       MaxAgentPanes,
+			"choices":                     MaxChoices,
+			"choice_characters":           MaxChoiceCharacters,
 		},
 		Types: map[string][]GuideField{},
 		Enums: map[string][]string{},
@@ -152,15 +155,18 @@ func NewGuide() Guide {
 		{"portenv msg AGENT TEXT [--thread ID] [--type notice|question|answer]", "A message to a teammate your grant names, or to the owner.",
 			`portenv msg reviewer "Ready for review on feature/cart" --type question`,
 			[]string{"builder may not message reviewer (its grant's message list doesn't name it).", "A message is 1 to " + kb(MaxMessageBytes) + " of plain text, with no control characters.", fmt.Sprintf("builder has sent %d messages in the last minute, its limit. Wait a moment.", MessagesPerMinute)}},
-		{"portenv ask-owner TEXT [--thread ID]", "A decision for the owner, who answers in Portenv. Wait with portenv inbox --wait.",
-			`portenv ask-owner "May I add a date library to the web app?"`,
-			[]string{"builder may not ask the owner (its grant has ask_owner: false).", fmt.Sprintf("builder has %d requests waiting for the owner, its limit. Wait for an answer first.", PendingDecisionsPerAgent)}},
+		{`portenv ask-owner TEXT [--choice "LABEL" --choice "LABEL"...] [--thread ID]`,
+			fmt.Sprintf(`A decision for the owner, who answers in Portenv. Without --choice it's a yes/no question (approved or declined). With %d to %d --choice labels, the owner picks one, or declines; inbox then shows chose "LABEL", and inbox --json the decision's choice, counting from 1. Wait with portenv inbox --wait.`, MinChoices, MaxChoices),
+			`portenv ask-owner "Which way for the date parsing?" --choice "Option a: keep our parser" --choice "Option b: install deps"`,
+			[]string{"builder may not ask the owner (its grant has ask_owner: false).", fmt.Sprintf("builder has %d requests waiting for the owner, its limit. Wait for an answer first.", PendingDecisionsPerAgent),
+				fmt.Sprintf("Give %d to %d choices, or none for a yes/no question.", MinChoices, MaxChoices),
+				fmt.Sprintf("A choice is 1 to %d characters of plain text on one line.", MaxChoiceCharacters), "Each choice must be different."}},
 		{"portenv inbox [--wait] [--since CURSOR] [--json]", "Your messages, and your decisions' answers, since a cursor. --wait waits up to a minute for something new.",
 			`portenv inbox --wait --since 12 --json`,
 			[]string{"Stopped waiting."}},
-		{"portenv share [BRANCH] [--text TEXT]", "Tells the owner (and the lead, if your grant names it) that your work is ready.",
-			`portenv share feature/cart --text "tests pass"`,
-			[]string{"A message is 1 to " + kb(MaxMessageBytes) + " of plain text, with no control characters."}},
+		{"portenv share [agent/YOUR-ID] [--text TEXT]", "Tells the owner (and the lead, if your grant names it) that your work is ready on your branch, agent/<your id>, in your own copy of the project. Commit first: the owner fetches the branch, never your uncommitted files.",
+			`portenv share --text "tests pass"`,
+			[]string{"A message is 1 to " + kb(MaxMessageBytes) + " of plain text, with no control characters.", "builder shares its own branch, agent/builder, not main.", "builder has no copy of the project (checkout: none), so it has no branch to share."}},
 		{"portenv status set TEXT [--progress N/M] [--blocked REASON] | portenv status clear", "What you're working on, shown to the owner and, with the grant, to teammates.",
 			`portenv status set "Running the payments tests" --progress 3/8`,
 			[]string{"builder set its status less than 10 seconds ago. Wait a moment.", fmt.Sprintf("A status is one line of plain text, 1 to %d characters.", MaxStatus)}},
@@ -209,7 +215,7 @@ func (g Guide) Text() string {
 	}
 	w("\nRoutines\n- %s\n", g.Routines)
 	w("\nLimits\n")
-	for _, k := range []string{"message_bytes", "messages_per_minute", "pending_decisions", "decision_expiry_hours", "status_characters", "handoff_bytes", "calls_in_flight"} {
+	for _, k := range []string{"message_bytes", "messages_per_minute", "pending_decisions", "decision_expiry_hours", "status_characters", "handoff_bytes", "calls_in_flight", "choices", "choice_characters"} {
 		w("- %s: %v\n", k, g.Limits[k])
 	}
 	w("\nEtiquette\n")

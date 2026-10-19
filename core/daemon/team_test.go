@@ -30,20 +30,31 @@ import (
 type fakeTeamHelper struct {
 	agentv1.AgentServiceClient
 
-	mu         sync.Mutex
-	board      []*agentv1.AppendBoardRequest
-	panes      []*agentv1.AgentPaneActionRequest
-	started    []*agentv1.StartTeamAgentRequest
-	stopped    []string
-	nextPane   int
-	handoffs   []*agentv1.HandoffFilesRequest
-	delivered  []*agentv1.DeliverRoutineRequest
-	busy       bool
-	prepared   []string
-	prepareErr string
-	fixed      []string
-	listed     []*agentv1.ListHomeFilesRequest
-	written    []*agentv1.WriteHomeFilesRequest
+	mu          sync.Mutex
+	board       []*agentv1.AppendBoardRequest
+	panes       []*agentv1.AgentPaneActionRequest
+	started     []*agentv1.StartTeamAgentRequest
+	stopped     []string
+	nextPane    int
+	handoffs    []*agentv1.HandoffFilesRequest
+	delivered   []*agentv1.DeliverRoutineRequest
+	busy        bool
+	prepared    []string
+	prepareErr  string
+	fixed       []string
+	listed      []*agentv1.ListHomeFilesRequest
+	written     []*agentv1.WriteHomeFilesRequest
+	fetched     []*agentv1.FetchAgentBranchRequest
+	migration   []*typesv1.MigrationItem
+	prepareReqs []*agentv1.PrepareTeamProjectRequest
+	resolved    []*agentv1.ResolveTeamMigrationRequest
+}
+
+func (f *fakeTeamHelper) FetchAgentBranch(_ context.Context, in *agentv1.FetchAgentBranchRequest, _ ...grpc.CallOption) (*agentv1.FetchAgentBranchResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.fetched = append(f.fetched, in)
+	return &agentv1.FetchAgentBranchResponse{Ref: "refs/remotes/agents/" + in.GetAgentId(), Commit: "0123456789abcdef0123456789abcdef01234567"}, nil
 }
 
 func (f *fakeTeamHelper) AppendBoard(_ context.Context, in *agentv1.AppendBoardRequest, _ ...grpc.CallOption) (*agentv1.AppendBoardResponse, error) {
@@ -619,7 +630,7 @@ func TestTheFirstStartAsksOnceWithTheResidualRisk(t *testing.T) {
 	for _, d := range e.box("w").decisions {
 		if d.GetKind() == typesv1.DecisionKind_DECISION_KIND_TEAM_START {
 			n++
-			if !strings.Contains(d.GetDetail(), "Check their changes before you run them.") {
+			if !strings.Contains(d.GetDetail(), "own copies of your project") || !strings.Contains(d.GetDetail(), "Check their branches before you run them.") {
 				t.Errorf("team_start detail: %q", d.GetDetail())
 			}
 		}
@@ -676,6 +687,111 @@ func TestShareIsAMessageUnderTheGrant(t *testing.T) {
 	}
 	if got := len(h.board) - n; got > messagesPerMinute {
 		t.Errorf("%d share lines in a minute, over the limit of %d", got, messagesPerMinute)
+	}
+}
+
+// ADR 0022 §2a: share names the agent's own branch; an agent without a
+// clone has nothing to share, and another branch is refused.
+func TestShareNamesTheAgentsBranch(t *testing.T) {
+	team := defaultTeam()
+	team[2].Spec.Checkout = CheckoutNone // reviewer
+	e, _, _ := newTestEngine(t, team...)
+	ctx := context.Background()
+	share := func(id, branch string) *agentv1.TeamCallsRequest {
+		return e.handleCall(ctx, "w", &agentv1.TeamCallsResponse{AgentId: id, Op: &agentv1.TeamCallsResponse_Share{Share: &agentv1.Share{Branch: branch, Text: "tests pass"}}})
+	}
+	if r := share("builder", ""); !r.GetOk() || r.GetMessage().GetText() != "Work is ready on agent/builder: tests pass" {
+		t.Errorf("share: %v", r)
+	}
+	if r := share("builder", "agent/builder"); !r.GetOk() {
+		t.Errorf("share agent/builder: %s", r.GetLine())
+	}
+	if r := share("builder", "main"); r.GetOk() || !strings.Contains(r.GetLine(), "agent/builder") {
+		t.Errorf("share main: %v", r)
+	}
+	if r := share("reviewer", ""); r.GetOk() || !strings.Contains(r.GetLine(), "checkout: none") {
+		t.Errorf("share without a clone: %v", r)
+	}
+}
+
+// ADR 0022 §2a: the owner's Fetch asks the helper for the agent's branch,
+// within its home's limit, and tells the agent; an agent without a clone
+// has nothing to fetch.
+func TestTheOwnersFetch(t *testing.T) {
+	team := defaultTeam()
+	team[2].Spec.Checkout = CheckoutNone
+	e, h, _ := newTestEngine(t, team...)
+	ctx := context.Background()
+	r, err := e.fetchAgent(ctx, "w", "builder")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.GetRef() != "refs/remotes/agents/builder" || len(h.fetched) != 1 ||
+		h.fetched[0].GetProjectDir() != "/home/work/w" || h.fetched[0].GetMaxBytes() != defaultHomeQuota {
+		t.Errorf("fetch: %v, asked %v", r, h.fetched)
+	}
+	got := inbox(t, e, "builder", "").GetMessages()
+	if len(got) != 1 || !strings.Contains(got[0].GetText(), "fetched agent/builder (0123456789ab)") {
+		t.Errorf("builder's inbox: %v", got)
+	}
+	if _, err := e.fetchAgent(ctx, "w", "reviewer"); err == nil || !strings.Contains(err.Error(), "checkout: none") {
+		t.Errorf("reviewer: %v", err)
+	}
+	if _, err := e.fetchAgent(ctx, "w", "ghost"); err == nil {
+		t.Error("fetched a stranger's branch")
+	}
+}
+
+// ADR 0022 §2a: an agent with its own clone starts with the project named,
+// so the helper makes the clone; checkout: none starts without one. Its
+// AGENTS.md says where it works.
+func TestStartNamesTheProjectForTheClone(t *testing.T) {
+	team := defaultTeam()
+	team[2].Spec.Checkout = CheckoutNone
+	e, h, _ := newTestEngine(t, team...)
+	ctx := context.Background()
+	_, _ = e.startAgent(ctx, "w", "lead") // asks the team's first start
+	approveTeamStart(t, e)                // which starts lead
+	if _, err := e.startAgent(ctx, "w", "reviewer"); err != nil {
+		t.Fatalf("start reviewer: %v", err)
+	}
+	got := map[string]*agentv1.StartTeamAgentRequest{}
+	for _, r := range h.started {
+		got[r.GetAgentId()] = r
+	}
+	if got["lead"].GetCloneProjectDir() != "/home/work/w" {
+		t.Errorf("lead's start: clone %q, want /home/work/w", got["lead"].GetCloneProjectDir())
+	}
+	if !strings.Contains(got["lead"].GetAgentsMd(), "your own copy of the project, ~/w, on branch agent/lead") {
+		t.Errorf("lead's AGENTS.md doesn't say where it works: %q", got["lead"].GetAgentsMd())
+	}
+	if got["reviewer"].GetCloneProjectDir() != "" || strings.Contains(got["reviewer"].GetAgentsMd(), "own copy") {
+		t.Errorf("reviewer (checkout: none) got a clone: %v", got["reviewer"])
+	}
+	if got["reviewer"].GetProjectDir() != "/home/work/w" {
+		t.Errorf("reviewer's start doesn't name the project for lenses: %v", got["reviewer"])
+	}
+}
+
+// ADR 0022 §2a point 4: every agent with its own clone is listed with the
+// approved, valid lenses that read it, or none.
+func TestCloneReadersAtStart(t *testing.T) {
+	team := defaultTeam()
+	team[2].Spec.Checkout = CheckoutNone
+	team[2].Grant.ReadClones = []string{"builder"}
+	team = append(team, testAgent("design", grant(typesv1.GrantMode_GRANT_MODE_NEVER, 1, nil, false)))
+	team[3].Grant.ReadClones = []string{"builder", "lead"}
+	team[3].Approved = false // not approved: no grant yet
+	got := cloneReaders(&Team{Agents: team})
+	var lines []string
+	for _, cr := range got {
+		lines = append(lines, cr.GetWriter()+":"+strings.Join(cr.GetReaders(), ","))
+	}
+	if want := []string{"lead:", "builder:reviewer", "design:"}; !slices.Equal(lines, want) {
+		t.Errorf("clone readers %q, want %q", lines, want)
+	}
+	if !strings.Contains(agentsMDBlock(&Team{Agents: team}, &team[2], "w"), "read, never change, /home/builder/w") {
+		t.Errorf("reviewer's AGENTS.md doesn't say what it reads")
 	}
 }
 
@@ -1140,10 +1256,96 @@ func (f *fakeTeamHelper) PrepareTeamProject(_ context.Context, in *agentv1.Prepa
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.prepared = append(f.prepared, in.GetProjectDir())
+	f.prepareReqs = append(f.prepareReqs, in)
 	if f.prepareErr != "" {
 		return nil, status.Error(codes.FailedPrecondition, f.prepareErr)
 	}
-	return &agentv1.PrepareTeamProjectResponse{Fixed: f.fixed}, nil
+	return &agentv1.PrepareTeamProjectResponse{Fixed: f.fixed, Migration: f.migration}, nil
+}
+
+func (f *fakeTeamHelper) ResolveTeamMigration(_ context.Context, in *agentv1.ResolveTeamMigrationRequest, _ ...grpc.CallOption) (*agentv1.ResolveTeamMigrationResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.resolved = append(f.resolved, in)
+	f.migration = nil // init's record is answered
+	return &agentv1.ResolveTeamMigrationResponse{}, nil
+}
+
+// ADR 0022 §2a point 6: a team that used the shared project is moved
+// before it starts; the record waits in a team_start decision naming the
+// agents; Approve sends the owner's removals to init, then starts them.
+func TestTheMoveWaitsForTheOwnersAnswer(t *testing.T) {
+	e, h, _ := newTestEngine(t, defaultTeam()...)
+	approveFirstStart(t, e)
+	ctx := context.Background()
+	h.migration = []*typesv1.MigrationItem{
+		{Id: "m1", Path: ".git/hooks/post-checkout", Kind: "git", Agent: "builder", Choice: true},
+		{Id: "m2", Path: "lead-notes.txt", Kind: "file", Agent: "lead", Choice: true, Note: "1 files copied into lead's copy (~/w), not committed."},
+		{Id: "m3", Path: ".git/config sets core.sharedRepository", Kind: "setting", Note: "Portenv removed it."},
+	}
+	started := len(h.started)
+	if _, err := e.startAgent(ctx, "w", "lead"); err == nil || !strings.Contains(err.Error(), "own copies") {
+		t.Fatalf("start during the move: %v", err)
+	}
+	if _, err := e.startAgent(ctx, "w", "builder"); err == nil {
+		t.Fatal("builder started during the move")
+	}
+	if len(h.started) != started {
+		t.Fatalf("an agent started before the owner answered: %v", h.started[started:])
+	}
+	if got := h.prepareReqs[len(h.prepareReqs)-1]; !slices.Equal(got.GetCloneAgents(), []string{"lead", "builder", "reviewer"}) || got.GetHomeQuotaBytes() != defaultHomeQuota {
+		t.Errorf("prepare asked %v", got)
+	}
+	var d *typesv1.Decision
+	for _, x := range e.box("w").pendingLocked(boardFrom) {
+		if x.GetKind() == typesv1.DecisionKind_DECISION_KIND_TEAM_START && len(x.GetMigrationItems()) > 0 {
+			if d != nil {
+				t.Fatal("two move decisions")
+			}
+			d = x
+		}
+	}
+	if d == nil || !slices.Equal(d.GetStartAgentIds(), []string{"lead", "builder"}) || len(d.GetMigrationItems()) != 3 {
+		t.Fatalf("the move's decision: %v", d)
+	}
+	for _, want := range []string{"own copy", "lead-notes.txt (file, lead)", ".git/hooks/post-checkout (git, builder)", "Nothing is deleted until you answer"} {
+		if !strings.Contains(d.GetDetail(), want) {
+			t.Errorf("detail lacks %q:\n%s", want, d.GetDetail())
+		}
+	}
+	// A setting isn't the owner's to remove; an unknown id neither.
+	for _, bad := range [][]string{{"m3"}, {"m9"}} {
+		if _, err := e.answerWith(ctx, "w", d.GetId(), true, "", bad); err == nil {
+			t.Errorf("removing %v was accepted", bad)
+		}
+	}
+	if len(h.resolved) != 0 {
+		t.Fatalf("init was asked before a valid answer: %v", h.resolved)
+	}
+	if _, err := e.answerWith(ctx, "w", d.GetId(), true, "", []string{"m1"}); err != nil {
+		t.Fatal(err)
+	}
+	e.starts.Wait()
+	if len(h.resolved) != 1 || !slices.Equal(h.resolved[0].GetRemoveItems(), []string{"m1"}) || h.resolved[0].GetProjectDir() != "/home/work/w" {
+		t.Errorf("init got %v", h.resolved)
+	}
+	var ids []string
+	for _, r := range h.started[started:] {
+		ids = append(ids, r.GetAgentId())
+	}
+	if !slices.Equal(ids, []string{"lead", "builder"}) {
+		t.Errorf("started %v after the answer, want lead and builder", ids)
+	}
+	if !slices.ContainsFunc(h.board, func(l *agentv1.AppendBoardRequest) bool {
+		m := l.GetMessage()
+		return m.GetTo() == boardOwner && strings.Contains(m.GetText(), "Now yours: lead-notes.txt") && strings.Contains(m.GetText(), "Removed: .git/hooks/post-checkout")
+	}) {
+		t.Error("the owner wasn't told what was kept and removed")
+	}
+	// Removing items only goes with Approve on the move's decision.
+	if _, err := e.answerWith(ctx, "w", d.GetId(), false, "", []string{"m1"}); err == nil {
+		t.Error("removals with an answered or other decision were accepted")
+	}
 }
 
 // ADR 0022 §2: the project is opened to the team before its first agent
@@ -1429,5 +1631,62 @@ func TestSyncAgentsFollowsTheFiles(t *testing.T) {
 	team = team[1:]
 	if evs := look(); len(evs) != 1 || evs[0].removed != "lead" {
 		t.Fatalf("removed: %v", evs)
+	}
+}
+
+// share_login isn't in the tester build (R-0323): an agent whose file asks
+// for it starts with nothing shared and no decision asked, and both its
+// column and its whoami say so.
+func TestShareLoginIsSaidToBeOff(t *testing.T) {
+	builder := testAgent("builder", grant(typesv1.GrantMode_GRANT_MODE_ASK, 2, []string{"lead"}, true))
+	builder.ShareLogin = []string{"claude", "gh"}
+	e, h, _ := newTestEngine(t, testAgent("lead", grant(typesv1.GrantMode_GRANT_MODE_ALLOW, 4, []string{"builder"}, true)), builder)
+	approveFirstStart(t, e)
+	ctx := context.Background()
+	if _, err := e.startAgent(ctx, "w", "builder"); err != nil {
+		t.Fatal(err)
+	}
+	if len(h.startedIDs()) != 1 {
+		t.Fatalf("started %v", h.startedIDs())
+	}
+	for _, d := range e.box("w").decisions {
+		if d.GetKind() == typesv1.DecisionKind_DECISION_KIND_SHARE_LOGIN {
+			t.Fatalf("a share_login decision was asked: %v", d)
+		}
+	}
+	infos := e.agentInfos(ctx, "w")
+	want := "Sharing your sign-in (claude, gh) isn't in this build, so nothing is shared. Sign Builder in from its own terminal if it needs to."
+	if got := infos["builder"].GetShareLoginOff(); got != want {
+		t.Errorf("builder's column: %q\nwant %q", got, want)
+	}
+	if got := infos["lead"].GetShareLoginOff(); got != "" {
+		t.Errorf("lead asks for nothing, but its column says %q", got)
+	}
+	w := e.handleCall(ctx, "w", &agentv1.TeamCallsResponse{AgentId: "builder", Op: &agentv1.TeamCallsResponse_Whoami{Whoami: &agentv1.WhoAmI{}}}).GetWhoami()
+	if got := w.GetShareLoginOff(); !strings.Contains(got, "isn't supported in this build") || !strings.Contains(got, "claude, gh") {
+		t.Errorf("builder's whoami: %q", got)
+	}
+	lw := e.handleCall(ctx, "w", &agentv1.TeamCallsResponse{AgentId: "lead", Op: &agentv1.TeamCallsResponse_Whoami{Whoami: &agentv1.WhoAmI{}}}).GetWhoami()
+	if got := lw.GetShareLoginOff(); got != "" {
+		t.Errorf("lead's whoami: %q", got)
+	}
+}
+
+// An agent's home_seed reaches the helper with the project to copy it from
+// (ADR 0022 §2, R-0323).
+func TestHomeSeedReachesTheHelper(t *testing.T) {
+	builder := testAgent("builder", grant(typesv1.GrantMode_GRANT_MODE_ASK, 2, []string{"lead"}, true))
+	builder.Spec.HomeSeed = []string{"docs/style-guide.md"}
+	e, h, _ := newTestEngine(t, builder)
+	approveFirstStart(t, e)
+	if _, err := e.startAgent(context.Background(), "w", "builder"); err != nil {
+		t.Fatal(err)
+	}
+	if len(h.started) != 1 {
+		t.Fatalf("started %v", h.started)
+	}
+	r := h.started[0]
+	if !slices.Equal(r.GetHomeSeed(), []string{"docs/style-guide.md"}) || r.GetProjectDir() != "/home/work/w" || r.GetHomeQuotaBytes() <= 0 {
+		t.Errorf("request: seed %v, project %q, quota %d", r.GetHomeSeed(), r.GetProjectDir(), r.GetHomeQuotaBytes())
 	}
 }

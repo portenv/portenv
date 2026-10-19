@@ -314,6 +314,10 @@ Also checked on tmux 3.4 in the image:
         - It shows the current tab's own terminal (`MainTabTerminal`, `TabTerminalShown`) through `ControlModeTabProvider` over portenvd's `TabTerminal` (`DaemonClient`).
         - **Reconnecting:** a lost stream says "Reconnecting…" while it opens again (waits from 0.25 s, doubling to 4 s).
         - **Giving up:** after 8 attempts in a row with no reset, or a permanent refusal, it says "Disconnected", with portenvd's reason, and offers Reconnect.
+        - **The outage gaps (R-0294, from the owner's restart test of #119):**
+          - **The deadline:** trouble that lasts past 25 s of time awake shows the Disconnected card, even while portenvd is said to be coming back (`TabTerminalShown.overlay`). A reconnect counts only once its stream has stayed up for 2 s after its reset, so a portenvd killed again within a second of each restart doesn't start the clock over, or the source's attempt count.
+          - **Liveness:** a frozen portenvd keeps its socket open. The app turns on gRPC keepalive (an HTTP/2 PING after 4 s with nothing read, while calls are open; 4 s to answer), so a live stream fails and says "Reconnecting…"; portenvd accepts pings 1 s apart (`keepalivePolicy`). A stream opened to a frozen portenvd never becomes ready, so it's given up if no reset comes within 10 s. Keepalive was chosen over an app-level heartbeat: no protocol change, no message while output flows, and it covers every call on the connection (the window's state follow too).
+          - **No alert:** portenvd away while the workspace is open no longer raises an alert on top; the card says "Portenv's background service isn't answering, so nothing is being saved…", and the state line keeps "Not saved since".
         - **Permanent refusals:** a tmux too old, an unknown call, or a refused request.
         - **Typing:** nothing typed before a reset is sent, then or later.
 13. **Agents' terminal access is unchanged in what it permits.** Agents (2.4) keep today's paths and limits: the attached `Terminal` RPC through their own viewer, `portenv screen`/`send`/`wait`, and ADR 0016's grants.

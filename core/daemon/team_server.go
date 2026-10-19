@@ -42,6 +42,19 @@ func (s *Server) teamEng() *teamEngine {
 				}
 			}
 		}()
+		// Message wake-ups (CC-0498): their own, shorter tick.
+		go func() {
+			tick := time.NewTicker(wakeTick)
+			defer tick.Stop()
+			for {
+				select {
+				case <-s.bgCtx.Done():
+					return
+				case <-tick.C:
+					s.team.tickWakes(s.bgCtx)
+				}
+			}
+		}()
 	})
 	return s.team
 }
@@ -305,6 +318,16 @@ func (s *Server) StartAgent(ctx context.Context, req *daemonv1.StartAgentRequest
 	return &daemonv1.StartAgentResponse{Agent: info}, nil
 }
 
+// FetchAgentBranch is the owner's Fetch of an agent's branch (ADR 0022
+// §2a).
+func (s *Server) FetchAgentBranch(ctx context.Context, req *daemonv1.FetchAgentBranchRequest) (*daemonv1.FetchAgentBranchResponse, error) {
+	r, err := s.teamEng().fetchAgent(ctx, req.GetName(), req.GetAgentId())
+	if err != nil {
+		return nil, teamStatus(err)
+	}
+	return &daemonv1.FetchAgentBranchResponse{Ref: r.GetRef(), Commit: r.GetCommit()}, nil
+}
+
 func (s *Server) StopAgent(ctx context.Context, req *daemonv1.StopAgentRequest) (*daemonv1.StopAgentResponse, error) {
 	info, err := s.teamEng().stopAgent(ctx, req.GetName(), req.GetAgentId())
 	if err != nil {
@@ -313,10 +336,12 @@ func (s *Server) StopAgent(ctx context.Context, req *daemonv1.StopAgentRequest) 
 	return &daemonv1.StopAgentResponse{Agent: info}, nil
 }
 
-// AnswerDecision is the owner's Approve or Decline. Only the app, in front
-// of the person, reaches portenvd's socket; no agent call answers one.
+// AnswerDecision is the owner's Approve or Decline, or choice (CC-0501).
+// Only the app, in front of the person, reaches portenvd's socket; no
+// agent call answers one.
 func (s *Server) AnswerDecision(ctx context.Context, req *daemonv1.AnswerDecisionRequest) (*daemonv1.AnswerDecisionResponse, error) {
-	d, err := s.teamEng().answer(ctx, req.GetName(), req.GetDecisionId(), req.GetApprove(), req.GetNote())
+	d, err := s.teamEng().answerChoice(ctx, req.GetName(), req.GetDecisionId(),
+		ownerAnswer{approve: req.GetApprove(), note: req.GetNote(), choice: req.GetChoice(), label: req.GetChoiceLabel(), remove: req.GetRemoveItems()})
 	if err != nil {
 		return nil, teamStatus(err)
 	}

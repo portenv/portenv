@@ -66,12 +66,16 @@ public struct TeamAgent: Equatable, Sendable, Identifiable {
     /// Its routines (R-0258), and why they're off, if they are.
     public var routines: [AgentRoutine]
     public var routinesOff: String
+    /// Set when its file asks for share_login, which this build doesn't
+    /// support: nothing is shared (R-0323).
+    public var shareLoginOff: String
 
     public init(id: String, name: String, role: String = "", avatar: String = "", remote: Bool = false, via: String = "",
                 status: AgentStatus, problem: String = "", fileSHA256: String = "", approved: Bool = true,
                 tabIDs: [String] = [], lastLine: String = "", pendingDecisions: Int = 0,
                 homeBytes: Int64 = 0, homeQuotaBytes: Int64 = 0, runner: String = "", grant: TeamGrant = TeamGrant(),
-                workStatus: AgentWorkStatus? = nil, routines: [AgentRoutine] = [], routinesOff: String = "") {
+                workStatus: AgentWorkStatus? = nil, routines: [AgentRoutine] = [], routinesOff: String = "",
+                shareLoginOff: String = "") {
         self.id = id
         self.name = TeamText.line(name, max: 64)
         self.role = TeamText.line(role, max: 120)
@@ -92,6 +96,7 @@ public struct TeamAgent: Equatable, Sendable, Identifiable {
         self.workStatus = workStatus
         self.routines = routines
         self.routinesOff = TeamText.line(routinesOff, max: 300)
+        self.shareLoginOff = TeamText.line(shareLoginOff, max: 300)
     }
 }
 
@@ -165,10 +170,17 @@ public struct TeamDecision: Equatable, Sendable, Identifiable {
     /// For the team's first start: the agents Approve starts, in
     /// portenvd, in the order the owner chose Start (R-0296).
     public var startAgents: [String]
+    /// An ask-owner's choices, in order (CC-0501): one button each, in
+    /// place of Approve. Empty for a yes/no question. As portenvd sent
+    /// them, because the answer must name the label exactly; the card
+    /// shows `shownChoices`.
+    public var choices: [String]
+    /// The owner's choice, counting from 1; 0 when none.
+    public var choice: Int
 
     public init(id: String, from: String, kind: Kind, summary: String, detail: String = "", state: State = .pending,
                 answerNote: String = "", createdAt: Date? = nil, answeredAt: Date? = nil, expiresAt: Date? = nil,
-                packages: [Package] = [], startAgents: [String] = []) {
+                packages: [Package] = [], startAgents: [String] = [], choices: [String] = [], choice: Int = 0) {
         self.id = id
         self.from = from
         self.kind = kind
@@ -181,6 +193,17 @@ public struct TeamDecision: Equatable, Sendable, Identifiable {
         self.expiresAt = expiresAt
         self.packages = packages
         self.startAgents = startAgents.map { TeamText.line($0, max: 64) }
+        self.choices = Array(choices.prefix(TeamText.maxChoices))
+        self.choice = choice
+    }
+
+    /// Each choice as the card shows it: plain text on one line, at most
+    /// 80 characters.
+    public var shownChoices: [String] { choices.map { TeamText.line($0, max: TeamText.maxChoiceCharacters) } }
+
+    /// The choice the owner made, as shown; nil when none.
+    public var chosen: String? {
+        state == .approved && choice >= 1 && choice <= choices.count ? shownChoices[choice - 1] : nil
     }
 
     /// Approve and Decline show only while it's pending; an expired
@@ -262,6 +285,14 @@ public enum TeamText {
     public static let approve = "Approve"
     public static let decline = "Decline\u{2026}"
     public static let answeredOnlyHere = "Answered only here, by you. Agents can ask but never approve."
+    /// An ask-owner's choices (CC-0501): at most 4, each at most 80
+    /// characters, as portenvd checks them.
+    public static let maxChoices = 4
+    public static let maxChoiceCharacters = 80
+
+    /// A choice button's VoiceOver label: what it answers, as Approve's
+    /// says ("Approve: merge #42").
+    public static func choose(_ label: String, summary: String) -> String { "Choose \u{201C}\(label)\u{201D}: \(summary)" }
 
     /// A status as a word (GUIDELINES: never colour alone).
     public static func word(_ s: AgentStatus) -> String {
@@ -391,7 +422,7 @@ public enum TeamText {
             case 0x09: out.append(" ")
             case 0x00 ... 0x1F, 0x7F ... 0x9F: continue
             // Bidi controls and isolates can reorder what's shown.
-            case 0x200E, 0x200F, 0x202A ... 0x202E, 0x2066 ... 0x2069: continue
+            case 0x061C, 0x200E, 0x200F, 0x202A ... 0x202E, 0x2066 ... 0x2069: continue
             default: out.append(u)
             }
             count += 1
@@ -544,5 +575,31 @@ public struct TabLabel: Equatable, Sendable {
         let chip = agent.map { AvatarLook.agent($0, in: team, isSymbol: isSymbol) }
             ?? AvatarLook(symbol: nil, initial: tab.agentID.first.map { String($0).uppercased() } ?? "?", colour: AgentColours.order[0])
         return TabLabel(title: "\(shown) \u{00B7} \(tab.name)", chip: chip)
+    }
+}
+
+/// What VoiceOver reads for the terminal (R-0314): whose tab it shows and
+/// the tab's name, as the tab bar and the sidebar name them, so the
+/// selection and the terminal can be checked against each other: "Terminal:
+/// Lead · lead", "Terminal: You · shell".
+public enum TerminalLabel {
+    public static func of(_ tab: TabInfo, team: [TeamAgent]) -> String {
+        "Terminal: \(title(tab, team: team))"
+    }
+
+    /// The tab's owner and name: an agent's as its tab shows it (its name
+    /// and the tab's), the owner's as "You · shell".
+    public static func title(_ tab: TabInfo, team: [TeamAgent]) -> String {
+        tab.agentID.isEmpty ? "You \u{00B7} \(tab.name)" : TabLabel.of(tab, team: team) { _ in false }.title
+    }
+
+    /// The terminal while the selection has no tab to show: never another
+    /// agent's pane.
+    public static func noTab(_ selection: TeamSelection, team: [TeamAgent]) -> String {
+        if case .agent(let id) = selection {
+            let name = team.first { $0.id == id }.map { $0.name.isEmpty ? id : $0.name } ?? id
+            return "\(name) has no tab open"
+        }
+        return "No tab open"
     }
 }

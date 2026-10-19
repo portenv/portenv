@@ -2208,6 +2208,13 @@ public nonisolated struct Portenv_Daemon_V1_AgentInfo: @unchecked Sendable {
     set {_uniqueStorage()._routinesOff = newValue}
   }
 
+  /// Set when its file asks for share_login, which this build doesn't
+  /// support: one plain line saying nothing is shared (R-0323).
+  public var shareLoginOff: String {
+    get {_storage._shareLoginOff}
+    set {_uniqueStorage()._shareLoginOff = newValue}
+  }
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -2280,6 +2287,35 @@ public nonisolated struct Portenv_Daemon_V1_WatchTeamResponse: Sendable {
     case removedAgentID(String)
 
   }
+
+  public init() {}
+}
+
+public nonisolated struct Portenv_Daemon_V1_FetchAgentBranchRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var name: String = String()
+
+  public var agentID: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Portenv_Daemon_V1_FetchAgentBranchResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// refs/remotes/agents/<id>.
+  public var ref: String = String()
+
+  public var commit: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
 }
@@ -2366,6 +2402,18 @@ public nonisolated struct Portenv_Daemon_V1_AnswerDecisionRequest: Sendable {
   public var approve: Bool = false
 
   public var note: String = String()
+
+  /// For a decision with choices (CC-0501): the chosen one, counting from
+  /// 1, with approve true. portenvd refuses it unless choice_label is
+  /// exactly the decision's stored choices[choice-1]. 0 for Decline and for
+  /// a decision without choices.
+  public var choice: Int32 = 0
+
+  public var choiceLabel: String = String()
+
+  /// For a team_start decision with migration items: the items to remove
+  /// (their ids). Every other item is kept: it becomes the owner's.
+  public var removeItems: [String] = []
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -6280,7 +6328,7 @@ nonisolated extension Portenv_Daemon_V1_ListAgentsResponse: SwiftProtobuf.Messag
 
 nonisolated extension Portenv_Daemon_V1_AgentInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".AgentInfo"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}name\0\u{1}role\0\u{1}avatar\0\u{1}remote\0\u{1}via\0\u{1}state\0\u{1}problem\0\u{3}file_sha256\0\u{1}approved\0\u{3}tab_ids\0\u{3}last_line\0\u{3}pending_decisions\0\u{3}home_bytes\0\u{3}home_quota_bytes\0\u{1}runner\0\u{1}grant\0\u{1}status\0\u{1}routines\0\u{3}routines_off\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}name\0\u{1}role\0\u{1}avatar\0\u{1}remote\0\u{1}via\0\u{1}state\0\u{1}problem\0\u{3}file_sha256\0\u{1}approved\0\u{3}tab_ids\0\u{3}last_line\0\u{3}pending_decisions\0\u{3}home_bytes\0\u{3}home_quota_bytes\0\u{1}runner\0\u{1}grant\0\u{1}status\0\u{1}routines\0\u{3}routines_off\0\u{3}share_login_off\0")
 
   fileprivate class _StorageClass {
     var _id: String = String()
@@ -6303,6 +6351,7 @@ nonisolated extension Portenv_Daemon_V1_AgentInfo: SwiftProtobuf.Message, SwiftP
     var _status: Portenv_Types_V1_AgentStatus? = nil
     var _routines: [Portenv_Types_V1_Routine] = []
     var _routinesOff: String = String()
+    var _shareLoginOff: String = String()
 
       // This property is used as the initial default value for new instances of the type.
       // The type itself is protecting the reference to its storage via CoW semantics.
@@ -6333,6 +6382,7 @@ nonisolated extension Portenv_Daemon_V1_AgentInfo: SwiftProtobuf.Message, SwiftP
       _status = source._status
       _routines = source._routines
       _routinesOff = source._routinesOff
+      _shareLoginOff = source._shareLoginOff
     }
   }
 
@@ -6371,6 +6421,7 @@ nonisolated extension Portenv_Daemon_V1_AgentInfo: SwiftProtobuf.Message, SwiftP
         case 18: try { try decoder.decodeSingularMessageField(value: &_storage._status) }()
         case 19: try { try decoder.decodeRepeatedMessageField(value: &_storage._routines) }()
         case 20: try { try decoder.decodeSingularStringField(value: &_storage._routinesOff) }()
+        case 21: try { try decoder.decodeSingularStringField(value: &_storage._shareLoginOff) }()
         default: break
         }
       }
@@ -6443,6 +6494,9 @@ nonisolated extension Portenv_Daemon_V1_AgentInfo: SwiftProtobuf.Message, SwiftP
       if !_storage._routinesOff.isEmpty {
         try visitor.visitSingularStringField(value: _storage._routinesOff, fieldNumber: 20)
       }
+      if !_storage._shareLoginOff.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._shareLoginOff, fieldNumber: 21)
+      }
     }
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -6472,6 +6526,7 @@ nonisolated extension Portenv_Daemon_V1_AgentInfo: SwiftProtobuf.Message, SwiftP
         if _storage._status != rhs_storage._status {return false}
         if _storage._routines != rhs_storage._routines {return false}
         if _storage._routinesOff != rhs_storage._routinesOff {return false}
+        if _storage._shareLoginOff != rhs_storage._shareLoginOff {return false}
         return true
       }
       if !storagesAreEqual {return false}
@@ -6611,6 +6666,76 @@ nonisolated extension Portenv_Daemon_V1_WatchTeamResponse: SwiftProtobuf.Message
   public static func ==(lhs: Portenv_Daemon_V1_WatchTeamResponse, rhs: Portenv_Daemon_V1_WatchTeamResponse) -> Bool {
     if lhs.event != rhs.event {return false}
     if lhs.cursor != rhs.cursor {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Portenv_Daemon_V1_FetchAgentBranchRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".FetchAgentBranchRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{3}agent_id\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.name) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.agentID) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.name.isEmpty {
+      try visitor.visitSingularStringField(value: self.name, fieldNumber: 1)
+    }
+    if !self.agentID.isEmpty {
+      try visitor.visitSingularStringField(value: self.agentID, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Portenv_Daemon_V1_FetchAgentBranchRequest, rhs: Portenv_Daemon_V1_FetchAgentBranchRequest) -> Bool {
+    if lhs.name != rhs.name {return false}
+    if lhs.agentID != rhs.agentID {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Portenv_Daemon_V1_FetchAgentBranchResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".FetchAgentBranchResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}ref\0\u{1}commit\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.ref) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.commit) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.ref.isEmpty {
+      try visitor.visitSingularStringField(value: self.ref, fieldNumber: 1)
+    }
+    if !self.commit.isEmpty {
+      try visitor.visitSingularStringField(value: self.commit, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Portenv_Daemon_V1_FetchAgentBranchResponse, rhs: Portenv_Daemon_V1_FetchAgentBranchResponse) -> Bool {
+    if lhs.ref != rhs.ref {return false}
+    if lhs.commit != rhs.commit {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -6756,7 +6881,7 @@ nonisolated extension Portenv_Daemon_V1_StopAgentResponse: SwiftProtobuf.Message
 
 nonisolated extension Portenv_Daemon_V1_AnswerDecisionRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".AnswerDecisionRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{3}decision_id\0\u{1}approve\0\u{1}note\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{3}decision_id\0\u{1}approve\0\u{1}note\0\u{1}choice\0\u{3}choice_label\0\u{3}remove_items\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -6768,6 +6893,9 @@ nonisolated extension Portenv_Daemon_V1_AnswerDecisionRequest: SwiftProtobuf.Mes
       case 2: try { try decoder.decodeSingularStringField(value: &self.decisionID) }()
       case 3: try { try decoder.decodeSingularBoolField(value: &self.approve) }()
       case 4: try { try decoder.decodeSingularStringField(value: &self.note) }()
+      case 5: try { try decoder.decodeSingularInt32Field(value: &self.choice) }()
+      case 6: try { try decoder.decodeSingularStringField(value: &self.choiceLabel) }()
+      case 7: try { try decoder.decodeRepeatedStringField(value: &self.removeItems) }()
       default: break
       }
     }
@@ -6786,6 +6914,15 @@ nonisolated extension Portenv_Daemon_V1_AnswerDecisionRequest: SwiftProtobuf.Mes
     if !self.note.isEmpty {
       try visitor.visitSingularStringField(value: self.note, fieldNumber: 4)
     }
+    if self.choice != 0 {
+      try visitor.visitSingularInt32Field(value: self.choice, fieldNumber: 5)
+    }
+    if !self.choiceLabel.isEmpty {
+      try visitor.visitSingularStringField(value: self.choiceLabel, fieldNumber: 6)
+    }
+    if !self.removeItems.isEmpty {
+      try visitor.visitRepeatedStringField(value: self.removeItems, fieldNumber: 7)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -6794,6 +6931,9 @@ nonisolated extension Portenv_Daemon_V1_AnswerDecisionRequest: SwiftProtobuf.Mes
     if lhs.decisionID != rhs.decisionID {return false}
     if lhs.approve != rhs.approve {return false}
     if lhs.note != rhs.note {return false}
+    if lhs.choice != rhs.choice {return false}
+    if lhs.choiceLabel != rhs.choiceLabel {return false}
+    if lhs.removeItems != rhs.removeItems {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

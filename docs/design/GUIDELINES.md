@@ -69,7 +69,7 @@ The title shows the workspace name, a sync symbol and a chevron; the line under 
 | Saved | `checkmark.circle` | `This Mac · Saved at 14:58` (`Saved just now` for the first minute; from the next day `Saved yesterday at 23:43`, then `Saved on 9 Oct at 23:43`, with the year once it's another year; the words change at midnight with no new save) |
 | Offline | `icloud.slash`-style "not synced" symbol | `This Mac · Offline · will save later` |
 | Moving | `arrow.triangle.2.circlepath` | `Moving to Test server…` |
-| Closing the last workspace window (saving before the list shows) | `arrow.triangle.2.circlepath` | `Saving before closing…`, with the Workspace menu disabled, until the list shows; the normal line again if the person stays |
+| Closing a workspace (Close Workspace, saving before it's closed) | `arrow.triangle.2.circlepath` | `Saving before closing…`, with the Workspace menu disabled, until the list shows; the normal line again if the person stays |
 | Open on a server | `checkmark.circle` | `Test server · Saved at 15:42` |
 | Workspace helper unavailable | `exclamationmark.triangle` | `This Mac · Not saved since 14:58` (and Restart Workspace offered) |
 | Just reverted | `checkmark.circle` | `Reverted to 14:31 · your changes were kept` for 5 s, then the normal line |
@@ -234,14 +234,22 @@ The Team section is the workspace's sidebar when the workspace has a team (agent
 **The sidebar** (R-0240, R-0241):
 - Shown by default when the workspace has a team and hidden otherwise; ⌘0 (View › Show Sidebar) toggles it, remembered per workspace. Width 248 pt. Below 900 pt of window width it collapses to avatars and status symbols, with names in tooltips and VoiceOver.
 - From the top:
-  1. **Needs you · <n>**, when a decision is pending: one row per decision, oldest first, with the question in one line and how long it has waited ("Waiting 6 min").
-  2. **Team:** You first ("You", with your tab count), then one row per agent in agent-file order, then files that can't start, then **Add Agent…**.
+  1. **Team activity:** the whole team's messages (below).
+  2. **Needs you · <n>**, when a decision is pending: one row per decision, oldest first, with the question in one line and how long it has waited ("Waiting 6 min").
+  3. **Team:** You first ("You", with your tab count), then one row per agent in agent-file order, then files that can't start, then **Add Agent…**.
 - An agent row: avatar, name, status as a word and a symbol, and the agent's latest board line, one line, truncated. Statuses: ▶ running (accent), ◌ idle, ■ stopped, ● needs you (orange), ⚠ can't start (red, with portenvd's reason as the line), starting. Colour never carries the status alone.
 - Remote agents (ADR 0022 §10) appear only once a remote way in exists, under **Connected from outside**, as connected or disconnected. Portenv never starts them.
 
 **Selecting:**
-- **An agent:** its tabs expand beneath its row, the tab bar shows only its tabs (named "Builder · tests"), with **All tabs** at its trailing end, and its column takes the inspector's place: who it runs as, its runner and its pane grant ("Runs as user builder · Claude Code · may open 4 panes"), its messages with you, its Agent files, and a field to message it.
+- **An agent:** its tabs expand beneath its row, the tab bar shows only its tabs (named "Builder · tests"), with **All tabs** at its trailing end, and its column takes the inspector's place: who it runs as, its runner and its pane grant ("Runs as user builder · Claude Code · may open 4 panes"), its messages with you, its Team section, its Agent files, and a field to message it (R-0313, R-0314).
+  - **Messages with you** come first: what it sent you, what you sent it, and Portenv's notices to you about it.
+  - **Team · <n>**, below them, **collapsed by default**: every other message this agent sent or received, oldest first. Each entry is one line, "Lead → Builder", the time and the message's first line; clicking it shows the whole text. Portenv's own notices about the agent (a routine's note, a status request, a start that failed) are in the same list, greyed, from "Portenv".
+  - **The message field** is the column's last row: "Message Builder", with Send, and "Return to send · Shift-Return for a new line" under it. Return sends, Shift-Return starts a new line. It sends exactly what you typed, as you, to this agent only, through portenvd (an idle agent wakes to read it). Plain text, at most 8 KB. A refusal shows under the field in red, as one line that says what to do ("A message can be at most 8 KB; this one is 9.2 KB. Shorten it and send again."), and keeps what you typed.
+- **Team activity:** the whole team's messages in the column's place, oldest first, as the board has them: each one as in the Team section ("Lead → Builder", the time, the first line; click for the rest), Portenv's notices greyed. A menu at the top filters by agent ("Everyone", or one agent: what it sent, what it received and Portenv's notices about it). The tab bar shows all tabs and the terminal stays on the tab it showed. It's how the owner sees every message that involves their agents (ADR 0016 point 5).
+- **Long messages:** an opened entry shows its first 12 lines or 600 characters, then **Show all** for the rest (a message is at most 8 KB).
+- **Live:** the column, the Team section and Team activity update as messages arrive (WatchTeam), with no refresh.
 - **You or All tabs:** the inspector comes back. All tabs shows every tab; You shows yours.
+- **The terminal follows the selection** (R-0314): it always shows exactly the tab the tab bar marks current (in split view, the focused pane does). Selecting an agent shows its tab last shown, or its first; You or All tabs goes back to your tab. An agent with no tab open shows "<Agent> has no tab open", never another agent's pane. An agent starting never moves the view. The terminal's VoiceOver name says whose tab it is: "Terminal: Lead · lead", "Terminal: You · shell".
 - A pane an agent opened is headed "Opened by <agent> · <command>".
 - Who's here (section 6) is dropped from the inspector while the workspace has a team; the Team section replaces it.
 
@@ -252,12 +260,13 @@ The Team section is the workspace's sidebar when the workspace has a team (agent
 - A package decision lists every package with its exact version and the repository it comes from, and says "Installing runs these packages' setup scripts as root."
 - The first start of a team shows the residual-risk sentence from ADR 0022 §2.
 - An expired decision is greyed, with no Approve; it never becomes an approval.
+- A question with choices (`ask-owner --choice`, CC-0501) shows one button per choice, in order, full width and wrapping, in Approve's place, with no default button, then **Decline…**. Each label is plain text. Answered, it reads “Chose “<label>””. VoiceOver: “Choose “Option b: install deps”: <question>”.
 
 **Agent files** (R-0234): below the agent's conversation, its private home (`/home/<agent>`) with each item's size, the quota ("212 MB of 500 MB · drop files here to add"), Add Files… and drag and drop (the drop target names what will be added and its size). Full: the bar turns red, with what wasn't added and what to do.
 
-**Plain text:** everything an agent writes (its latest line, messages, questions, evidence, file names, portenvd's reasons) is shown as plain text: no links, Markdown, images or actions in it. Controls next to it, such as "Open review-42.md", are the app's own.
+**Plain text:** everything an agent writes (its latest line, messages, questions, evidence, file names, portenvd's reasons) is shown as plain text: no links, Markdown, images or actions in it. Control characters, escape sequences and bidi overrides are removed before it's shown. Controls next to it, such as "Open review-42.md", are the app's own.
 
-**VoiceOver:** each row is one element, read as its name, status and latest line ("Reviewer, needs you. Wants to merge #42"). Decision buttons say what they answer ("Approve: merge #42").
+**VoiceOver:** each row is one element, read as its name, status and latest line ("Reviewer, needs you. Wants to merge #42"). Decision buttons say what they answer ("Approve: merge #42"). A message entry is one element, read as who to whom, the time and its first line ("Lead to Builder, 14:28: Take the retry half"); a notice starts "Notice from Portenv". The message field is read as "Message Builder".
 
 ### 6.3 New workspace: Project, Team, Review and approve, Creating (ADR 0025)
 

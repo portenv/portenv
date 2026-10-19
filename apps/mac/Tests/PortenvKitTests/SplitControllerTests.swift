@@ -77,7 +77,7 @@ struct SplitControllerTests {
         let s = SplitController(tabs: tabs)
         s.size = window
         s.tabsChanged()
-        s.selection = .agent("grok")
+        tabs.view(.agent("grok"))
         await s.split(.right)
         #expect(s.layout.tab(in: PaneID(2)) == "c")
     }

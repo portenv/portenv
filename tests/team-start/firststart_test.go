@@ -55,7 +55,11 @@
 //     keeps lead's file, lead starts, and the earlier checks pass again;
 //  12. a hand-off (CC-0507): lead hands a file to builder, and builder finds
 //     it in ~/inbox/lead/…, builder's, readable only by builder, its home
-//     still closed to others.
+//     still closed to others;
+//  13. New workspace's Team step (ADR 0025) on a second, fresh workspace:
+//     the plan PlanTeam shows, approved and kept, is written by
+//     ApplyTeamPlan into an empty project with git on main, as work, the
+//     left-out agents in off/, each file pinned and nothing started.
 //
 // The harness's own docker exec only sets the project up (step 1, as work),
 // tries what each agent may and may not do (as that agent), and reads the
@@ -78,6 +82,7 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/protobuf/encoding/protojson"
 
 	daemonv1 "github.com/portenv/portenv/proto/gen/go/portenv/daemon/v1"
 	typesv1 "github.com/portenv/portenv/proto/gen/go/portenv/types/v1"
@@ -721,6 +726,102 @@ for who in lead reviewer work; do runuser -u $who -- sh -c 'cat /home/builder/in
 		h.fatal("step 12: the project file in builder's inbox: exit %d:\n%s", code, out)
 	}
 	t.Logf("step 12: a project file handed over, with the project closed to others:\n%s", out)
+
+	h.newWorkspaceTeam(ctx, c)
+}
+
+// Step 13 (ADR 0025): New workspace's Team step on a second, fresh
+// workspace. The plan is the one PlanTeam shows, approved by its SHA-256s
+// and kept as CreateBox keeps it; ApplyTeamPlan, once the workspace is
+// open, makes the empty project with git on main, writes the files as
+// work (left-out agents in off/), pins each one, and starts nothing.
+func (h *harness) newWorkspaceTeam(ctx context.Context, c daemonv1.DaemonServiceClient) {
+	t := h.t
+	const name = "acme-new"
+	h.portenv(ctx, "init", name, "--image", h.image)
+	if out := h.portenv(ctx, "app", "open", name); !strings.Contains(out, "rule 1") {
+		h.fatal("step 13: open %s: not a new workspace: %s", name, out)
+	}
+	b, err := os.ReadFile(filepath.Join(h.root, "mac", "boxes", name+".json"))
+	if err != nil {
+		h.fatal("step 13: %v", err)
+	}
+	var cfg struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(b, &cfg); err != nil || cfg.ID == "" {
+		h.fatal("step 13: the workspace's id: %v %s", err, b)
+	}
+	boxName := "portenv-" + namespace + "-" + cfg.ID
+	t.Cleanup(func() {
+		_ = exec.Command("docker", "rm", "-f", boxName).Run()                                                                               // #nosec G204 -- the test's container
+		_ = exec.Command("docker", "volume", "rm", "-f", "portenv-home-"+namespace+"-"+cfg.ID, "portenv-cache-"+namespace+"-"+cfg.ID).Run() // #nosec G204 -- its volumes
+	})
+	choice := &daemonv1.TeamPlanChoice{Template: "orchestrate", Agents: []*daemonv1.TeamAgentChoice{
+		{Id: "builder-b"}, {Id: "builder-c"}, {Id: "devops"},
+		{Id: "reviewer", Include: true, Model: "opus"},
+		{Id: "coordinator", Include: true}, {Id: "builder-a", Include: true},
+	}}
+	plan, err := c.PlanTeam(ctx, &daemonv1.PlanTeamRequest{Choice: choice})
+	if err != nil || plan.GetIncluded() != 3 || len(plan.GetProblems()) != 0 {
+		h.fatal("step 13: PlanTeam: %v %v", plan, err)
+	}
+	for _, a := range plan.GetAgents() {
+		for _, ch := range choice.GetAgents() {
+			if ch.GetId() == a.GetId() && a.GetIncluded() {
+				ch.ApprovedSha256 = a.GetSha256()
+			}
+		}
+	}
+	kept, err := protojson.Marshal(choice)
+	if err != nil {
+		h.fatal("step 13: %v", err)
+	}
+	state := filepath.Join(h.root, "mac", "state", cfg.ID)
+	if err := os.MkdirAll(state, 0o700); err != nil {
+		h.fatal("step 13: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(state, "team-plan.json"), kept, 0o600); err != nil {
+		h.fatal("step 13: %v", err)
+	}
+	r, err := c.ApplyTeamPlan(ctx, &daemonv1.ApplyTeamPlanRequest{Name: name})
+	if err != nil || !r.GetApplied() || len(r.GetPinned()) != 3 || len(r.GetLines()) != 0 {
+		h.fatal("step 13: ApplyTeamPlan: %v %v", r, err)
+	}
+	out, code := h.boxIn(ctx, boxName, "work", `set -eu
+cd /home/work/acme-new
+git symbolic-ref HEAD
+stat -c '%U %a %n' .portenv/agents/*.md .portenv/agents/off/*.md
+grep '^runner:' .portenv/agents/reviewer.md
+grep '^  message:' .portenv/agents/coordinator.md`)
+	if code != 0 || !strings.Contains(out, "refs/heads/main") || !strings.Contains(out, "work 644 .portenv/agents/coordinator.md") ||
+		!strings.Contains(out, "work 644 .portenv/agents/off/devops.md") || !strings.Contains(out, "work 644 .portenv/agents/off/design-system.md") ||
+		!strings.Contains(out, "runner: claude --model opus --disallowedTools Edit,Write,NotebookEdit") ||
+		!strings.Contains(out, "  message: [reviewer, builder-a]") {
+		h.fatal("step 13: the project and its agent files: exit %d:\n%s", code, out)
+	}
+	t.Logf("step 13: the new workspace's team:\n%s", out)
+	list, err := c.ListAgents(ctx, &daemonv1.ListAgentsRequest{Name: name})
+	if err != nil || len(list.GetAgents()) != 3 {
+		h.fatal("step 13: ListAgents: %v %v", list, err)
+	}
+	for _, a := range list.GetAgents() {
+		if !a.GetApproved() || a.GetState() != typesv1.AgentState_AGENT_STATE_STOPPED {
+			h.fatal("step 13: %s isn't approved and stopped: %v", a.GetId(), a)
+		}
+	}
+	if again, err := c.ApplyTeamPlan(ctx, &daemonv1.ApplyTeamPlanRequest{Name: name}); err != nil || again.GetApplied() {
+		h.fatal("step 13: a second ApplyTeamPlan: %v %v", again, err)
+	}
+	t.Log("step 13: three agents approved and stopped; nothing started")
+}
+
+// boxIn is box for another workspace's container.
+func (h *harness) boxIn(ctx context.Context, container, user, sh string) (string, int) {
+	saved := h.boxName
+	h.boxName = container
+	defer func() { h.boxName = saved }()
+	return h.box(ctx, user, sh)
 }
 
 // waitRunning waits for portenvd to list the agent as running (or needing

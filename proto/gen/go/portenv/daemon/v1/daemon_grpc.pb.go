@@ -84,6 +84,9 @@ const (
 	DaemonService_SetRoutinePaused_FullMethodName      = "/portenv.daemon.v1.DaemonService/SetRoutinePaused"
 	DaemonService_GetTeamSettings_FullMethodName       = "/portenv.daemon.v1.DaemonService/GetTeamSettings"
 	DaemonService_SetAgentsAllowed_FullMethodName      = "/portenv.daemon.v1.DaemonService/SetAgentsAllowed"
+	DaemonService_ListTeamTemplates_FullMethodName     = "/portenv.daemon.v1.DaemonService/ListTeamTemplates"
+	DaemonService_PlanTeam_FullMethodName              = "/portenv.daemon.v1.DaemonService/PlanTeam"
+	DaemonService_ApplyTeamPlan_FullMethodName         = "/portenv.daemon.v1.DaemonService/ApplyTeamPlan"
 )
 
 // DaemonServiceClient is the client API for DaemonService service.
@@ -272,6 +275,18 @@ type DaemonServiceClient interface {
 	// front of the person: from Settings, or the owner's confirmed Raise.
 	GetTeamSettings(ctx context.Context, in *GetTeamSettingsRequest, opts ...grpc.CallOption) (*GetTeamSettingsResponse, error)
 	SetAgentsAllowed(ctx context.Context, in *SetAgentsAllowedRequest, opts ...grpc.CallOption) (*SetAgentsAllowedResponse, error)
+	// ADR 0025: the New-workspace Team step. The built-in team templates,
+	// each with its agents as they'd be written with no changes.
+	ListTeamTemplates(ctx context.Context, in *ListTeamTemplatesRequest, opts ...grpc.CallOption) (*ListTeamTemplatesResponse, error)
+	// A template with the owner's choices, as the exact agent files that
+	// would be written, each checked as portenvd checks any agent file.
+	PlanTeam(ctx context.Context, in *PlanTeamRequest, opts ...grpc.CallOption) (*PlanTeamResponse, error)
+	// Writes the team CreateBox kept for this workspace into its project
+	// (made empty, with git, if it isn't there), as work, never over a file,
+	// and pins each file the owner approved, only if it's those bytes. Only
+	// the owner's app calls it, once the workspace is open; with no team
+	// kept, it does nothing.
+	ApplyTeamPlan(ctx context.Context, in *ApplyTeamPlanRequest, opts ...grpc.CallOption) (*ApplyTeamPlanResponse, error)
 }
 
 type daemonServiceClient struct {
@@ -917,6 +932,36 @@ func (c *daemonServiceClient) SetAgentsAllowed(ctx context.Context, in *SetAgent
 	return out, nil
 }
 
+func (c *daemonServiceClient) ListTeamTemplates(ctx context.Context, in *ListTeamTemplatesRequest, opts ...grpc.CallOption) (*ListTeamTemplatesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListTeamTemplatesResponse)
+	err := c.cc.Invoke(ctx, DaemonService_ListTeamTemplates_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) PlanTeam(ctx context.Context, in *PlanTeamRequest, opts ...grpc.CallOption) (*PlanTeamResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PlanTeamResponse)
+	err := c.cc.Invoke(ctx, DaemonService_PlanTeam_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) ApplyTeamPlan(ctx context.Context, in *ApplyTeamPlanRequest, opts ...grpc.CallOption) (*ApplyTeamPlanResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ApplyTeamPlanResponse)
+	err := c.cc.Invoke(ctx, DaemonService_ApplyTeamPlan_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DaemonServiceServer is the server API for DaemonService service.
 // All implementations must embed UnimplementedDaemonServiceServer
 // for forward compatibility.
@@ -1103,6 +1148,18 @@ type DaemonServiceServer interface {
 	// front of the person: from Settings, or the owner's confirmed Raise.
 	GetTeamSettings(context.Context, *GetTeamSettingsRequest) (*GetTeamSettingsResponse, error)
 	SetAgentsAllowed(context.Context, *SetAgentsAllowedRequest) (*SetAgentsAllowedResponse, error)
+	// ADR 0025: the New-workspace Team step. The built-in team templates,
+	// each with its agents as they'd be written with no changes.
+	ListTeamTemplates(context.Context, *ListTeamTemplatesRequest) (*ListTeamTemplatesResponse, error)
+	// A template with the owner's choices, as the exact agent files that
+	// would be written, each checked as portenvd checks any agent file.
+	PlanTeam(context.Context, *PlanTeamRequest) (*PlanTeamResponse, error)
+	// Writes the team CreateBox kept for this workspace into its project
+	// (made empty, with git, if it isn't there), as work, never over a file,
+	// and pins each file the owner approved, only if it's those bytes. Only
+	// the owner's app calls it, once the workspace is open; with no team
+	// kept, it does nothing.
+	ApplyTeamPlan(context.Context, *ApplyTeamPlanRequest) (*ApplyTeamPlanResponse, error)
 	mustEmbedUnimplementedDaemonServiceServer()
 }
 
@@ -1289,6 +1346,15 @@ func (UnimplementedDaemonServiceServer) GetTeamSettings(context.Context, *GetTea
 }
 func (UnimplementedDaemonServiceServer) SetAgentsAllowed(context.Context, *SetAgentsAllowedRequest) (*SetAgentsAllowedResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SetAgentsAllowed not implemented")
+}
+func (UnimplementedDaemonServiceServer) ListTeamTemplates(context.Context, *ListTeamTemplatesRequest) (*ListTeamTemplatesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListTeamTemplates not implemented")
+}
+func (UnimplementedDaemonServiceServer) PlanTeam(context.Context, *PlanTeamRequest) (*PlanTeamResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method PlanTeam not implemented")
+}
+func (UnimplementedDaemonServiceServer) ApplyTeamPlan(context.Context, *ApplyTeamPlanRequest) (*ApplyTeamPlanResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ApplyTeamPlan not implemented")
 }
 func (UnimplementedDaemonServiceServer) mustEmbedUnimplementedDaemonServiceServer() {}
 func (UnimplementedDaemonServiceServer) testEmbeddedByValue()                       {}
@@ -2312,6 +2378,60 @@ func _DaemonService_SetAgentsAllowed_Handler(srv interface{}, ctx context.Contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _DaemonService_ListTeamTemplates_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListTeamTemplatesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).ListTeamTemplates(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_ListTeamTemplates_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).ListTeamTemplates(ctx, req.(*ListTeamTemplatesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_PlanTeam_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PlanTeamRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).PlanTeam(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_PlanTeam_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).PlanTeam(ctx, req.(*PlanTeamRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_ApplyTeamPlan_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ApplyTeamPlanRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).ApplyTeamPlan(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_ApplyTeamPlan_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).ApplyTeamPlan(ctx, req.(*ApplyTeamPlanRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // DaemonService_ServiceDesc is the grpc.ServiceDesc for DaemonService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -2526,6 +2646,18 @@ var DaemonService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SetAgentsAllowed",
 			Handler:    _DaemonService_SetAgentsAllowed_Handler,
+		},
+		{
+			MethodName: "ListTeamTemplates",
+			Handler:    _DaemonService_ListTeamTemplates_Handler,
+		},
+		{
+			MethodName: "PlanTeam",
+			Handler:    _DaemonService_PlanTeam_Handler,
+		},
+		{
+			MethodName: "ApplyTeamPlan",
+			Handler:    _DaemonService_ApplyTeamPlan_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -57,6 +58,14 @@ func (s *Server) CreateBox(ctx context.Context, req *daemonv1.CreateBoxRequest) 
 		s.log.Info("box not created", "box", req.GetName(), "id", req.GetBoxId(), "code", status.Code(err).String())
 		return nil, err
 	}
+	// The team chosen in New workspace (ADR 0025): approved, file by
+	// file, within the owner's limit, or nothing is made.
+	if t := req.GetTeam(); t != nil {
+		if err := checkTeamChoice(t, readAgentsAllowed(s.env.Dir)); err != nil {
+			s.log.Info("box not created", "box", req.GetName(), "id", req.GetBoxId(), "code", status.Code(err).String())
+			return nil, err
+		}
+	}
 	already, err := s.env.CreateBox(ctx, createRequest(req.GetName(), req.GetBoxId(), req.GetImage(), req.GetStorage(),
 		req.GetStorageHostKey(), req.GetStorageRest(), req.GetKeys(), req.GetRecoveryPassword()), local.CreateOptions{})
 	if err != nil {
@@ -64,7 +73,14 @@ func (s *Server) CreateBox(ctx context.Context, req *daemonv1.CreateBoxRequest) 
 		s.log.Info("box not created", "box", req.GetName(), "id", req.GetBoxId(), "code", status.Code(st).String())
 		return nil, st
 	}
-	s.log.Info("box created", "box", req.GetName(), "id", req.GetBoxId(), "already", already)
+	if t := req.GetTeam(); t != nil {
+		// Kept for ApplyTeamPlan, which writes it once the workspace runs.
+		// A retry (already created) keeps it again.
+		if err := keepTeamPlan(filepath.Join(s.env.Dir, "state", req.GetBoxId()), t); err != nil {
+			return nil, status.Error(codes.Internal, "Portenv couldn\u2019t keep the workspace\u2019s team. Try again.")
+		}
+	}
+	s.log.Info("box created", "box", req.GetName(), "id", req.GetBoxId(), "already", already, "team", req.GetTeam().GetTemplate())
 	return &daemonv1.CreateBoxResponse{BoxId: req.GetBoxId(), AlreadyCreated: already}, nil
 }
 

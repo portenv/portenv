@@ -45,6 +45,7 @@ const (
 	AgentService_ListHomeFiles_FullMethodName        = "/portenv.agent.v1.AgentService/ListHomeFiles"
 	AgentService_ReadHomeFile_FullMethodName         = "/portenv.agent.v1.AgentService/ReadHomeFile"
 	AgentService_WriteHomeFiles_FullMethodName       = "/portenv.agent.v1.AgentService/WriteHomeFiles"
+	AgentService_WriteAgentFiles_FullMethodName      = "/portenv.agent.v1.AgentService/WriteAgentFiles"
 	AgentService_EnsureAgentUser_FullMethodName      = "/portenv.agent.v1.AgentService/EnsureAgentUser"
 	AgentService_RemoveAgentUser_FullMethodName      = "/portenv.agent.v1.AgentService/RemoveAgentUser"
 	AgentService_SimulatePackage_FullMethodName      = "/portenv.agent.v1.AgentService/SimulatePackage"
@@ -118,6 +119,11 @@ type AgentServiceClient interface {
 	ListHomeFiles(ctx context.Context, in *ListHomeFilesRequest, opts ...grpc.CallOption) (*ListHomeFilesResponse, error)
 	ReadHomeFile(ctx context.Context, in *ReadHomeFileRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ReadHomeFileResponse], error)
 	WriteHomeFiles(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[WriteHomeFilesRequest, WriteHomeFilesResponse], error)
+	// The New-workspace team's agent files (ADR 0025 §5), written as work
+	// into the project's .portenv/agents/, never over a file and never
+	// through a link. A missing project folder is made empty, with git, on
+	// main. Runs nothing from the files.
+	WriteAgentFiles(ctx context.Context, in *WriteAgentFilesRequest, opts ...grpc.CallOption) (*WriteAgentFilesResponse, error)
 	// Served only by init (root) on its local socket, which only the API
 	// process reaches; the channel's server answers Unimplemented. init checks
 	// every id and package name itself.
@@ -411,6 +417,16 @@ func (c *agentServiceClient) WriteHomeFiles(ctx context.Context, opts ...grpc.Ca
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type AgentService_WriteHomeFilesClient = grpc.ClientStreamingClient[WriteHomeFilesRequest, WriteHomeFilesResponse]
 
+func (c *agentServiceClient) WriteAgentFiles(ctx context.Context, in *WriteAgentFilesRequest, opts ...grpc.CallOption) (*WriteAgentFilesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WriteAgentFilesResponse)
+	err := c.cc.Invoke(ctx, AgentService_WriteAgentFiles_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *agentServiceClient) EnsureAgentUser(ctx context.Context, in *EnsureAgentUserRequest, opts ...grpc.CallOption) (*EnsureAgentUserResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(EnsureAgentUserResponse)
@@ -608,6 +624,11 @@ type AgentServiceServer interface {
 	ListHomeFiles(context.Context, *ListHomeFilesRequest) (*ListHomeFilesResponse, error)
 	ReadHomeFile(*ReadHomeFileRequest, grpc.ServerStreamingServer[ReadHomeFileResponse]) error
 	WriteHomeFiles(grpc.ClientStreamingServer[WriteHomeFilesRequest, WriteHomeFilesResponse]) error
+	// The New-workspace team's agent files (ADR 0025 §5), written as work
+	// into the project's .portenv/agents/, never over a file and never
+	// through a link. A missing project folder is made empty, with git, on
+	// main. Runs nothing from the files.
+	WriteAgentFiles(context.Context, *WriteAgentFilesRequest) (*WriteAgentFilesResponse, error)
 	// Served only by init (root) on its local socket, which only the API
 	// process reaches; the channel's server answers Unimplemented. init checks
 	// every id and package name itself.
@@ -730,6 +751,9 @@ func (UnimplementedAgentServiceServer) ReadHomeFile(*ReadHomeFileRequest, grpc.S
 }
 func (UnimplementedAgentServiceServer) WriteHomeFiles(grpc.ClientStreamingServer[WriteHomeFilesRequest, WriteHomeFilesResponse]) error {
 	return status.Error(codes.Unimplemented, "method WriteHomeFiles not implemented")
+}
+func (UnimplementedAgentServiceServer) WriteAgentFiles(context.Context, *WriteAgentFilesRequest) (*WriteAgentFilesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WriteAgentFiles not implemented")
 }
 func (UnimplementedAgentServiceServer) EnsureAgentUser(context.Context, *EnsureAgentUserRequest) (*EnsureAgentUserResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method EnsureAgentUser not implemented")
@@ -1093,6 +1117,24 @@ func _AgentService_WriteHomeFiles_Handler(srv interface{}, stream grpc.ServerStr
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type AgentService_WriteHomeFilesServer = grpc.ClientStreamingServer[WriteHomeFilesRequest, WriteHomeFilesResponse]
 
+func _AgentService_WriteAgentFiles_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WriteAgentFilesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentServiceServer).WriteAgentFiles(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentService_WriteAgentFiles_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentServiceServer).WriteAgentFiles(ctx, req.(*WriteAgentFilesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _AgentService_EnsureAgentUser_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(EnsureAgentUserRequest)
 	if err := dec(in); err != nil {
@@ -1382,6 +1424,10 @@ var AgentService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListHomeFiles",
 			Handler:    _AgentService_ListHomeFiles_Handler,
+		},
+		{
+			MethodName: "WriteAgentFiles",
+			Handler:    _AgentService_WriteAgentFiles_Handler,
 		},
 		{
 			MethodName: "EnsureAgentUser",

@@ -63,6 +63,11 @@ service AgentService {
   rpc ListHomeFiles(ListHomeFilesRequest) returns (ListHomeFilesResponse);
   rpc ReadHomeFile(ReadHomeFileRequest) returns (stream ReadHomeFileResponse);
   rpc WriteHomeFiles(stream WriteHomeFilesRequest) returns (WriteHomeFilesResponse);
+  // The New-workspace team's agent files (ADR 0025 §5), written as work
+  // into the project's .portenv/agents/, never over a file and never
+  // through a link. A missing project folder is made empty, with git, on
+  // main. Runs nothing from the files.
+  rpc WriteAgentFiles(WriteAgentFilesRequest) returns (WriteAgentFilesResponse);
   // Served only by init (root) on its local socket, which only the API
   // process reaches; the channel's server answers Unimplemented. init checks
   // every id and package name itself.
@@ -822,3 +827,18 @@ message WakeAgentRequest {
 }
 
 message WakeAgentResponse {}
+
+message WriteAgentFilesRequest {
+  // The project folder, /home/work/<workspace>.
+  string project_dir = 1;
+  // Each path is <id>.md or off/<id>.md, relative to .portenv/agents/.
+  repeated AgentFileContent files = 2;
+}
+
+message WriteAgentFilesResponse {
+  // The paths written, and those already there (left as they are).
+  repeated string written = 1;
+  repeated string existing = 2;
+  // Whether the project folder was made.
+  bool made_project = 3;
+}

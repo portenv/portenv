@@ -251,7 +251,7 @@ func (s *apiServer) seedAgentHome(ctx context.Context, id string, uid int, proje
 	args := append([]string{"seed-home", project, home, strconv.FormatInt(quota, 10)}, seeds...)
 	var err error
 	if s.runHomeIO != nil {
-		_, err = s.runHomeIO(ctx, uid, args, nil)
+		_, err = s.runHomeIO(ctx, uid, agentGroups(uid, true), args, nil)
 	} else {
 		_, err = runAsAgentInTeam(ctx, uid, append([]string{"team-io"}, args...), nil, func(w io.Writer) error { return TeamIO(args, nil, w) })
 	}

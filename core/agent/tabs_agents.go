@@ -733,6 +733,15 @@ func (s *apiServer) deliverRoutine(ctx context.Context, agentID, text string) er
 	case len(line) > maxRoutine:
 		return status.Errorf(codes.InvalidArgument, "a routine is at most %d bytes", maxRoutine-len(routinePrefix))
 	}
+	return s.typeWhenIdle(ctx, a, line, "routine")
+}
+
+// typeWhenIdle types line and Enter into a's main pane, in one tmux
+// command, only when readyForRoutine passes: the one typing path for
+// routines and wake-ups (CC-0498), so both keep every check. what names
+// the call in errors.
+func (s *apiServer) typeWhenIdle(ctx context.Context, a *agentServer, line, what string) error {
+	agentID := a.user.ID
 	escaped, err := tmuxArg(line)
 	if err != nil {
 		return err
@@ -745,13 +754,13 @@ func (s *apiServer) deliverRoutine(ctx context.Context, agentID, text string) er
 	s.agents.mu.Unlock()
 	why, err := a.readyForRoutine(ctx, idleInput)
 	if err != nil {
-		return status.Errorf(codes.Unavailable, "routine to %s: %v", agentID, err)
+		return status.Errorf(codes.Unavailable, "%s to %s: %v", what, agentID, err)
 	}
 	if why != "" {
 		return status.Error(codes.FailedPrecondition, why)
 	}
 	if _, err := a.tmux(ctx, "send-keys", "-t", a.mainPane, "-l", "--", escaped, ";", "send-keys", "-t", a.mainPane, "Enter"); err != nil {
-		return status.Errorf(codes.Unavailable, "routine to %s: %v", agentID, err)
+		return status.Errorf(codes.Unavailable, "%s to %s: %v", what, agentID, err)
 	}
 	return nil
 }

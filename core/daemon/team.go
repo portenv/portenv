@@ -97,6 +97,8 @@ type teamBox struct {
 	routinesOff map[string]string                          // agent → why its routines are off
 	startErr    map[string]string                          // agent → why its last background start failed, until one succeeds (R-0302)
 	listed      map[string]string                          // agent → its files as syncAgents last saw them
+	wakes       map[string]*wakeState                      // agent → its unread batch (CC-0498)
+	wakeable    map[string]bool                            // agent → its runner has an idle pattern
 	changed     chan struct{}
 }
 
@@ -185,6 +187,7 @@ func (e *teamEngine) appendLocked(ctx context.Context, name string, b *teamBox, 
 		b.decisions[d.GetId()] = d
 		b.events = append(b.events, teamEvent{dec: d})
 	}
+	b.noteWakeLocked(line)
 	b.changedLocked()
 	return nil
 }
@@ -295,6 +298,7 @@ func (e *teamEngine) handleCall(ctx context.Context, name string, c *agentv1.Tea
 		return e.ownPaneLocked(ctx, name, b, me.ID, &agentv1.AgentPaneActionRequest{AgentId: me.ID, Action: &agentv1.AgentPaneActionRequest_Close{Close: op.Close}}, op.Close.GetPaneId(), true, id)
 	case *agentv1.TeamCallsResponse_Inbox:
 		in := b.inboxLocked(me.ID, op.Inbox.GetSinceCursor())
+		b.readWakeLocked(me.ID)
 		return &agentv1.TeamCallsRequest{CallId: id, Ok: true, Result: &agentv1.TeamCallsRequest_Inbox{Inbox: in}}
 	case *agentv1.TeamCallsResponse_Share:
 		// A share is a message to the owner, and to the lead when the
@@ -502,6 +506,9 @@ func (e *teamEngine) inboxWait(ctx context.Context, name, me, since, id string) 
 		}
 		in := b.inboxLocked(me, since)
 		changed := b.changed
+		if len(in.GetMessages())+len(in.GetDecisions()) > 0 {
+			b.readWakeLocked(me)
+		}
 		b.mu.Unlock()
 		if len(in.GetMessages())+len(in.GetDecisions()) > 0 {
 			return &agentv1.TeamCallsRequest{CallId: id, Ok: true, Result: &agentv1.TeamCallsRequest_Inbox{Inbox: in}}
@@ -705,9 +712,10 @@ func (e *teamEngine) startAgentAs(ctx context.Context, name, agentID string, app
 	b.routines[agentID] = nil
 	idle := runnerIdlePattern(a.Runner)
 	delete(b.routinesOff, agentID)
-	if idle == "" && len(a.Spec.Routines) > 0 {
-		b.routinesOff[agentID] = routinesOffLine(a.Runner)
+	if off := idleOffLine(a.Runner, len(a.Spec.Routines) > 0); off != "" {
+		b.routinesOff[agentID] = off
 	}
+	b.setWakeableLocked(agentID, idle != "")
 	for _, r := range a.Spec.Routines {
 		if idle == "" {
 			break
@@ -898,8 +906,8 @@ func (e *teamEngine) infoLocked(b *teamBox, a *TeamAgent) *daemonv1.AgentInfo {
 	}
 	info.Status = b.status[a.ID]
 	info.RoutinesOff = b.routinesOff[a.ID]
-	if info.RoutinesOff == "" && a.Spec != nil && len(a.Spec.Routines) > 0 && runnerIdlePattern(a.Runner) == "" {
-		info.RoutinesOff = routinesOffLine(a.Runner)
+	if info.RoutinesOff == "" && a.Spec != nil && !a.Remote {
+		info.RoutinesOff = idleOffLine(a.Runner, len(a.Spec.Routines) > 0)
 	}
 	if rs, ok := b.routines[a.ID]; ok {
 		for _, r := range rs {
@@ -1110,8 +1118,8 @@ func (e *teamEngine) whoamiLocked(name string, b *teamBox, team *Team, me *TeamA
 		w.Name, w.Role = me.Spec.Name, me.Spec.Role
 	}
 	w.Status = b.status[me.ID]
-	if me.Spec != nil && len(me.Spec.Routines) > 0 && runnerIdlePattern(me.Runner) == "" {
-		w.RoutinesOff = routinesOffLine(me.Runner)
+	if me.Spec != nil && !me.Remote {
+		w.RoutinesOff = idleOffLine(me.Runner, len(me.Spec.Routines) > 0)
 	}
 	w.Teammates = e.teammatesLocked(b, team, me, me.Grant.GetTeamStatus())
 	return w

@@ -5754,7 +5754,10 @@ type AgentInfo struct {
 	// Its routines (R-0258).
 	Routines []*v1.Routine `protobuf:"bytes,19,rep,name=routines,proto3" json:"routines,omitempty"`
 	// Why its routines are off, if they are (R-0258).
-	RoutinesOff   string `protobuf:"bytes,20,opt,name=routines_off,json=routinesOff,proto3" json:"routines_off,omitempty"`
+	RoutinesOff string `protobuf:"bytes,20,opt,name=routines_off,json=routinesOff,proto3" json:"routines_off,omitempty"`
+	// Set when its file asks for share_login, which this build doesn't
+	// support: one plain line saying nothing is shared (R-0323).
+	ShareLoginOff string `protobuf:"bytes,21,opt,name=share_login_off,json=shareLoginOff,proto3" json:"share_login_off,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -5925,6 +5928,13 @@ func (x *AgentInfo) GetRoutines() []*v1.Routine {
 func (x *AgentInfo) GetRoutinesOff() string {
 	if x != nil {
 		return x.RoutinesOff
+	}
+	return ""
+}
+
+func (x *AgentInfo) GetShareLoginOff() string {
+	if x != nil {
+		return x.ShareLoginOff
 	}
 	return ""
 }
@@ -7772,7 +7782,7 @@ const file_portenv_daemon_v1_daemon_proto_rawDesc = "" +
 	"\x11ListAgentsRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\"J\n" +
 	"\x12ListAgentsResponse\x124\n" +
-	"\x06agents\x18\x01 \x03(\v2\x1c.portenv.daemon.v1.AgentInfoR\x06agents\"\x99\x05\n" +
+	"\x06agents\x18\x01 \x03(\v2\x1c.portenv.daemon.v1.AgentInfoR\x06agents\"\xc1\x05\n" +
 	"\tAgentInfo\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
@@ -7796,7 +7806,8 @@ const file_portenv_daemon_v1_daemon_proto_rawDesc = "" +
 	"\x05grant\x18\x11 \x01(\v2\x1c.portenv.types.v1.AgentGrantR\x05grant\x125\n" +
 	"\x06status\x18\x12 \x01(\v2\x1d.portenv.types.v1.AgentStatusR\x06status\x125\n" +
 	"\broutines\x18\x13 \x03(\v2\x19.portenv.types.v1.RoutineR\broutines\x12!\n" +
-	"\froutines_off\x18\x14 \x01(\tR\vroutinesOff\">\n" +
+	"\froutines_off\x18\x14 \x01(\tR\vroutinesOff\x12&\n" +
+	"\x0fshare_login_off\x18\x15 \x01(\tR\rshareLoginOff\">\n" +
 	"\x10WatchTeamRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x16\n" +
 	"\x06cursor\x18\x02 \x01(\tR\x06cursor\"\x8c\x02\n" +

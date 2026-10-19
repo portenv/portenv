@@ -2743,9 +2743,12 @@ func (x *Msg) GetText() string {
 }
 
 type AskOwner struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Text          string                 `protobuf:"bytes,1,opt,name=text,proto3" json:"text,omitempty"`
-	ThreadId      string                 `protobuf:"bytes,2,opt,name=thread_id,json=threadId,proto3" json:"thread_id,omitempty"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Text     string                 `protobuf:"bytes,1,opt,name=text,proto3" json:"text,omitempty"`
+	ThreadId string                 `protobuf:"bytes,2,opt,name=thread_id,json=threadId,proto3" json:"thread_id,omitempty"`
+	// --choice, in order: 2 to 4 labels, each 1 to 80 characters of plain
+	// text (CC-0501). Empty asks a yes/no question.
+	Choices       []string `protobuf:"bytes,3,rep,name=choices,proto3" json:"choices,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2792,6 +2795,13 @@ func (x *AskOwner) GetThreadId() string {
 		return x.ThreadId
 	}
 	return ""
+}
+
+func (x *AskOwner) GetChoices() []string {
+	if x != nil {
+		return x.Choices
+	}
+	return nil
 }
 
 type Inbox struct {
@@ -3377,7 +3387,9 @@ type StartTeamAgentRequest struct {
 	// AGENTS.md in its home: the generated block (R-0246), then the file's
 	// instructions.
 	AgentsMd string `protobuf:"bytes,3,opt,name=agents_md,json=agentsMd,proto3" json:"agents_md,omitempty"`
-	// Repository paths copied into its home on first start (§2).
+	// Repository paths copied into its home on first start (§2), from
+	// project_dir: regular files and folders only, never through a link,
+	// at most 100 MB together, new files only; ~/.portenv-seeded records it.
 	HomeSeed       []string `protobuf:"bytes,4,rep,name=home_seed,json=homeSeed,proto3" json:"home_seed,omitempty"`
 	HomeQuotaBytes int64    `protobuf:"varint,5,opt,name=home_quota_bytes,json=homeQuotaBytes,proto3" json:"home_quota_bytes,omitempty"`
 	// The runner's idle-input pattern (RE2, matched against the main pane's
@@ -3391,8 +3403,12 @@ type StartTeamAgentRequest struct {
 	// missing, and starts the runner there. Empty: no clone, and the runner
 	// starts in the agent's home.
 	CloneProjectDir string `protobuf:"bytes,7,opt,name=clone_project_dir,json=cloneProjectDir,proto3" json:"clone_project_dir,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// The owner's project, /home/<main user>/<workspace>, that home_seed's
+	// paths are copied from, as the agent with the team group, on its first
+	// start (ADR 0022 §2). Required when home_seed isn't empty.
+	ProjectDir    string `protobuf:"bytes,9,opt,name=project_dir,json=projectDir,proto3" json:"project_dir,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *StartTeamAgentRequest) Reset() {
@@ -3470,6 +3486,13 @@ func (x *StartTeamAgentRequest) GetIdlePattern() string {
 func (x *StartTeamAgentRequest) GetCloneProjectDir() string {
 	if x != nil {
 		return x.CloneProjectDir
+	}
+	return ""
+}
+
+func (x *StartTeamAgentRequest) GetProjectDir() string {
+	if x != nil {
+		return x.ProjectDir
 	}
 	return ""
 }
@@ -5842,10 +5865,11 @@ const file_portenv_agent_v1_agent_proto_rawDesc = "" +
 	"\x02to\x18\x01 \x01(\tR\x02to\x12\x1b\n" +
 	"\tthread_id\x18\x02 \x01(\tR\bthreadId\x121\n" +
 	"\x04type\x18\x03 \x01(\x0e2\x1d.portenv.types.v1.MessageTypeR\x04type\x12\x12\n" +
-	"\x04text\x18\x04 \x01(\tR\x04text\";\n" +
+	"\x04text\x18\x04 \x01(\tR\x04text\"U\n" +
 	"\bAskOwner\x12\x12\n" +
 	"\x04text\x18\x01 \x01(\tR\x04text\x12\x1b\n" +
-	"\tthread_id\x18\x02 \x01(\tR\bthreadId\">\n" +
+	"\tthread_id\x18\x02 \x01(\tR\bthreadId\x12\x18\n" +
+	"\achoices\x18\x03 \x03(\tR\achoices\">\n" +
 	"\x05Inbox\x12!\n" +
 	"\fsince_cursor\x18\x01 \x01(\tR\vsinceCursor\x12\x12\n" +
 	"\x04wait\x18\x02 \x01(\bR\x04wait\"\x9b\x01\n" +
@@ -5890,7 +5914,7 @@ const file_portenv_agent_v1_agent_proto_rawDesc = "" +
 	"\x05state\x18\x04 \x01(\x0e2\x1c.portenv.types.v1.AgentStateR\x05state\x125\n" +
 	"\x06status\x18\x05 \x01(\v2\x1d.portenv.types.v1.AgentStatusR\x06status\x12+\n" +
 	"\x11pending_decisions\x18\x06 \x01(\x05R\x10pendingDecisions\x12!\n" +
-	"\fidle_seconds\x18\a \x01(\x03R\vidleSeconds\"\xf9\x01\n" +
+	"\fidle_seconds\x18\a \x01(\x03R\vidleSeconds\"\x9a\x02\n" +
 	"\x15StartTeamAgentRequest\x12\x19\n" +
 	"\bagent_id\x18\x01 \x01(\tR\aagentId\x12\x12\n" +
 	"\x04argv\x18\x02 \x03(\tR\x04argv\x12\x1b\n" +
@@ -5898,7 +5922,9 @@ const file_portenv_agent_v1_agent_proto_rawDesc = "" +
 	"\thome_seed\x18\x04 \x03(\tR\bhomeSeed\x12(\n" +
 	"\x10home_quota_bytes\x18\x05 \x01(\x03R\x0ehomeQuotaBytes\x12!\n" +
 	"\fidle_pattern\x18\x06 \x01(\tR\vidlePattern\x12*\n" +
-	"\x11clone_project_dir\x18\a \x01(\tR\x0fcloneProjectDir\"C\n" +
+	"\x11clone_project_dir\x18\a \x01(\tR\x0fcloneProjectDir\x12\x1f\n" +
+	"\vproject_dir\x18\t \x01(\tR\n" +
+	"projectDir\"C\n" +
 	"\x16StartTeamAgentResponse\x12)\n" +
 	"\x04tabs\x18\x01 \x03(\v2\x15.portenv.types.v1.TabR\x04tabs\"1\n" +
 	"\x14StopTeamAgentRequest\x12\x19\n" +

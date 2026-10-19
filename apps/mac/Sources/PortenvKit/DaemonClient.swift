@@ -624,6 +624,13 @@ extension DaemonClient {
         return try await call { TeamDecision(try await api.answerDecision(req).decision) }
     }
 
+    public func chooseDecision(_ box: String, id: String, choice: Int, label: String) async throws -> TeamDecision {
+        let req = Portenv_Daemon_V1_AnswerDecisionRequest.with {
+            $0.name = box; $0.decisionID = id; $0.approve = true; $0.choice = Int32(choice); $0.choiceLabel = label
+        }
+        return try await call { TeamDecision(try await api.answerDecision(req).decision) }
+    }
+
     public func sendMessage(_ box: String, to agent: String, thread: String, text: String) async throws -> TeamMessage {
         let req = Portenv_Daemon_V1_SendMessageRequest.with { $0.name = box; $0.to = agent; $0.threadID = thread; $0.text = text }
         return try await call { TeamMessage(try await api.sendMessage(req).message) }
@@ -749,6 +756,6 @@ extension TeamDecision {
                   answerNote: d.answerNote, createdAt: d.hasCreatedAt ? d.createdAt.date : nil,
                   answeredAt: d.hasAnsweredAt ? d.answeredAt.date : nil, expiresAt: d.hasExpiresAt ? d.expiresAt.date : nil,
                   packages: d.packages.map { Package(name: $0.name, version: $0.version, source: $0.source, dependency: $0.dependency) },
-                  startAgents: d.startAgentIds)
+                  startAgents: d.startAgentIds, choices: d.choices, choice: Int(d.choice))
     }
 }

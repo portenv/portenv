@@ -61,11 +61,20 @@ func (s *Server) startOpening() (done func(), err error) {
 	return s.opening.Done, nil
 }
 
-// closeAll saves, releases and stops every open box when the daemon stops.
-// Boxes still opening are waited for first (up to openingLimit), and no new
-// open starts. A box that can't be saved is left as it is, with the quit
-// marker, so the next open says so and saves first thing.
-func (s *Server) closeAll() {
+// shutdown is portenvd (or the runner) stopping: SIGTERM from launchd at
+// logout or shutdown, launchctl bootout, an update without the app. It
+// never saves, releases or stops a workspace (R-0252, ADR 0023): each one
+// keeps running, with its programs and tabs, for the next daemon to take
+// over by re-keying (ADR 0014). Closing is the app's: Close Workspace, and
+// Quit, which at logout closes each one as it does any time.
+//
+// Each open workspace gets the quit marker, so the next open saves it
+// first thing: at logout the engine itself may stop it, and nothing is
+// lost (its home stays, rule 3), but nothing may be left unsaved either.
+// No new open starts once the shutdown has begun, and an open already in
+// progress is waited for (up to openingLimit), so that workspace is marked
+// too rather than left half opened.
+func (s *Server) shutdown() {
 	s.mu.Lock()
 	s.stopping = true
 	s.mu.Unlock()
@@ -74,26 +83,24 @@ func (s *Server) closeAll() {
 	select {
 	case <-waited:
 	case <-time.After(openingLimit):
-		s.log.Error("a box was still opening after the shutdown wait; closing the others")
+		s.log.Error("a workspace was still opening after the shutdown wait; leaving the others running")
 	}
 	s.mu.Lock()
-	open := make(map[string]*openBox, len(s.open))
-	for n, ob := range s.open {
-		open[n] = ob
+	open := make([]*openBox, 0, len(s.open))
+	for _, ob := range s.open {
+		open = append(open, ob)
 	}
 	s.mu.Unlock()
-	for name, ob := range open {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-		err := s.closeBox(ctx, name)
-		cancel()
-		if err == nil {
+	for _, ob := range open {
+		if ob.sess == nil {
 			continue
 		}
-		s.log.Error("close on shutdown: left as it is, to save on the next open", "box", name, "err", err)
-		if ob.sess != nil {
-			if merr := s.writeQuitMarker(ob.sess.Cfg.ID); merr != nil {
-				s.log.Error("record the quit marker", "box", name, "err", merr)
-			}
+		id := ob.sess.Cfg.ID
+		// The close entry line, as CloseBox logs it, with why and what
+		// happened: nothing closed, by workspace ID.
+		s.log.Info("close", "box_id", id, "reason", "shutdown", "action", "left running")
+		if err := s.writeQuitMarker(id); err != nil {
+			s.log.Error("record the quit marker", "box_id", id, "err", err)
 		}
 	}
 }

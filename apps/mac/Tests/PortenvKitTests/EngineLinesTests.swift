@@ -28,3 +28,22 @@ struct EngineLinesTests {
         }
     }
 }
+
+/// CreateBox's refusals before it writes anything (Docker Desktop, the
+/// disk; core/daemon/testdata/new-workspace-lines.txt) reach New
+/// Workspace unchanged (R-0323).
+struct NewWorkspaceLinesTests {
+    static var fixture: URL {
+        EngineLinesTests.fixture.deletingLastPathComponent().appendingPathComponent("new-workspace-lines.txt")
+    }
+
+    @Test func createBoxsRefusalsPassThroughUnchanged() throws {
+        let lines = try String(contentsOf: Self.fixture, encoding: .utf8).split(separator: "\n").map(String.init)
+        #expect(lines.count == 3)
+        for line in lines {
+            #expect(DaemonErrorText.plain(code: .unavailable, message: line) == line)
+            #expect(DaemonErrorText.plain(code: .resourceExhausted, message: line) == line)
+            #expect(line.hasSuffix("then create the workspace again."))
+        }
+    }
+}

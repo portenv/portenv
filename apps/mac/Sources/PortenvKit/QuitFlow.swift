@@ -43,18 +43,24 @@ public struct QuitFlow: Sendable {
     }
 
     /// Closes the box, asking on failure. Returns true to quit, false to stay.
-    public func run(ask: @Sendable (String) async -> QuitChoice) async -> Bool {
-        await run(message: Self.message(box: box), ask: ask)
+    /// `tell` says, with OK only, why a close was refused (a Move To in
+    /// progress, R-0249).
+    public func run(ask: @Sendable (String) async -> QuitChoice, tell: @Sendable (String) async -> Void = { _ in }) async -> Bool {
+        await run(message: Self.message(box: box), ask: ask, tell: tell)
     }
 
     /// The same close, with the alert's words for what's happening
     /// (quitting, or closing the window: WindowClose).
-    func run(message: String, ask: @Sendable (String) async -> QuitChoice) async -> Bool {
+    func run(message: String, ask: @Sendable (String) async -> QuitChoice, tell: @Sendable (String) async -> Void = { _ in }) async -> Bool {
         guard openHere else { return true }
         while true {
             do {
                 try await daemon.close(box)
                 return true
+            } catch let e as DaemonError where e.moving {
+                // Never Quit Anyway in the middle of a move: stay.
+                await tell(e.message)
+                return false
             } catch {
                 switch await ask(message) {
                 case .tryAgain: continue

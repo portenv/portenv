@@ -42,6 +42,19 @@ func (s *Server) teamEng() *teamEngine {
 				}
 			}
 		}()
+		// Message wake-ups (CC-0498): their own, shorter tick.
+		go func() {
+			tick := time.NewTicker(wakeTick)
+			defer tick.Stop()
+			for {
+				select {
+				case <-s.bgCtx.Done():
+					return
+				case <-tick.C:
+					s.team.tickWakes(s.bgCtx)
+				}
+			}
+		}()
 	})
 	return s.team
 }

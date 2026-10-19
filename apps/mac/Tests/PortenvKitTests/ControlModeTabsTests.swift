@@ -45,11 +45,17 @@ final class FakeTabTransport: TabTerminalTransport, @unchecked Sendable {
 
 @MainActor
 struct ControlModeTabsTests {
-    static let fast = ControlModeTabSource.Retry(first: .milliseconds(10), longest: .milliseconds(40), attempts: 3)
+    /// No first-reset deadline: under the full suite's load the main
+    /// actor can take seconds to read a reset already played.
+    static let fast = ControlModeTabSource.Retry(first: .milliseconds(10), longest: .milliseconds(40), attempts: 3,
+                                                 firstReset: .seconds(3600))
     let size = TabTerminalSize(cols: 80, rows: 24)
 
+    /// Counts its turns rather than the clock: another test can hold the
+    /// main actor for seconds, and a clock limit would run out before the
+    /// source got its turn.
     func waitUntil(_ cond: @MainActor () -> Bool) async {
-        for _ in 0..<200 where !cond() { try? await Task.sleep(for: .milliseconds(10)) }
+        for _ in 0..<1000 where !cond() { try? await Task.sleep(for: .milliseconds(10)) }
     }
 
     /// Collects a source's events as they come.
@@ -167,5 +173,64 @@ struct ControlModeTabsTests {
         await waitUntil { e.done }
         #expect(e.all.last == .ended(.boxStopped))
         #expect(t.opened.count == 1)
+    }
+
+    /// Step 7b (R-0294): a frozen portenvd accepts the stream and never
+    /// answers. With no reset by `firstReset`, the attempt is given up on:
+    /// "Reconnecting…", then another try, and the reason says it isn't
+    /// answering.
+    @Test func aStreamThatNeverResetsIsGivenUpOn() async {
+        let t = FakeTabTransport()
+        let retry = ControlModeTabSource.Retry(first: .milliseconds(10), longest: .milliseconds(40), attempts: 3,
+                                               firstReset: .milliseconds(80))
+        let s = ControlModeTabProvider(box: "b", transport: t, retry: retry).open(tab: "@1", size: size)
+        let e = collect(s)
+        await waitUntil { t.opened.count == 2 }
+        #expect(t.opened.count == 2)
+        #expect(e.all.first == .ended(.lost(retrying: true)))
+        #expect((s as? ControlModeTabSource)?.failure == ControlModeTabSource.notAnswering)
+        #expect(t.closes >= 1)
+        // Its attempts run out like any other failure's.
+        await waitUntil { e.done }
+        #expect(e.all.last == .ended(.lost(retrying: false)))
+        #expect(t.opened.count == 4)
+    }
+
+    /// Step 7a (R-0294): a reset that's lost again before `settle` doesn't
+    /// start the count over, so intermittent contact still gives up.
+    @Test func blipsDoNotStartTheCountOver() async {
+        let t = FakeTabTransport()
+        let retry = ControlModeTabSource.Retry(first: .milliseconds(10), longest: .milliseconds(20), attempts: 3,
+                                               firstReset: .seconds(3600), settle: .seconds(3600))
+        let s = ControlModeTabProvider(box: "b", transport: t, retry: retry).open(tab: "@1", size: size)
+        let e = collect(s)
+        for n in 1...4 {
+            await waitUntil { t.opened.count == n }
+            t.play(.reset(size, seed: [], skipped: false))
+            await waitUntil { e.all.filter { if case .reset = $0 { true } else { false } }.count == n }
+            t.lose(TabTerminalStreamError("portenvd went away", permanent: false))
+        }
+        await waitUntil { e.done }
+        #expect(e.all.last == .ended(.lost(retrying: false)))
+        #expect(t.opened.count == 4)
+    }
+
+    /// A reset that stays up for `settle` does start the count over.
+    @Test func aSettledStreamStartsTheCountOver() async {
+        let t = FakeTabTransport()
+        let retry = ControlModeTabSource.Retry(first: .milliseconds(10), longest: .milliseconds(20), attempts: 1,
+                                               firstReset: .seconds(3600), settle: .milliseconds(30))
+        let s = ControlModeTabProvider(box: "b", transport: t, retry: retry).open(tab: "@1", size: size)
+        let e = collect(s)
+        for n in 1...3 {
+            await waitUntil { t.opened.count == n }
+            t.play(.reset(size, seed: [], skipped: false))
+            await waitUntil { e.all.filter { if case .reset = $0 { true } else { false } }.count == n }
+            try? await Task.sleep(for: .milliseconds(60))
+            t.lose(TabTerminalStreamError("portenvd went away", permanent: false))
+        }
+        await waitUntil { t.opened.count == 4 }
+        #expect(!e.done)
+        s.close()
     }
 }

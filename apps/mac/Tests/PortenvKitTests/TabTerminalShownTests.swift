@@ -76,8 +76,9 @@ struct ReconnectingToServiceTests {
         shown.ended(.lost(retrying: true))
         #expect(shown.showsReconnecting(serviceComing: false))
         shown.ended(.lost(retrying: false))
-        #expect(shown.showsReconnecting(serviceComing: true)) // the service is coming back: not Disconnected
+        #expect(shown.showsReconnecting(serviceComing: true)) // the service is coming back: not Disconnected (until the deadline)
         #expect(!shown.showsReconnecting(serviceComing: false)) // it isn't: Disconnected, with Reconnect
+        #expect(shown.overlay(serviceComing: false) == .disconnected(nil))
         #expect(TabTerminalShown.reconnectingLine == "Reconnecting to Portenv\u{2019}s background service\u{2026}")
     }
 
@@ -86,5 +87,136 @@ struct ReconnectingToServiceTests {
         #expect(!e.permanent)
         let tooOld = TabTerminalStreamError(rpc: RPCError(code: .failedPrecondition, message: "This workspace's tmux is too old for the app's terminal (needs 3.4 or later)."))
         #expect(tooOld.permanent)
+    }
+}
+
+/// Timers the test fires by hand, so the deadline tests don't depend on
+/// how busy the main actor is (the full suite runs 600 tests at once).
+@MainActor
+final class ManualTimers {
+    private var waiting: [(Duration, CheckedContinuation<Void, Never>)] = []
+
+    nonisolated var sleep: @Sendable (Duration) async -> Void {
+        { [self] d in await self.wait(d) }
+    }
+
+    private func wait(_ d: Duration) async {
+        await withCheckedContinuation { waiting.append((d, $0)) }
+    }
+
+    /// How many timers of this length are waiting.
+    func pending(_ d: Duration) -> Int { waiting.filter { $0.0 == d }.count }
+
+    /// Ends every wait of this length (cancelled ones see their
+    /// cancellation and do nothing).
+    func fire(_ d: Duration) {
+        let hit = waiting.filter { $0.0 == d }
+        waiting.removeAll { $0.0 == d }
+        for (_, c) in hit { c.resume() }
+    }
+}
+
+/// The outage gaps from the owner's restart test of #119 (R-0294): the
+/// Disconnected card past the deadline, however the contact comes and goes.
+@MainActor
+struct DisconnectedDeadlineTests {
+    static let deadline: Duration = .seconds(25)
+    static let settle: Duration = .seconds(2)
+
+    func make() -> (TabTerminalShown, TabTerminalShownTests.Provider, ManualTimers) {
+        let p = TabTerminalShownTests.Provider()
+        let timers = ManualTimers()
+        let shown = TabTerminalShown(provider: p, deadline: Self.deadline, settle: Self.settle, sleep: timers.sleep)
+        shown.show(tab: "@1", generation: 1)
+        shown.reset(TabTerminalSize(cols: 80, rows: 24))
+        return (shown, p, timers)
+    }
+
+    /// Counts turns, not the clock (ControlModeTabsTests.waitUntil).
+    func waitUntil(_ cond: @MainActor () -> Bool) async {
+        for _ in 0..<1000 where !cond() { try? await Task.sleep(for: .milliseconds(5)) }
+    }
+
+    /// Step 7a: portenvd killed again within a second of each restart. The
+    /// blips (a reset, then lost again before it settles) never start the
+    /// clock over, so the card shows at the deadline from the first loss,
+    /// saying nothing is being saved, even while the service is said to be
+    /// coming back.
+    @Test func intermittentContactStillShowsTheCard() async {
+        let (shown, _, timers) = make()
+        shown.ended(.lost(retrying: true))
+        #expect(shown.overlay(serviceComing: true) == .reconnecting)
+        await waitUntil { timers.pending(Self.deadline) == 1 }
+        for _ in 0..<5 {
+            shown.reset(TabTerminalSize(cols: 80, rows: 24)) // back for a moment
+            await waitUntil { timers.pending(Self.settle) >= 1 }
+            shown.ended(.lost(retrying: true)) // and gone again before it settles
+        }
+        timers.fire(Self.settle) // the cancelled settles: nothing
+        #expect(timers.pending(Self.deadline) == 1, "one deadline, from the first loss")
+        timers.fire(Self.deadline)
+        await waitUntil { shown.overdue }
+        #expect(shown.overdue)
+        #expect(shown.overlay(serviceComing: true) == .disconnected(TabTerminalShown.serviceAwayLine))
+        #expect(TabTerminalShown.serviceAwayLine.contains("nothing is being saved"))
+        #expect(shown.overlay(serviceComing: false) == .disconnected(TabTerminalShown.notAnsweringLine))
+        // It comes back and stays: the card goes once it has settled.
+        shown.reset(TabTerminalSize(cols: 80, rows: 24))
+        #expect(shown.overdue, "not before it has stayed up")
+        await waitUntil { timers.pending(Self.settle) == 1 }
+        timers.fire(Self.settle)
+        await waitUntil { !shown.overdue }
+        #expect(!shown.overdue)
+        #expect(shown.overlay(serviceComing: false) == .none)
+    }
+
+    /// The card waits for the deadline: the capsule before it.
+    @Test func theCapsuleUntilTheDeadline() async {
+        let (shown, _, timers) = make()
+        shown.ended(.lost(retrying: true))
+        await waitUntil { timers.pending(Self.deadline) == 1 }
+        #expect(!shown.overdue)
+        #expect(shown.overlay(serviceComing: false) == .reconnecting)
+        timers.fire(Self.deadline)
+        await waitUntil { shown.overdue }
+        #expect(shown.overlay(serviceComing: false) == .disconnected(TabTerminalShown.notAnsweringLine))
+    }
+
+    /// A reconnect that stays up for `settle` ends the trouble: the next
+    /// loss starts a fresh deadline, and the old one does nothing.
+    @Test func aSettledReconnectStartsTheClockOver() async {
+        let (shown, _, timers) = make()
+        shown.ended(.lost(retrying: true))
+        await waitUntil { timers.pending(Self.deadline) == 1 }
+        shown.reset(TabTerminalSize(cols: 80, rows: 24))
+        await waitUntil { timers.pending(Self.settle) == 1 }
+        timers.fire(Self.settle)
+        await waitUntil { !shown.inTrouble }
+        #expect(!shown.inTrouble)
+        timers.fire(Self.deadline) // the first loss's deadline: cancelled
+        shown.ended(.lost(retrying: true))
+        await waitUntil { timers.pending(Self.deadline) == 1 }
+        try? await Task.sleep(for: .milliseconds(20))
+        #expect(!shown.overdue)
+        #expect(shown.overlay(serviceComing: true) == .reconnecting)
+    }
+
+    /// Reconnect on the card: the card goes, a new stream opens, and the
+    /// deadline starts again.
+    @Test func reconnectClearsTheCard() async {
+        let (shown, p, timers) = make()
+        shown.ended(.lost(retrying: false))
+        await waitUntil { timers.pending(Self.deadline) == 1 }
+        timers.fire(Self.deadline)
+        await waitUntil { shown.overdue }
+        #expect(shown.overlay(serviceComing: true) == .disconnected(TabTerminalShown.serviceAwayLine))
+        shown.reconnect()
+        #expect(!shown.overdue)
+        #expect(p.opened.count == 2)
+        #expect(shown.overlay(serviceComing: true) == .none) // connecting
+        await waitUntil { timers.pending(Self.deadline) == 1 }
+        timers.fire(Self.deadline)
+        await waitUntil { shown.overdue }
+        #expect(shown.overdue, "no reset after Reconnect: the card again")
     }
 }

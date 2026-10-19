@@ -191,14 +191,15 @@ public final class BoxController {
     /// problem to show (for example, Login Items needs the person's
     /// approval), or nil. The app never starts portenvd itself.
     private let ensureDaemon: (@Sendable () async -> String?)?
-    /// How long portenvd may be away before the window says so plainly.
+    /// How long portenvd may take to answer at launch before the window
+    /// says so plainly (waitForDaemon).
     private let daemonDeadline: Duration
     private var daemonGoneSince: SuspendingClock.Instant?
     /// Time awake: a Mac asleep while portenvd is away mustn't spend the
     /// deadline (a wall clock did, on 2026-10-16).
     private let awake: @Sendable () -> SuspendingClock.Instant
 
-    /// What the window says when portenvd has been away past the deadline.
+    /// What the window says when portenvd doesn't answer at launch.
     public static let daemonGone = "Portenv's background service isn't running, so nothing is being saved. It's started again automatically; if this lasts, quit and reopen Portenv."
     /// Reopening after portenvd restarted: the state line keeps the real
     /// state instead of "Opening…".
@@ -599,19 +600,20 @@ public final class BoxController {
     public func cancelMove() { moveConfirmation = nil }
 
     /// portenvd isn't answering while the box is open (it crashed, is being
-    /// updated or relaunched): the line shows the box's real state, "Not
-    /// saved since" its last save, while launchd starts portenvd again. Past
-    /// the deadline, or when the login item needs approval, the window says
-    /// so plainly. Once portenvd is back, the box is reopened.
+    /// updated or relaunched, or is frozen): the line shows the box's real
+    /// state, "Not saved since" its last save, while launchd starts portenvd
+    /// again. When the login item needs approval, the window says so
+    /// plainly. Once portenvd is back, the box is reopened.
+    ///
+    /// No alert past a deadline (R-0294): the tab's terminal says it, in
+    /// place, with the capsule and then the Disconnected card, whose line
+    /// says nothing is being saved (TabTerminalShown.serviceAwayLine).
     private func daemonEnded() async {
         guard !leaving, location != .closed, !(await daemon.ping()) else { return }
         state = BoxState(save: .notSaved, savedAt: state?.savedAt, location: state?.location)
-        let since = daemonGoneSince ?? awake()
-        daemonGoneSince = since
+        if daemonGoneSince == nil { daemonGoneSince = awake() }
         if let problem = await ensureDaemon?() {
             error = problem
-        } else if awake() - since >= daemonDeadline {
-            error = Self.daemonGone
         }
     }
 

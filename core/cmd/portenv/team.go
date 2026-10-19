@@ -34,7 +34,7 @@ var teamUsage = map[string]string{
 	"focus":                "focus PANE",
 	"close":                "close PANE",
 	"msg":                  "msg AGENT TEXT [--thread ID] [--type notice|question|answer]",
-	"ask-owner":            "ask-owner TEXT [--thread ID]",
+	"ask-owner":            `ask-owner TEXT [--choice "LABEL" --choice "LABEL"...] [--thread ID]`,
 	"inbox":                "inbox [--wait] [--since CURSOR]",
 	"share":                "share [agent/YOUR-ID] [--text TEXT]",
 	"propose-agent-change": "propose-agent-change FILE",
@@ -117,13 +117,15 @@ func runTeam(ctx context.Context, args []string, getenv func(string) string, _ i
 // "--". Flags may come anywhere before "--".
 type teamArgs struct {
 	flags map[string]string
+	// lists has every value a repeatable flag was given, in order.
+	lists map[string][]string
 	pos   []string
 	rest  []string
 	dash  bool
 }
 
 func parseTeamArgs(args []string, bools, values []string) (teamArgs, error) {
-	a := teamArgs{flags: map[string]string{}}
+	a := teamArgs{flags: map[string]string{}, lists: map[string][]string{}}
 	isIn := func(list []string, s string) bool {
 		for _, v := range list {
 			if v == s {
@@ -149,6 +151,7 @@ func parseTeamArgs(args []string, bools, values []string) (teamArgs, error) {
 				}
 				i++
 				a.flags[f] = args[i]
+				a.lists[f] = append(a.lists[f], args[i])
 			default:
 				return a, fmt.Errorf("unknown flag --%s", f)
 			}
@@ -169,7 +172,7 @@ func buildTeamCall(name string, args []string, getenv func(string) string) (*age
 	case "msg":
 		values = []string{"thread", "type"}
 	case "ask-owner":
-		values = []string{"thread"}
+		values = []string{"thread", "choice"}
 	case "inbox":
 		bools, values = append(bools, "wait"), []string{"since"}
 	case "share":
@@ -255,7 +258,11 @@ func buildTeamCall(name string, args []string, getenv func(string) string) (*age
 		if err := needPos(1); err != nil {
 			return nil, false, err
 		}
-		c.Op = &agentv1.TeamCallsResponse_AskOwner{AskOwner: &agentv1.AskOwner{Text: a.pos[0], ThreadId: a.flags["thread"]}}
+		choices := a.lists["choice"]
+		if n := len(choices); n > 0 && (n < teamkit.MinChoices || n > teamkit.MaxChoices) {
+			return nil, false, fmt.Errorf("give %d to %d --choice labels, or none for a yes/no question", teamkit.MinChoices, teamkit.MaxChoices)
+		}
+		c.Op = &agentv1.TeamCallsResponse_AskOwner{AskOwner: &agentv1.AskOwner{Text: a.pos[0], ThreadId: a.flags["thread"], Choices: choices}}
 	case "inbox":
 		if err := needPos(0); err != nil {
 			return nil, false, err
@@ -441,7 +448,7 @@ func printTeamReply(w io.Writer, name string, call *agentv1.TeamCallsResponse, r
 				strings.ToLower(strings.TrimPrefix(m.GetType().String(), "MESSAGE_TYPE_")), shownPlain(m.GetText()))
 		}
 		for _, d := range in.GetDecisions() {
-			_, _ = fmt.Fprintf(w, "decision %s: %s\n", shownPlain(d.GetId()), strings.ToLower(strings.TrimPrefix(d.GetState().String(), "DECISION_STATE_")))
+			_, _ = fmt.Fprintf(w, "decision %s: %s\n", shownPlain(d.GetId()), decisionLine(d))
 		}
 		if in.GetCursor() != "" {
 			_, _ = fmt.Fprintf(w, "(next: portenv inbox --since %s)\n", shownPlain(in.GetCursor()))
@@ -456,6 +463,15 @@ func printTeamReply(w io.Writer, name string, call *agentv1.TeamCallsResponse, r
 	default:
 		_, _ = fmt.Fprintln(w, "Done.")
 	}
+}
+
+// decisionLine is a decision's answer as inbox shows it: its state, or for
+// a decision with choices, the owner's choice (CC-0501): chose "LABEL".
+func decisionLine(d *typesv1.Decision) string {
+	if n := int(d.GetChoice()); d.GetState() == typesv1.DecisionState_DECISION_STATE_APPROVED && n >= 1 && n <= len(d.GetChoices()) {
+		return `chose "` + shownPlain(d.GetChoices()[n-1]) + `"`
+	}
+	return strings.ToLower(strings.TrimPrefix(d.GetState().String(), "DECISION_STATE_"))
 }
 
 // shownPlain escapes what a terminal would act on (control and bidi

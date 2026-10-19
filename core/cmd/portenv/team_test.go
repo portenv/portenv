@@ -80,6 +80,8 @@ func TestTeamCommandsSendTheRightCall(t *testing.T) {
 		{[]string{"msg", "reviewer", "ready for review", "--thread", "t1"}, &agentv1.TeamCallsResponse{Op: &agentv1.TeamCallsResponse_Msg{Msg: &agentv1.Msg{To: "reviewer", Text: "ready for review", ThreadId: "t1", Type: typesv1.MessageType_MESSAGE_TYPE_NOTICE}}}},
 		{[]string{"msg", "--type", "question", "lead", "which branch?"}, &agentv1.TeamCallsResponse{Op: &agentv1.TeamCallsResponse_Msg{Msg: &agentv1.Msg{To: "lead", Text: "which branch?", Type: typesv1.MessageType_MESSAGE_TYPE_QUESTION}}}},
 		{[]string{"ask-owner", "May I add a dependency?"}, &agentv1.TeamCallsResponse{Op: &agentv1.TeamCallsResponse_AskOwner{AskOwner: &agentv1.AskOwner{Text: "May I add a dependency?"}}}},
+		{[]string{"ask-owner", "Which way?", "--choice", "Option a: wait", "--choice", "Option b: install deps", "--thread", "t1", "--choice", "Option c"},
+			&agentv1.TeamCallsResponse{Op: &agentv1.TeamCallsResponse_AskOwner{AskOwner: &agentv1.AskOwner{Text: "Which way?", ThreadId: "t1", Choices: []string{"Option a: wait", "Option b: install deps", "Option c"}}}}},
 		{[]string{"inbox", "--wait", "--since", "c9"}, &agentv1.TeamCallsResponse{Op: &agentv1.TeamCallsResponse_Inbox{Inbox: &agentv1.Inbox{Wait: true, SinceCursor: "c9"}}}},
 		{[]string{"share", "feature/x", "--text", "done"}, &agentv1.TeamCallsResponse{Op: &agentv1.TeamCallsResponse_Share{Share: &agentv1.Share{Branch: "feature/x", Text: "done"}}}},
 		{[]string{"request-package", "ffmpeg", "--reason", "video tests"}, &agentv1.TeamCallsResponse{Op: &agentv1.TeamCallsResponse_RequestPackage{RequestPackage: &agentv1.RequestPackage{Name: "ffmpeg", Reason: "video tests"}}}},
@@ -146,6 +148,9 @@ func TestUsageMistakesNeverReachTheHelper(t *testing.T) {
 		{"msg", "reviewer"}, // no text
 		{"msg", "--type", "shout", "reviewer", "hi"},
 		{"ask-owner"},
+		{"ask-owner", "Which?", "--choice", "only one"},
+		{"ask-owner", "Which?", "--choice", "a", "--choice", "b", "--choice", "c", "--choice", "d", "--choice", "e"},
+		{"ask-owner", "Which?", "--choice"},
 		{"request-package"},
 		{"request-package", "a", "b"},
 		{"focus"},
@@ -272,5 +277,27 @@ func TestGuideNeedsNoSocket(t *testing.T) {
 	out.Reset()
 	if code := runTeam(context.Background(), []string{"guide", "--json"}, func(string) string { return "" }, nil, &out, &errOut); code != 0 || !strings.Contains(out.String(), `"version"`) {
 		t.Errorf("guide --json: exit %d", code)
+	}
+}
+
+// inbox shows a decision with choices as the owner's choice (CC-0501),
+// and a yes/no one as its state, as before.
+func TestInboxShowsTheChosenLabel(t *testing.T) {
+	approved, declined := typesv1.DecisionState_DECISION_STATE_APPROVED, typesv1.DecisionState_DECISION_STATE_DECLINED
+	sock, _ := fakeHelper(t, &agentv1.TeamCallsRequest{Ok: true, Result: &agentv1.TeamCallsRequest_Inbox{Inbox: &agentv1.InboxResult{Decisions: []*typesv1.Decision{
+		{Id: "D1", State: approved, Choices: []string{"Option a: wait", "Option b: install deps"}, Choice: 2},
+		{Id: "D2", State: declined, Choices: []string{"x", "y"}},
+		{Id: "D3", State: approved},
+		// A choice out of range is never shown as a label.
+		{Id: "D4", State: approved, Choices: []string{"x", "y"}, Choice: 3},
+	}}}})
+	code, out, errOut := runTeamCmd(t, sock, "inbox")
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, errOut)
+	}
+	for _, want := range []string{`decision D1: chose "Option b: install deps"` + "\n", "decision D2: declined\n", "decision D3: approved\n", "decision D4: approved\n"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("inbox printed %q, want %q in it", out, want)
+		}
 	}
 }

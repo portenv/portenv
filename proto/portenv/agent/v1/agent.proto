@@ -451,6 +451,9 @@ message Msg {
 message AskOwner {
   string text = 1;
   string thread_id = 2;
+  // --choice, in order: 2 to 4 labels, each 1 to 80 characters of plain
+  // text (CC-0501). Empty asks a yes/no question.
+  repeated string choices = 3;
 }
 
 message Inbox {
@@ -532,7 +535,9 @@ message StartTeamAgentRequest {
   // AGENTS.md in its home: the generated block (R-0246), then the file's
   // instructions.
   string agents_md = 3;
-  // Repository paths copied into its home on first start (§2).
+  // Repository paths copied into its home on first start (§2), from
+  // project_dir: regular files and folders only, never through a link,
+  // at most 100 MB together, new files only; ~/.portenv-seeded records it.
   repeated string home_seed = 4;
   int64 home_quota_bytes = 5;
   // The runner's idle-input pattern (RE2, matched against the main pane's
@@ -552,7 +557,10 @@ message StartTeamAgentRequest {
   // no one else (an agent missing here: by no one). Applied only with
   // project_dir.
   repeated CloneReaders clone_readers = 8;
-  // The owner's project, /home/work/<workspace>, for clone_readers.
+  // The owner's project, /home/<main user>/<workspace>: home_seed's paths
+  // are copied from it, as the agent with the team group, on its first
+  // start (ADR 0022 §2), and clone_readers apply to its agents' clones.
+  // Required when home_seed isn't empty.
   string project_dir = 9;
   // The agent's display name, for its clone's git identity
   // ("<name> (Portenv agent)", set when the clone is made).

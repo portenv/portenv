@@ -31,12 +31,15 @@
 //     brings refs/remotes/agents/builder with builder's commit, by the
 //     bundle; no marker of work's uid appears, work's git in builder's
 //     clone is refused, and the bundle is gone (ADR 0022 §2a points 3, 5);
-//  9. approve and start reviewer, a lens with read_clones: [builder] (the
-//     template's): it reads builder's files, can't write any, can't list
+//  9. a message wakes an idle agent (CC-0498): reviewer's runner becomes a
+//     stand-in named claude, and the owner's message brings Portenv's fixed
+//     wake line, and only that line, into reviewer's own main pane;
+//  10. reviewer, started in step 9, is a lens with read_clones: [builder]
+//     (the template's): it reads builder's files, can't write any, can't list
 //     builder's home, and its git in builder's clone is refused; lead,
 //     without the grant, can't read them; the grant is a named-user ACL,
 //     never group team's (ADR 0022 §2a point 4);
-//  10. the move (ADR 0022 §2a point 6): with every agent stopped, the
+//  11. the move (ADR 0022 §2a point 6): with every agent stopped, the
 //     workspace is put back the old way (the project group team's,
 //     setgid, g:team:rwX, core.sharedRepository, Portenv's safe.directory,
 //     an R-0280 worktree for builder holding its uncommitted file, a hook
@@ -456,14 +459,16 @@ test -e /home/work/.portenv/team/handoff/builder.bundle; echo "bundle: $?"`, wor
 	}
 	t.Logf("step 8: no marker of work's (uid %s), work's git refused in builder's clone, bundle gone:\n%s", workUID, out)
 
-	// Step 9: reviewer, a lens on builder's clone (the template's
-	// read_clones: [builder]).
+	h.wakeOnMessage(ctx, c)
+	// Step 10: reviewer, a lens on builder's clone (the template's
+	// read_clones: [builder]). Step 9 already approved and started it, with
+	// its wake stand-in runner; Approve and Start again are no-ops.
 	reviewer := h.agent(ctx, c, "reviewer")
 	if _, err := c.ApproveAgentFile(ctx, &daemonv1.ApproveAgentFileRequest{Name: workspace, AgentId: "reviewer", FileSha256: reviewer.GetFileSha256()}); err != nil {
-		h.fatal("step 9 (approve reviewer): %v", err)
+		h.fatal("step 10 (approve reviewer): %v", err)
 	}
 	if _, err := c.StartAgent(ctx, &daemonv1.StartAgentRequest{Name: workspace, AgentId: "reviewer"}); err != nil {
-		h.fatal("step 9 (start reviewer): %v", err)
+		h.fatal("step 10 (start reviewer): %v", err)
 	}
 	h.waitRunning(ctx, c, "reviewer", 30*time.Second)
 	out, code = h.box(ctx, "reviewer", fmt.Sprintf(`cd / || exit 2
@@ -477,23 +482,23 @@ try mkdir $clone/.git/refs/heads/from-reviewer
 try git -C $clone log -1
 true`, workspace))
 	if code != 0 || !strings.HasPrefix(out, "from builder") || strings.Contains(out, "DID:") || strings.Count(out, "refused:") != 5 {
-		h.fatal("step 9: reviewer must read builder's files and nothing more: exit %d:\n%s", code, out)
+		h.fatal("step 10: reviewer must read builder's files and nothing more: exit %d:\n%s", code, out)
 	}
-	t.Logf("step 9: reviewer reads builder's clone, and nothing more:\n%s", out)
+	t.Logf("step 10: reviewer reads builder's clone, and nothing more:\n%s", out)
 	out, _ = h.box(ctx, "lead", fmt.Sprintf(`cat /home/builder/%s/from-builder.txt >/dev/null 2>&1; echo "lead reads builder's clone: $?"`, workspace))
 	if !strings.Contains(out, "lead reads builder's clone: 1") {
-		h.fatal("step 9: lead, without the grant, read builder's clone:\n%s", out)
+		h.fatal("step 10: lead, without the grant, read builder's clone:\n%s", out)
 	}
 	out, _ = h.box(ctx, "root", fmt.Sprintf(`getfacl -cp /home/builder /home/builder/%[1]s/from-builder.txt 2>&1`, workspace))
 	if !strings.Contains(out, "user:reviewer:--x") || !strings.Contains(out, "user:reviewer:r--") || strings.Contains(out, "group:team") || strings.Contains(out, "user:reviewer:rw") || strings.Contains(out, "user:lead") {
-		h.fatal("step 9: builder's home and clone must give reviewer (by name) traverse and read only:\n%s", out)
+		h.fatal("step 10: builder's home and clone must give reviewer (by name) traverse and read only:\n%s", out)
 	}
-	t.Logf("step 9: lead can't read builder's clone; the ACLs:\n%s", out)
+	t.Logf("step 10: lead can't read builder's clone; the ACLs:\n%s", out)
 
-	// Step 10: the move. Every agent stops first.
+	// Step 11: the move. Every agent stops first.
 	for _, id := range []string{"lead", "builder", "reviewer"} {
 		if _, err := c.StopAgent(ctx, &daemonv1.StopAgentRequest{Name: workspace, AgentId: id}); err != nil {
-			h.fatal("step 10 (stop %s): %v", id, err)
+			h.fatal("step 11 (stop %s): %v", id, err)
 		}
 	}
 	out, code = h.box(ctx, "root", fmt.Sprintf(`set -eu
@@ -513,9 +518,9 @@ runuser -u builder -- sh -c 'printf "#!/bin/sh\ntouch /tmp/portenv-markers/\$(id
 runuser -u lead -- sh -c 'echo "lead notes" > %[1]s/lead-notes.txt'
 stat -c '%%U %%n' $p/.git/hooks/post-checkout $p/lead-notes.txt $p/.worktrees/builder-old/wip.txt`, project, workspace))
 	if code != 0 {
-		h.fatal("step 10: putting the workspace back the old way: exit %d:\n%s", code, out)
+		h.fatal("step 11: putting the workspace back the old way: exit %d:\n%s", code, out)
 	}
-	t.Logf("step 10: the workspace, the old way:\n%s", out)
+	t.Logf("step 11: the workspace, the old way:\n%s", out)
 	var startErr error
 	for range 20 {
 		_, startErr = c.StartAgent(ctx, &daemonv1.StartAgentRequest{Name: workspace, AgentId: "lead"})
@@ -525,13 +530,13 @@ stat -c '%%U %%n' $p/.git/hooks/post-checkout $p/lead-notes.txt $p/.worktrees/bu
 		time.Sleep(500 * time.Millisecond) // the stopped agents' processes are still going
 	}
 	if startErr == nil || !strings.Contains(startErr.Error(), "own copies") {
-		h.fatal("step 10: lead's start didn't wait for the owner's answer to the move: %v", startErr)
+		h.fatal("step 11: lead's start didn't wait for the owner's answer to the move: %v", startErr)
 	}
 	move := h.waitDecision(func(d *typesv1.Decision) bool {
 		return d.GetKind() == typesv1.DecisionKind_DECISION_KIND_TEAM_START && d.GetState() == typesv1.DecisionState_DECISION_STATE_PENDING && len(d.GetMigrationItems()) > 0
 	}, time.Minute)
 	if move == nil {
-		h.fatal("step 10: no pending team_start decision with the move's record")
+		h.fatal("step 11: no pending team_start decision with the move's record")
 	}
 	byPath := map[string]*typesv1.MigrationItem{}
 	var record []string
@@ -541,9 +546,9 @@ stat -c '%%U %%n' $p/.git/hooks/post-checkout $p/lead-notes.txt $p/.worktrees/bu
 	}
 	hook, wt, notes := byPath[".git/hooks/post-checkout"], byPath[".worktrees/builder-old"], byPath["lead-notes.txt"]
 	if hook == nil || hook.GetKind() != "git" || hook.GetAgent() != "builder" || wt == nil || wt.GetKind() != "worktree" || wt.GetAgent() != "builder" || notes == nil || notes.GetKind() != "file" || notes.GetAgent() != "lead" {
-		h.fatal("step 10: the move's record:\n%s", strings.Join(record, "\n"))
+		h.fatal("step 11: the move's record:\n%s", strings.Join(record, "\n"))
 	}
-	t.Logf("step 10: the move's record:\n%s", strings.Join(record, "\n"))
+	t.Logf("step 11: the move's record:\n%s", strings.Join(record, "\n"))
 	// Before the answer: .git work's alone, the settings gone, builder's
 	// clone with its file uncommitted, lead's file in lead's clone and now
 	// work's, and nothing deleted.
@@ -558,12 +563,12 @@ runuser -u builder -- git -C /home/builder/%[2]s status --porcelain
 runuser -u lead -- cat /home/lead/%[2]s/lead-notes.txt`, project, workspace))
 	for _, want := range []string{"not work's in .git: 0", "team writes in .git: 0", "sharedRepository: 1", "safe.directory: 1", "work " + project + "/lead-notes.txt", "agent/builder", "?? wip.txt", "lead notes", "/.git/hooks/post-checkout", "/.worktrees/builder-old/wip.txt"} {
 		if !strings.Contains(out, want) {
-			h.fatal("step 10: after the move, want %q:\n%s", want, out)
+			h.fatal("step 11: after the move, want %q:\n%s", want, out)
 		}
 	}
-	t.Logf("step 10: after the move, before the answer:\n%s", out)
+	t.Logf("step 11: after the move, before the answer:\n%s", out)
 	if _, err := c.AnswerDecision(ctx, &daemonv1.AnswerDecisionRequest{Name: workspace, DecisionId: move.GetId(), Approve: true, RemoveItems: []string{hook.GetId(), wt.GetId()}}); err != nil {
-		h.fatal("step 10 (the owner's answer): %v", err)
+		h.fatal("step 11 (the owner's answer): %v", err)
 	}
 	h.waitRunning(ctx, c, "lead", time.Minute)
 	out, _ = h.box(ctx, "root", fmt.Sprintf(`p=%s
@@ -571,10 +576,10 @@ for f in .git/hooks/post-checkout .worktrees/builder-old .git/worktrees/builder-
 stat -c '%%U %%n' $p/lead-notes.txt`, project))
 	for _, want := range []string{".git/hooks/post-checkout: 1", ".worktrees/builder-old: 1", ".git/worktrees/builder-old: 1", "work " + project + "/lead-notes.txt"} {
 		if !strings.Contains(out, want) {
-			h.fatal("step 10: after the answer, want %q:\n%s", want, out)
+			h.fatal("step 11: after the answer, want %q:\n%s", want, out)
 		}
 	}
-	t.Logf("step 10: the answer removed the hook and the worktree, kept lead's file; lead runs:\n%s", out)
+	t.Logf("step 11: the answer removed the hook and the worktree, kept lead's file; lead runs:\n%s", out)
 	// Every earlier check, again: work's repository refuses lead, the
 	// team reads only, and builder's branch comes back with nothing of
 	// builder's run for work.
@@ -586,28 +591,28 @@ try touch .git/hooks/post-checkout
 try mkdir .git/refs/heads/evil
 true`, project))
 	if code != 0 || strings.Contains(out, "WROTE") || strings.Count(out, "refused:") != 4 {
-		h.fatal("step 10: after the move, lead wrote to work's repository: exit %d:\n%s", code, out)
+		h.fatal("step 11: after the move, lead wrote to work's repository: exit %d:\n%s", code, out)
 	}
 	out, _ = h.box(ctx, "root", fmt.Sprintf(`getfacl -Rcp %[1]s 2>/dev/null | grep -c '^group:team:.w'; git config --system --get-all safe.directory | grep -c -F %[1]s`, project))
 	if strings.Fields(out)[0] != "0" || !strings.HasSuffix(out, "0") {
-		h.fatal("step 10: after the move, team can write the project or the system config trusts it:\n%s", out)
+		h.fatal("step 11: after the move, team can write the project or the system config trusts it:\n%s", out)
 	}
 	if _, err := c.StartAgent(ctx, &daemonv1.StartAgentRequest{Name: workspace, AgentId: "builder"}); err != nil {
-		h.fatal("step 10 (start builder after the move): %v", err)
+		h.fatal("step 11 (start builder after the move): %v", err)
 	}
 	h.waitRunning(ctx, c, "builder", time.Minute)
 	if out, code = h.box(ctx, "builder", fmt.Sprintf(`set -eu
 cd /home/builder/%s
 git add wip.txt
 git -c user.name=Builder -c user.email=builder@example.invalid -c core.hooksPath=/dev/null commit -q -m "after the move"`, workspace)); code != 0 {
-		h.fatal("step 10: builder's commit after the move: exit %d: %s", code, out)
+		h.fatal("step 11: builder's commit after the move: exit %d: %s", code, out)
 	}
 	h.portenv(ctx, "app", "fetch-agent", workspace, "builder")
 	out, _ = h.box(ctx, "root", fmt.Sprintf(`runuser -u work -- git -C %s log -1 --format=%%s refs/remotes/agents/builder; ls /tmp/portenv-markers`, project))
 	if !strings.HasPrefix(out, "after the move") || strings.Contains(out, workUID+"-") {
-		h.fatal("step 10: builder's branch after the move, or a marker of work's:\n%s", out)
+		h.fatal("step 11: builder's branch after the move, or a marker of work's:\n%s", out)
 	}
-	t.Log("step 10: after the move every check passes again: lead refused, team reads only, builder's branch fetched, no marker of work's")
+	t.Log("step 11: after the move every check passes again: lead refused, team reads only, builder's branch fetched, no marker of work's")
 }
 
 // waitRunning waits for portenvd to list the agent as running (or needing
@@ -829,4 +834,107 @@ func (h *harness) cleanup() {
 	// container.
 	_ = exec.Command("docker", "run", "--rm", "-v", h.root+":/scratch", "--entrypoint", "rm", h.image, "-rf", "/scratch/mac/Repositories").Run() // #nosec G204 -- the test's scratch folder
 	_ = os.RemoveAll(h.root)
+}
+
+// Step 6 (CC-0498): a message wakes an idle agent. builder's runner
+// becomes a stand-in named claude, so the runner table's claude pattern
+// applies: it waits at "> " alone, as Claude Code's empty input does, and
+// echoes each line typed in, then reads its inbox, as a woken runner
+// would. The owner's message must bring Portenv's fixed line, and only
+// that line, into builder's own main pane.
+const (
+	wakeRunner = project + "/wake/claude"
+	wakeText   = "CC-0498 wake check: build the parser"
+	wakeLine   = "[Portenv] new message from the owner; run portenv inbox"
+)
+
+const wakeStandIn = `#!/bin/bash
+while IFS= read -r -p '> ' line; do
+  echo "wake-read: $line"
+  if out=$(portenv inbox 2>&1); then
+    echo "wake-inbox ok, $(printf '%s\n' "$out" | grep -c .) lines"
+  else
+    echo "wake-inbox failed"
+  fi
+done
+exec sleep 1000000
+`
+
+func (h *harness) wakeOnMessage(ctx context.Context, c daemonv1.DaemonServiceClient) {
+	out, code := h.box(ctx, "work", fmt.Sprintf(`set -eu
+cd %[1]s
+mkdir -p wake
+cat > %[2]s <<'EOF'
+%[3]sEOF
+chmod 0755 wake %[2]s
+sed -i 's|^runner: .*$|runner: %[2]s|' .portenv/agents/reviewer.md
+grep -q '^runner: %[2]s$' .portenv/agents/reviewer.md`, project, wakeRunner, wakeStandIn))
+	if code != 0 {
+		h.fatal("step 9 (reviewer's stand-in runner): exit %d: %s", code, out)
+	}
+	var reviewer *daemonv1.AgentInfo
+	for range 60 {
+		r, err := c.ListAgents(ctx, &daemonv1.ListAgentsRequest{Name: workspace})
+		if err == nil {
+			for _, a := range r.GetAgents() {
+				if a.GetId() == "reviewer" && a.GetRunner() == wakeRunner && a.GetFileSha256() != "" {
+					reviewer = a
+				}
+			}
+		}
+		if reviewer != nil {
+			break
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	if reviewer == nil {
+		h.fatal("step 9: portenvd doesn't list reviewer with runner %s", wakeRunner)
+	}
+	if off := reviewer.GetRoutinesOff(); off != "" {
+		h.fatal("step 9: reviewer's runner is claude, but its row says %q", off)
+	}
+	if _, err := c.ApproveAgentFile(ctx, &daemonv1.ApproveAgentFileRequest{Name: workspace, AgentId: "reviewer", FileSha256: reviewer.GetFileSha256()}); err != nil {
+		h.fatal("step 9 (approve reviewer): %v", err)
+	}
+	if _, err := c.StartAgent(ctx, &daemonv1.StartAgentRequest{Name: workspace, AgentId: "reviewer"}); err != nil {
+		h.fatal("step 9 (start reviewer): %v", err)
+	}
+	h.agentPane(ctx, "reviewer", ">", time.Minute)
+	if _, err := c.SendMessage(ctx, &daemonv1.SendMessageRequest{Name: workspace, To: "reviewer", Text: wakeText}); err != nil {
+		h.fatal("step 9 (the owner's message to reviewer): %v", err)
+	}
+	pane := h.agentPane(ctx, "reviewer", "wake-inbox", 2*time.Minute)
+	if !strings.Contains(pane, "wake-read: "+wakeLine) || !strings.Contains(pane, "wake-inbox ok") {
+		h.fatal("step 9: reviewer's pane didn't read the wake line, then its inbox:\n%s", pane)
+	}
+	if strings.Contains(pane, wakeText) {
+		h.fatal("step 9: the message's text reached reviewer's pane:\n%s", pane)
+	}
+	if n := strings.Count(pane, "wake-read: "); n != 1 {
+		h.fatal("step 9: reviewer's pane read %d lines, want one wake line:\n%s", n, pane)
+	}
+	for _, l := range strings.Split(pane, "\n") {
+		if strings.Contains(l, "wake-") {
+			h.t.Logf("step 9: reviewer's pane: %s", strings.TrimSpace(l))
+		}
+	}
+}
+
+// agentPane reads an agent's main pane, as root in the harness, until it
+// shows want.
+func (h *harness) agentPane(ctx context.Context, agent, want string, within time.Duration) string {
+	var out string
+	end := time.Now().Add(within)
+	for time.Now().Before(end) {
+		var code int
+		out, code = h.box(ctx, "root", `sock=$(find /run/portenv-team/`+agent+` -type s -name default | head -n 1)
+[ -n "$sock" ] || { echo "no tmux socket under /run/portenv-team/`+agent+`"; exit 1; }
+tmux -S "$sock" capture-pane -p -J -t main -S -200`)
+		if code == 0 && strings.Contains(out, want) {
+			return out
+		}
+		time.Sleep(time.Second)
+	}
+	h.fatal("step 6: %s's pane never showed %q:\n%s", agent, want, out)
+	return ""
 }

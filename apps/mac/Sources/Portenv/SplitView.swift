@@ -15,6 +15,8 @@ struct SplitPanes: View {
     let provider: any TabTerminalProvider
     let generation: Int
     let box: String
+    /// The team, so a pane names whose tab it shows (R-0314).
+    var team: [TeamAgent] = []
     var serviceComing = false
 
     var body: some View {
@@ -25,7 +27,7 @@ struct SplitPanes: View {
                 ForEach(split.layout.panes, id: \.self) { pane in
                     if let frame = frames[pane], let tab = split.layout.tab(in: pane) {
                         PaneView(split: split, pane: pane, tab: tab, provider: provider, generation: generation,
-                                 box: box, serviceComing: serviceComing)
+                                 box: box, team: team, serviceComing: serviceComing)
                             .frame(width: frame.width, height: frame.height)
                             .offset(x: frame.minX, y: frame.minY)
                     }
@@ -56,14 +58,19 @@ private struct PaneView: View {
     let provider: any TabTerminalProvider
     let generation: Int
     let box: String
+    let team: [TeamAgent]
     let serviceComing: Bool
 
     private var info: TabInfo? { split.tab(in: pane) }
     private var focused: Bool { split.layout.focused == pane }
-    private var name: String { info?.name ?? "" }
-    /// VoiceOver's name: "Pane: grok tab"; with one pane, the terminal's
-    /// name as before.
-    private var label: String { split.isSplit ? SplitText.paneLabel(tab: name, status: nil) : A11y.terminal(box: box) }
+    /// The tab as the tab bar names it: an agent's with the agent's name.
+    private var name: String { info.map { TerminalLabel.title($0, team: team) } ?? "" }
+    /// VoiceOver's name, naming whose tab it is (R-0314): "Pane: Lead ·
+    /// lead tab"; with one pane, "Terminal: Lead · lead".
+    private var label: String {
+        if split.isSplit { return SplitText.paneLabel(tab: name, status: nil) }
+        return info.map { TerminalLabel.of($0, team: team) } ?? A11y.terminal(box: box)
+    }
 
     var body: some View {
         VStack(spacing: 0) {

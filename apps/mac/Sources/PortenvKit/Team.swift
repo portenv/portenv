@@ -546,3 +546,29 @@ public struct TabLabel: Equatable, Sendable {
         return TabLabel(title: "\(shown) \u{00B7} \(tab.name)", chip: chip)
     }
 }
+
+/// What VoiceOver reads for the terminal (R-0314): whose tab it shows and
+/// the tab's name, as the tab bar and the sidebar name them, so the
+/// selection and the terminal can be checked against each other: "Terminal:
+/// Lead · lead", "Terminal: You · shell".
+public enum TerminalLabel {
+    public static func of(_ tab: TabInfo, team: [TeamAgent]) -> String {
+        "Terminal: \(title(tab, team: team))"
+    }
+
+    /// The tab's owner and name: an agent's as its tab shows it (its name
+    /// and the tab's), the owner's as "You · shell".
+    public static func title(_ tab: TabInfo, team: [TeamAgent]) -> String {
+        tab.agentID.isEmpty ? "You \u{00B7} \(tab.name)" : TabLabel.of(tab, team: team) { _ in false }.title
+    }
+
+    /// The terminal while the selection has no tab to show: never another
+    /// agent's pane.
+    public static func noTab(_ selection: TeamSelection, team: [TeamAgent]) -> String {
+        if case .agent(let id) = selection {
+            let name = team.first { $0.id == id }.map { $0.name.isEmpty ? id : $0.name } ?? id
+            return "\(name) has no tab open"
+        }
+        return "No tab open"
+    }
+}

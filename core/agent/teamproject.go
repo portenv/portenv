@@ -76,20 +76,116 @@ func (t *TeamUsers) PrepareProject(ctx context.Context, projectDir string) ([]st
 		return nil, cmdError("open the project to the team", out, err)
 	}
 	if fi, err := os.Lstat(filepath.Join(project, ".git")); err == nil && fi.IsDir() {
-		// Agents run git in work's repository: allow it for this one only.
-		if out, err := t.Run.Run(ctx, nil, "git", "config", "--system", "--add", "safe.directory", projectDir); err != nil {
-			return nil, cmdError("let agents use the project's git repository", out, err)
+		// Agents run git in work's repository: allow it for this one, and
+		// for work's own worktrees inside it (CC-0493), each named, each
+		// once.
+		if err := t.trustRepositories(ctx, append([]string{projectDir}, t.worktrees(project, projectDir)...)); err != nil {
+			return nil, err
 		}
 	}
 	return fixed, nil
+}
+
+// trustRepositories adds each folder to git's system safe.directory, if
+// it isn't there.
+func (t *TeamUsers) trustRepositories(ctx context.Context, dirs []string) error {
+	// git config --get-all exits 1 when there's none yet.
+	out, _ := t.Run.Run(ctx, nil, "git", "config", "--system", "--get-all", "safe.directory")
+	have := strings.Split(strings.TrimSpace(string(out)), "\n")
+	for _, d := range dirs {
+		if slices.Contains(have, d) {
+			continue
+		}
+		if out, err := t.Run.Run(ctx, nil, "git", "config", "--system", "--add", "safe.directory", d); err != nil {
+			return cmdError("let agents use the project's git repository", out, err)
+		}
+		have = append(have, d)
+	}
+	return nil
+}
+
+// worktrees are work's git worktrees inside the project, as git names
+// them (under projectDir), for safe.directory: agents get "dubious
+// ownership" in a worktree work owns, as in the project. Only a worktree
+// git registered in the project's .git/worktrees, that's a real folder
+// inside the project (not in .git, no link on the way), and whose folder,
+// .git file and registration are all work's, and agree with each other,
+// is named. An agent can't make files that are work's, so it can't get
+// a folder of its own trusted here; never "<project>/*", which would
+// trust an agent's repository for work too. init reads these as root,
+// so every file is opened without following a link, and small.
+func (t *TeamUsers) worktrees(project, projectDir string) []string {
+	ownerOf := t.ownerOf
+	if ownerOf == nil {
+		ownerOf = fileOwner
+	}
+	mine := func(p string, dir bool) bool {
+		fi, err := os.Lstat(p)
+		return err == nil && fi.IsDir() == dir && (dir || fi.Mode().IsRegular()) && ownerOf(p) == t.Cfg.UID
+	}
+	reg := filepath.Join(project, ".git", "worktrees")
+	if !mine(filepath.Join(project, ".git"), true) || !mine(reg, true) {
+		return nil
+	}
+	entries, err := os.ReadDir(reg)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, e := range entries {
+		name := e.Name()
+		if !mine(filepath.Join(reg, name), true) || !mine(filepath.Join(reg, name, "gitdir"), false) {
+			continue
+		}
+		b, err := readNoFollow(filepath.Join(reg, name), "gitdir", 4096)
+		if err != nil {
+			continue
+		}
+		gitFile := strings.TrimSuffix(string(b), "\n")
+		rel, ok := strings.CutPrefix(gitFile, projectDir+"/")
+		if !ok || path.Clean(gitFile) != gitFile || path.Base(rel) != ".git" || path.Dir(rel) == "." || strings.HasPrefix(rel, ".git/") {
+			continue
+		}
+		wt := path.Dir(rel)
+		real := true
+		for p := wt; p != "."; p = path.Dir(p) {
+			if !mine(filepath.Join(project, filepath.FromSlash(p)), true) {
+				real = false
+				break
+			}
+		}
+		local := filepath.Join(project, filepath.FromSlash(wt))
+		if !real || !mine(filepath.Join(local, ".git"), false) {
+			continue
+		}
+		g, err := readNoFollow(local, ".git", 4096)
+		if err != nil || strings.TrimSuffix(string(g), "\n") != "gitdir: "+projectDir+"/.git/worktrees/"+name {
+			continue
+		}
+		out = append(out, projectDir+"/"+wt)
+	}
+	return out
+}
+
+// fileOwner is a path's owner, without following a link.
+func fileOwner(p string) int {
+	fi, err := os.Lstat(p)
+	if err != nil {
+		return -1
+	}
+	if st, ok := fi.Sys().(*syscall.Stat_t); ok {
+		return int(st.Uid)
+	}
+	return -1
 }
 
 // errNoACL is the plain line when the filesystem won't keep ACLs.
 var errNoACL = errors.New("this workspace's files don't keep ACLs, so agents can't share the project. Portenv won't start the team")
 
 // openProject is team-io open-project, run as work: group team, setgid
-// and default ACLs on the project, the protected paths closed again, git's
-// shared repository, and /home/work made passable (0711).
+// and default ACLs on the project, git's shared repository, the protected
+// paths closed again (readable by the team, never writable: agents read
+// .git/config to use git, CC-0493), and /home/work made passable (0711).
 //
 // It walks the tree through descriptors: each entry is opened from its
 // folder's descriptor without following a link, checked to be the file
@@ -132,6 +228,12 @@ func openProject(ctx context.Context, project string, run Runner, ops projectOps
 			return cmdError("share the project's git repository", out, err)
 		}
 	}
+	// git rewrote .git/config (a new file, with .git's default ACL and
+	// the old mode, which can leave the team a --- mask): close the
+	// protected paths again, after it.
+	if err := w.closeProtected(top); err != nil {
+		return err
+	}
 	return chmodNoFollow(filepath.Dir(project), 0o711)
 }
 
@@ -143,6 +245,7 @@ type projectOps struct {
 	owner    func(rel string, st *unix.Stat_t) int
 	chown    func(f *os.File, gid int) error
 	addACL   func(f *os.File, dir bool) error                      // setfacl -m g:team:rwX (and d:g:team:rwX on a folder)
+	readACL  func(f *os.File, dir bool) error                      // on a file without one: setfacl -m g:team:rX (and d:g:team:rX on a folder)
 	clearACL func(f *os.File, dir bool) (fs.FileMode, bool, error) // setfacl -b: the owning group's bits, and whether it had an ACL
 }
 
@@ -197,57 +300,93 @@ func openEntry(dir *os.File, name, full string, st *unix.Stat_t) (f *os.File, ok
 }
 
 // collectProtected notes every file at or under the protected paths, so
-// a hard link to one elsewhere in the project stays closed too. A
-// protected path, or a folder on the way to one, that's a link is
-// refused: git would follow it.
+// a hard link to one elsewhere in the project stays closed too.
 func (w *projectWalk) collectProtected(top *os.File) error {
 	for _, p := range protectedInProject {
-		if err := w.collectPath(top, p); err != nil {
+		f, st, err := openProtected(top, p)
+		if err != nil || f == nil {
+			return err
+		}
+		w.protected[idOf(&st)] = true
+		if statType(&st) == unix.S_IFDIR {
+			err = w.collectUnder(f)
+		}
+		_ = f.Close()
+		if err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (w *projectWalk) collectPath(top *os.File, p string) error {
-	var opened []*os.File
-	defer func() {
-		for _, f := range opened {
-			_ = f.Close()
+// closeProtected closes each protected path, and all under it, to the
+// team's writes, leaving them readable.
+func (w *projectWalk) closeProtected(top *os.File) error {
+	for _, p := range protectedInProject {
+		f, st, err := openProtected(top, p)
+		if err != nil || f == nil {
+			return err
 		}
-	}()
+		dir := statType(&st) == unix.S_IFDIR
+		if uid := w.ops.uidOf(p, &st); uid != w.ops.self {
+			err = fmt.Errorf("%s in the project belongs to uid %d, not to you, so an agent could have changed it. Portenv won't open the project to the team until you check it and make it yours again", p, uid)
+		} else {
+			err = w.change(f, p, dir, true)
+		}
+		if err == nil && dir {
+			err = w.walk(f, p, true)
+		}
+		_ = f.Close()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// openProtected opens the protected path p in the project one name at a
+// time from top's descriptor, never through a link; nil if it isn't
+// there. A protected path, or a folder on the way to one, that's a link
+// is refused: git would follow it.
+func openProtected(top *os.File, p string) (*os.File, unix.Stat_t, error) {
+	var st unix.Stat_t
 	dir, parts := top, strings.Split(p, "/")
+	closeDir := func() {
+		if dir != top {
+			_ = dir.Close()
+		}
+	}
 	for i, name := range parts {
-		var st unix.Stat_t
 		err := unix.Fstatat(fdOf(dir), name, &st, unix.AT_SYMLINK_NOFOLLOW)
 		if errors.Is(err, unix.ENOENT) || errors.Is(err, unix.ENOTDIR) {
-			return nil
+			closeDir()
+			return nil, st, nil
 		}
 		if err != nil {
-			return fmt.Errorf("check %s: %w", p, err)
+			closeDir()
+			return nil, st, fmt.Errorf("check %s: %w", p, err)
 		}
-		switch typ := statType(&st); {
-		case typ == unix.S_IFLNK:
-			return fmt.Errorf("%s in the project is a link; Portenv won't open the project to the team until it's a real file or folder", path.Join(parts[:i+1]...))
-		case i == len(parts)-1:
-			w.protected[idOf(&st)] = true
-			if typ != unix.S_IFDIR {
-				return nil
-			}
-		case typ != unix.S_IFDIR:
-			return nil // .git as a file (a worktree's): nothing to protect under it
+		typ := statType(&st)
+		if typ == unix.S_IFLNK {
+			closeDir()
+			return nil, st, fmt.Errorf("%s in the project is a link; Portenv won't open the project to the team until it's a real file or folder", path.Join(parts[:i+1]...))
+		}
+		last := i == len(parts)-1
+		if (!last && typ != unix.S_IFDIR) || (last && typ != unix.S_IFDIR && typ != unix.S_IFREG) {
+			closeDir()
+			return nil, st, nil // .git as a file (a worktree's): nothing to protect under it
 		}
 		f, ok, err := openEntry(dir, name, filepath.Join(dir.Name(), name), &st)
+		closeDir()
 		if err != nil {
-			return fmt.Errorf("check %s: %w", p, err)
+			return nil, st, fmt.Errorf("check %s: %w", p, err)
 		}
 		if !ok {
-			return fmt.Errorf("%s changed while Portenv opened the project to the team; try again", p)
+			return nil, st, fmt.Errorf("%s changed while Portenv opened the project to the team; try again", p)
 		}
-		opened = append(opened, f)
 		dir = f
 	}
-	return w.collectUnder(dir)
+	return dir, st, nil
 }
 
 func (w *projectWalk) collectUnder(dir *os.File) error {
@@ -344,6 +483,10 @@ func (w *projectWalk) change(f *os.File, rel string, dir, protected bool) error 
 	}
 	perm := fi.Mode().Perm()
 	if protected {
+		// Readable by the team, never writable: group team, the owner's
+		// read and search bits for the group, and ACL entry g:team:rX with
+		// a mask to match, so agents can read .git/config and run the
+		// hooks, and can't change either (CC-0493).
 		g, had, err := w.ops.clearACL(f, dir)
 		if err != nil {
 			return fmt.Errorf("close %s to the team: %w", rel, err)
@@ -351,7 +494,16 @@ func (w *projectWalk) change(f *os.File, rel string, dir, protected bool) error 
 		if had {
 			perm = perm&^0o070 | g
 		}
-		return f.Chmod(perm &^ 0o022)
+		if err := w.ops.chown(f, TeamGID); err != nil {
+			return fmt.Errorf("give %s to the team to read: %w", rel, err)
+		}
+		if err := f.Chmod(perm&0o700 | (perm&0o500)>>3 | perm&0o005); err != nil {
+			return err
+		}
+		if err := w.ops.readACL(f, dir); err != nil {
+			return fmt.Errorf("let the team read %s: %w", rel, err)
+		}
+		return nil
 	}
 	if err := w.ops.chown(f, TeamGID); err != nil {
 		return fmt.Errorf("give %s to the team: %w", rel, err)

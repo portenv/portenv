@@ -209,14 +209,97 @@ public final class TabsController {
     /// A close waiting for the person (the tab runs a program).
     public private(set) var pendingClose: PendingClose?
 
-    /// The tab the terminal shows.
+    /// The tab portenvd shows this app (at most one is active). The
+    /// terminal never reads this directly: it shows `terminalTab`.
     public var current: TabInfo? { tabs.first { $0.active } }
+
+    /// What the Team sidebar selects (R-0241, R-0314): the tab bar and the
+    /// terminal both read it from here, so they can't disagree. Set with
+    /// `view(_:)`.
+    public private(set) var selection: TeamSelection = .allTabs
+
+    /// Told when this controller widens the selection itself, to .allTabs:
+    /// a tab outside an agent's filter became current (a new tab, a click
+    /// in a split pane showing another agent's tab), so the sidebar
+    /// follows.
+    @ObservationIgnored public var selectionWidened: (@MainActor (TeamSelection) -> Void)?
+
+    /// The tab each agent and the owner last had current, to go back to.
+    @ObservationIgnored private var lastOwnTab: String?
+    @ObservationIgnored private var lastAgentTab: [String: String] = [:]
+
+    /// The tabs the tab bar shows for the selection.
+    public var shownTabs: [TabInfo] { shown(for: selection) }
+
+    /// The one tab the terminal (the focused pane, when split) shows and the
+    /// tab bar marks current (R-0314): the current tab, only while it is in
+    /// the bar. Nil while it isn't (the selected agent has no tab open): the
+    /// terminal shows an empty state then, never another agent's pane.
+    public var terminalTab: TabInfo? {
+        guard let c = current, shownTabs.contains(where: { $0.id == c.id }) else { return nil }
+        return c
+    }
+
+    /// The owner chose something in the Team sidebar (or All tabs): the
+    /// tab bar filters to it, and the terminal switches with it at once.
+    /// An agent: its tab last shown, or its first. All tabs or You: the
+    /// owner's tab last shown, or their first. Nothing changes for the same
+    /// selection, or when what's current already belongs to it.
+    @discardableResult
+    public func view(_ s: TeamSelection) -> Task<Void, Never>? {
+        guard s != selection else { return nil }
+        selection = s
+        remember()
+        guard let id = target(for: s) else { return nil }
+        return choose(id)
+    }
+
+    /// The tab to show for a selection, or nil to leave the terminal as it
+    /// is (what's current already belongs to it, or there's nothing to
+    /// show).
+    private func target(for s: TeamSelection) -> String? {
+        let exists = { (id: String?) in id.flatMap { id in self.tabs.contains { $0.id == id } ? id : nil } }
+        switch s {
+        case .agent(let agent):
+            if current?.agentID == agent { return nil }
+            let mine = lastAgentTab[agent].flatMap { id in self.tabs.contains { $0.id == id && $0.agentID == agent } ? id : nil }
+            return mine ?? tabs.first { $0.agentID == agent }?.id
+        case .allTabs, .you:
+            if let c = current, c.agentID.isEmpty { return nil }
+            return exists(lastOwnTab) ?? tabs.first { $0.agentID.isEmpty }?.id
+        case .decision, .activity:
+            return current == nil ? tabs.first?.id : nil
+        }
+    }
+
+    /// Keeps the terminal on a tab the bar shows after the tabs changed
+    /// underneath (an agent's tab closed, portenvd went back to the
+    /// owner's): the selected agent's other tab, or the owner's. An agent
+    /// starting doesn't change what's current, so it never moves the view
+    /// (PLAN 4b).
+    private func tabsUpdated() {
+        remember()
+        if terminalTab == nil, let id = target(for: selection) { choose(id) }
+    }
+
+    private func remember() {
+        guard let c = current else { return }
+        if c.agentID.isEmpty { lastOwnTab = c.id } else { lastAgentTab[c.agentID] = c.id }
+    }
+
+    /// The selection goes back to every tab, so the bar shows what's
+    /// current.
+    private func widenIfHidden(_ id: String) {
+        guard !shownTabs.contains(where: { $0.id == id }) else { return }
+        selection = .allTabs
+        selectionWidened?(.allTabs)
+    }
 
     /// The tabs to show for what the Team sidebar selects (R-0241): every
     /// tab, the owner's own, or one agent's.
     public func shown(for selection: TeamSelection) -> [TabInfo] {
         switch selection {
-        case .allTabs, .decision: tabs
+        case .allTabs, .decision, .activity: tabs
         case .you: tabs.filter { $0.agentID.isEmpty }
         case .agent(let id): tabs.filter { $0.agentID == id }
         }
@@ -224,7 +307,10 @@ public final class TabsController {
 
     /// Reads the tabs once.
     public func load() async {
-        if let ts = try? await daemon.tabs(box) { tabs = ts }
+        if let ts = try? await daemon.tabs(box) {
+            tabs = ts
+            tabsUpdated()
+        }
     }
 
     /// Follows the tabs as the box agent reports them, watching again after
@@ -235,6 +321,7 @@ public final class TabsController {
             do {
                 for try await ts in daemon.watchTabs(box) {
                     tabs = ts
+                    tabsUpdated()
                     for f in commands.update(ts, at: now()) { commandFinished?(f) }
                 }
             } catch {}
@@ -253,6 +340,7 @@ public final class TabsController {
             let t = try await self.daemon.newTab(self.box, name: name)
             if !self.tabs.contains(where: { $0.id == t.id }) { self.tabs.append(t) }
             self.show(t.id)
+            self.widenIfHidden(t.id)
             made = t
         }
         return made
@@ -260,7 +348,10 @@ public final class TabsController {
 
     /// Takes the tabs as the box agent reported them, as `follow` does
     /// (renders and tests).
-    public func receive(_ ts: [TabInfo]) { tabs = ts }
+    public func receive(_ ts: [TabInfo]) {
+        tabs = ts
+        tabsUpdated()
+    }
 
     /// Closes a tab, never the last one.
     public func close(_ id: String) async {
@@ -269,7 +360,7 @@ public final class TabsController {
             try await self.daemon.closeTab(self.box, id: id)
             let wasActive = self.tabs.first { $0.id == id }?.active ?? false
             self.tabs.removeAll { $0.id == id }
-            if wasActive, let last = self.tabs.last { self.show(last.id) }
+            if wasActive, let last = self.shownTabs.last ?? self.tabs.last { self.show(last.id) }
         }
     }
 
@@ -293,11 +384,12 @@ public final class TabsController {
         return ok
     }
 
-    /// ⌘1–⌘9: the tab at that position (from 1); past the last tab,
-    /// nothing.
+    /// ⌘1–⌘9: the tab at that position in the bar (from 1); past the last
+    /// tab, nothing.
     public func select(number n: Int) async {
-        guard n >= 1, n <= tabs.count else { return }
-        await select(tabs[n - 1].id)
+        let shown = shownTabs
+        guard n >= 1, n <= shown.count else { return }
+        await select(shown[n - 1].id)
     }
 
     /// ⌘⇧]: the next tab, wrapping around.
@@ -306,18 +398,23 @@ public final class TabsController {
     /// ⌘⇧[: the previous tab, wrapping around.
     public func selectPrevious() async { await step(-1) }
 
+    /// Steps through the tabs the bar shows, never to one it hides.
     private func step(_ by: Int) async {
-        guard !tabs.isEmpty else { return }
-        let i = tabs.firstIndex { $0.active } ?? 0
-        await select(tabs[(i + by + tabs.count) % tabs.count].id)
+        let shown = shownTabs
+        guard !shown.isEmpty else { return }
+        guard let i = shown.firstIndex(where: { $0.active }) else {
+            await select(shown[by > 0 ? 0 : shown.count - 1].id)
+            return
+        }
+        await select(shown[(i + by + shown.count) % shown.count].id)
     }
 
-    /// ⌘W, the close button and Close Tab: closes a tab (the current one by
-    /// default). The last tab closes the window instead. A tab that still
+    /// ⌘W, the close button and Close Tab: closes a tab (the one the
+    /// terminal shows by default; none while it shows no tab). The last tab closes the window instead. A tab that still
     /// runs a program asks first; which program comes from the box agent
     /// now, not from the last update.
     public func requestClose(id: String? = nil) async -> CloseResult {
-        guard let id = id ?? current?.id else { return .nothing }
+        guard let id = id ?? terminalTab?.id else { return .nothing }
         guard canClose else { return .closeWindow }
         let fresh = (try? await daemon.tabs(box)) ?? tabs
         let program = fresh.first { $0.id == id }?.program ?? ""
@@ -348,12 +445,14 @@ public final class TabsController {
     /// Marks a tab current at once, and tells portenvd after (split view's
     /// focus, which can't wait for the answer). Nil when there's nothing to
     /// do: the tab is current already, or gone. A refusal puts the tabs
-    /// back as they were.
+    /// back as they were. A tab the bar hides (a split pane showing another
+    /// agent's tab) widens the selection to every tab, so the bar marks it.
     @discardableResult
     public func choose(_ id: String) -> Task<Void, Never>? {
         guard tabs.contains(where: { $0.id == id && !$0.active }) else { return nil }
         let before = tabs
         show(id)
+        widenIfHidden(id)
         return Task {
             await perform {
                 do {
@@ -370,6 +469,7 @@ public final class TabsController {
 
     private func show(_ id: String) {
         for i in tabs.indices { tabs[i].active = tabs[i].id == id }
+        remember()
     }
 
     private func perform(_ action: @MainActor () async throws -> Void) async {

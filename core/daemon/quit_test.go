@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -46,20 +47,87 @@ func TestTheQuitMarker(t *testing.T) {
 	}
 }
 
-// TestShutdownWaitsForBoxesStillOpening: closeAll waits for an open in
-// progress (so that box is closed too, not left half open), and once
-// shutdown has begun no new open starts.
-func TestShutdownWaitsForBoxesStillOpening(t *testing.T) {
+// TestAShutdownLeavesEveryWorkspaceRunning (R-0252, ADR 0023): portenvd
+// stopping (SIGTERM: launchctl bootout, logout, an update) never saves,
+// releases or stops a workspace. Each open one keeps running for the next
+// portenvd to take over with its tabs, gets the quit marker so that open
+// saves first thing, and is logged as a close with reason=shutdown, by
+// workspace ID. No new open starts meanwhile. (Before, every workspace was
+// saved, released and stopped, and its programs were lost.)
+func TestAShutdownLeavesEveryWorkspaceRunning(t *testing.T) {
+	dir, err := os.MkdirTemp("", "pd") // short: a Unix socket path has 103 bytes
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	var logs syncBuffer
+	// Logged as portenvd logs (cmd/portenvd), so the line checked here is
+	// the one in its log, the one tests/e2e/daemon.sh greps for.
+	s := New(&local.Env{Dir: dir, Machine: "mac-1"}, slog.New(slog.NewTextHandler(&logs, nil)).With("component", "portenvd"))
+	c := boxWithState(t, s, "")
+	// No sync engine and no driver: a save, release or stop would panic.
+	ob := &openBox{sess: &local.Session{Cfg: c}}
+	s.open[c.Name] = ob
+	ctx, cancel := context.WithCancel(context.Background())
+	served := make(chan error, 1)
+	go func() { served <- s.Serve(ctx) }()
+	for range 50 {
+		if _, err := os.Stat(filepath.Join(dir, SocketName)); err == nil {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	cancel() // what SIGTERM does
+	select {
+	case err := <-served:
+		if err != nil {
+			t.Fatalf("Serve: %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("portenvd kept serving after its shutdown")
+	}
+	ob.mu.Lock()
+	closed := ob.closed
+	ob.mu.Unlock()
+	if closed {
+		t.Fatal("the shutdown closed the workspace")
+	}
+	if !s.hasQuitMarker(c.ID) {
+		t.Fatal("no quit marker: the next open won't save first thing")
+	}
+	if _, err := s.startOpening(); status.Code(err) != codes.Unavailable {
+		t.Fatalf("an open during shutdown: %v, want Unavailable", err)
+	}
+	l := logs.String()
+	if !strings.Contains(l, "msg=close component=portenvd box_id="+c.ID+` reason=shutdown action="left running"`) {
+		t.Fatalf("log %q, want the close entry line with reason=shutdown", l)
+	}
+	for _, never := range []string{"close saved", "close released"} {
+		if strings.Contains(l, never) {
+			t.Fatalf("log %q has %q", l, never)
+		}
+	}
+	for _, line := range strings.Split(l, "\n") {
+		if strings.Contains(line, "msg=close") && strings.Contains(line, dir) {
+			t.Fatalf("a close line names a path: %q", line)
+		}
+	}
+}
+
+// TestShutdownWaitsForWorkspacesStillOpening: the shutdown waits for an
+// open in progress (so that workspace is marked too, not left half
+// opened), and once it has begun no new open starts.
+func TestShutdownWaitsForWorkspacesStillOpening(t *testing.T) {
 	s := quietServer(t)
 	done, err := s.startOpening()
 	if err != nil {
 		t.Fatal(err)
 	}
-	closed := make(chan struct{})
-	go func() { s.closeAll(); close(closed) }()
+	finished := make(chan struct{})
+	go func() { s.shutdown(); close(finished) }()
 	select {
-	case <-closed:
-		t.Fatal("closeAll finished while a box was still opening")
+	case <-finished:
+		t.Fatal("the shutdown finished while a workspace was still opening")
 	case <-time.After(300 * time.Millisecond):
 	}
 	if _, err := s.startOpening(); status.Code(err) != codes.Unavailable {
@@ -67,10 +135,28 @@ func TestShutdownWaitsForBoxesStillOpening(t *testing.T) {
 	}
 	done()
 	select {
-	case <-closed:
+	case <-finished:
 	case <-time.After(5 * time.Second):
-		t.Fatal("closeAll did not finish after the open ended")
+		t.Fatal("the shutdown didn't finish after the open ended")
 	}
+}
+
+// syncBuffer is a log buffer written by Serve's goroutines.
+type syncBuffer struct {
+	mu sync.Mutex
+	b  strings.Builder
+}
+
+func (w *syncBuffer) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.b.Write(p)
+}
+
+func (w *syncBuffer) String() string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.b.String()
 }
 
 // TestOneDaemonAtATime: a second portenvd (or runner) on the same Portenv
@@ -95,7 +181,7 @@ func TestOneDaemonAtATime(t *testing.T) {
 }
 
 // TestRelaunchLeavesBoxesRunning: when Portenv relaunches for an update,
-// portenvd stops serving without closing its boxes (closeAll never runs),
+// portenvd stops serving without closing its boxes or marking them,
 // so the next portenvd takes them over (ADR 0014). No new open starts
 // meanwhile.
 func TestRelaunchLeavesBoxesRunning(t *testing.T) {
@@ -131,7 +217,7 @@ func TestRelaunchLeavesBoxesRunning(t *testing.T) {
 	closed := s.stopping
 	s.mu.Unlock()
 	if closed {
-		t.Fatal("relaunching closed the boxes (closeAll ran)")
+		t.Fatal("relaunching ran the shutdown")
 	}
 }
 

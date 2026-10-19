@@ -336,6 +336,12 @@ func TeamIO(args []string, stdin io.Reader, stdout io.Writer) error {
 			return errors.New("read-home HOME PATH")
 		}
 		return homeRead(dir, args[2], stdout)
+	case "seed-home":
+		// As the agent, at its start (ADR 0022 §2).
+		if len(args) < 4 {
+			return errors.New("seed-home PROJECT HOME QUOTA PATH…")
+		}
+		return seedHome(dir, args[2], args[3], args[4:], stdout)
 	case "write-home":
 		if len(args) != 4 {
 			return errors.New("write-home HOME PATH QUOTA")

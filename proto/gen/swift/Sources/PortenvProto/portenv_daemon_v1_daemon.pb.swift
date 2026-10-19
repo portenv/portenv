@@ -2411,6 +2411,10 @@ public nonisolated struct Portenv_Daemon_V1_AnswerDecisionRequest: Sendable {
 
   public var choiceLabel: String = String()
 
+  /// For a team_start decision with migration items: the items to remove
+  /// (their ids). Every other item is kept: it becomes the owner's.
+  public var removeItems: [String] = []
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -6877,7 +6881,7 @@ nonisolated extension Portenv_Daemon_V1_StopAgentResponse: SwiftProtobuf.Message
 
 nonisolated extension Portenv_Daemon_V1_AnswerDecisionRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".AnswerDecisionRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{3}decision_id\0\u{1}approve\0\u{1}note\0\u{1}choice\0\u{3}choice_label\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{3}decision_id\0\u{1}approve\0\u{1}note\0\u{1}choice\0\u{3}choice_label\0\u{3}remove_items\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -6891,6 +6895,7 @@ nonisolated extension Portenv_Daemon_V1_AnswerDecisionRequest: SwiftProtobuf.Mes
       case 4: try { try decoder.decodeSingularStringField(value: &self.note) }()
       case 5: try { try decoder.decodeSingularInt32Field(value: &self.choice) }()
       case 6: try { try decoder.decodeSingularStringField(value: &self.choiceLabel) }()
+      case 7: try { try decoder.decodeRepeatedStringField(value: &self.removeItems) }()
       default: break
       }
     }
@@ -6915,6 +6920,9 @@ nonisolated extension Portenv_Daemon_V1_AnswerDecisionRequest: SwiftProtobuf.Mes
     if !self.choiceLabel.isEmpty {
       try visitor.visitSingularStringField(value: self.choiceLabel, fieldNumber: 6)
     }
+    if !self.removeItems.isEmpty {
+      try visitor.visitRepeatedStringField(value: self.removeItems, fieldNumber: 7)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -6925,6 +6933,7 @@ nonisolated extension Portenv_Daemon_V1_AnswerDecisionRequest: SwiftProtobuf.Mes
     if lhs.note != rhs.note {return false}
     if lhs.choice != rhs.choice {return false}
     if lhs.choiceLabel != rhs.choiceLabel {return false}
+    if lhs.removeItems != rhs.removeItems {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

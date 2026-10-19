@@ -101,7 +101,10 @@ type apiServer struct {
 	// idle-input pattern (SetAgentIdleInput; nil in tests).
 	setAgentIdleInput func(id, pattern string) error
 	// prepareProject asks init to open the project to the team.
-	prepareProject func(ctx context.Context, projectDir string) ([]string, error)
+	prepareProject func(ctx context.Context, req *agentv1.PrepareTeamProjectRequest) (*agentv1.PrepareTeamProjectResponse, error)
+	// resolveMigration asks init to carry out the owner's answer to the
+	// move to agents' own clones.
+	resolveMigration func(ctx context.Context, req *agentv1.ResolveTeamMigrationRequest) error
 	// now is the clock (nil: time.Now).
 	now func() time.Time
 }
@@ -131,7 +134,7 @@ func (s *apiServer) ctlHub() (*ctlHub, error) {
 // newChannelServer serves the API with the channel's current secrets.
 func newChannelServer(cfg Config, keys *channelKeys) *grpc.Server {
 	s := &apiServer{cfg: cfg, keys: keys, tmux: tmuxAs, tmuxCmd: tmuxCmdAs, team: newTeamHub(TeamRunDir),
-		users: initUsers{socket: DefaultSocket}, writeAsUser: writeFileAsUser, killUID: killAgentUID, prepareProject: askInitPrepare(DefaultSocket)}
+		users: initUsers{socket: DefaultSocket}, writeAsUser: writeFileAsUser, killUID: killAgentUID, prepareProject: askInitPrepare(DefaultSocket), resolveMigration: askInitResolve(DefaultSocket)}
 	s.agentTmux = agentAs
 	s.startAgentServer, s.stopAgentServer = s.StartAgentTerminals, s.StopAgentTerminals
 	s.setAgentIdleInput = s.SetAgentIdleInput

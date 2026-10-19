@@ -30,21 +30,24 @@ import (
 type fakeTeamHelper struct {
 	agentv1.AgentServiceClient
 
-	mu         sync.Mutex
-	board      []*agentv1.AppendBoardRequest
-	panes      []*agentv1.AgentPaneActionRequest
-	started    []*agentv1.StartTeamAgentRequest
-	stopped    []string
-	nextPane   int
-	handoffs   []*agentv1.HandoffFilesRequest
-	delivered  []*agentv1.DeliverRoutineRequest
-	busy       bool
-	prepared   []string
-	prepareErr string
-	fixed      []string
-	listed     []*agentv1.ListHomeFilesRequest
-	written    []*agentv1.WriteHomeFilesRequest
-	fetched    []*agentv1.FetchAgentBranchRequest
+	mu          sync.Mutex
+	board       []*agentv1.AppendBoardRequest
+	panes       []*agentv1.AgentPaneActionRequest
+	started     []*agentv1.StartTeamAgentRequest
+	stopped     []string
+	nextPane    int
+	handoffs    []*agentv1.HandoffFilesRequest
+	delivered   []*agentv1.DeliverRoutineRequest
+	busy        bool
+	prepared    []string
+	prepareErr  string
+	fixed       []string
+	listed      []*agentv1.ListHomeFilesRequest
+	written     []*agentv1.WriteHomeFilesRequest
+	fetched     []*agentv1.FetchAgentBranchRequest
+	migration   []*typesv1.MigrationItem
+	prepareReqs []*agentv1.PrepareTeamProjectRequest
+	resolved    []*agentv1.ResolveTeamMigrationRequest
 }
 
 func (f *fakeTeamHelper) FetchAgentBranch(_ context.Context, in *agentv1.FetchAgentBranchRequest, _ ...grpc.CallOption) (*agentv1.FetchAgentBranchResponse, error) {
@@ -1253,10 +1256,96 @@ func (f *fakeTeamHelper) PrepareTeamProject(_ context.Context, in *agentv1.Prepa
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.prepared = append(f.prepared, in.GetProjectDir())
+	f.prepareReqs = append(f.prepareReqs, in)
 	if f.prepareErr != "" {
 		return nil, status.Error(codes.FailedPrecondition, f.prepareErr)
 	}
-	return &agentv1.PrepareTeamProjectResponse{Fixed: f.fixed}, nil
+	return &agentv1.PrepareTeamProjectResponse{Fixed: f.fixed, Migration: f.migration}, nil
+}
+
+func (f *fakeTeamHelper) ResolveTeamMigration(_ context.Context, in *agentv1.ResolveTeamMigrationRequest, _ ...grpc.CallOption) (*agentv1.ResolveTeamMigrationResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.resolved = append(f.resolved, in)
+	f.migration = nil // init's record is answered
+	return &agentv1.ResolveTeamMigrationResponse{}, nil
+}
+
+// ADR 0022 §2a point 6: a team that used the shared project is moved
+// before it starts; the record waits in a team_start decision naming the
+// agents; Approve sends the owner's removals to init, then starts them.
+func TestTheMoveWaitsForTheOwnersAnswer(t *testing.T) {
+	e, h, _ := newTestEngine(t, defaultTeam()...)
+	approveFirstStart(t, e)
+	ctx := context.Background()
+	h.migration = []*typesv1.MigrationItem{
+		{Id: "m1", Path: ".git/hooks/post-checkout", Kind: "git", Agent: "builder", Choice: true},
+		{Id: "m2", Path: "lead-notes.txt", Kind: "file", Agent: "lead", Choice: true, Note: "1 files copied into lead's copy (~/w), not committed."},
+		{Id: "m3", Path: ".git/config sets core.sharedRepository", Kind: "setting", Note: "Portenv removed it."},
+	}
+	started := len(h.started)
+	if _, err := e.startAgent(ctx, "w", "lead"); err == nil || !strings.Contains(err.Error(), "own copies") {
+		t.Fatalf("start during the move: %v", err)
+	}
+	if _, err := e.startAgent(ctx, "w", "builder"); err == nil {
+		t.Fatal("builder started during the move")
+	}
+	if len(h.started) != started {
+		t.Fatalf("an agent started before the owner answered: %v", h.started[started:])
+	}
+	if got := h.prepareReqs[len(h.prepareReqs)-1]; !slices.Equal(got.GetCloneAgents(), []string{"lead", "builder", "reviewer"}) || got.GetHomeQuotaBytes() != defaultHomeQuota {
+		t.Errorf("prepare asked %v", got)
+	}
+	var d *typesv1.Decision
+	for _, x := range e.box("w").pendingLocked(boardFrom) {
+		if x.GetKind() == typesv1.DecisionKind_DECISION_KIND_TEAM_START && len(x.GetMigrationItems()) > 0 {
+			if d != nil {
+				t.Fatal("two move decisions")
+			}
+			d = x
+		}
+	}
+	if d == nil || !slices.Equal(d.GetStartAgentIds(), []string{"lead", "builder"}) || len(d.GetMigrationItems()) != 3 {
+		t.Fatalf("the move's decision: %v", d)
+	}
+	for _, want := range []string{"own copy", "lead-notes.txt (file, lead)", ".git/hooks/post-checkout (git, builder)", "Nothing is deleted until you answer"} {
+		if !strings.Contains(d.GetDetail(), want) {
+			t.Errorf("detail lacks %q:\n%s", want, d.GetDetail())
+		}
+	}
+	// A setting isn't the owner's to remove; an unknown id neither.
+	for _, bad := range [][]string{{"m3"}, {"m9"}} {
+		if _, err := e.answerWith(ctx, "w", d.GetId(), true, "", bad); err == nil {
+			t.Errorf("removing %v was accepted", bad)
+		}
+	}
+	if len(h.resolved) != 0 {
+		t.Fatalf("init was asked before a valid answer: %v", h.resolved)
+	}
+	if _, err := e.answerWith(ctx, "w", d.GetId(), true, "", []string{"m1"}); err != nil {
+		t.Fatal(err)
+	}
+	e.starts.Wait()
+	if len(h.resolved) != 1 || !slices.Equal(h.resolved[0].GetRemoveItems(), []string{"m1"}) || h.resolved[0].GetProjectDir() != "/home/work/w" {
+		t.Errorf("init got %v", h.resolved)
+	}
+	var ids []string
+	for _, r := range h.started[started:] {
+		ids = append(ids, r.GetAgentId())
+	}
+	if !slices.Equal(ids, []string{"lead", "builder"}) {
+		t.Errorf("started %v after the answer, want lead and builder", ids)
+	}
+	if !slices.ContainsFunc(h.board, func(l *agentv1.AppendBoardRequest) bool {
+		m := l.GetMessage()
+		return m.GetTo() == boardOwner && strings.Contains(m.GetText(), "Now yours: lead-notes.txt") && strings.Contains(m.GetText(), "Removed: .git/hooks/post-checkout")
+	}) {
+		t.Error("the owner wasn't told what was kept and removed")
+	}
+	// Removing items only goes with Approve on the move's decision.
+	if _, err := e.answerWith(ctx, "w", d.GetId(), false, "", []string{"m1"}); err == nil {
+		t.Error("removals with an answered or other decision were accepted")
+	}
 }
 
 // ADR 0022 §2: the project is opened to the team before its first agent

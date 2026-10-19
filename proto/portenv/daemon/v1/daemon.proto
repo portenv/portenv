@@ -975,6 +975,9 @@ message AnswerDecisionRequest {
   // a decision without choices.
   int32 choice = 5;
   string choice_label = 6;
+  // For a team_start decision with migration items: the items to remove
+  // (their ids). Every other item is kept: it becomes the owner's.
+  repeated string remove_items = 7;
 }
 
 message AnswerDecisionResponse {

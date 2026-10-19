@@ -33,6 +33,7 @@ const (
 	DriverService_Start_FullMethodName        = "/portenv.driver.v1.DriverService/Start"
 	DriverService_Stop_FullMethodName         = "/portenv.driver.v1.DriverService/Stop"
 	DriverService_Destroy_FullMethodName      = "/portenv.driver.v1.DriverService/Destroy"
+	DriverService_DeleteHome_FullMethodName   = "/portenv.driver.v1.DriverService/DeleteHome"
 	DriverService_Logs_FullMethodName         = "/portenv.driver.v1.DriverService/Logs"
 	DriverService_Stats_FullMethodName        = "/portenv.driver.v1.DriverService/Stats"
 	DriverService_SetResources_FullMethodName = "/portenv.driver.v1.DriverService/SetResources"
@@ -56,6 +57,10 @@ type DriverServiceClient interface {
 	Stop(ctx context.Context, in *StopRequest, opts ...grpc.CallOption) (*StopResponse, error)
 	// Removes the box's instance. Never deletes its home storage.
 	Destroy(ctx context.Context, in *DestroyRequest, opts ...grpc.CallOption) (*DestroyResponse, error)
+	// Deletes the box's home storage, only for Delete Workspace (ADR 0029),
+	// after Destroy: refused while the box's instance exists. Deleting
+	// storage that is already gone succeeds. Never touches another box's.
+	DeleteHome(ctx context.Context, in *DeleteHomeRequest, opts ...grpc.CallOption) (*DeleteHomeResponse, error)
 	// Streams the box's console output.
 	Logs(ctx context.Context, in *LogsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[LogsResponse], error)
 	// Returns a point-in-time snapshot of the box's state and resource use.
@@ -118,6 +123,16 @@ func (c *driverServiceClient) Destroy(ctx context.Context, in *DestroyRequest, o
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(DestroyResponse)
 	err := c.cc.Invoke(ctx, DriverService_Destroy_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *driverServiceClient) DeleteHome(ctx context.Context, in *DeleteHomeRequest, opts ...grpc.CallOption) (*DeleteHomeResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteHomeResponse)
+	err := c.cc.Invoke(ctx, DriverService_DeleteHome_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -217,6 +232,10 @@ type DriverServiceServer interface {
 	Stop(context.Context, *StopRequest) (*StopResponse, error)
 	// Removes the box's instance. Never deletes its home storage.
 	Destroy(context.Context, *DestroyRequest) (*DestroyResponse, error)
+	// Deletes the box's home storage, only for Delete Workspace (ADR 0029),
+	// after Destroy: refused while the box's instance exists. Deleting
+	// storage that is already gone succeeds. Never touches another box's.
+	DeleteHome(context.Context, *DeleteHomeRequest) (*DeleteHomeResponse, error)
 	// Streams the box's console output.
 	Logs(*LogsRequest, grpc.ServerStreamingServer[LogsResponse]) error
 	// Returns a point-in-time snapshot of the box's state and resource use.
@@ -256,6 +275,9 @@ func (UnimplementedDriverServiceServer) Stop(context.Context, *StopRequest) (*St
 }
 func (UnimplementedDriverServiceServer) Destroy(context.Context, *DestroyRequest) (*DestroyResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Destroy not implemented")
+}
+func (UnimplementedDriverServiceServer) DeleteHome(context.Context, *DeleteHomeRequest) (*DeleteHomeResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeleteHome not implemented")
 }
 func (UnimplementedDriverServiceServer) Logs(*LogsRequest, grpc.ServerStreamingServer[LogsResponse]) error {
 	return status.Error(codes.Unimplemented, "method Logs not implemented")
@@ -367,6 +389,24 @@ func _DriverService_Destroy_Handler(srv interface{}, ctx context.Context, dec fu
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(DriverServiceServer).Destroy(ctx, req.(*DestroyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DriverService_DeleteHome_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteHomeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DriverServiceServer).DeleteHome(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DriverService_DeleteHome_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DriverServiceServer).DeleteHome(ctx, req.(*DeleteHomeRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -512,6 +552,10 @@ var DriverService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Destroy",
 			Handler:    _DriverService_Destroy_Handler,
+		},
+		{
+			MethodName: "DeleteHome",
+			Handler:    _DriverService_DeleteHome_Handler,
 		},
 		{
 			MethodName: "Stats",

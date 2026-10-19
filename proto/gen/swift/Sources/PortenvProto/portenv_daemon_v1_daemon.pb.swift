@@ -257,6 +257,67 @@ public nonisolated enum Portenv_Daemon_V1_Answers: SwiftProtobuf.Enum, Swift.Cas
 
 }
 
+/// DeleteBox's steps, in order (ADR 0029).
+public nonisolated enum Portenv_Daemon_V1_DeleteStep: SwiftProtobuf.Enum, Swift.CaseIterable {
+  public typealias RawValue = Int
+  case unspecified // = 0
+
+  /// Stopping and removing the box's instance on this Mac.
+  case instance // = 1
+
+  /// Removing its home storage.
+  case home // = 2
+
+  /// Deleting its saves on this Mac (saves elsewhere are left).
+  case saves // = 3
+
+  /// The saves are gone: the app deletes the key from the Keychain.
+  case key // = 4
+
+  /// Removing portenvd's record of the box, last.
+  case record // = 5
+  case UNRECOGNIZED(Int)
+
+  public init() {
+    self = .unspecified
+  }
+
+  public init?(rawValue: Int) {
+    switch rawValue {
+    case 0: self = .unspecified
+    case 1: self = .instance
+    case 2: self = .home
+    case 3: self = .saves
+    case 4: self = .key
+    case 5: self = .record
+    default: self = .UNRECOGNIZED(rawValue)
+    }
+  }
+
+  public var rawValue: Int {
+    switch self {
+    case .unspecified: return 0
+    case .instance: return 1
+    case .home: return 2
+    case .saves: return 3
+    case .key: return 4
+    case .record: return 5
+    case .UNRECOGNIZED(let i): return i
+    }
+  }
+
+  // The compiler won't synthesize support with the UNRECOGNIZED case.
+  public static let allCases: [Portenv_Daemon_V1_DeleteStep] = [
+    .unspecified,
+    .instance,
+    .home,
+    .saves,
+    .key,
+    .record,
+  ]
+
+}
+
 public nonisolated struct Portenv_Daemon_V1_CheckBoxRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
@@ -683,6 +744,13 @@ public nonisolated struct Portenv_Daemon_V1_BoxStatus: Sendable {
   /// The box's repository also has the recovery-derived key (ADR 0019), so
   /// a typed recovery key can be checked against it. Not a secret.
   public var carriesRecoveryKey: Bool = false
+
+  /// DeleteBox started and hasn't finished (ADR 0029): the box can't open;
+  /// DeleteBox again continues from delete_step.
+  public var deleting: Bool = false
+
+  /// The step the deletion stopped at.
+  public var deleteStep: Portenv_Daemon_V1_DeleteStep = .unspecified
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -2696,6 +2764,105 @@ public nonisolated struct Portenv_Daemon_V1_SetRoutinePausedResponse: Sendable {
   fileprivate var _agent: Portenv_Daemon_V1_AgentInfo? = nil
 }
 
+public nonisolated struct Portenv_Daemon_V1_GetDeletePlanRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var name: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Portenv_Daemon_V1_GetDeletePlanResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var boxID: String = String()
+
+  /// How many saves the box has on this Mac and their size on disk, when
+  /// its saves are on this Mac (counted without a key: one file per save).
+  public var saveCount: Int32 = 0
+
+  public var savesBytes: Int64 = 0
+
+  /// The saves are somewhere other than this Mac (a server or a cloud
+  /// bucket): DeleteBox leaves them there, and the key stays so they can
+  /// still be restored. saves_place says where, as people read it.
+  public var savesElsewhere: Bool = false
+
+  public var savesPlace: String = String()
+
+  /// Open here (running, or still being saved after Quit Anyway): it must
+  /// be closed first, the usual way.
+  public var openHere: Bool = false
+
+  /// Why it can't be deleted now, as one plain line ("" when it can, as far
+  /// as portenvd knows without the key; the lease is checked by DeleteBox).
+  public var refusal: String = String()
+
+  /// A deletion that stopped: DeleteBox continues from here.
+  public var stoppedAt: Portenv_Daemon_V1_DeleteStep = .unspecified
+
+  /// The repository also has the recovery-derived key: copies of the saves
+  /// made outside Portenv (Time Machine) still open with the recovery key.
+  public var carriesRecoveryKey: Bool = false
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Portenv_Daemon_V1_DeleteBoxRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var name: String = String()
+
+  /// The name as the person typed it to confirm; it must equal name.
+  public var confirmName: String = String()
+
+  /// The second confirmation, for a box whose saves are elsewhere: the
+  /// person read that they stay there. Refused without it.
+  public var confirmSavesElsewhere: Bool = false
+
+  /// The app deleted the key IDs the last response gave from the Keychain:
+  /// portenvd removes its record and the deletion is finished.
+  public var keysDeleted: Bool = false
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Portenv_Daemon_V1_DeleteBoxResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// The record is gone: the box is deleted from this Mac.
+  public var finished: Bool = false
+
+  /// Set once the saves on this Mac are gone (step KEY): the Keychain
+  /// items to delete now. The app deletes them, then calls again with
+  /// keys_deleted. Never set while any save remains.
+  public var deleteKeyIds: [String] = []
+
+  /// Saves left where they are, as people read the place ("" when none).
+  public var savesLeftAt: String = String()
+
+  /// The step reached.
+  public var step: Portenv_Daemon_V1_DeleteStep = .unspecified
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
 // MARK: - Code below here is support for the SwiftProtobuf runtime.
 
 fileprivate nonisolated let _protobuf_package = "portenv.daemon.v1"
@@ -2714,6 +2881,10 @@ nonisolated extension Portenv_Daemon_V1_Holder: SwiftProtobuf._ProtoNameProvidin
 
 nonisolated extension Portenv_Daemon_V1_Answers: SwiftProtobuf._ProtoNameProviding {
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0ANSWERS_UNSPECIFIED\0\u{1}ANSWERS_YES\0\u{1}ANSWERS_NO\0\u{1}ANSWERS_CANNOT_ASK\0")
+}
+
+nonisolated extension Portenv_Daemon_V1_DeleteStep: SwiftProtobuf._ProtoNameProviding {
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0DELETE_STEP_UNSPECIFIED\0\u{1}DELETE_STEP_INSTANCE\0\u{1}DELETE_STEP_HOME\0\u{1}DELETE_STEP_SAVES\0\u{1}DELETE_STEP_KEY\0\u{1}DELETE_STEP_RECORD\0")
 }
 
 nonisolated extension Portenv_Daemon_V1_CheckBoxRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
@@ -3502,7 +3673,7 @@ nonisolated extension Portenv_Daemon_V1_ListBoxesResponse: SwiftProtobuf.Message
 
 nonisolated extension Portenv_Daemon_V1_BoxStatus: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".BoxStatus"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}box\0\u{1}state\0\u{1}creating\0\u{3}carries_recovery_key\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}box\0\u{1}state\0\u{1}creating\0\u{3}carries_recovery_key\0\u{1}deleting\0\u{3}delete_step\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -3514,6 +3685,8 @@ nonisolated extension Portenv_Daemon_V1_BoxStatus: SwiftProtobuf.Message, SwiftP
       case 2: try { try decoder.decodeSingularEnumField(value: &self.state) }()
       case 3: try { try decoder.decodeSingularBoolField(value: &self.creating) }()
       case 4: try { try decoder.decodeSingularBoolField(value: &self.carriesRecoveryKey) }()
+      case 5: try { try decoder.decodeSingularBoolField(value: &self.deleting) }()
+      case 6: try { try decoder.decodeSingularEnumField(value: &self.deleteStep) }()
       default: break
       }
     }
@@ -3536,6 +3709,12 @@ nonisolated extension Portenv_Daemon_V1_BoxStatus: SwiftProtobuf.Message, SwiftP
     if self.carriesRecoveryKey != false {
       try visitor.visitSingularBoolField(value: self.carriesRecoveryKey, fieldNumber: 4)
     }
+    if self.deleting != false {
+      try visitor.visitSingularBoolField(value: self.deleting, fieldNumber: 5)
+    }
+    if self.deleteStep != .unspecified {
+      try visitor.visitSingularEnumField(value: self.deleteStep, fieldNumber: 6)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -3544,6 +3723,8 @@ nonisolated extension Portenv_Daemon_V1_BoxStatus: SwiftProtobuf.Message, SwiftP
     if lhs.state != rhs.state {return false}
     if lhs.creating != rhs.creating {return false}
     if lhs.carriesRecoveryKey != rhs.carriesRecoveryKey {return false}
+    if lhs.deleting != rhs.deleting {return false}
+    if lhs.deleteStep != rhs.deleteStep {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -7476,6 +7657,196 @@ nonisolated extension Portenv_Daemon_V1_SetRoutinePausedResponse: SwiftProtobuf.
 
   public static func ==(lhs: Portenv_Daemon_V1_SetRoutinePausedResponse, rhs: Portenv_Daemon_V1_SetRoutinePausedResponse) -> Bool {
     if lhs._agent != rhs._agent {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Portenv_Daemon_V1_GetDeletePlanRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".GetDeletePlanRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.name) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.name.isEmpty {
+      try visitor.visitSingularStringField(value: self.name, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Portenv_Daemon_V1_GetDeletePlanRequest, rhs: Portenv_Daemon_V1_GetDeletePlanRequest) -> Bool {
+    if lhs.name != rhs.name {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Portenv_Daemon_V1_GetDeletePlanResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".GetDeletePlanResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}box_id\0\u{3}save_count\0\u{3}saves_bytes\0\u{3}saves_elsewhere\0\u{3}saves_place\0\u{3}open_here\0\u{1}refusal\0\u{3}stopped_at\0\u{3}carries_recovery_key\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.boxID) }()
+      case 2: try { try decoder.decodeSingularInt32Field(value: &self.saveCount) }()
+      case 3: try { try decoder.decodeSingularInt64Field(value: &self.savesBytes) }()
+      case 4: try { try decoder.decodeSingularBoolField(value: &self.savesElsewhere) }()
+      case 5: try { try decoder.decodeSingularStringField(value: &self.savesPlace) }()
+      case 6: try { try decoder.decodeSingularBoolField(value: &self.openHere) }()
+      case 7: try { try decoder.decodeSingularStringField(value: &self.refusal) }()
+      case 8: try { try decoder.decodeSingularEnumField(value: &self.stoppedAt) }()
+      case 9: try { try decoder.decodeSingularBoolField(value: &self.carriesRecoveryKey) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.boxID.isEmpty {
+      try visitor.visitSingularStringField(value: self.boxID, fieldNumber: 1)
+    }
+    if self.saveCount != 0 {
+      try visitor.visitSingularInt32Field(value: self.saveCount, fieldNumber: 2)
+    }
+    if self.savesBytes != 0 {
+      try visitor.visitSingularInt64Field(value: self.savesBytes, fieldNumber: 3)
+    }
+    if self.savesElsewhere != false {
+      try visitor.visitSingularBoolField(value: self.savesElsewhere, fieldNumber: 4)
+    }
+    if !self.savesPlace.isEmpty {
+      try visitor.visitSingularStringField(value: self.savesPlace, fieldNumber: 5)
+    }
+    if self.openHere != false {
+      try visitor.visitSingularBoolField(value: self.openHere, fieldNumber: 6)
+    }
+    if !self.refusal.isEmpty {
+      try visitor.visitSingularStringField(value: self.refusal, fieldNumber: 7)
+    }
+    if self.stoppedAt != .unspecified {
+      try visitor.visitSingularEnumField(value: self.stoppedAt, fieldNumber: 8)
+    }
+    if self.carriesRecoveryKey != false {
+      try visitor.visitSingularBoolField(value: self.carriesRecoveryKey, fieldNumber: 9)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Portenv_Daemon_V1_GetDeletePlanResponse, rhs: Portenv_Daemon_V1_GetDeletePlanResponse) -> Bool {
+    if lhs.boxID != rhs.boxID {return false}
+    if lhs.saveCount != rhs.saveCount {return false}
+    if lhs.savesBytes != rhs.savesBytes {return false}
+    if lhs.savesElsewhere != rhs.savesElsewhere {return false}
+    if lhs.savesPlace != rhs.savesPlace {return false}
+    if lhs.openHere != rhs.openHere {return false}
+    if lhs.refusal != rhs.refusal {return false}
+    if lhs.stoppedAt != rhs.stoppedAt {return false}
+    if lhs.carriesRecoveryKey != rhs.carriesRecoveryKey {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Portenv_Daemon_V1_DeleteBoxRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".DeleteBoxRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{3}confirm_name\0\u{3}confirm_saves_elsewhere\0\u{3}keys_deleted\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.name) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.confirmName) }()
+      case 3: try { try decoder.decodeSingularBoolField(value: &self.confirmSavesElsewhere) }()
+      case 4: try { try decoder.decodeSingularBoolField(value: &self.keysDeleted) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.name.isEmpty {
+      try visitor.visitSingularStringField(value: self.name, fieldNumber: 1)
+    }
+    if !self.confirmName.isEmpty {
+      try visitor.visitSingularStringField(value: self.confirmName, fieldNumber: 2)
+    }
+    if self.confirmSavesElsewhere != false {
+      try visitor.visitSingularBoolField(value: self.confirmSavesElsewhere, fieldNumber: 3)
+    }
+    if self.keysDeleted != false {
+      try visitor.visitSingularBoolField(value: self.keysDeleted, fieldNumber: 4)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Portenv_Daemon_V1_DeleteBoxRequest, rhs: Portenv_Daemon_V1_DeleteBoxRequest) -> Bool {
+    if lhs.name != rhs.name {return false}
+    if lhs.confirmName != rhs.confirmName {return false}
+    if lhs.confirmSavesElsewhere != rhs.confirmSavesElsewhere {return false}
+    if lhs.keysDeleted != rhs.keysDeleted {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Portenv_Daemon_V1_DeleteBoxResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".DeleteBoxResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}finished\0\u{3}delete_key_ids\0\u{3}saves_left_at\0\u{1}step\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularBoolField(value: &self.finished) }()
+      case 2: try { try decoder.decodeRepeatedStringField(value: &self.deleteKeyIds) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.savesLeftAt) }()
+      case 4: try { try decoder.decodeSingularEnumField(value: &self.step) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.finished != false {
+      try visitor.visitSingularBoolField(value: self.finished, fieldNumber: 1)
+    }
+    if !self.deleteKeyIds.isEmpty {
+      try visitor.visitRepeatedStringField(value: self.deleteKeyIds, fieldNumber: 2)
+    }
+    if !self.savesLeftAt.isEmpty {
+      try visitor.visitSingularStringField(value: self.savesLeftAt, fieldNumber: 3)
+    }
+    if self.step != .unspecified {
+      try visitor.visitSingularEnumField(value: self.step, fieldNumber: 4)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Portenv_Daemon_V1_DeleteBoxResponse, rhs: Portenv_Daemon_V1_DeleteBoxResponse) -> Bool {
+    if lhs.finished != rhs.finished {return false}
+    if lhs.deleteKeyIds != rhs.deleteKeyIds {return false}
+    if lhs.savesLeftAt != rhs.savesLeftAt {return false}
+    if lhs.step != rhs.step {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

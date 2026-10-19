@@ -96,8 +96,21 @@ While the workspace is closed, **Open** comes first, then a divider (R-0211). Th
 7. ———
 8. Restart Workspace (only shown when the workspace helper is unavailable, or with ⌥ held)
 9. Show in Finder ⌥⌘R
+10. ———
+11. Delete Workspace… (ADR 0029; disabled while the window is busy or an agent of the team is running; also in the workspace list's context menu)
 
 Menu items that can't work right now are disabled with no explanation in the menu; the explanation appears in the inspector or as an alert when chosen from the palette.
+
+### 3.3 Delete Workspace… (ADR 0029)
+
+A sheet on the window, the only confirmation in the app that asks for typing (Principle 5's exception: a deletion has no undo).
+
+- **Open first:** a workspace open here shows "acme-api is open. Close it first, then delete it." with Close Workspace (the usual close) and Cancel. Any other refusal (an agent running: "Stop its agents first (stop its team), then delete it.") is portenvd's line, with only Cancel.
+- **Title:** "Delete “acme-api”?" Then "This deletes:" and one line each for what goes: "All 12 saves on this Mac (340 MB)", "Everything in the workspace on this Mac: its files, programs and settings", "Its key in this Mac’s Keychain". Then "Copies of its saves in Time Machine backups aren’t deleted." and, in bold, "This can’t be undone."
+- **Saves elsewhere:** "Its saves on Test server aren’t deleted: they stay there, with this Mac’s key for them, so you can restore the workspace later.", with a checkbox, "Leave its saves on Test server", that must be ticked too.
+- **Confirming:** a field under "Type acme-api to confirm." Delete Workspace is the destructive button (`.destructive` role, red), disabled until the name matches exactly; Cancel is the default button (Return and ⎋ cancel).
+- **While it runs:** "Deleting…" with a spinner (none with Reduce Motion), the buttons disabled. A stop shows portenvd's line in red under the field ("Deleting acme-api stopped while deleting its saves. What's left of it is still there. Choose Delete Workspace… again to continue."); the list marks a workspace whose deletion stopped with "Deleting didn’t finish".
+- **After:** back to "Your workspaces", saying "Deleted acme-api." (or "Deleted far-api from this Mac. Its saves stay on Test server.").
 
 ---
 

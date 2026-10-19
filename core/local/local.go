@@ -119,6 +119,9 @@ type BoxConfig struct {
 	// Recovery: the repository also has the recovery-derived key (ADR
 	// 0019), added and checked by CreateBox or RecoverBox. Not a secret.
 	Recovery bool `json:"recovery,omitempty"`
+	// Deleting: a deletion started and hasn't finished (ADR 0029). The box
+	// can't be opened; deleting it again continues.
+	Deleting *DeleteProgress `json:"deleting,omitempty"`
 }
 
 // MachineConfig holds this machine's settings (machine.json).
@@ -271,10 +274,26 @@ func (e *Env) EngineAnswers(ctx context.Context) error {
 	return drv.Ping(ctx)
 }
 
+// BoxDriver is this machine's engine driver, as Open makes it but with no
+// storage mounted and no key: for stopping, removing and deleting a box's
+// instance and home (ADR 0029).
+func (e *Env) BoxDriver() (*docker.Driver, error) {
+	mc, err := e.MachineConfig()
+	if err != nil {
+		return nil, err
+	}
+	return docker.New(docker.Config{StateDir: filepath.Join(e.Dir, "driver"), HomesDir: mc.HomesDir,
+		Namespace: os.Getenv("PORTENV_DOCKER_NAMESPACE")})
+}
+
 func (e *Env) Open(name string) (*Session, error) {
 	c, err := e.LoadBox(name)
 	if err != nil {
 		return nil, err
+	}
+	// Part of it may be gone already: never start it (ADR 0029).
+	if c.Deleting != nil {
+		return nil, deletingError(name)
 	}
 	repo, hostDir, resticEnv, err := e.Storage(c)
 	storageRepo := ""

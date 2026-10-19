@@ -34,6 +34,7 @@ func servingWith(t *testing.T, adjust func(*Server)) (*Server, daemonv1.DaemonSe
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 	s := New(&local.Env{Dir: dir, Machine: "mac-1"}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	engineAndDiskFine(s)
 	if adjust != nil {
 		adjust(s)
 	}

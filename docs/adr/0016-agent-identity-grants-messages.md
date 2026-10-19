@@ -50,6 +50,8 @@ From 2.4, outside agents reach boxes through several doors: SSH and the CLI, MCP
 
    The owner always sees every message that involves their agents.
 
+   *Note (R-0313):* in the Mac app this is Team activity at the top of the Team sidebar (every message on the board, in time order, filtered by agent) and the Team section in each agent's column (every message it sent or received), with Portenv's notices greyed (GUIDELINES 6.2).
+
 6. **Where messages travel.**
    - Agents of the same owner may message each other locally, through `portenvd` or the runner, with no central service. This delivery is built in 2.5, alongside webhooks.
    - Messaging across owners is out of scope until the control plane (Phase 3 and later).

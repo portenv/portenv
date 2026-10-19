@@ -9,12 +9,14 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/portenv/portenv/core/internal/teamkit"
 	agentv1 "github.com/portenv/portenv/proto/gen/go/portenv/agent/v1"
 	typesv1 "github.com/portenv/portenv/proto/gen/go/portenv/types/v1"
 )
@@ -266,6 +268,64 @@ func TestTeamInitWritesATemplateOnce(t *testing.T) {
 	}
 	if code := runTeam(context.Background(), []string{"team", "init", "--template", "nope", "--dir", dir}, func(string) string { return "" }, nil, &out, &errOut); code != 2 {
 		t.Errorf("unknown template: exit %d", code)
+	}
+}
+
+// R-0338: the App product team. Its social agent is written off: in
+// .portenv/agents/off/, which Portenv doesn't load, until the owner moves
+// it up a folder.
+func TestTeamInitAppProduct(t *testing.T) {
+	dir := t.TempDir()
+	var out, errOut bytes.Buffer
+	if code := runTeam(context.Background(), []string{"team", "init", "--template", "app-product", "--dir", dir}, func(string) string { return "" }, nil, &out, &errOut); code != 0 {
+		t.Fatalf("exit %d: %s", code, errOut.String())
+	}
+	agents := filepath.Join(dir, ".portenv", "agents")
+	var got []string
+	err := filepath.WalkDir(agents, func(p string, d os.DirEntry, err error) error {
+		if err == nil && !d.IsDir() {
+			rel, _ := filepath.Rel(agents, p)
+			got = append(got, filepath.ToSlash(rel))
+		}
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		"design-system.md", "designer.md", "devops.md", "lead.md",
+		"off/social.md", "release.md", "reviewer.md", "trust-safety.md", "writer.md",
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("files %v, want %v", got, want)
+	}
+	files, _ := teamkit.Template("app-product")
+	for _, f := range want {
+		if b, _ := os.ReadFile(filepath.Join(agents, filepath.FromSlash(f))); !bytes.Equal(b, files[f]) {
+			t.Errorf("%s isn't the template's", f)
+		}
+	}
+	o := out.String()
+	for _, s := range []string{"Wrote 8 agent files", "Approve each", "social is off", "off/social.md"} {
+		if !strings.Contains(o, s) {
+			t.Errorf("out doesn't say %q: %q", s, o)
+		}
+	}
+	// Run again with only off/social.md left: it counts, so nothing is
+	// written.
+	for _, f := range want {
+		if f != "off/social.md" {
+			if err := os.Remove(filepath.Join(agents, f)); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	errOut.Reset()
+	if code := runTeam(context.Background(), []string{"team", "init", "--template", "app-product", "--dir", dir}, func(string) string { return "" }, nil, &out, &errOut); code != 1 || !strings.Contains(errOut.String(), "off/social.md") {
+		t.Errorf("second init: exit %d, %q", code, errOut.String())
+	}
+	if _, err := os.Stat(filepath.Join(agents, "lead.md")); err == nil {
+		t.Error("the second init wrote lead.md")
 	}
 }
 

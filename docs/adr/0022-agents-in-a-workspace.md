@@ -254,9 +254,12 @@ You build what the lead asks for. …
 - **The owner approves each file's content before it runs.** A file is pinned by its SHA-256 once the owner approves it in the app. A changed file (an agent's proposal, a `git pull`, a teammate's commit) stops nothing that's running, but won't start again until the owner approves the new content, with the diff. This matters because a repository is shared: a commit from someone else could add an agent with `panes: allow` and any `runner`, which is code that runs in the owner's workspace.
 - **Agents can't edit them in place.** The project's `.portenv/` is `work`'s and never group-writable (section 2), so an agent's uid can't change an agent file. It proposes a change with `portenv propose-agent-change <file>`, which lands as a decision for the owner, with the diff, and then only runs once the owner approves the new content.
 
-**Templates:** `portenv team init` offers two, and asks the owner to approve each file it writes:
+**Templates:** `portenv team init` offers three, and asks the owner to approve each file it writes:
 - **Starter:** three agents for Claude Code (lead, builder, reviewer).
 - **Orchestrate team** (R-0232): lead, builder, reviewer and design-system keeper, the team the owner tests end to end before testers (section 11).
+- **App product team** (`app-product`, R-0338): an engineering lead (`team_status: read`, a 30-minute status round that reports only blockers), a code writer, a code reviewer that can't edit files, a product designer, a design-system keeper, trust and safety and support (no clone, can't edit files), an App Store release manager and DevOps (the project's runbook first, production only by an approved decision). A social media manager ships off (drafts only, never publishes).
+
+**Agents a template ships off** are written to `.portenv/agents/off/<id>.md`. `portenvd` and the helper read only `<id>.md` directly in `.portenv/agents/`, so a file in `off/` is never loaded, approved or started; the owner turns one on by moving it up a folder and adding it to its teammates' `grant.message`, then approves the changed files. This is a folder convention of `team init`, not a new key in the agent file. Templates don't set `grant.read_clones` until portenvd parses it; the reviewer's file names it in a comment, and the writer hands the reviewer its diff (`portenv handoff`) meanwhile.
 
 ### 4. `portenv` inside the box
 
@@ -335,7 +338,7 @@ Agents learn what they can do from Portenv, not from guesses. Everything below c
 - **`portenv guide` and `guide --json`:**
   - both are versioned, and generated from the proto and the one limits table (`core/internal/teamkit`), which portenvd also enforces;
   - a test walks every type an agent can read and fails if the guide misses a field or value;
-  - `portenv team init [--template starter|orchestrate]` writes the agent files, never over an existing one.
+  - `portenv team init [--template starter|orchestrate|app-product]` writes the agent files, never over an existing one.
 
 ### 5. Identity: one per agent, the same on every way in
 

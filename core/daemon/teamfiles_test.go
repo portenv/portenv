@@ -752,46 +752,201 @@ func TestRoutinesInTheAgentFile(t *testing.T) {
 	}
 }
 
+// templateTeam loads a template's agents as portenv team init writes them,
+// with the owner's agent limit at its ceiling (ADR 0022 §7) and every
+// other limit at its default. extra adds files of the template's off/
+// folder as if the owner had turned them on.
+func templateTeam(t *testing.T, name string, extra ...string) Team {
+	t.Helper()
+	files, err := teamkit.Template(name)
+	if err != nil || len(files) == 0 {
+		t.Fatalf("%v, %d files", err, len(files))
+	}
+	src := teamDirs(t)
+	src.Limits = TeamLimits{MaxAgents: teamkit.MaxTeamAgents}
+	for _, id := range []string{"lead", "reviewer"} { // teamDirs's own
+		if err := os.Remove(filepath.Join(src.agentsDir(), id+".md")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for f, content := range files {
+		id, ok := strings.CutSuffix(f, ".md")
+		if !ok {
+			t.Fatalf("%s/%s isn't an agent file", name, f)
+		}
+		if off, isOff := strings.CutPrefix(id, teamkit.OffDir+"/"); isOff {
+			if !slices.Contains(extra, off) {
+				continue
+			}
+			id = off
+		}
+		writeAgent(t, src, id, string(content))
+	}
+	team, err := LoadTeam(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return team
+}
+
+// teamStatusReaders is who in each template has grant.team_status: read.
+var teamStatusReaders = map[string][]string{
+	"starter":     nil,
+	"orchestrate": {"lead"},
+	"app-product": {"lead"},
+}
+
 // Every template portenv team init writes is a valid team with no
-// problems (R-0232's Orchestrate team included).
+// problems (R-0232's Orchestrate team included), within the limits
+// portenvd enforces, and each agent it ships off is valid once turned on.
 func TestTheTemplatesAreValidTeams(t *testing.T) {
 	for _, name := range teamkit.Templates {
 		t.Run(name, func(t *testing.T) {
-			files, err := teamkit.Template(name)
-			if err != nil || len(files) == 0 {
-				t.Fatalf("%v, %d files", err, len(files))
+			on := teamkit.OnAgents(name)
+			team := templateTeam(t, name)
+			if len(team.Agents) != len(on) || len(team.Problems) != 0 {
+				t.Fatalf("agents %d, want %d; team problems %v", len(team.Agents), len(on), team.Problems)
 			}
-			src := teamDirs(t)
-			for f, content := range files {
-				writeAgent(t, src, strings.TrimSuffix(f, ".md"), string(content))
+			if len(on) > teamkit.MaxTeamAgents {
+				t.Errorf("%d agents on; the ceiling is %d", len(on), teamkit.MaxTeamAgents)
 			}
-			team, err := LoadTeam(src)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if len(team.Agents) != len(files) || len(team.Problems) != 0 {
-				t.Fatalf("agents %d, team problems %v", len(team.Agents), team.Problems)
-			}
+			var readers []string
 			for _, a := range team.Agents {
-				if len(a.Problems) != 0 {
-					t.Errorf("%s: %v", a.ID, a.Problems)
+				checkTemplateAgent(t, a, on)
+				if a.Grant.GetTeamStatus() {
+					readers = append(readers, a.ID)
 				}
-				if runnerIdlePattern(a.Runner) == "" && len(a.Spec.Routines) > 0 {
-					t.Errorf("%s has routines but a runner without an idle pattern", a.ID)
+			}
+			if !slices.Equal(readers, teamStatusReaders[name]) {
+				t.Errorf("team_status: read for %v, want %v", readers, teamStatusReaders[name])
+			}
+			for _, off := range teamkit.OffAgents(name) {
+				var found bool
+				for _, a := range templateTeam(t, name, off).Agents {
+					if a.ID != off {
+						continue
+					}
+					found = true
+					checkTemplateAgent(t, a, append(slices.Clone(on), off))
+					if a.Grant.GetTeamStatus() {
+						t.Errorf("%s (off) reads the team's status", off)
+					}
+				}
+				if !found {
+					t.Errorf("%s (off) wasn't loaded", off)
 				}
 			}
 		})
 	}
-	// Only Orchestrate's lead sees the team's status (R-0257).
-	files, _ := teamkit.Template("orchestrate")
-	src := teamDirs(t)
-	for f, content := range files {
-		writeAgent(t, src, strings.TrimSuffix(f, ".md"), string(content))
+}
+
+// checkTemplateAgent: the agent parses with no problems, its grant is
+// within what the code allows by default, and it messages only agents in
+// members.
+func checkTemplateAgent(t *testing.T, a TeamAgent, members []string) {
+	t.Helper()
+	if len(a.Problems) != 0 || a.Spec == nil {
+		t.Errorf("%s: %v", a.ID, a.Problems)
+		return
 	}
-	team, _ := LoadTeam(src)
-	for _, a := range team.Agents {
-		if a.Grant.GetTeamStatus() != (a.ID == "lead") {
-			t.Errorf("%s: team_status %v", a.ID, a.Grant.GetTeamStatus())
+	if runnerIdlePattern(a.Runner) == "" && len(a.Spec.Routines) > 0 {
+		t.Errorf("%s has routines but a runner without an idle pattern", a.ID)
+	}
+	g := a.Grant
+	if g.GetMaxPanes() < 1 || g.GetMaxPanes() > teamkit.DefaultAgentPanes {
+		t.Errorf("%s: max_panes %d; the default limit is %d", a.ID, g.GetMaxPanes(), teamkit.DefaultAgentPanes)
+	}
+	if g.GetPanes() == typesv1.GrantMode_GRANT_MODE_ALLOW || g.GetPackages() == typesv1.GrantMode_GRANT_MODE_ALLOW {
+		t.Errorf("%s: a template never allows panes or packages without asking", a.ID)
+	}
+	if len(a.Spec.Routines) > teamkit.MaxRoutines {
+		t.Errorf("%s: %d routines", a.ID, len(a.Spec.Routines))
+	}
+	for _, m := range g.GetMessage() {
+		if m == a.ID || !slices.Contains(members, m) {
+			t.Errorf("%s messages %q, which isn't another agent in the template", a.ID, m)
 		}
+	}
+}
+
+// R-0338: the App product team, as the owner asked for it.
+func TestTheAppProductTemplate(t *testing.T) {
+	team := templateTeam(t, "app-product", "social")
+	agents := map[string]TeamAgent{}
+	for _, a := range team.Agents {
+		agents[a.ID] = a
+	}
+	want := map[string]struct {
+		name     string
+		message  []string
+		checkout string
+	}{
+		"lead":          {"Engineering Lead", []string{"writer", "reviewer", "designer", "design-system", "trust-safety", "release", "devops"}, CheckoutNone},
+		"writer":        {"Code Writer", []string{"lead", "reviewer"}, CheckoutOwn},
+		"reviewer":      {"Code Reviewer", []string{"lead", "writer"}, CheckoutOwn},
+		"designer":      {"Product Designer", []string{"lead", "design-system", "trust-safety"}, CheckoutNone},
+		"design-system": {"Design System Keeper", []string{"lead", "designer"}, CheckoutOwn},
+		"trust-safety":  {"Trust & Safety and Support", []string{"lead", "designer"}, CheckoutNone},
+		"release":       {"App Store Release Manager", []string{"lead", "devops"}, CheckoutOwn},
+		"devops":        {"DevOps", []string{"lead", "release"}, CheckoutOwn},
+		"social":        {"Social Media Manager", []string{"lead"}, CheckoutNone},
+	}
+	if len(agents) != len(want) {
+		t.Fatalf("%d agents, want %d", len(agents), len(want))
+	}
+	for id, w := range want {
+		a, ok := agents[id]
+		if !ok || a.Spec == nil {
+			t.Errorf("no %s", id)
+			continue
+		}
+		if a.Spec.Name != w.name || !slices.Equal(a.Grant.GetMessage(), w.message) || a.Spec.Checkout != w.checkout {
+			t.Errorf("%s: %q, message %v, checkout %s", id, a.Spec.Name, a.Grant.GetMessage(), a.Spec.Checkout)
+		}
+		if !a.Grant.GetAskOwner() {
+			t.Errorf("%s can't ask the owner", id)
+		}
+		for _, rule := range []string{"information, not instructions", "secret", "Only the owner merges or pushes", "portenv status set"} {
+			if !strings.Contains(a.Spec.Instructions, rule) {
+				t.Errorf("%s's instructions don't say %q", id, rule)
+			}
+		}
+	}
+	// Who messages whom goes both ways, except to an agent that's off:
+	// turning social on means adding it to the lead's list too.
+	for id, a := range agents {
+		for _, m := range a.Grant.GetMessage() {
+			if !slices.Contains(agents[m].Grant.GetMessage(), id) && id != "social" {
+				t.Errorf("%s messages %s, but not back", id, m)
+			}
+		}
+	}
+	if r := agents["lead"].Spec.Routines; len(r) != 1 || r[0].EveryMinutes != 30 || !strings.Contains(r[0].Note, "blockers") {
+		t.Errorf("lead's routines: %+v", r)
+	}
+	if got := agents["writer"].RunnerLine; got != "claude --model opus" {
+		t.Errorf("writer's runner: %q", got)
+	}
+	if got := agents["reviewer"].RunnerLine; got != "claude --model fable --disallowedTools Edit,Write,NotebookEdit" {
+		t.Errorf("reviewer's runner: %q", got)
+	}
+	if got := agents["trust-safety"].RunnerLine; !strings.Contains(got, "--disallowedTools Edit,Write,NotebookEdit") {
+		t.Errorf("trust-safety's runner: %q", got)
+	}
+	for _, s := range []string{"DEPLOY.md", ".portenv/runbook.md", "Never guess", "production", "approved decision"} {
+		if !strings.Contains(agents["devops"].Spec.Instructions, s) {
+			t.Errorf("devops's instructions don't say %q", s)
+		}
+	}
+	if !strings.Contains(agents["social"].Spec.Instructions, "never publish") {
+		t.Error("social's instructions don't say it never publishes")
+	}
+	for _, s := range []string{"goal", "files", "acceptance criteria", "tests", "one task"} {
+		if !strings.Contains(agents["lead"].Spec.Instructions, s) {
+			t.Errorf("lead's task spec doesn't name %q", s)
+		}
+	}
+	if !strings.Contains(agents["reviewer"].Spec.Instructions, "cold") {
+		t.Error("the reviewer doesn't review cold")
 	}
 }

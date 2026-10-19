@@ -69,7 +69,7 @@ The title shows the workspace name, a sync symbol and a chevron; the line under 
 | Saved | `checkmark.circle` | `This Mac · Saved at 14:58` (`Saved just now` for the first minute; from the next day `Saved yesterday at 23:43`, then `Saved on 9 Oct at 23:43`, with the year once it's another year; the words change at midnight with no new save) |
 | Offline | `icloud.slash`-style "not synced" symbol | `This Mac · Offline · will save later` |
 | Moving | `arrow.triangle.2.circlepath` | `Moving to Test server…` |
-| Closing the last workspace window (saving before the list shows) | `arrow.triangle.2.circlepath` | `Saving before closing…`, with the Workspace menu disabled, until the list shows; the normal line again if the person stays |
+| Closing a workspace (Close Workspace, saving before it's closed) | `arrow.triangle.2.circlepath` | `Saving before closing…`, with the Workspace menu disabled, until the list shows; the normal line again if the person stays |
 | Open on a server | `checkmark.circle` | `Test server · Saved at 15:42` |
 | Workspace helper unavailable | `exclamationmark.triangle` | `This Mac · Not saved since 14:58` (and Restart Workspace offered) |
 | Just reverted | `checkmark.circle` | `Reverted to 14:31 · your changes were kept` for 5 s, then the normal line |

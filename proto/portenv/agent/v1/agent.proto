@@ -520,7 +520,9 @@ message StartTeamAgentRequest {
   // AGENTS.md in its home: the generated block (R-0246), then the file's
   // instructions.
   string agents_md = 3;
-  // Repository paths copied into its home on first start (§2).
+  // Repository paths copied into its home on first start (§2), from
+  // project_dir: regular files and folders only, never through a link,
+  // at most 100 MB together, new files only; ~/.portenv-seeded records it.
   repeated string home_seed = 4;
   int64 home_quota_bytes = 5;
   // The runner's idle-input pattern (RE2, matched against the main pane's
@@ -534,6 +536,10 @@ message StartTeamAgentRequest {
   // missing, and starts the runner there. Empty: no clone, and the runner
   // starts in the agent's home.
   string clone_project_dir = 7;
+  // The owner's project, /home/<main user>/<workspace>, that home_seed's
+  // paths are copied from, as the agent with the team group, on its first
+  // start (ADR 0022 §2). Required when home_seed isn't empty.
+  string project_dir = 9;
 }
 
 message StartTeamAgentResponse {

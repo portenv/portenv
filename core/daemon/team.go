@@ -709,6 +709,7 @@ func (e *teamEngine) startAgentAs(ctx context.Context, name, agentID string, app
 		Argv:            a.Runner,
 		AgentsMd:        agentsMDBlock(&team, a, name) + "\n" + a.Spec.Instructions,
 		HomeSeed:        a.Spec.HomeSeed,
+		ProjectDir:      projectDir(name),
 		HomeQuotaBytes:  defaultHomeQuota,
 		IdlePattern:     runnerIdlePattern(a.Runner),
 	})

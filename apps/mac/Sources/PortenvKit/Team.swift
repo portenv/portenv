@@ -233,6 +233,11 @@ public struct TeamState: Equatable, Sendable {
 
     public init() {}
 
+    /// An agent is running in any way (R-0358: Delete Workspace… waits).
+    public var agentsRunning: Bool {
+        agents.contains { [.starting, .running, .idle, .needsYou, .connected].contains($0.status) }
+    }
+
     public mutating func apply(_ event: TeamEvent, cursor: String = "") {
         switch event {
         case .agent(let a):

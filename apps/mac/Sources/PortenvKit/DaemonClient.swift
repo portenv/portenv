@@ -323,7 +323,8 @@ public final class DaemonClient: DaemonAPI, Sendable {
 extension DaemonClient: BoxCreating, RecoveryChecking {
     public func listings() async throws -> [BoxListing] {
         try await call {
-            try await api.listBoxes(.init()).boxes.map { BoxListing(name: $0.box.name, id: $0.box.id, creating: $0.creating, hasRecoveryKey: $0.carriesRecoveryKey) }
+            try await api.listBoxes(.init()).boxes.map { BoxListing(name: $0.box.name, id: $0.box.id, creating: $0.creating, hasRecoveryKey: $0.carriesRecoveryKey,
+                                                         deleting: $0.deleting) }
         }
     }
 
@@ -372,6 +373,27 @@ extension DaemonClient: BoxCreating, RecoveryChecking {
         case .unavailable: 14
         default: 13
         }
+    }
+}
+
+/// Delete Workspace… (ADR 0029). keyIDs and provideKeys are DaemonAPI's.
+extension DaemonClient: WorkspaceDeleting {
+    public func deletePlan(_ box: String) async throws -> DeletePlan {
+        let r = try await call { try await api.getDeletePlan(.with { $0.name = box }) }
+        return DeletePlan(boxID: r.boxID, saveCount: Int(r.saveCount), savesBytes: r.savesBytes, savesElsewhere: r.savesElsewhere,
+                          savesPlace: r.savesPlace, openHere: r.openHere, refusal: r.refusal,
+                          stoppedAt: DeleteStep(rawValue: r.stoppedAt.rawValue) ?? .none, carriesRecoveryKey: r.carriesRecoveryKey)
+    }
+
+    public func deleteBox(_ box: String, confirmName: String, savesElsewhereConfirmed: Bool, keysDeleted: Bool) async throws -> DeleteOutcome {
+        var req = Portenv_Daemon_V1_DeleteBoxRequest()
+        req.name = box
+        req.confirmName = confirmName
+        req.confirmSavesElsewhere = savesElsewhereConfirmed
+        req.keysDeleted = keysDeleted
+        let r = try await call { try await api.deleteBox(req) }
+        return DeleteOutcome(finished: r.finished, deleteKeyIDs: r.deleteKeyIds, savesLeftAt: r.savesLeftAt,
+                             step: DeleteStep(rawValue: r.step.rawValue) ?? .none)
     }
 }
 

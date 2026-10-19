@@ -54,6 +54,13 @@ final class AppModel {
     /// Why a move failed, shown once.
     var moveError: String?
 
+    /// Delete Workspace…'s sheet, while it shows (ADR 0029).
+    var deleting: DeleteFlow?
+    /// The sheet's flow, kept until the sheet has gone.
+    private var shownDeletion: DeleteFlow?
+    /// Workspaces whose deletion stopped part-way: the list says so.
+    private(set) var deletionStopped: Set<String> = []
+
     /// At launch: make sure portenvd runs, offer to move to Applications
     /// alongside (a sheet; nothing waits for the answer, R-0121), list the
     /// boxes, and decide.
@@ -226,6 +233,7 @@ final class AppModel {
             ensureDaemon: LoginItem.ensureRegistered
         )
         self.controller = controller
+        controller.onDelete = { [weak self] name in self?.askToDelete(name) }
         let tabs = TabsController(box: box, daemon: daemon)
         // A long command finishing in a tab, when the window isn't in
         // front (§5).
@@ -295,9 +303,45 @@ final class AppModel {
         await refreshRunning()
     }
 
-    /// Reads which workspaces run on this Mac.
+    /// Reads which workspaces run on this Mac, and which deletions stopped.
     func refreshRunning() async {
         running = Set(await RunningWorkspaces.here(daemon))
+        if let creating = daemon as? BoxCreating, let listed = try? await creating.listings() {
+            deletionStopped = Set(listed.filter(\.deleting).map(\.name))
+        }
+    }
+
+    /// Delete Workspace…, from the title menu or the list (ADR 0029).
+    func askToDelete(_ box: String) {
+        guard let api = daemon as? WorkspaceDeleting else { return }
+        let deleter = WorkspaceDeleter(daemon: api)
+        let flow = DeleteFlow(name: box, daemon: api, deleter: deleter) { [weak self] name in
+            await self?.closeForDeleting(name)
+        }
+        shownDeletion = flow
+        deleting = flow
+    }
+
+    /// The sheet's Close Workspace: the usual close; the window goes back
+    /// to the list if it showed this workspace.
+    private func closeForDeleting(_ box: String) async {
+        await closeWorkspace(box)
+        if controller?.box == box, !running.contains(box) { await showList() }
+    }
+
+    /// The sheet closed: after a deletion, the list without it, saying so.
+    func deleteSheetClosed() {
+        guard let flow = shownDeletion else { return }
+        shownDeletion = nil
+        deleting = nil
+        Task {
+            await refreshRunning()
+            guard let notice = flow.notice else { return }
+            boxes = WorkspaceList.afterDeleting(flow.name, from: boxes)
+            if controller?.box == flow.name { await showList() }
+            if let listed = try? await daemon.boxes() { boxes = listed }
+            launch = .boxList(notice: notice)
+        }
     }
 
     /// Back to "Your workspaces"; the workspace shown may still be running.
@@ -411,6 +455,8 @@ struct AppRoot: View {
                                 retry: model.serviceNotAnswering ? { model.begin() } : nil,
                                 running: model.running,
                                 close: { box in Task { await model.closeWorkspace(box) } },
+                                deletionStopped: model.deletionStopped,
+                                delete: { box in model.askToDelete(box) },
                                 refresh: { await model.refreshRunning() }) { box in
                         Task { await model.open(box) }
                     } newBox: {
@@ -431,6 +477,12 @@ struct AppRoot: View {
         // Space; the launch carries on behind it (R-0121).
         .sheet(isPresented: $model.moveOffered) {
             MoveOfferView { model.answerMove($0) }
+        }
+        // Delete Workspace… (ADR 0029): on the window, from the title menu
+        // or the list. Finishing closes it and shows the list.
+        .sheet(item: $model.deleting, onDismiss: { model.deleteSheetClosed() }) { flow in
+            DeleteWorkspaceSheet(flow: flow) { model.deleting = nil }
+                .onChange(of: flow.outcome?.finished == true) { _, done in if done { model.deleting = nil } }
         }
         .alert(model.moveError ?? "", isPresented: Binding(get: { model.moveError != nil },
                                                           set: { if !$0 { model.moveError = nil } })) {

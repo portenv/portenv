@@ -320,10 +320,10 @@ func TeamIO(args []string, stdin io.Reader, stdout io.Writer) error {
 		return json.NewEncoder(stdout).Encode(found)
 	case "clone-own":
 		// As the agent, through as-agent (ADR 0022 §2a point 2).
-		if len(args) != 5 {
-			return errors.New("clone-own PROJECT HOME ID QUOTA")
+		if len(args) != 6 {
+			return errors.New("clone-own PROJECT HOME ID QUOTA NAME")
 		}
-		return cloneOwn(context.Background(), dir, args[2], args[3], args[4], homeGit(args[2]), stdout)
+		return cloneOwn(context.Background(), dir, args[2], args[3], args[4], args[5], homeGit(args[2]), stdout)
 	case "bundle-own":
 		// As the agent, through as-agent (ADR 0022 §2a point 3): its
 		// branch's bundle on stdout.

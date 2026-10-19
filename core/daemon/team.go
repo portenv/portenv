@@ -803,12 +803,14 @@ func (e *teamEngine) startAgentAs(ctx context.Context, name, agentID string, app
 	// each start (ADR 0022 §2a): init checks it again every time, and
 	// refuses with a plain line.
 	var cloneAgents []string
+	names := map[string]string{}
 	for i := range team.Agents {
-		if team.Agents[i].OwnClone() {
-			cloneAgents = append(cloneAgents, team.Agents[i].ID)
+		if t := &team.Agents[i]; t.OwnClone() {
+			cloneAgents = append(cloneAgents, t.ID)
+			names[t.ID] = t.Spec.Name
 		}
 	}
-	pr, err := h.PrepareTeamProject(ctx, &agentv1.PrepareTeamProjectRequest{ProjectDir: "/home/work/" + name, CloneAgents: cloneAgents, HomeQuotaBytes: defaultHomeQuota})
+	pr, err := h.PrepareTeamProject(ctx, &agentv1.PrepareTeamProjectRequest{ProjectDir: "/home/work/" + name, CloneAgents: cloneAgents, HomeQuotaBytes: defaultHomeQuota, AgentNames: names})
 	if err != nil {
 		return nil, errors.New(status.Convert(err).Message())
 	}
@@ -833,6 +835,7 @@ func (e *teamEngine) startAgentAs(ctx context.Context, name, agentID string, app
 	r, err := h.StartTeamAgent(ctx, &agentv1.StartTeamAgentRequest{
 		AgentId:         agentID,
 		CloneProjectDir: clone,
+		AgentName:       a.Spec.Name,
 		ProjectDir:      "/home/work/" + name,
 		CloneReaders:    cloneReaders(&team),
 		Argv:            a.Runner,

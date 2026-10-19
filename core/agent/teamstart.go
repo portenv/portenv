@@ -113,7 +113,7 @@ func (s *apiServer) StartTeamAgent(ctx context.Context, req *agentv1.StartTeamAg
 	// (ADR 0022 §2a): the owner's project is never the agent's to write.
 	workDir := ""
 	if p := req.GetCloneProjectDir(); p != "" {
-		dir, err := s.ensureClone(ctx, id, u, p, req.GetHomeQuotaBytes())
+		dir, err := s.ensureClone(ctx, id, req.GetAgentName(), u, p, req.GetHomeQuotaBytes())
 		if err != nil {
 			s.team.removeAgent(id)
 			return nil, err

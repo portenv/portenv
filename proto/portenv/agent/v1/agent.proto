@@ -439,6 +439,9 @@ message Msg {
 message AskOwner {
   string text = 1;
   string thread_id = 2;
+  // --choice, in order: 2 to 4 labels, each 1 to 80 characters of plain
+  // text (CC-0501). Empty asks a yes/no question.
+  repeated string choices = 3;
 }
 
 message Inbox {

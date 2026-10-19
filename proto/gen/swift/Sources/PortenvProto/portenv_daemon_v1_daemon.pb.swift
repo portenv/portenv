@@ -2367,6 +2367,14 @@ public nonisolated struct Portenv_Daemon_V1_AnswerDecisionRequest: Sendable {
 
   public var note: String = String()
 
+  /// For a decision with choices (CC-0501): the chosen one, counting from
+  /// 1, with approve true. portenvd refuses it unless choice_label is
+  /// exactly the decision's stored choices[choice-1]. 0 for Decline and for
+  /// a decision without choices.
+  public var choice: Int32 = 0
+
+  public var choiceLabel: String = String()
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -6756,7 +6764,7 @@ nonisolated extension Portenv_Daemon_V1_StopAgentResponse: SwiftProtobuf.Message
 
 nonisolated extension Portenv_Daemon_V1_AnswerDecisionRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".AnswerDecisionRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{3}decision_id\0\u{1}approve\0\u{1}note\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{3}decision_id\0\u{1}approve\0\u{1}note\0\u{1}choice\0\u{3}choice_label\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -6768,6 +6776,8 @@ nonisolated extension Portenv_Daemon_V1_AnswerDecisionRequest: SwiftProtobuf.Mes
       case 2: try { try decoder.decodeSingularStringField(value: &self.decisionID) }()
       case 3: try { try decoder.decodeSingularBoolField(value: &self.approve) }()
       case 4: try { try decoder.decodeSingularStringField(value: &self.note) }()
+      case 5: try { try decoder.decodeSingularInt32Field(value: &self.choice) }()
+      case 6: try { try decoder.decodeSingularStringField(value: &self.choiceLabel) }()
       default: break
       }
     }
@@ -6786,6 +6796,12 @@ nonisolated extension Portenv_Daemon_V1_AnswerDecisionRequest: SwiftProtobuf.Mes
     if !self.note.isEmpty {
       try visitor.visitSingularStringField(value: self.note, fieldNumber: 4)
     }
+    if self.choice != 0 {
+      try visitor.visitSingularInt32Field(value: self.choice, fieldNumber: 5)
+    }
+    if !self.choiceLabel.isEmpty {
+      try visitor.visitSingularStringField(value: self.choiceLabel, fieldNumber: 6)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -6794,6 +6810,8 @@ nonisolated extension Portenv_Daemon_V1_AnswerDecisionRequest: SwiftProtobuf.Mes
     if lhs.decisionID != rhs.decisionID {return false}
     if lhs.approve != rhs.approve {return false}
     if lhs.note != rhs.note {return false}
+    if lhs.choice != rhs.choice {return false}
+    if lhs.choiceLabel != rhs.choiceLabel {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

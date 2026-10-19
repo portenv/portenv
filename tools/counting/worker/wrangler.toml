@@ -1,0 +1,36 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# The counting Worker behind portenv.com/appcast.xml (PLAN.md 1.8): the one
+# named exception to "no Portenv backend before Phase 3" (ADR 0008). The
+# owner deploys it with his own Cloudflare login (tools/counting/README.md);
+# no Cloudflare credential is ever in this repository.
+name = "portenv-counting"
+main = "src/index.mjs"
+compatibility_date = "2026-09-01"
+
+# Only the counting route: no workers.dev URL, no preview URLs.
+workers_dev = false
+preview_urls = false
+routes = [
+  { pattern = "portenv.com/appcast.xml", zone_name = "portenv.com" },
+]
+
+# Nothing about a request is kept (R-0010 point 4): Workers Logs and
+# invocation logs off, no Logpush, no tail consumers, no Analytics Engine.
+logpush = false
+[observability]
+enabled = false
+[observability.logs]
+enabled = false
+invocation_logs = false
+
+[vars]
+APPCAST_URL = "https://github.com/portenv/portenv/releases/latest/download/appcast.xml"
+
+# The counters (schema.sql). database_id is printed by
+# `wrangler d1 create portenv-counting`; it names the database, it isn't a
+# secret.
+[[d1_databases]]
+binding = "DB"
+database_name = "portenv-counting"
+database_id = "SET-AT-DEPLOY"

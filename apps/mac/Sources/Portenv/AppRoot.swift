@@ -59,6 +59,7 @@ final class AppModel {
     /// boxes, and decide.
     func start() async {
         problem = nil
+        AppCounting.check.recordInstallMonth()
         await LaunchOrder.begin(
             offersMove: MoveToApplications.shouldOffer,
             register: { _ = await LoginItem.ensureRegistered() },
@@ -226,6 +227,7 @@ final class AppModel {
             ensureDaemon: LoginItem.ensureRegistered
         )
         self.controller = controller
+        controller.onMoved = { AppCounting.check.noteMoved() }
         let tabs = TabsController(box: box, daemon: daemon)
         // A long command finishing in a tab, when the window isn't in
         // front (§5).
@@ -235,7 +237,9 @@ final class AppModel {
         }
         self.tabs = tabs
         split = SplitController(tabs: tabs)
-        team = TeamController(box: box, daemon: daemon)
+        let team = TeamController(box: box, daemon: daemon)
+        team.onAgentRunning = { AppCounting.check.noteAgentWorked() }
+        self.team = team
         launch = .open(box)
         defaults.set(box, forKey: Self.lastBoxKey)
         onOpen?(controller)
@@ -251,6 +255,11 @@ final class AppModel {
         openTask = opening
         await opening.value
         guard self.controller === controller else { return } // closed meanwhile
+        // The day's usage check, if the person chose counting (PLAN.md
+        // 1.8): fire and forget, off the main thread.
+        if controller.isOpen {
+            AppCounting.check.workspaceOpened(UsageFacts(workspaces: boxes.count, servers: controller.servers.count))
+        }
         // The state line follows the state portenvd pushes (WatchBoxState).
         // Alongside, whether Docker Desktop stopped (R-0098).
         followTask = Task {
@@ -449,4 +458,14 @@ struct ServiceUpdatingView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .accessibilityElement(children: .combine)
     }
+}
+
+/// Usage counting's check for this app (PLAN.md 1.8). A dev lane's build
+/// (gmake app LANE=X) never counts.
+enum AppCounting {
+    static let check = UsageCheck(
+        version: Feedback.Facts.current().version,
+        macOSMajor: ProcessInfo.processInfo.operatingSystemVersion.majorVersion,
+        counts: Instance.current.name == nil
+    )
 }

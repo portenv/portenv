@@ -221,6 +221,8 @@ private struct RecoveryKeyPane: View {
 /// Release notes are hidden too: there's no release with notes yet.
 private struct UpdatesPane: View {
     private let facts = Feedback.Facts.current()
+    /// "Count me in usage numbers", the same choice as first run's (R-0126).
+    @AppStorage(UsageCounting.choiceKey) private var countUsage = false
 
     var body: some View {
         Form {
@@ -228,8 +230,12 @@ private struct UpdatesPane: View {
                 SettingRow(label: SettingsText.version(facts), line: SettingsText.downloadForNow)
             }
             Section(SettingsText.privacyHeading) {
+                if UsageCounting.shown {
+                    CountingChoice(countUsage: Binding(get: { countUsage },
+                                                       set: { UsageCounting.setChoice($0) }))
+                }
                 SettingRow(label: SettingsText.whatPortenvSends,
-                           line: SettingsText.whatPortenvSendsLine(counting: UsageCounting.isOn())) {
+                           line: SettingsText.whatPortenvSendsLine(counting: countUsage && UsageCounting.shown)) {
                     Link(SettingsText.readPrivacyPage, destination: SettingsText.privacyURL)
                 }
                 SettingRow(label: SettingsText.feedback, line: Feedback.address) {

@@ -46,13 +46,14 @@ struct SettingsTests {
         #expect(!off.contains("update check") && !on.contains("update check"))
     }
 
-    /// Counting is on only in a build with counting, and only if chosen;
-    /// this build has none, so a stored choice alone never turns it on.
-    @Test func countingIsOffWithoutABuildThatCounts() throws {
+    /// Counting is off until chosen (R-0126), from first run or Settings,
+    /// and one click turns it off again.
+    @Test func countingIsOffUntilChosen() throws {
         let defaults = try #require(UserDefaults(suiteName: "SettingsTests-\(UUID().uuidString)"))
-        defaults.set(true, forKey: UsageCounting.choiceKey)
-        #expect(UsageCounting.isOn(defaults) == UsageCounting.shown)
-        defaults.set(false, forKey: UsageCounting.choiceKey)
+        #expect(!UsageCounting.isOn(defaults))
+        UsageCounting.setChoice(true, defaults)
+        #expect(UsageCounting.isOn(defaults))
+        UsageCounting.setChoice(false, defaults)
         #expect(!UsageCounting.isOn(defaults))
     }
 

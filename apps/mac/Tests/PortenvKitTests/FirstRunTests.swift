@@ -176,13 +176,12 @@ struct FirstRunTests {
         #expect(service.created.count == 1)
     }
 
-    /// Counting (PLAN.md 1.8, and point 6 of the CNIL criteria): hidden
-    /// while nothing is counted, and unticked when it comes (opt-in,
-    /// R-0106, R-0126), with the exact fields; nothing in the list
-    /// identifies anyone.
-    @Test func countingIsHiddenUntickedAndListedInPlainWords() {
+    /// Counting (PLAN.md 1.8, and point 6 of the CNIL criteria): shown on
+    /// Welcome, unticked (opt-in, R-0106, R-0126), with the exact fields;
+    /// nothing in the list identifies anyone.
+    @Test func countingIsShownUntickedAndListedInPlainWords() {
         let flow = FirstRunFlow(service: FakeFirstRunService())
-        #expect(!UsageCounting.shown)
+        #expect(UsageCounting.shown)
         #expect(!flow.countUsage)
         #expect(FirstRunText.countMeIn == "Count me in usage numbers (no ID, nothing about your work)")
         let fields = FirstRunText.countedFields.joined(separator: " ")
@@ -192,7 +191,8 @@ struct FirstRunTests {
         // The IP address is seen in transit, so the line never claims it
         // isn't sent (PLAN.md 1.8, CNIL point 4).
         #expect(FirstRunText.neverCounted == "Never sent: any ID, your name or email, workspace names, file names or anything in your workspaces. Your IP address is seen in transit but never kept.")
-        #expect(FirstRunText.turnOff.contains("Settings"))
+        #expect(FirstRunText.turnOff.contains("Settings › Updates"))
+        #expect(FirstRunText.countedWhen.contains("once a day") && FirstRunText.countedWhen.contains("open a workspace"))
     }
 
     /// VoiceOver reads the recovery key one character at a time, so it can

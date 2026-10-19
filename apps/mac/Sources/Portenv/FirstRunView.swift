@@ -162,10 +162,15 @@ struct FirstRunView: View {
             // Welcome has no footer: why Continue didn't move on goes under it.
             refusal
                 .frame(maxWidth: 440)
-            // Counting needs the update check, which tester builds don't
-            // have yet: hidden until counting exists (R-0098, R-0106).
+            // Before any check is sent, unticked until ticked (R-0106,
+            // R-0126); the choice is kept at once, as Settings keeps it.
             if UsageCounting.shown {
-                CountingChoice(countUsage: $flow.countUsage)
+                CountingChoice(countUsage: Binding(
+                    get: { flow.countUsage },
+                    set: { on in
+                        flow.countUsage = on
+                        UsageCounting.setChoice(on)
+                    }))
                     .frame(maxWidth: 440)
             }
         }
@@ -464,6 +469,7 @@ struct CountingChoice: View {
                     ForEach(FirstRunText.countedFields, id: \.self) { field in
                         Text("• " + field).fixedSize(horizontal: false, vertical: true)
                     }
+                    Text(FirstRunText.countedWhen).fixedSize(horizontal: false, vertical: true)
                     Text(FirstRunText.neverCounted).fixedSize(horizontal: false, vertical: true)
                     Text(FirstRunText.turnOff).fixedSize(horizontal: false, vertical: true)
                 }

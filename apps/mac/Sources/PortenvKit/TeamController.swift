@@ -10,6 +10,8 @@ public enum TeamSelection: Equatable, Hashable, Sendable {
     case agent(String)
     /// A decision Portenv itself asks (the team's first start), by id.
     case decision(String)
+    /// Team activity: the whole team's messages (R-0313).
+    case activity
 }
 
 /// A workspace's team, followed from portenvd, and the owner's actions on
@@ -102,6 +104,52 @@ public final class TeamController {
             let m = try await self.daemon.sendMessage(self.box, to: agent, thread: thread, text: text)
             self.state.apply(.message(m))
         }
+    }
+
+    /// What the owner has typed in each agent's message field, by agent id;
+    /// kept while another agent is selected, and after a refusal.
+    public private(set) var drafts: [String: String] = [:]
+    /// Why the last send to an agent was refused, one plain line shown
+    /// under its field; cleared when the owner types or a send works.
+    public private(set) var refusals: [String: String] = [:]
+    private var sending: Set<String> = []
+
+    public func draft(for agent: String) -> String { drafts[agent] ?? "" }
+
+    public func setDraft(_ text: String, for agent: String) {
+        guard drafts[agent] != text else { return }
+        drafts[agent] = text
+        refusals[agent] = nil
+    }
+
+    /// The message field's Return (GUIDELINES 6.2): sends exactly what was
+    /// typed, as the owner, to this agent only, through portenvd's
+    /// SendMessage (which wakes an idle agent). Nothing is sent when it's
+    /// only white space, over 8 KB (refused here, saying so) or while a send
+    /// to this agent is under way. A refusal keeps the draft; a send that
+    /// worked clears it. True when it was sent.
+    @discardableResult
+    public func submit(to agent: String) async -> Bool {
+        let text = draft(for: agent)
+        guard !text.allSatisfy(\.isWhitespace), !sending.contains(agent) else { return false }
+        if let refusal = TeamMessageText.refusal(text) {
+            refusals[agent] = refusal
+            return false
+        }
+        sending.insert(agent)
+        defer { sending.remove(agent) }
+        do {
+            let m = try await daemon.sendMessage(box, to: agent, thread: "", text: text)
+            state.apply(.message(m))
+            if drafts[agent] == text { drafts[agent] = "" }
+            refusals[agent] = nil
+            return true
+        } catch let e as DaemonError {
+            refusals[agent] = e.message
+        } catch {
+            refusals[agent] = error.localizedDescription
+        }
+        return false
     }
 
     /// Whether Start is on: a stopped agent of this workspace whose file

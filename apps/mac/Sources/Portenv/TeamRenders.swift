@@ -24,6 +24,8 @@ enum TeamRenders {
             ("builder", TeamText.owner, "Split done. Tests are running in my second pane.", 29),
             (TeamText.owner, "builder", "Ping me before touching the refunds module.", 27),
             ("builder", TeamText.owner, "Will do.", 26),
+            ("builder", "reviewer", "The fake clock fix is on retries-clock.", 25),
+            ("reviewer", "builder", "Looks right. One question about the jitter: should it come from the same clock?", 23),
         ].enumerated() {
             s.apply(.message(TeamMessage(id: "m\(i)", from: from, to: to, text: text, createdAt: now.addingTimeInterval(Double(-minutes * 60)))))
         }

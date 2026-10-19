@@ -133,10 +133,8 @@ jobs:
       # approve lead, the TEAM_START decision, start lead, whoami in its
       # pane, and its ask-owner in the decision list; its ask-owner
       # --choice answered by number over gRPC, with the label in its inbox
-      # (CC-0501); then lead writes a
-      # file and runs git, and builder's start must get past them (CC-0494);
-      # builder runs git in the project and in a worktree, and can't write
-      # .git/config or .git/hooks (CC-0493).
+      # (CC-0501); then the agents' own
+      # clones, with what ADR 0022 §2a's gate checks (R-0315).
       # No fixtures. After the other tests, so a failure here never hides
       # theirs.
       - name: Agent team first start

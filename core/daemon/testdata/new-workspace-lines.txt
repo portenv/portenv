@@ -1,0 +1,3 @@
+Portenv uses Docker Desktop to run workspaces on this Mac, and it isn’t running. Start Docker Desktop, then create the workspace again.
+Docker Desktop is still starting, or isn’t answering. Wait a moment, then create the workspace again.
+This Mac has 3.2 GB free, and a new workspace needs at least 5 GB. Free some space, then create the workspace again.

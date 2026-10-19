@@ -36,7 +36,7 @@ var teamUsage = map[string]string{
 	"msg":                  "msg AGENT TEXT [--thread ID] [--type notice|question|answer]",
 	"ask-owner":            `ask-owner TEXT [--choice "LABEL" --choice "LABEL"...] [--thread ID]`,
 	"inbox":                "inbox [--wait] [--since CURSOR]",
-	"share":                "share [BRANCH] [--text TEXT]",
+	"share":                "share [agent/YOUR-ID] [--text TEXT]",
 	"propose-agent-change": "propose-agent-change FILE",
 	"request-package":      "request-package NAME [--reason TEXT]",
 	"whoami":               "whoami",

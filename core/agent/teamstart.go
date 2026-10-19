@@ -35,6 +35,9 @@ type AgentServerSpec struct {
 	SocketDir string
 	Argv      []string
 	Env       []string
+	// WorkDir is where the runner starts: the agent's clone
+	// (/home/<id>/<workspace>), or its home when empty.
+	WorkDir string
 }
 
 // errNoAgentServers is what StartTeamAgent says until a build has the
@@ -106,10 +109,22 @@ func (s *apiServer) StartTeamAgent(ctx context.Context, req *agentv1.StartTeamAg
 	if err := s.writeAsUser(u.UID, u.UID, filepath.Join(u.Home, "AGENTS.md"), []byte(req.GetAgentsMd())); err != nil {
 		return nil, fail(codes.Internal, "write %s's AGENTS.md: %v", id, err)
 	}
+	// Its own clone of the project, made as the agent if it's missing
+	// (ADR 0022 §2a): the owner's project is never the agent's to write.
+	workDir := ""
+	if p := req.GetCloneProjectDir(); p != "" {
+		dir, err := s.ensureClone(ctx, id, u, p, req.GetHomeQuotaBytes())
+		if err != nil {
+			s.team.removeAgent(id)
+			return nil, err
+		}
+		workDir = dir
+	}
 	spec := AgentServerSpec{
 		ID: id, UID: u.UID, GID: u.UID, Home: u.Home,
 		SocketDir: u.TmuxDir,
 		Argv:      argv,
+		WorkDir:   workDir,
 		Env: []string{
 			"HOME=" + u.Home,
 			"USER=" + id,

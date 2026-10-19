@@ -91,6 +91,9 @@ type apiServer struct {
 	// runHomeIO runs team-io as an agent, for its home's files (nil: as
 	// the agent's uid, runAsAgent).
 	runHomeIO func(ctx context.Context, uid int, args []string, stdin io.Reader) ([]byte, error)
+	// asAgentIO runs team-io as an agent through as-agent's switch, for
+	// its clone (nil: runTeamIOAsAgent; tests replace it).
+	asAgentIO func(ctx context.Context, uid int, home string, args []string, stdin io.Reader) ([]byte, error)
 	// setAgentIdleInput gives lane A's idle decision a running agent's
 	// idle-input pattern (SetAgentIdleInput; nil in tests).
 	setAgentIdleInput func(id, pattern string) error

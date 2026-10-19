@@ -417,7 +417,7 @@ public enum TeamText {
             case 0x09: out.append(" ")
             case 0x00 ... 0x1F, 0x7F ... 0x9F: continue
             // Bidi controls and isolates can reorder what's shown.
-            case 0x200E, 0x200F, 0x202A ... 0x202E, 0x2066 ... 0x2069: continue
+            case 0x061C, 0x200E, 0x200F, 0x202A ... 0x202E, 0x2066 ... 0x2069: continue
             default: out.append(u)
             }
             count += 1

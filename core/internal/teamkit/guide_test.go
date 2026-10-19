@@ -85,3 +85,10 @@ func TestEnumValuesReadPlainly(t *testing.T) {
 		t.Errorf("MessageType = %v", g.Enums["MessageType"])
 	}
 }
+
+// The guide says share_login is off in this build (R-0324).
+func TestGuideSaysShareLoginIsOff(t *testing.T) {
+	if !strings.Contains(NewGuide().Text(), ShareLoginOff) {
+		t.Error("portenv guide doesn't say share_login is off")
+	}
+}

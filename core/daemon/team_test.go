@@ -1637,6 +1637,44 @@ func TestSyncAgentsFollowsTheFiles(t *testing.T) {
 	}
 }
 
+// share_login isn't in the tester build (R-0323): an agent whose file asks
+// for it starts with nothing shared and no decision asked, and both its
+// column and its whoami say so.
+func TestShareLoginIsSaidToBeOff(t *testing.T) {
+	builder := testAgent("builder", grant(typesv1.GrantMode_GRANT_MODE_ASK, 2, []string{"lead"}, true))
+	builder.ShareLogin = []string{"claude", "gh"}
+	e, h, _ := newTestEngine(t, testAgent("lead", grant(typesv1.GrantMode_GRANT_MODE_ALLOW, 4, []string{"builder"}, true)), builder)
+	approveFirstStart(t, e)
+	ctx := context.Background()
+	if _, err := e.startAgent(ctx, "w", "builder"); err != nil {
+		t.Fatal(err)
+	}
+	if len(h.startedIDs()) != 1 {
+		t.Fatalf("started %v", h.startedIDs())
+	}
+	for _, d := range e.box("w").decisions {
+		if d.GetKind() == typesv1.DecisionKind_DECISION_KIND_SHARE_LOGIN {
+			t.Fatalf("a share_login decision was asked: %v", d)
+		}
+	}
+	infos := e.agentInfos(ctx, "w")
+	want := "Sharing your sign-in (claude, gh) isn't in this build, so nothing is shared. Sign Builder in from its own terminal if it needs to."
+	if got := infos["builder"].GetShareLoginOff(); got != want {
+		t.Errorf("builder's column: %q\nwant %q", got, want)
+	}
+	if got := infos["lead"].GetShareLoginOff(); got != "" {
+		t.Errorf("lead asks for nothing, but its column says %q", got)
+	}
+	w := e.handleCall(ctx, "w", &agentv1.TeamCallsResponse{AgentId: "builder", Op: &agentv1.TeamCallsResponse_Whoami{Whoami: &agentv1.WhoAmI{}}}).GetWhoami()
+	if got := w.GetShareLoginOff(); !strings.Contains(got, "isn't supported in this build") || !strings.Contains(got, "claude, gh") {
+		t.Errorf("builder's whoami: %q", got)
+	}
+	lw := e.handleCall(ctx, "w", &agentv1.TeamCallsResponse{AgentId: "lead", Op: &agentv1.TeamCallsResponse_Whoami{Whoami: &agentv1.WhoAmI{}}}).GetWhoami()
+	if got := lw.GetShareLoginOff(); got != "" {
+		t.Errorf("lead's whoami: %q", got)
+	}
+}
+
 // An agent's home_seed reaches the helper with the project to copy it from
 // (ADR 0022 §2, R-0323).
 func TestHomeSeedReachesTheHelper(t *testing.T) {

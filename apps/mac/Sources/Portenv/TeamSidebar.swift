@@ -4,8 +4,8 @@ import AppKit
 import PortenvKit
 import SwiftUI
 
-/// The Team sidebar (GUIDELINES 6.2, the team-* mockups): Needs you, then
-/// You and the agents. Everything an agent wrote is shown as plain text.
+/// The Team sidebar (GUIDELINES 6.2, the team-* mockups): Team activity,
+/// Needs you, then You and the agents. Everything an agent wrote is shown as plain text.
 struct TeamSidebar: View {
     let state: TeamState
     /// Every tab, for the selected agent's tabs beneath its row and your
@@ -21,6 +21,10 @@ struct TeamSidebar: View {
 
     var body: some View {
         List(selection: Binding(get: { Optional(selection) }, set: { selection = $0 ?? .allTabs })) {
+            // The whole team's messages (R-0313).
+            Section {
+                TeamActivityRow(compact: compact).tag(TeamSelection.activity)
+            }
             if !state.needsYou.isEmpty {
                 Section(compact ? "" : TeamText.needsYouHeading(state.needsYou.count)) {
                     ForEach(state.needsYou) { d in

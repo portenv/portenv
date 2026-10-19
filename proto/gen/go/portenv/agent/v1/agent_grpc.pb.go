@@ -25,36 +25,39 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	AgentService_GetVersion_FullMethodName         = "/portenv.agent.v1.AgentService/GetVersion"
-	AgentService_GetReadiness_FullMethodName       = "/portenv.agent.v1.AgentService/GetReadiness"
-	AgentService_RetryPackages_FullMethodName      = "/portenv.agent.v1.AgentService/RetryPackages"
-	AgentService_RunRestic_FullMethodName          = "/portenv.agent.v1.AgentService/RunRestic"
-	AgentService_GetPathInfo_FullMethodName        = "/portenv.agent.v1.AgentService/GetPathInfo"
-	AgentService_Terminal_FullMethodName           = "/portenv.agent.v1.AgentService/Terminal"
-	AgentService_ListTabs_FullMethodName           = "/portenv.agent.v1.AgentService/ListTabs"
-	AgentService_NewTab_FullMethodName             = "/portenv.agent.v1.AgentService/NewTab"
-	AgentService_CloseTab_FullMethodName           = "/portenv.agent.v1.AgentService/CloseTab"
-	AgentService_RenameTab_FullMethodName          = "/portenv.agent.v1.AgentService/RenameTab"
-	AgentService_SelectTab_FullMethodName          = "/portenv.agent.v1.AgentService/SelectTab"
-	AgentService_WatchTabs_FullMethodName          = "/portenv.agent.v1.AgentService/WatchTabs"
-	AgentService_TabTerminal_FullMethodName        = "/portenv.agent.v1.AgentService/TabTerminal"
-	AgentService_TeamCalls_FullMethodName          = "/portenv.agent.v1.AgentService/TeamCalls"
-	AgentService_StartTeamAgent_FullMethodName     = "/portenv.agent.v1.AgentService/StartTeamAgent"
-	AgentService_StopTeamAgent_FullMethodName      = "/portenv.agent.v1.AgentService/StopTeamAgent"
-	AgentService_AppendBoard_FullMethodName        = "/portenv.agent.v1.AgentService/AppendBoard"
-	AgentService_ListHomeFiles_FullMethodName      = "/portenv.agent.v1.AgentService/ListHomeFiles"
-	AgentService_ReadHomeFile_FullMethodName       = "/portenv.agent.v1.AgentService/ReadHomeFile"
-	AgentService_WriteHomeFiles_FullMethodName     = "/portenv.agent.v1.AgentService/WriteHomeFiles"
-	AgentService_EnsureAgentUser_FullMethodName    = "/portenv.agent.v1.AgentService/EnsureAgentUser"
-	AgentService_RemoveAgentUser_FullMethodName    = "/portenv.agent.v1.AgentService/RemoveAgentUser"
-	AgentService_SimulatePackage_FullMethodName    = "/portenv.agent.v1.AgentService/SimulatePackage"
-	AgentService_InstallPackages_FullMethodName    = "/portenv.agent.v1.AgentService/InstallPackages"
-	AgentService_AgentPaneAction_FullMethodName    = "/portenv.agent.v1.AgentService/AgentPaneAction"
-	AgentService_ReadBoard_FullMethodName          = "/portenv.agent.v1.AgentService/ReadBoard"
-	AgentService_ReadAgentFiles_FullMethodName     = "/portenv.agent.v1.AgentService/ReadAgentFiles"
-	AgentService_DeliverRoutine_FullMethodName     = "/portenv.agent.v1.AgentService/DeliverRoutine"
-	AgentService_HandoffFiles_FullMethodName       = "/portenv.agent.v1.AgentService/HandoffFiles"
-	AgentService_PrepareTeamProject_FullMethodName = "/portenv.agent.v1.AgentService/PrepareTeamProject"
+	AgentService_GetVersion_FullMethodName           = "/portenv.agent.v1.AgentService/GetVersion"
+	AgentService_GetReadiness_FullMethodName         = "/portenv.agent.v1.AgentService/GetReadiness"
+	AgentService_RetryPackages_FullMethodName        = "/portenv.agent.v1.AgentService/RetryPackages"
+	AgentService_RunRestic_FullMethodName            = "/portenv.agent.v1.AgentService/RunRestic"
+	AgentService_GetPathInfo_FullMethodName          = "/portenv.agent.v1.AgentService/GetPathInfo"
+	AgentService_Terminal_FullMethodName             = "/portenv.agent.v1.AgentService/Terminal"
+	AgentService_ListTabs_FullMethodName             = "/portenv.agent.v1.AgentService/ListTabs"
+	AgentService_NewTab_FullMethodName               = "/portenv.agent.v1.AgentService/NewTab"
+	AgentService_CloseTab_FullMethodName             = "/portenv.agent.v1.AgentService/CloseTab"
+	AgentService_RenameTab_FullMethodName            = "/portenv.agent.v1.AgentService/RenameTab"
+	AgentService_SelectTab_FullMethodName            = "/portenv.agent.v1.AgentService/SelectTab"
+	AgentService_WatchTabs_FullMethodName            = "/portenv.agent.v1.AgentService/WatchTabs"
+	AgentService_TabTerminal_FullMethodName          = "/portenv.agent.v1.AgentService/TabTerminal"
+	AgentService_TeamCalls_FullMethodName            = "/portenv.agent.v1.AgentService/TeamCalls"
+	AgentService_StartTeamAgent_FullMethodName       = "/portenv.agent.v1.AgentService/StartTeamAgent"
+	AgentService_StopTeamAgent_FullMethodName        = "/portenv.agent.v1.AgentService/StopTeamAgent"
+	AgentService_AppendBoard_FullMethodName          = "/portenv.agent.v1.AgentService/AppendBoard"
+	AgentService_ListHomeFiles_FullMethodName        = "/portenv.agent.v1.AgentService/ListHomeFiles"
+	AgentService_ReadHomeFile_FullMethodName         = "/portenv.agent.v1.AgentService/ReadHomeFile"
+	AgentService_WriteHomeFiles_FullMethodName       = "/portenv.agent.v1.AgentService/WriteHomeFiles"
+	AgentService_EnsureAgentUser_FullMethodName      = "/portenv.agent.v1.AgentService/EnsureAgentUser"
+	AgentService_RemoveAgentUser_FullMethodName      = "/portenv.agent.v1.AgentService/RemoveAgentUser"
+	AgentService_SimulatePackage_FullMethodName      = "/portenv.agent.v1.AgentService/SimulatePackage"
+	AgentService_InstallPackages_FullMethodName      = "/portenv.agent.v1.AgentService/InstallPackages"
+	AgentService_AgentPaneAction_FullMethodName      = "/portenv.agent.v1.AgentService/AgentPaneAction"
+	AgentService_ReadBoard_FullMethodName            = "/portenv.agent.v1.AgentService/ReadBoard"
+	AgentService_ReadAgentFiles_FullMethodName       = "/portenv.agent.v1.AgentService/ReadAgentFiles"
+	AgentService_DeliverRoutine_FullMethodName       = "/portenv.agent.v1.AgentService/DeliverRoutine"
+	AgentService_HandoffFiles_FullMethodName         = "/portenv.agent.v1.AgentService/HandoffFiles"
+	AgentService_PrepareTeamProject_FullMethodName   = "/portenv.agent.v1.AgentService/PrepareTeamProject"
+	AgentService_FetchAgentBranch_FullMethodName     = "/portenv.agent.v1.AgentService/FetchAgentBranch"
+	AgentService_ResolveTeamMigration_FullMethodName = "/portenv.agent.v1.AgentService/ResolveTeamMigration"
+	AgentService_WakeAgent_FullMethodName            = "/portenv.agent.v1.AgentService/WakeAgent"
 )
 
 // AgentServiceClient is the client API for AgentService service.
@@ -141,12 +144,33 @@ type AgentServiceClient interface {
 	// recipient's ~/inbox/<sender>/<timestamp>/ as the recipient (R-0257
 	// item 3): regular files only, no links, at most 100 MB, within quota.
 	HandoffFiles(ctx context.Context, in *HandoffFilesRequest, opts ...grpc.CallOption) (*HandoffFilesResponse, error)
-	// Served only by init: opens the project to the team at team start
-	// (ADR 0022 §2): /home/work 0711 with its dotfiles 0700, the project's
-	// group team, setgid folders and default ACLs, with .git/hooks,
-	// .git/config and .portenv/ never group-writable. Refuses with a plain
-	// line when the filesystem won't keep ACLs.
+	// Served only by init: makes the project readable by the team at team
+	// start (ADR 0022 §2a, R-0315): /home/work 0711 with its dotfiles 0700;
+	// every file in the project work's, with g:team:r-X and no write for
+	// group team, other users or any named entry; no core.sharedRepository
+	// and no system safe.directory from Portenv. Before it changes anything
+	// it checks for what an agent could have changed in what work's git
+	// reads, and refuses with a plain line if it finds any. Refuses too when
+	// the filesystem won't keep ACLs.
 	PrepareTeamProject(ctx context.Context, in *PrepareTeamProjectRequest, opts ...grpc.CallOption) (*PrepareTeamProjectResponse, error)
+	// Fetches an agent's branch into the owner's project as
+	// refs/remotes/agents/<id> (ADR 0022 §2a point 3): as the agent, its
+	// clone's agent/<id> is bundled; as work, that file alone is fetched,
+	// with only the file protocol, no hooks or fsmonitor, every object
+	// checked, no tags and no submodules. work's git never opens the agent's
+	// repository.
+	FetchAgentBranch(ctx context.Context, in *FetchAgentBranchRequest, opts ...grpc.CallOption) (*FetchAgentBranchResponse, error)
+	// Served only by init (relayed by the helper): the owner's answer to the
+	// move to agents' own clones (ADR 0022 §2a point 6). Each recorded item
+	// is removed or becomes work's; nothing is deleted without it. Refused
+	// while any agent process runs.
+	ResolveTeamMigration(ctx context.Context, in *ResolveTeamMigrationRequest, opts ...grpc.CallOption) (*ResolveTeamMigrationResponse, error)
+	// Wakes an idle agent for new board lines (CC-0498): types the fixed
+	// line "[Portenv] new message from <from>; run portenv inbox", then
+	// Enter, into the agent's own main pane, under exactly DeliverRoutine's
+	// checks. The helper writes the line itself; no message text is ever
+	// typed, and from must be an agent id or "owner".
+	WakeAgent(ctx context.Context, in *WakeAgentRequest, opts ...grpc.CallOption) (*WakeAgentResponse, error)
 }
 
 type agentServiceClient struct {
@@ -496,6 +520,36 @@ func (c *agentServiceClient) PrepareTeamProject(ctx context.Context, in *Prepare
 	return out, nil
 }
 
+func (c *agentServiceClient) FetchAgentBranch(ctx context.Context, in *FetchAgentBranchRequest, opts ...grpc.CallOption) (*FetchAgentBranchResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(FetchAgentBranchResponse)
+	err := c.cc.Invoke(ctx, AgentService_FetchAgentBranch_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *agentServiceClient) ResolveTeamMigration(ctx context.Context, in *ResolveTeamMigrationRequest, opts ...grpc.CallOption) (*ResolveTeamMigrationResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ResolveTeamMigrationResponse)
+	err := c.cc.Invoke(ctx, AgentService_ResolveTeamMigration_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *agentServiceClient) WakeAgent(ctx context.Context, in *WakeAgentRequest, opts ...grpc.CallOption) (*WakeAgentResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WakeAgentResponse)
+	err := c.cc.Invoke(ctx, AgentService_WakeAgent_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AgentServiceServer is the server API for AgentService service.
 // All implementations must embed UnimplementedAgentServiceServer
 // for forward compatibility.
@@ -580,12 +634,33 @@ type AgentServiceServer interface {
 	// recipient's ~/inbox/<sender>/<timestamp>/ as the recipient (R-0257
 	// item 3): regular files only, no links, at most 100 MB, within quota.
 	HandoffFiles(context.Context, *HandoffFilesRequest) (*HandoffFilesResponse, error)
-	// Served only by init: opens the project to the team at team start
-	// (ADR 0022 §2): /home/work 0711 with its dotfiles 0700, the project's
-	// group team, setgid folders and default ACLs, with .git/hooks,
-	// .git/config and .portenv/ never group-writable. Refuses with a plain
-	// line when the filesystem won't keep ACLs.
+	// Served only by init: makes the project readable by the team at team
+	// start (ADR 0022 §2a, R-0315): /home/work 0711 with its dotfiles 0700;
+	// every file in the project work's, with g:team:r-X and no write for
+	// group team, other users or any named entry; no core.sharedRepository
+	// and no system safe.directory from Portenv. Before it changes anything
+	// it checks for what an agent could have changed in what work's git
+	// reads, and refuses with a plain line if it finds any. Refuses too when
+	// the filesystem won't keep ACLs.
 	PrepareTeamProject(context.Context, *PrepareTeamProjectRequest) (*PrepareTeamProjectResponse, error)
+	// Fetches an agent's branch into the owner's project as
+	// refs/remotes/agents/<id> (ADR 0022 §2a point 3): as the agent, its
+	// clone's agent/<id> is bundled; as work, that file alone is fetched,
+	// with only the file protocol, no hooks or fsmonitor, every object
+	// checked, no tags and no submodules. work's git never opens the agent's
+	// repository.
+	FetchAgentBranch(context.Context, *FetchAgentBranchRequest) (*FetchAgentBranchResponse, error)
+	// Served only by init (relayed by the helper): the owner's answer to the
+	// move to agents' own clones (ADR 0022 §2a point 6). Each recorded item
+	// is removed or becomes work's; nothing is deleted without it. Refused
+	// while any agent process runs.
+	ResolveTeamMigration(context.Context, *ResolveTeamMigrationRequest) (*ResolveTeamMigrationResponse, error)
+	// Wakes an idle agent for new board lines (CC-0498): types the fixed
+	// line "[Portenv] new message from <from>; run portenv inbox", then
+	// Enter, into the agent's own main pane, under exactly DeliverRoutine's
+	// checks. The helper writes the line itself; no message text is ever
+	// typed, and from must be an agent id or "owner".
+	WakeAgent(context.Context, *WakeAgentRequest) (*WakeAgentResponse, error)
 	mustEmbedUnimplementedAgentServiceServer()
 }
 
@@ -685,6 +760,15 @@ func (UnimplementedAgentServiceServer) HandoffFiles(context.Context, *HandoffFil
 }
 func (UnimplementedAgentServiceServer) PrepareTeamProject(context.Context, *PrepareTeamProjectRequest) (*PrepareTeamProjectResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method PrepareTeamProject not implemented")
+}
+func (UnimplementedAgentServiceServer) FetchAgentBranch(context.Context, *FetchAgentBranchRequest) (*FetchAgentBranchResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method FetchAgentBranch not implemented")
+}
+func (UnimplementedAgentServiceServer) ResolveTeamMigration(context.Context, *ResolveTeamMigrationRequest) (*ResolveTeamMigrationResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ResolveTeamMigration not implemented")
+}
+func (UnimplementedAgentServiceServer) WakeAgent(context.Context, *WakeAgentRequest) (*WakeAgentResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WakeAgent not implemented")
 }
 func (UnimplementedAgentServiceServer) mustEmbedUnimplementedAgentServiceServer() {}
 func (UnimplementedAgentServiceServer) testEmbeddedByValue()                      {}
@@ -1182,6 +1266,60 @@ func _AgentService_PrepareTeamProject_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AgentService_FetchAgentBranch_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(FetchAgentBranchRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentServiceServer).FetchAgentBranch(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentService_FetchAgentBranch_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentServiceServer).FetchAgentBranch(ctx, req.(*FetchAgentBranchRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AgentService_ResolveTeamMigration_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ResolveTeamMigrationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentServiceServer).ResolveTeamMigration(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentService_ResolveTeamMigration_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentServiceServer).ResolveTeamMigration(ctx, req.(*ResolveTeamMigrationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AgentService_WakeAgent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WakeAgentRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentServiceServer).WakeAgent(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentService_WakeAgent_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentServiceServer).WakeAgent(ctx, req.(*WakeAgentRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AgentService_ServiceDesc is the grpc.ServiceDesc for AgentService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1280,6 +1418,18 @@ var AgentService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "PrepareTeamProject",
 			Handler:    _AgentService_PrepareTeamProject_Handler,
+		},
+		{
+			MethodName: "FetchAgentBranch",
+			Handler:    _AgentService_FetchAgentBranch_Handler,
+		},
+		{
+			MethodName: "ResolveTeamMigration",
+			Handler:    _AgentService_ResolveTeamMigration_Handler,
+		},
+		{
+			MethodName: "WakeAgent",
+			Handler:    _AgentService_WakeAgent_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

@@ -1394,8 +1394,21 @@ type Decision struct {
 	// in that order. portenvd starts them itself on Approve, so the answer
 	// works after the app or portenvd restarts (R-0296).
 	StartAgentIds []string `protobuf:"bytes,12,rep,name=start_agent_ids,json=startAgentIds,proto3" json:"start_agent_ids,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// For DECISION_KIND_ASK_OWNER asked with --choice (CC-0501): the 2 to 4
+	// choices, in order, each 1 to 80 characters of plain text. The app
+	// shows one button per choice in place of Approve. Empty for a yes/no
+	// question.
+	Choices []string `protobuf:"bytes,13,rep,name=choices,proto3" json:"choices,omitempty"`
+	// The owner's choice, counting from 1 (choices[choice-1]); 0 when none
+	// was chosen. Set only on an approved decision with choices.
+	Choice int32 `protobuf:"varint,14,opt,name=choice,proto3" json:"choice,omitempty"`
+	// For DECISION_KIND_TEAM_START after the move to agents' own clones
+	// (ADR 0022 §2a point 6): what agents could have changed, for the owner
+	// to keep or remove, one by one. Approve keeps every item not named in
+	// AnswerDecisionRequest.remove_items.
+	MigrationItems []*MigrationItem `protobuf:"bytes,15,rep,name=migration_items,json=migrationItems,proto3" json:"migration_items,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *Decision) Reset() {
@@ -1512,6 +1525,131 @@ func (x *Decision) GetStartAgentIds() []string {
 	return nil
 }
 
+func (x *Decision) GetChoices() []string {
+	if x != nil {
+		return x.Choices
+	}
+	return nil
+}
+
+func (x *Decision) GetChoice() int32 {
+	if x != nil {
+		return x.Choice
+	}
+	return 0
+}
+
+func (x *Decision) GetMigrationItems() []*MigrationItem {
+	if x != nil {
+		return x.MigrationItems
+	}
+	return nil
+}
+
+// One thing the move to agents' own clones recorded (ADR 0022 §2a point
+// 6): something agents could have changed in what work's git reads, or a
+// repository, worktree or file an agent made in the project.
+type MigrationItem struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Stable within the record: what remove_items names.
+	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// Relative to the project; for a setting, what it was.
+	Path string `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
+	// "git" (a config file, hook or worktree registration in .git), "repo"
+	// (a repository an agent made in the project), "worktree", "file", or
+	// "setting" (core.sharedRepository or a system safe.directory, already
+	// removed).
+	Kind string `protobuf:"bytes,3,opt,name=kind,proto3" json:"kind,omitempty"`
+	// The agent whose it was, when Portenv can tell.
+	Agent string `protobuf:"bytes,4,opt,name=agent,proto3" json:"agent,omitempty"`
+	Size  int64  `protobuf:"varint,5,opt,name=size,proto3" json:"size,omitempty"`
+	// Whether the owner chooses: settings are removed either way.
+	Choice bool `protobuf:"varint,6,opt,name=choice,proto3" json:"choice,omitempty"`
+	// A plain line: what was copied into the agent's clone, or why not.
+	Note          string `protobuf:"bytes,7,opt,name=note,proto3" json:"note,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MigrationItem) Reset() {
+	*x = MigrationItem{}
+	mi := &file_portenv_types_v1_types_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MigrationItem) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MigrationItem) ProtoMessage() {}
+
+func (x *MigrationItem) ProtoReflect() protoreflect.Message {
+	mi := &file_portenv_types_v1_types_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MigrationItem.ProtoReflect.Descriptor instead.
+func (*MigrationItem) Descriptor() ([]byte, []int) {
+	return file_portenv_types_v1_types_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *MigrationItem) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *MigrationItem) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *MigrationItem) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *MigrationItem) GetAgent() string {
+	if x != nil {
+		return x.Agent
+	}
+	return ""
+}
+
+func (x *MigrationItem) GetSize() int64 {
+	if x != nil {
+		return x.Size
+	}
+	return 0
+}
+
+func (x *MigrationItem) GetChoice() bool {
+	if x != nil {
+		return x.Choice
+	}
+	return false
+}
+
+func (x *MigrationItem) GetNote() string {
+	if x != nil {
+		return x.Note
+	}
+	return ""
+}
+
 // One package apt-get -s would install, run by init (root), never by the
 // agent (ADR 0022 §6, R-0245 item 5).
 type PackagePlan struct {
@@ -1529,7 +1667,7 @@ type PackagePlan struct {
 
 func (x *PackagePlan) Reset() {
 	*x = PackagePlan{}
-	mi := &file_portenv_types_v1_types_proto_msgTypes[8]
+	mi := &file_portenv_types_v1_types_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1541,7 +1679,7 @@ func (x *PackagePlan) String() string {
 func (*PackagePlan) ProtoMessage() {}
 
 func (x *PackagePlan) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_types_v1_types_proto_msgTypes[8]
+	mi := &file_portenv_types_v1_types_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1554,7 +1692,7 @@ func (x *PackagePlan) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PackagePlan.ProtoReflect.Descriptor instead.
 func (*PackagePlan) Descriptor() ([]byte, []int) {
-	return file_portenv_types_v1_types_proto_rawDescGZIP(), []int{8}
+	return file_portenv_types_v1_types_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *PackagePlan) GetName() string {
@@ -1598,14 +1736,19 @@ type AgentGrant struct {
 	// team_status: read (R-0257 item 1): teammates' state, status, pending
 	// count and last activity in whoami and portenv team status. Off by
 	// default; never terminals or homes.
-	TeamStatus    bool `protobuf:"varint,6,opt,name=team_status,json=teamStatus,proto3" json:"team_status,omitempty"`
+	TeamStatus bool `protobuf:"varint,6,opt,name=team_status,json=teamStatus,proto3" json:"team_status,omitempty"`
+	// read_clones (ADR 0022 §2a, lenses): team agents with their own clone
+	// whose clone this agent may read, never write: a named-user read ACL
+	// on the clone and traverse on that agent's home, never through group
+	// team.
+	ReadClones    []string `protobuf:"bytes,7,rep,name=read_clones,json=readClones,proto3" json:"read_clones,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *AgentGrant) Reset() {
 	*x = AgentGrant{}
-	mi := &file_portenv_types_v1_types_proto_msgTypes[9]
+	mi := &file_portenv_types_v1_types_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1617,7 +1760,7 @@ func (x *AgentGrant) String() string {
 func (*AgentGrant) ProtoMessage() {}
 
 func (x *AgentGrant) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_types_v1_types_proto_msgTypes[9]
+	mi := &file_portenv_types_v1_types_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1630,7 +1773,7 @@ func (x *AgentGrant) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentGrant.ProtoReflect.Descriptor instead.
 func (*AgentGrant) Descriptor() ([]byte, []int) {
-	return file_portenv_types_v1_types_proto_rawDescGZIP(), []int{9}
+	return file_portenv_types_v1_types_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *AgentGrant) GetPanes() GrantMode {
@@ -1675,6 +1818,13 @@ func (x *AgentGrant) GetTeamStatus() bool {
 	return false
 }
 
+func (x *AgentGrant) GetReadClones() []string {
+	if x != nil {
+		return x.ReadClones
+	}
+	return nil
+}
+
 // A file or folder in an agent's home, for the Agent files view (§2).
 type AgentFile struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -1689,7 +1839,7 @@ type AgentFile struct {
 
 func (x *AgentFile) Reset() {
 	*x = AgentFile{}
-	mi := &file_portenv_types_v1_types_proto_msgTypes[10]
+	mi := &file_portenv_types_v1_types_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1701,7 +1851,7 @@ func (x *AgentFile) String() string {
 func (*AgentFile) ProtoMessage() {}
 
 func (x *AgentFile) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_types_v1_types_proto_msgTypes[10]
+	mi := &file_portenv_types_v1_types_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1714,7 +1864,7 @@ func (x *AgentFile) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentFile.ProtoReflect.Descriptor instead.
 func (*AgentFile) Descriptor() ([]byte, []int) {
-	return file_portenv_types_v1_types_proto_rawDescGZIP(), []int{10}
+	return file_portenv_types_v1_types_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *AgentFile) GetPath() string {
@@ -1762,7 +1912,7 @@ type AgentStatus struct {
 
 func (x *AgentStatus) Reset() {
 	*x = AgentStatus{}
-	mi := &file_portenv_types_v1_types_proto_msgTypes[11]
+	mi := &file_portenv_types_v1_types_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1774,7 +1924,7 @@ func (x *AgentStatus) String() string {
 func (*AgentStatus) ProtoMessage() {}
 
 func (x *AgentStatus) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_types_v1_types_proto_msgTypes[11]
+	mi := &file_portenv_types_v1_types_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1787,7 +1937,7 @@ func (x *AgentStatus) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentStatus.ProtoReflect.Descriptor instead.
 func (*AgentStatus) Descriptor() ([]byte, []int) {
-	return file_portenv_types_v1_types_proto_rawDescGZIP(), []int{11}
+	return file_portenv_types_v1_types_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *AgentStatus) GetText() string {
@@ -1838,7 +1988,7 @@ type HandoffFile struct {
 
 func (x *HandoffFile) Reset() {
 	*x = HandoffFile{}
-	mi := &file_portenv_types_v1_types_proto_msgTypes[12]
+	mi := &file_portenv_types_v1_types_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1850,7 +2000,7 @@ func (x *HandoffFile) String() string {
 func (*HandoffFile) ProtoMessage() {}
 
 func (x *HandoffFile) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_types_v1_types_proto_msgTypes[12]
+	mi := &file_portenv_types_v1_types_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1863,7 +2013,7 @@ func (x *HandoffFile) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HandoffFile.ProtoReflect.Descriptor instead.
 func (*HandoffFile) Descriptor() ([]byte, []int) {
-	return file_portenv_types_v1_types_proto_rawDescGZIP(), []int{12}
+	return file_portenv_types_v1_types_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *HandoffFile) GetPath() string {
@@ -1902,7 +2052,7 @@ type Routine struct {
 
 func (x *Routine) Reset() {
 	*x = Routine{}
-	mi := &file_portenv_types_v1_types_proto_msgTypes[13]
+	mi := &file_portenv_types_v1_types_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1914,7 +2064,7 @@ func (x *Routine) String() string {
 func (*Routine) ProtoMessage() {}
 
 func (x *Routine) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_types_v1_types_proto_msgTypes[13]
+	mi := &file_portenv_types_v1_types_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1927,7 +2077,7 @@ func (x *Routine) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Routine.ProtoReflect.Descriptor instead.
 func (*Routine) Descriptor() ([]byte, []int) {
-	return file_portenv_types_v1_types_proto_rawDescGZIP(), []int{13}
+	return file_portenv_types_v1_types_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *Routine) GetEveryMinutes() int32 {
@@ -2013,7 +2163,7 @@ const file_portenv_types_v1_types_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x123\n" +
 	"\x05files\x18\b \x03(\v2\x1d.portenv.types.v1.HandoffFileR\x05files\x12\x14\n" +
-	"\x05about\x18\t \x01(\tR\x05about\"\x82\x04\n" +
+	"\x05about\x18\t \x01(\tR\x05about\"\xfe\x04\n" +
 	"\bDecision\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04from\x18\x02 \x01(\tR\x04from\x122\n" +
@@ -2031,14 +2181,25 @@ const file_portenv_types_v1_types_proto_rawDesc = "" +
 	" \x03(\v2\x1d.portenv.types.v1.PackagePlanR\bpackages\x129\n" +
 	"\n" +
 	"expires_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\x12&\n" +
-	"\x0fstart_agent_ids\x18\f \x03(\tR\rstartAgentIds\"s\n" +
+	"\x0fstart_agent_ids\x18\f \x03(\tR\rstartAgentIds\x12\x18\n" +
+	"\achoices\x18\r \x03(\tR\achoices\x12\x16\n" +
+	"\x06choice\x18\x0e \x01(\x05R\x06choice\x12H\n" +
+	"\x0fmigration_items\x18\x0f \x03(\v2\x1f.portenv.types.v1.MigrationItemR\x0emigrationItems\"\x9d\x01\n" +
+	"\rMigrationItem\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
+	"\x04path\x18\x02 \x01(\tR\x04path\x12\x12\n" +
+	"\x04kind\x18\x03 \x01(\tR\x04kind\x12\x14\n" +
+	"\x05agent\x18\x04 \x01(\tR\x05agent\x12\x12\n" +
+	"\x04size\x18\x05 \x01(\x03R\x04size\x12\x16\n" +
+	"\x06choice\x18\x06 \x01(\bR\x06choice\x12\x12\n" +
+	"\x04note\x18\a \x01(\tR\x04note\"s\n" +
 	"\vPackagePlan\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12\x16\n" +
 	"\x06source\x18\x03 \x01(\tR\x06source\x12\x1e\n" +
 	"\n" +
 	"dependency\x18\x04 \x01(\bR\n" +
-	"dependency\"\xed\x01\n" +
+	"dependency\"\x8e\x02\n" +
 	"\n" +
 	"AgentGrant\x121\n" +
 	"\x05panes\x18\x01 \x01(\x0e2\x1b.portenv.types.v1.GrantModeR\x05panes\x12\x1b\n" +
@@ -2047,7 +2208,9 @@ const file_portenv_types_v1_types_proto_rawDesc = "" +
 	"\task_owner\x18\x04 \x01(\bR\baskOwner\x127\n" +
 	"\bpackages\x18\x05 \x01(\x0e2\x1b.portenv.types.v1.GrantModeR\bpackages\x12\x1f\n" +
 	"\vteam_status\x18\x06 \x01(\bR\n" +
-	"teamStatus\"}\n" +
+	"teamStatus\x12\x1f\n" +
+	"\vread_clones\x18\a \x03(\tR\n" +
+	"readClones\"}\n" +
 	"\tAgentFile\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x10\n" +
 	"\x03dir\x18\x02 \x01(\bR\x03dir\x12\x12\n" +
@@ -2160,7 +2323,7 @@ func file_portenv_types_v1_types_proto_rawDescGZIP() []byte {
 }
 
 var file_portenv_types_v1_types_proto_enumTypes = make([]protoimpl.EnumInfo, 12)
-var file_portenv_types_v1_types_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
+var file_portenv_types_v1_types_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
 var file_portenv_types_v1_types_proto_goTypes = []any{
 	(BoxState)(0),                 // 0: portenv.types.v1.BoxState
 	(Architecture)(0),             // 1: portenv.types.v1.Architecture
@@ -2182,41 +2345,43 @@ var file_portenv_types_v1_types_proto_goTypes = []any{
 	(*Tab)(nil),                   // 17: portenv.types.v1.Tab
 	(*BoardMessage)(nil),          // 18: portenv.types.v1.BoardMessage
 	(*Decision)(nil),              // 19: portenv.types.v1.Decision
-	(*PackagePlan)(nil),           // 20: portenv.types.v1.PackagePlan
-	(*AgentGrant)(nil),            // 21: portenv.types.v1.AgentGrant
-	(*AgentFile)(nil),             // 22: portenv.types.v1.AgentFile
-	(*AgentStatus)(nil),           // 23: portenv.types.v1.AgentStatus
-	(*HandoffFile)(nil),           // 24: portenv.types.v1.HandoffFile
-	(*Routine)(nil),               // 25: portenv.types.v1.Routine
-	(*timestamppb.Timestamp)(nil), // 26: google.protobuf.Timestamp
+	(*MigrationItem)(nil),         // 20: portenv.types.v1.MigrationItem
+	(*PackagePlan)(nil),           // 21: portenv.types.v1.PackagePlan
+	(*AgentGrant)(nil),            // 22: portenv.types.v1.AgentGrant
+	(*AgentFile)(nil),             // 23: portenv.types.v1.AgentFile
+	(*AgentStatus)(nil),           // 24: portenv.types.v1.AgentStatus
+	(*HandoffFile)(nil),           // 25: portenv.types.v1.HandoffFile
+	(*Routine)(nil),               // 26: portenv.types.v1.Routine
+	(*timestamppb.Timestamp)(nil), // 27: google.protobuf.Timestamp
 }
 var file_portenv_types_v1_types_proto_depIdxs = []int32{
 	13, // 0: portenv.types.v1.Box.resources:type_name -> portenv.types.v1.Resources
-	26, // 1: portenv.types.v1.SnapshotRef.time:type_name -> google.protobuf.Timestamp
+	27, // 1: portenv.types.v1.SnapshotRef.time:type_name -> google.protobuf.Timestamp
 	2,  // 2: portenv.types.v1.SnapshotRef.kind:type_name -> portenv.types.v1.SnapshotKind
-	26, // 3: portenv.types.v1.Lease.since:type_name -> google.protobuf.Timestamp
-	26, // 4: portenv.types.v1.Lease.last_heartbeat:type_name -> google.protobuf.Timestamp
+	27, // 3: portenv.types.v1.Lease.since:type_name -> google.protobuf.Timestamp
+	27, // 4: portenv.types.v1.Lease.last_heartbeat:type_name -> google.protobuf.Timestamp
 	3,  // 5: portenv.types.v1.Lease.source:type_name -> portenv.types.v1.LeaseSource
-	26, // 6: portenv.types.v1.Tab.running_since:type_name -> google.protobuf.Timestamp
+	27, // 6: portenv.types.v1.Tab.running_since:type_name -> google.protobuf.Timestamp
 	8,  // 7: portenv.types.v1.BoardMessage.type:type_name -> portenv.types.v1.MessageType
-	26, // 8: portenv.types.v1.BoardMessage.created_at:type_name -> google.protobuf.Timestamp
-	24, // 9: portenv.types.v1.BoardMessage.files:type_name -> portenv.types.v1.HandoffFile
+	27, // 8: portenv.types.v1.BoardMessage.created_at:type_name -> google.protobuf.Timestamp
+	25, // 9: portenv.types.v1.BoardMessage.files:type_name -> portenv.types.v1.HandoffFile
 	9,  // 10: portenv.types.v1.Decision.kind:type_name -> portenv.types.v1.DecisionKind
 	10, // 11: portenv.types.v1.Decision.state:type_name -> portenv.types.v1.DecisionState
-	26, // 12: portenv.types.v1.Decision.created_at:type_name -> google.protobuf.Timestamp
-	26, // 13: portenv.types.v1.Decision.answered_at:type_name -> google.protobuf.Timestamp
-	20, // 14: portenv.types.v1.Decision.packages:type_name -> portenv.types.v1.PackagePlan
-	26, // 15: portenv.types.v1.Decision.expires_at:type_name -> google.protobuf.Timestamp
-	11, // 16: portenv.types.v1.AgentGrant.panes:type_name -> portenv.types.v1.GrantMode
-	11, // 17: portenv.types.v1.AgentGrant.packages:type_name -> portenv.types.v1.GrantMode
-	26, // 18: portenv.types.v1.AgentFile.modified:type_name -> google.protobuf.Timestamp
-	26, // 19: portenv.types.v1.AgentStatus.set_at:type_name -> google.protobuf.Timestamp
-	26, // 20: portenv.types.v1.Routine.next_at:type_name -> google.protobuf.Timestamp
-	21, // [21:21] is the sub-list for method output_type
-	21, // [21:21] is the sub-list for method input_type
-	21, // [21:21] is the sub-list for extension type_name
-	21, // [21:21] is the sub-list for extension extendee
-	0,  // [0:21] is the sub-list for field type_name
+	27, // 12: portenv.types.v1.Decision.created_at:type_name -> google.protobuf.Timestamp
+	27, // 13: portenv.types.v1.Decision.answered_at:type_name -> google.protobuf.Timestamp
+	21, // 14: portenv.types.v1.Decision.packages:type_name -> portenv.types.v1.PackagePlan
+	27, // 15: portenv.types.v1.Decision.expires_at:type_name -> google.protobuf.Timestamp
+	20, // 16: portenv.types.v1.Decision.migration_items:type_name -> portenv.types.v1.MigrationItem
+	11, // 17: portenv.types.v1.AgentGrant.panes:type_name -> portenv.types.v1.GrantMode
+	11, // 18: portenv.types.v1.AgentGrant.packages:type_name -> portenv.types.v1.GrantMode
+	27, // 19: portenv.types.v1.AgentFile.modified:type_name -> google.protobuf.Timestamp
+	27, // 20: portenv.types.v1.AgentStatus.set_at:type_name -> google.protobuf.Timestamp
+	27, // 21: portenv.types.v1.Routine.next_at:type_name -> google.protobuf.Timestamp
+	22, // [22:22] is the sub-list for method output_type
+	22, // [22:22] is the sub-list for method input_type
+	22, // [22:22] is the sub-list for extension type_name
+	22, // [22:22] is the sub-list for extension extendee
+	0,  // [0:22] is the sub-list for field type_name
 }
 
 func init() { file_portenv_types_v1_types_proto_init() }
@@ -2230,7 +2395,7 @@ func file_portenv_types_v1_types_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_portenv_types_v1_types_proto_rawDesc), len(file_portenv_types_v1_types_proto_rawDesc)),
 			NumEnums:      12,
-			NumMessages:   14,
+			NumMessages:   15,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

@@ -54,3 +54,60 @@ func TestACLWithGroupIsSetfaclM(t *testing.T) {
 		t.Errorf("base %v", b)
 	}
 }
+
+// R-0315: who could write a file of work's, from its ACL.
+func TestACLLetsOthersWrite(t *testing.T) {
+	const work, own = 1000, 1000
+	cases := []struct {
+		name string
+		es   []aclEntry
+		gid  uint32
+		want bool
+	}{
+		{"0644", minimalACL(0o644), own, false},
+		{"0664 in work's own group", minimalACL(0o664), own, false},
+		{"0664 in group team", minimalACL(0o664), TeamGID, true},
+		{"0646", minimalACL(0o646), own, true},
+		{"team read", aclWithGroup(minimalACL(0o644), TeamGID, 5), own, false},
+		{"team write", aclWithGroup(minimalACL(0o644), TeamGID, 7), own, true},
+		{"team write under a read mask", append(aclBase(minimalACL(0o644)), aclEntry{aclGroup, 7, TeamGID}, aclEntry{aclMask, 5, aclUndefinedID}), own, false},
+		{"a named user's write", append(aclBase(minimalACL(0o644)), aclEntry{aclUser, 7, 2001}, aclEntry{aclMask, 7, aclUndefinedID}), own, true},
+		{"work's own named entry", append(aclBase(minimalACL(0o644)), aclEntry{aclUser, 7, work}, aclEntry{aclMask, 7, aclUndefinedID}), own, false},
+	}
+	for _, c := range cases {
+		if got := aclLetsOthersWrite(c.es, work, c.gid, own); got != c.want {
+			t.Errorf("%s: %v, want %v", c.name, got, c.want)
+		}
+	}
+	// readOnlyBase takes others' write, and the group's when it isn't
+	// work's own.
+	if got := readOnlyBase(minimalACL(0o666), TeamGID, own); !slices.Equal(got, minimalACL(0o644)) {
+		t.Errorf("readOnlyBase(0666, team) = %v, want 0644's", got)
+	}
+	if got := readOnlyBase(minimalACL(0o666), own, own); !slices.Equal(got, minimalACL(0o664)) {
+		t.Errorf("readOnlyBase(0666, own) = %v, want 0664's", got)
+	}
+}
+
+// Lenses (ADR 0022 §2a point 4): agent uids' named entries are exactly
+// the readers'; others are kept; no named entry left means no mask.
+func TestACLWithUsers(t *testing.T) {
+	base := minimalACL(0o700)
+	got := aclWithUsers(base, map[uint32]uint16{2002: 1}, AgentUIDFirst, AgentUIDLast)
+	want := []aclEntry{{aclUserObj, 7, aclUndefinedID}, {aclGroupObj, 0, aclUndefinedID}, {aclOther, 0, aclUndefinedID}, {aclUser, 1, 2002}, {aclMask, 1, aclUndefinedID}}
+	if !slices.Equal(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	// Another reader replaces it; a named entry outside the agents' range
+	// stays.
+	withOther := append(slices.Clone(got[:4]), aclEntry{aclUser, 4, 1500}, aclEntry{aclMask, 5, aclUndefinedID})
+	got = aclWithUsers(withOther, map[uint32]uint16{2003: 5}, AgentUIDFirst, AgentUIDLast)
+	if slices.ContainsFunc(got, func(e aclEntry) bool { return e.tag == aclUser && e.id == 2002 }) || !slices.Contains(got, aclEntry{aclUser, 4, 1500}) || !slices.Contains(got, aclEntry{aclUser, 5, 2003}) {
+		t.Errorf("got %v", got)
+	}
+	// No readers: the agents' entries and the mask go.
+	got = aclWithUsers(want, nil, AgentUIDFirst, AgentUIDLast)
+	if !slices.Equal(got, base) || aclHasNamed(got) {
+		t.Errorf("got %v, want the mode's own %v", got, base)
+	}
+}

@@ -89,12 +89,33 @@ service AgentService {
   // recipient's ~/inbox/<sender>/<timestamp>/ as the recipient (R-0257
   // item 3): regular files only, no links, at most 100 MB, within quota.
   rpc HandoffFiles(HandoffFilesRequest) returns (HandoffFilesResponse);
-  // Served only by init: opens the project to the team at team start
-  // (ADR 0022 §2): /home/work 0711 with its dotfiles 0700, the project's
-  // group team, setgid folders and default ACLs, with .git/hooks,
-  // .git/config and .portenv/ never group-writable. Refuses with a plain
-  // line when the filesystem won't keep ACLs.
+  // Served only by init: makes the project readable by the team at team
+  // start (ADR 0022 §2a, R-0315): /home/work 0711 with its dotfiles 0700;
+  // every file in the project work's, with g:team:r-X and no write for
+  // group team, other users or any named entry; no core.sharedRepository
+  // and no system safe.directory from Portenv. Before it changes anything
+  // it checks for what an agent could have changed in what work's git
+  // reads, and refuses with a plain line if it finds any. Refuses too when
+  // the filesystem won't keep ACLs.
   rpc PrepareTeamProject(PrepareTeamProjectRequest) returns (PrepareTeamProjectResponse);
+  // Fetches an agent's branch into the owner's project as
+  // refs/remotes/agents/<id> (ADR 0022 §2a point 3): as the agent, its
+  // clone's agent/<id> is bundled; as work, that file alone is fetched,
+  // with only the file protocol, no hooks or fsmonitor, every object
+  // checked, no tags and no submodules. work's git never opens the agent's
+  // repository.
+  rpc FetchAgentBranch(FetchAgentBranchRequest) returns (FetchAgentBranchResponse);
+  // Served only by init (relayed by the helper): the owner's answer to the
+  // move to agents' own clones (ADR 0022 §2a point 6). Each recorded item
+  // is removed or becomes work's; nothing is deleted without it. Refused
+  // while any agent process runs.
+  rpc ResolveTeamMigration(ResolveTeamMigrationRequest) returns (ResolveTeamMigrationResponse);
+  // Wakes an idle agent for new board lines (CC-0498): types the fixed
+  // line "[Portenv] new message from <from>; run portenv inbox", then
+  // Enter, into the agent's own main pane, under exactly DeliverRoutine's
+  // checks. The helper writes the line itself; no message text is ever
+  // typed, and from must be an agent id or "owner".
+  rpc WakeAgent(WakeAgentRequest) returns (WakeAgentResponse);
 }
 
 message RunResticRequest {
@@ -430,6 +451,9 @@ message Msg {
 message AskOwner {
   string text = 1;
   string thread_id = 2;
+  // --choice, in order: 2 to 4 labels, each 1 to 80 characters of plain
+  // text (CC-0501). Empty asks a yes/no question.
+  repeated string choices = 3;
 }
 
 message Inbox {
@@ -490,6 +514,9 @@ message WhoAmIResult {
   // Why its routines are off, if they are ("Portenv doesn't know when
   // this runner is idle").
   string routines_off = 16;
+  // Set when its file asks for share_login, which this build doesn't
+  // support: nothing is shared, so it signs in itself (R-0323).
+  string share_login_off = 17;
 }
 
 message Teammate {
@@ -511,7 +538,9 @@ message StartTeamAgentRequest {
   // AGENTS.md in its home: the generated block (R-0246), then the file's
   // instructions.
   string agents_md = 3;
-  // Repository paths copied into its home on first start (§2).
+  // Repository paths copied into its home on first start (§2), from
+  // project_dir: regular files and folders only, never through a link,
+  // at most 100 MB together, new files only; ~/.portenv-seeded records it.
   repeated string home_seed = 4;
   int64 home_quota_bytes = 5;
   // The runner's idle-input pattern (RE2, matched against the main pane's
@@ -519,6 +548,32 @@ message StartTeamAgentRequest {
   // when it matches, with no question on screen, 5 s of quiet and not the
   // alternate screen. Empty: routines are off for this runner (R-0258).
   string idle_pattern = 6;
+  // The owner's project, /home/work/<workspace>, for an agent with
+  // checkout: own (ADR 0022 §2a): the helper makes the agent's own clone
+  // at /home/<id>/<workspace> on agent/<id>, as the agent, if it's
+  // missing, and starts the runner there. Empty: no clone, and the runner
+  // starts in the agent's home.
+  string clone_project_dir = 7;
+  // Lenses (ADR 0022 §2a point 4): for each agent of the team with its own
+  // clone, the agents that may read it. At every start the helper makes
+  // every agent's clone readable by exactly these, as that agent, and by
+  // no one else (an agent missing here: by no one). Applied only with
+  // project_dir.
+  repeated CloneReaders clone_readers = 8;
+  // The owner's project, /home/<main user>/<workspace>: home_seed's paths
+  // are copied from it, as the agent with the team group, on its first
+  // start (ADR 0022 §2), and clone_readers apply to its agents' clones.
+  // Required when home_seed isn't empty.
+  string project_dir = 9;
+  // The agent's display name, for its clone's git identity
+  // ("<name> (Portenv agent)", set when the clone is made).
+  string agent_name = 10;
+}
+
+// One writer's clone and the lenses that may read it.
+message CloneReaders {
+  string writer = 1;
+  repeated string readers = 2;
 }
 
 message StartTeamAgentResponse {
@@ -717,13 +772,58 @@ message HandoffFilesResponse {
   repeated portenv.types.v1.HandoffFile files = 1;
 }
 
+message FetchAgentBranchRequest {
+  string agent_id = 1;
+  // The owner's project, /home/work/<workspace>.
+  string project_dir = 2;
+  // The bundle's limit: the agent's home quota.
+  int64 max_bytes = 3;
+}
+
+message FetchAgentBranchResponse {
+  // refs/remotes/agents/<id>.
+  string ref = 1;
+  // Its commit, in full hex.
+  string commit = 2;
+}
+
 message PrepareTeamProjectRequest {
   // The project folder, /home/work/<workspace>.
   string project_dir = 1;
+  // For a workspace whose team used the shared project: the agents that
+  // get their own clone in the move (ADR 0022 §2a point 6), and their
+  // home quota.
+  repeated string clone_agents = 2;
+  int64 home_quota_bytes = 3;
+  // Their display names, by id, for the clones' git identity.
+  map<string, string> agent_names = 4;
 }
 
 message PrepareTeamProjectResponse {
   // What was made private in the owner's home (R-0262), since the last
   // team start, as plain lines for the owner's board notice.
   repeated string fixed = 1;
+  // Not empty: the workspace's team used the shared project and was moved
+  // to its own clones (ADR 0022 §2a point 6); the owner keeps or removes
+  // each item (ResolveTeamMigration) before any agent starts.
+  repeated portenv.types.v1.MigrationItem migration = 2;
 }
+
+message ResolveTeamMigrationRequest {
+  string project_dir = 1;
+  // Items to remove; the rest become work's.
+  repeated string remove_items = 2;
+}
+
+message ResolveTeamMigrationResponse {}
+
+message WakeAgentRequest {
+  string agent_id = 1;
+  // Who sent the newest unread line: an agent id or "owner".
+  string from = 2;
+  // How many lines came since the agent last read its inbox; more than
+  // one makes the line plural. Never typed as a number.
+  int32 count = 3;
+}
+
+message WakeAgentResponse {}

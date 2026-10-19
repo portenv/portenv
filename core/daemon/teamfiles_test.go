@@ -150,6 +150,39 @@ func TestAgentFileDefaults(t *testing.T) {
 	}
 }
 
+// ADR 0022 §2a, lenses: read_clones names agents with their own clone,
+// and an override may narrow it.
+func TestAgentFileReadClones(t *testing.T) {
+	src := teamDirs(t)
+	writeAgent(t, src, "builder", with())
+	writeAgent(t, src, "reviewer", fm("id: reviewer", "name: Reviewer", "runner: claude", "checkout: none", "grant:", "  read_clones: [builder, lead]"))
+	if a := loadAgent(t, src, "reviewer"); len(a.Problems) != 0 || !slices.Equal(a.Grant.GetReadClones(), []string{"builder", "lead"}) {
+		t.Errorf("reviewer: %+v", a)
+	}
+	writeOverride(t, src, "reviewer", ofm("grant:", "  read_clones: [builder]"))
+	if a := loadAgent(t, src, "reviewer"); len(a.Problems) != 0 || !slices.Equal(a.Grant.GetReadClones(), []string{"builder"}) {
+		t.Errorf("reviewer, narrowed: %+v", a)
+	}
+	writeAgent(t, src, "lead", fm("id: lead", "name: Lead", "runner: claude", "checkout: none", "grant:", "  read_clones: [reviewer]"))
+	want := `lead: grant.read_clones names "reviewer", which has no copy of the project to read (checkout: none).`
+	if a := loadAgent(t, src, "lead"); !slices.Contains(a.Problems, want) {
+		t.Errorf("lead: %q, want %q", a.Problems, want)
+	}
+}
+
+// ADR 0022 §2a: checkout is own by default, or none.
+func TestAgentFileCheckout(t *testing.T) {
+	src := teamDirs(t)
+	writeAgent(t, src, "builder", with())
+	if a := loadAgent(t, src, "builder"); len(a.Problems) != 0 || a.Spec.Checkout != CheckoutOwn || !a.OwnClone() {
+		t.Errorf("default: %+v", a)
+	}
+	writeAgent(t, src, "builder", with("checkout: none"))
+	if a := loadAgent(t, src, "builder"); len(a.Problems) != 0 || a.Spec.Checkout != CheckoutNone || a.OwnClone() {
+		t.Errorf("none: %+v", a)
+	}
+}
+
 func TestAgentFileRemoteRunner(t *testing.T) {
 	src := teamDirs(t)
 	writeAgent(t, src, "dots", "---\nid: dots\nname: Dots\nrunner: remote\nvia: mcp\n---\n")
@@ -227,12 +260,17 @@ func TestAgentFileRules(t *testing.T) {
 		{"share_login item", "builder", with("share_login: [Claude]"), `builder: share_login "Claude" must be a tool name: a lowercase letter, then lowercase letters, digits or hyphens.`},
 		{"panes", "builder", with("grant:", "  panes: maybe"), `builder: grant.panes is "maybe"; it must be ask, allow or never.`},
 		{"packages allow", "builder", with("grant:", "  packages: allow"), `builder: grant.packages is "allow"; it must be ask or never.`},
+		{"checkout", "builder", with("checkout: shared"), `builder: checkout is "shared"; it must be own or none.`},
+		{"checkout list", "builder", with("checkout: [own]"), `builder: checkout must be a single value, not a list.`},
 		{"max_panes high", "builder", with("grant:", "  max_panes: 12"), `builder: grant.max_panes is 12; it must be 1 to 8.`},
 		{"max_panes zero", "builder", with("grant:", "  max_panes: 0"), `builder: grant.max_panes is 0; it must be 1 to 8.`},
 		{"max_panes words", "builder", with("grant:", "  max_panes: four"), `builder: grant.max_panes is "four"; it must be a whole number from 1 to 8.`},
 		{"max_panes over owner limit", "builder", with("grant:", "  max_panes: 6"), `builder: grant.max_panes is 6; the owner's limit is 4.`},
 		{"message stranger", "builder", with("grant:", "  message: [lead, ghost]"), `builder: grant.message names "ghost", which isn't another agent in this team.`},
 		{"message self", "builder", with("grant:", "  message: [builder]"), `builder: grant.message names "builder", which isn't another agent in this team.`},
+		{"read_clones stranger", "builder", with("grant:", "  read_clones: [lead, ghost]"), `builder: grant.read_clones names "ghost", which isn't another agent in this team.`},
+		{"read_clones self", "builder", with("grant:", "  read_clones: [builder]"), `builder: grant.read_clones names "builder", which isn't another agent in this team.`},
+		{"read_clones not a list", "builder", with("grant:", "  read_clones: lead"), `builder: grant.read_clones must be a list, like [builder].`},
 		{"message owner", "builder", with("grant:", "  message: [owner]"), `builder: grant.message names "owner", which isn't another agent in this team.`},
 		{"ask_owner", "builder", with("grant:", "  ask_owner: yes"), `builder: grant.ask_owner is "yes"; it must be true or false.`},
 		{"ask_owner quoted", "builder", with("grant:", `  ask_owner: "true"`), `builder: grant.ask_owner is "true"; it must be true or false.`},
@@ -470,11 +508,13 @@ func TestOverrideCantWiden(t *testing.T) {
 		{"panes allow", ofm("grant:", "  panes: allow"), `builder's override: grant.panes is allow, wider than the repository file's never; an override may only narrow a grant.`},
 		{"max_panes", ofm("grant:", "  max_panes: 3"), `builder's override: grant.max_panes is 3, wider than the repository file's 2; an override may only narrow a grant.`},
 		{"message", ofm("grant:", "  message: [lead, reviewer]"), `builder's override: grant.message is [lead, reviewer], wider than the repository file's [lead]; an override may only narrow a grant.`},
+		{"read_clones", ofm("grant:", "  read_clones: [lead]"), `builder's override: grant.read_clones is [lead], wider than the repository file's []; an override may only narrow a grant.`},
 		{"ask_owner", ofm("grant:", "  ask_owner: true"), `builder's override: grant.ask_owner is true, wider than the repository file's false; an override may only narrow a grant.`},
 		{"packages", ofm("grant:", "  packages: ask"), `builder's override: grant.packages is ask, wider than the repository file's never; an override may only narrow a grant.`},
 		{"team_status", ofm("grant:", "  team_status: read"), `builder's override: grant.team_status is read, wider than the repository file's none; an override may only narrow a grant.`},
 		{"home_seed", ofm("home_seed: [secrets]"), `builder's override: it sets home_seed; an override can't add home_seed.`},
 		{"name", ofm("name: Boss"), `builder's override: it sets name; an override may change only runner, via, avatar, share_login and grant.`},
+		{"checkout", ofm("checkout: none"), `builder's override: it sets checkout; an override may change only runner, via, avatar, share_login and grant.`},
 		{"unknown key", ofm("colour: red"), `builder's override: "colour" isn't a key an agent file may have.`},
 		{"other id", ofm("id: lead"), `builder's override: id is "lead"; it must match the file's name, builder.`},
 		{"instructions", "---\navatar: blue\n---\nDo more.\n", `builder's override: it has instructions; only the repository file's are used.`},

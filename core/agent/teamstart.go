@@ -6,8 +6,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"path"
 	"path/filepath"
 	"regexp"
+	"strconv"
+	"strings"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -35,6 +39,9 @@ type AgentServerSpec struct {
 	SocketDir string
 	Argv      []string
 	Env       []string
+	// WorkDir is where the runner starts: the agent's clone
+	// (/home/<id>/<workspace>), or its home when empty.
+	WorkDir string
 }
 
 // errNoAgentServers is what StartTeamAgent says until a build has the
@@ -85,6 +92,10 @@ func (s *apiServer) StartTeamAgent(ctx context.Context, req *agentv1.StartTeamAg
 	} else if _, err := regexp.Compile(p); err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "%s's idle pattern: %v", id, err)
 	}
+	seedFrom, err := s.checkSeed(req)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "%s: %v", id, err)
+	}
 	if len(req.GetAgentsMd()) > maxAgentsMD {
 		return nil, status.Errorf(codes.InvalidArgument, "%s's AGENTS.md is over %d KB", id, maxAgentsMD>>10)
 	}
@@ -106,10 +117,35 @@ func (s *apiServer) StartTeamAgent(ctx context.Context, req *agentv1.StartTeamAg
 	if err := s.writeAsUser(u.UID, u.UID, filepath.Join(u.Home, "AGENTS.md"), []byte(req.GetAgentsMd())); err != nil {
 		return nil, fail(codes.Internal, "write %s's AGENTS.md: %v", id, err)
 	}
+	// Its home_seed, on its first start (ADR 0022 §2).
+	if seedFrom != "" {
+		if err := s.seedAgentHome(ctx, id, u.UID, seedFrom, req.GetHomeSeed(), req.GetHomeQuotaBytes()); err != nil {
+			return nil, fail(status.Code(err), "%s's home_seed couldn't be copied: %s", id, status.Convert(err).Message())
+		}
+	}
+	// Its own clone of the project, made as the agent if it's missing
+	// (ADR 0022 §2a): the owner's project is never the agent's to write.
+	workDir := ""
+	if p := req.GetCloneProjectDir(); p != "" {
+		dir, err := s.ensureClone(ctx, id, req.GetAgentName(), u, p, req.GetHomeQuotaBytes())
+		if err != nil {
+			s.team.removeAgent(id)
+			return nil, err
+		}
+		workDir = dir
+	}
+	// Each clone readable by exactly the lenses granted on it now.
+	if p := req.GetProjectDir(); p != "" {
+		if err := s.applyLensGrants(ctx, p, req.GetCloneReaders()); err != nil {
+			s.team.removeAgent(id)
+			return nil, err
+		}
+	}
 	spec := AgentServerSpec{
 		ID: id, UID: u.UID, GID: u.UID, Home: u.Home,
 		SocketDir: u.TmuxDir,
 		Argv:      argv,
+		WorkDir:   workDir,
 		Env: []string{
 			"HOME=" + u.Home,
 			"USER=" + id,
@@ -177,6 +213,50 @@ func (s *apiServer) StopTeamAgent(ctx context.Context, req *agentv1.StopTeamAgen
 func checkKillableUID(uid int) error {
 	if uid < AgentUIDFirst || uid > AgentUIDLast {
 		return fmt.Errorf("uid %d isn't an agent's", uid)
+	}
+	return nil
+}
+
+// checkSeed checks a start's home_seed before anything is made, and
+// returns the project folder (on this filesystem) to copy from, or "" when
+// there's nothing to seed.
+func (s *apiServer) checkSeed(req *agentv1.StartTeamAgentRequest) (string, error) {
+	seeds := req.GetHomeSeed()
+	if len(seeds) == 0 {
+		return "", nil
+	}
+	if len(seeds) > maxSeedPaths {
+		return "", fmt.Errorf("home_seed lists at most %d paths", maxSeedPaths)
+	}
+	for _, p := range seeds {
+		if _, err := homeRel(p, false); err != nil {
+			return "", fmt.Errorf("home_seed %q isn't a plain path in the project", p)
+		}
+	}
+	if req.GetHomeQuotaBytes() <= 0 {
+		return "", errors.New("home_seed needs the home's quota")
+	}
+	prefix := "/home/" + s.cfg.User + "/"
+	name, ok := strings.CutPrefix(req.GetProjectDir(), prefix)
+	if s.cfg.User == "" || !ok || name == "" || strings.Contains(name, "/") || strings.HasPrefix(name, ".") || path.Clean(req.GetProjectDir()) != req.GetProjectDir() {
+		return "", fmt.Errorf("%q isn't a project folder in %s", req.GetProjectDir(), prefix)
+	}
+	return filepath.Join(s.cfg.HomeRoot, s.cfg.User, name), nil
+}
+
+// seedAgentHome runs seed-home as the agent, with the team group, so it
+// reads the project only as the agent can.
+func (s *apiServer) seedAgentHome(ctx context.Context, id string, uid int, project string, seeds []string, quota int64) error {
+	home := (&TeamUsers{Cfg: s.cfg}).home(id)
+	args := append([]string{"seed-home", project, home, strconv.FormatInt(quota, 10)}, seeds...)
+	var err error
+	if s.runHomeIO != nil {
+		_, err = s.runHomeIO(ctx, uid, agentGroups(uid, true), args, nil)
+	} else {
+		_, err = runAsAgentInTeam(ctx, uid, append([]string{"team-io"}, args...), nil, func(w io.Writer) error { return TeamIO(args, nil, w) })
+	}
+	if err != nil {
+		return homeErr(err)
 	}
 	return nil
 }

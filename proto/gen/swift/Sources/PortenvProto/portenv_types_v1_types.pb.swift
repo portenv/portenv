@@ -925,72 +925,158 @@ public nonisolated struct Portenv_Types_V1_BoardMessage: Sendable {
 }
 
 /// A request for the owner (ADR 0022 §6). Only the app answers it.
-public nonisolated struct Portenv_Types_V1_Decision: Sendable {
+public nonisolated struct Portenv_Types_V1_Decision: @unchecked Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
   /// A ULID.
-  public var id: String = String()
+  public var id: String {
+    get {_storage._id}
+    set {_uniqueStorage()._id = newValue}
+  }
 
   /// The agent that asked.
-  public var from: String = String()
+  public var from: String {
+    get {_storage._from}
+    set {_uniqueStorage()._from = newValue}
+  }
 
-  public var kind: Portenv_Types_V1_DecisionKind = .unspecified
+  public var kind: Portenv_Types_V1_DecisionKind {
+    get {_storage._kind}
+    set {_uniqueStorage()._kind = newValue}
+  }
 
   /// At most 200 characters.
-  public var summary: String = String()
+  public var summary: String {
+    get {_storage._summary}
+    set {_uniqueStorage()._summary = newValue}
+  }
 
   /// At most 32 KB: the question, the command, the diff, the package list.
-  public var detail: String = String()
+  public var detail: String {
+    get {_storage._detail}
+    set {_uniqueStorage()._detail = newValue}
+  }
 
-  public var state: Portenv_Types_V1_DecisionState = .unspecified
+  public var state: Portenv_Types_V1_DecisionState {
+    get {_storage._state}
+    set {_uniqueStorage()._state = newValue}
+  }
 
-  public var answerNote: String = String()
+  public var answerNote: String {
+    get {_storage._answerNote}
+    set {_uniqueStorage()._answerNote = newValue}
+  }
 
   public var createdAt: SwiftProtobuf.Google_Protobuf_Timestamp {
-    get {_createdAt ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
-    set {_createdAt = newValue}
+    get {_storage._createdAt ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
+    set {_uniqueStorage()._createdAt = newValue}
   }
   /// Returns true if `createdAt` has been explicitly set.
-  public var hasCreatedAt: Bool {self._createdAt != nil}
+  public var hasCreatedAt: Bool {_storage._createdAt != nil}
   /// Clears the value of `createdAt`. Subsequent reads from it will return its default value.
-  public mutating func clearCreatedAt() {self._createdAt = nil}
+  public mutating func clearCreatedAt() {_uniqueStorage()._createdAt = nil}
 
   public var answeredAt: SwiftProtobuf.Google_Protobuf_Timestamp {
-    get {_answeredAt ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
-    set {_answeredAt = newValue}
+    get {_storage._answeredAt ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
+    set {_uniqueStorage()._answeredAt = newValue}
   }
   /// Returns true if `answeredAt` has been explicitly set.
-  public var hasAnsweredAt: Bool {self._answeredAt != nil}
+  public var hasAnsweredAt: Bool {_storage._answeredAt != nil}
   /// Clears the value of `answeredAt`. Subsequent reads from it will return its default value.
-  public mutating func clearAnsweredAt() {self._answeredAt = nil}
+  public mutating func clearAnsweredAt() {_uniqueStorage()._answeredAt = nil}
 
   /// For DECISION_KIND_PACKAGE: exactly what Approve installs.
-  public var packages: [Portenv_Types_V1_PackagePlan] = []
+  public var packages: [Portenv_Types_V1_PackagePlan] {
+    get {_storage._packages}
+    set {_uniqueStorage()._packages = newValue}
+  }
 
   /// When a pending decision expires (24 hours after created_at).
   public var expiresAt: SwiftProtobuf.Google_Protobuf_Timestamp {
-    get {_expiresAt ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
-    set {_expiresAt = newValue}
+    get {_storage._expiresAt ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
+    set {_uniqueStorage()._expiresAt = newValue}
   }
   /// Returns true if `expiresAt` has been explicitly set.
-  public var hasExpiresAt: Bool {self._expiresAt != nil}
+  public var hasExpiresAt: Bool {_storage._expiresAt != nil}
   /// Clears the value of `expiresAt`. Subsequent reads from it will return its default value.
-  public mutating func clearExpiresAt() {self._expiresAt = nil}
+  public mutating func clearExpiresAt() {_uniqueStorage()._expiresAt = nil}
 
   /// For DECISION_KIND_TEAM_START: the agents the owner clicked Start on,
   /// in that order. portenvd starts them itself on Approve, so the answer
   /// works after the app or portenvd restarts (R-0296).
-  public var startAgentIds: [String] = []
+  public var startAgentIds: [String] {
+    get {_storage._startAgentIds}
+    set {_uniqueStorage()._startAgentIds = newValue}
+  }
+
+  /// For DECISION_KIND_ASK_OWNER asked with --choice (CC-0501): the 2 to 4
+  /// choices, in order, each 1 to 80 characters of plain text. The app
+  /// shows one button per choice in place of Approve. Empty for a yes/no
+  /// question.
+  public var choices: [String] {
+    get {_storage._choices}
+    set {_uniqueStorage()._choices = newValue}
+  }
+
+  /// The owner's choice, counting from 1 (choices[choice-1]); 0 when none
+  /// was chosen. Set only on an approved decision with choices.
+  public var choice: Int32 {
+    get {_storage._choice}
+    set {_uniqueStorage()._choice = newValue}
+  }
+
+  /// For DECISION_KIND_TEAM_START after the move to agents' own clones
+  /// (ADR 0022 §2a point 6): what agents could have changed, for the owner
+  /// to keep or remove, one by one. Approve keeps every item not named in
+  /// AnswerDecisionRequest.remove_items.
+  public var migrationItems: [Portenv_Types_V1_MigrationItem] {
+    get {_storage._migrationItems}
+    set {_uniqueStorage()._migrationItems = newValue}
+  }
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
 
-  fileprivate var _createdAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
-  fileprivate var _answeredAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
-  fileprivate var _expiresAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
+  fileprivate var _storage = _StorageClass.defaultInstance
+}
+
+/// One thing the move to agents' own clones recorded (ADR 0022 §2a point
+/// 6): something agents could have changed in what work's git reads, or a
+/// repository, worktree or file an agent made in the project.
+public nonisolated struct Portenv_Types_V1_MigrationItem: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// Stable within the record: what remove_items names.
+  public var id: String = String()
+
+  /// Relative to the project; for a setting, what it was.
+  public var path: String = String()
+
+  /// "git" (a config file, hook or worktree registration in .git), "repo"
+  /// (a repository an agent made in the project), "worktree", "file", or
+  /// "setting" (core.sharedRepository or a system safe.directory, already
+  /// removed).
+  public var kind: String = String()
+
+  /// The agent whose it was, when Portenv can tell.
+  public var agent: String = String()
+
+  public var size: Int64 = 0
+
+  /// Whether the owner chooses: settings are removed either way.
+  public var choice: Bool = false
+
+  /// A plain line: what was copied into the agent's clone, or why not.
+  public var note: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
 }
 
 /// One package apt-get -s would install, run by init (root), never by the
@@ -1038,6 +1124,12 @@ public nonisolated struct Portenv_Types_V1_AgentGrant: Sendable {
   /// count and last activity in whoami and portenv team status. Off by
   /// default; never terminals or homes.
   public var teamStatus: Bool = false
+
+  /// read_clones (ADR 0022 §2a, lenses): team agents with their own clone
+  /// whose clone this agent may read, never write: a named-user read ACL
+  /// on the clone and traverse on that agent's home, never through group
+  /// team.
+  public var readClones: [String] = []
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -1603,7 +1695,175 @@ nonisolated extension Portenv_Types_V1_BoardMessage: SwiftProtobuf.Message, Swif
 
 nonisolated extension Portenv_Types_V1_Decision: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Decision"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}from\0\u{1}kind\0\u{1}summary\0\u{1}detail\0\u{1}state\0\u{3}answer_note\0\u{3}created_at\0\u{3}answered_at\0\u{1}packages\0\u{3}expires_at\0\u{3}start_agent_ids\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}from\0\u{1}kind\0\u{1}summary\0\u{1}detail\0\u{1}state\0\u{3}answer_note\0\u{3}created_at\0\u{3}answered_at\0\u{1}packages\0\u{3}expires_at\0\u{3}start_agent_ids\0\u{1}choices\0\u{1}choice\0\u{3}migration_items\0")
+
+  fileprivate class _StorageClass {
+    var _id: String = String()
+    var _from: String = String()
+    var _kind: Portenv_Types_V1_DecisionKind = .unspecified
+    var _summary: String = String()
+    var _detail: String = String()
+    var _state: Portenv_Types_V1_DecisionState = .unspecified
+    var _answerNote: String = String()
+    var _createdAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
+    var _answeredAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
+    var _packages: [Portenv_Types_V1_PackagePlan] = []
+    var _expiresAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
+    var _startAgentIds: [String] = []
+    var _choices: [String] = []
+    var _choice: Int32 = 0
+    var _migrationItems: [Portenv_Types_V1_MigrationItem] = []
+
+      // This property is used as the initial default value for new instances of the type.
+      // The type itself is protecting the reference to its storage via CoW semantics.
+      // This will force a copy to be made of this reference when the first mutation occurs;
+      // hence, it is safe to mark this as `nonisolated(unsafe)`.
+      static nonisolated(unsafe) let defaultInstance = _StorageClass()
+
+    private init() {}
+
+    init(copying source: _StorageClass) {
+      _id = source._id
+      _from = source._from
+      _kind = source._kind
+      _summary = source._summary
+      _detail = source._detail
+      _state = source._state
+      _answerNote = source._answerNote
+      _createdAt = source._createdAt
+      _answeredAt = source._answeredAt
+      _packages = source._packages
+      _expiresAt = source._expiresAt
+      _startAgentIds = source._startAgentIds
+      _choices = source._choices
+      _choice = source._choice
+      _migrationItems = source._migrationItems
+    }
+  }
+
+  fileprivate mutating func _uniqueStorage() -> _StorageClass {
+    if !isKnownUniquelyReferenced(&_storage) {
+      _storage = _StorageClass(copying: _storage)
+    }
+    return _storage
+  }
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    _ = _uniqueStorage()
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      while let fieldNumber = try decoder.nextFieldNumber() {
+        // The use of inline closures is to circumvent an issue where the compiler
+        // allocates stack space for every case branch when no optimizations are
+        // enabled. https://github.com/apple/swift-protobuf/issues/1034
+        switch fieldNumber {
+        case 1: try { try decoder.decodeSingularStringField(value: &_storage._id) }()
+        case 2: try { try decoder.decodeSingularStringField(value: &_storage._from) }()
+        case 3: try { try decoder.decodeSingularEnumField(value: &_storage._kind) }()
+        case 4: try { try decoder.decodeSingularStringField(value: &_storage._summary) }()
+        case 5: try { try decoder.decodeSingularStringField(value: &_storage._detail) }()
+        case 6: try { try decoder.decodeSingularEnumField(value: &_storage._state) }()
+        case 7: try { try decoder.decodeSingularStringField(value: &_storage._answerNote) }()
+        case 8: try { try decoder.decodeSingularMessageField(value: &_storage._createdAt) }()
+        case 9: try { try decoder.decodeSingularMessageField(value: &_storage._answeredAt) }()
+        case 10: try { try decoder.decodeRepeatedMessageField(value: &_storage._packages) }()
+        case 11: try { try decoder.decodeSingularMessageField(value: &_storage._expiresAt) }()
+        case 12: try { try decoder.decodeRepeatedStringField(value: &_storage._startAgentIds) }()
+        case 13: try { try decoder.decodeRepeatedStringField(value: &_storage._choices) }()
+        case 14: try { try decoder.decodeSingularInt32Field(value: &_storage._choice) }()
+        case 15: try { try decoder.decodeRepeatedMessageField(value: &_storage._migrationItems) }()
+        default: break
+        }
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every if/case branch local when no optimizations
+      // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+      // https://github.com/apple/swift-protobuf/issues/1182
+      if !_storage._id.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._id, fieldNumber: 1)
+      }
+      if !_storage._from.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._from, fieldNumber: 2)
+      }
+      if _storage._kind != .unspecified {
+        try visitor.visitSingularEnumField(value: _storage._kind, fieldNumber: 3)
+      }
+      if !_storage._summary.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._summary, fieldNumber: 4)
+      }
+      if !_storage._detail.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._detail, fieldNumber: 5)
+      }
+      if _storage._state != .unspecified {
+        try visitor.visitSingularEnumField(value: _storage._state, fieldNumber: 6)
+      }
+      if !_storage._answerNote.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._answerNote, fieldNumber: 7)
+      }
+      try { if let v = _storage._createdAt {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 8)
+      } }()
+      try { if let v = _storage._answeredAt {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 9)
+      } }()
+      if !_storage._packages.isEmpty {
+        try visitor.visitRepeatedMessageField(value: _storage._packages, fieldNumber: 10)
+      }
+      try { if let v = _storage._expiresAt {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 11)
+      } }()
+      if !_storage._startAgentIds.isEmpty {
+        try visitor.visitRepeatedStringField(value: _storage._startAgentIds, fieldNumber: 12)
+      }
+      if !_storage._choices.isEmpty {
+        try visitor.visitRepeatedStringField(value: _storage._choices, fieldNumber: 13)
+      }
+      if _storage._choice != 0 {
+        try visitor.visitSingularInt32Field(value: _storage._choice, fieldNumber: 14)
+      }
+      if !_storage._migrationItems.isEmpty {
+        try visitor.visitRepeatedMessageField(value: _storage._migrationItems, fieldNumber: 15)
+      }
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Portenv_Types_V1_Decision, rhs: Portenv_Types_V1_Decision) -> Bool {
+    if lhs._storage !== rhs._storage {
+      let storagesAreEqual: Bool = withExtendedLifetime((lhs._storage, rhs._storage)) { (_args: (_StorageClass, _StorageClass)) in
+        let _storage = _args.0
+        let rhs_storage = _args.1
+        if _storage._id != rhs_storage._id {return false}
+        if _storage._from != rhs_storage._from {return false}
+        if _storage._kind != rhs_storage._kind {return false}
+        if _storage._summary != rhs_storage._summary {return false}
+        if _storage._detail != rhs_storage._detail {return false}
+        if _storage._state != rhs_storage._state {return false}
+        if _storage._answerNote != rhs_storage._answerNote {return false}
+        if _storage._createdAt != rhs_storage._createdAt {return false}
+        if _storage._answeredAt != rhs_storage._answeredAt {return false}
+        if _storage._packages != rhs_storage._packages {return false}
+        if _storage._expiresAt != rhs_storage._expiresAt {return false}
+        if _storage._startAgentIds != rhs_storage._startAgentIds {return false}
+        if _storage._choices != rhs_storage._choices {return false}
+        if _storage._choice != rhs_storage._choice {return false}
+        if _storage._migrationItems != rhs_storage._migrationItems {return false}
+        return true
+      }
+      if !storagesAreEqual {return false}
+    }
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Portenv_Types_V1_MigrationItem: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".MigrationItem"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}path\0\u{1}kind\0\u{1}agent\0\u{1}size\0\u{1}choice\0\u{1}note\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1612,79 +1872,50 @@ nonisolated extension Portenv_Types_V1_Decision: SwiftProtobuf.Message, SwiftPro
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularStringField(value: &self.id) }()
-      case 2: try { try decoder.decodeSingularStringField(value: &self.from) }()
-      case 3: try { try decoder.decodeSingularEnumField(value: &self.kind) }()
-      case 4: try { try decoder.decodeSingularStringField(value: &self.summary) }()
-      case 5: try { try decoder.decodeSingularStringField(value: &self.detail) }()
-      case 6: try { try decoder.decodeSingularEnumField(value: &self.state) }()
-      case 7: try { try decoder.decodeSingularStringField(value: &self.answerNote) }()
-      case 8: try { try decoder.decodeSingularMessageField(value: &self._createdAt) }()
-      case 9: try { try decoder.decodeSingularMessageField(value: &self._answeredAt) }()
-      case 10: try { try decoder.decodeRepeatedMessageField(value: &self.packages) }()
-      case 11: try { try decoder.decodeSingularMessageField(value: &self._expiresAt) }()
-      case 12: try { try decoder.decodeRepeatedStringField(value: &self.startAgentIds) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.path) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.kind) }()
+      case 4: try { try decoder.decodeSingularStringField(value: &self.agent) }()
+      case 5: try { try decoder.decodeSingularInt64Field(value: &self.size) }()
+      case 6: try { try decoder.decodeSingularBoolField(value: &self.choice) }()
+      case 7: try { try decoder.decodeSingularStringField(value: &self.note) }()
       default: break
       }
     }
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    // The use of inline closures is to circumvent an issue where the compiler
-    // allocates stack space for every if/case branch local when no optimizations
-    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
-    // https://github.com/apple/swift-protobuf/issues/1182
     if !self.id.isEmpty {
       try visitor.visitSingularStringField(value: self.id, fieldNumber: 1)
     }
-    if !self.from.isEmpty {
-      try visitor.visitSingularStringField(value: self.from, fieldNumber: 2)
+    if !self.path.isEmpty {
+      try visitor.visitSingularStringField(value: self.path, fieldNumber: 2)
     }
-    if self.kind != .unspecified {
-      try visitor.visitSingularEnumField(value: self.kind, fieldNumber: 3)
+    if !self.kind.isEmpty {
+      try visitor.visitSingularStringField(value: self.kind, fieldNumber: 3)
     }
-    if !self.summary.isEmpty {
-      try visitor.visitSingularStringField(value: self.summary, fieldNumber: 4)
+    if !self.agent.isEmpty {
+      try visitor.visitSingularStringField(value: self.agent, fieldNumber: 4)
     }
-    if !self.detail.isEmpty {
-      try visitor.visitSingularStringField(value: self.detail, fieldNumber: 5)
+    if self.size != 0 {
+      try visitor.visitSingularInt64Field(value: self.size, fieldNumber: 5)
     }
-    if self.state != .unspecified {
-      try visitor.visitSingularEnumField(value: self.state, fieldNumber: 6)
+    if self.choice != false {
+      try visitor.visitSingularBoolField(value: self.choice, fieldNumber: 6)
     }
-    if !self.answerNote.isEmpty {
-      try visitor.visitSingularStringField(value: self.answerNote, fieldNumber: 7)
-    }
-    try { if let v = self._createdAt {
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 8)
-    } }()
-    try { if let v = self._answeredAt {
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 9)
-    } }()
-    if !self.packages.isEmpty {
-      try visitor.visitRepeatedMessageField(value: self.packages, fieldNumber: 10)
-    }
-    try { if let v = self._expiresAt {
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 11)
-    } }()
-    if !self.startAgentIds.isEmpty {
-      try visitor.visitRepeatedStringField(value: self.startAgentIds, fieldNumber: 12)
+    if !self.note.isEmpty {
+      try visitor.visitSingularStringField(value: self.note, fieldNumber: 7)
     }
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  public static func ==(lhs: Portenv_Types_V1_Decision, rhs: Portenv_Types_V1_Decision) -> Bool {
+  public static func ==(lhs: Portenv_Types_V1_MigrationItem, rhs: Portenv_Types_V1_MigrationItem) -> Bool {
     if lhs.id != rhs.id {return false}
-    if lhs.from != rhs.from {return false}
+    if lhs.path != rhs.path {return false}
     if lhs.kind != rhs.kind {return false}
-    if lhs.summary != rhs.summary {return false}
-    if lhs.detail != rhs.detail {return false}
-    if lhs.state != rhs.state {return false}
-    if lhs.answerNote != rhs.answerNote {return false}
-    if lhs._createdAt != rhs._createdAt {return false}
-    if lhs._answeredAt != rhs._answeredAt {return false}
-    if lhs.packages != rhs.packages {return false}
-    if lhs._expiresAt != rhs._expiresAt {return false}
-    if lhs.startAgentIds != rhs.startAgentIds {return false}
+    if lhs.agent != rhs.agent {return false}
+    if lhs.size != rhs.size {return false}
+    if lhs.choice != rhs.choice {return false}
+    if lhs.note != rhs.note {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -1737,7 +1968,7 @@ nonisolated extension Portenv_Types_V1_PackagePlan: SwiftProtobuf.Message, Swift
 
 nonisolated extension Portenv_Types_V1_AgentGrant: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".AgentGrant"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}panes\0\u{3}max_panes\0\u{1}message\0\u{3}ask_owner\0\u{1}packages\0\u{3}team_status\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}panes\0\u{3}max_panes\0\u{1}message\0\u{3}ask_owner\0\u{1}packages\0\u{3}team_status\0\u{3}read_clones\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1751,6 +1982,7 @@ nonisolated extension Portenv_Types_V1_AgentGrant: SwiftProtobuf.Message, SwiftP
       case 4: try { try decoder.decodeSingularBoolField(value: &self.askOwner) }()
       case 5: try { try decoder.decodeSingularEnumField(value: &self.packages) }()
       case 6: try { try decoder.decodeSingularBoolField(value: &self.teamStatus) }()
+      case 7: try { try decoder.decodeRepeatedStringField(value: &self.readClones) }()
       default: break
       }
     }
@@ -1775,6 +2007,9 @@ nonisolated extension Portenv_Types_V1_AgentGrant: SwiftProtobuf.Message, SwiftP
     if self.teamStatus != false {
       try visitor.visitSingularBoolField(value: self.teamStatus, fieldNumber: 6)
     }
+    if !self.readClones.isEmpty {
+      try visitor.visitRepeatedStringField(value: self.readClones, fieldNumber: 7)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -1785,6 +2020,7 @@ nonisolated extension Portenv_Types_V1_AgentGrant: SwiftProtobuf.Message, SwiftP
     if lhs.askOwner != rhs.askOwner {return false}
     if lhs.packages != rhs.packages {return false}
     if lhs.teamStatus != rhs.teamStatus {return false}
+    if lhs.readClones != rhs.readClones {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

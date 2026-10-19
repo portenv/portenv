@@ -11,6 +11,12 @@ struct BoxListView: View {
     let notice: String?
     /// Try Again under the notice, while portenvd isn't answering (R-0121).
     var retry: (() -> Void)?
+    /// The workspaces running on this Mac (ADR 0023), shown as "Running",
+    /// with Close Workspace.
+    var running: Set<String> = []
+    var close: (String) -> Void = { _ in }
+    /// Reads `running` again when the list shows.
+    var refresh: () async -> Void = {}
     let open: (String) -> Void
     let newBox: () -> Void
     @State private var selection: String?
@@ -29,13 +35,22 @@ struct BoxListView: View {
                 Button(InspectorText.tryAgain, action: retry)
             }
             List(boxes, id: \.self, selection: $selection) { box in
-                Label(box, systemImage: "shippingbox")
-                    .tag(box)
-                    .accessibilityLabel("Workspace \(box)")
-                    .accessibilityHint("Opens the workspace")
+                HStack {
+                    Label(box, systemImage: "shippingbox")
+                    Spacer()
+                    if running.contains(box) {
+                        Text(BoxListText.running).foregroundStyle(.secondary)
+                    }
+                }
+                .tag(box)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(BoxListText.label(box, running: running.contains(box)))
+                .accessibilityHint("Opens the workspace")
             }
-            .contextMenu(forSelectionType: String.self) { _ in
-                EmptyView()
+            .contextMenu(forSelectionType: String.self) { picked in
+                if let box = picked.first, running.contains(box) {
+                    Button(BoxListText.closeWorkspace) { close(box) }
+                }
             } primaryAction: { picked in
                 if let box = picked.first { open(box) }
             }
@@ -43,6 +58,9 @@ struct BoxListView: View {
             HStack {
                 Button("New Workspace…", action: newBox)
                 Spacer()
+                if let selection, running.contains(selection) {
+                    Button(BoxListText.closeWorkspace) { close(selection) }
+                }
                 Button("Open") { if let selection { open(selection) } }
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.defaultAction)
@@ -54,5 +72,6 @@ struct BoxListView: View {
         .frame(minWidth: 720, minHeight: 520)
         .background(.background)
         .onAppear { selection = selection ?? boxes.first }
+        .task { await refresh() }
     }
 }

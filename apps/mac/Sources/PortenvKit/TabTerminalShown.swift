@@ -49,7 +49,7 @@ public final class TabTerminalShown {
     }
 
     /// What the pane says while the tab opens.
-    public static func openingLine(tab: String) -> String {
+    public nonisolated static func openingLine(tab: String) -> String {
         "Opening \(tab.isEmpty ? "tab" : tab)\u{2026}"
     }
 

@@ -759,6 +759,9 @@ func TestStartNamesTheProjectForTheClone(t *testing.T) {
 	for _, r := range h.started {
 		got[r.GetAgentId()] = r
 	}
+	if got["lead"].GetAgentName() != "Lead" {
+		t.Errorf("lead's start names it %q", got["lead"].GetAgentName())
+	}
 	if got["lead"].GetCloneProjectDir() != "/home/work/w" {
 		t.Errorf("lead's start: clone %q, want /home/work/w", got["lead"].GetCloneProjectDir())
 	}
@@ -1293,7 +1296,7 @@ func TestTheMoveWaitsForTheOwnersAnswer(t *testing.T) {
 	if len(h.started) != started {
 		t.Fatalf("an agent started before the owner answered: %v", h.started[started:])
 	}
-	if got := h.prepareReqs[len(h.prepareReqs)-1]; !slices.Equal(got.GetCloneAgents(), []string{"lead", "builder", "reviewer"}) || got.GetHomeQuotaBytes() != defaultHomeQuota {
+	if got := h.prepareReqs[len(h.prepareReqs)-1]; !slices.Equal(got.GetCloneAgents(), []string{"lead", "builder", "reviewer"}) || got.GetHomeQuotaBytes() != defaultHomeQuota || got.GetAgentNames()["builder"] != "Builder" {
 		t.Errorf("prepare asked %v", got)
 	}
 	var d *typesv1.Decision

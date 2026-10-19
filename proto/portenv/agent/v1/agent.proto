@@ -565,6 +565,9 @@ message StartTeamAgentRequest {
   // start (ADR 0022 §2), and clone_readers apply to its agents' clones.
   // Required when home_seed isn't empty.
   string project_dir = 9;
+  // The agent's display name, for its clone's git identity
+  // ("<name> (Portenv agent)", set when the clone is made).
+  string agent_name = 10;
 }
 
 // One writer's clone and the lenses that may read it.
@@ -792,6 +795,8 @@ message PrepareTeamProjectRequest {
   // home quota.
   repeated string clone_agents = 2;
   int64 home_quota_bytes = 3;
+  // Their display names, by id, for the clones' git identity.
+  map<string, string> agent_names = 4;
 }
 
 message PrepareTeamProjectResponse {

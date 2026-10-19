@@ -44,6 +44,14 @@ type fakeTeamHelper struct {
 	fixed      []string
 	listed     []*agentv1.ListHomeFilesRequest
 	written    []*agentv1.WriteHomeFilesRequest
+	fetched    []*agentv1.FetchAgentBranchRequest
+}
+
+func (f *fakeTeamHelper) FetchAgentBranch(_ context.Context, in *agentv1.FetchAgentBranchRequest, _ ...grpc.CallOption) (*agentv1.FetchAgentBranchResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.fetched = append(f.fetched, in)
+	return &agentv1.FetchAgentBranchResponse{Ref: "refs/remotes/agents/" + in.GetAgentId(), Commit: "0123456789abcdef0123456789abcdef01234567"}, nil
 }
 
 func (f *fakeTeamHelper) AppendBoard(_ context.Context, in *agentv1.AppendBoardRequest, _ ...grpc.CallOption) (*agentv1.AppendBoardResponse, error) {
@@ -700,6 +708,34 @@ func TestShareNamesTheAgentsBranch(t *testing.T) {
 	}
 	if r := share("reviewer", ""); r.GetOk() || !strings.Contains(r.GetLine(), "checkout: none") {
 		t.Errorf("share without a clone: %v", r)
+	}
+}
+
+// ADR 0022 §2a: the owner's Fetch asks the helper for the agent's branch,
+// within its home's limit, and tells the agent; an agent without a clone
+// has nothing to fetch.
+func TestTheOwnersFetch(t *testing.T) {
+	team := defaultTeam()
+	team[2].Spec.Checkout = CheckoutNone
+	e, h, _ := newTestEngine(t, team...)
+	ctx := context.Background()
+	r, err := e.fetchAgent(ctx, "w", "builder")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.GetRef() != "refs/remotes/agents/builder" || len(h.fetched) != 1 ||
+		h.fetched[0].GetProjectDir() != "/home/work/w" || h.fetched[0].GetMaxBytes() != defaultHomeQuota {
+		t.Errorf("fetch: %v, asked %v", r, h.fetched)
+	}
+	got := inbox(t, e, "builder", "").GetMessages()
+	if len(got) != 1 || !strings.Contains(got[0].GetText(), "fetched agent/builder (0123456789ab)") {
+		t.Errorf("builder's inbox: %v", got)
+	}
+	if _, err := e.fetchAgent(ctx, "w", "reviewer"); err == nil || !strings.Contains(err.Error(), "checkout: none") {
+		t.Errorf("reviewer: %v", err)
+	}
+	if _, err := e.fetchAgent(ctx, "w", "ghost"); err == nil {
+		t.Error("fetched a stranger's branch")
 	}
 }
 

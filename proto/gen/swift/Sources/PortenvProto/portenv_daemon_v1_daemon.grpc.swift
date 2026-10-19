@@ -633,6 +633,19 @@ public enum Portenv_Daemon_V1_DaemonService: Sendable {
                 type: .unary
             )
         }
+        /// Namespace for "FetchAgentBranch" metadata.
+        public enum FetchAgentBranch: Sendable {
+            /// Request type for "FetchAgentBranch".
+            public typealias Input = Portenv_Daemon_V1_FetchAgentBranchRequest
+            /// Response type for "FetchAgentBranch".
+            public typealias Output = Portenv_Daemon_V1_FetchAgentBranchResponse
+            /// Descriptor for "FetchAgentBranch".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "FetchAgentBranch",
+                type: .unary
+            )
+        }
         /// Namespace for "AnswerDecision" metadata.
         public enum AnswerDecision: Sendable {
             /// Request type for "AnswerDecision".
@@ -825,6 +838,7 @@ public enum Portenv_Daemon_V1_DaemonService: Sendable {
             WatchTeam.descriptor,
             StartAgent.descriptor,
             StopAgent.descriptor,
+            FetchAgentBranch.descriptor,
             AnswerDecision.descriptor,
             GetAgentFile.descriptor,
             ApproveAgentFile.descriptor,
@@ -1978,6 +1992,31 @@ extension Portenv_Daemon_V1_DaemonService {
             deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_StopAgentResponse>,
             options: GRPCCore.CallOptions,
             onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_StopAgentResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "FetchAgentBranch" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > The owner's Fetch (ADR 0022 §2a): an agent's branch, agent/<id> in its
+        /// > own clone, into the project as refs/remotes/agents/<id>, by the safe
+        /// > fetch that never opens the agent's repository as work.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_FetchAgentBranchRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_FetchAgentBranchRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_FetchAgentBranchResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func fetchAgentBranch<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_FetchAgentBranchRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_FetchAgentBranchRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_FetchAgentBranchResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_FetchAgentBranchResponse>) async throws -> Result
         ) async throws -> Result where Result: Sendable
 
         /// Call the "AnswerDecision" method.
@@ -3878,6 +3917,42 @@ extension Portenv_Daemon_V1_DaemonService {
             )
         }
 
+        /// Call the "FetchAgentBranch" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > The owner's Fetch (ADR 0022 §2a): an agent's branch, agent/<id> in its
+        /// > own clone, into the project as refs/remotes/agents/<id>, by the safe
+        /// > fetch that never opens the agent's repository as work.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_FetchAgentBranchRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_FetchAgentBranchRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_FetchAgentBranchResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func fetchAgentBranch<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_FetchAgentBranchRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_FetchAgentBranchRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_FetchAgentBranchResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_FetchAgentBranchResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.FetchAgentBranch.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
+
         /// Call the "AnswerDecision" method.
         ///
         /// > Source IDL Documentation:
@@ -5639,6 +5714,37 @@ extension Portenv_Daemon_V1_DaemonService.ClientProtocol {
             request: request,
             serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_StopAgentRequest>(),
             deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_StopAgentResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "FetchAgentBranch" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > The owner's Fetch (ADR 0022 §2a): an agent's branch, agent/<id> in its
+    /// > own clone, into the project as refs/remotes/agents/<id>, by the safe
+    /// > fetch that never opens the agent's repository as work.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_FetchAgentBranchRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func fetchAgentBranch<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_FetchAgentBranchRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_FetchAgentBranchResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.fetchAgentBranch(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_FetchAgentBranchRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_FetchAgentBranchResponse>(),
             options: options,
             onResponse: handleResponse
         )
@@ -7538,6 +7644,41 @@ extension Portenv_Daemon_V1_DaemonService.ClientProtocol {
             metadata: metadata
         )
         return try await self.stopAgent(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "FetchAgentBranch" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > The owner's Fetch (ADR 0022 §2a): an agent's branch, agent/<id> in its
+    /// > own clone, into the project as refs/remotes/agents/<id>, by the safe
+    /// > fetch that never opens the agent's repository as work.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func fetchAgentBranch<Result>(
+        _ message: Portenv_Daemon_V1_FetchAgentBranchRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_FetchAgentBranchResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_FetchAgentBranchRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.fetchAgentBranch(
             request: request,
             options: options,
             onResponse: handleResponse

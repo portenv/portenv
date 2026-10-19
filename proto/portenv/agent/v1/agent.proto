@@ -98,6 +98,13 @@ service AgentService {
   // reads, and refuses with a plain line if it finds any. Refuses too when
   // the filesystem won't keep ACLs.
   rpc PrepareTeamProject(PrepareTeamProjectRequest) returns (PrepareTeamProjectResponse);
+  // Fetches an agent's branch into the owner's project as
+  // refs/remotes/agents/<id> (ADR 0022 §2a point 3): as the agent, its
+  // clone's agent/<id> is bundled; as work, that file alone is fetched,
+  // with only the file protocol, no hooks or fsmonitor, every object
+  // checked, no tags and no submodules. work's git never opens the agent's
+  // repository.
+  rpc FetchAgentBranch(FetchAgentBranchRequest) returns (FetchAgentBranchResponse);
   // Wakes an idle agent for new board lines (CC-0498): types the fixed
   // line "[Portenv] new message from <from>; run portenv inbox", then
   // Enter, into the agent's own main pane, under exactly DeliverRoutine's
@@ -742,6 +749,21 @@ message HandoffFilesRequest {
 
 message HandoffFilesResponse {
   repeated portenv.types.v1.HandoffFile files = 1;
+}
+
+message FetchAgentBranchRequest {
+  string agent_id = 1;
+  // The owner's project, /home/work/<workspace>.
+  string project_dir = 2;
+  // The bundle's limit: the agent's home quota.
+  int64 max_bytes = 3;
+}
+
+message FetchAgentBranchResponse {
+  // refs/remotes/agents/<id>.
+  string ref = 1;
+  // Its commit, in full hex.
+  string commit = 2;
 }
 
 message PrepareTeamProjectRequest {

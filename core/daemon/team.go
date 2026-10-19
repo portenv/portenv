@@ -871,6 +871,40 @@ func (e *teamEngine) stopAgent(ctx context.Context, name, agentID string) (*daem
 	return info, nil
 }
 
+// fetchAgent is the owner's Fetch (ADR 0022 §2a): the agent's branch into
+// the project as refs/remotes/agents/<id>, by the helper's safe fetch. The
+// agent is told, on the board.
+func (e *teamEngine) fetchAgent(ctx context.Context, name, agentID string) (*agentv1.FetchAgentBranchResponse, error) {
+	team, err := e.loadTeam(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	a := team.agent(agentID)
+	switch {
+	case a == nil:
+		return nil, fmt.Errorf("this workspace has no agent %q", agentID)
+	case !a.OwnClone():
+		return nil, fmt.Errorf("%s has no copy of the project (checkout: none), so it has no branch to fetch", agentID)
+	}
+	h, err := e.helper(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	r, err := h.FetchAgentBranch(ctx, &agentv1.FetchAgentBranchRequest{AgentId: agentID, ProjectDir: "/home/work/" + name, MaxBytes: defaultHomeQuota})
+	if err != nil {
+		return nil, errors.New(status.Convert(err).Message())
+	}
+	if b, err := e.lockBox(ctx, name); err == nil {
+		short := r.GetCommit()
+		if len(short) > 12 {
+			short = short[:12]
+		}
+		e.noticeLocked(ctx, name, b, agentID, "", fmt.Sprintf("The owner fetched %s (%s) into the project as %s.", agentBranch(agentID), short, r.GetRef()))
+		b.mu.Unlock()
+	}
+	return r, nil
+}
+
 // askTeamStartLocked makes the team_start decision naming the agent, or
 // adds the agent to the one already waiting (R-0296).
 func (e *teamEngine) askTeamStartLocked(ctx context.Context, name string, b *teamBox, agentID string) error {

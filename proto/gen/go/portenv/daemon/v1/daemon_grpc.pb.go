@@ -72,6 +72,7 @@ const (
 	DaemonService_WatchTeam_FullMethodName             = "/portenv.daemon.v1.DaemonService/WatchTeam"
 	DaemonService_StartAgent_FullMethodName            = "/portenv.daemon.v1.DaemonService/StartAgent"
 	DaemonService_StopAgent_FullMethodName             = "/portenv.daemon.v1.DaemonService/StopAgent"
+	DaemonService_FetchAgentBranch_FullMethodName      = "/portenv.daemon.v1.DaemonService/FetchAgentBranch"
 	DaemonService_AnswerDecision_FullMethodName        = "/portenv.daemon.v1.DaemonService/AnswerDecision"
 	DaemonService_GetAgentFile_FullMethodName          = "/portenv.daemon.v1.DaemonService/GetAgentFile"
 	DaemonService_ApproveAgentFile_FullMethodName      = "/portenv.daemon.v1.DaemonService/ApproveAgentFile"
@@ -243,6 +244,10 @@ type DaemonServiceClient interface {
 	StartAgent(ctx context.Context, in *StartAgentRequest, opts ...grpc.CallOption) (*StartAgentResponse, error)
 	// Stops an agent at once: its tmux server and every process of its user.
 	StopAgent(ctx context.Context, in *StopAgentRequest, opts ...grpc.CallOption) (*StopAgentResponse, error)
+	// The owner's Fetch (ADR 0022 §2a): an agent's branch, agent/<id> in its
+	// own clone, into the project as refs/remotes/agents/<id>, by the safe
+	// fetch that never opens the agent's repository as work.
+	FetchAgentBranch(ctx context.Context, in *FetchAgentBranchRequest, opts ...grpc.CallOption) (*FetchAgentBranchResponse, error)
 	// Approve or Decline, the owner's answer to a pending decision.
 	AnswerDecision(ctx context.Context, in *AnswerDecisionRequest, opts ...grpc.CallOption) (*AnswerDecisionResponse, error)
 	// An agent file's content and the content last approved, for Approve's
@@ -780,6 +785,16 @@ func (c *daemonServiceClient) StopAgent(ctx context.Context, in *StopAgentReques
 	return out, nil
 }
 
+func (c *daemonServiceClient) FetchAgentBranch(ctx context.Context, in *FetchAgentBranchRequest, opts ...grpc.CallOption) (*FetchAgentBranchResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(FetchAgentBranchResponse)
+	err := c.cc.Invoke(ctx, DaemonService_FetchAgentBranch_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *daemonServiceClient) AnswerDecision(ctx context.Context, in *AnswerDecisionRequest, opts ...grpc.CallOption) (*AnswerDecisionResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(AnswerDecisionResponse)
@@ -1060,6 +1075,10 @@ type DaemonServiceServer interface {
 	StartAgent(context.Context, *StartAgentRequest) (*StartAgentResponse, error)
 	// Stops an agent at once: its tmux server and every process of its user.
 	StopAgent(context.Context, *StopAgentRequest) (*StopAgentResponse, error)
+	// The owner's Fetch (ADR 0022 §2a): an agent's branch, agent/<id> in its
+	// own clone, into the project as refs/remotes/agents/<id>, by the safe
+	// fetch that never opens the agent's repository as work.
+	FetchAgentBranch(context.Context, *FetchAgentBranchRequest) (*FetchAgentBranchResponse, error)
 	// Approve or Decline, the owner's answer to a pending decision.
 	AnswerDecision(context.Context, *AnswerDecisionRequest) (*AnswerDecisionResponse, error)
 	// An agent file's content and the content last approved, for Approve's
@@ -1234,6 +1253,9 @@ func (UnimplementedDaemonServiceServer) StartAgent(context.Context, *StartAgentR
 }
 func (UnimplementedDaemonServiceServer) StopAgent(context.Context, *StopAgentRequest) (*StopAgentResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method StopAgent not implemented")
+}
+func (UnimplementedDaemonServiceServer) FetchAgentBranch(context.Context, *FetchAgentBranchRequest) (*FetchAgentBranchResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method FetchAgentBranch not implemented")
 }
 func (UnimplementedDaemonServiceServer) AnswerDecision(context.Context, *AnswerDecisionRequest) (*AnswerDecisionResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method AnswerDecision not implemented")
@@ -2092,6 +2114,24 @@ func _DaemonService_StopAgent_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _DaemonService_FetchAgentBranch_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(FetchAgentBranchRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).FetchAgentBranch(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_FetchAgentBranch_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).FetchAgentBranch(ctx, req.(*FetchAgentBranchRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _DaemonService_AnswerDecision_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(AnswerDecisionRequest)
 	if err := dec(in); err != nil {
@@ -2446,6 +2486,10 @@ var DaemonService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "StopAgent",
 			Handler:    _DaemonService_StopAgent_Handler,
+		},
+		{
+			MethodName: "FetchAgentBranch",
+			Handler:    _DaemonService_FetchAgentBranch_Handler,
 		},
 		{
 			MethodName: "AnswerDecision",

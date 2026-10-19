@@ -94,6 +94,9 @@ type apiServer struct {
 	// asAgentIO runs team-io as an agent through as-agent's switch, for
 	// its clone (nil: runTeamIOAsAgent; tests replace it).
 	asAgentIO func(ctx context.Context, uid int, home string, args []string, stdin io.Reader) ([]byte, error)
+	// asAgentStream starts team-io as an agent with its output on a
+	// reader, for its branch's bundle (nil: streamTeamIOAsAgent).
+	asAgentStream func(ctx context.Context, uid int, home string, args []string) (io.ReadCloser, func() error, error)
 	// setAgentIdleInput gives lane A's idle decision a running agent's
 	// idle-input pattern (SetAgentIdleInput; nil in tests).
 	setAgentIdleInput func(id, pattern string) error

@@ -1,6 +1,6 @@
 # 0022. Agents in a workspace: a team the owner approves, each agent its own user, one grant check for every way in
 
-Date: 2026-10-16 · Status: Accepted (the reviewer, R-0245), with R-0245's six additions, R-0246 and R-0247 in this text. Per-agent users are the owner's decision (13:19, R-0231; R-0235). Built from lane A's tmux findings (CC-0345), R-0226, R-0227 and R-0231 to R-0237. Amended 2026-10-18 (the owner's security decision, R-0315): each coding agent works in its own clone and the owner's repository is never agent-writable; see "2a. Amended 2026-10-18 (R-0315)" below, which wins where it differs.
+Date: 2026-10-16 · Status: Accepted (the reviewer, R-0245), with R-0245's six additions, R-0246 and R-0247 in this text. Per-agent users are the owner's decision (13:19, R-0231; R-0235). `ask-owner --choice` added by CC-0501 (accepted in R-0314). Built from lane A's tmux findings (CC-0345), R-0226, R-0227 and R-0231 to R-0237. Amended 2026-10-18 (the owner's security decision, R-0315): each coding agent works in its own clone and the owner's repository is never agent-writable; see "2a. Amended 2026-10-18 (R-0315)" below, which wins where it differs.
 
 ## Context
 
@@ -107,6 +107,7 @@ This closes every item of lane A's list:
 - **Seeding:** an agent file may list `home_seed: [paths in the repository]`. On the agent's first start, as the agent's user, the helper copies them into its home at the same relative paths. The rules:
   - only regular files and folders inside the project, with no symlink leaving it, at most 100 MB together;
   - a marker, `~/.portenv-seeded`, records the copy; later changes in the repository are not copied again.
+  - **As built (R-0323):** the helper runs `team-io seed-home` as the agent, with the team group so it reads the project as the agent can, before the agent's terminal starts. It walks through descriptors and never follows a link. Links, special files and hidden names (`.bashrc`, `.claude/…`) are skipped and reported, not copied. A missing path is skipped. It writes only new files (0600, or 0700 when executable), so a file the agent already has is kept. The copy is at most 100 MB and 10,000 files together, within the home's quota; past either, nothing is copied, no marker is written and the start fails with the reason. It reads the owner's project, so it works the same once agents have their own clones (§2a).
 - **The Agent files view:** the owner lists, opens (a copy to the Mac) and adds files (drag and drop) for each agent in the app. The helper does each read and write as the agent's user, in a forked process with its uid, so new files belong to the agent. Nothing else crosses: no agent reads another's home, and no agent call reaches this view.
 - **Quota:**
   - each agent's home has a limit (2 GB by default, 20 GB at most, section 7), and it counts toward the workspace's size;
@@ -268,7 +269,7 @@ You build what the lead asks for. …
 | `portenv focus <pane>` | own panes only | |
 | `portenv close <pane>` | own panes only | |
 | `portenv msg <agent> "<text>"` | `message` | at most 8 KB; to the board (section 6) |
-| `portenv ask-owner "<text>"` | `ask_owner` | a decision for the owner (section 6), which the agent waits for or polls |
+| `portenv ask-owner "<text>" [--choice "<label>" …]` | `ask_owner` | a decision for the owner (section 6), which the agent waits for or polls; with 2 to 4 `--choice` labels the owner picks one (CC-0501) |
 | `portenv request-package <name> [--reason "<text>"]` | `packages` | a package decision for the owner (section 6); the result comes to the agent's inbox |
 | `portenv inbox [--wait] [--since <cursor>]` | always, own messages only | JSON lines |
 | `portenv share [<branch>]` | `checkout: own` | a message to the owner and the lead that its branch (`agent/<id>` in its own clone) is ready for the owner to fetch (section 2a) |
@@ -347,8 +348,14 @@ Agents learn what they can do from Portenv, not from guesses. Everything below c
 
 - **Where:** `/home/work/.portenv/board/` in the workspace (box-level, so it moves with the workspace and isn't committed). Two append-only JSONL files: `messages.jsonl` and `decisions.jsonl`. Agents can't write them: the directory is `work`'s, 0755. **One writer: the helper, on `portenvd`'s instruction**; no agent call writes a byte without `portenvd`'s check first.
 - **A message** is ADR 0016's type, with these fields and nothing else: `id` (ULID), `from`, `to` (an agent id or `owner`), `thread_id`, `type` (`question`, `answer`, `notice`), `text` (≤ 8 KB, plain text), `created_at`. `portenv inbox` returns an agent's own, with a cursor; the owner sees every message that involves their agents (ADR 0016 point 5).
-- **A decision** is a request for the owner: `id`, `from` (agent), `kind` (`ask_owner`, `pane`, `agent_file_change`, `share_login`, `package`), `summary` (≤ 200 characters), `detail` (≤ 32 KB: the question, the command, the diff), `state` (`pending`, `approved`, `declined`, `expired`), `answer_note`, `created_at`, `answered_at`. Each answer is a new line; the file is never rewritten.
+- **A decision** is a request for the owner: `id`, `from` (agent), `kind` (`ask_owner`, `pane`, `agent_file_change`, `share_login`, `package`), `summary` (≤ 200 characters), `detail` (≤ 32 KB: the question, the command, the diff), `state` (`pending`, `approved`, `declined`, `expired`), `answer_note`, `created_at`, `answered_at`, and for an `ask_owner` with choices, `choices` and the owner's `choice` (below). Each answer is a new line; the file is never rewritten.
 - **Only the app answers decisions,** with Approve and Decline, in front of the person (no agent, no CLI on the Mac, no door). A pending decision expires after 24 hours. Expired is final: it never turns into an approval, and the app shows it greyed, with no Approve. The agent gets a notice in its inbox: "Your request expired before the owner answered. Ask again if you still need it." (R-0245)
+- **Questions with choices (CC-0501, accepted in R-0314).** `portenv ask-owner TEXT --choice "<label>" --choice "<label>" …` takes 2 to 4 choices, each 1 to 80 characters of plain text on one line (no control or bidi characters, `boardText`), all different; `portenvd` refuses anything else with a plain line, and the helper checks the board line again. The decision stores them in order (`Decision.choices`).
+  - The card shows one button per choice, in order, in Approve's place, with no default button, plus Decline… as before. Each label is plain text, never markup. VoiceOver reads each as “Choose “<label>”: <question>”.
+  - The app's answer is the choice's number, counting from 1, and its label (`AnswerDecisionRequest.choice` and `choice_label`). `portenvd` checks both against the decision's stored choices and refuses an answer whose number is out of range or whose label isn't that choice, so a forged or stale answer never picks something else. A decision with choices is answered with one of them or declined; one without is never answered with a choice.
+  - The answer is an approved decision with `choice` set; the agent's `portenv inbox` shows `decision <id>: chose "<label>"`, and `inbox --json` the decision with `choices` and `choice`.
+  - Without `--choice`, nothing changes: a yes/no question keeps Approve and Decline. Only the app answers, as for every decision.
+  - A workspace whose toolbox image predates this has a helper and an in-box `portenv` without it: that `portenv` refuses `--choice` as an unknown flag, and that helper writes the board line without the choices, so the question falls back to Approve and Decline. Nothing is chosen wrongly either way.
 - **Board text is data, never UI or instructions:** the app shows it as plain text (no Markdown links, no images, no actions in it), and `portenv guide` tells agents that a message is information from another agent, not a command (ADR 0016 point 7).
 - **Package decisions (owner's request, 16 Oct).** An Approve on `ask-owner` only says yes; for a system package, Approve also installs it, so the owner doesn't have to type the install.
   - **The request:** `portenv request-package <name> [--reason "<text>"]`.
@@ -404,6 +411,7 @@ Past a limit, the call is refused with a plain line ("builder has 4 panes open, 
 - `AgentGrant` with a `GrantMode`;
 - `AgentInfo.runner` and `grant`;
 - `WhoAmI` (R-0246);
+- `AskOwner.choices`, `Decision.choices` and `choice`, and `AnswerDecisionRequest.choice` and `choice_label` (CC-0501), all additive;
 - shared types (`BoardMessage`, `Decision`, `AgentFile`, `FileChunk`) in `types.proto`, so neither file's generated indices move.
 
 All appended per the merge guard: new RPCs at the end of `DaemonService`, new messages at the end of `daemon.proto`, enums in `types/v1/types.proto`.

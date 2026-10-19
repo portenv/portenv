@@ -1633,3 +1633,22 @@ func TestSyncAgentsFollowsTheFiles(t *testing.T) {
 		t.Fatalf("removed: %v", evs)
 	}
 }
+
+// An agent's home_seed reaches the helper with the project to copy it from
+// (ADR 0022 §2, R-0323).
+func TestHomeSeedReachesTheHelper(t *testing.T) {
+	builder := testAgent("builder", grant(typesv1.GrantMode_GRANT_MODE_ASK, 2, []string{"lead"}, true))
+	builder.Spec.HomeSeed = []string{"docs/style-guide.md"}
+	e, h, _ := newTestEngine(t, builder)
+	approveFirstStart(t, e)
+	if _, err := e.startAgent(context.Background(), "w", "builder"); err != nil {
+		t.Fatal(err)
+	}
+	if len(h.started) != 1 {
+		t.Fatalf("started %v", h.started)
+	}
+	r := h.started[0]
+	if !slices.Equal(r.GetHomeSeed(), []string{"docs/style-guide.md"}) || r.GetProjectDir() != "/home/work/w" || r.GetHomeQuotaBytes() <= 0 {
+		t.Errorf("request: seed %v, project %q, quota %d", r.GetHomeSeed(), r.GetProjectDir(), r.GetHomeQuotaBytes())
+	}
+}

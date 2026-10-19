@@ -5,13 +5,16 @@ package agent
 import (
 	"context"
 	"errors"
+	"io"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 
 	agentv1 "github.com/portenv/portenv/proto/gen/go/portenv/agent/v1"
 	typesv1 "github.com/portenv/portenv/proto/gen/go/portenv/types/v1"
@@ -266,4 +269,71 @@ type elsewhereUsers struct{}
 
 func (elsewhereUsers) EnsureAgentUser(context.Context, string) (AgentUser, error) {
 	return AgentUser{UID: 2001, Home: "/home/builder", RunDir: "/tmp/x", TmuxDir: "/tmp/x/tmux", TmpDir: "/tmp/x/tmp"}, nil
+}
+
+// home_seed runs seed-home as the agent, from the project, before its
+// terminal starts; a bad request is refused before init is asked, and a
+// seeding that fails stops the start (ADR 0022 §2).
+func TestStartTeamAgentSeedsItsHome(t *testing.T) {
+	s, users, _, started, _ := newStartServer(t)
+	s.cfg.User, s.cfg.HomeRoot = "work", "/home"
+	type call struct {
+		uid  int
+		args []string
+	}
+	var calls []call
+	var seedErr error
+	s.runHomeIO = func(_ context.Context, uid int, args []string, _ io.Reader) ([]byte, error) {
+		calls = append(calls, call{uid, args})
+		return []byte(`{"copied":["docs/style-guide.md"]}`), seedErr
+	}
+	req := &agentv1.StartTeamAgentRequest{AgentId: "builder", Argv: []string{"claude"}, HomeSeed: []string{"docs/style-guide.md", "notes"},
+		HomeQuotaBytes: 2 << 30, ProjectDir: "/home/work/acme"}
+	if _, err := s.StartTeamAgent(context.Background(), req); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"seed-home", "/home/work/acme", "/home/builder", strconv.FormatInt(2<<30, 10), "docs/style-guide.md", "notes"}
+	if len(calls) != 1 || calls[0].uid != 2001 || !slices.Equal(calls[0].args, want) {
+		t.Errorf("seed-home calls %+v, want uid 2001 %v", calls, want)
+	}
+	if len(*started) != 1 {
+		t.Errorf("started %d", len(*started))
+	}
+	_, _ = s.StopTeamAgent(context.Background(), &agentv1.StopTeamAgentRequest{AgentId: "builder"})
+
+	// No home_seed: no call.
+	calls = nil
+	if _, err := s.StartTeamAgent(context.Background(), &agentv1.StartTeamAgentRequest{AgentId: "builder", Argv: []string{"claude"}}); err != nil || len(calls) != 0 {
+		t.Errorf("no home_seed: %v, calls %v", err, calls)
+	}
+	_, _ = s.StopTeamAgent(context.Background(), &agentv1.StopTeamAgentRequest{AgentId: "builder"})
+
+	// Refused before init.
+	users.got, *started, calls = nil, nil, nil
+	for name, bad := range map[string]func(r *agentv1.StartTeamAgentRequest){
+		"no project":          func(r *agentv1.StartTeamAgentRequest) { r.ProjectDir = "" },
+		"another folder":      func(r *agentv1.StartTeamAgentRequest) { r.ProjectDir = "/home/builder/acme" },
+		"the owner's home":    func(r *agentv1.StartTeamAgentRequest) { r.ProjectDir = "/home/work" },
+		"a hidden folder":     func(r *agentv1.StartTeamAgentRequest) { r.ProjectDir = "/home/work/.ssh" },
+		"an absolute seed":    func(r *agentv1.StartTeamAgentRequest) { r.HomeSeed = []string{"/etc/passwd"} },
+		"a seed leaving":      func(r *agentv1.StartTeamAgentRequest) { r.HomeSeed = []string{"../x"} },
+		"no quota":            func(r *agentv1.StartTeamAgentRequest) { r.HomeQuotaBytes = 0 },
+		"too many seed paths": func(r *agentv1.StartTeamAgentRequest) { r.HomeSeed = make([]string, maxSeedPaths+1) },
+	} {
+		r := proto.CloneOf(req)
+		bad(r)
+		if _, err := s.StartTeamAgent(context.Background(), r); status.Code(err) != codes.InvalidArgument {
+			t.Errorf("%s: %v, want InvalidArgument", name, err)
+		}
+	}
+	if len(users.got) != 0 || len(*started) != 0 || len(calls) != 0 {
+		t.Errorf("a refused start asked init %v, started %d, seeded %v", users.got, len(*started), calls)
+	}
+
+	// A seeding that fails stops the start, with its reason.
+	seedErr = errHomeFull
+	_, err := s.StartTeamAgent(context.Background(), req)
+	if status.Code(err) != codes.ResourceExhausted || !strings.Contains(err.Error(), "home_seed couldn't be copied") || len(*started) != 0 {
+		t.Errorf("a failed seeding: %v, started %d", err, len(*started))
+	}
 }

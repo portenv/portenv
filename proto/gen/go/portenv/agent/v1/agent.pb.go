@@ -3138,7 +3138,10 @@ type WhoAmIResult struct {
 	Status  *v1.AgentStatus `protobuf:"bytes,15,opt,name=status,proto3" json:"status,omitempty"`
 	// Why its routines are off, if they are ("Portenv doesn't know when
 	// this runner is idle").
-	RoutinesOff   string `protobuf:"bytes,16,opt,name=routines_off,json=routinesOff,proto3" json:"routines_off,omitempty"`
+	RoutinesOff string `protobuf:"bytes,16,opt,name=routines_off,json=routinesOff,proto3" json:"routines_off,omitempty"`
+	// Set when its file asks for share_login, which this build doesn't
+	// support: nothing is shared, so it signs in itself (R-0323).
+	ShareLoginOff string `protobuf:"bytes,17,opt,name=share_login_off,json=shareLoginOff,proto3" json:"share_login_off,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3281,6 +3284,13 @@ func (x *WhoAmIResult) GetStatus() *v1.AgentStatus {
 func (x *WhoAmIResult) GetRoutinesOff() string {
 	if x != nil {
 		return x.RoutinesOff
+	}
+	return ""
+}
+
+func (x *WhoAmIResult) GetShareLoginOff() string {
+	if x != nil {
+		return x.ShareLoginOff
 	}
 	return ""
 }
@@ -6072,7 +6082,7 @@ const file_portenv_agent_v1_agent_proto_rawDesc = "" +
 	"\x0eRequestPackage\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x16\n" +
 	"\x06reason\x18\x02 \x01(\tR\x06reason\"\b\n" +
-	"\x06WhoAmI\"\xc9\x04\n" +
+	"\x06WhoAmI\"\xf1\x04\n" +
 	"\fWhoAmIResult\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
@@ -6092,7 +6102,8 @@ const file_portenv_agent_v1_agent_proto_rawDesc = "" +
 	"\bcommands\x18\r \x03(\tR\bcommands\x12\x18\n" +
 	"\arunners\x18\x0e \x03(\tR\arunners\x125\n" +
 	"\x06status\x18\x0f \x01(\v2\x1d.portenv.types.v1.AgentStatusR\x06status\x12!\n" +
-	"\froutines_off\x18\x10 \x01(\tR\vroutinesOff\"\xfd\x01\n" +
+	"\froutines_off\x18\x10 \x01(\tR\vroutinesOff\x12&\n" +
+	"\x0fshare_login_off\x18\x11 \x01(\tR\rshareLoginOff\"\xfd\x01\n" +
 	"\bTeammate\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +

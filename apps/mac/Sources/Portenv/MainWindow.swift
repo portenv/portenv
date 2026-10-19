@@ -9,45 +9,84 @@ import SwiftUI
 struct MainWindow: View {
     @Bindable var controller: BoxController
     @Bindable var tabs: TabsController
+    /// The workspace's agent team; nil in renders without one.
+    let team: TeamController?
+    /// Split view's panes (PLAN 1.2b); nil shows one terminal (renders).
+    let split: SplitController?
     /// The inspector's open state, remembered for this box's window (§6).
     @AppStorage private var inspectorOpen: Bool
+    /// The sidebar as the person chose it with ⌘0, for this box; "" until
+    /// they do (TeamSidebarToggle).
+    @AppStorage private var sidebarChoice: String
+    /// Below 900 pt the sidebar is compact (GUIDELINES 6.2).
+    @State private var narrow = false
     /// Renders only (ScreenRenders): a sample terminal in place of
     /// `portenv attach`.
     private let renderTerminal: (() -> NSView)?
 
-    init(controller: BoxController, tabs: TabsController, renderTerminal: (() -> NSView)? = nil) {
+    init(controller: BoxController, tabs: TabsController, team: TeamController? = nil, split: SplitController? = nil,
+         renderTerminal: (() -> NSView)? = nil) {
         self.controller = controller
         self.tabs = tabs
+        self.team = team
+        self.split = split
         self.renderTerminal = renderTerminal
         _inspectorOpen = AppStorage(wrappedValue: false, InspectorToggle.key(controller.box))
+        _sidebarChoice = AppStorage(wrappedValue: "", TeamSidebarToggle.key(controller.box))
+    }
+
+    /// The selected agent, whose column takes the inspector's place
+    /// (R-0240).
+    private var agent: TeamAgent? { team?.selectedAgent }
+
+    /// Open while an agent is selected, whatever the person last chose.
+    private var columnOpen: Binding<Bool> {
+        Binding(get: { inspectorOpen || agent != nil || team?.selectedDecision != nil || team?.selection == .activity }, set: { inspectorOpen = $0 })
     }
 
     var body: some View {
-        content
+        HStack(spacing: 0) {
+            if TeamSidebarToggle.shows(choice: sidebarChoice, team: team), let team {
+                TeamSidebar(state: team.state, tabs: tabs.tabs,
+                            selection: Binding(get: { team.selection }, set: { choose($0) }), compact: narrow)
+                Divider()
+            }
+            content
+        }
+            // The team while the window is open; it watches again after a
+            // restart or a move.
+            .task(id: controller.box) { await team?.follow() }
+            .onGeometryChange(for: Bool.self) { $0.size.width < 900 } action: { narrow = $0 }
             // The terminal side and the inspector share the window's width;
             // only the window has a minimum width (R-0073, R-0075).
-            .boxWindowColumns(inspectorOpen: $inspectorOpen) {
-                InspectorView(
-                    content: InspectorContent(box: controller, tabs: tabs),
-                    yourInitial: String(NSFullUserName().prefix(1)).uppercased(),
-                    moveMenu: controller.moveMenu,
-                    move: { target in Task { await controller.requestMove(to: target) } },
-                    run: { action in Task { await controller.run(action) } },
-                    retryPackages: { Task { await controller.retryPackages() } },
-                    revert: { Task { await controller.revertToLastSavePoint() } },
-                    retrySaves: { Task { await controller.refreshSaves() } }
-                )
-                // Read the saves while open and wherever the box runs,
-                // quietly trying again if that fails. A new save reads them
-                // again from the controller (savedAtChanged).
-                .task(id: controller.location) {
-                    await controller.keepSavesLoaded()
+            .boxWindowColumns(inspectorOpen: columnOpen) {
+                if let agent, let team {
+                    TeamColumn(agent: agent, team: team)
+                        // Each agent's column starts with its Team section
+                        // collapsed.
+                        .id(agent.id)
+                        .inspectorToggle(isOpen: columnOpen)
+                } else if let team, team.selection == .activity {
+                    TeamActivityColumn(team: team)
+                        .inspectorToggle(isOpen: columnOpen)
+                } else if let team, let decision = team.selectedDecision {
+                    DecisionColumn(decision: decision, team: team)
+                        .inspectorToggle(isOpen: columnOpen)
+                } else {
+                    inspectorView
                 }
-                // The toggle at the toolbar's trailing edge, open or closed.
-                .inspectorToggle(isOpen: $inspectorOpen)
             }
             .navigationTitle(controller.box)
             // Keep Waiting's way out (R-0178), next to "Waiting for …".
+            // Split Right and Split Down, in the title bar (the board),
+            // while the workspace's terminal shows.
+            .toolbar {
+                if let split, splitShows {
+                    ToolbarItemGroup(placement: .primaryAction) {
+                        SplitToolbarButtons(split: split)
+                    }
+                }
+            }
             .toolbar {
                 if let place = controller.waitingFor {
                     ToolbarItem(placement: .primaryAction) {
@@ -101,6 +140,54 @@ struct MainWindow: View {
             }
     }
 
+    /// Whether the workspace's terminal shows (so the panes can split).
+    private var splitShows: Bool {
+        switch controller.location {
+        case .thisMac, .server:
+            !controller.waitingForKeychain && !controller.engineDown && !(controller.agentUnavailable && controller.isOpen)
+                && !AppTerminal.attached && controller.tabTerminals != nil
+        case .closed: false
+        }
+    }
+
+    /// The owner chose in the sidebar, or All tabs (R-0314): the sidebar,
+    /// the tab bar and the terminal (the focused pane, when split) switch
+    /// together, in this one turn, so none shows another's tab.
+    private func choose(_ s: TeamSelection) {
+        team?.selection = s
+        tabs.view(s)
+        split?.tabsChanged()
+    }
+
+    /// The terminal's VoiceOver name: whose tab it shows (R-0314).
+    private var terminalLabel: String {
+        if split?.isSplit == true { return A11y.splitPanes }
+        guard let tab = tabs.terminalTab else { return A11y.terminal(box: controller.box) }
+        return TerminalLabel.of(tab, team: team?.state.agents ?? [])
+    }
+
+    private var inspectorView: some View {
+                InspectorView(
+                    content: InspectorContent(box: controller, tabs: tabs),
+                    hasTeam: team?.state.hasTeam ?? false,
+                    yourInitial: String(NSFullUserName().prefix(1)).uppercased(),
+                    moveMenu: controller.moveMenu,
+                    move: { target in Task { await controller.requestMove(to: target) } },
+                    run: { action in Task { await controller.run(action) } },
+                    retryPackages: { Task { await controller.retryPackages() } },
+                    revert: { Task { await controller.revertToLastSavePoint() } },
+                    retrySaves: { Task { await controller.refreshSaves() } }
+                )
+                // Read the saves while open and wherever the box runs,
+                // quietly trying again if that fails. A new save reads them
+                // again from the controller (savedAtChanged).
+                .task(id: controller.location) {
+                    await controller.keepSavesLoaded()
+                }
+                // The toggle at the toolbar's trailing edge, open or closed.
+                .inspectorToggle(isOpen: columnOpen)
+    }
+
     @ViewBuilder private var content: some View {
         switch controller.location {
         // Also while reopening after portenvd restarted, so Cancel is
@@ -149,20 +236,63 @@ struct MainWindow: View {
             // bar sits above it (§3); choosing a tab shows that tmux window
             // in this same terminal.
             VStack(spacing: 0) {
-                TabBar(tabs: tabs)
+                HStack(spacing: 0) {
+                    TabBar(tabs: tabs, team: team?.state.agents ?? [],
+                           paneFrame: { split?.paneFrame(forTab: $0) })
+                    // An agent's tabs only: All tabs at the trailing end
+                    // brings back every tab (R-0241).
+                    if team != nil, tabs.selection != .allTabs {
+                        Button(TeamText.allTabs) { choose(.allTabs) }
+                            .buttonStyle(.link)
+                            .padding(.horizontal, 12)
+                    }
+                }
                     // Follows the tabs while the box is open here or on a
                     // server; watches again after a restart or a move.
                     .task { await tabs.follow() }
+                    // The panes follow the tabs: the current tab shows in the
+                    // focused pane, and a closed tab's pane moves on.
+                    .onAppear { split?.tabsChanged() }
+                    .onChange(of: tabs.tabs) { split?.tabsChanged() }
+                    // The selection changed without a click (an agent left
+                    // the team, a decision was answered): the same switch.
+                    .onChange(of: team?.selection, initial: true) {
+                        tabs.view(team?.selection ?? .allTabs)
+                        split?.tabsChanged()
+                    }
+                    // The tab bar widened the selection itself (a new tab, a
+                    // pane showing another agent's tab): the sidebar follows.
+                    .onAppear { tabs.selectionWidened = { team?.selection = $0 } }
                 Group {
                     if let renderTerminal {
                         RenderedView(make: renderTerminal)
+                    } else if !AppTerminal.attached, controller.tabTerminals != nil, !tabs.tabs.isEmpty, tabs.terminalTab == nil {
+                        // The selection has no tab to show (an agent with
+                        // no tab open yet): never another agent's pane
+                        // (R-0314).
+                        NoTabOpen(line: TerminalLabel.noTab(tabs.selection, team: team?.state.agents ?? []))
+                    } else if !AppTerminal.attached, let provider = controller.tabTerminals, let split, split.activeTab != nil {
+                        // Split view: each pane its own tab's terminal
+                        // (PLAN 1.2b, ADR 0020).
+                        SplitPanes(split: split, provider: provider, generation: controller.terminalGeneration,
+                                   box: controller.box, team: team?.state.agents ?? [],
+                                   serviceComing: controller.reconnectingToService)
+                    } else if !AppTerminal.attached, split == nil, let provider = controller.tabTerminals, let tab = tabs.terminalTab {
+                        // Each tab's own terminal (ADR 0020): the tab the
+                        // bar marks current, never another (R-0314).
+                        MainTabTerminal(shown: TabTerminalShown(provider: provider), tab: tab.id,
+                                        generation: controller.terminalGeneration, label: terminalLabel,
+                                        serviceComing: controller.reconnectingToService)
+                    } else if !AppTerminal.attached, controller.tabTerminals != nil {
+                        // The tabs aren't known yet.
+                        Color(nsColor: .textBackgroundColor)
                     } else {
                         BoxTerminal(box: controller.box, generation: controller.terminalGeneration,
                                     onEnded: { Task { await controller.terminalEnded() } },
                                     onLinkStatus: { controller.linkStatus = $0 })
                     }
                 }
-                .accessibilityLabel(A11y.terminal(box: controller.box))
+                .accessibilityLabel(terminalLabel)
             }
         case .closed:
             if controller.busy {
@@ -182,6 +312,21 @@ struct MainWindow: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(.background)
+    }
+}
+
+/// The terminal while the selection has no tab to show (R-0314): "Code
+/// Writer has no tab open". Nothing here takes keys.
+struct NoTabOpen: View {
+    let line: String
+
+    var body: some View {
+        Text(line)
+            .font(.title3)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color(nsColor: .textBackgroundColor))
+            .accessibilityLabel(line)
     }
 }
 

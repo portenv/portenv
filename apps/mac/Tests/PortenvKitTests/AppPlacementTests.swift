@@ -155,7 +155,8 @@ struct LaunchdJobTests {
     @Test func waitingForApprovalSaysSo() {
         for status in [ServiceStatus.requiresApproval, .notRegistered, .notFound] {
             let p = BackgroundServiceProblem.of(status: status, launchdJob: running, placement: .elsewhere)
-            #expect(p == BackgroundServiceProblem(message: ServiceText.needsApproval, opensLoginItems: true, offersTryAgain: false), "\(status)")
+            #expect(p == BackgroundServiceProblem(message: ServiceText.needsApproval, opensLoginItems: true, offersTryAgain: true, endsWait: false), "\(status)")
+            #expect(p?.offersTryAgain == true && p?.endsWait == false, "approval: Try Again, and the wait goes on (R-0250)")
         }
         #expect(ServiceText.needsApproval == "Portenv needs permission to run in the background. Turn it on in System Settings \u{203A} General \u{203A} Login Items.")
     }

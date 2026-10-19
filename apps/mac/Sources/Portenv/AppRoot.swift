@@ -26,6 +26,10 @@ final class AppModel {
         return names.sorted()
     }
     private(set) var tabs: TabsController?
+    /// The open workspace's split view (PLAN 1.2b): one pane on each open.
+    private(set) var split: SplitController?
+    /// The open workspace's agent team (ADR 0022).
+    private(set) var team: TeamController?
     private(set) var firstRun: FirstRunFlow?
     /// Why portenvd isn't there, said plainly: with Open Login Items when it
     /// waits for approval, with Try Again otherwise.
@@ -230,6 +234,8 @@ final class AppModel {
             Task { await Notifier.shared.commandFinished(box: box, finished: f, location: place) }
         }
         self.tabs = tabs
+        split = SplitController(tabs: tabs)
+        team = TeamController(box: box, daemon: daemon)
         launch = .open(box)
         defaults.set(box, forKey: Self.lastBoxKey)
         onOpen?(controller)
@@ -301,6 +307,7 @@ final class AppModel {
         openTask = nil
         controller = nil
         tabs = nil
+        split = nil
         onOpen?(nil)
         if let listed = try? await daemon.boxes() { boxes = listed }
         await refreshRunning()
@@ -381,6 +388,10 @@ struct AppRoot: View {
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                // Back from System Settings: check again at once (R-0250).
+                .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+                    model.begin()
+                }
             } else {
                 switch model.launch {
                 case nil:
@@ -407,7 +418,7 @@ struct AppRoot: View {
                     }
                 case .open:
                     if let controller = model.controller, let tabs = model.tabs {
-                        MainWindow(controller: controller, tabs: tabs)
+                        MainWindow(controller: controller, tabs: tabs, team: model.team, split: model.split)
                     }
                 }
             }

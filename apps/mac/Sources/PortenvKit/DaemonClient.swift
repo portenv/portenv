@@ -346,7 +346,8 @@ extension DaemonClient: BoxCreating, RecoveryChecking {
 extension TabInfo {
     init(_ t: Portenv_Types_V1_Tab) {
         self.init(id: t.id, name: t.name, active: t.active, program: t.program,
-                  command: t.command, runningSince: t.hasRunningSince ? t.runningSince.date : nil)
+                  command: t.command, runningSince: t.hasRunningSince ? t.runningSince.date : nil,
+                  agentID: t.agentID, paneIDs: t.paneIds)
     }
 }
 
@@ -387,6 +388,141 @@ extension BoxState {
         storagePlace = r.storagePlace.isEmpty ? nil : r.storagePlace
         openedAt = r.hasOpenedAt ? r.openedAt.date : nil
         restartedForSecurityUpdate = r.restartedForSecurityUpdate
+        if r.hasImagePull { imagePull = ImagePull(done: r.imagePull.doneBytes, total: r.imagePull.totalBytes) }
+    }
+}
+
+/// Each tab's terminal through portenvd's TabTerminal (ADR 0020).
+extension DaemonClient: TabTerminalTransport {
+    public func tabTerminal(box: String, session: String, tab: String, size: TabTerminalSize) -> TabTerminalConnection {
+        let api = self.api
+        let (requests, outbox) = AsyncStream.makeStream(of: Portenv_Daemon_V1_TabTerminalRequest.self)
+        outbox.yield(.with {
+            $0.open = .with {
+                $0.box = box
+                $0.session = session
+                $0.tab = tab
+                $0.size = .init(size)
+            }
+        })
+        let running = RunningCall()
+        let messages = AsyncThrowingStream<TabTerminalMessage, Error> { continuation in
+            let task = Task {
+                do {
+                    let request = StreamingClientRequest(of: Portenv_Daemon_V1_TabTerminalRequest.self) { writer in
+                        for await r in requests { try await writer.write(r) }
+                    }
+                    try await api.tabTerminal(request: request) { response in
+                        for try await m in response.messages {
+                            if let message = TabTerminalMessage(m) { continuation.yield(message) }
+                        }
+                    }
+                    continuation.finish()
+                } catch let e as RPCError {
+                    continuation.finish(throwing: TabTerminalStreamError(rpc: e))
+                } catch {
+                    continuation.finish(throwing: TabTerminalStreamError(error.localizedDescription, permanent: false))
+                }
+            }
+            running.set(task)
+            continuation.onTermination = { _ in
+                task.cancel()
+                outbox.finish()
+            }
+        }
+        return TabTerminalConnection(
+            messages: messages,
+            send: { r in
+                switch r {
+                case let .input(bytes): outbox.yield(.with { $0.input = Data(bytes) })
+                case let .resize(size): outbox.yield(.with { $0.resize = .init(size) })
+                }
+            },
+            close: {
+                outbox.finish()
+                running.cancel()
+            }
+        )
+    }
+}
+
+/// The task running a stream, for its close.
+private final class RunningCall: @unchecked Sendable {
+    private let lock = NSLock()
+    private var task: Task<Void, Never>?
+    private var cancelled = false
+
+    func set(_ t: Task<Void, Never>) {
+        let cancel = lock.withLock { () -> Bool in
+            task = t
+            return cancelled
+        }
+        if cancel { t.cancel() }
+    }
+
+    func cancel() {
+        lock.withLock {
+            cancelled = true
+            return task
+        }?.cancel()
+    }
+}
+
+extension Portenv_Daemon_V1_TerminalSize {
+    init(_ s: TabTerminalSize) {
+        self.init()
+        cols = UInt32(clamping: s.cols)
+        rows = UInt32(clamping: s.rows)
+    }
+}
+
+extension TabTerminalSize {
+    init(_ s: Portenv_Daemon_V1_TerminalSize) {
+        self.init(cols: Int(s.cols), rows: Int(s.rows))
+    }
+}
+
+extension TabTerminalMessage {
+    /// portenvd's message, or nil for one this app doesn't know (a newer
+    /// portenvd's).
+    init?(_ m: Portenv_Daemon_V1_TabTerminalResponse) {
+        switch m.msg {
+        case let .reset(r):
+            self = .reset(TabTerminalSize(r.size), seed: [UInt8](r.seed), skipped: r.skipped)
+        case let .output(d):
+            self = .output([UInt8](d))
+        case let .resized(s):
+            self = .resized(TabTerminalSize(s))
+        case let .author(a):
+            self = .author(line: a.line, name: a.name, isYou: a.isYou, agentID: a.agentID)
+        case let .end(e):
+            switch e {
+            case .boxStopping: self = .boxStopping
+            default: self = .tabClosed
+            }
+        case .none:
+            return nil
+        }
+    }
+}
+
+extension TabTerminalStreamError {
+    /// portenvd's refusal, as the view shows it. A call this portenvd
+    /// doesn't have, a workspace that can't show the app's terminal, or a
+    /// request it refuses won't change by trying again.
+    init(rpc e: RPCError) {
+        switch e.code {
+        case .unimplemented:
+            self.init(DaemonError.outOfDate, permanent: true)
+        case .failedPrecondition where e.message.contains("is not open on this Mac"):
+            // portenvd restarted and hasn't reopened the workspace yet: the
+            // app reopens it, so this passes (R-0242).
+            self.init(e.message, permanent: false)
+        case .failedPrecondition, .invalidArgument, .permissionDenied, .unauthenticated, .notFound:
+            self.init(e.message, permanent: true)
+        default:
+            self.init(e.message, permanent: false)
+        }
     }
 }
 
@@ -455,5 +591,164 @@ extension DaemonClient {
         var options = CallOptions.defaults
         options.timeout = .seconds(2)
         return try await callOnce { try await api.getVersion(.init(), options: options).build.buildID }
+    }
+}
+
+// MARK: The team (ADR 0022)
+
+extension DaemonClient {
+    public func watchTeam(_ box: String, cursor: String) -> AsyncThrowingStream<(TeamEvent, String), Error> {
+        let api = self.api
+        let req = Portenv_Daemon_V1_WatchTeamRequest.with { $0.name = box; $0.cursor = cursor }
+        return AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    try await api.watchTeam(req) { response in
+                        for try await message in response.messages {
+                            if let event = TeamEvent(message) { continuation.yield((event, message.cursor)) }
+                        }
+                    }
+                    continuation.finish()
+                } catch let e as RPCError {
+                    continuation.finish(throwing: DaemonError.fromRPC(message: e.message, unimplemented: e.code == .unimplemented, unavailable: e.code == .unavailable))
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
+    public func answerDecision(_ box: String, id: String, approve: Bool, note: String) async throws -> TeamDecision {
+        let req = Portenv_Daemon_V1_AnswerDecisionRequest.with { $0.name = box; $0.decisionID = id; $0.approve = approve; $0.note = note }
+        return try await call { TeamDecision(try await api.answerDecision(req).decision) }
+    }
+
+    public func sendMessage(_ box: String, to agent: String, thread: String, text: String) async throws -> TeamMessage {
+        let req = Portenv_Daemon_V1_SendMessageRequest.with { $0.name = box; $0.to = agent; $0.threadID = thread; $0.text = text }
+        return try await call { TeamMessage(try await api.sendMessage(req).message) }
+    }
+
+    public func startAgent(_ box: String, id: String) async throws -> TeamAgent {
+        let req = Portenv_Daemon_V1_StartAgentRequest.with { $0.name = box; $0.agentID = id }
+        return try await call { TeamAgent(try await api.startAgent(req).agent) }
+    }
+
+    public func stopAgent(_ box: String, id: String) async throws -> TeamAgent {
+        let req = Portenv_Daemon_V1_StopAgentRequest.with { $0.name = box; $0.agentID = id }
+        return try await call { TeamAgent(try await api.stopAgent(req).agent) }
+    }
+
+    public func getAgentFile(_ box: String, id: String) async throws -> AgentFileContent {
+        let req = Portenv_Daemon_V1_GetAgentFileRequest.with { $0.name = box; $0.agentID = id }
+        return try await call {
+            let r = try await api.getAgentFile(req)
+            return AgentFileContent(content: r.content, sha256: r.fileSha256, approvedContent: r.approvedContent, runner: r.runner)
+        }
+    }
+
+    public func approveAgentFile(_ box: String, id: String, sha256: String) async throws -> TeamAgent {
+        let req = Portenv_Daemon_V1_ApproveAgentFileRequest.with { $0.name = box; $0.agentID = id; $0.fileSha256 = sha256 }
+        return try await call { TeamAgent(try await api.approveAgentFile(req).agent) }
+    }
+}
+
+extension TeamEvent {
+    init?(_ r: Portenv_Daemon_V1_WatchTeamResponse) {
+        switch r.event {
+        case .agent(let a)?: self = .agent(TeamAgent(a))
+        case .message(let m)?: self = .message(TeamMessage(m))
+        case .decision(let d)?: self = .decision(TeamDecision(d))
+        case .removedAgentID(let id)?: self = .removed(id)
+        case nil: return nil
+        }
+    }
+}
+
+extension TeamAgent {
+    init(_ a: Portenv_Daemon_V1_AgentInfo) {
+        let status: AgentStatus = switch a.state {
+        case .starting: .starting
+        case .running: .running
+        case .idle: .idle
+        case .needsYou: .needsYou
+        case .invalid: .invalid
+        case .connected: .connected
+        case .disconnected: .disconnected
+        case .stopped, .unspecified, .UNRECOGNIZED: .stopped
+        }
+        self.init(id: a.id, name: a.name, role: a.role, avatar: a.avatar, remote: a.remote, via: a.via, status: status,
+                  problem: a.problem, fileSHA256: a.fileSha256, approved: a.approved, tabIDs: a.tabIds, lastLine: a.lastLine,
+                  pendingDecisions: Int(a.pendingDecisions), homeBytes: a.homeBytes, homeQuotaBytes: a.homeQuotaBytes,
+                  runner: a.runner, grant: TeamGrant(a.grant),
+                  workStatus: a.hasStatus ? AgentWorkStatus(a.status) : nil,
+                  routines: a.routines.map { AgentRoutine(every: TimeInterval($0.everyMinutes) * 60, note: $0.note, paused: $0.paused) },
+                  routinesOff: a.routinesOff)
+    }
+}
+
+extension AgentWorkStatus {
+    init(_ s: Portenv_Types_V1_AgentStatus) {
+        // Both 0 when not given; the kit drops any progress that isn't N of M.
+        self.init(text: s.text, progress: (Int(s.progressDone), Int(s.progressTotal)), blocked: s.blocked,
+                  setAt: s.hasSetAt ? s.setAt.date : nil)
+    }
+}
+
+extension TeamGrant {
+    init(_ g: Portenv_Types_V1_AgentGrant) {
+        func mode(_ m: Portenv_Types_V1_GrantMode) -> GrantMode {
+            switch m {
+            case .allow: .allow
+            case .never: .never
+            case .ask, .unspecified, .UNRECOGNIZED: .ask
+            }
+        }
+        self.init(panes: mode(g.panes), maxPanes: Int(g.maxPanes), message: g.message, askOwner: g.askOwner,
+                  // Packages are never allowed without asking (§6).
+                  packages: mode(g.packages) == .never ? .never : .ask)
+    }
+}
+
+extension TeamMessage {
+    init(_ m: Portenv_Types_V1_BoardMessage) {
+        let kind: Kind = switch m.type {
+        case .question: .question
+        case .notice: .notice
+        // These show as notices until the sidebar gives them their own
+        // kinds (lane D).
+        case .statusRequest, .routine, .handoff: .notice
+        case .answer, .unspecified, .UNRECOGNIZED: .answer
+        }
+        self.init(id: m.id, from: m.from, to: m.to, threadID: m.threadID, kind: kind, text: m.text,
+                  createdAt: m.hasCreatedAt ? m.createdAt.date : nil, about: m.about)
+    }
+}
+
+extension TeamDecision {
+    init(_ d: Portenv_Types_V1_Decision) {
+        let kind: Kind = switch d.kind {
+        case .pane: .pane
+        case .agentFileChange: .agentFileChange
+        case .shareLogin: .shareLogin
+        case .package: .package
+        case .teamStart: .teamStart
+        case .deleteAgentFiles: .deleteAgentFiles
+        case .askOwner, .unspecified, .UNRECOGNIZED: .askOwner
+        }
+        let state: State = switch d.state {
+        case .approved: .approved
+        case .declined: .declined
+        case .expired: .expired
+        // An unknown state is never answerable (an expired decision never
+        // turns into an approval).
+        case .unspecified, .UNRECOGNIZED: .expired
+        case .pending: .pending
+        }
+        self.init(id: d.id, from: d.from, kind: kind, summary: d.summary, detail: d.detail, state: state,
+                  answerNote: d.answerNote, createdAt: d.hasCreatedAt ? d.createdAt.date : nil,
+                  answeredAt: d.hasAnsweredAt ? d.answeredAt.date : nil, expiresAt: d.hasExpiresAt ? d.expiresAt.date : nil,
+                  packages: d.packages.map { Package(name: $0.name, version: $0.version, source: $0.source, dependency: $0.dependency) },
+                  startAgents: d.startAgentIds)
     }
 }

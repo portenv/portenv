@@ -46,6 +46,61 @@ service AgentService {
   // sets the stream's author from its caller (R-0133 item 4); the app's own
   // request to portenvd has no author field.
   rpc TabTerminal(stream TabTerminalRequest) returns (stream TabTerminalResponse);
+  // ADR 0022: the agent team.
+  // In-box portenv calls, relayed up. portenvd opens the stream; the helper
+  // sends each call with the caller it read from the socket (SO_PEERCRED),
+  // and portenvd, after its grant check, answers. The helper has no say in
+  // grants.
+  rpc TeamCalls(stream TeamCallsRequest) returns (stream TeamCallsResponse);
+  // Starts an agent's tmux server and control client as its user, and its
+  // runner in the first tab.
+  rpc StartTeamAgent(StartTeamAgentRequest) returns (StartTeamAgentResponse);
+  // Ends an agent's tmux server and every process of its user.
+  rpc StopTeamAgent(StopTeamAgentRequest) returns (StopTeamAgentResponse);
+  // The board's one writer: appends a line, on portenvd's instruction only.
+  rpc AppendBoard(AppendBoardRequest) returns (AppendBoardResponse);
+  // The Agent files view, each done in a process with the agent's uid.
+  rpc ListHomeFiles(ListHomeFilesRequest) returns (ListHomeFilesResponse);
+  rpc ReadHomeFile(ReadHomeFileRequest) returns (stream ReadHomeFileResponse);
+  rpc WriteHomeFiles(stream WriteHomeFilesRequest) returns (WriteHomeFilesResponse);
+  // Served only by init (root) on its local socket, which only the API
+  // process reaches; the channel's server answers Unimplemented. init checks
+  // every id and package name itself.
+  rpc EnsureAgentUser(EnsureAgentUserRequest) returns (EnsureAgentUserResponse);
+  rpc RemoveAgentUser(RemoveAgentUserRequest) returns (RemoveAgentUserResponse);
+  // apt-get -s for one requested package: the exact set, versions and sources.
+  rpc SimulatePackage(SimulatePackageRequest) returns (SimulatePackageResponse);
+  // Installs exactly the approved set, pinned, or nothing.
+  rpc InstallPackages(InstallPackagesRequest) returns (InstallPackagesResponse);
+  // Opens, focuses or closes a pane on an agent's own tmux server, as that
+  // agent. portenvd calls it only after its grant check (at once for
+  // panes: allow, on the owner's Approve for panes: ask).
+  rpc AgentPaneAction(AgentPaneActionRequest) returns (AgentPaneActionResponse);
+  // The board's lines from the start, for portenvd after a restart.
+  rpc ReadBoard(ReadBoardRequest) returns (stream ReadBoardResponse);
+  // The project's agent files (.portenv/agents/*.md), read by the helper.
+  rpc ReadAgentFiles(ReadAgentFilesRequest) returns (ReadAgentFilesResponse);
+  // Types a routine's note into the agent's own main pane, prefixed
+  // "[Portenv routine] ", then Enter (R-0258). portenvd calls it only when
+  // the agent is idle; the helper checks the text again and types only into
+  // the agent's recorded main pane.
+  rpc DeliverRoutine(DeliverRoutineRequest) returns (DeliverRoutineResponse);
+  // Copies files from the sender's home or the project into the
+  // recipient's ~/inbox/<sender>/<timestamp>/ as the recipient (R-0257
+  // item 3): regular files only, no links, at most 100 MB, within quota.
+  rpc HandoffFiles(HandoffFilesRequest) returns (HandoffFilesResponse);
+  // Served only by init: opens the project to the team at team start
+  // (ADR 0022 §2): /home/work 0711 with its dotfiles 0700, the project's
+  // group team, setgid folders and default ACLs, with .git/hooks,
+  // .git/config and .portenv/ never group-writable. Refuses with a plain
+  // line when the filesystem won't keep ACLs.
+  rpc PrepareTeamProject(PrepareTeamProjectRequest) returns (PrepareTeamProjectResponse);
+  // Wakes an idle agent for new board lines (CC-0498): types the fixed
+  // line "[Portenv] new message from <from>; run portenv inbox", then
+  // Enter, into the agent's own main pane, under exactly DeliverRoutine's
+  // checks. The helper writes the line itself; no message text is ever
+  // typed, and from must be an agent id or "owner".
+  rpc WakeAgent(WakeAgentRequest) returns (WakeAgentResponse);
 }
 
 message RunResticRequest {
@@ -305,3 +360,387 @@ message CommandAuthor {
   // For "also typed by" (GUIDELINES §4.2's "You and Grok Bot"), later.
   reserved 5;
 }
+
+// ADR 0022: the agent team.
+
+// One in-box portenv call (ADR 0022 §4), from the helper up to portenvd:
+// the response stream of TeamCalls.
+message TeamCallsResponse {
+  string call_id = 1;
+  // From SO_PEERCRED, never from the request.
+  string agent_id = 2;
+  oneof op {
+    Split split = 3;
+    NewTeamTab tab = 4;
+    PaneRef focus = 5;
+    PaneRef close = 6;
+    Msg msg = 7;
+    AskOwner ask_owner = 8;
+    Inbox inbox = 9;
+    Share share = 10;
+    ProposeAgentChange propose = 11;
+    RequestPackage request_package = 12;
+    WhoAmI whoami = 13;
+    SetStatus set_status = 14;
+    TeamStatus team_status = 15;
+    Handoff handoff = 16;
+    ProposeRoutine propose_routine = 17;
+  }
+}
+
+// portenvd's answer to one call: the request stream of TeamCalls.
+message TeamCallsRequest {
+  string call_id = 1;
+  bool ok = 2;
+  // The plain line, for a refusal ("builder has 4 panes open, its limit.
+  // Close one first.").
+  string line = 3;
+  oneof result {
+    PaneRef pane = 4;
+    InboxResult inbox = 5;
+    portenv.types.v1.Decision decision = 6;
+    portenv.types.v1.BoardMessage message = 7;
+    WhoAmIResult whoami = 8;
+    TeamStatusResult team_status = 9;
+  }
+}
+
+// portenv split: splits the agent's own current pane.
+message Split {
+  // The agent's own pane to split.
+  string pane_id = 1;
+  // Right or down.
+  bool down = 2;
+  // Run with no shell.
+  repeated string argv = 3;
+}
+
+// portenv tab new: a tab in the agent's own server.
+message NewTeamTab {
+  string name = 1;
+  repeated string argv = 2;
+}
+
+message PaneRef {
+  string pane_id = 1;
+  string tab_id = 2;
+}
+
+message Msg {
+  string to = 1;
+  string thread_id = 2;
+  portenv.types.v1.MessageType type = 3;
+  string text = 4;
+}
+
+message AskOwner {
+  string text = 1;
+  string thread_id = 2;
+}
+
+message Inbox {
+  string since_cursor = 1;
+  // Wait for the next message or decision answer, up to a minute.
+  bool wait = 2;
+}
+
+message InboxResult {
+  repeated portenv.types.v1.BoardMessage messages = 1;
+  // Its own decisions whose state changed.
+  repeated portenv.types.v1.Decision decisions = 2;
+  string cursor = 3;
+}
+
+message Share {
+  // Empty for changes in the shared checkout.
+  string branch = 1;
+  string text = 2;
+}
+
+message ProposeAgentChange {
+  // The agent file's id.
+  string agent_id = 1;
+  // The proposed content; portenvd makes the diff.
+  string content = 2;
+}
+
+message RequestPackage {
+  // One name in apt's grammar; init checks it again.
+  string name = 1;
+  string reason = 2;
+}
+
+message WhoAmI {}
+
+// portenv whoami --json (R-0246): written by portenvd from what it
+// enforces.
+message WhoAmIResult {
+  string id = 1;
+  string name = 2;
+  string role = 3;
+  // The workspace and where it runs ("mac", "server" or "hosted").
+  string workspace = 4;
+  string location = 5;
+  portenv.types.v1.AgentGrant grant = 6;
+  int32 panes_open = 7;
+  int64 home_bytes = 8;
+  int64 home_quota_bytes = 9;
+  int32 pending_decisions = 10;
+  int32 package_requests_today = 11;
+  repeated Teammate teammates = 12;
+  // The portenv commands it may use now.
+  repeated string commands = 13;
+  // The runners on its PATH that pass the agent-file check.
+  repeated string runners = 14;
+  portenv.types.v1.AgentStatus status = 15;
+  // Why its routines are off, if they are ("Portenv doesn't know when
+  // this runner is idle").
+  string routines_off = 16;
+}
+
+message Teammate {
+  string id = 1;
+  string name = 2;
+  string role = 3;
+  portenv.types.v1.AgentState state = 4;
+  // Only with team_status: read (R-0257 item 1).
+  portenv.types.v1.AgentStatus status = 5;
+  int32 pending_decisions = 6;
+  // Seconds since its last board line or status.
+  int64 idle_seconds = 7;
+}
+
+message StartTeamAgentRequest {
+  string agent_id = 1;
+  // The runner, run with no shell.
+  repeated string argv = 2;
+  // AGENTS.md in its home: the generated block (R-0246), then the file's
+  // instructions.
+  string agents_md = 3;
+  // Repository paths copied into its home on first start (§2).
+  repeated string home_seed = 4;
+  int64 home_quota_bytes = 5;
+  // The runner's idle-input pattern (RE2, matched against the main pane's
+  // last line) from portenvd's runner table: DeliverRoutine types only
+  // when it matches, with no question on screen, 5 s of quiet and not the
+  // alternate screen. Empty: routines are off for this runner (R-0258).
+  string idle_pattern = 6;
+}
+
+message StartTeamAgentResponse {
+  repeated portenv.types.v1.Tab tabs = 1;
+}
+
+message StopTeamAgentRequest {
+  string agent_id = 1;
+}
+
+message StopTeamAgentResponse {}
+
+message AppendBoardRequest {
+  oneof line {
+    portenv.types.v1.BoardMessage message = 1;
+    portenv.types.v1.Decision decision = 2;
+  }
+}
+
+message AppendBoardResponse {}
+
+message ListHomeFilesRequest {
+  string agent_id = 1;
+  string dir = 2;
+}
+
+message ListHomeFilesResponse {
+  repeated portenv.types.v1.AgentFile files = 1;
+  int64 home_bytes = 2;
+}
+
+message ReadHomeFileRequest {
+  string agent_id = 1;
+  string path = 2;
+}
+
+message ReadHomeFileResponse {
+  bytes data = 1;
+}
+
+message WriteHomeFilesRequest {
+  // agent_id and quota on the first message only.
+  string agent_id = 1;
+  int64 home_quota_bytes = 2;
+  string path = 3;
+  bytes data = 4;
+  bool last = 5;
+}
+
+message WriteHomeFilesResponse {
+  repeated portenv.types.v1.AgentFile added = 1;
+}
+
+message EnsureAgentUserRequest {
+  string agent_id = 1;
+}
+
+message EnsureAgentUserResponse {
+  uint32 uid = 1;
+  string home = 2;
+  // Made now, rather than already there.
+  bool created = 3;
+  // The agent's run folder, /run/portenv-team/<id> (ADR 0022 section 1):
+  // the helper's, the agent's group, setgid, 0710. init makes it, and
+  // tmux_dir and tmp_dir in it (the agent's, 0700), at every call, since
+  // /run is lost when the box stops. The helper listens on
+  // run_dir/portenv.sock.
+  string run_dir = 4;
+  string tmux_dir = 5;
+  string tmp_dir = 6;
+}
+
+message RemoveAgentUserRequest {
+  string agent_id = 1;
+  // Only after the owner approved DECISION_KIND_DELETE_AGENT_FILES.
+  bool delete_files = 2;
+}
+
+message RemoveAgentUserResponse {}
+
+message SimulatePackageRequest {
+  string name = 1;
+}
+
+message SimulatePackageResponse {
+  repeated portenv.types.v1.PackagePlan packages = 1;
+  // A refusal (it would remove or downgrade, or install more than 50).
+  string line = 2;
+}
+
+message InstallPackagesRequest {
+  // The requested name, appended to apt-packages.txt on success.
+  string name = 1;
+  repeated portenv.types.v1.PackagePlan approved = 2;
+  // The package decision (R-0254): init reads it from the board itself,
+  // and installs only if it is approved and not expired, and a fresh
+  // simulation equals its packages exactly (names, versions, sources).
+  // Otherwise nothing is installed.
+  string decision_id = 3;
+}
+
+message InstallPackagesResponse {
+  bool ok = 1;
+  // The result, or the failing line, for the agent's inbox.
+  string line = 2;
+}
+
+message AgentPaneActionRequest {
+  string agent_id = 1;
+  oneof action {
+    Split split = 2;
+    NewTeamTab tab = 3;
+    PaneRef focus = 4;
+    PaneRef close = 5;
+  }
+}
+
+message AgentPaneActionResponse {
+  // The pane made or acted on.
+  PaneRef pane = 1;
+}
+
+message ReadBoardRequest {}
+
+// One board line, in the order written.
+message ReadBoardResponse {
+  oneof line {
+    portenv.types.v1.BoardMessage message = 1;
+    portenv.types.v1.Decision decision = 2;
+  }
+}
+
+message ReadAgentFilesRequest {
+  // The project folder inside the box, e.g. /home/work/<workspace>.
+  string project_dir = 1;
+}
+
+message ReadAgentFilesResponse {
+  repeated AgentFileContent files = 1;
+}
+
+// One agent file as the helper read it: its name (id.md) and its bytes.
+message AgentFileContent {
+  string name = 1;
+  bytes content = 2;
+}
+
+// portenv status set|clear (R-0256).
+message SetStatus {
+  // Empty with clear.
+  string text = 1;
+  int32 progress_done = 2;
+  int32 progress_total = 3;
+  string blocked = 4;
+  bool clear = 5;
+}
+
+// portenv team status (R-0257 item 1); needs team_status: read.
+message TeamStatus {}
+
+message TeamStatusResult {
+  repeated Teammate teammates = 1;
+}
+
+// portenv handoff AGENT PATH [--note] (R-0257 item 3), under grant message.
+message Handoff {
+  string to = 1;
+  // In the sender's home or the project, as the CLI resolved it.
+  string path = 2;
+  string note = 3;
+}
+
+// portenv routine propose (R-0258): an agent_file_change decision.
+message ProposeRoutine {
+  int32 every_minutes = 1;
+  string note = 2;
+}
+
+message DeliverRoutineRequest {
+  string agent_id = 1;
+  // One plain line, without the prefix, at most 4078 bytes.
+  string text = 2;
+}
+
+message DeliverRoutineResponse {}
+
+message HandoffFilesRequest {
+  string from_agent = 1;
+  string to_agent = 2;
+  // An absolute path in the box: the sender's home or the project.
+  string source_path = 3;
+  int64 recipient_quota_bytes = 4;
+}
+
+message HandoffFilesResponse {
+  repeated portenv.types.v1.HandoffFile files = 1;
+}
+
+message PrepareTeamProjectRequest {
+  // The project folder, /home/work/<workspace>.
+  string project_dir = 1;
+}
+
+message PrepareTeamProjectResponse {
+  // What was made private in the owner's home (R-0262), since the last
+  // team start, as plain lines for the owner's board notice.
+  repeated string fixed = 1;
+}
+
+message WakeAgentRequest {
+  string agent_id = 1;
+  // Who sent the newest unread line: an agent id or "owner".
+  string from = 2;
+  // How many lines came since the agent last read its inbox; more than
+  // one makes the line plural. Never typed as a number.
+  int32 count = 3;
+}
+
+message WakeAgentResponse {}

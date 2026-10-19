@@ -176,6 +176,7 @@ enum ScreenRenders {
             // The move question, as the sheet on the window (R-0121).
             try snapshot(MoveOfferView { _ in }.background(.background), name: "move-offer",
                          size: NSSize(width: 440, height: 150), in: dir)
+            try await renderSplit(to: dir)
             try renderInspector(to: dir)
             // Help › Acknowledgements…, with this build's notices (R-0119).
             try snapshot(view: { AcknowledgementsText.view(Acknowledgements.text(in: .main)) },
@@ -188,6 +189,9 @@ enum ScreenRenders {
             // (R-0131): with the inspector open, and closed.
             try await MainWindowRender.render(to: dir, terminal: { sampleTerminal() })
             try await MainWindowRender.render(to: dir, name: "main-window-no-inspector", inspector: false, terminal: { sampleTerminal() })
+            // With a team, Builder selected: the sidebar, Builder's tabs and
+            // its column in the inspector's place (GUIDELINES 6.2).
+            try await MainWindowRender.render(to: dir, name: "main-window-team", team: true, terminal: { sampleTerminal() })
             // A closed workspace's window: Open, and a failed open with Try
             // Again (R-0211).
             try snapshot(ClosedWorkspace(box: "acme-api", failure: nil) {}, name: "closed", size: NSSize(width: 720, height: 360), in: dir)
@@ -197,6 +201,13 @@ enum ScreenRenders {
                          name: "closed-open-failed", size: NSSize(width: 720, height: 360), in: dir)
             // Command blocks, folded by default and opened (R-0139, R-0174).
             try BlockRenders.render(to: dir) { view, name, size in
+                for (suffix, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] where name.hasSuffix(suffix) {
+                    try snapshotOne(view, name: String(name.dropLast(suffix.count + 1)), suffix: suffix, size: size, appearance: appearance, in: dir)
+                }
+            }
+            // The Team sidebar (GUIDELINES 6.2): All tabs, an agent
+            // selected, and compact.
+            try TeamRenders.render(to: dir) { view, name, size in
                 for (suffix, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] where name.hasSuffix(suffix) {
                     try snapshotOne(view, name: String(name.dropLast(suffix.count + 1)), suffix: suffix, size: size, appearance: appearance, in: dir)
                 }
@@ -254,6 +265,53 @@ enum ScreenRenders {
     /// The inspector: a box on this Mac with no server yet (Move To… says
     /// why it can't), its saves listed; saves that couldn't be loaded; and
     /// a box whose saves go to a server.
+    /// Split view as the split-view board: claude on the left, grok over
+    /// tests on the right, the claude pane focused; scripted terminals.
+    private static func renderSplit(to dir: URL) async throws {
+        let at = Date(timeIntervalSince1970: 1_800_000_000)
+        let tabs = [
+            TabInfo(id: "@1", name: "claude", active: true, program: "Claude Code",
+                    waiting: TabQuestion(text: "Push fix/retries once the full suite passes?", secret: false),
+                    typingAuthor: TabAuthor(name: "You", isYou: true)),
+            TabInfo(id: "@2", name: "grok", active: false, program: "npm",
+                    typingAuthor: TabAuthor(name: "Grok Bot", isYou: false)),
+            TabInfo(id: "@3", name: "tests", active: false, program: "npm",
+                    lastOutputAt: at.addingTimeInterval(-120), watchers: ["Claude Code"]),
+            TabInfo(id: "@4", name: "dev", active: false),
+        ]
+        let provider = ScriptedTabProvider(seeds: [
+            "@1": "$ claude --continue\n\u{25CF} The retry delay now takes the clock as a\n  parameter. Grok Bot is running the full suite\n  in the grok tab; the tests tab is watching.\n\n  Changed: api/retries.ts, api/retries.spec.ts\n  \u{2713} 40 of 40 runs pass locally\n",
+            "@2": "$ git pull --rebase\nCurrent branch fix/retries is up to date.\n$ npm test -- --runInBand --coverage",
+            "@3": "$ npm test -- --watch\n PASS  api/retries.spec.ts\n PASS  api/payments.spec.ts\n PASS  api/webhooks.spec.ts\n\nTests: 24 passed, 24 total\nTime:  3.1 s\n\nWatch usage: press a to run all, q to quit",
+        ])
+        // In a real, active-looking window captured by the window server:
+        // the terminals draw on their layers, which a cached display leaves
+        // out.
+        let size = NSSize(width: 1280, height: 700)
+        let before = NSApp.appearance
+        defer { NSApp.appearance = before }
+        for (suffix, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
+            NSApp.appearance = NSAppearance(named: appearance)
+            let tabsController = TabsController(box: "acme-api", daemon: SampleDaemon(savedAt: at))
+            tabsController.receive(tabs)
+            let split = SplitController(tabs: tabsController)
+            split.size = size
+            split.tabsChanged()
+            await split.split(.right)
+            await split.split(.down)
+            split.focus(PaneID(1)) // the board's focused pane
+            let window = ActiveLookingWindow(contentRect: NSRect(origin: .zero, size: size),
+                                             styleMask: [.titled, .closable, .miniaturizable, .resizable],
+                                             backing: .buffered, defer: false)
+            window.isReleasedWhenClosed = false
+            window.title = "acme-api"
+            window.appearance = NSAppearance(named: appearance)
+            window.contentView = NSHostingView(rootView: SplitPanes(split: split, provider: provider, generation: 0, box: "acme-api"))
+            window.setContentSize(size)
+            try await WindowCapture.capture(window, to: dir.appendingPathComponent("split-view-\(suffix).png"))
+        }
+    }
+
     private static func renderInspector(to dir: URL) throws {
         // Minutes before now, so "Last saved" reads as it would (past its
         // first minute) whenever the renders are made.

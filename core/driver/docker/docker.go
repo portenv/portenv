@@ -31,6 +31,7 @@ import (
 	cerrdefs "github.com/containerd/errdefs"
 	"github.com/moby/moby/api/pkg/stdcopy"
 	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/api/types/jsonstream"
 	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/api/types/network"
 	"github.com/moby/moby/client"
@@ -67,6 +68,10 @@ type Config struct {
 	// Client overrides the Docker client; nil means one from the
 	// environment (DOCKER_HOST and friends).
 	Client *client.Client
+	// Host is the engine's address ("tcp://…", "unix://…") when Client is
+	// nil; empty means the environment's (DOCKER_HOST, Docker Desktop's
+	// socket). Tests outside this package point it at a fake engine.
+	Host string
 	// Namespace, when set, is added to container names so several simulated
 	// machines can share one engine (tests only).
 	Namespace string
@@ -105,7 +110,11 @@ func New(cfg Config) (*Driver, error) {
 	cli := cfg.Client
 	if cli == nil {
 		var err error
-		cli, err = client.New(client.FromEnv)
+		opts := []client.Opt{client.FromEnv}
+		if cfg.Host != "" {
+			opts = append(opts, client.WithHost(cfg.Host))
+		}
+		cli, err = client.New(opts...)
 		if err != nil {
 			return nil, fmt.Errorf("connect to Docker: %w", err)
 		}
@@ -290,6 +299,9 @@ func (d *Driver) pull(ctx context.Context, ref string) error {
 	if err != nil {
 		return stalled(err)
 	}
+	// Read layer by layer, so whoever opens the box can show the pull's
+	// progress (R-0211).
+	var tally pullTally
 	for m, err := range resp.JSONMessages(pctx) {
 		if err != nil {
 			return stalled(err)
@@ -301,11 +313,47 @@ func (d *Driver) pull(ctx context.Context, ref string) error {
 		case progress <- struct{}{}:
 		default:
 		}
+		fetched, all := tally.update(m)
+		driver.ReportPull(ctx, fetched, all)
 	}
 	if err := context.Cause(pctx); err != nil {
 		return stalled(err)
 	}
 	return nil
+}
+
+// pullTally adds up a pull's bytes over its layers, from Docker's
+// per-layer messages: a layer's download counts as it goes, in full once
+// it's downloaded, and a layer already here counts for nothing. Extracting
+// (its own progress) is never counted again.
+type pullTally struct {
+	layers map[string]*[2]int64 // id: done, total
+}
+
+func (p *pullTally) update(msg jsonstream.Message) (done, total int64) {
+	if p.layers == nil {
+		p.layers = map[string]*[2]int64{}
+	}
+	l := p.layers[msg.ID]
+	switch msg.Status {
+	case "Downloading":
+		if msg.Progress != nil && msg.Progress.Total > 0 {
+			if l == nil {
+				l = &[2]int64{}
+				p.layers[msg.ID] = l
+			}
+			l[0], l[1] = msg.Progress.Current, msg.Progress.Total
+		}
+	case "Download complete", "Verifying Checksum", "Pull complete":
+		if l != nil {
+			l[0] = l[1]
+		}
+	}
+	for _, l := range p.layers {
+		done += l[0]
+		total += l[1]
+	}
+	return done, total
 }
 
 // recreate replaces the box's container with a fresh one from its spec.
@@ -395,25 +443,60 @@ func engineSocket(p string) bool {
 }
 
 // sameMounts is whether a running container's mounts are the ones its
-// spec gives now, in any order.
+// spec gives now, in any order. A bind mount's source is matched as the
+// engine reports it (sameBindSource).
 func sameMounts(want, got []mount.Mount) bool {
 	if len(want) != len(got) {
 		return false
 	}
-	key := func(m mount.Mount) string {
-		return fmt.Sprintf("%s\x00%s\x00%s\x00%v", m.Type, m.Source, m.Target, m.ReadOnly)
-	}
-	left := map[string]int{}
-	for _, m := range want {
-		left[key(m)]++
-	}
-	for _, m := range got {
-		if left[key(m)] == 0 {
+	used := make([]bool, len(got))
+	for _, w := range want {
+		found := false
+		for i, g := range got {
+			if !used[i] && sameMount(w, g) {
+				used[i], found = true, true
+				break
+			}
+		}
+		if !found {
 			return false
 		}
-		left[key(m)]--
 	}
 	return true
+}
+
+func sameMount(want, got mount.Mount) bool {
+	if want.Type != got.Type || want.Target != got.Target || want.ReadOnly != got.ReadOnly {
+		return false
+	}
+	if want.Type == mount.TypeBind {
+		return sameBindSource(want.Source, got.Source)
+	}
+	return want.Source == got.Source
+}
+
+// desktopHostMount is where Docker Desktop's VM sees the Mac's files.
+const desktopHostMount = "/host_mnt"
+
+// sameBindSource is whether the engine's report of a bind mount's source is
+// the folder the driver mounted. Docker Engine reports it as given. Docker
+// Desktop reports it as /host_mnt plus the real path, with symlinks
+// resolved (/var is /private/var on a Mac), so a plain comparison found
+// every box "changed" after a portenvd restart and restarted it (R-0242).
+func sameBindSource(want, got string) bool {
+	if got == want {
+		return true
+	}
+	rest, ok := strings.CutPrefix(got, desktopHostMount+"/")
+	if !ok {
+		return false
+	}
+	rest = "/" + rest
+	if rest == want {
+		return true
+	}
+	real, err := filepath.EvalSymlinks(want)
+	return err == nil && rest == real
 }
 
 // CacheMount is restic's cache inside every box (portenv-sync's, 0700).

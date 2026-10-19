@@ -18,6 +18,10 @@ SHELL := $(CURDIR)/scripts/make-shell
 
 BIN := $(CURDIR)/bin
 GO_MODULES := core proto/gen/go
+# The image tests (team boundary, team first start) are their own modules,
+# outside go.work: the toolbox image's build copies go.work, and the tests
+# don't belong in it.
+TEST_MODULES := tests/team-boundary tests/team-start
 CMDS := portenvd portenv-runner portenv-agent portenv
 AGENT_ARCHES := arm64 amd64
 
@@ -61,7 +65,7 @@ SWIFT_PROTOBUF := 1.38.1
 GRPC_SWIFT_PROTOBUF := 2.4.1
 SWIFT_PLUGINS := $(BIN)/protoc-gen-swift $(BIN)/protoc-gen-grpc-swift-2
 
-.PHONY: all build app release-local unregister-service test fuzz lint fmt proto proto-go proto-swift proto-check proto-check-go agent-linux cli-linux cli-darwin swift-test swift-env-check \
+.PHONY: team-boundary team-start all build app release-local unregister-service test fuzz lint fmt proto proto-go proto-swift proto-check proto-check-go agent-linux cli-linux cli-darwin swift-test swift-env-check \
 	secrets spdx-check check tools clean image image-test driver-test e2e
 
 all: build test lint proto-check
@@ -117,6 +121,7 @@ test: $(TOOLS_STAMP)
 	scripts/test-notarize.sh
 	scripts/test-workspace-word.sh
 	scripts/test-check-terminal-views.sh
+	scripts/test-attached-terminal.sh
 	scripts/test-check-ssh-keygen.sh
 	scripts/test-check-dev-previews.sh
 
@@ -143,6 +148,8 @@ lint: $(TOOLS_STAMP) $(SHELLCHECK) spdx-check
 	for m in $(GO_MODULES); do \
 		(cd $$m && $(BIN)/golangci-lint run --config $(CURDIR)/.golangci.yml ./...); \
 	done
+	test -z "$$(gofmt -l $(TEST_MODULES) | tee /dev/stderr)"
+	for m in $(TEST_MODULES); do (cd $$m && GOWORK=off go vet ./... && GOWORK=off go mod verify && GOWORK=off $(BIN)/golangci-lint run --config $(CURDIR)/.golangci.yml ./...) || exit 1; done
 	cd proto && $(BIN)/buf lint && $(BIN)/buf format --diff --exit-code
 	scripts/install-shellcheck.sh --check
 	$(BIN)/actionlint -shellcheck=$(SHELLCHECK)
@@ -219,6 +226,19 @@ APP_BUILD := $(HOME)/Library/Caches/Portenv/app-build-$(INSTANCE)
 # never reads PORTENV_INSTANCE, a dev one refuses any other value.
 LDFLAGS += -X github.com/portenv/portenv/core/internal/instance.stamp=$(INSTANCE)
 endif
+# ATTACHED_TERMINAL=1 (a dev lane only, ADR 0020 decision 12): the main
+# window shows the old attached terminal instead of the control-mode tab
+# terminal, until the latency gate passes. The app carries a marker
+# (PortenvAttachedTerminal in Info.plist, and a string in its binary) that
+# check-app-identity.sh and release-local.sh refuse in a release build.
+ATTACHED_TERMINAL ?=
+ifneq ($(ATTACHED_TERMINAL),)
+ifeq ($(LANE),)
+$(error ATTACHED_TERMINAL=1 is for a dev lane's build only: add LANE=X)
+endif
+APP_SWIFTFLAGS := -Xswiftc -DPORTENV_ATTACHED_TERMINAL
+APP_BUILD := $(APP_BUILD)-attached
+endif
 # Swift builds run with a clean environment: SwiftPM's plugin caches record
 # the environment they ran in, so a session token or other secret in the
 # shell would end up on disk under .build (scripts/check-swift-env.sh).
@@ -227,7 +247,7 @@ app: build $(TOOLS_STAMP)
 	# Source paths remapped: a release build never carries this machine's paths.
 	# A lane build also compiles the dev-only previews (R-0220); a release
 	# build never does, and check-dev-previews.sh checks its binary below.
-	cd apps/mac && $(SWIFT) build -c release --scratch-path "$(APP_BUILD)" $(if $(LANE),-Xswiftc -DPORTENV_DEV_PREVIEWS) \
+	cd apps/mac && $(SWIFT) build -c release --scratch-path "$(APP_BUILD)" $(if $(LANE),-Xswiftc -DPORTENV_DEV_PREVIEWS) $(APP_SWIFTFLAGS) \
 		-Xswiftc -file-prefix-map -Xswiftc "$(CURDIR)/=" -Xcc -ffile-prefix-map="$(CURDIR)/=" \
 		-Xswiftc -file-prefix-map -Xswiftc "$(APP_BUILD)/=build/" -Xcc -ffile-prefix-map="$(APP_BUILD)/=build/"
 	rm -rf $(BIN)/Portenv.app && mkdir -p $(BIN)/Portenv.app/Contents/MacOS
@@ -241,6 +261,7 @@ app: build $(TOOLS_STAMP)
 	for f in portenv portenvd restic; do codesign --force --sign - $(BIN)/Portenv.app/Contents/Helpers/$$f; done
 	cp apps/mac/Info.plist $(BIN)/Portenv.app/Contents/Info.plist
 	/usr/libexec/PlistBuddy -c "Add :PortenvBuildID string $(BUILD_ID)" $(BIN)/Portenv.app/Contents/Info.plist
+	$(if $(ATTACHED_TERMINAL),/usr/libexec/PlistBuddy -c "Add :PortenvAttachedTerminal bool true" $(BIN)/Portenv.app/Contents/Info.plist)
 	# The app icon (R-0128); a dev lane's carries its letter, so it's never
 	# mistaken for the release app.
 	scripts/make-app-icon.sh apps/mac/Resources/Assets.xcassets/AppIcon.appiconset \
@@ -291,6 +312,14 @@ image-test: image
 ## driver-test: run the driver conformance suite against Docker with $(IMAGE)
 driver-test:
 	PORTENV_TEST_IMAGE=$(IMAGE) go test -count=1 -timeout 20m ./core/driver/docker/
+
+## team-boundary: the per-agent user boundary (ADR 0022) against $(IMAGE): every row as an agent, then with its mutation, which must fail it. TEAM_SETUP=fixture (the ADR's layout, built by the test) or real (the helper's team start; what the preview is gated on)
+team-boundary:
+	cd tests/team-boundary && GOWORK=off PORTENV_TEST_IMAGE=$(IMAGE) PORTENV_TEAM_SETUP=$(or $(TEAM_SETUP),fixture) go test -count=1 -timeout 20m -v ./...
+
+## team-start: an agent team's first start on a fresh workspace (R-0296) against $(IMAGE): a real portenvd, team init, approve lead, the TEAM_START decision, start lead, whoami in its pane, its ask-owner in the decision list; lead writes a file and runs git, then builder starts past them (CC-0494); builder runs git in the project and a worktree and can't write .git/config or .git/hooks (CC-0493)
+team-start: build
+	cd tests/team-start && GOWORK=off PORTENV_TEST_IMAGE=$(IMAGE) go test -count=1 -timeout 15m -v ./...
 
 ## e2e: restic isolation probe, two machines, SFTP storage and portenvd against $(IMAGE)
 e2e: build $(TOOLS_STAMP)

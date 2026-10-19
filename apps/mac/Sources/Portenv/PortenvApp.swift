@@ -13,6 +13,7 @@ struct PortenvApp: App {
     @State private var model = AppModel()
 
     init() {
+        AppTerminal.announce()
         // A dev lane's build refuses an environment naming another lane, before
         // it touches a login item, keys or a folder (Instance, gmake app LANE=X).
         if let problem = Instance.current.mismatch(environment: ProcessInfo.processInfo.environment) {
@@ -42,7 +43,6 @@ struct PortenvApp: App {
                 let app = NSApplication.shared
                 app.setActivationPolicy(.regular)
                 BlocksPreview.show()
-                NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: nil, queue: .main) { _ in exit(0) }
                 app.run()
             }
             exit(0)
@@ -71,8 +71,10 @@ struct PortenvApp: App {
                     BoxMenu(controller: controller)
                 }
             }
-            TabCommands(tabs: model.tabs)
+            TabCommands(tabs: model.tabs, split: model.split)
+            SplitCommands(split: model.split)
             InspectorToggle(box: model.controller?.box)
+            TeamSidebarToggle(box: model.controller?.box, team: model.team)
             FindCommands()
             FeedbackCommands()
             // Portenv › Settings… (⌘,): the toolbar window (R-0137).

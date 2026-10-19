@@ -16,6 +16,8 @@ on:
       - go.work
       - .dockerignore
       - tests/e2e/**
+      - tests/team-boundary/**
+      - tests/team-start/**
       - server/**
       - Makefile
       - .github/workflows/images.yml
@@ -28,6 +30,8 @@ on:
       - go.work
       - .dockerignore
       - tests/e2e/**
+      - tests/team-boundary/**
+      - tests/team-start/**
       - server/**
       - Makefile
       - .github/workflows/images.yml
@@ -117,8 +121,24 @@ jobs:
           tools: true
       - name: Driver conformance
         run: make driver-test IMAGE=toolbox-node:test
+      # Every row of the per-agent user boundary (ADR 0022, section 12), each
+      # proven by a mutation that must fail it. Fixture mode until lane C's
+      # team start is in the image; the preview build is gated on real mode.
+      - name: Agent team boundary
+        run: make team-boundary IMAGE=toolbox-node:test
       - name: End-to-end (restic isolation, two machines)
         run: make e2e IMAGE=toolbox-node:test
+      # An agent team's first start on a fresh workspace, as the owner
+      # makes it in the app (R-0296): a real portenvd, portenv team init,
+      # approve lead, the TEAM_START decision, start lead, whoami in its
+      # pane, and its ask-owner in the decision list; then lead writes a
+      # file and runs git, and builder's start must get past them (CC-0494);
+      # builder runs git in the project and in a worktree, and can't write
+      # .git/config or .git/hooks (CC-0493).
+      # No fixtures. After the other tests, so a failure here never hides
+      # theirs.
+      - name: Agent team first start
+        run: make team-start IMAGE=toolbox-node:test
       - name: Publish ${{ matrix.arch }}
         if: github.event_name == 'push'
         env:

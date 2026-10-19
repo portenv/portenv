@@ -61,6 +61,8 @@ die() { echo "release-local: $*" >&2; exit 1; }
 # notarize_staple, json_field
 # shellcheck source=scripts/notarize-lib.sh
 source "$root/scripts/notarize-lib.sh"
+# shellcheck source=scripts/release-guards.sh
+source "$root/scripts/release-guards.sh"
 # Any failure exits 1, never 2: 2 means only "built for testing".
 test_build_done=0
 trap 'rc=$?; if [[ $rc != 0 && $test_build_done == 0 ]]; then [[ $rc == 1 ]] || echo "release-local: failed (exit $rc)" >&2; exit 1; fi' EXIT
@@ -151,6 +153,8 @@ else
 # their lines as they were.
 
 step "Building Portenv.app (gmake app, release identity)"
+# The dev-only attached terminal never reaches a release (ADR 0020).
+refuse_attached_terminal || die "refused"
 "$make_cmd" -C "$root" app LANE=
 
 out=$HOME/Library/Caches/Portenv/release/$version-$build

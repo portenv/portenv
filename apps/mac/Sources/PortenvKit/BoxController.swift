@@ -36,6 +36,17 @@ public struct BoxState: Equatable, Sendable {
     /// This open stopped and started the box again to apply a security
     /// update (R-0201): the window tells the person once.
     public var restartedForSecurityUpdate = false
+    /// The first open's image pull, while it runs (R-0211).
+    public struct ImagePull: Equatable, Sendable {
+        public let done: Int64
+        public let total: Int64
+        public init(done: Int64, total: Int64) {
+            self.done = done
+            self.total = total
+        }
+    }
+
+    public var imagePull: ImagePull?
 
     public init(save: Save, savedAt: Date? = nil, location: String? = nil) {
         self.save = save
@@ -54,6 +65,20 @@ public struct BoxState: Equatable, Sendable {
             let storage_place: String?
             let opened_at: Date?
             let restarted_for_security_update: Bool?
+            let image_pull: Pull?
+            struct Pull: Decodable {
+                // protojson writes int64 as a string; tests write numbers.
+                let done_bytes: Flex?
+                let total_bytes: Flex?
+            }
+
+            struct Flex: Decodable {
+                let value: Int64
+                init(from decoder: Decoder) throws {
+                    let c = try decoder.singleValueContainer()
+                    if let n = try? c.decode(Int64.self) { value = n } else { value = Int64(try c.decode(String.self)) ?? 0 }
+                }
+            }
         }
         let d = JSONDecoder()
         d.dateDecodingStrategy = .custom { dec in
@@ -72,6 +97,7 @@ public struct BoxState: Equatable, Sendable {
         s.storagePlace = (w.storage_place?.isEmpty ?? true) ? nil : w.storage_place
         s.openedAt = w.opened_at
         s.restartedForSecurityUpdate = w.restarted_for_security_update ?? false
+        if let p = w.image_pull { s.imagePull = ImagePull(done: p.done_bytes?.value ?? 0, total: p.total_bytes?.value ?? 0) }
         return s
     }
 
@@ -155,6 +181,9 @@ public final class BoxController {
     public private(set) var movingTo: String?
 
     private let daemon: DaemonAPI
+    /// The window's tab terminals (ADR 0020): one stream per tab through
+    /// portenvd, when the daemon client can open them.
+    @ObservationIgnored public let tabTerminals: (any TabTerminalProvider)?
     private let keychain: KeychainReading
     private let notifier: KeychainWaitNotifying?
     private let keychainThreshold: Duration
@@ -164,13 +193,24 @@ public final class BoxController {
     private let ensureDaemon: (@Sendable () async -> String?)?
     /// How long portenvd may be away before the window says so plainly.
     private let daemonDeadline: Duration
-    private var daemonGoneSince: ContinuousClock.Instant?
+    private var daemonGoneSince: SuspendingClock.Instant?
+    /// Time awake: a Mac asleep while portenvd is away mustn't spend the
+    /// deadline (a wall clock did, on 2026-10-16).
+    private let awake: @Sendable () -> SuspendingClock.Instant
 
     /// What the window says when portenvd has been away past the deadline.
     public static let daemonGone = "Portenv's background service isn't running, so nothing is being saved. It's started again automatically; if this lasts, quit and reopen Portenv."
     /// Reopening after portenvd restarted: the state line keeps the real
     /// state instead of "Opening…".
     private var resuming = false
+    /// portenvd went away while this window had the workspace open here:
+    /// whatever the new portenvd says first (interrupted, or closed), the
+    /// window reopens it by itself, never showing "closed" (R-0250).
+    private var lostWhileOpenHere = false
+    /// portenvd is away, or the workspace is being reopened after it came
+    /// back: the tab view says it's reconnecting, never "disconnected" with
+    /// a Reconnect that can't work yet (R-0242).
+    public var reconnectingToService: Bool { daemonGoneSince != nil || resuming }
     /// One reopen per restart, so a failing one doesn't read the Keychain
     /// every few seconds.
     private var resumeTried = false
@@ -195,6 +235,7 @@ public final class BoxController {
                 notifier: KeychainWaitNotifying? = nil, keychainThreshold: Duration = KeychainWait.threshold,
                 ensureDaemon: (@Sendable () async -> String?)? = nil, followRetry: Duration = .seconds(1),
                 daemonDeadline: Duration = .seconds(30), savesRetry: Duration = .seconds(5),
+                awake: @escaping @Sendable () -> SuspendingClock.Instant = { .now },
                 now: @escaping @Sendable () -> Date = { Date() },
                 sleep: @escaping @Sendable (Duration) async -> Void = { try? await Task.sleep(for: $0) },
                 bringForward: @escaping @Sendable () -> Void = { KeychainWait.front.bringForward() }) {
@@ -206,11 +247,13 @@ public final class BoxController {
         // Set from the clock when a save is first recorded (savedAtChanged).
         self.savedTimeNow = .distantPast
         self.daemon = daemon
+        tabTerminals = (daemon as? any TabTerminalTransport).map { ControlModeTabProvider(box: box, transport: $0) }
         self.keychain = keychain
         self.notifier = notifier
         self.keychainThreshold = keychainThreshold
         self.ensureDaemon = ensureDaemon
         self.daemonDeadline = daemonDeadline
+        self.awake = awake
         self.followRetry = followRetry
     }
 
@@ -563,11 +606,11 @@ public final class BoxController {
     private func daemonEnded() async {
         guard !leaving, location != .closed, !(await daemon.ping()) else { return }
         state = BoxState(save: .notSaved, savedAt: state?.savedAt, location: state?.location)
-        let since = daemonGoneSince ?? .now
+        let since = daemonGoneSince ?? awake()
         daemonGoneSince = since
         if let problem = await ensureDaemon?() {
             error = problem
-        } else if ContinuousClock.now - since >= daemonDeadline {
+        } else if awake() - since >= daemonDeadline {
             error = Self.daemonGone
         }
     }
@@ -575,11 +618,11 @@ public final class BoxController {
     /// Waits for portenvd at launch (launchd starts it with the login item),
     /// saying so plainly if it doesn't come within the deadline.
     public func waitForDaemon() async {
-        let start = ContinuousClock.now
+        let start = awake()
         while !(await daemon.ping()) {
             if let problem = await ensureDaemon?() {
                 error = problem
-            } else if ContinuousClock.now - start >= daemonDeadline {
+            } else if awake() - start >= daemonDeadline {
                 error = Self.daemonGone
                 return
             }
@@ -681,6 +724,9 @@ public final class BoxController {
                 }
             } catch {}
             if Task.isCancelled { return }
+            // The stream ended: portenvd went away. A workspace this window
+            // had open here is reattached when it's back (R-0250).
+            if location == .thisMac { lostWhileOpenHere = true }
             await daemonEnded()
             try? await Task.sleep(for: followRetry)
         }
@@ -698,20 +744,27 @@ public final class BoxController {
             notice = Self.securityRestartNotice
         }
         if newSave { savedAtChanged() }
+        // The first open's pull: the line says how far it has got, and
+        // goes back to "Opening…" when it's done (R-0211).
+        if busy, let line = progress, line == StateLine.opening || line.hasPrefix(StateLine.gettingImagePrefix) {
+            progress = st.imagePull.map { StateLine.gettingImage(done: $0.done, total: $0.total) } ?? StateLine.opening
+        }
         // portenvd answers again: whatever said it was away no longer holds.
         daemonGoneSince = nil
         if error == Self.daemonGone { error = nil }
         if pushed && busy { return }
-        if st.interrupted {
+        if st.interrupted || (lostWhileOpenHere && st.save == .closed) {
             // portenvd restarted while this window had the box open: open it
             // again, handing the keys over (the window stays on the box).
             if location != .closed && !busy && !resumeTried {
                 resumeTried = true
+                lostWhileOpenHere = false
                 await resume()
             }
             return
         }
         resumeTried = false
+        lostWhileOpenHere = false
         switch st.save {
         case .closed: location = .closed
         default: location = st.location.map { .server($0) } ?? .thisMac

@@ -2,7 +2,7 @@
 
 These guidelines turn the approved mockups into rules. When a mockup and this file disagree, this file wins and the mockup gets updated. When neither covers a case, follow Apple's Human Interface Guidelines for macOS, then ask.
 
-Reference frames (design canvas): Main window, Main window moving, Command palette, Notification, Title menu, Agents, First run 1–6. The mockups are drawn in dark mode; every rule here applies to light mode too.
+Reference frames (design canvas): Main window, Main window moving, Command palette, Notification, Title menu, Agents, First run 1–6; the Team frames are in `docs/mockups/team-*`. The mockups are drawn in dark mode; every rule here applies to light mode too.
 
 ---
 
@@ -51,6 +51,7 @@ From top to bottom, left to right:
 | Area | Contents | Notes |
 | --- | --- | --- |
 | Toolbar (unified, 52 pt) | sidebar toggle · title button · flexible space · open-port pills · agent avatars · inspector toggle | Title button is the workspace's document menu |
+| Sidebar (leading, 248 pt) | Needs you · Team (You, the agents, Add Agent…) | Shown by default when the workspace has a team, ⌘0 toggles it (6.2) |
 | Tab bar (30 pt) | one tab per terminal session, `+` for a new tab | Tabs replace tmux's status bar, which is always hidden |
 | Terminal | blocks, sticky header, inline answer card | Fills the remaining space |
 | Inspector (trailing, 260–400 pt, 300 by default) | Where it is · Saves · Who's here · Running now | Hidden by default, ⌥⌘I or toolbar button |
@@ -148,7 +149,7 @@ Rules:
 - Your own blocks use your initial on a neutral grey. Each agent gets a stable color, assigned on first connection and kept per workspace.
 - Full-screen and interactive programs (Claude Code, vim, less, top) are one block whose body is the live program. No block decorations inside it.
 - Block background is a subtle tint (one step lighter than the terminal ground in dark mode, one step darker in light mode), radius 8 pt. No coloured side borders.
-- Actions on a block (context menu and hover toolbar): Copy Command, Copy Output, Copy Both, Collapse, and Jump to Start.
+- Actions on a block: the hover toolbar (shown on hover and on the selected block) has Copy Output, Copy Command and Run Again, which VoiceOver offers as the block's actions; the context menu has those three plus Copy Both, Collapse and Jump to Start. ⌥⌘C copies the selected block's output. Copy Output copies the whole block and says first how many lines left the scrollback. Run Again asks first unless portenvd recorded that you ran the command (R-0224).
 
 ### 4.3 Sticky header
 
@@ -199,7 +200,7 @@ Sections, always in this order, each with a small grey heading:
 1. **Where it is.** "Running on <place>" with how long and where it came from; "Saves go to <place>" with "Encrypted on this Mac before they leave it" (or the right equivalent); a Move To… button. When packages from `apt-packages.txt` couldn't be installed: "1 package couldn't be installed: <name> · Retry" ("2 packages couldn't be installed: <a>, <b> · Retry"). The state line stays normal; the workspace started all the same and Portenv retries in the background.
    - During a move, this section becomes the move's progress, in four steps with a check, current or pending marker each: Saved on <source> (time, size of changes) → Sending changes (progress bar, "x of y MB") → Starting on <destination> → Reconnecting this window. Above the steps: a time estimate once known. Below: "You can keep reading. Typing comes back when the workspace is running there. If the move stops, the workspace stays here, saved."
 2. **Saves.** "Last saved <time>" (the state line's rule: "just now", "14:58", "yesterday at 23:43", "on 9 Oct at 23:43"), then the five most recent saves, newest first: time, kind and optional name. Kinds: Autosave, Save point ("name"), Saved before moving, Arrived from <place>, Kept when you reverted (with "Nothing reverted away is lost"); and, for kinds portenvd records today: Saved when the workspace closed (a close), Kept from <machine> (this Mac's copy kept when a newer save came from elsewhere). Hovering a row shows Revert. "Browse All Saves…" link below.
-3. **Who's here.** You first, then each connected agent: avatar, name, mode ("On your behalf" or "Own lane"), "since <time>", any waiting state in orange text, and a Revoke button (destructive style, confirmation alert).
+3. **Who's here** (only for a workspace without a team; the Team section replaces it, 6.2). You first, then each connected agent: avatar, name, mode ("On your behalf" or "Own lane"), "since <time>", any waiting state in orange text, and a Revoke button (destructive style, confirmation alert).
 4. **Running now.** Tabs, each with what runs in it ("Idle" for just the shell), open ports with "Open in Safari", saved commands with Run buttons and the note "Kept in the workspace, so they move with it".
 
 Empty states use one short sentence ("No agents connected. Connect an Agent…").
@@ -225,6 +226,46 @@ The user chooses the door for each agent, per workspace, and the sheet says hone
 - **Never describe SSH command rules as a security boundary,** anywhere: in the app, the docs or the website.
 - Each door appears once its milestone lands: stand-in in 2.4, MCP in 2.6 and 2.7, the web terminal in 2.8, lanes in 4.1 (PLAN.md). A door that doesn't exist yet is never listed.
 - **Pairing approval** (ADR 0016): when an agent runs `portenv connect`, the app asks "<Agent> wants to join <workspace>, code <code>", for example "Grok Bot wants to join acme-api, code 7F3-K2Q". The code shown is the one the agent printed, so the user can match them.
+
+### 6.2 Team (the agent team, ADR 0022)
+
+The Team section is the workspace's sidebar when the workspace has a team (agent files in `.portenv/agents/`). Mockups: `team-sidebar`, `team-agent-selected`, `team-decision`, `team-states`, `team-agent-files`.
+
+**The sidebar** (R-0240, R-0241):
+- Shown by default when the workspace has a team and hidden otherwise; ⌘0 (View › Show Sidebar) toggles it, remembered per workspace. Width 248 pt. Below 900 pt of window width it collapses to avatars and status symbols, with names in tooltips and VoiceOver.
+- From the top:
+  1. **Team activity:** the whole team's messages (below).
+  2. **Needs you · <n>**, when a decision is pending: one row per decision, oldest first, with the question in one line and how long it has waited ("Waiting 6 min").
+  3. **Team:** You first ("You", with your tab count), then one row per agent in agent-file order, then files that can't start, then **Add Agent…**.
+- An agent row: avatar, name, status as a word and a symbol, and the agent's latest board line, one line, truncated. Statuses: ▶ running (accent), ◌ idle, ■ stopped, ● needs you (orange), ⚠ can't start (red, with portenvd's reason as the line), starting. Colour never carries the status alone.
+- Remote agents (ADR 0022 §10) appear only once a remote way in exists, under **Connected from outside**, as connected or disconnected. Portenv never starts them.
+
+**Selecting:**
+- **An agent:** its tabs expand beneath its row, the tab bar shows only its tabs (named "Builder · tests"), with **All tabs** at its trailing end, and its column takes the inspector's place: who it runs as, its runner and its pane grant ("Runs as user builder · Claude Code · may open 4 panes"), its messages with you, its Team section, its Agent files, and a field to message it (R-0313, R-0314).
+  - **Messages with you** come first: what it sent you, what you sent it, and Portenv's notices to you about it.
+  - **Team · <n>**, below them, **collapsed by default**: every other message this agent sent or received, oldest first. Each entry is one line, "Lead → Builder", the time and the message's first line; clicking it shows the whole text. Portenv's own notices about the agent (a routine's note, a status request, a start that failed) are in the same list, greyed, from "Portenv".
+  - **The message field** is the column's last row: "Message Builder", with Send, and "Return to send · Shift-Return for a new line" under it. Return sends, Shift-Return starts a new line. It sends exactly what you typed, as you, to this agent only, through portenvd (an idle agent wakes to read it). Plain text, at most 8 KB. A refusal shows under the field in red, as one line that says what to do ("A message can be at most 8 KB; this one is 9.2 KB. Shorten it and send again."), and keeps what you typed.
+- **Team activity:** the whole team's messages in the column's place, oldest first, as the board has them: each one as in the Team section ("Lead → Builder", the time, the first line; click for the rest), Portenv's notices greyed. A menu at the top filters by agent ("Everyone", or one agent: what it sent, what it received and Portenv's notices about it). The tab bar shows all tabs and the terminal stays on the tab it showed. It's how the owner sees every message that involves their agents (ADR 0016 point 5).
+- **Long messages:** an opened entry shows its first 12 lines or 600 characters, then **Show all** for the rest (a message is at most 8 KB).
+- **Live:** the column, the Team section and Team activity update as messages arrive (WatchTeam), with no refresh.
+- **You or All tabs:** the inspector comes back. All tabs shows every tab; You shows yours.
+- **The terminal follows the selection** (R-0314): it always shows exactly the tab the tab bar marks current (in split view, the focused pane does). Selecting an agent shows its tab last shown, or its first; You or All tabs goes back to your tab. An agent with no tab open shows "<Agent> has no tab open", never another agent's pane. An agent starting never moves the view. The terminal's VoiceOver name says whose tab it is: "Terminal: Lead · lead", "Terminal: You · shell".
+- A pane an agent opened is headed "Opened by <agent> · <command>".
+- Who's here (section 6) is dropped from the inspector while the workspace has a team; the Team section replaces it.
+
+**Decisions** (ADR 0022 §6):
+- Every decision shows who asks, the question, its evidence (the detail, the diff or the package list), **Decline…** (asks for an optional reason) and **Approve**, with no default button, and the line "Answered only here, by you. Agents can ask but never approve."
+- Answered only in the app: never from a notification, the CLI or an agent.
+- An agent-file change shows its diff, and its `runner` line on its own, prominently: that's code that will run (R-0245).
+- A package decision lists every package with its exact version and the repository it comes from, and says "Installing runs these packages' setup scripts as root."
+- The first start of a team shows the residual-risk sentence from ADR 0022 §2.
+- An expired decision is greyed, with no Approve; it never becomes an approval.
+
+**Agent files** (R-0234): below the agent's conversation, its private home (`/home/<agent>`) with each item's size, the quota ("212 MB of 500 MB · drop files here to add"), Add Files… and drag and drop (the drop target names what will be added and its size). Full: the bar turns red, with what wasn't added and what to do.
+
+**Plain text:** everything an agent writes (its latest line, messages, questions, evidence, file names, portenvd's reasons) is shown as plain text: no links, Markdown, images or actions in it. Control characters, escape sequences and bidi overrides are removed before it's shown. Controls next to it, such as "Open review-42.md", are the app's own.
+
+**VoiceOver:** each row is one element, read as its name, status and latest line ("Reviewer, needs you. Wants to merge #42"). Decision buttons say what they answer ("Approve: merge #42"). A message entry is one element, read as who to whom, the time and its first line ("Lead to Builder, 14:28: Take the retry half"); a notice starts "Notice from Portenv". The message field is read as "Message Builder".
 
 ## 7. Command palette
 

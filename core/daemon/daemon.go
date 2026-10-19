@@ -47,6 +47,8 @@ type Server struct {
 	daemonv1.UnimplementedDaemonServiceServer
 	env *local.Env
 	log *slog.Logger
+	// pulling: the first open's image pull, for the box's state (R-0211).
+	pulling pulls
 
 	// relaunching: Portenv is relaunching for an update, so this daemon
 	// stops without closing its boxes (ADR 0014); stop ends Serve.
@@ -66,6 +68,13 @@ type Server struct {
 	bgCancel     context.CancelFunc
 	sleep        func(ctx context.Context, d time.Duration) bool
 	closeForQuit func(ctx context.Context, name string) error
+
+	// team is the agent team (ADR 0022), made on first use; teamPumps
+	// holds each workspace's TeamCalls stream.
+	teamOnce  sync.Once
+	team      *teamEngine
+	teamMu    sync.Mutex
+	teamPumps map[string]bool
 
 	mu     sync.Mutex
 	moves  map[string]string     // box name → the target of a Move To in progress
@@ -88,6 +97,9 @@ type Server struct {
 	alive   func(pid int) bool // whether a reporting app still runs
 	// engine asks the box engine whether it answers (tests set it).
 	engine func(ctx context.Context) error
+	// freeBytes is the space free to this user on dir's volume (tests
+	// set it).
+	freeBytes func(dir string) (uint64, error)
 }
 
 // openBox is a box this daemon opened: its session, sync engine and agent
@@ -174,7 +186,8 @@ func New(env *local.Env, log *slog.Logger) *Server {
 	bg, cancel := context.WithCancel(context.Background())
 	return &Server{env: env, log: log, open: map[string]*openBox{}, moves: map[string]string{}, remote: map[string]*remoteBox{}, gen: map[string]uint64{},
 		now: time.Now, alive: processAlive, bgCtx: bg, bgCancel: cancel,
-		engine: func(ctx context.Context) error { return env.EngineAnswers(ctx) }}
+		engine:    func(ctx context.Context) error { return env.EngineAnswers(ctx) },
+		freeBytes: freeBytes}
 }
 
 // Serve listens on the socket in the Portenv directory (mode 0600 in a 0700
@@ -344,6 +357,8 @@ func (s *Server) OpenBox(ctx context.Context, req *daemonv1.OpenBoxRequest) (_ *
 		return nil, err
 	}
 	defer done()
+	ctx, pulled := s.followPull(ctx, req.GetName())
+	defer pulled()
 	ob, res, err := s.openBox(ctx, req.GetName(), req.GetTakeOver())
 	if err != nil {
 		var held *boxsync.LeaseHeldError

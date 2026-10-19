@@ -164,7 +164,7 @@ A box is a toolbox image plus a home. The image is rebuilt or pulled on each mac
     apt-packages.txt         system packages reinstalled on every start
     excludes                 restic exclude patterns, user-editable
 /home/<agent>/               one lane per connected agent (uid 2000+)
-  <project>/                 a git worktree on branch agent/<agent>
+  <project>/                 its own clone, on branch agent/<agent> (ADR 0022)
 ```
 
 **Users and privileges**
@@ -344,7 +344,7 @@ The user owns every box; agents are guests the user invites (ADR 0006). Any agen
 | Mode | The agent | Access |
 | --- | --- | --- |
 | Continue my work (stand-in) | Acts as the user, in the user's sessions: drives existing tabs, starts Claude Code, Codex or anything else in the same codebase, and relays questions back to the user | The user's access to that box. The app says so plainly when the agent is connected |
-| Lane | Has its own user (`/home/<agent>`), tmux session, git worktree on branch `agent/<name>`, and its own limits | No access to the user's files or sessions. For agents the user wants kept separate |
+| Lane | Has its own user (`/home/<agent>`), tmux session, its own clone of the project on branch `agent/<name>` (ADR 0022, R-0315), and its own limits | No access to the user's files or sessions. For agents the user wants kept separate |
 
 In both modes every session is recorded and tagged with the agent's name, there is one writer per terminal with explicit Take Over, and Revoke ends access and live sessions immediately.
 
@@ -360,7 +360,7 @@ Approvals are opt-in, per action (for example `git push`, deleting, production s
 
 **Lanes**
 
-- One Linux user per agent (`/home/<agent>`), its own tmux session, and its own git worktree on branch `agent/<agent>`. A read-only view of the main checkout is mounted at `/home/<agent>/main`.
+- One Linux user per agent (`/home/<agent>`), its own tmux session, and its own clone of the project on branch `agent/<agent>` in its home. It reads the main checkout and never writes it, or its `.git`; its work comes back as a branch the owner fetches, without `work`'s git ever opening the agent's repository (ADR 0022 section 2a, the owner's decision of 2026-10-18, R-0315).
 - An agent's SSH session lands in its tmux session, so dropped connections resume. One writer per terminal; others attach read-only; Take Over is explicit.
 - Per-lane limits: CPU, memory, process count, network egress rules (production hosts blocked unless granted).
 - Agent keystrokes count as activity, so idle sleep does not cut off a working agent. A maximum session length still applies.
@@ -774,7 +774,7 @@ portenv/
     sync/                 restic saves and restores, leases, invariants
     keys/                 key handling, Keychain and server key stores
     relay/                port relay, tunnels (yamux over WebSocket)
-    lanes/                agent users, worktrees, approvals, audit
+    lanes/                agent users, clones, approvals, audit
   shims/
     containerization/     Swift process implementing the apple driver
   images/
@@ -1143,6 +1143,10 @@ In this order:
                 - a reset clears the filter too;
                 - dropped text and Services are refused;
                 - the lint fails on any delegate assignment outside the factory and the tab view, and the runtime check also runs in the relay's paths.
+            - **Built (PR 6, 2026-10-14, awaiting review):** the main window shows the current tab's own terminal through portenvd's `TabTerminal`.
+              - **Losing the stream:** "Reconnecting…" while it comes back, then "Disconnected" with Reconnect.
+              - **The dev-only switch:** `gmake app LANE=X ATTACHED_TERMINAL=1` brings back the attached terminal. Each of its four release guards has a test that fails without it.
+              - **Also in the helper:** a pending Enter's author ends at the next prompt (R-0177). Failed replies are never read as data, so a failed pane list ends no lane (R-0180).
           - **the latency gate:** keystroke to echo no worse than the attached client by more than 5 ms at p95 locally (within ±0.25 ms at tmux, measured), and the same run on the us-west-2 tester server once it exists. Until it passes, a dev-only switch back to the attached client, which never reaches a release build;
           - tmux pinned in the image (3.4) and checked at attach;
           - #73's and #75's no-loss guarantees carried over, with tests.
@@ -1203,6 +1207,29 @@ It comes after 1.2's blocks, wherever they land (Phase 1 if the spike succeeds, 
   - The panes of a tiling terminal (Ghostty, kitty, tmux, Hyprland) can each show a different tab, with the same per-viewer independence.
   - The in-shell features come from shell integration, so they work in every pane there too.
 - **The launch demo** uses split view at the moment the laptop reopens: Claude Code, Grok Bot and the tests side by side, all still working on the server.
+
+**First version (the owner, 2026-10-18: split view ships tonight; demo note `docs/milestones/1.2b.md`).**
+
+- [x] Up to 4 panes in one window, each its own `MainTabTerminal` on one of the box's tabs (ADR 0020), with its own Reconnecting and Disconnected. A tab shows in at most one pane; an agent typing in one tab never moves a pane.
+- [x] Split Right (⌘D) and Split Down (⇧⌘D), as title-bar buttons and Window menu commands. A new pane shows the first tab the tab bar shows (so an agent's, with that agent selected) that no pane shows; when every one is in a pane, a new shell tab, owned by you, as `+` makes.
+- [x] ⌘⌥ and the arrows move the focus between panes (also in the Window menu); Close Pane in the Window menu.
+- [x] ⌘W closes the focused pane first, and closes tabs only when one pane is left. Closing a pane never stops its tab.
+- [x] The slim pane header: the tab picker (the tab's name with a chevron, listing the tabs no other pane shows), the program running in it, and a close button.
+- [x] The focused pane's 1 px accent outline; keystrokes go to it. VoiceOver reads each pane as "Pane: grok tab".
+- [x] The tab bar: choosing a tab (a click, ⌘1–9, ⌃Tab, ⌘⇧]) shows it in the focused pane, or focuses the pane already showing it; the current tab is always the focused pane's. A small glyph marks the tabs in a pane, showing where.
+- [x] Each pane asks its own tab for its own size; a tab has one size, the latest asked for.
+- [x] Works with the Team sidebar and agent columns: selecting an agent filters the tab bar and shows that agent's tab in the focused pane, so the focused pane's tab is always the bar's current tab (R-0314); the other panes stay as they are.
+- [x] Tests: `SplitControllerTests`, `SplitLayoutTests`, `SplitPanesLayoutTests` (four panes fit the window's minimum).
+
+**Still to do after the first version:**
+
+- [ ] The header's status ("asking you", "watching", "quiet since 15:41") and who is active ("Grok Bot is typing"), and VoiceOver's status after the tab name: the tab list doesn't carry `waiting`, `typingAuthor`, `watchers` or `lastOutputAt` from portenvd yet, so the header shows only the running program. `PaneHeader` already writes the words.
+- [ ] The split layout remembered per workspace; today each open starts with one pane.
+- [ ] Drag to rearrange panes.
+- [ ] "Opened by <agent> · <command>" for a pane an agent opened (GUIDELINES 6.2).
+- [ ] The Warp-style features per pane beyond what each terminal already does, inline answers per pane, and narrow-pane block headers.
+- [ ] When another viewer has a tab larger, the pane keeps the cursor's row in sight.
+- [ ] Renders of the board redone from the shipped panes (`docs/screenshots/split-view/` is from the draft).
 
 **5. 1.3: the `apple` driver**
 
@@ -1402,6 +1429,8 @@ Slow uplinks are a real user condition, not an edge case (the Phase 0 gate ran o
 - **Keys:** the Developer ID certificate and the Sparkle EdDSA private key live only in CI secrets and the owner's Keychain, never in the repository.
 - **Design testers need Docker Desktop** (the owner, 2026-10-14 19:37, R-0211): it runs their workspaces on the Mac. Apple's Containerization engine (ADR 0004) comes later. First run checks that Docker Desktop is installed and ready before "Make your first workspace", waits while it starts ("Docker Desktop is starting…"), and says what to do when it isn't there.
 - **No Docker inside a workspace yet** (the owner, 2026-10-16 08:30, R-0223): the workspace image ships no container engine, and nothing is mounted from the Mac's engine (its socket is root on the Mac: never). A tester may install an engine in a workspace, but it won't start today: the workspace helper refuses the privileges a nested engine asks for. Testers are told "Docker isn't available inside a workspace yet. Use Docker Desktop on your Mac for containers." (`docs/testers.md`). Whether a self-installed rootless engine can run is a spike (lane C), and any change to the helper or the box profile it suggests is the owner's security decision.
+- **Agents in a workspace work in their own clones** (ADR 0022, amended by the owner's security decision of 2026-10-18, R-0315): each coding agent in a team has its own Unix user and a full clone of the project in its home, on branch `agent/<id>`. The owner's checkout and its `.git` are never agent-writable, Portenv adds no system git `safe.directory` (the interim entries from PR #197 go away), and an agent's branch comes back by a fetch that never opens the agent's repository as `work`. Read-only lenses get a read grant on a writer's clone, never write. A workspace whose team used the shared project is moved over at its next team start: `.git` back to `work` alone, a clone per agent with its branch and uncommitted files, and nothing deleted without the owner's decision. **The code PR's gate:** the team-start step in which an agent tampers with its own clone's config and `work`'s git in the project runs nothing (ADR 0022 section 2a, point 5).
+- **An owner preview uses the image CI published for its commit** (found in the owner's demo, 2026-10-18, R-0302): a dev preview (`gmake app LANE=Z`) can be current while its workspace runs an old helper, because `portenv-agent` comes from the toolbox image, the Docker driver pulls only when the tag is missing, and a new workspace pins whatever `:main` the Mac has. Before a preview, check that `docker buildx imagetools inspect ghcr.io/portenv/toolbox-node:sha-<12>` (the commit's first 12 characters) shows the same digest as `:main`, `docker pull` it, and test in a new workspace: existing ones keep their pinned image.
 - **Design-tester builds are signed and notarized on the owner's Mac, not in CI** (decided by the reviewer, on the owner's delegation, R-0089, 2026-10-11). `gmake release-local` (`scripts/release-local.sh`):
   - builds the release app with `gmake app` (no lane), and refuses it unless its third-party notices cover every Go module in its helpers and every Swift pin;
   - signs the helpers, then the app, with the Developer ID Application identity, the hardened runtime and a secure timestamp. There are no entitlements; `apps/mac/Portenv.entitlements` says why, and any entitlement added later comes with its reason;
@@ -1422,6 +1451,7 @@ Slow uplinks are a real user condition, not an edge case (the Phase 0 gate ran o
 - [ ] **Gates the design-tester build (R-0203):** on a signed build, after `portenvd` exits (a crash or a `Relaunch`), launchd starts it again and the app carries on
 - [ ] **Gates the design-tester build (R-0211, CC-0302):** `portenvd` logs OpenBox on entry, at "pulling the toolbox image" and on every error, by workspace ID with no paths, and each open phase has a deadline (about 30 s without progress is a plain-line failure) (lane A)
 - [ ] **Gates the design-tester build (R-0211):** first run's engine check waits for Docker Desktop to be ready, not just running: a short `Ping`, retried while it starts ("Docker Desktop is starting…"), never failing on a long dial; missing or stopped, it says what to do; the engine's own errors (not running, image missing, no disk) are plain lines in first run and the window (lane C)
+- [x] **Gates the design-tester build (R-0323):** New workspace checks Docker Desktop and the disk before anything is written: the app keeps Create disabled until Docker Desktop answers (R-0211), and `CreateBox` itself asks the engine again (5 s) and measures the free space on the disk holding Portenv's folder, refusing with one plain line ("This Mac has 3.2 GB free, and a new workspace needs at least 5 GB. Free some space, then create the workspace again.") under 5 GB. A disk that can't be measured doesn't refuse. Docker Desktop's own disk image limit isn't measured; a full one still fails the open with the "out of disk space" line.
 - [ ] **Gates the design-tester build (R-0211):** the first open's image pull shows its progress, "Getting the workspace image… 312 MB of 900 MB", streamed from `portenvd` (lane C)
 - [ ] **Gates the design-tester build (R-0211):** a failed open stays visible in the window, with its plain line and Try Again, and the box list has an Open button (lane D)
 - [ ] Close Workspace saves and releases; reopening restores within 5 seconds; closing the window leaves it running (ADR 0023)
@@ -1559,7 +1589,7 @@ Milestones: 3.1 accounts (Apple, GitHub, email) · 3.2 device enrollment and wra
 
 ### Phase 4: Agent access
 
-Milestones: 4.1 lanes (users, tmux, worktrees, limits) everywhere a box runs, and stand-in mode on local and cloud boxes · 4.2 opt-in approval helper (push, delete, secrets, protected scripts, sudo in a lane) · 4.3 secrets vault · 4.4 full command audit (auditd or eBPF) on top of 2.4's session recording · 4.5 remaining doors, only if usage shows the need: GitHub bridge, chat or email bridges, A2A (ADR 0006) · 4.6 iPhone companion for approvals.
+Milestones: 4.1 lanes (users, tmux, clones, limits) everywhere a box runs, and stand-in mode on local and cloud boxes · 4.2 opt-in approval helper (push, delete, secrets, protected scripts, sudo in a lane) · 4.3 secrets vault · 4.4 full command audit (auditd or eBPF) on top of 2.4's session recording · 4.5 remaining doors, only if usage shows the need: GitHub bridge, chat or email bridges, A2A (ADR 0006) · 4.6 iPhone companion for approvals.
 
 - [ ] An agent in a third-party sandbox connects with a device code and works in its lane
 - [ ] A lane agent cannot read the user's home
@@ -1619,6 +1649,12 @@ These need an owner decision; Claude Code should add new ones here instead of gu
 - [ ] Before 2.5: can the target agents be woken by an incoming webhook? If not, an agent keeping `portenv events --follow` running does the job and 2.5 drops in priority (ADR 0008).
 - [x] Apple Developer Program enrolment, needed for Developer ID signing and notarization in 1.8. **Answered (2026-10-10):** Portenv is signed with the owner's existing organization team; no new enrolment is needed (see 1.8).
 - [ ] Approval timeout default (30 minutes assumed) and what happens when it expires.
+- [ ] A stale toolbox image (R-0302): the Docker driver pulls only when the tag is missing locally, so a Mac with an old `:main` silently creates workspaces with an old helper. Should the driver compare the local `:main` digest with the registry's before a create, or should the app build pin the image digest CI published for its commit?
+- [ ] machine-id race (R-0299): `core/local` writes `machine-id` with a plain `os.WriteFile`, so two processes starting together on a fresh Mac can read it empty ("sync: invalid machine ID"). The fix is a temporary file and a rename; a small fix after the 2026-10-18 demo.
+- [ ] Agents' clones (ADR 0022 section 2a, R-0315): how the owner sees an agent's branch in the app. A Fetch button on the agent's row, a fetch Portenv makes on every `portenv share`, or both; and whether the app shows the branch's diff itself or leaves it to the owner's git tools.
+- [ ] Agents' clones (R-0315): do read-only lenses (reviewer, design, trust-safety) need their own clone in the first build, to read a writer's history with the safe fetch, or is reading the writer's files through `read_clones` enough for now?
+- [ ] Agents' clones (R-0315): agents keep read access to the owner's checkout, which they need to clone and fetch from it, so they can still read untracked files there (`.env`, local settings). Keep that, or seed clones from a bundle `work` makes, so agents need no read access to the project at all?
+- [ ] Agents' clones (R-0315): a full clone counts toward the agent's home limit (2 GB by default). Raise the default for agents with `checkout: own`, give clones their own allowance, or keep one limit and let the start's plain line ask the owner to raise it?
 - [ ] Anthropic's terms for agents driving Claude Code with a subscription login versus a Console API key.
 - [ ] Open-source boundary in detail: this repository is Apache-2.0 and `portenv/cloud` is private (decided), but confirm before going public whether the Mac app, the File Provider and the iPhone companion stay in the public repository or move to a private one.
 - [ ] Phase 3 control-plane milestones now live in `portenv/cloud`: how its CI pins and tests against `proto/gen/go` versions from this repository (tags, or a pseudo-version per merge).

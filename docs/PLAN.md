@@ -1166,6 +1166,7 @@ In this order:
        3. **Command blocks:** attribution, the sticky header, the inline answer card, then tab badges; the command palette and saved commands after.
      - **tmux's passthrough stays off.** The app's per-tab view filters what a program prints (no clipboard, link or title effects), and a test checks both.
      - **Still to do:** the same cases over the SSH forward to a server box (needs the owner's go-ahead for the AWS test server), and real agent CLIs in place of the stand-ins (needs accounts).
+     - **Terminal input, after the tester build (ADR 0027, proposed; R-0348 to R-0351):** four parallel streams on two fixed contracts (the InputLine API and the command-list JSON): S1 the input editor and shell-integration blocks (zsh system-wide, fish), S2 local completions with no network, S3 Portenv's everyday actions in the owner's CLI through portenvd, S4 experimental English to a command (off by default; a command on any doubt; nothing runs without Return).
 
 **Terminal colours (the owner, 2026-10-11).** The terminal follows the system appearance by default ("Match System"), like Terminal.app's Basic profile:
 - the system's text background and text colours (`NSColor.textBackgroundColor`, `textColor`), changing with light and dark mode, the margin included;
@@ -1682,6 +1683,15 @@ These need an owner decision; Claude Code should add new ones here instead of gu
 
   Dropping any of them makes it the owner's decision. The check on main found that `set-clipboard external` let any program set the Mac's clipboard through `tmux set-buffer -w`, fixed in #94; links are limited to web pages on the person's click (R-0134).
 - [ ] ADR 0020: should agents' terminal access (2.4) move to the `TabTerminal` stream as well, for per-author attribution of their keystrokes, or stay on today's attach?
+- [ ] ADR 0027 (terminal input, R-0348 to R-0351):
+  - the classifier: the owner chose jev (R-0349); which upstream project, its licence, size and how it's bundled;
+  - the completion spec set (MIT by its repository's metadata, 2026-10-19): the licence per file, and whether declarative-only specs cover enough;
+  - the input editor's default for new shell tabs once its slice passes (proposed: on);
+  - line endings: proposed not needed (CRLF becomes LF; workspaces are Linux);
+  - after a failed suggestion, a second Return sends the text as typed: confirm;
+  - `portenv deploy`: refuses without a runbook (proposed); production asks in the app whoever asked; staging without asking when the owner typed it; whether runbook target names may be sent to the model;
+  - the owner's `portenv msg` and `portenv wake` semantics (from the owner by name; no waking a busy agent, proposed);
+  - the editor running `portenv …` lines as the app's actions through portenvd rather than in the workspace's shell (`command portenv` reaches the shell's).
 - [ ] A per-box "Keep running when Portenv quits" option (off by default) with a menu bar item listing boxes still running? Only with Phase 3's lease hand-off (see 2.4).
 - [x] Tab keyboard shortcuts (1.2)? **Answered (2026-10-10):**
   - ⌘T opens a new tab, ⌘1–⌘9 choose a tab, ⌘⇧[ / ⌘⇧] go to the previous / next tab.

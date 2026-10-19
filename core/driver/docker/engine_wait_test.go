@@ -25,6 +25,8 @@ type fakeEngine struct {
 	inspectImage func(w http.ResponseWriter, r *http.Request)
 	pull         func(w http.ResponseWriter, r *http.Request)
 	inspectBox   func(w http.ResponseWriter, r *http.Request)
+	// distribution answers the registry check (R-0302); nil is a 404.
+	distribution func(w http.ResponseWriter, r *http.Request)
 }
 
 // hang answers nothing until the caller gives up.
@@ -60,6 +62,8 @@ func (f *fakeEngine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case strings.Contains(p, "/images/create"):
 		f.pull(w, r)
+	case strings.Contains(p, "/distribution/") && f.distribution != nil:
+		f.distribution(w, r)
 	case strings.Contains(p, "/images/") && strings.HasSuffix(p, "/json"):
 		f.inspectImage(w, r)
 	case strings.Contains(p, "/containers/") && strings.HasSuffix(p, "/json"):

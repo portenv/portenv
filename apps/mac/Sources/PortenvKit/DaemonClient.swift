@@ -15,8 +15,40 @@ public final class DaemonClient: DaemonAPI, Sendable {
     private let grpc: GRPCClient<Transport>
     private let api: Portenv_Daemon_V1_DaemonService.Client<Transport>
 
-    public init(socket: URL = Binaries.socket) throws {
-        let transport = try Transport(target: .unixDomainSocket(path: socket.path), transportSecurity: .plaintext)
+    /// How the app notices a portenvd that stopped answering (R-0294): a
+    /// frozen portenvd (SIGSTOP, a hang) keeps its socket open, so nothing
+    /// fails on its own and a tab's terminal would just freeze.
+    ///
+    /// - **Keepalive:** gRPC's own HTTP/2 PING (gRFC A8), sent only after
+    ///   `time` with nothing read on a connection with calls open, and only
+    ///   while calls are open. An unanswered ping closes the connection
+    ///   after `timeout`, which fails every call on it: the tab's stream
+    ///   says "Reconnecting…" and the window's state follow notices too.
+    ///   It costs one 17-byte frame each way per quiet `time`, on a local
+    ///   socket, and none while output flows. portenvd permits it
+    ///   (`keepalivePolicy` in core/daemon).
+    /// - **Backoff:** reconnecting to a local socket that launchd restarts
+    ///   every ~10 s; gRPC's default grows to two minutes, which kept the
+    ///   app away long after portenvd was back.
+    public struct Liveness: Sendable {
+        public var time: Duration
+        public var timeout: Duration
+        public var backoffMax: Duration
+        public init(time: Duration, timeout: Duration, backoffMax: Duration) {
+            self.time = time
+            self.timeout = timeout
+            self.backoffMax = backoffMax
+        }
+
+        public static let standard = Liveness(time: .seconds(4), timeout: .seconds(4), backoffMax: .seconds(2))
+    }
+
+    public init(socket: URL = Binaries.socket, liveness: Liveness = .standard) throws {
+        let config = Transport.Config.defaults {
+            $0.connection.keepalive = .init(time: liveness.time, timeout: liveness.timeout, allowWithoutCalls: false)
+            $0.backoff = .init(initial: .milliseconds(250), max: liveness.backoffMax, multiplier: 1.6, jitter: 0.2)
+        }
+        let transport = try Transport(target: .unixDomainSocket(path: socket.path), transportSecurity: .plaintext, config: config)
         let client = GRPCClient(transport: transport)
         grpc = client
         api = Portenv_Daemon_V1_DaemonService.Client(wrapping: client)
@@ -50,6 +82,11 @@ public final class DaemonClient: DaemonAPI, Sendable {
         } catch let e as RPCError {
             if e.metadata[stringValues: "portenv-refusal"].contains("open-elsewhere") {
                 throw DaemonError(e.message, openElsewhere: true)
+            }
+            if e.metadata[stringValues: "portenv-refusal"].contains("moving") {
+                var refused = DaemonError(e.message)
+                refused.moving = true
+                throw refused
             }
             throw DaemonError.fromRPC(message: DaemonErrorText.plain(code: e.code, message: e.message), unimplemented: e.code == .unimplemented,
                                       unavailable: e.code == .unavailable || DaemonErrorText.isTransport(e.message))
@@ -516,7 +553,8 @@ extension TabTerminalStreamError {
         case .failedPrecondition, .invalidArgument, .permissionDenied, .unauthenticated, .notFound:
             self.init(e.message, permanent: true)
         default:
-            self.init(e.message, permanent: false)
+            // Never gRPC's transport words or the socket's path (R-0202).
+            self.init(DaemonErrorText.plain(code: e.code, message: e.message), permanent: false)
         }
     }
 }
@@ -619,6 +657,13 @@ extension DaemonClient {
         return try await call { TeamDecision(try await api.answerDecision(req).decision) }
     }
 
+    public func chooseDecision(_ box: String, id: String, choice: Int, label: String) async throws -> TeamDecision {
+        let req = Portenv_Daemon_V1_AnswerDecisionRequest.with {
+            $0.name = box; $0.decisionID = id; $0.approve = true; $0.choice = Int32(choice); $0.choiceLabel = label
+        }
+        return try await call { TeamDecision(try await api.answerDecision(req).decision) }
+    }
+
     public func sendMessage(_ box: String, to agent: String, thread: String, text: String) async throws -> TeamMessage {
         let req = Portenv_Daemon_V1_SendMessageRequest.with { $0.name = box; $0.to = agent; $0.threadID = thread; $0.text = text }
         return try await call { TeamMessage(try await api.sendMessage(req).message) }
@@ -678,7 +723,7 @@ extension TeamAgent {
                   runner: a.runner, grant: TeamGrant(a.grant),
                   workStatus: a.hasStatus ? AgentWorkStatus(a.status) : nil,
                   routines: a.routines.map { AgentRoutine(every: TimeInterval($0.everyMinutes) * 60, note: $0.note, paused: $0.paused) },
-                  routinesOff: a.routinesOff)
+                  routinesOff: a.routinesOff, shareLoginOff: a.shareLoginOff)
     }
 }
 
@@ -744,6 +789,6 @@ extension TeamDecision {
                   answerNote: d.answerNote, createdAt: d.hasCreatedAt ? d.createdAt.date : nil,
                   answeredAt: d.hasAnsweredAt ? d.answeredAt.date : nil, expiresAt: d.hasExpiresAt ? d.expiresAt.date : nil,
                   packages: d.packages.map { Package(name: $0.name, version: $0.version, source: $0.source, dependency: $0.dependency) },
-                  startAgents: d.startAgentIds)
+                  startAgents: d.startAgentIds, choices: d.choices, choice: Int(d.choice))
     }
 }

@@ -147,3 +147,66 @@ func TestAnOpenWithNoEngineSaysStartIt(t *testing.T) {
 		t.Errorf("no failure in the log:\n%s", logs.String())
 	}
 }
+
+// CloseBox says what it did by workspace ID (ADR 0023): on entry, and a
+// failure with its reason, never a path.
+func TestCloseBoxIsLogged(t *testing.T) {
+	s, logs := loggingServer(t)
+	c := local.BoxConfig{ID: "box-0123abcd", Name: "acme-api", Image: "img"}
+	if err := s.env.SaveBox(c); err != nil {
+		t.Fatal(err)
+	}
+	// Not open here: the close fails, and says so.
+	if _, err := s.CloseBox(context.Background(), &daemonv1.CloseBoxRequest{Name: c.Name}); err == nil {
+		t.Fatal("closing a workspace that isn't open succeeded")
+	}
+	out := logs.String()
+	for _, want := range []string{`msg=close box_id=box-0123abcd`, `msg="close failed" box_id=box-0123abcd`} {
+		if !strings.Contains(out, want) {
+			t.Errorf("the log lacks %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, s.env.Dir) {
+		t.Errorf("the log has a path:\n%s", out)
+	}
+	// Already closed while this close waited: entry only, no failure.
+	before := strings.Count(logs.String(), "close failed")
+	s.open[c.Name] = &openBox{closed: true}
+	if _, err := s.CloseBox(context.Background(), &daemonv1.CloseBoxRequest{Name: c.Name}); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Count(logs.String(), "close failed") != before {
+		t.Errorf("a close of an already-closed workspace logged a failure:\n%s", logs.String())
+	}
+}
+
+// While a Move To runs, CloseBox refuses plainly, with the refusal's
+// trailer, and closes nothing (R-0249): a close or a quit in the middle of
+// a move would race the move's own close and open.
+func TestCloseBoxRefusesDuringAMove(t *testing.T) {
+	s, logs := loggingServer(t)
+	c := local.BoxConfig{ID: "box-0123abcd", Name: "acme-api", Image: "img"}
+	if err := s.env.SaveBox(c); err != nil {
+		t.Fatal(err)
+	}
+	ob := &openBox{}
+	s.open[c.Name] = ob
+	done := s.moving(c.Name, "dev@test-server")
+	_, err := s.CloseBox(context.Background(), &daemonv1.CloseBoxRequest{Name: c.Name})
+	st, _ := status.FromError(err)
+	if st.Code() != codes.FailedPrecondition || st.Message() != "acme-api is moving to test-server. Close it once the move has finished." {
+		t.Fatalf("got %v", err)
+	}
+	if ob.closed || s.open[c.Name] != ob {
+		t.Error("the refused close closed the workspace")
+	}
+	if !strings.Contains(logs.String(), `msg="close refused" box_id=box-0123abcd`) {
+		t.Errorf("the refusal isn't in the log:\n%s", logs.String())
+	}
+	// The move over, a close goes ahead (here: already closed, so nothing to do).
+	done()
+	ob.closed = true
+	if _, err := s.CloseBox(context.Background(), &daemonv1.CloseBoxRequest{Name: c.Name}); err != nil {
+		t.Fatalf("after the move: %v", err)
+	}
+}

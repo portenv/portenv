@@ -13,9 +13,9 @@ final class CloseOrder: @unchecked Sendable {
     func add(_ event: String) { lock.withLock { _events.append(event) } }
 }
 
-/// Closing the last box window goes back to "Your boxes" instead of quitting
-/// (the owner, 2026-10-11). The box is closed, saved and released first,
-/// exactly as quitting does; ⌘Q still quits.
+/// Close Workspace (WindowClose.run): the workspace is closed, saved and
+/// released before the list shows it closed, asking on a failed save.
+/// Closing a window no longer closes it (ADR 0023: KeepRunningTests).
 struct WindowCloseTests {
     /// The data-loss path: the close (save and release) has finished before
     /// the list is shown.
@@ -142,14 +142,6 @@ struct WindowCloseTests {
         #expect(shown)
         #expect(cli.calls.isEmpty)
         #expect(order.events == ["list"])
-    }
-
-    /// Only the last window showing a box closes it; any other window (the
-    /// list, first run, or a second window on the same box) just closes.
-    @Test func onlyTheLastBoxWindowClosesTheBox() {
-        #expect(WindowClose.action(showingBox: true, otherBoxWindows: 0) == .closeBoxThenShowList)
-        #expect(WindowClose.action(showingBox: true, otherBoxWindows: 1) == .closeWindow)
-        #expect(WindowClose.action(showingBox: false, otherBoxWindows: 0) == .closeWindow)
     }
 
     /// File › Close acts on the key window, else the main window, else the

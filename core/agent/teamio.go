@@ -107,6 +107,16 @@ func checkBoardLine(l *agentv1.AppendBoardRequest) (file string, err error) {
 		if n := d.GetAnswerNote(); len(n) > maxBoardText || !plainText(n, true) {
 			return bad("an answer's note is at most 8 KB of plain text")
 		}
+		// An ask-owner's choices (CC-0501): none, or 2 to 4 one-line labels
+		// of at most 80 characters; the owner's choice counts from 1.
+		if c := d.GetChoices(); len(c) == 1 || len(c) > 4 || d.GetChoice() < 0 || int(d.GetChoice()) > len(c) {
+			return bad("a decision has 2 to 4 choices, or none, and a choice among them")
+		}
+		for _, c := range d.GetChoices() {
+			if strings.TrimSpace(c) == "" || utf8.RuneCountInString(c) > 80 || !plainText(c, false) {
+				return bad("a decision's choice is 1 to 80 characters of plain text on one line")
+			}
+		}
 		for _, p := range d.GetPackages() {
 			if !packageRE.MatchString(p.GetName()) || !plainText(p.GetVersion(), false) || !plainText(p.GetSource(), false) || len(p.GetVersion())+len(p.GetSource()) > 512 {
 				return bad("a decision's package list holds only package names, versions and sources")
@@ -300,8 +310,22 @@ func TeamIO(args []string, stdin io.Reader, stdout io.Writer) error {
 		}
 		return json.NewEncoder(stdout).Encode(files)
 	case "open-project":
-		// As work, from init at team start (ADR 0022 §2).
-		return openProject(context.Background(), dir, ExecRunner{}, fileProjectOps())
+		// As work, from init at team start (ADR 0022 §2a): one JSON line,
+		// what it found (and so didn't change).
+		if len(args) > 3 || (len(args) == 3 && args[2] != "look") {
+			return errors.New("open-project PROJECT [look]")
+		}
+		found, err := openProject(context.Background(), dir, ExecRunner{}, fileProjectOps(), len(args) == 3)
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(stdout).Encode(found)
+	case "clone-own":
+		// As the agent, through as-agent (ADR 0022 §2a point 2).
+		if len(args) != 5 {
+			return errors.New("clone-own PROJECT HOME ID QUOTA")
+		}
+		return cloneOwn(context.Background(), dir, args[2], args[3], args[4], homeGit(args[2]), stdout)
 	case "handoff-pack":
 		if len(args) != 3 {
 			return errors.New("handoff-pack BASE PATH")
@@ -322,6 +346,12 @@ func TeamIO(args []string, stdin io.Reader, stdout io.Writer) error {
 			return errors.New("read-home HOME PATH")
 		}
 		return homeRead(dir, args[2], stdout)
+	case "seed-home":
+		// As the agent, at its start (ADR 0022 §2).
+		if len(args) < 4 {
+			return errors.New("seed-home PROJECT HOME QUOTA PATH…")
+		}
+		return seedHome(dir, args[2], args[3], args[4:], stdout)
 	case "write-home":
 		if len(args) != 4 {
 			return errors.New("write-home HOME PATH QUOTA")

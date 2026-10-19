@@ -7,10 +7,13 @@ package agent
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 )
@@ -47,10 +50,69 @@ func runAsMainUser(ctx context.Context, cfg Config, args []string, stdin io.Read
 	return out, nil
 }
 
+// asAgentEnv is the fixed environment of team-io run as an agent.
+func asAgentEnv(home string) []string {
+	id := filepath.Base(home)
+	return []string{"HOME=" + home, "USER=" + id, "LOGNAME=" + id, "PATH=/usr/bin:/bin", "LANG=C.UTF-8"}
+}
+
+// asAgentCommand is "portenv-agent as-agent UID UID HOME -- team-io ARGS":
+// this binary switches to the agent (its group and team, no capabilities,
+// no_new_privs) and then runs the plain binary's team-io (RunAsAgent).
+// init (root) and the API process (cap_setuid, cap_setgid) can both run
+// it.
+func asAgentCommand(ctx context.Context, uid int, home string, args []string) (*exec.Cmd, error) {
+	if _, err := checkAsAgent(uid, uid, home); err != nil {
+		return nil, err
+	}
+	self, err := os.Executable()
+	if err != nil {
+		return nil, err
+	}
+	argv := append([]string{"as-agent", strconv.Itoa(uid), strconv.Itoa(uid), home, "--", "team-io"}, args...)
+	cmd := exec.CommandContext(ctx, self, argv...) // #nosec G204 -- this binary; arguments made by the caller and checked by as-agent
+	cmd.Dir = "/"
+	cmd.Env = asAgentEnv(home)
+	return cmd, nil
+}
+
+// runTeamIOAsAgent runs team-io as an agent and returns its output.
+func runTeamIOAsAgent(ctx context.Context, uid int, home string, args []string, stdin io.Reader) ([]byte, error) {
+	cmd, err := asAgentCommand(ctx, uid, home, args)
+	if err != nil {
+		return nil, err
+	}
+	if stdin != nil {
+		cmd.Stdin = stdin
+	}
+	var stderr strings.Builder
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	if err != nil {
+		if msg := strings.TrimSpace(stderr.String()); msg != "" {
+			msg = strings.TrimPrefix(strings.TrimPrefix(msg, "portenv-agent: "), "portenv-agent as-agent: ")
+			return nil, errors.New(strings.Join(strings.Fields(strings.ReplaceAll(msg, "\n", " · ")), " "))
+		}
+		return nil, fmt.Errorf("%s: %w", args[0], err)
+	}
+	return out, nil
+}
+
 // runAsAgent runs the plain portenv-agent binary as an agent's uid (its
 // own group only), for the Agent files view. Outside the API process it
 // runs local in this process.
 func runAsAgent(ctx context.Context, uid int, args []string, stdin io.Reader, local func(io.Writer) error) ([]byte, error) {
+	return runAsAgentWith(ctx, uid, false, args, stdin, local)
+}
+
+// runAsAgentInTeam is runAsAgent with the team group too, as the agent's
+// own sessions have it: for reading the project, which the team reads
+// through its ACL (home_seed, ADR 0022 §2).
+func runAsAgentInTeam(ctx context.Context, uid int, args []string, stdin io.Reader, local func(io.Writer) error) ([]byte, error) {
+	return runAsAgentWith(ctx, uid, true, args, stdin, local)
+}
+
+func runAsAgentWith(ctx context.Context, uid int, team bool, args []string, stdin io.Reader, local func(io.Writer) error) ([]byte, error) {
 	if _, err := os.Stat(ServeBinary); err != nil || os.Getuid() != ServeUID {
 		var out bytes.Buffer
 		err := local(&out)
@@ -65,7 +127,11 @@ func runAsAgent(ctx context.Context, uid int, args []string, stdin io.Reader, lo
 	cmd := exec.CommandContext(ctx, PlainBinary, args...) // #nosec G204 -- fixed binary; arguments made by the API process
 	cmd.Env = []string{"PATH=/usr/bin:/bin"}
 	u := uint32(uid) // #nosec G115 -- an agent's uid, 2001..2008
-	cmd.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: u, Gid: u, Groups: []uint32{u}}}
+	groups := []uint32{u}
+	if team {
+		groups = append(groups, TeamGID)
+	}
+	cmd.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: u, Gid: u, Groups: groups}}
 	if stdin != nil {
 		cmd.Stdin = stdin
 	}

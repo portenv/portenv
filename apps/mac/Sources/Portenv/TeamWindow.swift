@@ -56,11 +56,14 @@ private struct SidebarMenuItem: View {
 
 /// The selected agent's column, in the inspector's place (R-0240, the
 /// team-agent-selected mockup): who it runs as, its messages with you as
-/// plain text, what it asks you, then its file to approve and Start
-/// (R-0285). Message and its files come with the column's next part.
+/// plain text, what it asks you, its Team section (every other message
+/// it sent or received, collapsed by default, R-0313), then its file to
+/// approve and Start (R-0285), and the field to message it (R-0314).
 struct TeamColumn: View {
     let agent: TeamAgent
     @Bindable var team: TeamController
+    /// The Team section, collapsed until the owner opens it.
+    @State private var teamOpen = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -74,6 +77,12 @@ struct TeamColumn: View {
                         Text(verbatim: routines).font(.system(size: 11)).foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
+                    // A shared sign-in its file asks for, which this build
+                    // doesn't do (R-0323).
+                    if !agent.shareLoginOff.isEmpty {
+                        Text(verbatim: agent.shareLoginOff).font(.system(size: 11)).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
             }
             .padding(.horizontal, 14).padding(.vertical, 10)
@@ -82,6 +91,8 @@ struct TeamColumn: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 10) {
+                        Text(TeamMessageText.messagesWithYou).font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
+                            .accessibilityAddTraits(.isHeader)
                         ForEach(team.state.conversation(with: agent.id)) { m in
                             TeamMessageRow(message: m, sender: team.state.agent(m.from), team: team.state.agents)
                                 .id(m.id)
@@ -91,11 +102,14 @@ struct TeamColumn: View {
                         // (GUIDELINES 6.2). Inside the scroll: a long card
                         // never sets the column's (and window's) height.
                         ForEach(team.decisions(for: agent.id)) { d in
-                            DecisionCard(decision: d, asker: TeamText.asker(d, team: team.state.agents)) { approve, note in
+                            DecisionCard(decision: d, asker: TeamText.asker(d, team: team.state.agents),
+                                         choose: { i in Task { await team.choose(d, index: i) } }) { approve, note in
                                 Task { await team.answer(d, approve: approve, note: note) }
                             }
                             .id(d.id)
                         }
+                        Divider()
+                        TeamSection(messages: team.state.teamMessages(of: agent.id), team: team.state.agents, open: $teamOpen)
                     }
                     .padding(14)
                 }
@@ -108,6 +122,10 @@ struct TeamColumn: View {
             ScrollView { TeamControls(agent: agent, team: team) }
                 .frame(maxHeight: agent.approved ? 120 : 460)
                 .fixedSize(horizontal: false, vertical: agent.approved)
+            if agent.status != .invalid {
+                Divider()
+                MessageComposer(agent: agent, team: team)
+            }
         }
         .frame(maxHeight: .infinity, alignment: .top)
     }

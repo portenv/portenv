@@ -519,10 +519,18 @@ message StartTeamAgentRequest {
   // when it matches, with no question on screen, 5 s of quiet and not the
   // alternate screen. Empty: routines are off for this runner (R-0258).
   string idle_pattern = 6;
+  // Where the runner reads user-level instructions, under its home, from
+  // portenvd's runner table (R-0327): ".claude/CLAUDE.md" or
+  // ".codex/AGENTS.md". init writes a fixed start pointer there, root's
+  // and 0444, and keeps a file the agent wrote. Empty: none.
+  string instructions_file = 7;
 }
 
 message StartTeamAgentResponse {
   repeated portenv.types.v1.Tab tabs = 1;
+  // Why the start pointer isn't in place (the agent's own file is
+  // there), as a plain line; empty when it's written or none was asked.
+  string pointer_kept = 2;
 }
 
 message StopTeamAgentRequest {
@@ -574,6 +582,10 @@ message WriteHomeFilesResponse {
 
 message EnsureAgentUserRequest {
   string agent_id = 1;
+  // Also write the agent's start pointer at this path under its home
+  // (R-0327): one of the runner files init knows, with fixed text naming
+  // the agent; init refuses any other path. Empty: none.
+  string instructions_file = 2;
 }
 
 message EnsureAgentUserResponse {
@@ -589,6 +601,10 @@ message EnsureAgentUserResponse {
   string run_dir = 4;
   string tmux_dir = 5;
   string tmp_dir = 6;
+  // Why init left instructions_file alone (a file the agent made, or a
+  // folder that isn't its own), as a plain line; empty when the pointer
+  // is in place or none was asked.
+  string pointer_kept = 7;
 }
 
 message RemoveAgentUserRequest {

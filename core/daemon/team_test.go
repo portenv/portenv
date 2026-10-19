@@ -44,6 +44,9 @@ type fakeTeamHelper struct {
 	fixed      []string
 	listed     []*agentv1.ListHomeFilesRequest
 	written    []*agentv1.WriteHomeFilesRequest
+	// pointerKept is init's line when the agent's own file holds the
+	// start pointer's place (R-0327).
+	pointerKept string
 }
 
 func (f *fakeTeamHelper) AppendBoard(_ context.Context, in *agentv1.AppendBoardRequest, _ ...grpc.CallOption) (*agentv1.AppendBoardResponse, error) {
@@ -71,7 +74,7 @@ func (f *fakeTeamHelper) StartTeamAgent(_ context.Context, in *agentv1.StartTeam
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.started = append(f.started, in)
-	return &agentv1.StartTeamAgentResponse{Tabs: []*typesv1.Tab{{Id: in.GetAgentId() + ":@1", AgentId: in.GetAgentId(), PaneIds: []string{"%1"}}}}, nil
+	return &agentv1.StartTeamAgentResponse{Tabs: []*typesv1.Tab{{Id: in.GetAgentId() + ":@1", AgentId: in.GetAgentId(), PaneIds: []string{"%1"}}}, PointerKept: f.pointerKept}, nil
 }
 
 func (f *fakeTeamHelper) StopTeamAgent(_ context.Context, in *agentv1.StopTeamAgentRequest, _ ...grpc.CallOption) (*agentv1.StopTeamAgentResponse, error) {

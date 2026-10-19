@@ -99,6 +99,7 @@ func NewGuide() Guide {
 			"Only the owner answers decisions, in Portenv. A decision you asked for is pending until then.",
 			"You reach only your own terminals and files. Opening a pane in the owner's window goes through portenv split or portenv tab new, and your grant.",
 			"Run portenv whoami for what you can do now.",
+			"At each start Portenv writes a read-only pointer where your runner reads user instructions (~/.claude/CLAUDE.md for Claude Code, ~/.codex/AGENTS.md for Codex): run portenv whoami and portenv guide first, check portenv inbox after each step, and read ~/AGENTS.md. A file you made there is kept and never replaced.",
 		},
 		Etiquette: []string{
 			"One topic per thread; reply in the thread (--thread).",

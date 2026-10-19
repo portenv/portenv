@@ -17,6 +17,8 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+
+	"github.com/portenv/portenv/core/internal/teamkit"
 )
 
 // Agent users (ADR 0022 §1): each team agent is a user of the workspace,
@@ -69,6 +71,9 @@ type AgentUser struct {
 	// folders in it that are its own (§1), made by Ensure as root. Empty
 	// where TeamUsers has no RunDir.
 	RunDir, TmuxDir, TmpDir string
+	// PointerKept is why init left the start pointer's path alone (R-0327),
+	// or "" when it's in place or none was asked.
+	PointerKept string
 }
 
 // TeamUsers makes, removes and restores agent users. Its methods are safe
@@ -93,6 +98,11 @@ type TeamUsers struct {
 	groupOf   func(string) int
 	// ownerOf reads a path's owner (a fake in tests).
 	ownerOf func(string) int
+	// pointerRoot owns the agents' start pointers (0; the test's uid in
+	// tests), and pointerOwner reads an open file's owner (a fake in
+	// tests; nil: its Stat_t).
+	pointerRoot  int
+	pointerOwner func(f *os.File, fi os.FileInfo) int
 }
 
 type agentUserRecord struct {
@@ -189,6 +199,33 @@ func (t *TeamUsers) Ensure(ctx context.Context, id string) (AgentUser, error) {
 		u.TmuxDir, u.TmpDir = filepath.Join(u.RunDir, "tmux"), filepath.Join(u.RunDir, "tmp")
 	}
 	return u, nil
+}
+
+// WritePointer writes the agent's start pointer (R-0327) at rel in its
+// home, one of teamkit.PointerFiles, with teamkit.PointerText: fixed
+// text, root's and 0444. It returns "" when the pointer is in place, or a
+// plain line saying why it left the path alone (the agent's own file is
+// never replaced). Ensure runs first, at the same start.
+func (t *TeamUsers) WritePointer(id, rel string) (string, error) {
+	if err := CheckAgentID(id, t.Cfg.User); err != nil {
+		return "", err
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	store, err := t.load()
+	if err != nil {
+		return "", err
+	}
+	rec := store.find(id)
+	if rec == nil || rec.Removed {
+		return "", fmt.Errorf("%s: %w", id, ErrNoAgent)
+	}
+	fchown := t.fchown
+	if fchown == nil {
+		fchown = func(f *os.File, uid, gid int) error { return f.Chown(uid, gid) }
+	}
+	w := pointerWriter{rootUID: t.pointerRoot, agentUID: rec.UID, fchown: fchown, owner: t.pointerOwner}
+	return w.write(t.home(id), rel, teamkit.PointerText(id, rel))
 }
 
 // Remove takes the agent's user and group out. Its home and uid stay,

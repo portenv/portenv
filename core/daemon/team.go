@@ -695,6 +695,9 @@ func (e *teamEngine) startAgentAs(ctx context.Context, name, agentID string, app
 		HomeSeed:       a.Spec.HomeSeed,
 		HomeQuotaBytes: defaultHomeQuota,
 		IdlePattern:    runnerIdlePattern(a.Runner),
+		// Where its runner reads user instructions (R-0327): init writes
+		// the start pointer there.
+		InstructionsFile: runnerInstructionsFile(a.Runner),
 	})
 	if err != nil {
 		b.states[agentID] = typesv1.AgentState_AGENT_STATE_STOPPED
@@ -702,6 +705,11 @@ func (e *teamEngine) startAgentAs(ctx context.Context, name, agentID string, app
 	}
 	b.states[agentID] = typesv1.AgentState_AGENT_STATE_RUNNING
 	delete(b.startErr, agentID)
+	// The agent's own file is where the pointer would go: kept, and the
+	// owner told, in its column (R-0327).
+	if kept := r.GetPointerKept(); kept != "" {
+		e.noticeAboutLocked(ctx, name, b, boardOwner, "", agentID, agentID+": "+kept+" Its AGENTS.md still says to run portenv guide.")
+	}
 	b.routines[agentID] = nil
 	idle := runnerIdlePattern(a.Runner)
 	delete(b.routinesOff, agentID)

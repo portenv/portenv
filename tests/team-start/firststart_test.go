@@ -10,8 +10,10 @@
 //  3. start lead (StartAgent), which asks the team's first-start decision
 //     (TEAM_START) naming lead; approved, portenvd starts lead itself,
 //     with no second StartAgent, and a second Start is a no-op; its runner
-//     is "bash <script>", a script in the project;
-//  4. whoami in lead's pane says lead;
+//     is a stand-in for Claude Code, a script named claude in the project;
+//  4. whoami in lead's pane says lead; its start pointer (R-0327) is in
+//     ~/.claude/CLAUDE.md, root's and 0444, and the stand-in's first
+//     command, read from it, runs portenv guide;
 //  5. the script's "portenv ask-owner", over lead's own socket, reaches
 //     portenvd's decision list (the WatchTeam stream the app reads);
 //  6. lead makes a file in the project and runs git there, so the file and
@@ -54,6 +56,7 @@ const (
 	project   = "/home/work/" + workspace
 	script    = project + "/first-start.sh"
 	script2   = project + "/second-start.sh"
+	standIn   = project + "/stand-in/claude"
 	question  = "R-0296 first start: may lead begin?"
 )
 
@@ -66,6 +69,24 @@ else
   echo "first-start ask-owner failed: $out"
 fi
 exec sleep 1000000
+`
+
+// claudeStandIn is lead's runner, named claude so portenvd's runner table
+// treats it as Claude Code (R-0327): it reads ~/.claude/CLAUDE.md, as
+// Claude Code does, runs the commands the pointer says to run first, then
+// lead's first-start script.
+const claudeStandIn = `#!/bin/bash
+f="$HOME/.claude/CLAUDE.md"
+echo "stand-in pointer: $(stat -c '%U:%G %a' "$f" 2>&1)"
+line=$(grep -m1 '^You are ' "$f" | tr '\140' '|')
+cmd="$(echo "$line" | cut -d'|' -f2) && $(echo "$line" | cut -d'|' -f4)"
+echo "stand-in first command: $cmd"
+if out=$(bash -c "$cmd" 2>&1); then
+  echo "stand-in guide: $(printf '%s\n' "$out" | grep -m1 'guide for agents')"
+else
+  echo "stand-in first command failed: $out"
+fi
+exec bash ` + script + `
 `
 
 // secondStart is builder's runner.
@@ -152,13 +173,16 @@ cat > %[2]s <<'EOF'
 %[3]sEOF
 cat > %[4]s <<'EOF'
 %[5]sEOF
-chmod 0755 %[2]s %[4]s
-sed -i 's|^runner: .*$|runner: bash %[2]s|' .portenv/agents/lead.md
-grep -q '^runner: bash %[2]s$' .portenv/agents/lead.md
+mkdir -p "$(dirname %[6]s)"
+cat > %[6]s <<'EOF'
+%[7]sEOF
+chmod 0755 %[2]s %[4]s %[6]s
+sed -i 's|^runner: .*$|runner: %[6]s|' .portenv/agents/lead.md
+grep -q '^runner: %[6]s$' .portenv/agents/lead.md
 sed -i 's|^runner: .*$|runner: bash %[4]s|' .portenv/agents/builder.md
 grep -q '^runner: bash %[4]s$' .portenv/agents/builder.md
 git add -A
-git -c user.name=Owner -c user.email=owner@example.invalid commit -q -m "first commit"`, project, script, firstStart, script2, secondStart))
+git -c user.name=Owner -c user.email=owner@example.invalid commit -q -m "first commit"`, project, script, firstStart, script2, secondStart, standIn, claudeStandIn))
 	if code != 0 {
 		h.fatal("step 1 (portenv team init in %s): exit %d: %s", project, code, out)
 	}
@@ -166,8 +190,8 @@ git -c user.name=Owner -c user.email=owner@example.invalid commit -q -m "first c
 
 	// Step 2: approve lead, with the sha the app shows.
 	lead := h.agent(ctx, c, "lead")
-	if lead.GetRunner() != "bash "+script {
-		h.fatal("step 2: lead's runner is %q, not the script", lead.GetRunner())
+	if lead.GetRunner() != standIn {
+		h.fatal("step 2: lead's runner is %q, not the stand-in", lead.GetRunner())
 	}
 	ar, err := c.ApproveAgentFile(ctx, &daemonv1.ApproveAgentFileRequest{Name: workspace, AgentId: "lead", FileSha256: lead.GetFileSha256()})
 	if err != nil {
@@ -228,6 +252,7 @@ ps -o user= -p "$(tmux -S "$sock" display-message -p -t main '#{pane_pid}')"`)
 		h.fatal("step 4: lead's pane process isn't lead's: exit %d: %s", code, out)
 	}
 	t.Log("step 4: whoami in lead's pane is lead")
+	h.checkStartPointer(ctx, pane)
 
 	// Step 5: lead's ask-owner is in the decision list, pending, and the
 	// pane names the same decision.
@@ -313,6 +338,40 @@ true`, project))
 		h.fatal("step 8: builder should read .git/config and write neither it nor .git/hooks: exit %d: %s", code, out)
 	}
 	t.Log("step 8: builder ran git in the project and the worktree; .git/config and .git/hooks are read-only to it")
+}
+
+// checkStartPointer is step 4's second half (R-0327): lead's start
+// pointer is where Claude Code reads user instructions, root's and 0444 in
+// lead's own 0700 folder, with Portenv's fixed text; lead can't edit it in
+// place; and the stand-in's first command, read from it, ran portenv guide.
+func (h *harness) checkStartPointer(ctx context.Context, pane string) {
+	h.t.Helper()
+	want := "<!-- Portenv writes this file at each start, read-only. Your own notes go elsewhere. -->\n\n" +
+		"You are lead in a Portenv team. Run `portenv whoami` and `portenv guide` first. Check `portenv inbox` after each step.\n\n" +
+		"Your instructions from the team's agent file are in ~/AGENTS.md:\n\n@~/AGENTS.md"
+	out, code := h.box(ctx, "root", `stat -c '%U:%G %a %n' /home/lead/.claude /home/lead/.claude/CLAUDE.md`)
+	if code != 0 || !strings.Contains(out, "lead:lead 700 /home/lead/.claude\n") || !strings.Contains(out, "root:root 444 /home/lead/.claude/CLAUDE.md") {
+		h.fatal("step 4: lead's pointer isn't root's 0444 file in its own 0700 ~/.claude: exit %d: %s", code, out)
+	}
+	if out, code = h.box(ctx, "root", `cat /home/lead/.claude/CLAUDE.md`); code != 0 || out != want {
+		h.fatal("step 4: lead's pointer: exit %d:\n%s\nwant:\n%s", code, out, want)
+	}
+	out, _ = h.box(ctx, "lead", `{ echo "# lead" >> ~/.claude/CLAUDE.md; } 2>/dev/null && echo "WROTE the pointer"
+chmod u+w ~/.claude/CLAUDE.md 2>/dev/null && echo "CHMODDED the pointer"
+true`)
+	if strings.Contains(out, "WROTE") || strings.Contains(out, "CHMODDED") {
+		h.fatal("step 4: lead could edit its pointer in place: %s", out)
+	}
+	for _, line := range []string{
+		"stand-in pointer: root:root 444",
+		"stand-in first command: portenv whoami && portenv guide",
+		"stand-in guide: Portenv's guide for agents",
+	} {
+		if !strings.Contains(pane, line) {
+			h.fatal("step 4: lead's pane doesn't show %q:\n%s", line, pane)
+		}
+	}
+	h.t.Log("step 4: lead's start pointer is root's 0444 ~/.claude/CLAUDE.md, and its first command ran portenv whoami && portenv guide")
 }
 
 // waitRunning waits for portenvd to list the agent as running (or needing

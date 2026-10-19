@@ -3384,9 +3384,14 @@ type StartTeamAgentRequest struct {
 	// last line) from portenvd's runner table: DeliverRoutine types only
 	// when it matches, with no question on screen, 5 s of quiet and not the
 	// alternate screen. Empty: routines are off for this runner (R-0258).
-	IdlePattern   string `protobuf:"bytes,6,opt,name=idle_pattern,json=idlePattern,proto3" json:"idle_pattern,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	IdlePattern string `protobuf:"bytes,6,opt,name=idle_pattern,json=idlePattern,proto3" json:"idle_pattern,omitempty"`
+	// Where the runner reads user-level instructions, under its home, from
+	// portenvd's runner table (R-0327): ".claude/CLAUDE.md" or
+	// ".codex/AGENTS.md". init writes a fixed start pointer there, root's
+	// and 0444, and keeps a file the agent wrote. Empty: none.
+	InstructionsFile string `protobuf:"bytes,7,opt,name=instructions_file,json=instructionsFile,proto3" json:"instructions_file,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *StartTeamAgentRequest) Reset() {
@@ -3461,9 +3466,19 @@ func (x *StartTeamAgentRequest) GetIdlePattern() string {
 	return ""
 }
 
+func (x *StartTeamAgentRequest) GetInstructionsFile() string {
+	if x != nil {
+		return x.InstructionsFile
+	}
+	return ""
+}
+
 type StartTeamAgentResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Tabs          []*v1.Tab              `protobuf:"bytes,1,rep,name=tabs,proto3" json:"tabs,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Tabs  []*v1.Tab              `protobuf:"bytes,1,rep,name=tabs,proto3" json:"tabs,omitempty"`
+	// Why the start pointer isn't in place (the agent's own file is
+	// there), as a plain line; empty when it's written or none was asked.
+	PointerKept   string `protobuf:"bytes,2,opt,name=pointer_kept,json=pointerKept,proto3" json:"pointer_kept,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3503,6 +3518,13 @@ func (x *StartTeamAgentResponse) GetTabs() []*v1.Tab {
 		return x.Tabs
 	}
 	return nil
+}
+
+func (x *StartTeamAgentResponse) GetPointerKept() string {
+	if x != nil {
+		return x.PointerKept
+	}
+	return ""
 }
 
 type StopTeamAgentRequest struct {
@@ -4025,10 +4047,14 @@ func (x *WriteHomeFilesResponse) GetAdded() []*v1.AgentFile {
 }
 
 type EnsureAgentUserRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	AgentId       string                 `protobuf:"bytes,1,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	AgentId string                 `protobuf:"bytes,1,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
+	// Also write the agent's start pointer at this path under its home
+	// (R-0327): one of the runner files init knows, with fixed text naming
+	// the agent; init refuses any other path. Empty: none.
+	InstructionsFile string `protobuf:"bytes,2,opt,name=instructions_file,json=instructionsFile,proto3" json:"instructions_file,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *EnsureAgentUserRequest) Reset() {
@@ -4068,6 +4094,13 @@ func (x *EnsureAgentUserRequest) GetAgentId() string {
 	return ""
 }
 
+func (x *EnsureAgentUserRequest) GetInstructionsFile() string {
+	if x != nil {
+		return x.InstructionsFile
+	}
+	return ""
+}
+
 type EnsureAgentUserResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Uid   uint32                 `protobuf:"varint,1,opt,name=uid,proto3" json:"uid,omitempty"`
@@ -4079,9 +4112,13 @@ type EnsureAgentUserResponse struct {
 	// tmux_dir and tmp_dir in it (the agent's, 0700), at every call, since
 	// /run is lost when the box stops. The helper listens on
 	// run_dir/portenv.sock.
-	RunDir        string `protobuf:"bytes,4,opt,name=run_dir,json=runDir,proto3" json:"run_dir,omitempty"`
-	TmuxDir       string `protobuf:"bytes,5,opt,name=tmux_dir,json=tmuxDir,proto3" json:"tmux_dir,omitempty"`
-	TmpDir        string `protobuf:"bytes,6,opt,name=tmp_dir,json=tmpDir,proto3" json:"tmp_dir,omitempty"`
+	RunDir  string `protobuf:"bytes,4,opt,name=run_dir,json=runDir,proto3" json:"run_dir,omitempty"`
+	TmuxDir string `protobuf:"bytes,5,opt,name=tmux_dir,json=tmuxDir,proto3" json:"tmux_dir,omitempty"`
+	TmpDir  string `protobuf:"bytes,6,opt,name=tmp_dir,json=tmpDir,proto3" json:"tmp_dir,omitempty"`
+	// Why init left instructions_file alone (a file the agent made, or a
+	// folder that isn't its own), as a plain line; empty when the pointer
+	// is in place or none was asked.
+	PointerKept   string `protobuf:"bytes,7,opt,name=pointer_kept,json=pointerKept,proto3" json:"pointer_kept,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4154,6 +4191,13 @@ func (x *EnsureAgentUserResponse) GetTmuxDir() string {
 func (x *EnsureAgentUserResponse) GetTmpDir() string {
 	if x != nil {
 		return x.TmpDir
+	}
+	return ""
+}
+
+func (x *EnsureAgentUserResponse) GetPointerKept() string {
+	if x != nil {
+		return x.PointerKept
 	}
 	return ""
 }
@@ -5662,16 +5706,18 @@ const file_portenv_agent_v1_agent_proto_rawDesc = "" +
 	"\x05state\x18\x04 \x01(\x0e2\x1c.portenv.types.v1.AgentStateR\x05state\x125\n" +
 	"\x06status\x18\x05 \x01(\v2\x1d.portenv.types.v1.AgentStatusR\x06status\x12+\n" +
 	"\x11pending_decisions\x18\x06 \x01(\x05R\x10pendingDecisions\x12!\n" +
-	"\fidle_seconds\x18\a \x01(\x03R\vidleSeconds\"\xcd\x01\n" +
+	"\fidle_seconds\x18\a \x01(\x03R\vidleSeconds\"\xfa\x01\n" +
 	"\x15StartTeamAgentRequest\x12\x19\n" +
 	"\bagent_id\x18\x01 \x01(\tR\aagentId\x12\x12\n" +
 	"\x04argv\x18\x02 \x03(\tR\x04argv\x12\x1b\n" +
 	"\tagents_md\x18\x03 \x01(\tR\bagentsMd\x12\x1b\n" +
 	"\thome_seed\x18\x04 \x03(\tR\bhomeSeed\x12(\n" +
 	"\x10home_quota_bytes\x18\x05 \x01(\x03R\x0ehomeQuotaBytes\x12!\n" +
-	"\fidle_pattern\x18\x06 \x01(\tR\vidlePattern\"C\n" +
+	"\fidle_pattern\x18\x06 \x01(\tR\vidlePattern\x12+\n" +
+	"\x11instructions_file\x18\a \x01(\tR\x10instructionsFile\"f\n" +
 	"\x16StartTeamAgentResponse\x12)\n" +
-	"\x04tabs\x18\x01 \x03(\v2\x15.portenv.types.v1.TabR\x04tabs\"1\n" +
+	"\x04tabs\x18\x01 \x03(\v2\x15.portenv.types.v1.TabR\x04tabs\x12!\n" +
+	"\fpointer_kept\x18\x02 \x01(\tR\vpointerKept\"1\n" +
 	"\x14StopTeamAgentRequest\x12\x19\n" +
 	"\bagent_id\x18\x01 \x01(\tR\aagentId\"\x17\n" +
 	"\x15StopTeamAgentResponse\"\x92\x01\n" +
@@ -5699,16 +5745,18 @@ const file_portenv_agent_v1_agent_proto_rawDesc = "" +
 	"\x04data\x18\x04 \x01(\fR\x04data\x12\x12\n" +
 	"\x04last\x18\x05 \x01(\bR\x04last\"K\n" +
 	"\x16WriteHomeFilesResponse\x121\n" +
-	"\x05added\x18\x01 \x03(\v2\x1b.portenv.types.v1.AgentFileR\x05added\"3\n" +
+	"\x05added\x18\x01 \x03(\v2\x1b.portenv.types.v1.AgentFileR\x05added\"`\n" +
 	"\x16EnsureAgentUserRequest\x12\x19\n" +
-	"\bagent_id\x18\x01 \x01(\tR\aagentId\"\xa6\x01\n" +
+	"\bagent_id\x18\x01 \x01(\tR\aagentId\x12+\n" +
+	"\x11instructions_file\x18\x02 \x01(\tR\x10instructionsFile\"\xc9\x01\n" +
 	"\x17EnsureAgentUserResponse\x12\x10\n" +
 	"\x03uid\x18\x01 \x01(\rR\x03uid\x12\x12\n" +
 	"\x04home\x18\x02 \x01(\tR\x04home\x12\x18\n" +
 	"\acreated\x18\x03 \x01(\bR\acreated\x12\x17\n" +
 	"\arun_dir\x18\x04 \x01(\tR\x06runDir\x12\x19\n" +
 	"\btmux_dir\x18\x05 \x01(\tR\atmuxDir\x12\x17\n" +
-	"\atmp_dir\x18\x06 \x01(\tR\x06tmpDir\"V\n" +
+	"\atmp_dir\x18\x06 \x01(\tR\x06tmpDir\x12!\n" +
+	"\fpointer_kept\x18\a \x01(\tR\vpointerKept\"V\n" +
 	"\x16RemoveAgentUserRequest\x12\x19\n" +
 	"\bagent_id\x18\x01 \x01(\tR\aagentId\x12!\n" +
 	"\fdelete_files\x18\x02 \x01(\bR\vdeleteFiles\"\x19\n" +

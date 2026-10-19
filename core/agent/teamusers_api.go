@@ -9,6 +9,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/portenv/portenv/core/internal/teamkit"
 	agentv1 "github.com/portenv/portenv/proto/gen/go/portenv/agent/v1"
 )
 
@@ -24,9 +25,21 @@ func (s *server) EnsureAgentUser(ctx context.Context, req *agentv1.EnsureAgentUs
 	if err != nil {
 		return nil, teamStatus(err)
 	}
+	// The start pointer (R-0327), at every start: init checks the path
+	// against the runner files it knows and writes only fixed text.
+	var kept string
+	if f := req.GetInstructionsFile(); f != "" {
+		if !teamkit.IsPointerFile(f) {
+			return nil, status.Errorf(codes.InvalidArgument, "%q isn't a file Portenv writes for a runner", f)
+		}
+		if kept, err = s.team.WritePointer(req.GetAgentId(), f); err != nil {
+			return nil, status.Errorf(codes.FailedPrecondition, "%s's start pointer: %v", req.GetAgentId(), err)
+		}
+	}
 	return &agentv1.EnsureAgentUserResponse{
 		Uid: uint32(u.UID), Home: u.Home, Created: u.Created, // #nosec G115 -- 2001..2008
 		RunDir: u.RunDir, TmuxDir: u.TmuxDir, TmpDir: u.TmpDir,
+		PointerKept: kept,
 	}, nil
 }
 

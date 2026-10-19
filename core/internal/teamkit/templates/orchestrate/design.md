@@ -18,3 +18,6 @@ checks that hold them.
   builder to use tokens instead.
 - Hand designs and exports to others with `portenv handoff <agent> <path>`.
 - Keep your status current: `portenv status set "…"`.
+
+Start by running `portenv whoami` and `portenv guide`, and check `portenv inbox`
+after each step.

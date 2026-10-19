@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"unicode/utf8"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -49,9 +50,7 @@ type gitFunc func(ctx context.Context, dir string, args ...string) ([]byte, erro
 // home's environment only: no terminal, no inherited variables.
 func homeGit(home string) gitFunc {
 	return func(ctx context.Context, dir string, args ...string) ([]byte, error) {
-		cmd := exec.CommandContext(ctx, agentGitPath, args...) // #nosec G204 -- git by its path; arguments made here
-		cmd.Dir = dir
-		cmd.Env = []string{"HOME=" + home, "PATH=/usr/bin:/bin", "LANG=C.UTF-8", "LC_ALL=C", "GIT_TERMINAL_PROMPT=0"}
+		cmd := gitCommand(ctx, home, dir, args...)
 		var out bytes.Buffer
 		cmd.Stdout, cmd.Stderr = &out, &out
 		err := cmd.Run()
@@ -59,16 +58,39 @@ func homeGit(home string) gitFunc {
 	}
 }
 
+// gitCommand is git by its absolute path in dir, with home's fixed
+// environment and no terminal (stdin is /dev/null).
+func gitCommand(ctx context.Context, home, dir string, args ...string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, agentGitPath, args...) // #nosec G204 -- git by its path; arguments made here
+	cmd.Dir = dir
+	cmd.Env = gitEnv(home)
+	return cmd
+}
+
+// AgentGitIdentity is the git identity of an agent's clone (R-0328):
+// "<name> (Portenv agent)" and <id>@agents.portenv.invalid. The .invalid
+// top-level domain is reserved (RFC 2606, RFC 6761) and never resolves, so
+// no mail can reach anyone by mistake, and the id is unique in the
+// workspace. A name that isn't plain text, or is over 40 characters, gives
+// way to the id.
+func AgentGitIdentity(id, name string) (string, string) {
+	if name == "" || !plainText(name, false) || utf8.RuneCountInString(name) > 40 {
+		name = id
+	}
+	return name + " (Portenv agent)", id + "@agents.portenv.invalid"
+}
+
 // AgentBranch is an agent's branch in its clone.
 func AgentBranch(id string) string { return "agent/" + id }
 
-// cloneOwn is team-io clone-own PROJECT HOME ID QUOTA, run as the agent:
+// cloneOwn is team-io clone-own PROJECT HOME ID QUOTA NAME, run as the
+// agent (NAME, its display name, gives the clone its git identity):
 // if HOME/<project's name> is missing, it clones the project there (a
 // full copy, --no-hardlinks, remote "owner") and switches to agent/<ID>,
 // from the owner's agent/<ID> if the project has one, else from the
 // owner's current branch. A project bigger than the agent's free space is
 // refused with a plain line. An existing folder there is left as it is.
-func cloneOwn(ctx context.Context, project, home, id, quota string, git gitFunc, w io.Writer) error {
+func cloneOwn(ctx context.Context, project, home, id, quota, agentName string, git gitFunc, w io.Writer) error {
 	name := filepath.Base(project)
 	switch {
 	case !filepath.IsAbs(project) || filepath.Clean(project) != project || name == "" || strings.HasPrefix(name, "."):
@@ -136,6 +158,14 @@ func cloneOwn(ctx context.Context, project, home, id, quota string, git gitFunc,
 	if err != nil {
 		_ = os.RemoveAll(tmp)
 		return cmdError("make "+branch+" in "+id+"'s copy", out, err)
+	}
+	// Its commits say whose they are (R-0328), in the clone's own config.
+	userName, userEmail := AgentGitIdentity(id, agentName)
+	for _, kv := range [][2]string{{"user.name", userName}, {"user.email", userEmail}} {
+		if out, err := git(ctx, tmp, "config", "--local", kv[0], kv[1]); err != nil {
+			_ = os.RemoveAll(tmp)
+			return cmdError("set "+id+"'s git identity", out, err)
+		}
 	}
 	if err := os.Rename(tmp, dest); err != nil {
 		_ = os.RemoveAll(tmp)
@@ -211,7 +241,7 @@ func (s *apiServer) projectName(projectDir string) (string, error) {
 
 // ensureClone makes the agent's clone if it's missing, as the agent, and
 // returns its folder (ADR 0022 §2a point 2).
-func (s *apiServer) ensureClone(ctx context.Context, id string, u AgentUser, projectDir string, quota int64) (string, error) {
+func (s *apiServer) ensureClone(ctx context.Context, id, agentName string, u AgentUser, projectDir string, quota int64) (string, error) {
 	name, err := s.projectName(projectDir)
 	if err != nil {
 		return "", status.Error(codes.InvalidArgument, err.Error())
@@ -220,7 +250,7 @@ func (s *apiServer) ensureClone(ctx context.Context, id string, u AgentUser, pro
 		return "", status.Error(codes.InvalidArgument, "no home quota given")
 	}
 	project := filepath.Join(s.cfg.HomeRoot, s.cfg.User, name)
-	out, err := s.teamIOAsAgent(ctx, u.UID, u.Home, []string{"clone-own", project, u.Home, id, strconv.FormatInt(quota, 10)}, nil)
+	out, err := s.teamIOAsAgent(ctx, u.UID, u.Home, []string{"clone-own", project, u.Home, id, strconv.FormatInt(quota, 10), agentName}, nil)
 	if err != nil {
 		return "", status.Error(codes.FailedPrecondition, err.Error())
 	}

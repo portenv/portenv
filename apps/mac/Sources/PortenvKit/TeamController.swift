@@ -73,11 +73,26 @@ public final class TeamController {
         guard decision.answerable else { return }
         await perform {
             let d = try await self.daemon.answerDecision(self.box, id: decision.id, approve: approve, note: note)
-            self.state.apply(.decision(d))
-            if self.selection == .decision(d.id), !d.answerable {
-                let next = d.state == .approved ? d.startAgents.first { self.state.agent($0) != nil } : nil
-                self.selection = next.map { .agent($0) } ?? .allTabs
-            }
+            self.answered(d)
+        }
+    }
+
+    /// Answers a decision with choices with the one at `index` (counting
+    /// from 0, as the card lists them): portenvd gets its number and its
+    /// label, and refuses one that isn't the decision's (CC-0501).
+    public func choose(_ decision: TeamDecision, index: Int) async {
+        guard decision.answerable, decision.choices.indices.contains(index) else { return }
+        await perform {
+            let d = try await self.daemon.chooseDecision(self.box, id: decision.id, choice: index + 1, label: decision.choices[index])
+            self.answered(d)
+        }
+    }
+
+    private func answered(_ d: TeamDecision) {
+        state.apply(.decision(d))
+        if selection == .decision(d.id), !d.answerable {
+            let next = d.state == .approved ? d.startAgents.first { state.agent($0) != nil } : nil
+            selection = next.map { .agent($0) } ?? .allTabs
         }
     }
 

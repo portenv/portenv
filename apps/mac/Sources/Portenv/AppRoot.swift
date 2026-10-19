@@ -216,7 +216,11 @@ final class AppModel {
     /// Opens a box that exists: its controllers, then the same sequence the
     /// window always ran (1.1).
     func open(_ box: String) async {
-        guard boxes.contains(box) || firstRun?.made == box else { return }
+        guard boxes.contains(box) || firstRun?.made == box else {
+            // Never "Opening…" for ever (R-0386): the list, saying so.
+            if launch == .open(box), controller == nil { launch = LaunchGap.boxGone(box) }
+            return
+        }
         if firstRun?.made == box { defaults.set(true, forKey: Self.firstRunDoneKey) }
         firstRun = nil
         let controller = BoxController(
@@ -343,6 +347,12 @@ final class AppModel {
         launch = .firstRun(.firstBox)
     }
 
+    /// First run with no flow (R-0386): makes the one it should have.
+    func ensureFirstRunFlow(at step: FirstRunStep) {
+        guard firstRun == nil, launch == .firstRun(step) else { return }
+        firstRun = makeFlow(at: step, fromBoxList: false, memory: DefaultsFirstRunMemory())
+    }
+
     /// Cancel, ⎋ or "Your boxes" from New Box…: back to the list.
     func cancelNewBox() {
         firstRun = nil
@@ -361,6 +371,12 @@ struct UnavailableFirstRunService: FirstRunService {
 /// The window's content, from the model's decision.
 struct AppRoot: View {
     @Bindable var model: AppModel
+
+    /// What the window says while the launch catches up (R-0386).
+    private var launchGap: String {
+        LaunchGap.line(model.launch, hasController: model.controller != nil && model.tabs != nil,
+                       hasFirstRunFlow: model.firstRun != nil) ?? LaunchWait.starting
+    }
 
     var body: some View {
         Group {
@@ -401,10 +417,15 @@ struct AppRoot: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .accessibilityElement()
                         .accessibilityLabel(LaunchWait.starting)
-                case .firstRun:
+                case let .firstRun(step):
                     if let flow = model.firstRun {
                         FirstRunView(flow: flow, opened: { box in Task { await model.open(box) } },
                                      cancel: flow.fromBoxList ? { model.cancelNewBox() } : nil, refill: model.refill)
+                    } else {
+                        // Never a bare background (R-0386): the flow is
+                        // made, and says so meanwhile.
+                        TerminalOpening(line: launchGap)
+                            .onAppear { model.ensureFirstRunFlow(at: step) }
                     }
                 case let .boxList(notice):
                     BoxListView(boxes: model.boxes, notice: notice,
@@ -419,6 +440,9 @@ struct AppRoot: View {
                 case .open:
                     if let controller = model.controller, let tabs = model.tabs {
                         MainWindow(controller: controller, tabs: tabs, team: model.team, split: model.split)
+                    } else {
+                        // Before the workspace's controller exists (R-0386).
+                        TerminalOpening(line: launchGap)
                     }
                 }
             }

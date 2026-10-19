@@ -16,7 +16,9 @@ import Observation
 ///   the clock over.
 /// - Until the stream's first reset the tab is `.opening` ("Opening
 ///   <tab>…"), and a stream that fails before then is `.couldNotOpen`, with
-///   Try Again: never a bare background (basics audit, R-0384).
+///   Try Again: never a bare background (basics audit, R-0384). An open
+///   that sends nothing at all (no reset, no end) for `openDeadline` is
+///   `.couldNotOpen` too (R-0386).
 @MainActor
 @Observable
 public final class TabTerminalShown {
@@ -69,7 +71,7 @@ public final class TabTerminalShown {
     public static let notAnsweringLine = "This tab\u{2019}s terminal isn\u{2019}t answering. Portenv keeps trying; click Reconnect to try now."
 
     public func overlay(serviceComing: Bool) -> Overlay {
-        if overdue {
+        if overdue || (!opened && openTimedOut) {
             if serviceComing { return opened ? .disconnected(Self.serviceAwayLine) : .couldNotOpen(Self.serviceAwayLine) }
             if case let .disconnected(why) = connection, let why { return opened ? .disconnected(why) : .couldNotOpen(why) }
             return opened ? .disconnected(failure ?? Self.notAnsweringLine) : .couldNotOpen(failure ?? Self.notOpeningLine)
@@ -87,6 +89,8 @@ public final class TabTerminalShown {
 
     /// How long trouble may last before the card shows.
     public static let deadline: Duration = .seconds(25)
+    /// How long an open may send nothing at all before the card shows.
+    public static let openDeadline: Duration = .seconds(20)
     /// How long a stream must stay up after its reset to end the trouble.
     public static let settle: Duration = .seconds(2)
 
@@ -105,6 +109,10 @@ public final class TabTerminalShown {
     /// there's something on screen. Reconnect keeps it; another tab or a
     /// new generation clears it.
     public private(set) var opened = false
+    /// The open sent nothing for `openDeadline`: the card shows.
+    public private(set) var openTimedOut = false
+    @ObservationIgnored private let openDeadline: Duration
+    @ObservationIgnored private var openTimer: Task<Void, Never>?
     @ObservationIgnored private let provider: any TabTerminalProvider
     @ObservationIgnored private var shown: (tab: String, generation: Int)?
     @ObservationIgnored private let deadline: Duration
@@ -119,10 +127,12 @@ public final class TabTerminalShown {
 
     public init(provider: any TabTerminalProvider, deadline: Duration = TabTerminalShown.deadline,
                 settle: Duration = TabTerminalShown.settle,
+                openDeadline: Duration = TabTerminalShown.openDeadline,
                 sleep: @escaping @Sendable (Duration) async -> Void = { try? await Task.sleep(for: $0, clock: .suspending) }) {
         self.provider = provider
         self.deadline = deadline
         self.settle = settle
+        self.openDeadline = openDeadline
         self.sleep = sleep
     }
 
@@ -152,6 +162,7 @@ public final class TabTerminalShown {
         source = nil
         shown = nil
         opened = false
+        stopOpenTimer()
         clearTrouble()
     }
 
@@ -159,6 +170,7 @@ public final class TabTerminalShown {
         self.size = size
         connection = .live
         opened = true
+        stopOpenTimer()
         guard inTrouble, settling == nil else { return }
         settling = Task { [weak self, settle, sleep] in
             await sleep(settle)
@@ -169,6 +181,8 @@ public final class TabTerminalShown {
     }
 
     public func ended(_ why: TabTerminalEnd) {
+        // Something came: the trouble deadline takes over from here.
+        if case .lost = why { openTimer?.cancel(); openTimer = nil }
         switch why {
         case .lost(retrying: true):
             connection = .reconnecting
@@ -211,5 +225,19 @@ public final class TabTerminalShown {
         source?.close()
         connection = .connecting
         source = provider.open(tab: shown.tab, size: size)
+        stopOpenTimer()
+        guard !opened else { return }
+        openTimer = Task { [weak self, openDeadline, sleep] in
+            await sleep(openDeadline)
+            guard !Task.isCancelled, let self, !self.opened else { return }
+            self.openTimer = nil
+            self.openTimedOut = true
+        }
+    }
+
+    private func stopOpenTimer() {
+        openTimer?.cancel()
+        openTimer = nil
+        openTimedOut = false
     }
 }

@@ -31,10 +31,13 @@ struct MainTabTerminal: View {
                                 onReset: { shown.reset($0) }, onEnded: { shown.ended($0) })
                     .padding(TerminalLayout.margin)
             }
-            switch shown.connection {
-            case .connecting, .live:
+            // The capsule while it comes back; the card (never a modal on
+            // top, GUIDELINES.md) once it has given up or the trouble has
+            // lasted past the deadline (R-0294).
+            switch shown.overlay(serviceComing: serviceComing) {
+            case .none:
                 EmptyView()
-            case _ where shown.showsReconnecting(serviceComing: serviceComing):
+            case .reconnecting:
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small)
                     Text(TabTerminalShown.reconnectingLine)
@@ -45,8 +48,6 @@ struct MainTabTerminal: View {
                 .frame(maxHeight: .infinity, alignment: .top)
                 .padding(.top, 12)
                 .accessibilityElement(children: .combine)
-            case .reconnecting:
-                EmptyView()
             case let .disconnected(why):
                 VStack(spacing: 8) {
                     Text("Disconnected").font(.headline)
@@ -57,6 +58,7 @@ struct MainTabTerminal: View {
                 .padding(16)
                 .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
                 .frame(maxWidth: 420)
+                .accessibilityElement(children: .contain)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

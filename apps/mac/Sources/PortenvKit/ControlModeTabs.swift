@@ -84,20 +84,34 @@ public final class ControlModeTabProvider: TabTerminalProvider {
 /// - After `Retry.attempts` failures in a row with no `reset` between, or
 ///   a permanent failure, it says `.lost(retrying: false)` and ends: the
 ///   view offers Reconnect, which opens a new source.
+/// - A stream counts as working again only once it has stayed up for
+///   `Retry.settle` after its reset: a portenvd killed again within a
+///   second of each restart (R-0294) doesn't start the count over.
+/// - A stream with no reset within `Retry.firstReset` is given up on and
+///   counted as a failure: a frozen portenvd accepts the connection and
+///   never answers (R-0294). A live stream's hang is gRPC keepalive's
+///   (DaemonClient.Liveness).
 /// - Input while it's reconnecting isn't sent: the view shows
 ///   "Reconnecting…", and nothing typed then reaches the tab later.
 @MainActor
 public final class ControlModeTabSource: TabTerminalSource {
     /// How it tries again: waits that double from `first` up to `longest`,
-    /// at most `attempts` in a row.
+    /// at most `attempts` in a row. `firstReset`: how long an opened stream
+    /// may go without its reset. `settle`: how long a stream must stay up
+    /// after its reset to count as working again.
     public struct Retry: Sendable {
         public var first: Duration
         public var longest: Duration
         public var attempts: Int
-        public init(first: Duration, longest: Duration, attempts: Int) {
+        public var firstReset: Duration
+        public var settle: Duration
+        public init(first: Duration, longest: Duration, attempts: Int,
+                    firstReset: Duration = .seconds(10), settle: Duration = .seconds(2)) {
             self.first = first
             self.longest = longest
             self.attempts = attempts
+            self.firstReset = firstReset
+            self.settle = settle
         }
 
         public static let standard = Retry(first: .milliseconds(250), longest: .seconds(4), attempts: 8)
@@ -112,6 +126,8 @@ public final class ControlModeTabSource: TabTerminalSource {
     public private(set) var lastResetSkipped = false
     /// Why the stream gave up, when it says so (shown with Reconnect).
     public private(set) var failure: String?
+    /// The reason when a stream opened but never reset (a frozen portenvd).
+    public static let notAnswering = "Portenv\u{2019}s background service isn\u{2019}t answering."
     let box: String
     private let continuation: AsyncStream<TabTerminalEvent>.Continuation
     private let transport: any TabTerminalTransport
@@ -121,6 +137,9 @@ public final class ControlModeTabSource: TabTerminalSource {
     private var reading: Task<Void, Never>?
     private var closed = false
     private var live = false // a reset came on the current connection
+    private var liveAt: ContinuousClock.Instant? // when that reset came
+    private var attempt = 0
+    private var unanswered = false // the current attempt passed firstReset
 
     init(box: String, tab: String, size: TabTerminalSize, transport: any TabTerminalTransport, retry: Retry) {
         self.box = box
@@ -167,6 +186,15 @@ public final class ControlModeTabSource: TabTerminalSource {
             let conn = transport.tabTerminal(box: box, session: Self.session, tab: tab, size: size)
             connection = conn
             live = false
+            liveAt = nil
+            attempt += 1
+            unanswered = false
+            let watchdog = Task { [weak self, mine = attempt, limit = retry.firstReset] in
+                try? await Task.sleep(for: limit)
+                guard !Task.isCancelled, let self, self.attempt == mine, !self.live, !self.closed else { return }
+                self.unanswered = true
+                conn.close()
+            }
             var permanent = false
             do {
                 for try await message in conn.messages {
@@ -179,11 +207,16 @@ public final class ControlModeTabSource: TabTerminalSource {
             } catch {
                 failure = error.localizedDescription
             }
+            watchdog.cancel()
             if closed || Task.isCancelled { return }
+            if unanswered {
+                failure = Self.notAnswering
+                permanent = false
+            }
             conn.close()
             connection = nil
-            if live {
-                // It had worked: start counting again.
+            if let liveAt, ContinuousClock.now - liveAt >= retry.settle {
+                // It had worked, for long enough: start counting again.
                 failures = 0
                 wait = retry.first
             }
@@ -203,6 +236,7 @@ public final class ControlModeTabSource: TabTerminalSource {
     private func apply(_ message: TabTerminalMessage) -> Bool {
         switch message {
         case let .reset(size, seed, skipped):
+            if !live { liveAt = ContinuousClock.now }
             live = true
             lastResetSkipped = skipped
             continuation.yield(.reset(size, seed: seed))

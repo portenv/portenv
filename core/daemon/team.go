@@ -1034,6 +1034,7 @@ func (e *teamEngine) infoLocked(b *teamBox, a *TeamAgent) *daemonv1.AgentInfo {
 	}
 	info.Status = b.status[a.ID]
 	info.RoutinesOff = b.routinesOff[a.ID]
+	info.ShareLoginOff = shareLoginOffLine(a)
 	if info.RoutinesOff == "" && a.Spec != nil && !a.Remote {
 		info.RoutinesOff = idleOffLine(a.Runner, len(a.Spec.Routines) > 0)
 	}
@@ -1249,6 +1250,7 @@ func (e *teamEngine) whoamiLocked(name string, b *teamBox, team *Team, me *TeamA
 	if me.Spec != nil && !me.Remote {
 		w.RoutinesOff = idleOffLine(me.Runner, len(me.Spec.Routines) > 0)
 	}
+	w.ShareLoginOff = shareLoginOffForAgent(me)
 	w.Teammates = e.teammatesLocked(b, team, me, me.Grant.GetTeamStatus())
 	return w
 }

@@ -13,6 +13,10 @@ let package = Package(
     platforms: [.macOS(.v26)],
     products: [
         .executable(name: "Portenv", targets: ["Portenv"]),
+        // The attachment preview service (ADR 0030 point 5), put in the
+        // app's Contents/XPCServices by gmake app, sandboxed with no
+        // entitlements beyond it (PortenvPreview.entitlements).
+        .executable(name: "PortenvPreview", targets: ["PortenvPreview"]),
     ],
     dependencies: [
         // MIT-licensed terminal emulator (docs/PLAN.md, 1.2).
@@ -26,9 +30,15 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-protobuf.git", exact: "1.38.1"),
     ],
     targets: [
+        // The preview service's decoding (ImageIO, PDFKit), bounded, and its
+        // XPC protocol. Only the service decodes an attachment; the app
+        // links this for the protocol and its tests.
+        .target(name: "PortenvPreviewCore"),
+        .executableTarget(name: "PortenvPreview", dependencies: ["PortenvPreviewCore"]),
         .target(
             name: "PortenvKit",
             dependencies: [
+                "PortenvPreviewCore",
                 .product(name: "PortenvProto", package: "swift"),
                 .product(name: "GRPCCore", package: "grpc-swift-2"),
                 .product(name: "GRPCNIOTransportHTTP2", package: "grpc-swift-nio-transport"),
@@ -53,7 +63,7 @@ let package = Package(
         .testTarget(name: "PortenvAppTests", dependencies: ["Portenv", "PortenvKit"]),
         // SwiftTerm: the layout tests put a real terminal in the window.
         .testTarget(name: "PortenvKitTests", dependencies: [
-            "PortenvKit", .product(name: "SwiftTerm", package: "SwiftTerm"),
+            "PortenvKit", "PortenvPreviewCore", .product(name: "SwiftTerm", package: "SwiftTerm"),
             // The client's gRPC status codes (BoxMakerTests).
             .product(name: "GRPCCore", package: "grpc-swift-2"),
             // A fake portenvd that stops answering (DaemonLivenessTests).

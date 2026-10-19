@@ -116,10 +116,14 @@ public struct TeamMessage: Equatable, Sendable, Identifiable {
     /// For Portenv's notices about one agent (a start that failed): its
     /// id, so the notice shows in that agent's column (R-0302).
     public var about: String
+    /// Its attachments (ADR 0030): records only; the bytes are in this
+    /// Mac's store, read through portenvd.
+    public var attachments: [TeamAttachment]
 
     public init(id: String, from: String, to: String, threadID: String = "", kind: Kind = .answer, text: String, createdAt: Date? = nil,
-                about: String = "") {
+                about: String = "", attachments: [TeamAttachment] = []) {
         self.id = id
+        self.attachments = Array(attachments.prefix(TeamAttachment.maxPerLine))
         self.about = about
         self.from = from
         self.to = to
@@ -177,11 +181,16 @@ public struct TeamDecision: Equatable, Sendable, Identifiable {
     public var choices: [String]
     /// The owner's choice, counting from 1; 0 when none.
     public var choice: Int
+    /// What the agent attached to its question (ADR 0030): shown with the
+    /// evidence, above the buttons.
+    public var attachments: [TeamAttachment]
 
     public init(id: String, from: String, kind: Kind, summary: String, detail: String = "", state: State = .pending,
                 answerNote: String = "", createdAt: Date? = nil, answeredAt: Date? = nil, expiresAt: Date? = nil,
-                packages: [Package] = [], startAgents: [String] = [], choices: [String] = [], choice: Int = 0) {
+                packages: [Package] = [], startAgents: [String] = [], choices: [String] = [], choice: Int = 0,
+                attachments: [TeamAttachment] = []) {
         self.id = id
+        self.attachments = Array(attachments.prefix(TeamAttachment.maxPerLine))
         self.from = from
         self.kind = kind
         self.summary = TeamText.line(summary, max: 200)

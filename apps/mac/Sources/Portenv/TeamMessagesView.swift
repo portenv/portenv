@@ -15,6 +15,8 @@ import SwiftUI
 struct TeamMessageEntry: View {
     let message: TeamMessage
     let team: [TeamAgent]
+    /// For the chips of its attachments (ADR 0030); nil shows none.
+    var controller: TeamController?
     var timeZone: TimeZone = .current
     @State var open = false
     @State var all = false
@@ -42,6 +44,11 @@ struct TeamMessageEntry: View {
                 Text(verbatim: TeamMessageText.firstLine(message.text))
                     .font(.system(size: 12)).lineLimit(1).truncationMode(.tail)
             }
+            if let controller, !message.attachments.isEmpty {
+                AttachmentChips(attachments: message.attachments, from: TeamMessageText.name(message.from, team: team), team: controller,
+                                at: message.createdAt)
+                    .padding(.top, 3)
+            }
         }
         .foregroundStyle(notice ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
         .padding(.vertical, 5).padding(.horizontal, 6)
@@ -66,6 +73,7 @@ struct TeamMessageEntry: View {
 struct TeamSection: View {
     let messages: [TeamMessage]
     let team: [TeamAgent]
+    var controller: TeamController?
     @Binding var open: Bool
 
     var body: some View {
@@ -89,7 +97,7 @@ struct TeamSection: View {
                     Text(TeamMessageText.noTeamMessages).font(.system(size: 12)).foregroundStyle(.secondary)
                 }
                 ForEach(messages) { m in
-                    TeamMessageEntry(message: m, team: team).id(m.id)
+                    TeamMessageEntry(message: m, team: team, controller: controller).id(m.id)
                 }
             }
         }
@@ -102,6 +110,8 @@ struct TeamActivityColumn: View {
     @Bindable var team: TeamController
     /// An agent id, or "" for everyone.
     @State var filter = ""
+    /// Files chosen with Attach…, waiting for Send to whole team.
+    @State private var picked: [URL] = []
 
     var body: some View {
         let shown = team.state.activity(filter: filter.isEmpty ? nil : filter)
@@ -110,6 +120,11 @@ struct TeamActivityColumn: View {
                 Image(systemName: "bubble.left.and.bubble.right").foregroundStyle(Color.accentColor).accessibilityHidden(true)
                 Text(TeamMessageText.activity).font(.system(size: 13, weight: .semibold)).lineLimit(1)
                 Spacer(minLength: 4)
+                // Every attachment on the board (R-0381).
+                Button(AttachmentText.panelHeading(team.state.attachmentEntries().count)) { team.selection = .attachments }
+                    .buttonStyle(.link).font(.system(size: 11)).lineLimit(1).fixedSize()
+                    .accessibilityLabel("Show attachments")
+                AttachButton(label: "Attach files for the team") { picked = AttachPicker.choose() }
                 Picker("Show messages of", selection: $filter) {
                     Text(TeamMessageText.everyone).tag("")
                     ForEach(team.state.agents) { a in Text(verbatim: a.name).tag(a.id) }
@@ -127,14 +142,19 @@ struct TeamActivityColumn: View {
                             Text(TeamMessageText.noActivity).font(.system(size: 12)).foregroundStyle(.secondary)
                         }
                         ForEach(shown) { m in
-                            TeamMessageEntry(message: m, team: team.state.agents).id(m.id)
+                            TeamMessageEntry(message: m, team: team.state.agents, controller: team, open: team.focusedLine == m.id).id(m.id)
                         }
+                        AttachRefusal(line: team.attachRefusals["activity"])
                     }
                     .padding(14)
                 }
                 .defaultScrollAnchor(.bottom)
                 .onChange(of: shown.last?.id) { _, id in
                     if let id { proxy.scrollTo(id, anchor: .bottom) }
+                }
+                // ⌘-click in the Attachments panel: its message.
+                .onChange(of: team.focusedLine, initial: true) { _, id in
+                    if let id { proxy.scrollTo(id, anchor: .center) }
                 }
             }
             // An agent filtered on that leaves the team: back to everyone.
@@ -143,6 +163,13 @@ struct TeamActivityColumn: View {
             }
         }
         .frame(maxHeight: .infinity, alignment: .top)
+        .sheet(isPresented: Binding(get: { !picked.isEmpty }, set: { if !$0 { picked = [] } })) {
+            SendToTeamSheet(agents: team.state.agents.filter { !$0.remote }, files: picked, send: { ids in
+                let urls = picked
+                picked = []
+                Task { await team.attach(urls, to: ids, target: "activity") }
+            }, cancel: { picked = [] })
+        }
     }
 }
 
@@ -183,7 +210,10 @@ struct MessageComposer: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .bottom, spacing: 8) {
                 MessageField(text: Binding(get: { team.draft(for: agent.id) }, set: { team.setDraft($0, for: agent.id) }),
-                             label: TeamMessageText.placeholder(agent.name)) { submit() }
+                             label: TeamMessageText.placeholder(agent.name), pasteImage: { png in
+                                 let id = agent.id
+                                 Task { await team.attach([OutgoingAttachments.pasted(png: png)], to: [id], target: id) }
+                             }) { submit() }
                     .frame(height: CGFloat(lines) * 17 + 11)
                     .overlay(alignment: .topLeading) {
                         if draft.isEmpty {
@@ -194,11 +224,18 @@ struct MessageComposer: View {
                         }
                     }
                     .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(nsColor: .separatorColor)))
+                AttachButton(label: "Attach files for \(agent.name)") {
+                    let urls = AttachPicker.choose()
+                    let id = agent.id
+                    if !urls.isEmpty { Task { await team.attach(urls, to: [id], target: id) } }
+                }
                 Button(TeamMessageText.send) { submit() }
                     .disabled(draft.allSatisfy(\.isWhitespace))
                     .accessibilityLabel("Send to \(agent.name)")
             }
+            .attachDrop(team, to: [agent.id], target: agent.id)
             Text(TeamMessageText.hint).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1).minimumScaleFactor(0.8)
+            AttachRefusal(line: team.attachRefusals[agent.id])
             if let refusal = team.refusals[agent.id] {
                 Text(verbatim: refusal).font(.system(size: 11)).foregroundStyle(Color(nsColor: .systemRed))
                     .fixedSize(horizontal: false, vertical: true)
@@ -220,17 +257,20 @@ struct MessageComposer: View {
 struct MessageField: NSViewRepresentable {
     @Binding var text: String
     let label: String
+    /// A pasted image, as PNG: it goes as an attachment, never as text.
+    var pasteImage: (Data) -> Void = { _ in }
     let submit: () -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
     func makeNSView(context: Context) -> NSScrollView {
-        let scroll = NSTextView.scrollableTextView()
+        let scroll = PasteAwareTextView.scrollableTextView()
         scroll.drawsBackground = false
         scroll.borderType = .noBorder
         scroll.hasVerticalScroller = true
         scroll.autohidesScrollers = true
         if let tv = scroll.documentView as? NSTextView {
+            (tv as? PasteAwareTextView)?.pasteImage = { context.coordinator.parent.pasteImage($0) }
             tv.delegate = context.coordinator
             tv.isRichText = false
             tv.importsGraphics = false
@@ -285,5 +325,33 @@ struct MessageField: NSViewRepresentable {
             }
             return true
         }
+    }
+}
+
+/// The message field's text view: a pasted image (and nothing else on the
+/// pasteboard but pictures) is attached, never typed; everything else
+/// pastes as plain text.
+final class PasteAwareTextView: NSTextView {
+    var pasteImage: ((Data) -> Void)?
+
+    override class func scrollableTextView() -> NSScrollView {
+        let scroll = NSScrollView()
+        let tv = PasteAwareTextView()
+        tv.isVerticallyResizable = true
+        tv.isHorizontallyResizable = false
+        tv.autoresizingMask = [.width]
+        tv.textContainer?.widthTracksTextView = true
+        scroll.documentView = tv
+        return scroll
+    }
+
+    override func paste(_ sender: Any?) {
+        let pb = NSPasteboard.general
+        if pb.string(forType: .string) == nil, let image = NSImage(pasteboard: pb), let tiff = image.tiffRepresentation,
+           let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) {
+            pasteImage?(png)
+            return
+        }
+        super.paste(sender)
     }
 }

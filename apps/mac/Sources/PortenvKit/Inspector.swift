@@ -219,6 +219,11 @@ public enum NotifyText {
         public let title: String
         public let body: String
         public let subtitle: String
+        public init(title: String, body: String, subtitle: String) {
+            self.title = title
+            self.body = body
+            self.subtitle = subtitle
+        }
     }
 
     public static func commandFinished(box: String, tab: String, program: String, seconds: Int, location: String?) -> Content {

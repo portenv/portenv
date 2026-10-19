@@ -41,14 +41,15 @@ struct MainWindow: View {
 
     /// Open while an agent is selected, whatever the person last chose.
     private var columnOpen: Binding<Bool> {
-        Binding(get: { inspectorOpen || agent != nil || team?.selectedDecision != nil || team?.selection == .activity }, set: { inspectorOpen = $0 })
+        Binding(get: { inspectorOpen || agent != nil || team?.selectedDecision != nil || team?.selection == .activity || team?.selection == .attachments },
+                set: { inspectorOpen = $0 })
     }
 
     var body: some View {
         HStack(spacing: 0) {
             if TeamSidebarToggle.shows(choice: sidebarChoice, team: team), let team {
                 TeamSidebar(state: team.state, tabs: tabs.tabs,
-                            selection: Binding(get: { team.selection }, set: { choose($0) }), compact: narrow)
+                            selection: Binding(get: { team.selection }, set: { choose($0) }), compact: narrow, controller: team)
                 Divider()
             }
             content
@@ -68,6 +69,9 @@ struct MainWindow: View {
                         .inspectorToggle(isOpen: columnOpen)
                 } else if let team, team.selection == .activity {
                     TeamActivityColumn(team: team)
+                        .inspectorToggle(isOpen: columnOpen)
+                } else if let team, team.selection == .attachments {
+                    AttachmentsColumn(team: team)
                         .inspectorToggle(isOpen: columnOpen)
                 } else if let team, let decision = team.selectedDecision {
                     DecisionColumn(decision: decision, team: team)
@@ -238,7 +242,7 @@ struct MainWindow: View {
             VStack(spacing: 0) {
                 HStack(spacing: 0) {
                     TabBar(tabs: tabs, team: team?.state.agents ?? [],
-                           paneFrame: { split?.paneFrame(forTab: $0) })
+                           paneFrame: { split?.paneFrame(forTab: $0) }, controller: team)
                     // An agent's tabs only: All tabs at the trailing end
                     // brings back every tab (R-0241).
                     if team != nil, tabs.selection != .allTabs {
@@ -263,6 +267,8 @@ struct MainWindow: View {
                     // The tab bar widened the selection itself (a new tab, a
                     // pane showing another agent's tab): the sidebar follows.
                     .onAppear { tabs.selectionWidened = { team?.selection = $0 } }
+                // After a drop typed nothing: where the copy is (ADR 0030).
+                if let team { DropNoticeBar(team: team) }
                 Group {
                     if let renderTerminal {
                         RenderedView(make: renderTerminal)
@@ -293,6 +299,10 @@ struct MainWindow: View {
                     }
                 }
                 .accessibilityLabel(terminalLabel)
+                // A file dropped on an agent's terminal goes to that agent;
+                // the path is offered in its pane, never run.
+                .attachDrop(tabs.terminalTab?.agentID.isEmpty == false ? team : nil, to: [tabs.terminalTab?.agentID ?? ""],
+                            pane: tabs.terminalTab?.paneIDs.first ?? "", target: "tab:" + (tabs.terminalTab?.id ?? ""))
             }
         case .closed:
             if controller.busy {

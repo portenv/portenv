@@ -124,6 +124,8 @@ struct AgentFileReviewCard: View {
 struct DecisionCard: View {
     let decision: TeamDecision
     let asker: String
+    /// For its attachments' chips (ADR 0030); nil shows none.
+    var team: TeamController?
     /// Once answered: when, and what it's doing (R-0296).
     var answered: String?
     /// A choice, counting from 0 as listed.
@@ -133,6 +135,8 @@ struct DecisionCard: View {
     /// The frame names of its buttons, for the tests that click them.
     static func choiceFrame(_ index: Int) -> String { "choice-\(index)" }
     static let declineFrame = "decline"
+    static let approveFrame = "approve"
+    static let questionFrame = "question"
     @State private var declining = false
     @State private var reason = ""
 
@@ -142,9 +146,15 @@ struct DecisionCard: View {
                 .font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
             Text(verbatim: decision.summary).font(.system(size: 13, weight: .semibold))
                 .fixedSize(horizontal: false, vertical: true)
+                .reportsFrame(Self.questionFrame)
             if !decision.detail.isEmpty {
                 Text(verbatim: decision.detail).font(.system(size: 12)).textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
+            }
+            // With the evidence, above the buttons: never in place of the
+            // question or of Approve and Decline.
+            if let team, !decision.attachments.isEmpty {
+                AttachmentChips(attachments: decision.attachments, from: asker, team: team, at: decision.createdAt)
             }
             if decision.answerable && !decision.choices.isEmpty {
                 // Each label is plain text, never markup; none is the
@@ -175,6 +185,7 @@ struct DecisionCard: View {
                         .accessibilityLabel("Decline: \(decision.summary)")
                     Button(TeamText.approve) { answer(true, "") }
                         .accessibilityLabel("Approve: \(decision.summary)")
+                        .reportsFrame(Self.approveFrame)
                 }
             } else if let answered {
                 Text(verbatim: answered).font(.system(size: 12, weight: .semibold))
@@ -216,7 +227,7 @@ struct DecisionColumn: View {
 
     var body: some View {
         ScrollView {
-            DecisionCard(decision: decision, asker: TeamText.asker(decision, team: team.state.agents),
+            DecisionCard(decision: decision, asker: TeamText.asker(decision, team: team.state.agents), team: team,
                          answered: TeamText.answered(decision, team: team.state.agents),
                          choose: { i in Task { await team.choose(decision, index: i) } }) { approve, note in
                 Task { await team.answer(decision, approve: approve, note: note) }

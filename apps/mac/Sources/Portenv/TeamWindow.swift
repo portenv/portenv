@@ -83,10 +83,22 @@ struct TeamColumn: View {
                         Text(verbatim: agent.shareLoginOff).font(.system(size: 11)).foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
+                    if team.isMuted(agent.id) {
+                        Text(TeamController.mutedLine).font(.system(size: 11)).foregroundStyle(.secondary)
+                    }
                 }
+                .accessibilityElement(children: .combine)
+                Spacer(minLength: 0)
+                // The column's … menu (ADR 0030 point 9a).
+                Menu {
+                    Button(AttachmentText.mute(agent.name, muted: team.isMuted(agent.id))) {
+                        team.setMuted(!team.isMuted(agent.id), agent: agent.id)
+                    }
+                } label: { Image(systemName: "ellipsis.circle") }
+                    .menuStyle(.borderlessButton).fixedSize()
+                    .accessibilityLabel("More for \(agent.name)")
             }
             .padding(.horizontal, 14).padding(.vertical, 10)
-            .accessibilityElement(children: .combine)
             Divider()
             ScrollViewReader { proxy in
                 ScrollView {
@@ -94,7 +106,7 @@ struct TeamColumn: View {
                         Text(TeamMessageText.messagesWithYou).font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
                             .accessibilityAddTraits(.isHeader)
                         ForEach(team.state.conversation(with: agent.id)) { m in
-                            TeamMessageRow(message: m, sender: team.state.agent(m.from), team: team.state.agents)
+                            TeamMessageRow(message: m, sender: team.state.agent(m.from), team: team.state.agents, controller: team)
                                 .id(m.id)
                         }
                         // What it asks you, and the team's first start
@@ -102,14 +114,14 @@ struct TeamColumn: View {
                         // (GUIDELINES 6.2). Inside the scroll: a long card
                         // never sets the column's (and window's) height.
                         ForEach(team.decisions(for: agent.id)) { d in
-                            DecisionCard(decision: d, asker: TeamText.asker(d, team: team.state.agents),
+                            DecisionCard(decision: d, asker: TeamText.asker(d, team: team.state.agents), team: team,
                                          choose: { i in Task { await team.choose(d, index: i) } }) { approve, note in
                                 Task { await team.answer(d, approve: approve, note: note) }
                             }
                             .id(d.id)
                         }
                         Divider()
-                        TeamSection(messages: team.state.teamMessages(of: agent.id), team: team.state.agents, open: $teamOpen)
+                        TeamSection(messages: team.state.teamMessages(of: agent.id), team: team.state.agents, controller: team, open: $teamOpen)
                     }
                     .padding(14)
                 }
@@ -128,6 +140,8 @@ struct TeamColumn: View {
             }
         }
         .frame(maxHeight: .infinity, alignment: .top)
+        // Files dropped on the agent's column go to it (ADR 0030 point 8).
+        .attachDrop(agent.status == .invalid || agent.remote ? nil : team, to: [agent.id], target: agent.id)
     }
 }
 
@@ -137,6 +151,8 @@ struct TeamMessageRow: View {
     /// The agent that sent it; nil for you and for Portenv.
     let sender: TeamAgent?
     let team: [TeamAgent]
+    /// For its attachments' chips; nil shows none.
+    var controller: TeamController?
 
     var body: some View {
         let you = message.from == TeamText.owner
@@ -159,8 +175,11 @@ struct TeamMessageRow: View {
                 }
                 Text(verbatim: message.text).font(.system(size: 13)).textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
+                if let controller, !message.attachments.isEmpty {
+                    AttachmentChips(attachments: message.attachments, from: name, team: controller, at: message.createdAt)
+                }
             }
         }
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .contain)
     }
 }

@@ -174,8 +174,13 @@ $pb -c "Add :PortenvCommit string $commit" "$app/Contents/Info.plist"
 # --- Sign, inside out ------------------------------------------------------
 
 if [[ $adhoc == 1 ]]; then ts=(--timestamp=none); else ts=(--timestamp); fi
+# The attachment preview service has its own entitlements (the App Sandbox,
+# ADR 0030); everything else gets the app's.
+preview_ent=$root/apps/mac/PortenvPreview.entitlements
 sign_code() {
-	codesign --force --sign "$sign_id" --options runtime "${ts[@]}" --entitlements "$ent" "$1"
+	local e=$ent
+	[[ $1 == *"/PortenvPreview.xpc"* ]] && e=$preview_ent
+	codesign --force --sign "$sign_id" --options runtime "${ts[@]}" --entitlements "$e" "$1"
 	echo "signed: ${1#"$out"/}"
 }
 is_macho() { [[ $(file -b "$1") == Mach-O* ]]; }
@@ -219,6 +224,9 @@ for s in "${signed[@]}"; do
 		grep -qxF "Authority=$sign_name" <<<"$d" || die "${s#"$out"/}: not signed by $sign_name"
 	fi
 done
+xpc=$app/Contents/XPCServices/PortenvPreview.xpc
+[[ -d $xpc ]] || die "the app has no PortenvPreview.xpc"
+codesign -d --entitlements - --xml "$xpc" 2>/dev/null | grep -q com.apple.security.app-sandbox || die "PortenvPreview.xpc isn't sandboxed"
 echo "hardened runtime on all ${#signed[@]} signatures"
 fi
 

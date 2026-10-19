@@ -235,7 +235,11 @@ final class AppModel {
         }
         self.tabs = tabs
         split = SplitController(tabs: tabs)
-        team = TeamController(box: box, daemon: daemon)
+        // An attachment pushed to the owner notifies, unless its agent's
+        // attachments are muted (ADR 0030 point 9a).
+        team = TeamController(box: box, daemon: daemon) { notice in
+            Task { await Notifier.shared.attachment(box: box, notice: notice) }
+        }
         launch = .open(box)
         defaults.set(box, forKey: Self.lastBoxKey)
         onOpen?(controller)

@@ -12,6 +12,8 @@ public enum TeamSelection: Equatable, Hashable, Sendable {
     case decision(String)
     /// Team activity: the whole team's messages (R-0313).
     case activity
+    /// The Attachments panel: every attachment on the board (ADR 0030).
+    case attachments
 }
 
 /// A workspace's team, followed from portenvd, and the owner's actions on
@@ -32,11 +34,27 @@ public final class TeamController {
     public private(set) var review: AgentFileReview?
     private let daemon: DaemonAPI
     private let retry: Duration
+    /// Where this workspace's mutes and removals are remembered, on this Mac.
+    private let defaults: UserDefaults
+    /// The preview service, for thumbnails and previews (ADR 0030 point 5).
+    public let previewer: AttachmentPreviewing
+    /// Lines written before this are the board read back, never notified.
+    private let startedAt: Date
+    /// Posts a notification for an attachment pushed to the owner.
+    private let notify: @MainActor (AttachmentNotice) -> Void
 
-    public init(box: String, daemon: DaemonAPI, retry: Duration = .seconds(1)) {
+    public init(box: String, daemon: DaemonAPI, retry: Duration = .seconds(1), defaults: UserDefaults = .standard,
+                previewer: AttachmentPreviewing = XPCPreviewer(), startedAt: Date = Date(),
+                notify: @escaping @MainActor (AttachmentNotice) -> Void = { _ in }) {
         self.box = box
         self.daemon = daemon
         self.retry = retry
+        self.defaults = defaults
+        self.previewer = previewer
+        self.startedAt = startedAt
+        self.notify = notify
+        muted = Set(defaults.stringArray(forKey: Self.mutedKey(box)) ?? [])
+        removed = Set(defaults.stringArray(forKey: Self.removedKey(box)) ?? [])
     }
 
     /// The selected agent, if one is selected and still in the team.
@@ -52,7 +70,7 @@ public final class TeamController {
         while !Task.isCancelled {
             do {
                 for try await (event, cursor) in daemon.watchTeam(box, cursor: state.cursor) {
-                    state.apply(event, cursor: cursor)
+                    receiveLive(event, cursor: cursor)
                     if case .removed(let id) = event, selection == .agent(id) { selection = .allTabs }
                 }
             } catch let e as DaemonError where e.message == DaemonError.outOfDate {
@@ -213,6 +231,145 @@ public final class TeamController {
 
     /// Tests: an event as if from the stream.
     func receive(_ event: TeamEvent) { state.apply(event) }
+
+    // MARK: Attachments (ADR 0030)
+
+    static func mutedKey(_ box: String) -> String { "attachmentsMuted.\(box)" }
+    static func removedKey(_ box: String) -> String { "attachmentsRemoved.\(box)" }
+    /// The column's header while an agent's attachments are muted.
+    public static let mutedLine = "Attachments muted"
+
+    /// Agents whose attachments raise no notification (ADR 0030 point 9a).
+    public private(set) var muted: Set<String>
+    /// Attachments the owner removed from this Mac.
+    private var removed: Set<String>
+    private var available: [String: AttachmentAvailability] = [:]
+    /// Each image's chip thumbnail (PNG), from the preview service.
+    public private(set) var thumbnails: [String: Data] = [:]
+    private var bytes: [String: Data] = [:]
+    private var bytesOrder: [String] = []
+    /// The last refusal for each place files were dropped or attached
+    /// (an agent id, "activity", or "tab:<id>"), as one plain line.
+    public private(set) var attachRefusals: [String: String] = [:]
+    /// After a drop that typed nothing: where the copy is, with Copy Path.
+    public var dropNotice: DropNotice?
+    /// The board line Team activity scrolls to and opens (⌘-click in the
+    /// Attachments panel).
+    public var focusedLine: String?
+
+    public func isMuted(_ agent: String) -> Bool { muted.contains(agent) }
+
+    public func setMuted(_ on: Bool, agent: String) {
+        if on { muted.insert(agent) } else { muted.remove(agent) }
+        defaults.set(muted.sorted(), forKey: Self.mutedKey(box))
+    }
+
+    /// An event from the stream, with the notification for an attachment
+    /// pushed to the owner: on a message to the owner or a pending
+    /// decision, new since this window opened, from an agent not muted.
+    /// Muting hides nothing: every line still applies.
+    public func receiveLive(_ event: TeamEvent, cursor: String = "") {
+        var notice: AttachmentNotice?
+        switch event {
+        case .message(let m) where !state.messages.contains { $0.id == m.id }:
+            if m.to == TeamText.owner, !m.attachments.isEmpty, let a = state.agent(m.from), (m.createdAt ?? .distantPast) >= startedAt, !isMuted(a.id) {
+                notice = AttachmentNotice(agent: a.id, title: "\(a.name) \(AttachmentText.attached(m.attachments))", body: TeamMessageText.firstLine(m.text))
+            }
+        case .decision(let d) where !state.decisions.contains { $0.id == d.id }:
+            if d.answerable, !d.attachments.isEmpty, let a = state.agent(d.from), (d.createdAt ?? .distantPast) >= startedAt, !isMuted(a.id) {
+                notice = AttachmentNotice(agent: a.id, title: "\(a.name) \(AttachmentText.attached(d.attachments))", body: d.summary)
+            }
+        default: break
+        }
+        state.apply(event, cursor: cursor)
+        if let notice { notify(notice) }
+    }
+
+    public func availability(of a: TeamAttachment) -> AttachmentAvailability {
+        removed.contains(a.id) ? .removed : available[a.id] ?? .unknown
+    }
+
+    /// Asks this Mac's store whether it has the attachment, keeping its
+    /// bytes for the preview, and its thumbnail for an image's chip.
+    public func check(_ a: TeamAttachment) async {
+        guard !removed.contains(a.id), available[a.id] == nil else { return }
+        _ = try? await data(of: a)
+        if a.kind.isImage, let d = bytes[a.id], thumbnails[a.id] == nil, let png = try? await previewer.thumbnail(d, maxPixel: 256) {
+            thumbnails[a.id] = png
+        }
+    }
+
+    /// The attachment's bytes from portenvd (a few are kept for the
+    /// preview's ← and →).
+    public func data(of a: TeamAttachment) async throws -> Data {
+        if removed.contains(a.id) { throw DaemonError(AttachmentText.notOnThisMac) }
+        if let d = bytes[a.id] { return d }
+        do {
+            let (_, d) = try await daemon.readAttachment(box, id: a.id)
+            available[a.id] = .here
+            bytes[a.id] = d
+            bytesOrder.append(a.id)
+            while bytesOrder.count > 8 { bytes[bytesOrder.removeFirst()] = nil }
+            return d
+        } catch let e as DaemonError where Self.notOnThisMac(e.message) {
+            available[a.id] = .elsewhere
+            throw e
+        }
+    }
+
+    static func notOnThisMac(_ message: String) -> Bool {
+        message.replacingOccurrences(of: "\u{2019}", with: "'") == AttachmentText.notOnThisMac.replacingOccurrences(of: "\u{2019}", with: "'")
+    }
+
+    /// Remove from this Mac (after the owner confirmed): its chips then
+    /// read "removed"; the message and its record stay.
+    public func remove(_ a: TeamAttachment) async {
+        await perform {
+            try await self.daemon.removeAttachment(self.box, id: a.id)
+            self.removed.insert(a.id)
+            self.defaults.set(self.removed.sorted(), forKey: Self.removedKey(self.box))
+            self.bytes[a.id] = nil
+            self.thumbnails[a.id] = nil
+        }
+    }
+
+    /// The owner's files, dropped or chosen with Attach…: checked here
+    /// first (no folders, links, unknown types, or more than 5), then sent
+    /// through portenvd. target names where to show a refusal.
+    public func attach(_ urls: [URL], to agents: [String], pane: String = "", target: String) async {
+        let (files, refusal) = OutgoingAttachments.prepare(urls)
+        if let refusal {
+            attachRefusals[target] = refusal
+            return
+        }
+        await attach(files, to: agents, pane: pane, target: target)
+    }
+
+    public func attach(_ files: [OutgoingAttachment], to agents: [String], pane: String = "", target: String) async {
+        guard !files.isEmpty, !agents.isEmpty else { return }
+        dropNotice = nil
+        do {
+            let r = try await daemon.sendAttachments(box, to: agents, thread: "", pane: pane, files: files)
+            for m in r.messages { state.apply(.message(m)) }
+            attachRefusals[target] = r.refused.isEmpty ? nil : r.refused.joined(separator: "\n")
+            if r.inserted == .none, r.messages.count == 1, let m = r.messages.first {
+                let home = "/home/\(m.to)/"
+                var path = r.insertedPath
+                if path.isEmpty, let a = m.attachments.first {
+                    path = home + (m.attachments.count == 1 ? a.inboxPath : (a.inboxPath as NSString).deletingLastPathComponent + "/")
+                }
+                let shown = path.hasPrefix(home) ? "~/" + path.dropFirst(home.count) : path
+                let what = m.attachments.count == 1 ? m.attachments[0].name : "\(m.attachments.count) files"
+                dropNotice = DropNotice(line: AttachmentText.inbox(what, agent: TeamMessageText.name(m.to, team: state.agents), path: shown), path: path)
+            }
+        } catch let e as DaemonError {
+            attachRefusals[target] = e.message
+        } catch {
+            attachRefusals[target] = error.localizedDescription
+        }
+    }
+
+    public func clearAttachRefusal(_ target: String) { attachRefusals[target] = nil }
 
     public func dismissError() { error = nil }
 

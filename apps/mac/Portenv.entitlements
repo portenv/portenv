@@ -15,6 +15,10 @@
        in its own file, with the reason here.
      - No keychain-access-groups yet: moving box keys to the data-protection
        keychain (ADR 0013) needs it, with a provisioning profile.
+     - The attachment preview service (ADR 0030) has its own file,
+       PortenvPreview.entitlements: the App Sandbox and nothing else, so the
+       decoders run where a bad file can reach nothing. This app itself stays
+       unsandboxed.
      Add an entitlement only with the reason it's needed. -->
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">

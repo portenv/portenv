@@ -267,7 +267,7 @@ public final class TabsController {
         case .allTabs, .you:
             if let c = current, c.agentID.isEmpty { return nil }
             return exists(lastOwnTab) ?? tabs.first { $0.agentID.isEmpty }?.id
-        case .decision, .activity:
+        case .decision, .activity, .attachments:
             return current == nil ? tabs.first?.id : nil
         }
     }
@@ -299,7 +299,7 @@ public final class TabsController {
     /// tab, the owner's own, or one agent's.
     public func shown(for selection: TeamSelection) -> [TabInfo] {
         switch selection {
-        case .allTabs, .decision, .activity: tabs
+        case .allTabs, .decision, .activity, .attachments: tabs
         case .you: tabs.filter { $0.agentID.isEmpty }
         case .agent(let id): tabs.filter { $0.agentID == id }
         }

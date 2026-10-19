@@ -254,6 +254,16 @@ app: build $(TOOLS_STAMP)
 	cp "$(APP_BUILD)/release/Portenv" $(BIN)/Portenv.app/Contents/MacOS/Portenv
 	# No debug map in a release app: it lists source and object paths.
 	strip -S $(BIN)/Portenv.app/Contents/MacOS/Portenv
+	# The attachment preview service (ADR 0030 point 5): its own bundle in
+	# XPCServices, sandboxed with no entitlements beyond it, signed before
+	# the app (codesign without --deep keeps its signature).
+	mkdir -p $(BIN)/Portenv.app/Contents/XPCServices/PortenvPreview.xpc/Contents/MacOS
+	cp "$(APP_BUILD)/release/PortenvPreview" $(BIN)/Portenv.app/Contents/XPCServices/PortenvPreview.xpc/Contents/MacOS/PortenvPreview
+	strip -S $(BIN)/Portenv.app/Contents/XPCServices/PortenvPreview.xpc/Contents/MacOS/PortenvPreview
+	cp apps/mac/PortenvPreview/Info.plist $(BIN)/Portenv.app/Contents/XPCServices/PortenvPreview.xpc/Contents/Info.plist
+	codesign --force --sign - --entitlements apps/mac/PortenvPreview.entitlements $(BIN)/Portenv.app/Contents/XPCServices/PortenvPreview.xpc
+	codesign -d --entitlements - --xml $(BIN)/Portenv.app/Contents/XPCServices/PortenvPreview.xpc 2>/dev/null | grep -q com.apple.security.app-sandbox \
+		|| { echo "PortenvPreview.xpc isn't sandboxed" >&2; exit 1; }
 	# The app must be able to prompt: it never links the process-wide no-prompt switch (core/keys).
 	if nm -u $(BIN)/Portenv.app/Contents/MacOS/Portenv | grep -q SecKeychainSetUserInteractionAllowed; then echo "Portenv imports SecKeychainSetUserInteractionAllowed: prompts would stop working in the app" >&2; exit 1; fi
 	# Helpers, not MacOS/: on a case-insensitive disk portenv would replace Portenv.

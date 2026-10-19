@@ -75,6 +75,7 @@ struct PortenvApp: App {
             SplitCommands(split: model.split)
             InspectorToggle(box: model.controller?.box)
             TeamSidebarToggle(box: model.controller?.box, team: model.team)
+            AttachmentsCommand(team: model.team)
             FindCommands()
             FeedbackCommands()
             // Portenv › Settings… (⌘,): the toolbar window (R-0137).

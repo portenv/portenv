@@ -83,6 +83,14 @@ public protocol DaemonAPI: Sendable {
     /// Pins the agent file whose text hashes to `sha256`; only the owner's
     /// app calls it (R-0285).
     func approveAgentFile(_ box: String, id: String, sha256: String) async throws -> TeamAgent
+    /// An attachment from this Mac's store (ADR 0030): its record and its
+    /// bytes. One the store doesn't hold says AttachmentText.notOnThisMac.
+    func readAttachment(_ box: String, id: String) async throws -> (TeamAttachment, Data)
+    /// Remove from this Mac: the bytes go; the board keeps the record.
+    func removeAttachment(_ box: String, id: String) async throws
+    /// The owner's files for agents: each agent gets its own copy in its
+    /// ~/inbox/owner/; with a pane, the path is offered there.
+    func sendAttachments(_ box: String, to agents: [String], thread: String, pane: String, files: [OutgoingAttachment]) async throws -> SentAttachments
 }
 
 public extension DaemonAPI {
@@ -111,6 +119,11 @@ public extension DaemonAPI {
     func stopAgent(_: String, id _: String) async throws -> TeamAgent { throw DaemonError(DaemonError.outOfDate) }
     func getAgentFile(_: String, id _: String) async throws -> AgentFileContent { throw DaemonError(DaemonError.outOfDate) }
     func approveAgentFile(_: String, id _: String, sha256 _: String) async throws -> TeamAgent { throw DaemonError(DaemonError.outOfDate) }
+    func readAttachment(_: String, id _: String) async throws -> (TeamAttachment, Data) { throw DaemonError(DaemonError.outOfDate) }
+    func removeAttachment(_: String, id _: String) async throws { throw DaemonError(DaemonError.outOfDate) }
+    func sendAttachments(_: String, to _: [String], thread _: String, pane _: String, files _: [OutgoingAttachment]) async throws -> SentAttachments {
+        throw DaemonError(DaemonError.outOfDate)
+    }
 }
 
 /// A box saved in the background after Quit Anyway.

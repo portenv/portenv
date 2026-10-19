@@ -709,6 +709,7 @@ message TabTerminalRequest {
     TabTerminalOpen open = 1;
     // Keystrokes, pastes, clicks and IME input, as the app's terminal
     // produced them (never the emulator's replies; ADR 0020, decision 4).
+    // A paste comes between marker messages (TabTerminalReset.paste_markers).
     bytes input = 2;
     // The size this view can show, in cells.
     TerminalSize resize = 3;
@@ -756,6 +757,12 @@ message TabTerminalReset {
   // too far behind; ADR 0020, decision 11): the app tells the person and
   // marks the block that was running as skipped, never complete.
   bool skipped = 4;
+  // The helper takes a paste between bracketed-paste markers and lets tmux
+  // bracket it only if the program asked (agent.v1's paste_markers): the
+  // app sends ESC[200~, the text and ESC[201~ as three inputs for every
+  // paste. False from an older helper: the app brackets only when its
+  // terminal says the program asked.
+  bool paste_markers = 5;
 }
 
 // Who sent the Enter that started a command: the helper's CommandAuthor

@@ -458,6 +458,24 @@ func TestSkippedArrives(t *testing.T) {
 	}
 }
 
+// TestPasteMarkersArrive (CC-0490): a helper that takes marked pastes says
+// so in its reset, and the app hears it; an older helper's reset says
+// nothing, and the app keeps bracketing only when its terminal says to.
+func TestPasteMarkersArrive(t *testing.T) {
+	script := []*agentv1.TabTerminalResponse{
+		{Msg: &agentv1.TabTerminalResponse_Reset_{Reset_: &agentv1.TabTerminalReset{Seed: []byte("old")}}},
+		{Msg: &agentv1.TabTerminalResponse_Reset_{Reset_: &agentv1.TabTerminalReset{Seed: []byte("new"), PasteMarkers: true}}},
+		endsClosed(),
+	}
+	w := servingTabTerminals(t, ownerCaller(), &fakeTabHelper{boxID: "box-a", script: script}, &fakeTabHelper{boxID: "box-b"})
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	got := relayed(t, openTab(ctx, t, w.c, &daemonv1.TabTerminalOpen{Box: "acme-api", Session: "main", Tab: "@0"}))
+	if len(got) != 3 || got[0].GetReset_().GetPasteMarkers() || !got[1].GetReset_().GetPasteMarkers() {
+		t.Fatalf("got %v, want a reset without paste markers, then one with", got)
+	}
+}
+
 // TestABadAuthorFromTheHelperIsDropped (R-0178): the helper lives in the
 // workspace, so an author whose name is over 64 characters, or has control
 // or bidi characters (here U+202E, which can make "Grok Bot" read as

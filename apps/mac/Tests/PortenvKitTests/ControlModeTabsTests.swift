@@ -175,6 +175,40 @@ struct ControlModeTabsTests {
         #expect(t.opened.count == 1)
     }
 
+    /// CC-0490: a reset says whether the helper takes marked pastes, and
+    /// the source says so to the view; an older helper's doesn't.
+    @Test func aResetSaysWhetherPastesAreMarked() async {
+        let t = FakeTabTransport()
+        let s = ControlModeTabProvider(box: "b", transport: t, retry: Self.fast).open(tab: "@1", size: size)
+        let e = collect(s)
+        await waitUntil { t.opened.count == 1 }
+        t.play(.reset(size, seed: [], skipped: false))
+        await waitUntil { e.all.count == 1 }
+        #expect(!s.marksPastes)
+        t.play(.reset(size, seed: [], skipped: false, pasteMarkers: true))
+        await waitUntil { e.all.count == 2 }
+        #expect(s.marksPastes)
+        s.close()
+    }
+
+    /// A long paste goes as several inputs, none over the helper's 1 MB,
+    /// in order and whole.
+    @Test func aLongInputGoesInPieces() async {
+        let t = FakeTabTransport()
+        let s = ControlModeTabProvider(box: "b", transport: t, retry: Self.fast).open(tab: "@1", size: size)
+        let e = collect(s)
+        await waitUntil { t.opened.count == 1 }
+        t.play(.reset(size, seed: [], skipped: false, pasteMarkers: true))
+        await waitUntil { e.all.count == 1 }
+        let big = (0 ..< (3 << 20)).map { UInt8(truncatingIfNeeded: $0 &* 7) }
+        s.send(big)
+        let inputs = t.sent.compactMap { if case let .input(b) = $0 { b } else { nil } }
+        #expect(inputs.count == 12)
+        #expect(inputs.allSatisfy { $0.count <= 256 << 10 })
+        #expect(inputs.flatMap { $0 } == big)
+        s.close()
+    }
+
     /// Step 7b (R-0294): a frozen portenvd accepts the stream and never
     /// answers. With no reset by `firstReset`, the attempt is given up on:
     /// "Reconnecting…", then another try, and the reason says it isn't

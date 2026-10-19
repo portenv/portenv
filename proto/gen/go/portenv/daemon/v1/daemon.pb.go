@@ -4477,6 +4477,7 @@ type TabTerminalRequest_Open struct {
 type TabTerminalRequest_Input struct {
 	// Keystrokes, pastes, clicks and IME input, as the app's terminal
 	// produced them (never the emulator's replies; ADR 0020, decision 4).
+	// A paste comes between marker messages (TabTerminalReset.paste_markers).
 	Input []byte `protobuf:"bytes,2,opt,name=input,proto3,oneof"`
 }
 
@@ -4708,7 +4709,13 @@ type TabTerminalReset struct {
 	// Output was skipped since the last reset (the helper or its reader fell
 	// too far behind; ADR 0020, decision 11): the app tells the person and
 	// marks the block that was running as skipped, never complete.
-	Skipped       bool `protobuf:"varint,4,opt,name=skipped,proto3" json:"skipped,omitempty"`
+	Skipped bool `protobuf:"varint,4,opt,name=skipped,proto3" json:"skipped,omitempty"`
+	// The helper takes a paste between bracketed-paste markers and lets tmux
+	// bracket it only if the program asked (agent.v1's paste_markers): the
+	// app sends ESC[200~, the text and ESC[201~ as three inputs for every
+	// paste. False from an older helper: the app brackets only when its
+	// terminal says the program asked.
+	PasteMarkers  bool `protobuf:"varint,5,opt,name=paste_markers,json=pasteMarkers,proto3" json:"paste_markers,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4767,6 +4774,13 @@ func (x *TabTerminalReset) GetAuthors() []*CommandAuthor {
 func (x *TabTerminalReset) GetSkipped() bool {
 	if x != nil {
 		return x.Skipped
+	}
+	return false
+}
+
+func (x *TabTerminalReset) GetPasteMarkers() bool {
+	if x != nil {
+		return x.PasteMarkers
 	}
 	return false
 }
@@ -7606,12 +7620,13 @@ const file_portenv_daemon_v1_daemon_proto_rawDesc = "" +
 	"\aresized\x18\x03 \x01(\v2\x1f.portenv.daemon.v1.TerminalSizeH\x00R\aresized\x124\n" +
 	"\x03end\x18\x04 \x01(\x0e2 .portenv.types.v1.TabTerminalEndH\x00R\x03end\x12:\n" +
 	"\x06author\x18\x05 \x01(\v2 .portenv.daemon.v1.CommandAuthorH\x00R\x06authorB\x05\n" +
-	"\x03msg\"\xb1\x01\n" +
+	"\x03msg\"\xd6\x01\n" +
 	"\x10TabTerminalReset\x123\n" +
 	"\x04size\x18\x01 \x01(\v2\x1f.portenv.daemon.v1.TerminalSizeR\x04size\x12\x12\n" +
 	"\x04seed\x18\x02 \x01(\fR\x04seed\x12:\n" +
 	"\aauthors\x18\x03 \x03(\v2 .portenv.daemon.v1.CommandAuthorR\aauthors\x12\x18\n" +
-	"\askipped\x18\x04 \x01(\bR\askipped\"o\n" +
+	"\askipped\x18\x04 \x01(\bR\askipped\x12#\n" +
+	"\rpaste_markers\x18\x05 \x01(\bR\fpasteMarkers\"o\n" +
 	"\rCommandAuthor\x12\x12\n" +
 	"\x04line\x18\x01 \x01(\x04R\x04line\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x15\n" +

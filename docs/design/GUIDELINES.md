@@ -99,7 +99,7 @@ While the workspace is closed, **Open** comes first, then a divider (R-0211). Th
 
 Menu items that can't work right now are disabled with no explanation in the menu; the explanation appears in the inspector or as an alert when chosen from the palette.
 
-### 3.3 Workspace tabs (R-0344, R-0345)
+### 3.3 Workspace tabs (R-0344, R-0345; [ADR 0028](../adr/0028-workspace-tabs-native-window-tabs.md))
 
 Each open workspace has a window of its own, and workspace windows group as **macOS window tabs**, as documents do in Pages and Finder. No other window becomes a tab: Settings, Acknowledgements and first run keep tabbing off.
 

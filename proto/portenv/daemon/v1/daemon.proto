@@ -966,6 +966,12 @@ message AnswerDecisionRequest {
   string decision_id = 2;
   bool approve = 3;
   string note = 4;
+  // For a decision with choices (CC-0501): the chosen one, counting from
+  // 1, with approve true. portenvd refuses it unless choice_label is
+  // exactly the decision's stored choices[choice-1]. 0 for Decline and for
+  // a decision without choices.
+  int32 choice = 5;
+  string choice_label = 6;
 }
 
 message AnswerDecisionResponse {

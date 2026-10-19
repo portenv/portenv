@@ -107,6 +107,16 @@ func checkBoardLine(l *agentv1.AppendBoardRequest) (file string, err error) {
 		if n := d.GetAnswerNote(); len(n) > maxBoardText || !plainText(n, true) {
 			return bad("an answer's note is at most 8 KB of plain text")
 		}
+		// An ask-owner's choices (CC-0501): none, or 2 to 4 one-line labels
+		// of at most 80 characters; the owner's choice counts from 1.
+		if c := d.GetChoices(); len(c) == 1 || len(c) > 4 || d.GetChoice() < 0 || int(d.GetChoice()) > len(c) {
+			return bad("a decision has 2 to 4 choices, or none, and a choice among them")
+		}
+		for _, c := range d.GetChoices() {
+			if strings.TrimSpace(c) == "" || utf8.RuneCountInString(c) > 80 || !plainText(c, false) {
+				return bad("a decision's choice is 1 to 80 characters of plain text on one line")
+			}
+		}
 		for _, p := range d.GetPackages() {
 			if !packageRE.MatchString(p.GetName()) || !plainText(p.GetVersion(), false) || !plainText(p.GetSource(), false) || len(p.GetVersion())+len(p.GetSource()) > 512 {
 				return bad("a decision's package list holds only package names, versions and sources")
@@ -356,6 +366,12 @@ func TeamIO(args []string, stdin io.Reader, stdout io.Writer) error {
 			return errors.New("read-home HOME PATH")
 		}
 		return homeRead(dir, args[2], stdout)
+	case "seed-home":
+		// As the agent, at its start (ADR 0022 §2).
+		if len(args) < 4 {
+			return errors.New("seed-home PROJECT HOME QUOTA PATH…")
+		}
+		return seedHome(dir, args[2], args[3], args[4:], stdout)
 	case "write-home":
 		if len(args) != 4 {
 			return errors.New("write-home HOME PATH QUOTA")

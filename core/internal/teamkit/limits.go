@@ -28,4 +28,8 @@ const (
 	MaxHandoffBytes          = 100 << 20
 	MaxRoutines              = 4
 	MinRoutineMinutes        = 10
+	// An ask-owner's --choice (CC-0501): 2 to 4, each 1 to 80 characters.
+	MinChoices          = 2
+	MaxChoices          = 4
+	MaxChoiceCharacters = 80
 )

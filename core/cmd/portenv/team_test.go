@@ -392,10 +392,10 @@ func TestTeamInitSaysWhenATemplateNeedsMoreAgents(t *testing.T) {
 	}
 	dir := t.TempDir()
 	var out, errOut bytes.Buffer
-	if code := runTeam(context.Background(), []string{"team", "init", "--template", "orchestrate", "--dir", dir}, func(string) string { return "" }, nil, &out, &errOut); code != 0 {
+	if code := runTeam(context.Background(), []string{"team", "init", "--template", "starter", "--dir", dir}, func(string) string { return "" }, nil, &out, &errOut); code != 0 {
 		t.Fatalf("exit %d: %s", code, errOut.String())
 	}
 	if strings.Contains(out.String(), "Agents allowed") {
-		t.Errorf("a 4-agent template mentions the limit: %q", out.String())
+		t.Errorf("a 3-agent template mentions the limit: %q", out.String())
 	}
 }

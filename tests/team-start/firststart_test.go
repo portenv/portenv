@@ -11,7 +11,9 @@
 //     (TEAM_START) naming lead; approved, portenvd starts lead itself,
 //     with no second StartAgent, and a second Start is a no-op; its runner
 //     is "bash <script>", a script in the project;
-//  4. whoami in lead's pane says lead;
+//  4. whoami in lead's pane says lead, and its home_seed (the project's
+//     seed/ folder) is in its home, lead's, without the folder's link or
+//     hidden file (ADR 0022 §2, R-0323);
 //  5. the script's "portenv ask-owner", over lead's own socket, reaches
 //     portenvd's decision list (the WatchTeam stream the app reads); then
 //     its "ask-owner --choice" (CC-0501) arrives with its choices, a
@@ -182,6 +184,14 @@ sed -i 's|^runner: .*$|runner: bash %[2]s|' .portenv/agents/lead.md
 grep -q '^runner: bash %[2]s$' .portenv/agents/lead.md
 sed -i 's|^runner: .*$|runner: bash %[4]s|' .portenv/agents/builder.md
 grep -q '^runner: bash %[4]s$' .portenv/agents/builder.md
+mkdir -p seed
+echo "seeded for lead" > seed/notes.md
+printf '#!/bin/sh\n' > seed/run.sh
+chmod 0755 seed/run.sh
+echo "hidden" > seed/.hidden
+ln -s /etc/passwd seed/link
+sed -i '/^runner: /a home_seed: [seed]' .portenv/agents/lead.md
+grep -q '^home_seed: \[seed\]$' .portenv/agents/lead.md
 git add -A
 git -c user.name=Owner -c user.email=owner@example.invalid commit -q -m "first commit"`, project, script, firstStart, script2, secondStart))
 	if code != 0 {
@@ -253,6 +263,17 @@ ps -o user= -p "$(tmux -S "$sock" display-message -p -t main '#{pane_pid}')"`)
 		h.fatal("step 4: lead's pane process isn't lead's: exit %d: %s", code, out)
 	}
 	t.Log("step 4: whoami in lead's pane is lead")
+	out, code = h.box(ctx, "root", `set -eu
+stat -c '%U %a %n' /home/lead/seed/notes.md /home/lead/seed/run.sh /home/lead/.portenv-seeded
+cat /home/lead/seed/notes.md
+test ! -e /home/lead/seed/link && test ! -L /home/lead/seed/link && echo "no link"
+test ! -e /home/lead/seed/.hidden && echo "no hidden"`)
+	for _, want := range []string{"lead 600 /home/lead/seed/notes.md", "lead 700 /home/lead/seed/run.sh", "lead 600 /home/lead/.portenv-seeded", "seeded for lead", "no link", "no hidden"} {
+		if code != 0 || !strings.Contains(out, want) {
+			h.fatal("step 4: lead's home_seed: missing %q: exit %d:\n%s", want, code, out)
+		}
+	}
+	t.Log("step 4: lead's home_seed is in its home, lead's")
 
 	// Step 5: lead's ask-owner is in the decision list, pending, and the
 	// pane names the same decision.

@@ -88,3 +88,26 @@ func TestACLLetsOthersWrite(t *testing.T) {
 		t.Errorf("readOnlyBase(0666, own) = %v, want 0664's", got)
 	}
 }
+
+// Lenses (ADR 0022 §2a point 4): agent uids' named entries are exactly
+// the readers'; others are kept; no named entry left means no mask.
+func TestACLWithUsers(t *testing.T) {
+	base := minimalACL(0o700)
+	got := aclWithUsers(base, map[uint32]uint16{2002: 1}, AgentUIDFirst, AgentUIDLast)
+	want := []aclEntry{{aclUserObj, 7, aclUndefinedID}, {aclGroupObj, 0, aclUndefinedID}, {aclOther, 0, aclUndefinedID}, {aclUser, 1, 2002}, {aclMask, 1, aclUndefinedID}}
+	if !slices.Equal(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	// Another reader replaces it; a named entry outside the agents' range
+	// stays.
+	withOther := append(slices.Clone(got[:4]), aclEntry{aclUser, 4, 1500}, aclEntry{aclMask, 5, aclUndefinedID})
+	got = aclWithUsers(withOther, map[uint32]uint16{2003: 5}, AgentUIDFirst, AgentUIDLast)
+	if slices.ContainsFunc(got, func(e aclEntry) bool { return e.tag == aclUser && e.id == 2002 }) || !slices.Contains(got, aclEntry{aclUser, 4, 1500}) || !slices.Contains(got, aclEntry{aclUser, 5, 2003}) {
+		t.Errorf("got %v", got)
+	}
+	// No readers: the agents' entries and the mask go.
+	got = aclWithUsers(want, nil, AgentUIDFirst, AgentUIDLast)
+	if !slices.Equal(got, base) || aclHasNamed(got) {
+		t.Errorf("got %v, want the mode's own %v", got, base)
+	}
+}

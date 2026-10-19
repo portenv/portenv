@@ -23,6 +23,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	agentv1 "github.com/portenv/portenv/proto/gen/go/portenv/agent/v1"
+	typesv1 "github.com/portenv/portenv/proto/gen/go/portenv/types/v1"
 )
 
 // The project at team start (ADR 0022 §2 and §2a, the owner's decision
@@ -115,12 +116,15 @@ func (e *SharedProjectError) Error() string {
 }
 
 // PrepareProject makes the project folder (/home/<user>/<name>) readable
-// by the team and writable by no agent.
-func (t *TeamUsers) PrepareProject(ctx context.Context, projectDir string) ([]string, error) {
+// by the team and writable by no agent. A workspace whose team used the
+// shared project is moved to agents' own clones first (teammigrate.go),
+// and the record comes back for the owner's answer; while it waits, it
+// comes back again and nothing else happens.
+func (t *TeamUsers) PrepareProject(ctx context.Context, projectDir string, opt PrepareOptions) ([]string, []*typesv1.MigrationItem, error) {
 	prefix := "/home/" + t.Cfg.User + "/"
 	name, ok := strings.CutPrefix(projectDir, prefix)
 	if !ok || name == "" || strings.Contains(name, "/") || strings.HasPrefix(name, ".") || path.Clean(projectDir) != projectDir {
-		return nil, fmt.Errorf("%q isn't a project folder in %s", projectDir, prefix)
+		return nil, nil, fmt.Errorf("%q isn't a project folder in %s", projectDir, prefix)
 	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -128,23 +132,29 @@ func (t *TeamUsers) PrepareProject(ctx context.Context, projectDir string) ([]st
 	project := filepath.Join(work, name)
 	for _, d := range []string{t.Cfg.HomeRoot, work, project} {
 		if err := checkRealDir(d); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 	// On a new workspace group team doesn't exist yet (agent users come
 	// later), and an ACL can't name a group the box doesn't have.
 	if err := t.ensureTeamGroup(ctx); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	// Nothing directly in the owner's home is readable by others once they
 	// can pass through it (R-0262).
 	fixed, err := t.tightenHome(work, append(t.projects(), name))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	fixed = append(t.takeHomeFixesLocked(), fixed...)
 	if err := t.recordProject(name); err != nil {
-		return nil, err
+		return nil, nil, err
+	}
+	// A move waiting for the owner's answer: its record, and nothing else.
+	if rec, err := t.loadMigration(project); err != nil {
+		return nil, nil, err
+	} else if rec != nil {
+		return fixed, protoItems(rec.Items), nil
 	}
 	var found ProjectFindings
 	for _, e := range t.portenvSafeDirs(ctx, projectDir) {
@@ -156,20 +166,24 @@ func (t *TeamUsers) PrepareProject(ctx context.Context, projectDir string) ([]st
 	}
 	out, err := t.Run.Run(ctx, nil, "runuser", args...)
 	if err != nil {
-		return nil, cmdError("open the project to the team", out, err)
+		return nil, nil, cmdError("open the project to the team", out, err)
 	}
 	opened, err := parseFindings(out)
 	if err != nil {
-		return nil, fmt.Errorf("open the project to the team: %w", err)
+		return nil, nil, fmt.Errorf("open the project to the team: %w", err)
 	}
 	for _, f := range opened.Items {
 		found.add(f)
 	}
 	found.More += opened.More
-	if !found.Empty() {
-		return nil, &SharedProjectError{Found: found}
+	if found.Empty() {
+		return fixed, nil, nil
 	}
-	return fixed, nil
+	items, err := t.migrateLocked(ctx, project, found, opt)
+	if err != nil {
+		return nil, nil, err
+	}
+	return fixed, items, nil
 }
 
 // portenvSafeDirs are the system git config's safe.directory entries for
@@ -450,26 +464,53 @@ func (s *apiServer) PrepareTeamProject(ctx context.Context, req *agentv1.Prepare
 	if s.prepareProject == nil {
 		return nil, status.Error(codes.Unimplemented, "no team in this workspace")
 	}
-	fixed, err := s.prepareProject(ctx, req.GetProjectDir())
+	r, err := s.prepareProject(ctx, req)
 	if err != nil {
 		return nil, status.Error(codes.FailedPrecondition, err.Error())
 	}
-	return &agentv1.PrepareTeamProjectResponse{Fixed: fixed}, nil
+	return r, nil
+}
+
+// ResolveTeamMigration on the agent channel relays to init, which alone
+// re-owns and removes (ADR 0022 §2a point 6).
+func (s *apiServer) ResolveTeamMigration(ctx context.Context, req *agentv1.ResolveTeamMigrationRequest) (*agentv1.ResolveTeamMigrationResponse, error) {
+	if s.resolveMigration == nil {
+		return nil, status.Error(codes.Unimplemented, "no team in this workspace")
+	}
+	if err := s.resolveMigration(ctx, req); err != nil {
+		return nil, status.Error(codes.FailedPrecondition, err.Error())
+	}
+	return &agentv1.ResolveTeamMigrationResponse{}, nil
 }
 
 // askInitPrepare asks init on its local socket.
-func askInitPrepare(socket string) func(context.Context, string) ([]string, error) {
-	return func(ctx context.Context, dir string) ([]string, error) {
+func askInitPrepare(socket string) func(context.Context, *agentv1.PrepareTeamProjectRequest) (*agentv1.PrepareTeamProjectResponse, error) {
+	return func(ctx context.Context, req *agentv1.PrepareTeamProjectRequest) (*agentv1.PrepareTeamProjectResponse, error) {
 		conn, err := grpc.NewClient("unix://"+socket, grpc.WithTransportCredentials(insecure.NewCredentials()))
 		if err != nil {
 			return nil, fmt.Errorf("connect to init: %w", err)
 		}
 		defer func() { _ = conn.Close() }()
-		r, err := agentv1.NewAgentServiceClient(conn).PrepareTeamProject(ctx, &agentv1.PrepareTeamProjectRequest{ProjectDir: dir})
+		r, err := agentv1.NewAgentServiceClient(conn).PrepareTeamProject(ctx, req)
 		if err != nil {
 			return nil, errors.New(status.Convert(err).Message())
 		}
-		return r.GetFixed(), nil
+		return r, nil
+	}
+}
+
+// askInitResolve asks init on its local socket.
+func askInitResolve(socket string) func(context.Context, *agentv1.ResolveTeamMigrationRequest) error {
+	return func(ctx context.Context, req *agentv1.ResolveTeamMigrationRequest) error {
+		conn, err := grpc.NewClient("unix://"+socket, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		if err != nil {
+			return fmt.Errorf("connect to init: %w", err)
+		}
+		defer func() { _ = conn.Close() }()
+		if _, err := agentv1.NewAgentServiceClient(conn).ResolveTeamMigration(ctx, req); err != nil {
+			return errors.New(status.Convert(err).Message())
+		}
+		return nil
 	}
 }
 

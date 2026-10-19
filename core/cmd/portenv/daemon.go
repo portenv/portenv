@@ -200,6 +200,17 @@ func cmdApp(ctx context.Context, e *local.Env, op string, args []string) error {
 	switch op {
 	case "delete":
 		return deleteWorkspace(ctx, c, name, args[1:], os.Stdin, os.Stdout, term.IsTerminal(int(os.Stdin.Fd()))) // #nosec G115 -- a file descriptor
+	case "fetch-agent":
+		// The owner's Fetch (ADR 0022 §2a): the agent's branch into the
+		// project as refs/remotes/agents/<id>.
+		if len(args) != 2 {
+			return usageError{Msg: "app fetch-agent needs a box name and an agent id"}
+		}
+		r, err := c.FetchAgentBranch(ctx, &daemonv1.FetchAgentBranchRequest{Name: name, AgentId: args[1]})
+		if err != nil {
+			return plain(err)
+		}
+		summary = fmt.Sprintf("fetched %s's branch as %s (%s)", args[1], r.GetRef(), short(r.GetCommit()))
 	case "open":
 		takeOver := len(args) > 1 && args[1] == "--take-over"
 		r, err := c.OpenBox(ctx, &daemonv1.OpenBoxRequest{Name: name, TakeOver: takeOver})

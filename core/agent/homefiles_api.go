@@ -40,11 +40,38 @@ func (s *apiServer) agentHome(id string) (int, string, error) {
 	return rec.UID, t.home(id), nil
 }
 
-func (s *apiServer) homeIO(ctx context.Context, uid int, args []string, stdin io.Reader) ([]byte, error) {
-	if s.runHomeIO != nil {
-		return s.runHomeIO(ctx, uid, args, stdin)
+// agentGroups is the supplementary groups team-io runs with as an agent:
+// its own group, and group team only to read the project, which the team
+// reads through its ACL (ADR 0022 §2a). Least privilege (R-0334): home
+// files, the Agent files view and a hand-off's unpacking get no team.
+func agentGroups(uid int, team bool) []uint32 {
+	u := uint32(uid) // #nosec G115 -- an agent's uid, 2001..2008
+	if team {
+		return []uint32{u, TeamGID}
 	}
-	return runAsAgent(ctx, uid, append([]string{"team-io"}, args...), stdin, func(w io.Writer) error { return TeamIO(args, stdin, w) })
+	return []uint32{u}
+}
+
+// homeIO runs team-io as the agent, with its own group only.
+func (s *apiServer) homeIO(ctx context.Context, uid int, args []string, stdin io.Reader) ([]byte, error) {
+	return s.agentIO(ctx, uid, false, args, stdin)
+}
+
+// projectIO runs team-io as the agent with group team too: only for a
+// hand-off that reads the project (CC-0507).
+func (s *apiServer) projectIO(ctx context.Context, uid int, args []string, stdin io.Reader) ([]byte, error) {
+	return s.agentIO(ctx, uid, true, args, stdin)
+}
+
+func (s *apiServer) agentIO(ctx context.Context, uid int, team bool, args []string, stdin io.Reader) ([]byte, error) {
+	if s.runHomeIO != nil {
+		return s.runHomeIO(ctx, uid, agentGroups(uid, team), args, stdin)
+	}
+	run := runAsAgent
+	if team {
+		run = runAsAgentInTeam
+	}
+	return run(ctx, uid, append([]string{"team-io"}, args...), stdin, func(w io.Writer) error { return TeamIO(args, stdin, w) })
 }
 
 func homeErr(err error) error {

@@ -9,6 +9,7 @@ grant:
   max_panes: 2
   message: [lead, builder]
   ask_owner: true
+  read_clones: [builder]
 ---
 You review what the builder shares: read the diff, run the tests, and
 reply to the builder with what to fix, or tell the lead it's ready. You

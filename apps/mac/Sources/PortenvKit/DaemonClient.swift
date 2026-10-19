@@ -51,6 +51,11 @@ public final class DaemonClient: DaemonAPI, Sendable {
             if e.metadata[stringValues: "portenv-refusal"].contains("open-elsewhere") {
                 throw DaemonError(e.message, openElsewhere: true)
             }
+            if e.metadata[stringValues: "portenv-refusal"].contains("moving") {
+                var refused = DaemonError(e.message)
+                refused.moving = true
+                throw refused
+            }
             throw DaemonError.fromRPC(message: DaemonErrorText.plain(code: e.code, message: e.message), unimplemented: e.code == .unimplemented,
                                       unavailable: e.code == .unavailable || DaemonErrorText.isTransport(e.message))
         }

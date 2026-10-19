@@ -25,6 +25,9 @@ const (
 	RefusalTrailer = "portenv-refusal"
 	// RefusalOpenElsewhere: another machine holds the box open.
 	RefusalOpenElsewhere = "open-elsewhere"
+	// RefusalMoving: a Move To is in progress, so CloseBox refused
+	// (R-0249); the app says so, and offers no Close or Quit Anyway.
+	RefusalMoving = "moving"
 )
 
 // refuseOpenElsewhere is OpenBox's answer when another machine holds the

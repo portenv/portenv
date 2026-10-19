@@ -78,3 +78,35 @@ func TestWakeAgentTypesOnlyTheFixedLineWhenIdle(t *testing.T) {
 		t.Errorf("a batch: the main pane read %q, want %q", got, want)
 	}
 }
+
+// R-0330: first_start types only the fixed first-step line, naming the
+// running agent, under the same checks; a runner with no idle pattern
+// gets nothing, and no sender is needed.
+func TestWakeAgentFirstStartTypesTheFixedFirstStepLine(t *testing.T) {
+	s := testAgentServers(t)
+	ctx := context.Background()
+	shortQuiet(t)
+	dir := t.TempDir()
+	ready := idleBox + `IFS= read -r line; printf '%s' "$line" > "$0"; exec sleep 100`
+	if _, err := s.StartAgentTerminals(ctx, testSpec(t, "ready", standIn(ready, filepath.Join(dir, "ready"))...)); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetAgentIdleInput("ready", idleBoxPattern); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.StartAgentTerminals(ctx, testSpec(t, "nopattern", standIn(idleBox+`IFS= read -r line; exec sleep 100`, "x")...)); err != nil {
+		t.Fatal(err)
+	}
+	waitQuiet()
+	_, err := s.WakeAgent(ctx, &agentv1.WakeAgentRequest{AgentId: "nopattern", FirstStart: true})
+	if status.Code(err) != codes.FailedPrecondition || !strings.Contains(status.Convert(err).Message(), "no idle-input pattern") {
+		t.Errorf("no pattern: %v, want busy", err)
+	}
+	if _, err := s.WakeAgent(ctx, &agentv1.WakeAgentRequest{AgentId: "ready", FirstStart: true}); err != nil {
+		t.Fatal(err)
+	}
+	want := "[Portenv] You are ready in a Portenv team. Run portenv whoami and portenv guide first. Check portenv inbox after each step."
+	if got := waitFile(t, filepath.Join(dir, "ready")); got != want {
+		t.Errorf("the main pane read %q, want %q", got, want)
+	}
+}

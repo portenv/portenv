@@ -757,6 +757,13 @@ message WakeAgentRequest {
   // How many lines came since the agent last read its inbox; more than
   // one makes the line plural. Never typed as a number.
   int32 count = 3;
+  // Type the fixed first-step line instead (R-0330): "[Portenv] You are
+  // <agent_id> in a Portenv team. Run portenv whoami and portenv guide
+  // first. Check portenv inbox after each step." portenvd asks once per
+  // start when the runner's start pointer isn't in place (the agent's own
+  // file holds its place). from and count are ignored; the same checks
+  // apply, so a runner with no idle pattern gets nothing.
+  bool first_start = 4;
 }
 
 message WakeAgentResponse {}

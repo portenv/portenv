@@ -36,6 +36,9 @@ type wakeState struct {
 	count int       // lines since the agent last read its inbox
 	typed bool      // this batch's line is typed; no other until it reads
 	last  time.Time // the last line typed, for wakeEvery
+	// firstStart: the first-step line is owed (R-0330), once per start,
+	// because the runner's start pointer isn't in place.
+	firstStart bool
 }
 
 // noteWakeLocked counts a board line just written toward its recipient's
@@ -86,6 +89,30 @@ func (b *teamBox) readWakeLocked(agent string) {
 	}
 }
 
+// setFirstStartLocked records, at an agent's start, whether it's owed the
+// first-step line: its runner has an idle pattern (wakeable), but its
+// start pointer isn't in place (the agent's own file holds it, or the
+// runner table names no file for it).
+func (b *teamBox) setFirstStartLocked(agent string, owed bool) {
+	if b.wakes == nil {
+		b.wakes = map[string]*wakeState{}
+	}
+	w := b.wakes[agent]
+	if w == nil {
+		w = &wakeState{}
+		b.wakes[agent] = w
+	}
+	w.firstStart = owed
+}
+
+// firstStepDoneLocked drops an owed first-step line: the agent ran
+// portenv whoami, so it found Portenv by itself.
+func (b *teamBox) firstStepDoneLocked(agent string) {
+	if w := b.wakes[agent]; w != nil {
+		w.firstStart = false
+	}
+}
+
 // setWakeableLocked records, at an agent's start, whether its runner has
 // an idle pattern: without one it's never woken.
 func (b *teamBox) setWakeableLocked(agent string, wakeable bool) {
@@ -112,7 +139,10 @@ func (e *teamEngine) tickWakes(ctx context.Context) {
 		}
 		now := e.now()
 		for agent, w := range b.wakes {
-			if w.count == 0 || w.typed || !b.wakeable[agent] || b.states[agent] != typesv1.AgentState_AGENT_STATE_RUNNING {
+			if !b.wakeable[agent] || b.states[agent] != typesv1.AgentState_AGENT_STATE_RUNNING {
+				continue
+			}
+			if !w.firstStart && (w.count == 0 || w.typed) {
 				continue
 			}
 			if !w.last.IsZero() && now.Sub(w.last) < wakeEvery {
@@ -121,6 +151,14 @@ func (e *teamEngine) tickWakes(ctx context.Context) {
 			h, err := e.helper(ctx, name)
 			if err != nil {
 				break
+			}
+			// The first-step line goes first (R-0330); the batch waits
+			// out wakeEvery behind it.
+			if w.firstStart {
+				if _, err := h.WakeAgent(ctx, &agentv1.WakeAgentRequest{AgentId: agent, FirstStart: true}); err == nil {
+					w.firstStart, w.last = false, now
+				}
+				continue
 			}
 			if _, err := h.WakeAgent(ctx, &agentv1.WakeAgentRequest{AgentId: agent, From: w.from, Count: int32(min(w.count, 1<<20))}); err == nil { // #nosec G115 -- bounded
 				w.typed, w.last = true, now

@@ -334,6 +334,7 @@ func (e *teamEngine) handleCall(ctx context.Context, name string, c *agentv1.Tea
 	case *agentv1.TeamCallsResponse_Handoff:
 		return e.handoffLocked(ctx, name, b, &team, me, op.Handoff, id)
 	case *agentv1.TeamCallsResponse_Whoami:
+		b.firstStepDoneLocked(me.ID)
 		return &agentv1.TeamCallsRequest{CallId: id, Ok: true, Result: &agentv1.TeamCallsRequest_Whoami{Whoami: e.whoamiLocked(name, b, &team, me)}}
 	case *agentv1.TeamCallsResponse_Propose, *agentv1.TeamCallsResponse_RequestPackage, *agentv1.TeamCallsResponse_ProposeRoutine:
 		return refuse(id, "That command isn't in this build of Portenv yet.")
@@ -724,6 +725,9 @@ func (e *teamEngine) startAgentAs(ctx context.Context, name, agentID string, app
 		b.routinesOff[agentID] = off
 	}
 	b.setWakeableLocked(agentID, idle != "")
+	// The first-step line, typed once when the start pointer isn't in
+	// place and Portenv knows when the runner is idle (R-0330).
+	b.setFirstStartLocked(agentID, idle != "" && (r.GetPointerKept() != "" || runnerInstructionsFile(a.Runner) == ""))
 	for _, r := range a.Spec.Routines {
 		if idle == "" {
 			break

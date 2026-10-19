@@ -29,7 +29,10 @@ var runnerIdlePatterns = map[string]string{
 // only as a fallback in recent versions; Codex reads $CODEX_HOME
 // (~/.codex)/AGENTS.md, and AGENTS.md in its working folder (the agent's
 // home). A runner not here gets no pointer; its AGENTS.md block and its
-// template's instructions still say to run portenv guide first. Each
+// template's instructions still say to run portenv guide first. When the
+// pointer isn't in place but the runner has an idle pattern, the line is
+// typed once instead (WakeAgent's first_start, R-0330); a runner with no
+// idle pattern is never typed into. Each
 // value must be one of teamkit.PointerFiles, or init refuses it.
 var runnerInstructionsFiles = map[string]string{
 	"claude": ".claude/CLAUDE.md",

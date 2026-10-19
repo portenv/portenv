@@ -5508,7 +5508,14 @@ type WakeAgentRequest struct {
 	From string `protobuf:"bytes,2,opt,name=from,proto3" json:"from,omitempty"`
 	// How many lines came since the agent last read its inbox; more than
 	// one makes the line plural. Never typed as a number.
-	Count         int32 `protobuf:"varint,3,opt,name=count,proto3" json:"count,omitempty"`
+	Count int32 `protobuf:"varint,3,opt,name=count,proto3" json:"count,omitempty"`
+	// Type the fixed first-step line instead (R-0330): "[Portenv] You are
+	// <agent_id> in a Portenv team. Run portenv whoami and portenv guide
+	// first. Check portenv inbox after each step." portenvd asks once per
+	// start when the runner's start pointer isn't in place (the agent's own
+	// file holds its place). from and count are ignored; the same checks
+	// apply, so a runner with no idle pattern gets nothing.
+	FirstStart    bool `protobuf:"varint,4,opt,name=first_start,json=firstStart,proto3" json:"first_start,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -5562,6 +5569,13 @@ func (x *WakeAgentRequest) GetCount() int32 {
 		return x.Count
 	}
 	return 0
+}
+
+func (x *WakeAgentRequest) GetFirstStart() bool {
+	if x != nil {
+		return x.FirstStart
+	}
+	return false
 }
 
 type WakeAgentResponse struct {
@@ -5929,11 +5943,13 @@ const file_portenv_agent_v1_agent_proto_rawDesc = "" +
 	"\vproject_dir\x18\x01 \x01(\tR\n" +
 	"projectDir\"2\n" +
 	"\x1aPrepareTeamProjectResponse\x12\x14\n" +
-	"\x05fixed\x18\x01 \x03(\tR\x05fixed\"W\n" +
+	"\x05fixed\x18\x01 \x03(\tR\x05fixed\"x\n" +
 	"\x10WakeAgentRequest\x12\x19\n" +
 	"\bagent_id\x18\x01 \x01(\tR\aagentId\x12\x12\n" +
 	"\x04from\x18\x02 \x01(\tR\x04from\x12\x14\n" +
-	"\x05count\x18\x03 \x01(\x05R\x05count\"\x13\n" +
+	"\x05count\x18\x03 \x01(\x05R\x05count\x12\x1f\n" +
+	"\vfirst_start\x18\x04 \x01(\bR\n" +
+	"firstStart\"\x13\n" +
 	"\x11WakeAgentResponse*\x86\x01\n" +
 	"\x0eReadinessState\x12\x1f\n" +
 	"\x1bREADINESS_STATE_UNSPECIFIED\x10\x00\x12\x1c\n" +

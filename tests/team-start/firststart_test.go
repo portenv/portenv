@@ -23,6 +23,10 @@
 //     files, and whoami in builder's pane says builder;
 //  8. builder runs git status and git log -1 in the project and in the
 //     worktree, and can't write .git/config or .git/hooks (CC-0493).
+//  9. (wakeOnMessage) the owner's message wakes reviewer;
+//  10. (firstStepWhenKept) reviewer's own ~/.claude/CLAUDE.md is kept at
+//     its next start, and the first-step line is typed once instead
+//     (R-0330).
 //
 // The harness's own docker exec only sets the project up (step 1, as work;
 // step 6, as lead; step 7, as work) and reads the panes as root; portenvd reaches the box
@@ -340,6 +344,7 @@ true`, project))
 	t.Log("step 8: builder ran git in the project and the worktree; .git/config and .git/hooks are read-only to it")
 
 	h.wakeOnMessage(ctx, c)
+	h.firstStepWhenKept(ctx, c)
 }
 
 // checkStartPointer is step 4's second half (R-0327): lead's start
@@ -679,6 +684,40 @@ grep -q '^runner: %[2]s$' .portenv/agents/reviewer.md`, project, wakeRunner, wak
 			h.t.Logf("step 9: reviewer's pane: %s", strings.TrimSpace(l))
 		}
 	}
+}
+
+// Step 10 (R-0330): reviewer replaces its pointer with its own
+// ~/.claude/CLAUDE.md (it owns the folder), and starts again. Portenv
+// keeps the agent's file, and since the runner table knows claude's idle
+// pattern, types the fixed first-step line once into its pane instead.
+const firstStepLine = "[Portenv] You are reviewer in a Portenv team. Run portenv whoami and portenv guide first. Check portenv inbox after each step."
+
+func (h *harness) firstStepWhenKept(ctx context.Context, c daemonv1.DaemonServiceClient) {
+	if _, err := c.StopAgent(ctx, &daemonv1.StopAgentRequest{Name: workspace, AgentId: "reviewer"}); err != nil {
+		h.fatal("step 10 (stop reviewer): %v", err)
+	}
+	out, code := h.box(ctx, "reviewer", `set -eu
+rm -f ~/.claude/CLAUDE.md
+echo "reviewer's own notes" > ~/.claude/CLAUDE.md
+stat -c '%U %a' ~/.claude/CLAUDE.md`)
+	if code != 0 {
+		h.fatal("step 10 (reviewer writes its own CLAUDE.md): exit %d: %s", code, out)
+	}
+	if _, err := c.StartAgent(ctx, &daemonv1.StartAgentRequest{Name: workspace, AgentId: "reviewer"}); err != nil {
+		h.fatal("step 10 (start reviewer again): %v", err)
+	}
+	h.agentPane(ctx, "reviewer", "wake-read: "+firstStepLine, 2*time.Minute)
+	// Once only: more wake ticks and the quiet rule bring no second.
+	time.Sleep(15 * time.Second)
+	pane := h.agentPane(ctx, "reviewer", "wake-inbox", time.Minute)
+	if n := strings.Count(pane, "wake-read: "); n != 1 || !strings.Contains(pane, "wake-read: "+firstStepLine) {
+		h.fatal("step 10: reviewer's pane read %d lines, want only the first-step line:\n%s", n, pane)
+	}
+	out, code = h.box(ctx, "root", `stat -c '%U %a' /home/reviewer/.claude/CLAUDE.md; cat /home/reviewer/.claude/CLAUDE.md`)
+	if code != 0 || out != "reviewer 644\nreviewer's own notes" {
+		h.fatal("step 10: reviewer's own CLAUDE.md wasn't kept as it was: exit %d: %q", code, out)
+	}
+	h.t.Logf("step 10: reviewer's own CLAUDE.md was kept, and its pane read the first-step line once: %s", firstStepLine)
 }
 
 // agentPane reads an agent's main pane, as root in the harness, until it

@@ -37,6 +37,9 @@ const (
 	maxBoardMessage          = teamkit.MaxMessageBytes
 	maxDecisionDetail        = teamkit.MaxDecisionDetailBytes
 	maxDecisionSummary       = teamkit.MaxDecisionSummary
+	minChoices               = teamkit.MinChoices
+	maxChoices               = teamkit.MaxChoices
+	maxChoiceCharacters      = teamkit.MaxChoiceCharacters
 	messagesPerMinute        = teamkit.MessagesPerMinute
 	pendingDecisionsPerAgent = teamkit.PendingDecisionsPerAgent
 	decisionExpiry           = teamkit.DecisionExpiry
@@ -54,7 +57,7 @@ const (
 )
 
 // residualRisk is §2's sentence, shown when a team first starts (R-0245).
-const residualRisk = "Agents can change your project's files. Check their changes before you run them."
+const residualRisk = "Agents work in their own copies of your project and can't change yours: their work comes back as branches you fetch. Check their branches before you run them."
 
 // teamEngine holds every workspace's team state in portenvd.
 type teamEngine struct {
@@ -97,6 +100,8 @@ type teamBox struct {
 	routinesOff map[string]string                          // agent → why its routines are off
 	startErr    map[string]string                          // agent → why its last background start failed, until one succeeds (R-0302)
 	listed      map[string]string                          // agent → its files as syncAgents last saw them
+	wakes       map[string]*wakeState                      // agent → its unread batch (CC-0498)
+	wakeable    map[string]bool                            // agent → its runner has an idle pattern
 	changed     chan struct{}
 }
 
@@ -185,6 +190,7 @@ func (e *teamEngine) appendLocked(ctx context.Context, name string, b *teamBox, 
 		b.decisions[d.GetId()] = d
 		b.events = append(b.events, teamEvent{dec: d})
 	}
+	b.noteWakeLocked(line)
 	b.changedLocked()
 	return nil
 }
@@ -284,7 +290,11 @@ func (e *teamEngine) handleCall(ctx context.Context, name string, c *agentv1.Tea
 		if !threadOK(op.AskOwner.GetThreadId()) {
 			return refuse(id, "A thread id is the id of a board message.")
 		}
-		return e.decideLocked(ctx, name, b, me.ID, typesv1.DecisionKind_DECISION_KIND_ASK_OWNER, text, text, nil, id)
+		choices := op.AskOwner.GetChoices()
+		if line := choicesProblem(choices); line != "" {
+			return refuse(id, "%s", line)
+		}
+		return e.decideChoicesLocked(ctx, name, b, me.ID, typesv1.DecisionKind_DECISION_KIND_ASK_OWNER, text, text, nil, id, choices)
 	case *agentv1.TeamCallsResponse_Split:
 		return e.paneLocked(ctx, name, b, me, &agentv1.AgentPaneActionRequest{AgentId: me.ID, Action: &agentv1.AgentPaneActionRequest_Split{Split: op.Split}}, op.Split.GetArgv(), id)
 	case *agentv1.TeamCallsResponse_Tab:
@@ -295,16 +305,20 @@ func (e *teamEngine) handleCall(ctx context.Context, name string, c *agentv1.Tea
 		return e.ownPaneLocked(ctx, name, b, me.ID, &agentv1.AgentPaneActionRequest{AgentId: me.ID, Action: &agentv1.AgentPaneActionRequest_Close{Close: op.Close}}, op.Close.GetPaneId(), true, id)
 	case *agentv1.TeamCallsResponse_Inbox:
 		in := b.inboxLocked(me.ID, op.Inbox.GetSinceCursor())
+		b.readWakeLocked(me.ID)
 		return &agentv1.TeamCallsRequest{CallId: id, Ok: true, Result: &agentv1.TeamCallsRequest_Inbox{Inbox: in}}
 	case *agentv1.TeamCallsResponse_Share:
 		// A share is a message to the owner, and to the lead when the
-		// grant names it: the same checks and limit (R-0260 item 1).
-		text := "Work is ready"
-		if br := op.Share.GetBranch(); br != "" {
-			text += " on " + br
-		} else {
-			text += " in the shared checkout"
+		// grant names it: the same checks and limit (R-0260 item 1). The
+		// work is on the agent's branch in its own clone (ADR 0022 §2a).
+		if !me.OwnClone() {
+			return refuse(id, "%s has no copy of the project (checkout: none), so it has no branch to share.", me.ID)
 		}
+		branch := agentBranch(me.ID)
+		if br := op.Share.GetBranch(); br != "" && br != branch {
+			return refuse(id, "%s shares its own branch, %s, not %s.", me.ID, branch, br)
+		}
+		text := "Work is ready on " + branch
 		if s := strings.TrimSpace(op.Share.GetText()); s != "" {
 			text += ": " + s
 		}
@@ -379,6 +393,12 @@ func (e *teamEngine) msgLocked(ctx context.Context, name string, b *teamBox, tea
 // decideLocked makes a pending decision for the owner.
 // startIDs is what a team_start's Approve starts.
 func (e *teamEngine) decideLocked(ctx context.Context, name string, b *teamBox, from string, kind typesv1.DecisionKind, summary, detail string, action *agentv1.AgentPaneActionRequest, id string, startIDs ...string) *agentv1.TeamCallsRequest {
+	return e.decideChoicesLocked(ctx, name, b, from, kind, summary, detail, action, id, nil, startIDs...)
+}
+
+// decideChoicesLocked is decideLocked with an ask-owner's choices, already
+// checked by choicesProblem (CC-0501).
+func (e *teamEngine) decideChoicesLocked(ctx context.Context, name string, b *teamBox, from string, kind typesv1.DecisionKind, summary, detail string, action *agentv1.AgentPaneActionRequest, id string, choices []string, startIDs ...string) *agentv1.TeamCallsRequest {
 	if from != boardFrom && len(b.pendingLocked(from)) >= pendingDecisionsPerAgent {
 		return refuse(id, "%s has %d requests waiting for the owner, its limit. Wait for an answer first.", from, pendingDecisionsPerAgent)
 	}
@@ -392,7 +412,7 @@ func (e *teamEngine) decideLocked(ctx context.Context, name string, b *teamBox, 
 	d := &typesv1.Decision{
 		Id: newULID(now), From: from, Kind: kind, Summary: summary, Detail: detail,
 		State: typesv1.DecisionState_DECISION_STATE_PENDING, CreatedAt: timestamppb.New(now),
-		ExpiresAt: timestamppb.New(now.Add(decisionExpiry)), StartAgentIds: startIDs,
+		ExpiresAt: timestamppb.New(now.Add(decisionExpiry)), StartAgentIds: startIDs, Choices: choices,
 	}
 	if err := e.appendLocked(ctx, name, b, &agentv1.AppendBoardRequest{Line: &agentv1.AppendBoardRequest_Decision{Decision: d}}); err != nil {
 		return refuse(id, "%v", err)
@@ -502,6 +522,9 @@ func (e *teamEngine) inboxWait(ctx context.Context, name, me, since, id string) 
 		}
 		in := b.inboxLocked(me, since)
 		changed := b.changed
+		if len(in.GetMessages())+len(in.GetDecisions()) > 0 {
+			b.readWakeLocked(me)
+		}
 		b.mu.Unlock()
 		if len(in.GetMessages())+len(in.GetDecisions()) > 0 {
 			return &agentv1.TeamCallsRequest{CallId: id, Ok: true, Result: &agentv1.TeamCallsRequest_Inbox{Inbox: in}}
@@ -516,17 +539,85 @@ func (e *teamEngine) inboxWait(ctx context.Context, name, me, since, id string) 
 	}
 }
 
+// choicesProblem is an ask-owner's --choice rule (CC-0501): none (a yes/no
+// question), or 2 to 4 labels, each 1 to 80 characters of one-line plain
+// text, all different. It returns the plain line, or "" when they're fine.
+func choicesProblem(choices []string) string {
+	if len(choices) == 0 {
+		return ""
+	}
+	if len(choices) < minChoices || len(choices) > maxChoices {
+		return fmt.Sprintf("Give %d to %d choices, or none for a yes/no question.", minChoices, maxChoices)
+	}
+	seen := map[string]bool{}
+	for _, c := range choices {
+		n := utf8.RuneCountInString(c)
+		if strings.TrimSpace(c) == "" || n > maxChoiceCharacters || !boardText(c, false) {
+			return fmt.Sprintf("A choice is 1 to %d characters of plain text on one line.", maxChoiceCharacters)
+		}
+		if seen[c] {
+			return "Each choice must be different."
+		}
+		seen[c] = true
+	}
+	return ""
+}
+
+// ownerAnswer is the owner's answer from the app: Approve or Decline, or
+// for a decision with choices, the choice (counting from 1) and its label,
+// which must match the decision's stored choice (CC-0501).
+type ownerAnswer struct {
+	approve bool
+	note    string
+	choice  int32
+	label   string
+}
+
 // answer is the owner's Approve or Decline, from the app only.
 func (e *teamEngine) answer(ctx context.Context, name, decisionID string, approve bool, note string) (*typesv1.Decision, error) {
+	return e.answerChoice(ctx, name, decisionID, ownerAnswer{approve: approve, note: note})
+}
+
+// answerChoice is the owner's answer, with a choice.
+func (e *teamEngine) answerChoice(ctx context.Context, name, decisionID string, a ownerAnswer) (*typesv1.Decision, error) {
 	b, err := e.lockBox(ctx, name)
 	if err != nil {
 		return nil, err
 	}
 	defer b.mu.Unlock()
-	return e.answerLocked(ctx, name, b, decisionID, approve, note)
+	return e.answerChoiceLocked(ctx, name, b, decisionID, a)
 }
 
 func (e *teamEngine) answerLocked(ctx context.Context, name string, b *teamBox, decisionID string, approve bool, note string) (*typesv1.Decision, error) {
+	return e.answerChoiceLocked(ctx, name, b, decisionID, ownerAnswer{approve: approve, note: note})
+}
+
+// choiceProblem checks an answer's choice against the decision's stored
+// choices: a decision with choices is answered with one of them or
+// declined, and one without is never answered with a choice. A choice
+// whose label isn't the stored one is refused, so a forged or stale
+// answer never picks the wrong thing.
+func choiceProblem(d *typesv1.Decision, a ownerAnswer) error {
+	choices := d.GetChoices()
+	switch {
+	case len(choices) == 0 && (a.choice != 0 || a.label != ""):
+		return errors.New("that request has no choices; approve or decline it")
+	case len(choices) == 0:
+		return nil
+	case !a.approve && (a.choice != 0 || a.label != ""):
+		return errors.New("a declined request has no choice")
+	case !a.approve:
+		return nil
+	case a.choice < 1 || int(a.choice) > len(choices):
+		return fmt.Errorf("choose one of the request's %d choices", len(choices))
+	case choices[a.choice-1] != a.label:
+		return errors.New("that choice isn't the request's; it may have changed, so look again")
+	}
+	return nil
+}
+
+func (e *teamEngine) answerChoiceLocked(ctx context.Context, name string, b *teamBox, decisionID string, a ownerAnswer) (*typesv1.Decision, error) {
+	approve, note := a.approve, a.note
 	d := b.decisions[decisionID]
 	switch {
 	case d == nil:
@@ -540,6 +631,9 @@ func (e *teamEngine) answerLocked(ctx context.Context, name string, b *teamBox, 
 	}
 	if !boardText(note, true) || len(note) > maxBoardMessage {
 		return nil, errors.New("a note is at most 8 KB of plain text")
+	}
+	if err := choiceProblem(d, a); err != nil {
+		return nil, err
 	}
 	action := b.actions[decisionID]
 	if approve && action != nil {
@@ -557,7 +651,7 @@ func (e *teamEngine) answerLocked(ctx context.Context, name string, b *teamBox, 
 	x := proto.CloneOf(d)
 	x.State, x.AnswerNote, x.AnsweredAt = typesv1.DecisionState_DECISION_STATE_DECLINED, note, timestamppb.New(e.now())
 	if approve {
-		x.State = typesv1.DecisionState_DECISION_STATE_APPROVED
+		x.State, x.Choice = typesv1.DecisionState_DECISION_STATE_APPROVED, a.choice
 	}
 	if err := e.appendLocked(ctx, name, b, &agentv1.AppendBoardRequest{Line: &agentv1.AppendBoardRequest_Decision{Decision: x}}); err != nil {
 		return nil, err
@@ -677,8 +771,9 @@ func (e *teamEngine) startAgentAs(ctx context.Context, name, agentID string, app
 	if err != nil {
 		return nil, err
 	}
-	// The project is the team's before each start (ADR 0022 §2): init
-	// checks it again every time, and refuses with a plain line.
+	// The project is readable by the team and writable by no agent before
+	// each start (ADR 0022 §2a): init checks it again every time, and
+	// refuses with a plain line.
 	pr, err := h.PrepareTeamProject(ctx, &agentv1.PrepareTeamProjectRequest{ProjectDir: "/home/work/" + name})
 	if err != nil {
 		return nil, errors.New(status.Convert(err).Message())
@@ -688,13 +783,19 @@ func (e *teamEngine) startAgentAs(ctx context.Context, name, agentID string, app
 		e.noticeLocked(ctx, name, b, boardOwner, "", "Portenv made these private in your home, since agents can pass through it: "+strings.Join(fixed, "; ")+".")
 	}
 	b.states[agentID] = typesv1.AgentState_AGENT_STATE_STARTING
+	clone := ""
+	if a.OwnClone() {
+		clone = "/home/work/" + name
+	}
 	r, err := h.StartTeamAgent(ctx, &agentv1.StartTeamAgentRequest{
-		AgentId:        agentID,
-		Argv:           a.Runner,
-		AgentsMd:       agentsMDBlock(&team, a) + "\n" + a.Spec.Instructions,
-		HomeSeed:       a.Spec.HomeSeed,
-		HomeQuotaBytes: defaultHomeQuota,
-		IdlePattern:    runnerIdlePattern(a.Runner),
+		AgentId:         agentID,
+		CloneProjectDir: clone,
+		Argv:            a.Runner,
+		AgentsMd:        agentsMDBlock(&team, a, name) + "\n" + a.Spec.Instructions,
+		HomeSeed:        a.Spec.HomeSeed,
+		ProjectDir:      projectDir(name),
+		HomeQuotaBytes:  defaultHomeQuota,
+		IdlePattern:     runnerIdlePattern(a.Runner),
 	})
 	if err != nil {
 		b.states[agentID] = typesv1.AgentState_AGENT_STATE_STOPPED
@@ -705,9 +806,10 @@ func (e *teamEngine) startAgentAs(ctx context.Context, name, agentID string, app
 	b.routines[agentID] = nil
 	idle := runnerIdlePattern(a.Runner)
 	delete(b.routinesOff, agentID)
-	if idle == "" && len(a.Spec.Routines) > 0 {
-		b.routinesOff[agentID] = routinesOffLine(a.Runner)
+	if off := idleOffLine(a.Runner, len(a.Spec.Routines) > 0); off != "" {
+		b.routinesOff[agentID] = off
 	}
+	b.setWakeableLocked(agentID, idle != "")
 	for _, r := range a.Spec.Routines {
 		if idle == "" {
 			break
@@ -898,8 +1000,9 @@ func (e *teamEngine) infoLocked(b *teamBox, a *TeamAgent) *daemonv1.AgentInfo {
 	}
 	info.Status = b.status[a.ID]
 	info.RoutinesOff = b.routinesOff[a.ID]
-	if info.RoutinesOff == "" && a.Spec != nil && len(a.Spec.Routines) > 0 && runnerIdlePattern(a.Runner) == "" {
-		info.RoutinesOff = routinesOffLine(a.Runner)
+	info.ShareLoginOff = shareLoginOffLine(a)
+	if info.RoutinesOff == "" && a.Spec != nil && !a.Remote {
+		info.RoutinesOff = idleOffLine(a.Runner, len(a.Spec.Routines) > 0)
 	}
 	if rs, ok := b.routines[a.ID]; ok {
 		for _, r := range rs {
@@ -1110,16 +1213,17 @@ func (e *teamEngine) whoamiLocked(name string, b *teamBox, team *Team, me *TeamA
 		w.Name, w.Role = me.Spec.Name, me.Spec.Role
 	}
 	w.Status = b.status[me.ID]
-	if me.Spec != nil && len(me.Spec.Routines) > 0 && runnerIdlePattern(me.Runner) == "" {
-		w.RoutinesOff = routinesOffLine(me.Runner)
+	if me.Spec != nil && !me.Remote {
+		w.RoutinesOff = idleOffLine(me.Runner, len(me.Spec.Routines) > 0)
 	}
+	w.ShareLoginOff = shareLoginOffForAgent(me)
 	w.Teammates = e.teammatesLocked(b, team, me, me.Grant.GetTeamStatus())
 	return w
 }
 
 // agentsMDBlock is the generated block at the top of an agent's AGENTS.md
 // (R-0246), written from its grant so it can't drift from what's enforced.
-func agentsMDBlock(team *Team, a *TeamAgent) string {
+func agentsMDBlock(team *Team, a *TeamAgent, workspace string) string {
 	g := a.Grant
 	name := a.ID
 	if a.Spec != nil && a.Spec.Name != "" {
@@ -1144,6 +1248,10 @@ func agentsMDBlock(team *Team, a *TeamAgent) string {
 	} else {
 		cant = append(cant, "ask the owner for decisions")
 	}
+	if a.OwnClone() {
+		can = append(can, fmt.Sprintf("work in your own copy of the project, ~/%s, on branch %s, and say it's ready with portenv share once you've committed", workspace, agentBranch(a.ID)))
+		cant = append(cant, fmt.Sprintf("change the owner's project in /home/work/%s (you can read it, and git fetch owner brings its new commits)", workspace))
+	}
 	cant = append(cant, "reach the owner's terminals or other agents' files", "use sudo")
 	var mates []string
 	for i := range team.Agents {
@@ -1163,6 +1271,9 @@ func agentsMDBlock(team *Team, a *TeamAgent) string {
 	s.WriteString(" Run portenv guide for the board, and portenv whoami for what you can do now.\n")
 	return s.String()
 }
+
+// agentBranch is an agent's branch in its clone (ADR 0022 §2a).
+func agentBranch(id string) string { return "agent/" + id }
 
 // newULID is a ULID: 48 bits of milliseconds, then 80 random bits, in
 // Crockford's base 32, so ids sort by time.

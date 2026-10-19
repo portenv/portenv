@@ -154,6 +154,7 @@ public extension TeamText {
         case .expired: return "Expired"
         case .declined: return "Declined" + at
         case .approved:
+            if let chosen = d.chosen { return "Chose \u{201C}\(chosen)\u{201D}" + at }
             let starting = d.kind == .teamStart
                 ? d.startAgents.compactMap { id in team.first { $0.id == id } }.filter { [.stopped, .starting].contains($0.status) }.map(\.name)
                 : []

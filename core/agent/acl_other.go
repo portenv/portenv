@@ -6,7 +6,6 @@ package agent
 
 import (
 	"errors"
-	"io/fs"
 	"os"
 
 	"golang.org/x/sys/unix"
@@ -16,11 +15,11 @@ import (
 // (as a filesystem without ACLs).
 func fileProjectOps() projectOps {
 	return projectOps{
-		self:     os.Getuid(),
-		chown:    func(f *os.File, gid int) error { return f.Chown(-1, gid) },
-		addACL:   func(*os.File, bool) error { return errors.ErrUnsupported },
-		readACL:  func(*os.File, bool) error { return errors.ErrUnsupported },
-		clearACL: func(*os.File, bool) (fs.FileMode, bool, error) { return 0, false, errors.ErrUnsupported },
+		self: os.Getuid(),
+		othersWrite: func(_ *os.File, st *unix.Stat_t, _ bool) (bool, error) {
+			return st.Mode&0o002 != 0 || (st.Gid != uint32(os.Getgid()) && st.Mode&0o020 != 0), nil // #nosec G115 -- a gid
+		},
+		readOnly: func(*os.File, bool) error { return errors.ErrUnsupported },
 	}
 }
 

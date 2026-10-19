@@ -1173,6 +1173,15 @@ In this order:
 - the caret and the selection follow the system accent.
 - **Later:** View › Terminal Appearance (other themes). Built in lane B's second PR.
 
+**Smart input, phase 1's adapters (ADR 0027 S5a, built 2026-10-19).** In PortenvKit, on ADR 0027 §7's contracts (`Classifier`, `Suggester`, `ClassifyingSuggester`, `InputContext`):
+- **The built-in rules** (`RuleClassifier`), always present and the default classifier.
+- **jev** (`JevClassifier`, §4a): `POST https://api.typesafe.ai/v1/systemone`, the typed line and the shell's name only, the one `intent` question; the model (`jev-latest`) and the threshold (0.8) are settings, and tests pin a version.
+- **Anthropic** (`AnthropicSuggester`): the Messages API with the owner's key, plain URLSession; the model is a setting (`claude-opus-5-5` to start). It sends R-0350's fields only: the sentence, the shell, the intent, the command list, the team's IDs, names and roles, and script names only with the opt-in.
+- **The fall-through runner** (`SmartInputRunner`): rules, then the hosted classifier (150 ms), then the suggester (2 s). Every error, timeout, missing key, missing adapter or malformed answer falls through, ending at the plain line; no dialog, no held keystroke. A circuit breaker per adapter (3 failures, 60 s, doubling to 15 min; a success resets it). Answers are one line of at most 2 KB with no control characters.
+- **Keys:** Settings › Experimental writes each key to its own Keychain service (`dev.portenv.smart-input-keys`), which portenvd, the CLI and the helper never read. The app reads a key only when it makes a call; it's never logged or shown back (the row says when it was saved). Tests use a key store in memory and stubbed network.
+- **The usage counter,** per adapter, in the app's defaults: requests, fallbacks, failures, p50 and p95 latency, input and output tokens, the answering model. Numbers only.
+- **The toggle,** Settings › Experimental › Smart input, off by default; off makes no call and reads no key. Nothing in the terminal calls the runner until S1's editor and S4 land.
+
 **4b. 1.2b: split view** (the owner, 2026-10-10; reference: docs/mockups/split-view.png)
 
 It comes after 1.2's blocks, wherever they land (Phase 1 if the spike succeeds, otherwise Phase 2), and before the launch demo. The panes themselves don't depend on blocks; the Warp-style features below apply per pane once they exist.
@@ -1683,6 +1692,7 @@ These need an owner decision; Claude Code should add new ones here instead of gu
   Dropping any of them makes it the owner's decision. The check on main found that `set-clipboard external` let any program set the Mac's clipboard through `tmux set-buffer -w`, fixed in #94; links are limited to web pages on the person's click (R-0134).
 - [ ] ADR 0020: should agents' terminal access (2.4) move to the `TabTerminal` stream as well, for per-author attribution of their keystrokes, or stay on today's attach?
 - [ ] A per-box "Keep running when Portenv quits" option (off by default) with a menu bar item listing boxes still running? Only with Phase 3's lease hand-off (see 2.4).
+- [ ] ADR 0027 S5a, to confirm with the owner's keys: jev's request and answer field names (`state`, `questions.intent.criteria`, `answers.intent.choice` and `confidence`, `usage`) against TypeSafe's documentation; whether `claude-opus-5-5` at low effort answers within the 2 s budget, or the model setting should start on a faster model; both measured and reported before the budgets are fixed.
 - [x] Tab keyboard shortcuts (1.2)? **Answered (2026-10-10):**
   - ⌘T opens a new tab, ⌘1–⌘9 choose a tab, ⌘⇧[ / ⌘⇧] go to the previous / next tab.
   - ⌘W closes the current tab when there's more than one; on the last tab it closes the window (save and release), like Terminal and Safari.

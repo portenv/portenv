@@ -316,3 +316,26 @@ func TestInboxShowsTheChosenLabel(t *testing.T) {
 		}
 	}
 }
+
+// A template that asks for more agents than the default limit says so,
+// and how to raise it (R-0347); one within the default says nothing.
+func TestTeamInitSaysWhenATemplateNeedsMoreAgents(t *testing.T) {
+	if got := teamInitLimitLine(4); got != "" {
+		t.Errorf("4 agents: %q", got)
+	}
+	want := "This team has 6 agents; Portenv allows 4 in a workspace unless you raise it. In Portenv, choose Raise to 6 in the workspace's Team section, or set Settings › Team › Agents allowed."
+	if got := teamInitLimitLine(6); got != want {
+		t.Errorf("6 agents:\n%q\nwant\n%q", got, want)
+	}
+	if got := teamInitLimitLine(9); !strings.Contains(got, "at most 8") {
+		t.Errorf("9 agents: %q", got)
+	}
+	dir := t.TempDir()
+	var out, errOut bytes.Buffer
+	if code := runTeam(context.Background(), []string{"team", "init", "--template", "orchestrate", "--dir", dir}, func(string) string { return "" }, nil, &out, &errOut); code != 0 {
+		t.Fatalf("exit %d: %s", code, errOut.String())
+	}
+	if strings.Contains(out.String(), "Agents allowed") {
+		t.Errorf("a 4-agent template mentions the limit: %q", out.String())
+	}
+}

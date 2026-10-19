@@ -552,5 +552,22 @@ func runTeamInit(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 	_, _ = fmt.Fprintf(stdout, "Wrote %d agent files to .portenv/agents/ (%s). Approve each in Portenv's Team section; nothing runs before you do.\n", len(files), strings.Join(teamkit.TemplateFiles(name), ", "))
+	if line := teamInitLimitLine(teamkit.TemplateAgents(name)); line != "" {
+		_, _ = fmt.Fprintln(stdout, line)
+	}
 	return 0
+}
+
+// teamInitLimitLine is what team init says when a template asks for more
+// agents than Portenv allows by default (R-0347). The owner's own limit
+// lives on the Mac, which this command in the workspace can't read; the
+// app's Team section shows it and offers the raise.
+func teamInitLimitLine(agents int) string {
+	switch {
+	case agents > teamkit.MaxTeamAgents:
+		return fmt.Sprintf("This team has %d agents; Portenv runs at most %d in a workspace. Turn some off by moving their files out of .portenv/agents/.", agents, teamkit.MaxTeamAgents)
+	case agents > teamkit.DefaultTeamAgents:
+		return fmt.Sprintf("This team has %d agents; Portenv allows %d in a workspace unless you raise it. In Portenv, choose Raise to %d in the workspace's Team section, or set Settings › Team › Agents allowed.", agents, teamkit.DefaultTeamAgents, agents)
+	}
+	return ""
 }

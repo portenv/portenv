@@ -758,14 +758,27 @@ func (e *teamEngine) startAgentAs(ctx context.Context, name, agentID string, app
 		return nil, err
 	}
 	defer b.mu.Unlock()
+	if s := b.states[agentID]; !approved && (s == typesv1.AgentState_AGENT_STATE_STARTING || s == typesv1.AgentState_AGENT_STATE_RUNNING) {
+		return e.infoLocked(b, a), nil
+	}
+	// The owner's limit (R-0347): before the owner is asked anything. A
+	// team not started yet counts the agents its first start names.
+	allowed, active := team.Limits.normal().MaxAgents, b.activeLocked(agentID)
+	if d := b.teamStartPendingLocked(); d != nil && !b.teamStartApprovedLocked() {
+		for _, id := range d.GetStartAgentIds() {
+			if id != agentID {
+				active++
+			}
+		}
+	}
+	if active >= allowed {
+		return nil, errors.New(startLimitLine(a.displayName(), active, allowed))
+	}
 	if !b.teamStartApprovedLocked() {
 		if err := e.askTeamStartLocked(ctx, name, b, agentID); err != nil {
 			return nil, err
 		}
 		return nil, errors.New("approve the team's first start in Portenv first")
-	}
-	if s := b.states[agentID]; !approved && (s == typesv1.AgentState_AGENT_STATE_STARTING || s == typesv1.AgentState_AGENT_STATE_RUNNING) {
-		return e.infoLocked(b, a), nil
 	}
 	h, err := e.helper(ctx, name)
 	if err != nil {
@@ -895,6 +908,7 @@ func (e *teamEngine) startApprovedLocked(ctx context.Context, name string, b *te
 		return
 	}
 	var starting []string
+	allowed, active := team.Limits.normal().MaxAgents, b.activeLocked("")
 	for _, id := range ids {
 		a := team.agent(id)
 		if a == nil {
@@ -903,6 +917,16 @@ func (e *teamEngine) startApprovedLocked(ctx context.Context, name string, b *te
 		if s := b.states[id]; s == typesv1.AgentState_AGENT_STATE_STARTING || s == typesv1.AgentState_AGENT_STATE_RUNNING {
 			continue
 		}
+		// Past the owner's limit (lowered since Start): it stays stopped,
+		// and says why (R-0347).
+		if active >= allowed {
+			line := startLimitLine(a.displayName(), active, allowed)
+			b.startErr[id] = line
+			b.events = append(b.events, teamEvent{agent: e.infoLocked(b, a)})
+			e.noticeAboutLocked(ctx, name, b, boardOwner, d.GetId(), id, line)
+			continue
+		}
+		active++
 		b.states[id] = typesv1.AgentState_AGENT_STATE_STARTING
 		b.events = append(b.events, teamEvent{agent: e.infoLocked(b, a)})
 		starting = append(starting, id)

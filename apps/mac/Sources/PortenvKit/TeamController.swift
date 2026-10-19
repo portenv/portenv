@@ -96,6 +96,23 @@ public final class TeamController {
         }
     }
 
+    /// The Team section's Raise, after the owner confirmed it (R-0347):
+    /// Agents allowed goes to `n` through portenvd, which then sends the
+    /// new limit in WatchTeam. A refusal is the section's error line.
+    public func raiseAgentLimit(to n: Int) async {
+        do {
+            _ = try await AgentsAllowed.set(n, daemon: daemon)
+            limitError = nil
+        } catch let e as DaemonError {
+            limitError = e.message
+        } catch {
+            limitError = error.localizedDescription
+        }
+    }
+
+    /// Why the last Raise was refused; shown under the limit's line.
+    public private(set) var limitError: String?
+
     /// The owner's message to an agent. Nothing is sent when it's empty.
     public func send(_ text: String, to agent: String, thread: String = "") async {
         let text = text.trimmingCharacters(in: .whitespacesAndNewlines)

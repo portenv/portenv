@@ -215,6 +215,9 @@ func (a TeamAgent) Valid() bool { return a.Spec != nil && len(a.Problems) == 0 }
 type Team struct {
 	Agents   []TeamAgent
 	Problems []string
+	// Limits are the owner's limits the team was checked against
+	// (R-0347); zero values mean the defaults.
+	Limits TeamLimits
 }
 
 // problems collects plain lines for one file.
@@ -237,6 +240,7 @@ func LoadTeam(src TeamSource) (Team, error) {
 		return team, err
 	}
 	limits := src.Limits.normal()
+	team.Limits = limits
 	approvals, err := loadAgentApprovals(src.StateDir)
 	if err != nil {
 		return team, err

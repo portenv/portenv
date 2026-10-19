@@ -351,9 +351,9 @@ public final class SplitController {
     public private(set) var layout = SplitLayout(tab: nil)
     /// The panes' area, as the window last drew it.
     public var size: CGSize = .zero
-    /// What the Team sidebar selects: a new pane takes the next tab from the
-    /// tabs the tab bar shows.
-    public var selection: TeamSelection = .allTabs
+    /// What the Team sidebar selects (the tab bar's, from TabsController):
+    /// a new pane takes the next tab from the tabs the tab bar shows.
+    public var selection: TeamSelection { tabs.selection }
     public let tabs: TabsController
     /// A tab made current by a focus change, until portenvd has it: the
     /// tab list's current tab is not followed meanwhile.
@@ -368,6 +368,10 @@ public final class SplitController {
     public var activeTab: String? { layout.tab(in: layout.focused) }
 
     public var isSplit: Bool { layout.panes.count > 1 }
+
+    /// Whether the focused pane shows the tab the tab bar marks current
+    /// (R-0314); true after every change the window passes on.
+    public var agreesWithBar: Bool { activeTab != nil && activeTab == tabs.terminalTab?.id }
 
     /// Where a tab's pane is (0 to 1), for the tab bar's glyph; nil when no
     /// pane shows it or there's only one pane.

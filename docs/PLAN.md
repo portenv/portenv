@@ -1218,7 +1218,7 @@ It comes after 1.2's blocks, wherever they land (Phase 1 if the spike succeeds, 
 - [x] The focused pane's 1 px accent outline; keystrokes go to it. VoiceOver reads each pane as "Pane: grok tab".
 - [x] The tab bar: choosing a tab (a click, ⌘1–9, ⌃Tab, ⌘⇧]) shows it in the focused pane, or focuses the pane already showing it; the current tab is always the focused pane's. A small glyph marks the tabs in a pane, showing where.
 - [x] Each pane asks its own tab for its own size; a tab has one size, the latest asked for.
-- [x] Works with the Team sidebar and agent columns: selecting an agent filters the tab bar as before, and the panes stay as they are.
+- [x] Works with the Team sidebar and agent columns: selecting an agent filters the tab bar and shows that agent's tab in the focused pane, so the focused pane's tab is always the bar's current tab (R-0314); the other panes stay as they are.
 - [x] Tests: `SplitControllerTests`, `SplitLayoutTests`, `SplitPanesLayoutTests` (four panes fit the window's minimum).
 
 **Still to do after the first version:**

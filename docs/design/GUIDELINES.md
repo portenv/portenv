@@ -242,6 +242,7 @@ The Team section is the workspace's sidebar when the workspace has a team (agent
 **Selecting:**
 - **An agent:** its tabs expand beneath its row, the tab bar shows only its tabs (named "Builder · tests"), with **All tabs** at its trailing end, and its column takes the inspector's place: who it runs as, its runner and its pane grant ("Runs as user builder · Claude Code · may open 4 panes"), its messages with you, its Agent files, and a field to message it.
 - **You or All tabs:** the inspector comes back. All tabs shows every tab; You shows yours.
+- **The terminal follows the selection** (R-0314): it always shows exactly the tab the tab bar marks current (in split view, the focused pane does). Selecting an agent shows its tab last shown, or its first; You or All tabs goes back to your tab. An agent with no tab open shows "<Agent> has no tab open", never another agent's pane. An agent starting never moves the view. The terminal's VoiceOver name says whose tab it is: "Terminal: Lead · lead", "Terminal: You · shell".
 - A pane an agent opened is headed "Opened by <agent> · <command>".
 - Who's here (section 6) is dropped from the inspector while the workspace has a team; the Team section replaces it.
 

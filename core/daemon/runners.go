@@ -69,3 +69,21 @@ func shareLoginOffForAgent(a *TeamAgent) string {
 	}
 	return "share_login (" + strings.Join(a.ShareLogin, ", ") + ") isn't supported in this build: nothing of the owner's was shared with you. Sign in yourself in your own terminal, or ask the owner."
 }
+
+// idleOffLine says what an agent misses because Portenv doesn't know when
+// its runner is idle, or "" when it does: no message wake-ups (CC-0498),
+// and no routines when it has any. A runner with no idle pattern is never
+// typed into, the same rule for both.
+func idleOffLine(argv []string, routines bool) string {
+	if runnerIdlePattern(argv) != "" {
+		return ""
+	}
+	if routines {
+		return routinesOffLine(argv) + " New messages don't wake it either; it reads them when it runs portenv inbox."
+	}
+	name := "its runner"
+	if len(argv) > 0 {
+		name = path.Base(argv[0])
+	}
+	return "Messages don't wake it: Portenv doesn't know when " + name + " is idle, so it reads them only when it runs portenv inbox."
+}

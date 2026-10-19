@@ -10,9 +10,6 @@ import SwiftUI
 /// hidden; the app owns names and order.
 struct TabBar: View {
     @Bindable var tabs: TabsController
-    /// What the Team sidebar selects: every tab, yours, or one agent's
-    /// (lane D, ADR 0022 §12; GUIDELINES 6.2).
-    var selection: TeamSelection = .allTabs
     /// The team, for each agent tab's chip and name (R-0265 item 4).
     var team: [TeamAgent] = []
     /// Split view: where a tab's pane is (0 to 1), for its glyph; nil for a
@@ -26,8 +23,12 @@ struct TabBar: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            ForEach(tabs.shown(for: selection)) { tab in
-                TabItem(tab: tab, label: TabLabel.of(tab, team: team) { NSImage(systemSymbolName: $0, accessibilityDescription: nil) != nil },
+            // What the Team sidebar selects: every tab, yours, or one
+            // agent's (lane D, ADR 0022 §12; GUIDELINES 6.2). The tab marked
+            // current is the terminal's own (`terminalTab`, R-0314).
+            let current = tabs.terminalTab?.id
+            ForEach(tabs.shownTabs) { tab in
+                TabItem(tab: tab, isCurrent: tab.id == current, label: TabLabel.of(tab, team: team) { NSImage(systemSymbolName: $0, accessibilityDescription: nil) != nil },
                         pane: paneFrame(tab.id),
                         canClose: tabs.canClose, renaming: renaming == tab.id, draft: $draft,
                         select: { Task { await tabs.select(tab.id) } },
@@ -151,6 +152,8 @@ struct TabCommands: Commands {
 /// tab); double-click or Rename… in its menu to rename it in place.
 private struct TabItem: View {
     let tab: TabInfo
+    /// The tab the terminal shows (TabsController.terminalTab).
+    let isCurrent: Bool
     /// What the tab shows: an agent's tab always with its chip and name.
     let label: TabLabel
     /// Where its split-view pane is, when it's in one.
@@ -183,10 +186,10 @@ private struct TabItem: View {
                     if let pane { PaneGlyph(frame: pane) }
                     if let chip = label.chip { TeamAvatar(look: chip, size: 16) }
                     Text(verbatim: label.title)
-                        .font(.system(size: 12, weight: tab.active ? .semibold : .regular))
+                        .font(.system(size: 12, weight: isCurrent ? .semibold : .regular))
                         .lineLimit(1)
                         .truncationMode(.middle)
-                        .foregroundStyle(tab.active ? .primary : .secondary)
+                        .foregroundStyle(isCurrent ? .primary : .secondary)
                 }
                 .padding(.horizontal, 28)
             }
@@ -208,11 +211,11 @@ private struct TabItem: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(tab.active ? Color(nsColor: .windowBackgroundColor) : .clear)
+        .background(isCurrent ? Color(nsColor: .windowBackgroundColor) : .clear)
         // The current tab is marked by more than a shade (§4.1, §12): its
         // name in semibold and an accent line along its bottom edge.
         .overlay(alignment: .bottom) {
-            if tab.active { Rectangle().fill(Color.accentColor).frame(height: 2).accessibilityHidden(true) }
+            if isCurrent { Rectangle().fill(Color.accentColor).frame(height: 2).accessibilityHidden(true) }
         }
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
@@ -225,7 +228,7 @@ private struct TabItem: View {
         .accessibilityElement(children: renaming ? .contain : .ignore)
         .accessibilityLabel(A11y.tab(label.title))
         .accessibilityValue(pane == nil ? "" : SplitText.inAPane)
-        .accessibilityAddTraits(tab.active ? [.isButton, .isSelected] : .isButton)
+        .accessibilityAddTraits(isCurrent ? [.isButton, .isSelected] : .isButton)
         .accessibilityAction(.default, select)
         .accessibilityAction(named: "Rename", startRename)
         .accessibilityActions {

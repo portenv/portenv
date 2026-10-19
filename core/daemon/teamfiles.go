@@ -148,6 +148,9 @@ type AgentSpec struct {
 	ShareLogin []string
 	// HomeSeed is cleaned, relative to the project.
 	HomeSeed []string
+	// Checkout is "own" (its own clone of the project, the default) or
+	// "none" (ADR 0022 §2a).
+	Checkout string
 	// Routines are the file's routines (R-0258).
 	Routines []AgentRoutine
 	// Grant is the file's grant, with the defaults filled in.
@@ -161,6 +164,18 @@ type AgentSpec struct {
 // grantSet records which grant keys a file sets, for overrides.
 type grantSet struct {
 	panes, maxPanes, message, askOwner, packages, teamStatus bool
+}
+
+// An agent's checkout (ADR 0022 §2a): its own clone of the project, or
+// none.
+const (
+	CheckoutOwn  = "own"
+	CheckoutNone = "none"
+)
+
+// OwnClone is whether the agent works in its own clone of the project.
+func (a TeamAgent) OwnClone() bool {
+	return a.Spec != nil && a.Spec.Checkout != CheckoutNone && !a.Remote
 }
 
 // TeamAgent is one agent of a team: its repository file, the personal
@@ -377,7 +392,7 @@ func pathErrText(err error) error {
 }
 
 var (
-	agentFileKeys = []string{"id", "name", "role", "runner", "via", "avatar", "share_login", "home_seed", "routine", "grant"}
+	agentFileKeys = []string{"id", "name", "role", "runner", "via", "avatar", "share_login", "home_seed", "checkout", "routine", "grant"}
 	agentListLike = map[string]string{"share_login": "[claude]", "home_seed": "[docs/style-guide.md]", "routine": `["every 30m: Status round"]`, "grant.message": "[lead]"}
 )
 
@@ -396,7 +411,7 @@ func buildAgentSpec(content []byte, fileID string, override bool, limits TeamLim
 	if !ok {
 		return nil
 	}
-	s := &AgentSpec{set: map[string]bool{}}
+	s := &AgentSpec{set: map[string]bool{}, Checkout: CheckoutOwn}
 	if override {
 		if strings.TrimSpace(fm.body) != "" {
 			p.addf("it has instructions; only the repository file's are used.")
@@ -458,7 +473,7 @@ func buildAgentSpec(content []byte, fileID string, override bool, limits TeamLim
 			case "routine":
 				p.addf("it sets routine; only the repository file, which the owner approves, has routines.")
 				continue
-			case "name", "role":
+			case "name", "role", "checkout":
 				p.addf("it sets %s; an override may change only runner, via, avatar, share_login and grant.", key)
 				continue
 			}
@@ -563,6 +578,14 @@ func buildAgentSpec(content []byte, fileID string, override bool, limits TeamLim
 					continue
 				}
 				s.Routines = append(s.Routines, rt)
+			}
+		case "checkout":
+			if c, ok := scalar(key, v); ok {
+				if c != CheckoutOwn && c != CheckoutNone {
+					p.addf("checkout is %q; it must be own or none.", c)
+				} else {
+					s.Checkout = c
+				}
 			}
 		case "home_seed":
 			items, _ := list(key, v)

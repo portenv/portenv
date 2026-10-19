@@ -53,9 +53,10 @@ func agentAs(spec AgentServerSpec) (tmuxFunc, tmuxCmdFunc, error) {
 	return run, command, nil
 }
 
-// RunAsAgent is "portenv-agent as-agent UID GID HOME -- tmux ARGS…": it
-// becomes the agent (groups: its own and the team's; no capabilities;
-// no_new_privs) and runs tmux. It returns only on failure.
+// RunAsAgent is "portenv-agent as-agent UID GID HOME -- tmux ARGS…" or
+// "… -- team-io OP ARGS…": it becomes the agent (groups: its own and the
+// team's; no capabilities; no_new_privs) and runs tmux, or the plain
+// binary's team-io. It returns only on failure.
 func RunAsAgent(args []string) error {
 	uid, gid, home, argv, err := parseAsAgent(args)
 	if err != nil {
@@ -91,6 +92,13 @@ func RunAsAgent(args []string) error {
 	}
 	if err := os.Chdir(home); err != nil {
 		return err
+	}
+	if argv[0] == "team-io" {
+		// The plain binary, which has no file capabilities, by its path.
+		if err := checkTrustedFile(PlainBinary, 0); err != nil {
+			return fmt.Errorf("portenv-agent: %w", err)
+		}
+		return syscall.Exec(PlainBinary, append([]string{"portenv-agent"}, argv...), os.Environ()) // #nosec G204 -- the plain binary by its path; argv checked in parseAsAgent
 	}
 	// Checked again here, just before it runs.
 	if err := checkTrustedFile(agentTmuxPath, 0); err != nil {

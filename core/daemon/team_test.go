@@ -619,7 +619,7 @@ func TestTheFirstStartAsksOnceWithTheResidualRisk(t *testing.T) {
 	for _, d := range e.box("w").decisions {
 		if d.GetKind() == typesv1.DecisionKind_DECISION_KIND_TEAM_START {
 			n++
-			if !strings.Contains(d.GetDetail(), "Check their changes before you run them.") {
+			if !strings.Contains(d.GetDetail(), "own copies of your project") || !strings.Contains(d.GetDetail(), "Check their branches before you run them.") {
 				t.Errorf("team_start detail: %q", d.GetDetail())
 			}
 		}
@@ -676,6 +676,58 @@ func TestShareIsAMessageUnderTheGrant(t *testing.T) {
 	}
 	if got := len(h.board) - n; got > messagesPerMinute {
 		t.Errorf("%d share lines in a minute, over the limit of %d", got, messagesPerMinute)
+	}
+}
+
+// ADR 0022 §2a: share names the agent's own branch; an agent without a
+// clone has nothing to share, and another branch is refused.
+func TestShareNamesTheAgentsBranch(t *testing.T) {
+	team := defaultTeam()
+	team[2].Spec.Checkout = CheckoutNone // reviewer
+	e, _, _ := newTestEngine(t, team...)
+	ctx := context.Background()
+	share := func(id, branch string) *agentv1.TeamCallsRequest {
+		return e.handleCall(ctx, "w", &agentv1.TeamCallsResponse{AgentId: id, Op: &agentv1.TeamCallsResponse_Share{Share: &agentv1.Share{Branch: branch, Text: "tests pass"}}})
+	}
+	if r := share("builder", ""); !r.GetOk() || r.GetMessage().GetText() != "Work is ready on agent/builder: tests pass" {
+		t.Errorf("share: %v", r)
+	}
+	if r := share("builder", "agent/builder"); !r.GetOk() {
+		t.Errorf("share agent/builder: %s", r.GetLine())
+	}
+	if r := share("builder", "main"); r.GetOk() || !strings.Contains(r.GetLine(), "agent/builder") {
+		t.Errorf("share main: %v", r)
+	}
+	if r := share("reviewer", ""); r.GetOk() || !strings.Contains(r.GetLine(), "checkout: none") {
+		t.Errorf("share without a clone: %v", r)
+	}
+}
+
+// ADR 0022 §2a: an agent with its own clone starts with the project named,
+// so the helper makes the clone; checkout: none starts without one. Its
+// AGENTS.md says where it works.
+func TestStartNamesTheProjectForTheClone(t *testing.T) {
+	team := defaultTeam()
+	team[2].Spec.Checkout = CheckoutNone
+	e, h, _ := newTestEngine(t, team...)
+	ctx := context.Background()
+	_, _ = e.startAgent(ctx, "w", "lead") // asks the team's first start
+	approveTeamStart(t, e)                // which starts lead
+	if _, err := e.startAgent(ctx, "w", "reviewer"); err != nil {
+		t.Fatalf("start reviewer: %v", err)
+	}
+	got := map[string]*agentv1.StartTeamAgentRequest{}
+	for _, r := range h.started {
+		got[r.GetAgentId()] = r
+	}
+	if got["lead"].GetCloneProjectDir() != "/home/work/w" {
+		t.Errorf("lead's start: clone %q, want /home/work/w", got["lead"].GetCloneProjectDir())
+	}
+	if !strings.Contains(got["lead"].GetAgentsMd(), "your own copy of the project, ~/w, on branch agent/lead") {
+		t.Errorf("lead's AGENTS.md doesn't say where it works: %q", got["lead"].GetAgentsMd())
+	}
+	if got["reviewer"].GetCloneProjectDir() != "" || strings.Contains(got["reviewer"].GetAgentsMd(), "own copy") {
+		t.Errorf("reviewer (checkout: none) got a clone: %v", got["reviewer"])
 	}
 }
 

@@ -87,11 +87,64 @@ func NewEnv() (*Env, error) {
 
 var unsafeRE = regexp.MustCompile(`[^A-Za-z0-9._-]+`)
 
+// machineID reads this machine's ID, making it on first use. Two processes
+// starting together on a fresh Mac (the app's helper call and portenvd) must
+// agree on one ID and never read a half-written file (R-0299): the new ID is
+// written to a temporary file in the same directory and linked into place,
+// which fails if the file already exists, so the first writer wins and every
+// caller returns what the file holds. A plain rename would replace a file
+// another caller has already read. An empty file, from an older version's
+// os.WriteFile still running or killed mid-write, is read again a few times
+// before it is replaced.
 func (e *Env) machineID() (string, error) {
 	p := filepath.Join(e.Dir, "machine-id")
-	if b, err := os.ReadFile(p); err == nil { // #nosec G304 -- fixed name in the Portenv directory
-		return strings.TrimSpace(string(b)), nil
+	for range 2 {
+		id, err := readMachineID(p)
+		if err != nil || id != "" {
+			return id, err
+		}
+		if err := writeMachineID(e.Dir, p); err != nil {
+			return "", err
+		}
 	}
+	return readMachineID(p)
+}
+
+// machineIDRetries and machineIDWait bound how long an empty machine-id is
+// read again before it is treated as broken and replaced.
+var (
+	machineIDRetries = 20
+	machineIDWait    = 25 * time.Millisecond
+)
+
+// readMachineID returns "" with no error when the file doesn't exist, or
+// stays empty after the retries (then the caller writes a new one).
+func readMachineID(p string) (string, error) {
+	for i := 0; ; i++ {
+		b, err := os.ReadFile(p) // #nosec G304 -- fixed name in the Portenv directory
+		if errors.Is(err, os.ErrNotExist) {
+			return "", nil
+		}
+		if err != nil {
+			return "", err
+		}
+		if id := strings.TrimSpace(string(b)); id != "" {
+			return id, nil
+		}
+		if i >= machineIDRetries {
+			// Still empty: broken, not being written. Remove it so the
+			// caller's link can take its place.
+			if err := os.Remove(p); err != nil && !errors.Is(err, os.ErrNotExist) {
+				return "", err
+			}
+			return "", nil
+		}
+		time.Sleep(machineIDWait)
+	}
+}
+
+// writeMachineID puts a new ID at p unless a file is already there.
+func writeMachineID(dir, p string) error {
 	host, _ := os.Hostname()
 	host = strings.Trim(unsafeRE.ReplaceAllString(strings.Split(host, ".")[0], "-"), "-")
 	if host == "" {
@@ -100,7 +153,30 @@ func (e *Env) machineID() (string, error) {
 	b := make([]byte, 3)
 	_, _ = rand.Read(b)
 	id := host + "-" + hex.EncodeToString(b)
-	return id, os.WriteFile(p, []byte(id+"\n"), 0o600)
+
+	f, err := os.CreateTemp(dir, ".machine-id-*")
+	if err != nil {
+		return err
+	}
+	tmp := f.Name()
+	defer func() { _ = os.Remove(tmp) }()
+	if _, err := f.WriteString(id + "\n"); err != nil {
+		_ = f.Close()
+		return err
+	}
+	if err := f.Sync(); err != nil {
+		_ = f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	// CreateTemp makes the file 0600 already. Link never replaces: if
+	// another caller got there first, its ID stands.
+	if err := os.Link(tmp, p); err != nil && !errors.Is(err, os.ErrExist) {
+		return err
+	}
+	return nil
 }
 
 // BoxConfig is a box's configuration on this machine. It holds no secrets.

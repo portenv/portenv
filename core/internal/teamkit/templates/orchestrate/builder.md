@@ -19,3 +19,6 @@ You build what the lead asks for.
 - When a task is done, `portenv share` it to the lead, and ask the
   reviewer to look.
 - Keep your status current: `portenv status set "…" --progress N/M`.
+
+Start by running `portenv whoami` and `portenv guide`, and check `portenv inbox`
+after each step.

@@ -23,18 +23,21 @@ type fakeUsers struct {
 	t      *testing.T
 	runDir string
 	got    []string
+	files  []string // instructions files asked for
+	kept   string   // what init says about the pointer
 	err    error
 }
 
-func (f *fakeUsers) EnsureAgentUser(_ context.Context, id string) (AgentUser, error) {
+func (f *fakeUsers) EnsureAgentUser(_ context.Context, id, instructionsFile string) (AgentUser, error) {
 	f.got = append(f.got, id)
+	f.files = append(f.files, instructionsFile)
 	if f.err != nil {
 		return AgentUser{}, f.err
 	}
 	makeTestRunDir(f.t, f.runDir, id, 2001)
 	base := filepath.Join(f.runDir, id)
 	return AgentUser{UID: 2001, Home: "/home/" + id, Created: true,
-		RunDir: base, TmuxDir: filepath.Join(base, "tmux"), TmpDir: filepath.Join(base, "tmp")}, nil
+		RunDir: base, TmuxDir: filepath.Join(base, "tmux"), TmpDir: filepath.Join(base, "tmp"), PointerKept: f.kept}, nil
 }
 
 type wrote struct {
@@ -264,6 +267,32 @@ func TestStartTeamAgentRefusesAnotherRunFolder(t *testing.T) {
 
 type elsewhereUsers struct{}
 
-func (elsewhereUsers) EnsureAgentUser(context.Context, string) (AgentUser, error) {
+func (elsewhereUsers) EnsureAgentUser(context.Context, string, string) (AgentUser, error) {
 	return AgentUser{UID: 2001, Home: "/home/builder", RunDir: "/tmp/x", TmuxDir: "/tmp/x/tmux", TmpDir: "/tmp/x/tmp"}, nil
+}
+
+// R-0327: the runner's instructions file reaches init, an unknown path is
+// refused before init is asked, and init's "kept" line comes back.
+func TestStartTeamAgentAsksInitForThePointer(t *testing.T) {
+	s, users, _, _, _ := newStartServer(t)
+	users.kept = "~/.claude/CLAUDE.md is the agent's own file, so Portenv left it and didn't add its pointer."
+	r, err := s.StartTeamAgent(context.Background(), &agentv1.StartTeamAgentRequest{AgentId: "builder", Argv: []string{"claude"}, InstructionsFile: ".claude/CLAUDE.md"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(users.files, []string{".claude/CLAUDE.md"}) {
+		t.Errorf("init was asked for %q", users.files)
+	}
+	if r.GetPointerKept() != users.kept {
+		t.Errorf("pointer_kept = %q", r.GetPointerKept())
+	}
+	for _, f := range []string{"../work/.bashrc", ".bashrc", "/etc/passwd", ".claude/settings.json"} {
+		_, err := s.StartTeamAgent(context.Background(), &agentv1.StartTeamAgentRequest{AgentId: "reviewer", Argv: []string{"claude"}, InstructionsFile: f})
+		if status.Code(err) != codes.InvalidArgument {
+			t.Errorf("instructions file %q: %v", f, err)
+		}
+	}
+	if slices.Contains(users.got, "reviewer") {
+		t.Error("init was asked with a path it doesn't know")
+	}
 }

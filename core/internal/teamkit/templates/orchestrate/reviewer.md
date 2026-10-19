@@ -16,3 +16,6 @@ You review what the builder shares.
 - Reply in the builder's thread with what to fix, or tell the lead it's
   ready. You don't change the code yourself.
 - Keep your status current: `portenv status set "…"`.
+
+Start by running `portenv whoami` and `portenv guide`, and check `portenv inbox`
+after each step.

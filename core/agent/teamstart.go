@@ -14,6 +14,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 
+	"github.com/portenv/portenv/core/internal/teamkit"
 	agentv1 "github.com/portenv/portenv/proto/gen/go/portenv/agent/v1"
 )
 
@@ -43,31 +44,36 @@ var errNoAgentServers = errors.New("this build can't start agents' terminals yet
 
 // agentUsers makes agent users: init, over its own socket.
 type agentUsers interface {
-	EnsureAgentUser(ctx context.Context, id string) (AgentUser, error)
+	// instructionsFile, when set, is where init also writes the agent's
+	// start pointer (R-0327).
+	EnsureAgentUser(ctx context.Context, id, instructionsFile string) (AgentUser, error)
 }
 
 // initUsers asks init (root) on its local socket.
 type initUsers struct{ socket string }
 
-func (u initUsers) EnsureAgentUser(ctx context.Context, id string) (AgentUser, error) {
+func (u initUsers) EnsureAgentUser(ctx context.Context, id, instructionsFile string) (AgentUser, error) {
 	conn, err := grpc.NewClient("unix://"+u.socket, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return AgentUser{}, fmt.Errorf("connect to init: %w", err)
 	}
 	defer func() { _ = conn.Close() }()
-	r, err := agentv1.NewAgentServiceClient(conn).EnsureAgentUser(ctx, &agentv1.EnsureAgentUserRequest{AgentId: id})
+	r, err := agentv1.NewAgentServiceClient(conn).EnsureAgentUser(ctx, &agentv1.EnsureAgentUserRequest{AgentId: id, InstructionsFile: instructionsFile})
 	if err != nil {
 		return AgentUser{}, errors.New(status.Convert(err).Message())
 	}
 	return AgentUser{
 		UID: int(r.GetUid()), Home: r.GetHome(), Created: r.GetCreated(),
 		RunDir: r.GetRunDir(), TmuxDir: r.GetTmuxDir(), TmpDir: r.GetTmpDir(),
+		PointerKept: r.GetPointerKept(),
 	}, nil
 }
 
 // StartTeamAgent starts one agent (ADR 0022 §8): init makes its user if
-// it's new, and its run folder; the helper serves its socket in that folder, writes AGENTS.md as the agent,
-// and starts its own tmux server with the runner in its first tab.
+// it's new, and its run folder, and writes its start pointer where its
+// runner reads user instructions (R-0327); the helper serves its socket in
+// that folder, writes AGENTS.md as the agent, and starts its own tmux
+// server with the runner in its first tab.
 func (s *apiServer) StartTeamAgent(ctx context.Context, req *agentv1.StartTeamAgentRequest) (*agentv1.StartTeamAgentResponse, error) {
 	if s.team == nil || s.users == nil {
 		return nil, status.Error(codes.Unimplemented, "no team in this workspace")
@@ -85,10 +91,13 @@ func (s *apiServer) StartTeamAgent(ctx context.Context, req *agentv1.StartTeamAg
 	} else if _, err := regexp.Compile(p); err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "%s's idle pattern: %v", id, err)
 	}
+	if f := req.GetInstructionsFile(); f != "" && !teamkit.IsPointerFile(f) {
+		return nil, status.Errorf(codes.InvalidArgument, "%s's instructions file %q isn't one Portenv writes", id, f)
+	}
 	if len(req.GetAgentsMd()) > maxAgentsMD {
 		return nil, status.Errorf(codes.InvalidArgument, "%s's AGENTS.md is over %d KB", id, maxAgentsMD>>10)
 	}
-	u, err := s.users.EnsureAgentUser(ctx, id)
+	u, err := s.users.EnsureAgentUser(ctx, id, req.GetInstructionsFile())
 	if err != nil {
 		return nil, status.Errorf(codes.FailedPrecondition, "%s: %v", id, err)
 	}
@@ -136,7 +145,7 @@ func (s *apiServer) StartTeamAgent(ctx context.Context, req *agentv1.StartTeamAg
 			return nil, status.Errorf(codes.Internal, "set %s's idle pattern: %v", id, err)
 		}
 	}
-	return &agentv1.StartTeamAgentResponse{Tabs: tabs}, nil
+	return &agentv1.StartTeamAgentResponse{Tabs: tabs, PointerKept: u.PointerKept}, nil
 }
 
 // StopTeamAgent ends an agent at once (ADR 0022 §8): its tmux server, then

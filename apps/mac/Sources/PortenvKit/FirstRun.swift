@@ -10,24 +10,27 @@ public enum FirstRunStep: Int, CaseIterable, Sendable {
     case welcome, recoveryKey, storage, firstBox, gettingReady
 }
 
-/// Usage counting (1.8) needs the update check, which tester builds don't
-/// have: its checkbox stays hidden until counting exists, and then starts
-/// unticked (R-0106, R-0126). Builds with counting set PORTENV_COUNTING.
+/// Usage counting (PLAN.md 1.8): "Count me in usage numbers", unticked
+/// until the person ticks it, on Welcome and in Settings › Updates
+/// (R-0106, R-0126). UsageCheck sends the counts.
 public enum UsageCounting {
-    #if PORTENV_COUNTING
+    /// Shown on Welcome and in Settings: counting exists in this build.
     public static let shown = true
-    #else
-    public static let shown = false
-    #endif
 
-    /// Where the person's choice is kept once counting exists (it's never
-    /// on before that); Settings › Updates says what's sent from it.
+    /// Where the person's choice is kept; Settings › Updates says what's
+    /// sent from it.
     public static let choiceKey = "countUsage"
 
-    /// Whether usage numbers are counted: only in a build with counting,
-    /// and only if the person chose it.
+    /// Whether usage numbers are counted: only if the person chose it.
     public static func isOn(_ defaults: UserDefaults = .standard) -> Bool {
         shown && defaults.bool(forKey: choiceKey)
+    }
+
+    /// The person's choice, from first run's checkbox or Settings. Off
+    /// forgets the local counting state too.
+    public static func setChoice(_ on: Bool, _ defaults: UserDefaults = .standard) {
+        defaults.set(on, forKey: choiceKey)
+        if !on { UsageCheck.Keys.state.forEach(defaults.removeObject(forKey:)) }
     }
 }
 
@@ -509,12 +512,16 @@ public enum FirstRunText {
     public static let countMeIn = "Count me in usage numbers (no ID, nothing about your work)"
     /// The exact fields, in plain words (PLAN.md 1.8).
     public static let countedFields = [
-        "Portenv’s version, the macOS version and the Mac’s architecture",
+        "Portenv’s version, the macOS version (only the major one, like 26) and the Mac’s architecture",
         "the month you installed Portenv",
         "whether it’s the first check each week, and the first check each month",
         "once a week: whether a workspace moved, whether an agent worked in a workspace, and rough counts of your workspaces and servers (like 2–5)",
     ]
     public static let neverCounted = "Never sent: any ID, your name or email, workspace names, file names or anything in your workspaces. Your IP address is seen in transit but never kept."
+    /// When the counts go, and where (PLAN.md 1.8).
+    public static let countedWhen = "Sent to portenv.com at most once a day, only on days you open a workspace."
     public static let whatsCounted = "What’s counted"
-    public static let turnOff = "You can turn this off at any time in Settings › Privacy. The update check itself stays, for security updates."
+    /// Until Sparkle (1.8) there's no update check, so off sends nothing at
+    /// all; the Sparkle change says the update check stays.
+    public static let turnOff = "You can turn this off at any time in Settings › Updates. Off, Portenv sends nothing."
 }

@@ -65,7 +65,7 @@ SWIFT_PROTOBUF := 1.38.1
 GRPC_SWIFT_PROTOBUF := 2.4.1
 SWIFT_PLUGINS := $(BIN)/protoc-gen-swift $(BIN)/protoc-gen-grpc-swift-2
 
-.PHONY: team-boundary team-start all build app release-local unregister-service test fuzz lint fmt proto proto-go proto-swift proto-check proto-check-go agent-linux cli-linux cli-darwin swift-test swift-env-check \
+.PHONY: team-boundary team-start all build app release-local unregister-service test counting-test fuzz lint fmt proto proto-go proto-swift proto-check proto-check-go agent-linux cli-linux cli-darwin swift-test swift-env-check \
 	secrets spdx-check check tools clean image image-test driver-test e2e
 
 all: build test lint proto-check
@@ -124,6 +124,12 @@ test: $(TOOLS_STAMP)
 	scripts/test-attached-terminal.sh
 	scripts/test-check-ssh-keygen.sh
 	scripts/test-check-dev-previews.sh
+	$(MAKE) counting-test
+
+## counting-test: usage counting's Worker and snapshot (node's own test runner, no packages) and the download archive (PLAN.md 1.8)
+counting-test:
+	node --test tools/counting/test/*.test.mjs
+	scripts/test-archive-downloads.sh
 
 ## fuzz: the workspace helper's control-mode decoder, line reader and pane parser, briefly (R-0162, R-0142)
 # Counts of runs, not durations: with a duration, go test fails with

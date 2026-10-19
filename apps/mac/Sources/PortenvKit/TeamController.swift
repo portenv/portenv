@@ -32,6 +32,9 @@ public final class TeamController {
     public private(set) var review: AgentFileReview?
     private let daemon: DaemonAPI
     private let retry: Duration
+    /// An agent is running in the workspace: usage counting's `agent`
+    /// (PLAN.md 1.8).
+    @ObservationIgnored public var onAgentRunning: (() -> Void)?
 
     public init(box: String, daemon: DaemonAPI, retry: Duration = .seconds(1)) {
         self.box = box
@@ -53,6 +56,7 @@ public final class TeamController {
             do {
                 for try await (event, cursor) in daemon.watchTeam(box, cursor: state.cursor) {
                     state.apply(event, cursor: cursor)
+                    noteRunning(event)
                     if case .removed(let id) = event, selection == .agent(id) { selection = .allTabs }
                 }
             } catch let e as DaemonError where e.message == DaemonError.outOfDate {
@@ -212,7 +216,14 @@ public final class TeamController {
     public func closeFile() { review = nil }
 
     /// Tests: an event as if from the stream.
-    func receive(_ event: TeamEvent) { state.apply(event) }
+    func receive(_ event: TeamEvent) {
+        state.apply(event)
+        noteRunning(event)
+    }
+
+    private func noteRunning(_ event: TeamEvent) {
+        if case .agent(let a) = event, a.status == .running { onAgentRunning?() }
+    }
 
     public func dismissError() { error = nil }
 

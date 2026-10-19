@@ -179,6 +179,8 @@ public final class BoxController {
     private let sleep: @Sendable (Duration) async -> Void
     /// Where a move in progress is going (the inspector shows the move).
     public private(set) var movingTo: String?
+    /// A move finished: usage counting's `moved` (PLAN.md 1.8).
+    @ObservationIgnored public var onMoved: (() -> Void)?
 
     private let daemon: DaemonAPI
     /// The window's tab terminals (ADR 0020): one stream per tab through
@@ -800,6 +802,7 @@ public final class BoxController {
         let started = now()
         await perform {
             try await self.daemon.move(self.box, to: target)
+            self.onMoved?()
             self.terminalGeneration += 1
             self.show(StateLine.moved(to: target))
             await self.refresh()

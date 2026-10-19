@@ -15,6 +15,7 @@ while IFS= read -r f; do
 	fi
 done < <(git ls-files --cached --others --exclude-standard -- \
 	'*.go' '*.proto' '*.swift' '*.sh' '*.yml' '*.yaml' 'Makefile' '**/Makefile' '**/Dockerfile' \
+	'*.mjs' '*.sql' '**/wrangler.toml' \
 	':!proto/gen/**' ':!**/testdata/**')
 
 exit "$missing"

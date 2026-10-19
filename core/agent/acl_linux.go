@@ -152,3 +152,75 @@ func teamReadOnly(f *os.File, dir bool, ownGID uint32) error {
 func statType(st *unix.Stat_t) uint32 { return st.Mode & unix.S_IFMT }
 
 func statDev(st *unix.Stat_t) uint64 { return st.Dev }
+
+// fileLensOps sets lens entries through each file's own descriptor.
+func fileLensOps() lensOps { return lensOps{set: setLensACL} }
+
+// setLensACL gives readers (agent uids) read on f (r-x on a folder or a
+// program, r-- otherwise), or --x with traverseOnly, and takes every other
+// agent uid's entry away; on a folder (not traverseOnly) its default ACL
+// gets the same, or loses its agent entries (and goes, when nothing is
+// left in it) when there are no readers.
+func setLensACL(f *os.File, dir bool, readers []uint32, traverseOnly bool) error {
+	fi, err := f.Stat()
+	if err != nil {
+		return err
+	}
+	acc, err := getACL(f, aclXattrAccess)
+	if err != nil {
+		return err
+	}
+	cur := acc
+	if cur == nil {
+		cur = minimalACL(fi.Mode())
+	}
+	perm := uint16(4)
+	if dir || fi.Mode()&0o111 != 0 {
+		perm = 5
+	}
+	if traverseOnly {
+		perm = 1
+	}
+	want := map[uint32]uint16{}
+	for _, r := range readers {
+		want[r] = perm
+	}
+	next := aclWithUsers(cur, want, AgentUIDFirst, AgentUIDLast)
+	if acc == nil && !aclHasNamed(next) {
+		// Nothing to add or take away.
+	} else if acc == nil || !bytes.Equal(encodeACL(acc), encodeACL(next)) {
+		if err := setACL(f, aclXattrAccess, next); err != nil {
+			return err
+		}
+	}
+	if !dir || traverseOnly {
+		return nil
+	}
+	def, err := getACL(f, aclXattrDefault)
+	if err != nil {
+		return err
+	}
+	if def == nil && len(readers) == 0 {
+		return nil
+	}
+	base := def
+	if base == nil {
+		base = aclBase(next)
+	}
+	dwant := map[uint32]uint16{}
+	for _, r := range readers {
+		dwant[r] = 5
+	}
+	nextDef := aclWithUsers(base, dwant, AgentUIDFirst, AgentUIDLast)
+	if !aclHasNamed(nextDef) {
+		err := withFD(f, func(fd int) error { return unix.Fremovexattr(fd, aclXattrDefault) })
+		if errors.Is(err, unix.ENODATA) {
+			return nil
+		}
+		return err
+	}
+	if def == nil || !bytes.Equal(encodeACL(def), encodeACL(nextDef)) {
+		return setACL(f, aclXattrDefault, nextDef)
+	}
+	return nil
+}

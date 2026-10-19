@@ -165,3 +165,47 @@ func aclLetsOthersWrite(es []aclEntry, uid, gid, ownGID uint32) bool {
 	}
 	return false
 }
+
+// aclWithUsers is the ACL with its named-user entries for uids in [lo, hi]
+// replaced by want (uid → perm), others kept, and the mask the union of
+// the group class (none when no named entry is left, so the ACL is the
+// mode's again).
+func aclWithUsers(es []aclEntry, want map[uint32]uint16, lo, hi uint32) []aclEntry {
+	out := make([]aclEntry, 0, len(es)+len(want))
+	named := false
+	for _, e := range es {
+		switch {
+		case e.tag == aclMask:
+			continue
+		case e.tag == aclUser && e.id >= lo && e.id <= hi:
+			continue
+		case e.tag == aclUser || e.tag == aclGroup:
+			named = true
+		}
+		out = append(out, e)
+	}
+	for uid, perm := range want {
+		out = append(out, aclEntry{aclUser, perm & 7, uid})
+		named = true
+	}
+	if !named {
+		return out
+	}
+	var mask uint16
+	for _, e := range out {
+		if e.tag == aclGroupObj || e.tag == aclUser || e.tag == aclGroup {
+			mask |= e.perm
+		}
+	}
+	return append(out, aclEntry{aclMask, mask, aclUndefinedID})
+}
+
+// aclHasNamed is whether the ACL has a named user or group entry.
+func aclHasNamed(es []aclEntry) bool {
+	for _, e := range es {
+		if e.tag == aclUser || e.tag == aclGroup {
+			return true
+		}
+	}
+	return false
+}

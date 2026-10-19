@@ -9,9 +9,7 @@ grant:
   max_panes: 2
   message: [coordinator, builder-a, builder-b, builder-c]
   ask_owner: true
-  # read_clones: [builder-a, builder-b, builder-c] belongs here once
-  # Portenv supports it (ADR 0022 section 2a); until then builders hand
-  # you their diffs.
+  read_clones: [builder-a, builder-b, builder-c]
 ---
 You review every change before it merges. You read and run; you never
 change the code (your runner can't edit files). Run on a different model

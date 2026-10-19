@@ -46,7 +46,7 @@ type GuideCommand struct {
 
 // guideTypes are the messages an agent reads (inbox, whoami, team status).
 var guideTypes = []protoreflect.ProtoMessage{
-	&typesv1.BoardMessage{}, &typesv1.Decision{}, &typesv1.HandoffFile{}, &typesv1.AgentStatus{},
+	&typesv1.BoardMessage{}, &typesv1.Decision{}, &typesv1.MigrationItem{}, &typesv1.HandoffFile{}, &typesv1.AgentStatus{},
 	&typesv1.AgentGrant{}, &typesv1.PackagePlan{}, &agentv1.InboxResult{}, &agentv1.WhoAmIResult{},
 	&agentv1.Teammate{}, &agentv1.TeamStatusResult{},
 }
@@ -99,6 +99,7 @@ func NewGuide() Guide {
 			"Only the owner answers decisions, in Portenv. A decision you asked for is pending until then.",
 			"You reach only your own terminals and files. Opening a pane in the owner's window goes through portenv split or portenv tab new, and your grant.",
 			"Run portenv whoami for what you can do now.",
+			ShareLoginOff,
 		},
 		Etiquette: []string{
 			"One topic per thread; reply in the thread (--thread).",

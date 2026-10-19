@@ -459,6 +459,9 @@ func printTeamReply(w io.Writer, name string, call *agentv1.TeamCallsResponse, r
 		if len(me.GetCommands()) > 0 {
 			_, _ = fmt.Fprintf(w, "You can use: %s\n", shownPlain(strings.Join(me.GetCommands(), ", ")))
 		}
+		if off := me.GetShareLoginOff(); off != "" {
+			_, _ = fmt.Fprintln(w, shownPlain(off))
+		}
 		_, _ = fmt.Fprintln(w, "For everything, run: portenv whoami --json")
 	default:
 		_, _ = fmt.Fprintln(w, "Done.")

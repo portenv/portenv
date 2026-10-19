@@ -256,7 +256,7 @@ You build what the lead asks for. …
 
 **Templates:** `portenv team init` offers three, and asks the owner to approve each file it writes:
 - **Starter:** three agents for Claude Code (lead, builder, reviewer).
-- **Orchestrate team** (R-0232): lead, builder, reviewer and design-system keeper, the team the owner tests end to end before testers (section 11).
+- **Orchestrate team** (R-0232, rebuilt by R-0340): how this project is run, as a template. A coordinator (assigns lanes, runs the merge chain, keeps the tracker, `team_status: read`, a 30-minute status round that reports only blockers), a reviewer on a different model that can't edit files and gives numbered decisions, three parallel builder lanes (`builder-a` to `builder-c`, each with its own clone), and DevOps; a design keeper ships off. Its rules: one task per lane, a test that failed before the change in every PR, the 200-deleted-line guard only the owner waives, no force-push, hand merges with a remerge-diff and a tree check, numbered decisions on the board, and owner approvals only in the app. Until R-0340 it was lead, builder, reviewer and design keeper; the owner's run sheet (section 11) uses the new team.
 - **App product team** (`app-product`, R-0338): an engineering lead (`team_status: read`, a 30-minute status round that reports only blockers), a code writer, a code reviewer that can't edit files, a product designer, a design-system keeper, trust and safety and support (no clone, can't edit files), an App Store release manager and DevOps (the project's runbook first, production only by an approved decision). A social media manager ships off (drafts only, never publishes).
 
 **Agents a template ships off** are written to `.portenv/agents/off/<id>.md`. `portenvd` and the helper read only `<id>.md` directly in `.portenv/agents/`, so a file in `off/` is never loaded, approved or started; the owner turns one on by moving it up a folder and adding it to its teammates' `grant.message`, then approves the changed files. This is a folder convention of `team init`, not a new key in the agent file. Templates don't set `grant.read_clones` until portenvd parses it; the reviewer's file names it in a comment, and the writer hands the reviewer its diff (`portenv handoff`) meanwhile.
@@ -319,7 +319,7 @@ Agents learn what they can do from Portenv, not from guesses. Everything below c
 - **`grant.team_status: read`** (default `none`; an override can only narrow it):
   - `portenv team status` and `whoami` show each teammate's state, status, pending requests and idle time;
   - never terminals or homes;
-  - in the Orchestrate template, only the lead has it.
+  - in the Orchestrate template, only the coordinator has it; in App product, only the lead.
 - **Hand-offs: `portenv handoff AGENT PATH [--note]`,** under the `message` grant:
   - **source:** only from the sender's home or the project, by full path;
   - **reading:** as the sender, by an openat walk with `O_NOFOLLOW`; a link or special file refuses the whole hand-off;

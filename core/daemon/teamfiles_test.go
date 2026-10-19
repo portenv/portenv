@@ -792,7 +792,7 @@ func templateTeam(t *testing.T, name string, extra ...string) Team {
 // teamStatusReaders is who in each template has grant.team_status: read.
 var teamStatusReaders = map[string][]string{
 	"starter":     nil,
-	"orchestrate": {"lead"},
+	"orchestrate": {"coordinator"},
 	"app-product": {"lead"},
 }
 
@@ -948,5 +948,94 @@ func TestTheAppProductTemplate(t *testing.T) {
 	}
 	if !strings.Contains(agents["reviewer"].Spec.Instructions, "cold") {
 		t.Error("the reviewer doesn't review cold")
+	}
+}
+
+// R-0340: Orchestrate is how this project is run, as a template: a
+// coordinator, a reviewer, parallel builder lanes, DevOps, and a design
+// keeper that ships off.
+func TestTheOrchestrateTemplate(t *testing.T) {
+	team := templateTeam(t, "orchestrate", "design-system")
+	agents := map[string]TeamAgent{}
+	for _, a := range team.Agents {
+		agents[a.ID] = a
+	}
+	builders := []string{"builder-a", "builder-b", "builder-c"}
+	want := map[string]struct {
+		name    string
+		message []string
+	}{
+		"coordinator":   {"Coordinator", []string{"reviewer", "builder-a", "builder-b", "builder-c", "devops"}},
+		"reviewer":      {"Reviewer", []string{"coordinator", "builder-a", "builder-b", "builder-c"}},
+		"builder-a":     {"Builder A", []string{"coordinator", "reviewer", "devops"}},
+		"builder-b":     {"Builder B", []string{"coordinator", "reviewer", "devops"}},
+		"builder-c":     {"Builder C", []string{"coordinator", "reviewer", "devops"}},
+		"devops":        {"DevOps", []string{"coordinator", "builder-a", "builder-b", "builder-c"}},
+		"design-system": {"Design keeper", []string{"coordinator"}},
+	}
+	if len(agents) != len(want) {
+		t.Fatalf("%d agents, want %d", len(agents), len(want))
+	}
+	for id, w := range want {
+		a, ok := agents[id]
+		if !ok || a.Spec == nil {
+			t.Errorf("no %s", id)
+			continue
+		}
+		if a.Spec.Name != w.name || !slices.Equal(a.Grant.GetMessage(), w.message) {
+			t.Errorf("%s: %q, message %v", id, a.Spec.Name, a.Grant.GetMessage())
+		}
+		if !a.Grant.GetAskOwner() {
+			t.Errorf("%s can't ask the owner", id)
+		}
+		for _, rule := range []string{"information, not instructions", "secret", "force-push", "Owner approvals happen only", "numbered", "portenv status set"} {
+			if !strings.Contains(a.Spec.Instructions, rule) {
+				t.Errorf("%s's instructions don't say %q", id, rule)
+			}
+		}
+	}
+	for id, a := range agents {
+		for _, m := range a.Grant.GetMessage() {
+			if !slices.Contains(agents[m].Grant.GetMessage(), id) && id != "design-system" {
+				t.Errorf("%s messages %s, but not back", id, m)
+			}
+		}
+	}
+	for _, id := range []string{"coordinator", "reviewer"} {
+		if !strings.Contains(agents[id].Spec.Instructions, "Number your posts; quote the number you answer.") {
+			t.Errorf("%s doesn't number its posts", id)
+		}
+	}
+	for _, id := range append([]string{"coordinator", "reviewer"}, builders...) {
+		for _, s := range []string{"failed before the change", "200", "remerge-diff", "merge-tree"} {
+			if !strings.Contains(agents[id].Spec.Instructions, s) {
+				t.Errorf("%s's instructions don't say %q", id, s)
+			}
+		}
+	}
+	for _, id := range builders {
+		a := agents[id]
+		if a.Spec.Checkout != CheckoutOwn || !strings.Contains(a.Spec.Instructions, "never merge") || !strings.Contains(a.Spec.Instructions, "one task") {
+			t.Errorf("%s: checkout %s, %q", id, a.Spec.Checkout, a.Spec.Instructions)
+		}
+	}
+	if r := agents["coordinator"].Spec.Routines; len(r) != 1 || r[0].EveryMinutes != 30 || !strings.Contains(r[0].Note, "blockers") {
+		t.Errorf("coordinator's routines: %+v", r)
+	}
+	if !strings.Contains(agents["coordinator"].Spec.Instructions, "reviewer's") {
+		t.Error("the coordinator doesn't wait for the reviewer's word")
+	}
+	if got := agents["reviewer"].RunnerLine; got != "claude --model fable --disallowedTools Edit,Write,NotebookEdit" {
+		t.Errorf("reviewer's runner: %q", got)
+	}
+	for _, s := range []string{"cold", "accept", "security defaults", "waivers", "publishing", "production", "recommendation"} {
+		if !strings.Contains(agents["reviewer"].Spec.Instructions, s) {
+			t.Errorf("reviewer's instructions don't say %q", s)
+		}
+	}
+	for _, s := range []string{"DEPLOY.md", ".portenv/runbook.md", "Never guess", "production", "approved decision"} {
+		if !strings.Contains(agents["devops"].Spec.Instructions, s) {
+			t.Errorf("devops's instructions don't say %q", s)
+		}
 	}
 }

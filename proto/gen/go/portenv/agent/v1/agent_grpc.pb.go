@@ -55,6 +55,7 @@ const (
 	AgentService_DeliverRoutine_FullMethodName     = "/portenv.agent.v1.AgentService/DeliverRoutine"
 	AgentService_HandoffFiles_FullMethodName       = "/portenv.agent.v1.AgentService/HandoffFiles"
 	AgentService_PrepareTeamProject_FullMethodName = "/portenv.agent.v1.AgentService/PrepareTeamProject"
+	AgentService_WakeAgent_FullMethodName          = "/portenv.agent.v1.AgentService/WakeAgent"
 )
 
 // AgentServiceClient is the client API for AgentService service.
@@ -147,6 +148,12 @@ type AgentServiceClient interface {
 	// .git/config and .portenv/ never group-writable. Refuses with a plain
 	// line when the filesystem won't keep ACLs.
 	PrepareTeamProject(ctx context.Context, in *PrepareTeamProjectRequest, opts ...grpc.CallOption) (*PrepareTeamProjectResponse, error)
+	// Wakes an idle agent for new board lines (CC-0498): types the fixed
+	// line "[Portenv] new message from <from>; run portenv inbox", then
+	// Enter, into the agent's own main pane, under exactly DeliverRoutine's
+	// checks. The helper writes the line itself; no message text is ever
+	// typed, and from must be an agent id or "owner".
+	WakeAgent(ctx context.Context, in *WakeAgentRequest, opts ...grpc.CallOption) (*WakeAgentResponse, error)
 }
 
 type agentServiceClient struct {
@@ -496,6 +503,16 @@ func (c *agentServiceClient) PrepareTeamProject(ctx context.Context, in *Prepare
 	return out, nil
 }
 
+func (c *agentServiceClient) WakeAgent(ctx context.Context, in *WakeAgentRequest, opts ...grpc.CallOption) (*WakeAgentResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WakeAgentResponse)
+	err := c.cc.Invoke(ctx, AgentService_WakeAgent_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AgentServiceServer is the server API for AgentService service.
 // All implementations must embed UnimplementedAgentServiceServer
 // for forward compatibility.
@@ -586,6 +603,12 @@ type AgentServiceServer interface {
 	// .git/config and .portenv/ never group-writable. Refuses with a plain
 	// line when the filesystem won't keep ACLs.
 	PrepareTeamProject(context.Context, *PrepareTeamProjectRequest) (*PrepareTeamProjectResponse, error)
+	// Wakes an idle agent for new board lines (CC-0498): types the fixed
+	// line "[Portenv] new message from <from>; run portenv inbox", then
+	// Enter, into the agent's own main pane, under exactly DeliverRoutine's
+	// checks. The helper writes the line itself; no message text is ever
+	// typed, and from must be an agent id or "owner".
+	WakeAgent(context.Context, *WakeAgentRequest) (*WakeAgentResponse, error)
 	mustEmbedUnimplementedAgentServiceServer()
 }
 
@@ -685,6 +708,9 @@ func (UnimplementedAgentServiceServer) HandoffFiles(context.Context, *HandoffFil
 }
 func (UnimplementedAgentServiceServer) PrepareTeamProject(context.Context, *PrepareTeamProjectRequest) (*PrepareTeamProjectResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method PrepareTeamProject not implemented")
+}
+func (UnimplementedAgentServiceServer) WakeAgent(context.Context, *WakeAgentRequest) (*WakeAgentResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WakeAgent not implemented")
 }
 func (UnimplementedAgentServiceServer) mustEmbedUnimplementedAgentServiceServer() {}
 func (UnimplementedAgentServiceServer) testEmbeddedByValue()                      {}
@@ -1182,6 +1208,24 @@ func _AgentService_PrepareTeamProject_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AgentService_WakeAgent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WakeAgentRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentServiceServer).WakeAgent(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentService_WakeAgent_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentServiceServer).WakeAgent(ctx, req.(*WakeAgentRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AgentService_ServiceDesc is the grpc.ServiceDesc for AgentService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1280,6 +1324,10 @@ var AgentService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "PrepareTeamProject",
 			Handler:    _AgentService_PrepareTeamProject_Handler,
+		},
+		{
+			MethodName: "WakeAgent",
+			Handler:    _AgentService_WakeAgent_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

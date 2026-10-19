@@ -23,6 +23,7 @@ func fileProjectOps() projectOps {
 		self:     os.Getuid(),
 		chown:    func(f *os.File, gid int) error { return f.Chown(-1, gid) },
 		addACL:   addTeamACL,
+		readACL:  addTeamReadACL,
 		clearACL: clearACL,
 	}
 }
@@ -104,6 +105,28 @@ func addTeamACL(f *os.File, dir bool) error {
 		def = aclBase(acc)
 	}
 	return setACL(f, aclXattrDefault, aclWithGroup(def, TeamGID, 7))
+}
+
+// addTeamReadACL is setfacl -m g:team:rX (and d:g:team:rX on a folder)
+// on f, which clearACL just left without an ACL: the mask becomes the
+// owning group's bits and team's r or r-x, never write.
+func addTeamReadACL(f *os.File, dir bool) error {
+	fi, err := f.Stat()
+	if err != nil {
+		return err
+	}
+	acc := minimalACL(fi.Mode())
+	perm := uint16(4)
+	if dir || fi.Mode()&0o111 != 0 {
+		perm = 5
+	}
+	if err := setACL(f, aclXattrAccess, aclWithGroup(acc, TeamGID, perm)); err != nil {
+		return err
+	}
+	if !dir {
+		return nil
+	}
+	return setACL(f, aclXattrDefault, aclWithGroup(acc, TeamGID, 5))
 }
 
 // clearACL is setfacl -b on f itself: its ACLs removed. It returns the

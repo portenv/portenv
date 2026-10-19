@@ -187,6 +187,19 @@ service DaemonService {
   rpc AddAgentFiles(stream AddAgentFilesRequest) returns (AddAgentFilesResponse);
   // Pauses or resumes one of an agent's routines (R-0258).
   rpc SetRoutinePaused(SetRoutinePausedRequest) returns (SetRoutinePausedResponse);
+  // The owner's portenv wake (ADR 0027 §5): types the agent's fixed
+  // wake-up line for its unread messages, under the helper's checks, so a
+  // busy agent is never typed into. Refused, with a plain line, when the
+  // agent isn't running, has nothing unread, or its runner can't be woken.
+  rpc WakeAgent(WakeAgentRequest) returns (WakeAgentResponse);
+  // The workspace's decisions, oldest first: pending ones only unless
+  // all is set (portenv decision list). Read only.
+  rpc ListDecisions(ListDecisionsRequest) returns (ListDecisionsResponse);
+  // The owner's portenv deploy (ADR 0027 §5, ADR 0026): refused with a
+  // plain line when the project has no deploy runbook, and, until ADR
+  // 0026's run-with-secret is built, refused when it has one too. Nothing
+  // runs.
+  rpc Deploy(DeployRequest) returns (DeployResponse);
 }
 
 message CheckBoxRequest {
@@ -1079,4 +1092,32 @@ message SetRoutinePausedRequest {
 
 message SetRoutinePausedResponse {
   AgentInfo agent = 1;
+}
+
+message WakeAgentRequest {
+  string name = 1;
+  string agent_id = 2;
+}
+
+message WakeAgentResponse {}
+
+message ListDecisionsRequest {
+  string name = 1;
+  // Answered and expired ones too.
+  bool all = 2;
+}
+
+message ListDecisionsResponse {
+  repeated portenv.types.v1.Decision decisions = 1;
+}
+
+message DeployRequest {
+  string name = 1;
+  // A target the project's runbook names, for example staging.
+  string target = 2;
+}
+
+message DeployResponse {
+  // The decision the deploy waits on in the app, once deploys run.
+  portenv.types.v1.Decision decision = 1;
 }

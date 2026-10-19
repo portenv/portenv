@@ -35,6 +35,9 @@ public final class TeamController {
     /// Told after the team changes (from the stream, or an answer given
     /// here): the session's notifications and the Dock badge (§5).
     @ObservationIgnored public var changed: (@MainActor (TeamState) -> Void)?
+    /// A decision to select once the team has it (a notification's Show
+    /// opened this window before its team arrived).
+    @ObservationIgnored private var toShow: String?
 
     public init(box: String, daemon: DaemonAPI, retry: Duration = .seconds(1)) {
         self.box = box
@@ -57,7 +60,7 @@ public final class TeamController {
                 for try await (event, cursor) in daemon.watchTeam(box, cursor: state.cursor) {
                     state.apply(event, cursor: cursor)
                     if case .removed(let id) = event, selection == .agent(id) { selection = .allTabs }
-                    changed?(state)
+                    didChange()
                 }
             } catch let e as DaemonError where e.message == DaemonError.outOfDate {
                 supported = false
@@ -66,6 +69,27 @@ public final class TeamController {
             if Task.isCancelled { return }
             try? await Task.sleep(for: retry)
         }
+    }
+
+    /// Selects a decision as its Needs-you row does, now or as soon as
+    /// the team has it; once only, so the owner's own choice afterwards
+    /// stands.
+    public func show(decision id: String) {
+        toShow = id
+        showPending()
+    }
+
+    private func showPending() {
+        guard let id = toShow, let s = NotificationRoute.selection(decision: id, in: state) else { return }
+        selection = s
+        toShow = nil
+    }
+
+    /// The team changed: a decision waiting to be shown, then whoever
+    /// listens.
+    private func didChange() {
+        showPending()
+        changed?(state)
     }
 
     /// Approve or Decline (with the owner's reason); only a pending
@@ -94,7 +118,7 @@ public final class TeamController {
 
     private func answered(_ d: TeamDecision) {
         state.apply(.decision(d))
-        changed?(state)
+        didChange()
         if selection == .decision(d.id), !d.answerable {
             let next = d.state == .approved ? d.startAgents.first { state.agent($0) != nil } : nil
             selection = next.map { .agent($0) } ?? .allTabs
@@ -219,7 +243,7 @@ public final class TeamController {
     /// Tests: an event as if from the stream.
     func receive(_ event: TeamEvent) {
         state.apply(event)
-        changed?(state)
+        didChange()
     }
 
     public func dismissError() { error = nil }

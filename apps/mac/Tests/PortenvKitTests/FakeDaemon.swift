@@ -229,11 +229,18 @@ final class FakeDaemon: DaemonAPI, @unchecked Sendable {
     }
     /// Each watchTeam plays the next script; after the last, it waits.
     var teamScripts: [TeamScript] = []
+    /// Per workspace, played before `teamScripts` (several teams at once).
+    var teamScriptsByBox: [String: [TeamScript]] = [:]
     /// The decision answerDecision returns, keyed by id.
     var answered: [String: TeamDecision] = [:]
     func watchTeam(_ box: String, cursor: String) -> AsyncThrowingStream<(TeamEvent, String), Error> {
         let script: TeamScript? = lock.withLock {
             _calls.append(["app", "watch-team", box, cursor])
+            if var own = teamScriptsByBox[box], !own.isEmpty {
+                let first = own.removeFirst()
+                teamScriptsByBox[box] = own
+                return first
+            }
             return teamScripts.isEmpty ? nil : teamScripts.removeFirst()
         }
         return AsyncThrowingStream { continuation in

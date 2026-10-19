@@ -43,6 +43,16 @@ final class AppModel {
     /// Opening the box (up to following its state), and following it.
     private var openTask: Task<Void, Never>?
     private var followTask: Task<Void, Never>?
+    /// The teams of workspaces running with no window: they still notify
+    /// and count in the Dock badge (ADR 0023, R-0388).
+    @ObservationIgnored private(set) lazy var windowless: WindowlessTeams = {
+        let teams = WindowlessTeams(daemon: daemon, center: NeedsYouNotifications.shared.center)
+        teams.shown = { [weak self] in Set([self?.controller?.box].compactMap { $0 }) }
+        return teams
+    }()
+    /// Reads which workspaces run, now and then, for `windowless`.
+    @ObservationIgnored private var runningWatch: Task<Void, Never>?
+    static let runningEvery: Duration = .seconds(15)
     /// Closing the box to go back to the list: one close at a time.
     private(set) var closing = false
 
@@ -59,6 +69,14 @@ final class AppModel {
     /// boxes, and decide.
     func start() async {
         problem = nil
+        if runningWatch == nil {
+            runningWatch = Task { [weak self] in
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: Self.runningEvery)
+                    await self?.refreshRunning()
+                }
+            }
+        }
         await LaunchOrder.begin(
             offersMove: MoveToApplications.shouldOffer,
             register: { _ = await LoginItem.ensureRegistered() },
@@ -237,6 +255,8 @@ final class AppModel {
         split = SplitController(tabs: tabs)
         let team = TeamController(box: box, daemon: daemon)
         self.team = team
+        // The window follows its team now, not the background.
+        windowless.windowOpened(box)
         // An agent's decision or a tab's question notifies, and counts in
         // the Dock badge (§5, R-0384).
         let needsYou = NeedsYouNotifications.shared.center
@@ -312,7 +332,10 @@ final class AppModel {
     /// Portenv forward.
     func show(_ route: NotificationRoute) {
         (NSApp.mainWindow ?? NSApp.windows.first { $0.isVisible })?.makeKeyAndOrderFront(nil)
-        guard let controller, controller.box == route.box else { return }
+        guard let controller, controller.box == route.box else {
+            openFromNotification(route)
+            return
+        }
         switch route {
         case .decision(_, let id):
             if let team, let selection = NotificationRoute.selection(decision: id, in: team.state) { team.selection = selection }
@@ -322,9 +345,26 @@ final class AppModel {
         }
     }
 
+    /// Show on a workspace running with no window: its window opens (in
+    /// place of the one shown, which keeps running, ADR 0023) with the
+    /// decision selected once its team has it.
+    private func openFromNotification(_ route: NotificationRoute) {
+        guard case .decision(let box, let id) = route, windowless.following.contains(box), !closing else { return }
+        closing = true
+        Task {
+            defer { closing = false }
+            await openTask?.value
+            if controller != nil { await showList() }
+            await open(box)
+            team?.show(decision: id)
+        }
+    }
+
     /// Reads which workspaces run on this Mac.
     func refreshRunning() async {
-        running = Set(await RunningWorkspaces.here(daemon))
+        let now = Set(await RunningWorkspaces.here(daemon))
+        if now != running { running = now }
+        windowless.update(running: now)
     }
 
     /// Back to "Your workspaces"; the workspace shown may still be running.

@@ -23,6 +23,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -87,6 +88,10 @@ type Config struct {
 // driver.ErrEngineUnresponsive or driver.ErrPullStalled (R-0211). A pull
 // that keeps progressing may take as long as it needs. Tests shorten it.
 var EngineWait = 30 * time.Second
+
+// RegistryWait bounds asking the registry whether a tag has a newer image
+// before a create (R-0302); past it the local image is used.
+var RegistryWait = 10 * time.Second
 
 // Driver is the docker box driver.
 type Driver struct {
@@ -250,10 +255,16 @@ func engineErr(parent context.Context, what string, err error) error {
 func (d *Driver) ensureImage(ctx context.Context, box driver.Box) error {
 	ref := box.ToolboxImage
 	cctx, cancel := call(ctx, 0)
-	_, err := d.cli.ImageInspect(cctx, ref)
+	insp, err := d.cli.ImageInspect(cctx, ref)
 	cancel()
 	if err == nil {
-		return nil
+		if !d.staleImage(ctx, ref, insp.RepoDigests) {
+			return nil
+		}
+		if box.Progress != nil {
+			box.Progress("updating the toolbox image")
+		}
+		return d.pull(ctx, ref)
 	} else if !cerrdefs.IsNotFound(err) {
 		return engineErr(ctx, "inspect image "+ref, err)
 	}
@@ -262,6 +273,56 @@ func (d *Driver) ensureImage(ctx context.Context, box driver.Box) error {
 	}
 	return d.pull(ctx, ref)
 }
+
+// staleImage reports whether the registry's image for ref, a tag such as
+// ":main", is newer than the one this Mac pulled before (R-0302): Docker
+// pulls only a missing tag, so a Mac would otherwise keep making new
+// workspaces from an old toolbox, with an old helper. Only a tag from a
+// registry that this Mac pulled from that registry is checked: a pinned
+// ref (@sha256:) never changes, and an image built here (no registry
+// digest) is left as it is. When the registry can't be asked (offline, a
+// timeout, an error), the local image is used, as before.
+func (d *Driver) staleImage(ctx context.Context, ref string, repoDigests []string) bool {
+	if strings.Contains(ref, "@") || !registryRef(ref) {
+		return false
+	}
+	repo := imageRepo(ref)
+	var local []string
+	for _, rd := range repoDigests {
+		if name, digest, ok := strings.Cut(rd, "@"); ok && sameRepo(name, repo) {
+			local = append(local, digest)
+		}
+	}
+	if len(local) == 0 {
+		return false
+	}
+	cctx, cancel := context.WithTimeout(ctx, min(EngineWait, RegistryWait))
+	defer cancel()
+	r, err := d.cli.DistributionInspect(cctx, ref, client.DistributionInspectOptions{})
+	if err != nil {
+		return false
+	}
+	remote := r.Descriptor.Digest.String()
+	return remote != "" && !slices.Contains(local, remote)
+}
+
+// registryRef reports whether ref names a registry host ("ghcr.io/…",
+// "localhost:5000/…"), as core/local's FromRegistry does.
+func registryRef(ref string) bool {
+	first, _, ok := strings.Cut(ref, "/")
+	return ok && (strings.ContainsAny(first, ".:") || first == "localhost")
+}
+
+// imageRepo is ref without its tag.
+func imageRepo(ref string) string {
+	if i := strings.LastIndex(ref, ":"); i > strings.LastIndex(ref, "/") {
+		return ref[:i]
+	}
+	return ref
+}
+
+// sameRepo reports whether a RepoDigests name is repo.
+func sameRepo(name, repo string) bool { return name == repo || strings.HasSuffix(name, "/"+repo) }
 
 // pull downloads ref for as long as it keeps progressing: it fails with
 // driver.ErrPullStalled once EngineWait passes with no message from the
@@ -845,13 +906,10 @@ func (d *Driver) ImageDigest(ctx context.Context, ref string) (string, error) {
 	if err != nil {
 		return "", engineErr(ctx, "inspect image "+ref, err)
 	}
-	repo := ref
-	if i := strings.LastIndex(ref, ":"); i > strings.LastIndex(ref, "/") {
-		repo = ref[:i]
-	}
+	repo := imageRepo(ref)
 	for _, rd := range insp.RepoDigests {
 		name, digest, ok := strings.Cut(rd, "@")
-		if ok && (name == repo || strings.HasSuffix(name, "/"+repo)) {
+		if ok && sameRepo(name, repo) {
 			return ref + "@" + digest, nil
 		}
 	}

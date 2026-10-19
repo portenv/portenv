@@ -1394,11 +1394,19 @@ type Decision struct {
 	// in that order. portenvd starts them itself on Approve, so the answer
 	// works after the app or portenvd restarts (R-0296).
 	StartAgentIds []string `protobuf:"bytes,12,rep,name=start_agent_ids,json=startAgentIds,proto3" json:"start_agent_ids,omitempty"`
+	// For DECISION_KIND_ASK_OWNER asked with --choice (CC-0501): the 2 to 4
+	// choices, in order, each 1 to 80 characters of plain text. The app
+	// shows one button per choice in place of Approve. Empty for a yes/no
+	// question.
+	Choices []string `protobuf:"bytes,13,rep,name=choices,proto3" json:"choices,omitempty"`
+	// The owner's choice, counting from 1 (choices[choice-1]); 0 when none
+	// was chosen. Set only on an approved decision with choices.
+	Choice int32 `protobuf:"varint,14,opt,name=choice,proto3" json:"choice,omitempty"`
 	// For DECISION_KIND_TEAM_START after the move to agents' own clones
 	// (ADR 0022 §2a point 6): what agents could have changed, for the owner
 	// to keep or remove, one by one. Approve keeps every item not named in
 	// AnswerDecisionRequest.remove_items.
-	MigrationItems []*MigrationItem `protobuf:"bytes,13,rep,name=migration_items,json=migrationItems,proto3" json:"migration_items,omitempty"`
+	MigrationItems []*MigrationItem `protobuf:"bytes,15,rep,name=migration_items,json=migrationItems,proto3" json:"migration_items,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -1515,6 +1523,20 @@ func (x *Decision) GetStartAgentIds() []string {
 		return x.StartAgentIds
 	}
 	return nil
+}
+
+func (x *Decision) GetChoices() []string {
+	if x != nil {
+		return x.Choices
+	}
+	return nil
+}
+
+func (x *Decision) GetChoice() int32 {
+	if x != nil {
+		return x.Choice
+	}
+	return 0
 }
 
 func (x *Decision) GetMigrationItems() []*MigrationItem {
@@ -2141,7 +2163,7 @@ const file_portenv_types_v1_types_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x123\n" +
 	"\x05files\x18\b \x03(\v2\x1d.portenv.types.v1.HandoffFileR\x05files\x12\x14\n" +
-	"\x05about\x18\t \x01(\tR\x05about\"\xcc\x04\n" +
+	"\x05about\x18\t \x01(\tR\x05about\"\xfe\x04\n" +
 	"\bDecision\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04from\x18\x02 \x01(\tR\x04from\x122\n" +
@@ -2159,8 +2181,10 @@ const file_portenv_types_v1_types_proto_rawDesc = "" +
 	" \x03(\v2\x1d.portenv.types.v1.PackagePlanR\bpackages\x129\n" +
 	"\n" +
 	"expires_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\x12&\n" +
-	"\x0fstart_agent_ids\x18\f \x03(\tR\rstartAgentIds\x12H\n" +
-	"\x0fmigration_items\x18\r \x03(\v2\x1f.portenv.types.v1.MigrationItemR\x0emigrationItems\"\x9d\x01\n" +
+	"\x0fstart_agent_ids\x18\f \x03(\tR\rstartAgentIds\x12\x18\n" +
+	"\achoices\x18\r \x03(\tR\achoices\x12\x16\n" +
+	"\x06choice\x18\x0e \x01(\x05R\x06choice\x12H\n" +
+	"\x0fmigration_items\x18\x0f \x03(\v2\x1f.portenv.types.v1.MigrationItemR\x0emigrationItems\"\x9d\x01\n" +
 	"\rMigrationItem\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04path\x18\x02 \x01(\tR\x04path\x12\x12\n" +

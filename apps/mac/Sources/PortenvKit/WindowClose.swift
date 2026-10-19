@@ -6,20 +6,19 @@ import Foundation
 public enum WindowCloseAction: Equatable, Sendable {
     /// Just close it: it shows no box, or another window shows the box.
     case closeWindow
-    /// Close the box (save and release), then show "Your boxes" in the
-    /// window in place of quitting.
-    case closeBoxThenShowList
+    /// Show "Your workspaces" in the window, leaving the workspace running
+    /// (ADR 0023): nothing is saved, released or stopped.
+    case showListLeavingItRunning
 }
 
-/// Closing the last box window goes back to "Your boxes" (the box list)
-/// instead of quitting (the owner, 2026-10-11); ⌘Q still quits. The box is
-/// closed, saved and released first, exactly as quitting does (QuitFlow):
-/// if that fails, the person is asked to try again, close anyway (the box
-/// stays as it is with the quit marker and is saved first thing the next
-/// time it opens) or cancel (the window stays on the box).
+/// Closing the last workspace window goes back to "Your workspaces", and the
+/// workspace keeps running there, with its lease, tabs and programs (ADR
+/// 0023, R-0238; this replaces the owner's 2026-10-11 rule). It's closed,
+/// saved and released, only by Close Workspace (`run`, below), Quit
+/// (QuitAll) or Move To.
 public enum WindowClose {
     public static func action(showingBox: Bool, otherBoxWindows: Int) -> WindowCloseAction {
-        showingBox && otherBoxWindows == 0 ? .closeBoxThenShowList : .closeWindow
+        showingBox && otherBoxWindows == 0 ? .showListLeavingItRunning : .closeWindow
     }
 
     /// The window File › Close acts on: the key window, else the main
@@ -39,18 +38,20 @@ public enum WindowClose {
     public static let informative = "Try again, or close now: the workspace stays as it is and is saved first thing the next time it opens."
     public static let anywayButton = "Close Anyway"
 
-    /// Closes the box, asking on failure, then shows the list. Returns true
+    /// Close Workspace: closes the box, asking on failure, then shows the
+    /// list. Returns true
     /// once the list is shown, false when the person chose to stay.
     /// `closing` shows that the box is closing while it saves (true before
     /// the close, false when the person stays in the box).
     public static func run(
         _ flow: QuitFlow,
         ask: @Sendable (String) async -> QuitChoice,
+        tell: @Sendable (String) async -> Void = { _ in },
         closing: @Sendable (Bool) async -> Void = { _ in },
         showList: @Sendable () async -> Void
     ) async -> Bool {
         await closing(true)
-        guard await flow.run(message: message(box: flow.box), ask: ask) else {
+        guard await flow.run(message: message(box: flow.box), ask: ask, tell: tell) else {
             await closing(false)
             return false
         }

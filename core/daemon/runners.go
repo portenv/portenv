@@ -29,7 +29,10 @@ var runnerIdlePatterns = map[string]string{
 // only as a fallback in recent versions; Codex reads $CODEX_HOME
 // (~/.codex)/AGENTS.md, and AGENTS.md in its working folder (the agent's
 // home). A runner not here gets no pointer; its AGENTS.md block and its
-// template's instructions still say to run portenv guide first. Each
+// template's instructions still say to run portenv guide first. When the
+// pointer isn't in place but the runner has an idle pattern, the line is
+// typed once instead (WakeAgent's first_start, R-0330); a runner with no
+// idle pattern is never typed into. Each
 // value must be one of teamkit.PointerFiles, or init refuses it.
 var runnerInstructionsFiles = map[string]string{
 	"claude": ".claude/CLAUDE.md",
@@ -65,4 +68,22 @@ func routinesOffLine(argv []string) string {
 		name = path.Base(argv[0])
 	}
 	return "Routines are off: Portenv doesn't know when " + name + " is idle, so it can't type a routine safely."
+}
+
+// idleOffLine says what an agent misses because Portenv doesn't know when
+// its runner is idle, or "" when it does: no message wake-ups (CC-0498),
+// and no routines when it has any. A runner with no idle pattern is never
+// typed into, the same rule for both.
+func idleOffLine(argv []string, routines bool) string {
+	if runnerIdlePattern(argv) != "" {
+		return ""
+	}
+	if routines {
+		return routinesOffLine(argv) + " New messages don't wake it either; it reads them when it runs portenv inbox."
+	}
+	name := "its runner"
+	if len(argv) > 0 {
+		name = path.Base(argv[0])
+	}
+	return "Messages don't wake it: Portenv doesn't know when " + name + " is idle, so it reads them only when it runs portenv inbox."
 }

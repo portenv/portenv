@@ -23,6 +23,10 @@
 //     files, and whoami in builder's pane says builder;
 //  8. builder runs git status and git log -1 in the project and in the
 //     worktree, and can't write .git/config or .git/hooks (CC-0493).
+//  9. (wakeOnMessage) the owner's message wakes reviewer;
+//  10. (firstStepWhenKept) reviewer's own ~/.claude/CLAUDE.md is kept at
+//     its next start, and the first-step line is typed once instead
+//     (R-0330).
 //
 // The harness's own docker exec only sets the project up (step 1, as work;
 // step 6, as lead; step 7, as work) and reads the panes as root; portenvd reaches the box
@@ -338,6 +342,9 @@ true`, project))
 		h.fatal("step 8: builder should read .git/config and write neither it nor .git/hooks: exit %d: %s", code, out)
 	}
 	t.Log("step 8: builder ran git in the project and the worktree; .git/config and .git/hooks are read-only to it")
+
+	h.wakeOnMessage(ctx, c)
+	h.firstStepWhenKept(ctx, c)
 }
 
 // checkStartPointer is step 4's second half (R-0327): lead's start
@@ -593,4 +600,141 @@ func (h *harness) cleanup() {
 	// container.
 	_ = exec.Command("docker", "run", "--rm", "-v", h.root+":/scratch", "--entrypoint", "rm", h.image, "-rf", "/scratch/mac/Repositories").Run() // #nosec G204 -- the test's scratch folder
 	_ = os.RemoveAll(h.root)
+}
+
+// Step 6 (CC-0498): a message wakes an idle agent. builder's runner
+// becomes a stand-in named claude, so the runner table's claude pattern
+// applies: it waits at "> " alone, as Claude Code's empty input does, and
+// echoes each line typed in, then reads its inbox, as a woken runner
+// would. The owner's message must bring Portenv's fixed line, and only
+// that line, into builder's own main pane.
+const (
+	wakeRunner = project + "/wake/claude"
+	wakeText   = "CC-0498 wake check: build the parser"
+	wakeLine   = "[Portenv] new message from the owner; run portenv inbox"
+)
+
+const wakeStandIn = `#!/bin/bash
+while IFS= read -r -p '> ' line; do
+  echo "wake-read: $line"
+  if out=$(portenv inbox 2>&1); then
+    echo "wake-inbox ok, $(printf '%s\n' "$out" | grep -c .) lines"
+  else
+    echo "wake-inbox failed"
+  fi
+done
+exec sleep 1000000
+`
+
+func (h *harness) wakeOnMessage(ctx context.Context, c daemonv1.DaemonServiceClient) {
+	out, code := h.box(ctx, "work", fmt.Sprintf(`set -eu
+cd %[1]s
+mkdir -p wake
+cat > %[2]s <<'EOF'
+%[3]sEOF
+chmod 0755 wake %[2]s
+sed -i 's|^runner: .*$|runner: %[2]s|' .portenv/agents/reviewer.md
+grep -q '^runner: %[2]s$' .portenv/agents/reviewer.md`, project, wakeRunner, wakeStandIn))
+	if code != 0 {
+		h.fatal("step 9 (reviewer's stand-in runner): exit %d: %s", code, out)
+	}
+	var reviewer *daemonv1.AgentInfo
+	for range 60 {
+		r, err := c.ListAgents(ctx, &daemonv1.ListAgentsRequest{Name: workspace})
+		if err == nil {
+			for _, a := range r.GetAgents() {
+				if a.GetId() == "reviewer" && a.GetRunner() == wakeRunner && a.GetFileSha256() != "" {
+					reviewer = a
+				}
+			}
+		}
+		if reviewer != nil {
+			break
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	if reviewer == nil {
+		h.fatal("step 9: portenvd doesn't list reviewer with runner %s", wakeRunner)
+	}
+	if off := reviewer.GetRoutinesOff(); off != "" {
+		h.fatal("step 9: reviewer's runner is claude, but its row says %q", off)
+	}
+	if _, err := c.ApproveAgentFile(ctx, &daemonv1.ApproveAgentFileRequest{Name: workspace, AgentId: "reviewer", FileSha256: reviewer.GetFileSha256()}); err != nil {
+		h.fatal("step 9 (approve reviewer): %v", err)
+	}
+	if _, err := c.StartAgent(ctx, &daemonv1.StartAgentRequest{Name: workspace, AgentId: "reviewer"}); err != nil {
+		h.fatal("step 9 (start reviewer): %v", err)
+	}
+	h.agentPane(ctx, "reviewer", ">", time.Minute)
+	if _, err := c.SendMessage(ctx, &daemonv1.SendMessageRequest{Name: workspace, To: "reviewer", Text: wakeText}); err != nil {
+		h.fatal("step 9 (the owner's message to reviewer): %v", err)
+	}
+	pane := h.agentPane(ctx, "reviewer", "wake-inbox", 2*time.Minute)
+	if !strings.Contains(pane, "wake-read: "+wakeLine) || !strings.Contains(pane, "wake-inbox ok") {
+		h.fatal("step 9: reviewer's pane didn't read the wake line, then its inbox:\n%s", pane)
+	}
+	if strings.Contains(pane, wakeText) {
+		h.fatal("step 9: the message's text reached reviewer's pane:\n%s", pane)
+	}
+	if n := strings.Count(pane, "wake-read: "); n != 1 {
+		h.fatal("step 9: reviewer's pane read %d lines, want one wake line:\n%s", n, pane)
+	}
+	for _, l := range strings.Split(pane, "\n") {
+		if strings.Contains(l, "wake-") {
+			h.t.Logf("step 9: reviewer's pane: %s", strings.TrimSpace(l))
+		}
+	}
+}
+
+// Step 10 (R-0330): reviewer replaces its pointer with its own
+// ~/.claude/CLAUDE.md (it owns the folder), and starts again. Portenv
+// keeps the agent's file, and since the runner table knows claude's idle
+// pattern, types the fixed first-step line once into its pane instead.
+const firstStepLine = "[Portenv] You are reviewer in a Portenv team. Run portenv whoami and portenv guide first. Check portenv inbox after each step."
+
+func (h *harness) firstStepWhenKept(ctx context.Context, c daemonv1.DaemonServiceClient) {
+	if _, err := c.StopAgent(ctx, &daemonv1.StopAgentRequest{Name: workspace, AgentId: "reviewer"}); err != nil {
+		h.fatal("step 10 (stop reviewer): %v", err)
+	}
+	out, code := h.box(ctx, "reviewer", `set -eu
+rm -f ~/.claude/CLAUDE.md
+echo "reviewer's own notes" > ~/.claude/CLAUDE.md
+stat -c '%U %a' ~/.claude/CLAUDE.md`)
+	if code != 0 {
+		h.fatal("step 10 (reviewer writes its own CLAUDE.md): exit %d: %s", code, out)
+	}
+	if _, err := c.StartAgent(ctx, &daemonv1.StartAgentRequest{Name: workspace, AgentId: "reviewer"}); err != nil {
+		h.fatal("step 10 (start reviewer again): %v", err)
+	}
+	h.agentPane(ctx, "reviewer", "wake-read: "+firstStepLine, 2*time.Minute)
+	// Once only: more wake ticks and the quiet rule bring no second.
+	time.Sleep(15 * time.Second)
+	pane := h.agentPane(ctx, "reviewer", "wake-inbox", time.Minute)
+	if n := strings.Count(pane, "wake-read: "); n != 1 || !strings.Contains(pane, "wake-read: "+firstStepLine) {
+		h.fatal("step 10: reviewer's pane read %d lines, want only the first-step line:\n%s", n, pane)
+	}
+	out, code = h.box(ctx, "root", `stat -c '%U %a' /home/reviewer/.claude/CLAUDE.md; cat /home/reviewer/.claude/CLAUDE.md`)
+	if code != 0 || out != "reviewer 644\nreviewer's own notes" {
+		h.fatal("step 10: reviewer's own CLAUDE.md wasn't kept as it was: exit %d: %q", code, out)
+	}
+	h.t.Logf("step 10: reviewer's own CLAUDE.md was kept, and its pane read the first-step line once: %s", firstStepLine)
+}
+
+// agentPane reads an agent's main pane, as root in the harness, until it
+// shows want.
+func (h *harness) agentPane(ctx context.Context, agent, want string, within time.Duration) string {
+	var out string
+	end := time.Now().Add(within)
+	for time.Now().Before(end) {
+		var code int
+		out, code = h.box(ctx, "root", `sock=$(find /run/portenv-team/`+agent+` -type s -name default | head -n 1)
+[ -n "$sock" ] || { echo "no tmux socket under /run/portenv-team/`+agent+`"; exit 1; }
+tmux -S "$sock" capture-pane -p -J -t main -S -200`)
+		if code == 0 && strings.Contains(out, want) {
+			return out
+		}
+		time.Sleep(time.Second)
+	}
+	h.fatal("step 6: %s's pane never showed %q:\n%s", agent, want, out)
+	return ""
 }

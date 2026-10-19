@@ -95,6 +95,12 @@ service AgentService {
   // .git/config and .portenv/ never group-writable. Refuses with a plain
   // line when the filesystem won't keep ACLs.
   rpc PrepareTeamProject(PrepareTeamProjectRequest) returns (PrepareTeamProjectResponse);
+  // Wakes an idle agent for new board lines (CC-0498): types the fixed
+  // line "[Portenv] new message from <from>; run portenv inbox", then
+  // Enter, into the agent's own main pane, under exactly DeliverRoutine's
+  // checks. The helper writes the line itself; no message text is ever
+  // typed, and from must be an agent id or "owner".
+  rpc WakeAgent(WakeAgentRequest) returns (WakeAgentResponse);
 }
 
 message RunResticRequest {
@@ -743,3 +749,21 @@ message PrepareTeamProjectResponse {
   // team start, as plain lines for the owner's board notice.
   repeated string fixed = 1;
 }
+
+message WakeAgentRequest {
+  string agent_id = 1;
+  // Who sent the newest unread line: an agent id or "owner".
+  string from = 2;
+  // How many lines came since the agent last read its inbox; more than
+  // one makes the line plural. Never typed as a number.
+  int32 count = 3;
+  // Type the fixed first-step line instead (R-0330): "[Portenv] You are
+  // <agent_id> in a Portenv team. Run portenv whoami and portenv guide
+  // first. Check portenv inbox after each step." portenvd asks once per
+  // start when the runner's start pointer isn't in place (the agent's own
+  // file holds its place). from and count are ignored; the same checks
+  // apply, so a runner with no idle pattern gets nothing.
+  bool first_start = 4;
+}
+
+message WakeAgentResponse {}

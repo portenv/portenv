@@ -2,7 +2,10 @@
 
 package teamkit
 
-import "slices"
+import (
+	"slices"
+	"strings"
+)
 
 // The start pointer (R-0327): agents must know Portenv's commands from
 // their first step, not by chance. The helper writes AGENTS.md in the
@@ -29,6 +32,13 @@ func IsPointerFile(rel string) bool { return slices.Contains(PointerFiles, rel) 
 // checked agent id.
 func FirstStepLine(id string) string {
 	return "You are " + id + " in a Portenv team. Run `portenv whoami` and `portenv guide` first. Check `portenv inbox` after each step."
+}
+
+// FirstStepTyped is the same line as Portenv types it into an agent's
+// pane (R-0330), when its runner's pointer isn't in place but Portenv
+// knows when it's idle: plain text, marked as Portenv's.
+func FirstStepTyped(id string) string {
+	return "[Portenv] " + strings.ReplaceAll(FirstStepLine(id), "`", "")
 }
 
 // PointerText is the whole pointer for rel: fixed text, the agent's id the

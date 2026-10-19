@@ -5,10 +5,14 @@ package daemon
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
+	"time"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/portenv/portenv/core/driver"
 	"github.com/portenv/portenv/core/local"
 	daemonv1 "github.com/portenv/portenv/proto/gen/go/portenv/daemon/v1"
 )
@@ -47,6 +51,12 @@ func createRequest(name, boxID, image, storage, hostKey, rest string, ks map[str
 
 // CreateBox implements daemonv1.DaemonServiceServer.
 func (s *Server) CreateBox(ctx context.Context, req *daemonv1.CreateBoxRequest) (*daemonv1.CreateBoxResponse, error) {
+	// Docker Desktop answers and the disk has room, before anything is
+	// written (R-0323).
+	if err := s.checkNewBox(ctx); err != nil {
+		s.log.Info("box not created", "box", req.GetName(), "id", req.GetBoxId(), "code", status.Code(err).String())
+		return nil, err
+	}
 	already, err := s.env.CreateBox(ctx, createRequest(req.GetName(), req.GetBoxId(), req.GetImage(), req.GetStorage(),
 		req.GetStorageHostKey(), req.GetStorageRest(), req.GetKeys(), req.GetRecoveryPassword()), local.CreateOptions{})
 	if err != nil {
@@ -90,4 +100,65 @@ func (s *Server) CheckRecoveryKey(ctx context.Context, req *daemonv1.CheckRecove
 	}
 	s.log.Info("recovery key checked", "checked", res.Checked, "opened", res.Opened)
 	return &daemonv1.CheckRecoveryKeyResponse{Checked: int32(res.Checked), Opened: res.Opened}, nil // #nosec G115 -- a count of this Mac's boxes
+}
+
+// minFreeForNewBox is the free disk a new workspace needs on this Mac: the
+// toolbox image, its home and its first saves (R-0323).
+const minFreeForNewBox = 5_000_000_000
+
+// newBoxEngineWait bounds CreateBox's engine check (tests shorten it).
+var newBoxEngineWait = 5 * time.Second
+
+// The lines CreateBox refuses with before it writes anything; the app shows
+// them under Create (GUIDELINES §10).
+const (
+	NewBoxEngineNotRunning   = "Portenv uses Docker Desktop to run workspaces on this Mac, and it isn’t running. Start Docker Desktop, then create the workspace again."
+	NewBoxEngineUnresponsive = "Docker Desktop is still starting, or isn’t answering. Wait a moment, then create the workspace again."
+)
+
+// newBoxNoDisk says how much is free and what a new workspace needs.
+func newBoxNoDisk(free uint64) string {
+	return fmt.Sprintf("This Mac has %s free, and a new workspace needs at least %s. Free some space, then create the workspace again.",
+		gigabytes(free), gigabytes(minFreeForNewBox))
+}
+
+// gigabytes is "3.2 GB" (GUIDELINES §10's numbers), in macOS's decimal units.
+func gigabytes(n uint64) string {
+	g := float64(n) / 1e9
+	if g >= 10 || g == float64(int(g)) {
+		return fmt.Sprintf("%.0f GB", g)
+	}
+	return fmt.Sprintf("%.1f GB", g)
+}
+
+// checkNewBox refuses a new workspace while Docker Desktop doesn't answer
+// or the disk holding Portenv's folder is short of minFreeForNewBox. A
+// disk that can't be measured isn't a refusal: the create's own errors
+// still say so.
+func (s *Server) checkNewBox(ctx context.Context) error {
+	if s.engine != nil {
+		ectx, cancel := context.WithTimeout(ctx, newBoxEngineWait)
+		err := s.engine(ectx)
+		cancel()
+		if err != nil {
+			// Docker's socket is a unix:// address in the person's home.
+			s.log.Info("engine check before create", "err", noPaths(strings.ReplaceAll(err.Error(), "unix://", "unix: ")))
+			if ctx.Err() != nil {
+				return createStatus(ctx.Err())
+			}
+			if errors.Is(ectx.Err(), context.DeadlineExceeded) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, driver.ErrEngineUnresponsive) {
+				return status.Error(codes.Unavailable, NewBoxEngineUnresponsive)
+			}
+			return status.Error(codes.Unavailable, NewBoxEngineNotRunning)
+		}
+	}
+	if s.freeBytes != nil && s.env != nil {
+		free, err := s.freeBytes(s.env.Dir)
+		if err != nil {
+			s.log.Info("disk check before create", "err", noPaths(err.Error()))
+		} else if free < minFreeForNewBox {
+			return status.Error(codes.ResourceExhausted, newBoxNoDisk(free))
+		}
+	}
+	return nil
 }

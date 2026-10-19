@@ -130,6 +130,29 @@ expect "the next portenvd takes it over" test "$(grep -c "took over the running 
 expect "  still the same start" test "$(docker inspect -f '{{.State.StartedAt}}' "portenv-daemon-$(box_id)")" = "$started"
 out=$(type_in 'echo again=$((40+3))')
 expect "  and the terminal reconnects" grep -q "again=43" <<<"$out"
+# A plain shutdown (SIGTERM: launchctl bootout, logout, a launchd stop)
+# leaves the box running with its programs (R-0252, ADR 0023), logged as a
+# close with reason=shutdown. The next portenvd takes it over with its
+# terminal, and saves it first thing (the quit marker).
+before=$(wc -l < "$root/portenvd.log")
+kill -TERM "$dpid"
+for _ in $(seq 40); do kill -0 "$dpid" 2>/dev/null || break; sleep 0.25; done
+expect "SIGTERM: portenvd stops" bash -c "! kill -0 $dpid 2>/dev/null"
+wait "$dpid" 2>/dev/null || true
+expect "  leaving the box running (same start time)" test "$(docker inspect -f '{{.State.Running}} {{.State.StartedAt}}' "portenv-daemon-$(box_id)")" = "true $started"
+expect "  and the long command too" probe "portenv-daemon-$(box_id)" pgrep -x sleep
+since=$(tail -n +"$((before + 1))" "$root/portenvd.log")
+expect "  logged as a close with reason=shutdown, by workspace ID" grep -qF "msg=close component=portenvd box_id=$(box_id) reason=shutdown action=\"left running\"" <<<"$since"
+expect "  and never saved or released" bash -c "! grep -qE 'msg=\"close (saved|released)\"' <<<'$since'"
+start_daemon
+out=$("$portenv" app open d 2>&1) || true; echo "  $out"
+expect "the next portenvd takes it over" test "$(grep -c "took over the running workspace" "$root/portenvd.log")" -ge 3
+expect "  still the same start" test "$(docker inspect -f '{{.State.StartedAt}}' "portenv-daemon-$(box_id)")" = "$started"
+expect "  and saves it first thing" grep -q "Portenv quit before saving" <<<"$out"
+out=$(type_in 'echo term=$((40+4))')
+expect "  and the terminal reconnects" grep -q "term=44" <<<"$out"
+for _ in $(seq 60); do "$portenv" app state d 2>/dev/null | grep -q SAVE_STATE_SAVED && break; sleep 1; done
+expect "  and that save completes" bash -c "$portenv app state d | grep -q SAVE_STATE_SAVED"
 # Quit Anyway with portenvd run by launchd (1.1): portenvd outlives the app,
 # so it records the quit marker and saves the box in the background; an
 # open before that save works takes the box back and saves it first thing.
@@ -199,10 +222,13 @@ type_in "sed -i '/portenv-no-such-package/d' ~/.portenv/apt-packages.txt" 1 >/de
 for _ in $(seq 60); do "$portenv" app state d 2>/dev/null | grep -q failed_packages || break; sleep 1; done
 expect "after the list is fixed, Retry clears it" bash -c "! '$portenv' app state d 2>/dev/null | grep -q failed_packages"
 
-# Quitting the app stops portenvd (SIGTERM) with the box open: it saves,
-# releases and stops the box. Proof: drop the local home; the next open
-# restores the last edit from storage.
+# Quit (ADR 0023): the app closes each running workspace (CloseBox), which
+# saves, releases and stops it; then portenvd stops. Proof: drop the local
+# home; the next open restores the last edit from storage. (portenvd's own
+# shutdown never closes a workspace: R-0252, the SIGTERM step above.)
 type_in 'echo before-quit > ~/quit.txt' 1 >/dev/null
+out=$("$portenv" app close d 2>&1) || true; echo "  $out"
+expect "quitting: the app closes the workspace" grep -q "closed and released" <<<"$out"
 kill -TERM "$dpid"
 for _ in $(seq 240); do kill -0 "$dpid" 2>/dev/null || break; sleep 0.5; done
 expect "quitting: portenvd stops within 2 minutes" bash -c "! kill -0 $dpid 2>/dev/null"
@@ -291,8 +317,10 @@ out=$("$portenv" app point d 2>&1) || true
 expect "and the next save goes through" grep -q "^save point" <<<"$out"
 "$portenv" app close d >/dev/null 2>&1 || true
 
-# Quit while a box is still opening: portenvd waits for the open, then
-# saves, releases and stops it (it once forgot boxes still opening).
+# portenvd stops while a box is still opening: it waits for the open, then
+# leaves that box running with the quit marker, like any other (R-0252);
+# it once forgot boxes still opening. The next open takes it over and
+# saves it first thing.
 "$portenv" app open d >/dev/null 2>&1 &
 opener=$!
 sleep 1
@@ -300,10 +328,15 @@ kill -TERM "$dpid"
 for _ in $(seq 360); do kill -0 "$dpid" 2>/dev/null || break; sleep 0.5; done
 wait "$dpid" 2>/dev/null || true
 wait "$opener" 2>/dev/null || true
-expect "quit while opening: portenvd stops within 3 minutes" bash -c "! kill -0 $dpid 2>/dev/null"
-expect "and the box it was opening is stopped" test "$(docker inspect -f '{{.State.Running}}' "$c" 2>/dev/null)" != true
-expect "and released (lease released, nothing unsaved)" python3 -c "import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if d.get('lease')=='released' and not d.get('dirty') else 1)" "$root/mac/state/$(box_id)/state.json"
+expect "stop while opening: portenvd stops within 3 minutes" bash -c "! kill -0 $dpid 2>/dev/null"
+expect "  and the box it was opening is left running" test "$(docker inspect -f '{{.State.Running}}' "$c" 2>/dev/null)" = true
+expect "  with the quit marker" test -f "$(marker)"
 start_daemon
+out=$("$portenv" app open d 2>&1) || true; echo "  $out"
+expect "  the next open takes it over and saves it first thing" grep -q "Portenv quit before saving" <<<"$out"
+for _ in $(seq 60); do [[ $(state_of) == SAVE_STATE_SAVED ]] && break; sleep 1; done
+expect "  and that save completes" test "$(state_of)" = SAVE_STATE_SAVED
+"$portenv" app close d >/dev/null 2>&1 || true
 
 # An impostor on the agent's port (ADR 0010, conditions): root in the box
 # kills the agent and serves a self-made certificate there. portenvd

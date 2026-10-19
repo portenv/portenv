@@ -75,7 +75,16 @@ func (l *lockedBuffer) String() string {
 func loggingServer(t *testing.T) (*Server, *lockedBuffer) {
 	t.Helper()
 	logs := &lockedBuffer{}
-	return New(&local.Env{Dir: t.TempDir(), Machine: "mac-1"}, slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug}))), logs
+	s := New(&local.Env{Dir: t.TempDir(), Machine: "mac-1"}, slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	engineAndDiskFine(s)
+	return s, logs
+}
+
+// engineAndDiskFine stands in for Docker Desktop answering and a disk with
+// room, which CreateBox checks first.
+func engineAndDiskFine(s *Server) {
+	s.engine = func(context.Context) error { return nil }
+	s.freeBytes = func(string) (uint64, error) { return 1 << 40, nil }
 }
 
 func createBoxRequest(name, boxID string) *daemonv1.CreateBoxRequest {

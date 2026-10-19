@@ -164,7 +164,7 @@ A box is a toolbox image plus a home. The image is rebuilt or pulled on each mac
     apt-packages.txt         system packages reinstalled on every start
     excludes                 restic exclude patterns, user-editable
 /home/<agent>/               one lane per connected agent (uid 2000+)
-  <project>/                 a git worktree on branch agent/<agent>
+  <project>/                 its own clone, on branch agent/<agent> (ADR 0022)
 ```
 
 **Users and privileges**
@@ -207,7 +207,7 @@ Each box has its own restic repository; saves happen automatically, and a lease 
 **When saves happen**
 
 - Every 30 seconds while there are changes (so the newest save is never more than a minute behind), and when the Mac sleeps or the lid closes (a power assertion holds sleep until the upload finishes, up to 60 seconds).
-- Before Move To, before closing the window, before an approved privileged action, on ⌘S (Make Save Point), and as a save point when a stand-in agent connects (so Revert To ▸ Last Save Point undoes its work).
+- Before Move To, on Close Workspace and Quit (ADR 0023: closing the window doesn't save), before an approved privileged action, on ⌘S (Make Save Point), and as a save point when a stand-in agent connects (so Revert To ▸ Last Save Point undoes its work).
 - The box agent tracks changed paths with inotify, so the toolbar can show unsaved state without scanning.
 - An optional `~/.portenv/hooks/pre-save` runs first, for example to dump a database running in the box.
 
@@ -344,7 +344,7 @@ The user owns every box; agents are guests the user invites (ADR 0006). Any agen
 | Mode | The agent | Access |
 | --- | --- | --- |
 | Continue my work (stand-in) | Acts as the user, in the user's sessions: drives existing tabs, starts Claude Code, Codex or anything else in the same codebase, and relays questions back to the user | The user's access to that box. The app says so plainly when the agent is connected |
-| Lane | Has its own user (`/home/<agent>`), tmux session, git worktree on branch `agent/<name>`, and its own limits | No access to the user's files or sessions. For agents the user wants kept separate |
+| Lane | Has its own user (`/home/<agent>`), tmux session, its own clone of the project on branch `agent/<name>` (ADR 0022, R-0315), and its own limits | No access to the user's files or sessions. For agents the user wants kept separate |
 
 In both modes every session is recorded and tagged with the agent's name, there is one writer per terminal with explicit Take Over, and Revoke ends access and live sessions immediately.
 
@@ -360,7 +360,7 @@ Approvals are opt-in, per action (for example `git push`, deleting, production s
 
 **Lanes**
 
-- One Linux user per agent (`/home/<agent>`), its own tmux session, and its own git worktree on branch `agent/<agent>`. A read-only view of the main checkout is mounted at `/home/<agent>/main`.
+- One Linux user per agent (`/home/<agent>`), its own tmux session, and its own clone of the project on branch `agent/<agent>` in its home. It reads the main checkout and never writes it, or its `.git`; its work comes back as a branch the owner fetches, without `work`'s git ever opening the agent's repository (ADR 0022 section 2a, the owner's decision of 2026-10-18, R-0315).
 - An agent's SSH session lands in its tmux session, so dropped connections resume. One writer per terminal; others attach read-only; Take Over is explicit.
 - Per-lane limits: CPU, memory, process count, network egress rules (production hosts blocked unless granted).
 - Agent keystrokes count as activity, so idle sleep does not cut off a working agent. A maximum session length still applies.
@@ -610,7 +610,7 @@ The main window is a terminal with a title; everything else appears only when it
 **Principles**
 
 1. Deference: a thin unified toolbar, full-width terminal, sidebar hidden by default (⌘0).
-2. Automate instead of asking: autosave; closing the window saves and releases the workspace.
+2. Automate instead of asking: autosave; the workspace keeps running when its window closes, and Close Workspace or Quit saves and releases it (ADR 0023).
 3. Workspace actions live in the title menu, like a document's title menu in macOS.
 4. State is shown with quiet symbols (saved, saving, changes) with details on hover.
 5. Undo over "Are you sure?": history makes most actions reversible.
@@ -774,7 +774,7 @@ portenv/
     sync/                 restic saves and restores, leases, invariants
     keys/                 key handling, Keychain and server key stores
     relay/                port relay, tunnels (yamux over WebSocket)
-    lanes/                agent users, worktrees, approvals, audit
+    lanes/                agent users, clones, approvals, audit
   shims/
     containerization/     Swift process implementing the apple driver
   images/
@@ -1260,10 +1260,10 @@ Reduced: no sign-in, Only you, Keychain keys, the recovery key; the Welcome scre
   - **The name field** has a hint ("Letters, numbers and hyphens, like the project's name."), and an inline error for an invalid name ("Start with a letter or a number.").
   - **Opening a box that's on a server** connects to it there; nothing moves unless the person chooses Move To.
   - **While the name is invalid** (R-0049): the field has a red border in place of the blue focus ring, and VoiceOver reads the problem as part of the field's description ("Workspace name. Start with a letter or a number."); Create Workspace is dimmed as well as disabled.
-- **Closing the last box window goes back to "Your workspaces"** instead of quitting (the owner, 2026-10-11). ⌘Q still quits.
-  - The box is closed, saved and released first, exactly as quitting does. If that fails, the app asks "acme-api couldn't be saved before closing. Its work is still on this Mac.", with Try Again, Close Anyway and Cancel.
-  - Close Anyway leaves the box as Quit Anyway does (the quit marker; saved first thing on the next open). Cancel keeps the window on the box.
-  - A box still opening finishes opening first, so it's never left open with no window. Closing another window on the same box just closes that window. Closing the list or first run, when it's the last window, quits.
+- **Closing the last workspace window goes back to "Your workspaces", and the workspace keeps running** (ADR 0023, replacing the owner's 2026-10-11 rule). ⌘Q still quits.
+  - Nothing is saved, released or stopped. The list shows it as "Running", with Open and Close Workspace.
+  - Close Workspace saves and releases it. If that fails, the app asks "acme-api couldn't be saved before closing. Its work is still on this Mac.", with Try Again, Close Anyway and Cancel. Close Anyway leaves it as Quit Anyway does (the quit marker; saved first thing on the next open).
+  - A workspace still opening finishes opening first. Closing another window on the same workspace just closes that window. Closing the list or first run, when it's the last window, quits.
 - **Link GitHub** (boards `link-github` and `link-github-linked`; before launch; not a Portenv account):
   - GitHub's device flow, through `gh auth login` inside the box, with the same access as the person's own gh; any number of repositories can be cloned into the box afterwards (the owner, 2026-10-10, ADR 0018: GitHub access works as on their Mac; no Portenv GitHub App and no repository picker);
   - gh's default scopes, then `gh auth setup-git`, so plain `git clone` and `git push` work for any repository the account can reach; the token lives in the box home's gh config (`hosts.yml`), never in the image;
@@ -1416,7 +1416,7 @@ Slow uplinks are a real user condition, not an edge case (the Phase 0 gate ran o
 - A Move, or any save that takes more than a few seconds, shows visible progress and a time estimate in the title subtitle, from the bytes still to send and the measured bandwidth.
 - Closing the laptop or quitting mid-upload never loses work and never leaves the lease in a bad state: the local home stays as it was (dirty), no partial save counts as complete, the lease stays with this machine until a save completes, and the upload resumes (restic deduplicates what already arrived) when the Mac wakes.
 - Same-machine resume never waits on the network: offline, the box starts from the local home and saves queue.
-- Quitting never fails silently. ⌘Q closes the box first (closing the last box window does too, then shows the box list: 1.5); if its release save fails, quitting stops and the app asks: "acme-api couldn't be saved before quitting. Its work is still on this Mac." with Try Again (default), Quit Anyway and Cancel. Quit Anyway, a force quit or a crash leaves the box as it is with a quit marker (`state/<box-id>/quit-unsaved`), written by portenvd's shutdown; the next open says "Not saved since 15:54 · Portenv quit before saving" and saves first thing, and the marker goes with the first successful save. Shutdown waits for boxes still opening and refuses new opens. Tested in `tests/e2e/daemon.sh` (agent down, Quit Anyway, relaunch; quit while opening) and `PortenvKitTests` (the alert's choices).
+- Quitting never fails silently. ⌘Q names every workspace running on this Mac, then closes each (ADR 0023); if its release save fails, quitting stops and the app asks: "acme-api couldn't be saved before quitting. Its work is still on this Mac." with Try Again (default), Quit Anyway and Cancel. Quit Anyway, a force quit or a crash leaves the box as it is with a quit marker (`state/<box-id>/quit-unsaved`), written by portenvd's shutdown; the next open says "Not saved since 15:54 · Portenv quit before saving" and saves first thing, and the marker goes with the first successful save. Shutdown waits for boxes still opening and refuses new opens. Tested in `tests/e2e/daemon.sh` (agent down, Quit Anyway, relaunch; quit while opening) and `PortenvKitTests` (the alert's choices).
 - Waking from sleep: the app reports the wake (`portenv app woke`); portenvd checks every open box's agent channel and restarts a box whose channel is gone (its home stays: rule 3), so a dropped channel never sits unnoticed for hours. Tested in `tests/e2e/daemon.sh` (the channel dropped during sleep).
 - A package that can't be installed never stops a box from starting. The box starts and the state line stays normal; the inspector's Where it is section shows "1 package couldn't be installed: <name> · Retry". The box agent tries the rest of the list one package at a time (one bad name never keeps the others out), retries the failed ones in the background (after 1, 5 and 15 minutes, then hourly, or at once on Retry: `portenv app retry-packages`), and logs the error; `portenv app state` lists them. Tested in `tests/e2e/daemon.sh` (a deliberately missing package) and the agent's unit tests.
 
@@ -1429,7 +1429,8 @@ Slow uplinks are a real user condition, not an edge case (the Phase 0 gate ran o
 - **Keys:** the Developer ID certificate and the Sparkle EdDSA private key live only in CI secrets and the owner's Keychain, never in the repository.
 - **Design testers need Docker Desktop** (the owner, 2026-10-14 19:37, R-0211): it runs their workspaces on the Mac. Apple's Containerization engine (ADR 0004) comes later. First run checks that Docker Desktop is installed and ready before "Make your first workspace", waits while it starts ("Docker Desktop is starting…"), and says what to do when it isn't there.
 - **No Docker inside a workspace yet** (the owner, 2026-10-16 08:30, R-0223): the workspace image ships no container engine, and nothing is mounted from the Mac's engine (its socket is root on the Mac: never). A tester may install an engine in a workspace, but it won't start today: the workspace helper refuses the privileges a nested engine asks for. Testers are told "Docker isn't available inside a workspace yet. Use Docker Desktop on your Mac for containers." (`docs/testers.md`). Whether a self-installed rootless engine can run is a spike (lane C), and any change to the helper or the box profile it suggests is the owner's security decision.
-- **An owner preview uses the image CI published for its commit** (found in the owner's demo, 2026-10-18, R-0302): a dev preview (`gmake app LANE=Z`) can be current while its workspace runs an old helper, because `portenv-agent` comes from the toolbox image, the Docker driver pulls only when the tag is missing, and a new workspace pins whatever `:main` the Mac has. Before a preview, check that `docker buildx imagetools inspect ghcr.io/portenv/toolbox-node:sha-<12>` (the commit's first 12 characters) shows the same digest as `:main`, `docker pull` it, and test in a new workspace: existing ones keep their pinned image.
+- **Agents in a workspace work in their own clones** (ADR 0022, amended by the owner's security decision of 2026-10-18, R-0315): each coding agent in a team has its own Unix user and a full clone of the project in its home, on branch `agent/<id>`. The owner's checkout and its `.git` are never agent-writable, Portenv adds no system git `safe.directory` (the interim entries from PR #197 go away), and an agent's branch comes back by a fetch that never opens the agent's repository as `work`. Read-only lenses get a read grant on a writer's clone, never write. A workspace whose team used the shared project is moved over at its next team start: `.git` back to `work` alone, a clone per agent with its branch and uncommitted files, and nothing deleted without the owner's decision. **The code PR's gate:** the team-start step in which an agent tampers with its own clone's config and `work`'s git in the project runs nothing (ADR 0022 section 2a, point 5).
+- **An owner preview uses the image CI published for its commit** (found in the owner's demo, 2026-10-18, R-0302): a dev preview (`gmake app LANE=Z`) can be current while its workspace runs an old helper, because `portenv-agent` comes from the toolbox image, the Docker driver pulls only when the tag is missing, and a new workspace pins whatever `:main` the Mac has. Before a preview, check that `docker buildx imagetools inspect ghcr.io/portenv/toolbox-node:sha-<12>` (the commit's first 12 characters) shows the same digest as `:main`, `docker pull` it, and test in a new workspace: existing ones keep their pinned image. Since R-0323 the driver pulls a changed `:main` itself before a create; the check still matters when `:main` hasn't been published for the commit yet.
 - **Design-tester builds are signed and notarized on the owner's Mac, not in CI** (decided by the reviewer, on the owner's delegation, R-0089, 2026-10-11). `gmake release-local` (`scripts/release-local.sh`):
   - builds the release app with `gmake app` (no lane), and refuses it unless its third-party notices cover every Go module in its helpers and every Swift pin;
   - signs the helpers, then the app, with the Developer ID Application identity, the hardened runtime and a secure timestamp. There are no entitlements; `apps/mac/Portenv.entitlements` says why, and any entitlement added later comes with its reason;
@@ -1450,9 +1451,10 @@ Slow uplinks are a real user condition, not an edge case (the Phase 0 gate ran o
 - [ ] **Gates the design-tester build (R-0203):** on a signed build, after `portenvd` exits (a crash or a `Relaunch`), launchd starts it again and the app carries on
 - [ ] **Gates the design-tester build (R-0211, CC-0302):** `portenvd` logs OpenBox on entry, at "pulling the toolbox image" and on every error, by workspace ID with no paths, and each open phase has a deadline (about 30 s without progress is a plain-line failure) (lane A)
 - [ ] **Gates the design-tester build (R-0211):** first run's engine check waits for Docker Desktop to be ready, not just running: a short `Ping`, retried while it starts ("Docker Desktop is starting…"), never failing on a long dial; missing or stopped, it says what to do; the engine's own errors (not running, image missing, no disk) are plain lines in first run and the window (lane C)
+- [x] **Gates the design-tester build (R-0323):** New workspace checks Docker Desktop and the disk before anything is written: the app keeps Create disabled until Docker Desktop answers (R-0211), and `CreateBox` itself asks the engine again (5 s) and measures the free space on the disk holding Portenv's folder, refusing with one plain line ("This Mac has 3.2 GB free, and a new workspace needs at least 5 GB. Free some space, then create the workspace again.") under 5 GB. A disk that can't be measured doesn't refuse. Docker Desktop's own disk image limit isn't measured; a full one still fails the open with the "out of disk space" line.
 - [ ] **Gates the design-tester build (R-0211):** the first open's image pull shows its progress, "Getting the workspace image… 312 MB of 900 MB", streamed from `portenvd` (lane C)
 - [ ] **Gates the design-tester build (R-0211):** a failed open stays visible in the window, with its plain line and Try Again, and the box list has an Open button (lane D)
-- [ ] Closing the window saves and releases; reopening restores within 5 seconds
+- [ ] Close Workspace saves and releases; reopening restores within 5 seconds; closing the window leaves it running (ADR 0023)
 - [ ] On a throttled uplink (for example 400 kbit/s), a Move shows progress and an estimate, and closing the lid mid-upload loses nothing and leaves the lease with this machine
 - [ ] A version tag produces a signed, notarized, stapled `Portenv.dmg` and a signed `appcast.xml` on the GitHub release; `portenv.com/download` and `portenv.com/appcast.xml` redirect to them, and an installed build updates through Sparkle
 - [ ] The Sparkle key's offline backups exist and a restore test passed
@@ -1587,7 +1589,7 @@ Milestones: 3.1 accounts (Apple, GitHub, email) · 3.2 device enrollment and wra
 
 ### Phase 4: Agent access
 
-Milestones: 4.1 lanes (users, tmux, worktrees, limits) everywhere a box runs, and stand-in mode on local and cloud boxes · 4.2 opt-in approval helper (push, delete, secrets, protected scripts, sudo in a lane) · 4.3 secrets vault · 4.4 full command audit (auditd or eBPF) on top of 2.4's session recording · 4.5 remaining doors, only if usage shows the need: GitHub bridge, chat or email bridges, A2A (ADR 0006) · 4.6 iPhone companion for approvals.
+Milestones: 4.1 lanes (users, tmux, clones, limits) everywhere a box runs, and stand-in mode on local and cloud boxes · 4.2 opt-in approval helper (push, delete, secrets, protected scripts, sudo in a lane) · 4.3 secrets vault · 4.4 full command audit (auditd or eBPF) on top of 2.4's session recording · 4.5 remaining doors, only if usage shows the need: GitHub bridge, chat or email bridges, A2A (ADR 0006) · 4.6 iPhone companion for approvals.
 
 - [ ] An agent in a third-party sandbox connects with a device code and works in its lane
 - [ ] A lane agent cannot read the user's home
@@ -1647,8 +1649,13 @@ These need an owner decision; Claude Code should add new ones here instead of gu
 - [ ] Before 2.5: can the target agents be woken by an incoming webhook? If not, an agent keeping `portenv events --follow` running does the job and 2.5 drops in priority (ADR 0008).
 - [x] Apple Developer Program enrolment, needed for Developer ID signing and notarization in 1.8. **Answered (2026-10-10):** Portenv is signed with the owner's existing organization team; no new enrolment is needed (see 1.8).
 - [ ] Approval timeout default (30 minutes assumed) and what happens when it expires.
-- [ ] A stale toolbox image (R-0302): the Docker driver pulls only when the tag is missing locally, so a Mac with an old `:main` silently creates workspaces with an old helper. Should the driver compare the local `:main` digest with the registry's before a create, or should the app build pin the image digest CI published for its commit?
+- [x] A stale toolbox image (R-0302): the Docker driver pulls only when the tag is missing locally, so a Mac with an old `:main` silently creates workspaces with an old helper. Should the driver compare the local `:main` digest with the registry's before a create, or should the app build pin the image digest CI published for its commit? **Built (2026-10-18, R-0323), the simpler of the two:** before a create, the driver asks the registry for the tag's digest (Docker's distribution call, at most 10 s) and pulls again when it differs from every digest this Mac pulled for that repository ("updating the toolbox image"). A pinned ref, an image built on this Mac (no registry digest) and a registry that can't be asked (offline, a timeout) keep the local image, as before. Existing workspaces keep their pinned digest. Pinning the app build to its commit's image digest stays possible for 1.8's release builds.
 - [ ] machine-id race (R-0299): `core/local` writes `machine-id` with a plain `os.WriteFile`, so two processes starting together on a fresh Mac can read it empty ("sync: invalid machine ID"). The fix is a temporary file and a rename; a small fix after the 2026-10-18 demo.
+- [ ] `share_login` (ADR 0022 §2) isn't in the tester build (R-0323): the key is parsed and checked but shares nothing, and the agent's column and its `whoami` say so. Build it after the tester build as the ADR describes (one decision per agent, the tool's credential file copied 0600), or drop it in favour of each agent signing in itself? Copying a subscription login also depends on the next question.
+- [ ] Agents' clones (ADR 0022 section 2a, R-0315): how the owner sees an agent's branch in the app. A Fetch button on the agent's row, a fetch Portenv makes on every `portenv share`, or both; and whether the app shows the branch's diff itself or leaves it to the owner's git tools.
+- [ ] Agents' clones (R-0315): do read-only lenses (reviewer, design, trust-safety) need their own clone in the first build, to read a writer's history with the safe fetch, or is reading the writer's files through `read_clones` enough for now?
+- [ ] Agents' clones (R-0315): agents keep read access to the owner's checkout, which they need to clone and fetch from it, so they can still read untracked files there (`.env`, local settings). Keep that, or seed clones from a bundle `work` makes, so agents need no read access to the project at all?
+- [ ] Agents' clones (R-0315): a full clone counts toward the agent's home limit (2 GB by default). Raise the default for agents with `checkout: own`, give clones their own allowance, or keep one limit and let the start's plain line ask the owner to raise it?
 - [ ] Anthropic's terms for agents driving Claude Code with a subscription login versus a Console API key.
 - [ ] Open-source boundary in detail: this repository is Apache-2.0 and `portenv/cloud` is private (decided), but confirm before going public whether the Mac app, the File Provider and the iPhone companion stay in the public repository or move to a private one.
 - [ ] Phase 3 control-plane milestones now live in `portenv/cloud`: how its CI pins and tests against `proto/gen/go` versions from this repository (tags, or a pseudo-version per merge).

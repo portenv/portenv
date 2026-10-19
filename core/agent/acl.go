@@ -118,3 +118,50 @@ func aclWithGroup(es []aclEntry, gid uint32, perm uint16) []aclEntry {
 	}
 	return append(out, aclEntry{aclMask, mask, aclUndefinedID})
 }
+
+// readOnlyBase is an ACL's owner, owning group and other entries, with
+// others' write taken off, and the owning group's when gid (the file's
+// group) isn't ownGID.
+func readOnlyBase(es []aclEntry, gid, ownGID uint32) []aclEntry {
+	out := aclBase(es)
+	for i := range out {
+		switch {
+		case out[i].tag == aclOther, out[i].tag == aclGroupObj && gid != ownGID:
+			out[i].perm &^= 2
+		}
+	}
+	return out
+}
+
+// aclLetsOthersWrite is whether the ACL of a file owned by uid and gid
+// lets a uid other than uid write: others' write, the owning group's when
+// gid isn't ownGID, or a named user or group entry (other than uid or
+// ownGID) with write that the mask lets through.
+func aclLetsOthersWrite(es []aclEntry, uid, gid, ownGID uint32) bool {
+	mask, ok := aclPerm(es, aclMask)
+	if !ok {
+		mask = 7
+	}
+	for _, e := range es {
+		w := e.perm&2 != 0
+		switch e.tag {
+		case aclOther:
+			if w {
+				return true
+			}
+		case aclGroupObj:
+			if w && mask&2 != 0 && gid != ownGID {
+				return true
+			}
+		case aclUser:
+			if w && mask&2 != 0 && e.id != uid {
+				return true
+			}
+		case aclGroup:
+			if w && mask&2 != 0 && e.id != ownGID {
+				return true
+			}
+		}
+	}
+	return false
+}

@@ -83,6 +83,11 @@ public final class DaemonClient: DaemonAPI, Sendable {
             if e.metadata[stringValues: "portenv-refusal"].contains("open-elsewhere") {
                 throw DaemonError(e.message, openElsewhere: true)
             }
+            if e.metadata[stringValues: "portenv-refusal"].contains("moving") {
+                var refused = DaemonError(e.message)
+                refused.moving = true
+                throw refused
+            }
             throw DaemonError.fromRPC(message: DaemonErrorText.plain(code: e.code, message: e.message), unimplemented: e.code == .unimplemented,
                                       unavailable: e.code == .unavailable || DaemonErrorText.isTransport(e.message))
         }
@@ -652,6 +657,13 @@ extension DaemonClient {
         return try await call { TeamDecision(try await api.answerDecision(req).decision) }
     }
 
+    public func chooseDecision(_ box: String, id: String, choice: Int, label: String) async throws -> TeamDecision {
+        let req = Portenv_Daemon_V1_AnswerDecisionRequest.with {
+            $0.name = box; $0.decisionID = id; $0.approve = true; $0.choice = Int32(choice); $0.choiceLabel = label
+        }
+        return try await call { TeamDecision(try await api.answerDecision(req).decision) }
+    }
+
     public func sendMessage(_ box: String, to agent: String, thread: String, text: String) async throws -> TeamMessage {
         let req = Portenv_Daemon_V1_SendMessageRequest.with { $0.name = box; $0.to = agent; $0.threadID = thread; $0.text = text }
         return try await call { TeamMessage(try await api.sendMessage(req).message) }
@@ -711,7 +723,7 @@ extension TeamAgent {
                   runner: a.runner, grant: TeamGrant(a.grant),
                   workStatus: a.hasStatus ? AgentWorkStatus(a.status) : nil,
                   routines: a.routines.map { AgentRoutine(every: TimeInterval($0.everyMinutes) * 60, note: $0.note, paused: $0.paused) },
-                  routinesOff: a.routinesOff)
+                  routinesOff: a.routinesOff, shareLoginOff: a.shareLoginOff)
     }
 }
 
@@ -777,6 +789,6 @@ extension TeamDecision {
                   answerNote: d.answerNote, createdAt: d.hasCreatedAt ? d.createdAt.date : nil,
                   answeredAt: d.hasAnsweredAt ? d.answeredAt.date : nil, expiresAt: d.hasExpiresAt ? d.expiresAt.date : nil,
                   packages: d.packages.map { Package(name: $0.name, version: $0.version, source: $0.source, dependency: $0.dependency) },
-                  startAgents: d.startAgentIds)
+                  startAgents: d.startAgentIds, choices: d.choices, choice: Int(d.choice))
     }
 }

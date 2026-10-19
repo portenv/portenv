@@ -333,6 +333,12 @@ func TeamIO(args []string, stdin io.Reader, stdout io.Writer) error {
 			return errors.New("bundle-own HOME NAME ID thin|full")
 		}
 		return bundleOwn(context.Background(), dir, args[2], args[3], args[4], streamGit(dir), stdout)
+	case "lens-grant":
+		// As the writer, through as-agent (ADR 0022 §2a point 4).
+		if len(args) != 4 {
+			return errors.New("lens-grant HOME NAME UIDS")
+		}
+		return lensGrant(dir, args[2], args[3], fileLensOps())
 	case "fetch-agent":
 		// As work (ADR 0022 §2a point 3): the bundle on stdin, fetched
 		// into the project from that file only.

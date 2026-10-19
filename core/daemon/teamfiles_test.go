@@ -150,6 +150,26 @@ func TestAgentFileDefaults(t *testing.T) {
 	}
 }
 
+// ADR 0022 §2a, lenses: read_clones names agents with their own clone,
+// and an override may narrow it.
+func TestAgentFileReadClones(t *testing.T) {
+	src := teamDirs(t)
+	writeAgent(t, src, "builder", with())
+	writeAgent(t, src, "reviewer", fm("id: reviewer", "name: Reviewer", "runner: claude", "checkout: none", "grant:", "  read_clones: [builder, lead]"))
+	if a := loadAgent(t, src, "reviewer"); len(a.Problems) != 0 || !slices.Equal(a.Grant.GetReadClones(), []string{"builder", "lead"}) {
+		t.Errorf("reviewer: %+v", a)
+	}
+	writeOverride(t, src, "reviewer", ofm("grant:", "  read_clones: [builder]"))
+	if a := loadAgent(t, src, "reviewer"); len(a.Problems) != 0 || !slices.Equal(a.Grant.GetReadClones(), []string{"builder"}) {
+		t.Errorf("reviewer, narrowed: %+v", a)
+	}
+	writeAgent(t, src, "lead", fm("id: lead", "name: Lead", "runner: claude", "checkout: none", "grant:", "  read_clones: [reviewer]"))
+	want := `lead: grant.read_clones names "reviewer", which has no copy of the project to read (checkout: none).`
+	if a := loadAgent(t, src, "lead"); !slices.Contains(a.Problems, want) {
+		t.Errorf("lead: %q, want %q", a.Problems, want)
+	}
+}
+
 // ADR 0022 §2a: checkout is own by default, or none.
 func TestAgentFileCheckout(t *testing.T) {
 	src := teamDirs(t)
@@ -248,6 +268,9 @@ func TestAgentFileRules(t *testing.T) {
 		{"max_panes over owner limit", "builder", with("grant:", "  max_panes: 6"), `builder: grant.max_panes is 6; the owner's limit is 4.`},
 		{"message stranger", "builder", with("grant:", "  message: [lead, ghost]"), `builder: grant.message names "ghost", which isn't another agent in this team.`},
 		{"message self", "builder", with("grant:", "  message: [builder]"), `builder: grant.message names "builder", which isn't another agent in this team.`},
+		{"read_clones stranger", "builder", with("grant:", "  read_clones: [lead, ghost]"), `builder: grant.read_clones names "ghost", which isn't another agent in this team.`},
+		{"read_clones self", "builder", with("grant:", "  read_clones: [builder]"), `builder: grant.read_clones names "builder", which isn't another agent in this team.`},
+		{"read_clones not a list", "builder", with("grant:", "  read_clones: lead"), `builder: grant.read_clones must be a list, like [builder].`},
 		{"message owner", "builder", with("grant:", "  message: [owner]"), `builder: grant.message names "owner", which isn't another agent in this team.`},
 		{"ask_owner", "builder", with("grant:", "  ask_owner: yes"), `builder: grant.ask_owner is "yes"; it must be true or false.`},
 		{"ask_owner quoted", "builder", with("grant:", `  ask_owner: "true"`), `builder: grant.ask_owner is "true"; it must be true or false.`},
@@ -485,6 +508,7 @@ func TestOverrideCantWiden(t *testing.T) {
 		{"panes allow", ofm("grant:", "  panes: allow"), `builder's override: grant.panes is allow, wider than the repository file's never; an override may only narrow a grant.`},
 		{"max_panes", ofm("grant:", "  max_panes: 3"), `builder's override: grant.max_panes is 3, wider than the repository file's 2; an override may only narrow a grant.`},
 		{"message", ofm("grant:", "  message: [lead, reviewer]"), `builder's override: grant.message is [lead, reviewer], wider than the repository file's [lead]; an override may only narrow a grant.`},
+		{"read_clones", ofm("grant:", "  read_clones: [lead]"), `builder's override: grant.read_clones is [lead], wider than the repository file's []; an override may only narrow a grant.`},
 		{"ask_owner", ofm("grant:", "  ask_owner: true"), `builder's override: grant.ask_owner is true, wider than the repository file's false; an override may only narrow a grant.`},
 		{"packages", ofm("grant:", "  packages: ask"), `builder's override: grant.packages is ask, wider than the repository file's never; an override may only narrow a grant.`},
 		{"team_status", ofm("grant:", "  team_status: read"), `builder's override: grant.team_status is read, wider than the repository file's none; an override may only narrow a grant.`},

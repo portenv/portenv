@@ -334,6 +334,11 @@ message AgentGrant {
   // count and last activity in whoami and portenv team status. Off by
   // default; never terminals or homes.
   bool team_status = 6;
+  // read_clones (ADR 0022 §2a, lenses): team agents with their own clone
+  // whose clone this agent may read, never write: a named-user read ACL
+  // on the clone and traverse on that agent's home, never through group
+  // team.
+  repeated string read_clones = 7;
 }
 
 // A file or folder in an agent's home, for the Agent files view (§2).

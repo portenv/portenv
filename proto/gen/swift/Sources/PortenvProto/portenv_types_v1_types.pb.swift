@@ -1080,6 +1080,12 @@ public nonisolated struct Portenv_Types_V1_AgentGrant: Sendable {
   /// default; never terminals or homes.
   public var teamStatus: Bool = false
 
+  /// read_clones (ADR 0022 §2a, lenses): team agents with their own clone
+  /// whose clone this agent may read, never write: a named-user read ACL
+  /// on the clone and traverse on that agent's home, never through group
+  /// team.
+  public var readClones: [String] = []
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -1850,7 +1856,7 @@ nonisolated extension Portenv_Types_V1_PackagePlan: SwiftProtobuf.Message, Swift
 
 nonisolated extension Portenv_Types_V1_AgentGrant: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".AgentGrant"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}panes\0\u{3}max_panes\0\u{1}message\0\u{3}ask_owner\0\u{1}packages\0\u{3}team_status\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}panes\0\u{3}max_panes\0\u{1}message\0\u{3}ask_owner\0\u{1}packages\0\u{3}team_status\0\u{3}read_clones\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1864,6 +1870,7 @@ nonisolated extension Portenv_Types_V1_AgentGrant: SwiftProtobuf.Message, SwiftP
       case 4: try { try decoder.decodeSingularBoolField(value: &self.askOwner) }()
       case 5: try { try decoder.decodeSingularEnumField(value: &self.packages) }()
       case 6: try { try decoder.decodeSingularBoolField(value: &self.teamStatus) }()
+      case 7: try { try decoder.decodeRepeatedStringField(value: &self.readClones) }()
       default: break
       }
     }
@@ -1888,6 +1895,9 @@ nonisolated extension Portenv_Types_V1_AgentGrant: SwiftProtobuf.Message, SwiftP
     if self.teamStatus != false {
       try visitor.visitSingularBoolField(value: self.teamStatus, fieldNumber: 6)
     }
+    if !self.readClones.isEmpty {
+      try visitor.visitRepeatedStringField(value: self.readClones, fieldNumber: 7)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -1898,6 +1908,7 @@ nonisolated extension Portenv_Types_V1_AgentGrant: SwiftProtobuf.Message, SwiftP
     if lhs.askOwner != rhs.askOwner {return false}
     if lhs.packages != rhs.packages {return false}
     if lhs.teamStatus != rhs.teamStatus {return false}
+    if lhs.readClones != rhs.readClones {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

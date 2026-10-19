@@ -14,17 +14,20 @@
 //  4. whoami in lead's pane says lead;
 //  5. the script's "portenv ask-owner", over lead's own socket, reaches
 //     portenvd's decision list (the WatchTeam stream the app reads);
-//  6. lead makes a file in the project and runs git there, so the file and
-//     .git/index are lead's (CC-0494);
-//  7. work adds a git worktree in the project (.worktrees/x); approve and
-//     start builder: its start opens the project again, past lead's
-//     files, and whoami in builder's pane says builder;
-//  8. builder runs git status and git log -1 in the project and in the
-//     worktree, and can't write .git/config or .git/hooks (CC-0493).
+//  6. lead has its own clone (ADR 0022 §2a, R-0315): /home/lead/acme,
+//     lead's, on agent/lead with the remote owner, and its runner started
+//     there; work's repository is never agent-writable: lead can't create,
+//     change or remove anything in the project or its .git, the system git
+//     config trusts nothing in the project, and the project has no
+//     core.sharedRepository; lead commits in its own clone, and work's git
+//     in the project still works;
+//  7. approve and start builder: its start checks the project again, and
+//     whoami in builder's pane says builder; builder reads the project,
+//     has its own clone, and can't read lead's.
 //
-// The harness's own docker exec only sets the project up (step 1, as work;
-// step 6, as lead; step 7, as work) and reads the panes as root; portenvd reaches the box
-// only through the agent channel.
+// The harness's own docker exec only sets the project up (step 1, as work),
+// tries what each agent may and may not do (as that agent), and reads the
+// panes as root; portenvd reaches the box only through the agent channel.
 package teamstart
 
 import (
@@ -60,6 +63,7 @@ const (
 // firstStart is lead's runner: what it prints is what step 4 and 5 read.
 const firstStart = `#!/bin/bash
 echo "first-start whoami=$(whoami)"
+echo "first-start pwd=$PWD"
 if out=$(portenv ask-owner "` + question + `" 2>&1); then
   echo "first-start ask-owner ok: $out"
 else
@@ -243,31 +247,80 @@ ps -o user= -p "$(tmux -S "$sock" display-message -p -t main '#{pane_pid}')"`)
 	}
 	t.Logf("step 5: lead's ask-owner is decision %s in the list", ask.GetId())
 
-	// Step 6: lead makes a file in the project and runs git there; git add
-	// rewrites .git/index, so both are lead's, which work (who opens the
-	// project at each start) can't change (CC-0494).
+	// Step 6: lead's own clone (ADR 0022 §2a, R-0315). It's lead's, in
+	// lead's 0700 home, on agent/lead with the remote owner, and lead's
+	// runner started in it.
+	if !strings.Contains(pane, "first-start pwd=/home/lead/"+workspace) {
+		h.fatal("step 6: lead's runner didn't start in its clone:\n%s", pane)
+	}
+	out, code = h.box(ctx, "root", fmt.Sprintf(`set -eu
+stat -c '%%U %%a %%n' /home/lead /home/lead/%[1]s`, workspace))
+	if code != 0 || !strings.Contains(out, "lead 700 /home/lead\n") || !strings.Contains(out, "lead ") || !strings.HasSuffix(out, "/home/lead/"+workspace) {
+		h.fatal("step 6: lead's clone isn't lead's, in its 0700 home: exit %d: %s", code, out)
+	}
 	out, code = h.box(ctx, "lead", fmt.Sprintf(`set -eu
-cd %s
+cd /home/lead/%s
+echo "branch=$(git symbolic-ref --short HEAD)"
+echo "remotes=$(git remote | tr '\n' ' ')"
+echo "owner=$(git remote get-url owner)"
+echo "log=$(git log -1 --format=%%s)"`, workspace))
+	for _, want := range []string{"branch=agent/lead", "remotes=owner ", "owner=" + project, "log=first commit"} {
+		if code != 0 || !strings.Contains(out, want) {
+			h.fatal("step 6: lead's clone: want %q: exit %d:\n%s", want, code, out)
+		}
+	}
+	t.Logf("step 6: lead's clone:\n%s", out)
+	// work's repository refuses every write of lead's: in the tree and
+	// in .git, a new file, a change, a removal and a rename; and git in
+	// the project as lead can't write its index.
+	out, code = h.box(ctx, "lead", fmt.Sprintf(`cd %s || exit 2
+try() { if "$@" 2>/dev/null; then echo "WROTE: $*"; else echo "refused: $*"; fi; }
+try touch from-lead.txt
+try sh -c 'echo x >> first-start.sh'
+try sh -c 'echo "[core]" >> .git/config'
+try touch .git/hooks/post-checkout
+try sh -c 'echo x >> .git/HEAD'
+try mkdir .git/refs/heads/evil
+try rm -f .git/description
+try mv .git/config .git/config.old
+try git -c user.name=Lead -c user.email=lead@example.invalid commit -q --allow-empty -m "lead in work's repository"
+true`, project))
+	if code != 0 || strings.Contains(out, "WROTE") || strings.Count(out, "refused:") != 9 {
+		h.fatal("step 6: lead wrote to work's repository: exit %d:\n%s", code, out)
+	}
+	t.Logf("step 6: work's repository refuses lead:\n%s", out)
+	// Portenv trusts nothing in the project in the system git config, and
+	// the project shares nothing through core.sharedRepository.
+	out, _ = h.box(ctx, "root", fmt.Sprintf(`git config --system --get-all safe.directory | grep -F %[1]s; echo "safe.directory: $?"
+git config --file %[1]s/.git/config --get core.sharedRepository; echo "sharedRepository: $?"
+getfacl -cp %[1]s/.git/config %[1]s/.git/hooks 2>&1`, project))
+	if !strings.Contains(out, "safe.directory: 1") || !strings.Contains(out, "sharedRepository: 1") || strings.Contains(out, "group:team:rw") || !strings.Contains(out, "group:team:r") {
+		h.fatal("step 6: the system config trusts the project, it shares its repository, or team can write it:\n%s", out)
+	}
+	t.Logf("step 6: no safe.directory, no sharedRepository, team reads only:\n%s", out)
+	// Lead commits in its own clone; work's git in the project still
+	// works, and sees nothing of lead's.
+	out, code = h.box(ctx, "lead", fmt.Sprintf(`set -eu
+cd /home/lead/%s
 echo "from lead" > from-lead.txt
-git status --short
 git add from-lead.txt
-stat -c '%%U %%n' from-lead.txt .git/index`, project))
-	if code != 0 {
-		h.fatal("step 6 (lead writes a file and runs git): exit %d: %s", code, out)
+git -c user.name=Lead -c user.email=lead@example.invalid commit -q -m "from lead"
+git log -1 --format=%%s`, workspace))
+	if code != 0 || !strings.HasSuffix(out, "from lead") {
+		h.fatal("step 6: lead couldn't commit in its own clone: exit %d: %s", code, out)
 	}
-	if !strings.Contains(out, "lead from-lead.txt") || !strings.Contains(out, "lead .git/index") {
-		h.fatal("step 6: lead's file or .git/index isn't lead's:\n%s", out)
-	}
-	t.Logf("step 6: lead wrote a file and ran git:\n%s", out)
-
-	// Step 7: work adds a worktree inside the project, then builder starts.
-	// Its start opens the project to the team again, past lead's files,
-	// and must succeed.
-	if out, code := h.box(ctx, "work", fmt.Sprintf(`set -eu
+	out, code = h.box(ctx, "work", fmt.Sprintf(`set -eu
 cd %s
-git worktree add -q .worktrees/x -b x`, project)); code != 0 {
-		h.fatal("step 7 (work adds a worktree): exit %d: %s", code, out)
+git status --short
+git log -1 --format=%%s
+test ! -e from-lead.txt`, project))
+	if code != 0 || !strings.HasSuffix(out, "first commit") {
+		h.fatal("step 6: work's git in the project after lead's commit: exit %d: %s", code, out)
 	}
+	t.Log("step 6: lead committed in its own clone; work's project is as it was")
+
+	// Step 7: start builder. Its start checks the project again and must
+	// succeed.
 	builder := h.agent(ctx, c, "builder")
 	if builder.GetRunner() != "bash "+script2 {
 		h.fatal("step 7: builder's runner is %q, not the script", builder.GetRunner())
@@ -276,43 +329,21 @@ git worktree add -q .worktrees/x -b x`, project)); code != 0 {
 		h.fatal("step 7 (approve builder): %v", err)
 	}
 	if _, err := c.StartAgent(ctx, &daemonv1.StartAgentRequest{Name: workspace, AgentId: "builder"}); err != nil {
-		h.fatal("step 7 (start builder after lead wrote files): %v", err)
+		h.fatal("step 7 (start builder after lead's commit): %v", err)
 	}
 	h.waitRunning(ctx, c, "builder", 30*time.Second)
 	if bp := h.waitPane(ctx, "builder", "second-start whoami=", time.Minute); !strings.Contains(bp, "second-start whoami=builder") {
 		h.fatal("step 7: builder's pane doesn't show whoami=builder:\n%s", bp)
 	}
-	// Lead's file is still lead's, and the team can read it.
-	out, code = h.box(ctx, "builder", fmt.Sprintf(`set -eu
-cd %s
-stat -c '%%U %%n' from-lead.txt
-cat from-lead.txt`, project))
-	if code != 0 || !strings.Contains(out, "lead from-lead.txt") || !strings.Contains(out, "from lead") {
-		h.fatal("step 7: builder can't read lead's file, or it changed hands: exit %d: %s", code, out)
+	// Builder reads the project, has its own clone, and can't read lead's.
+	out, code = h.box(ctx, "builder", fmt.Sprintf(`set -u
+head -n 1 %[1]s/second-start.sh
+git -C /home/builder/%[2]s symbolic-ref --short HEAD
+if ls /home/lead/%[2]s >/dev/null 2>&1; then echo "READ lead's clone"; else echo "lead's clone refused"; fi`, project, workspace))
+	if code != 0 || !strings.Contains(out, "#!/bin/bash") || !strings.Contains(out, "agent/builder") || !strings.Contains(out, "lead's clone refused") {
+		h.fatal("step 7: builder's reads: exit %d:\n%s", code, out)
 	}
-	t.Log("step 7: builder started after lead wrote files, and reads lead's file")
-
-	// Step 8: builder uses git in the project and in work's worktree, and
-	// can read .git/config but not write it or .git/hooks (CC-0493).
-	for _, dir := range []string{project, project + "/.worktrees/x"} {
-		out, code = h.box(ctx, "builder", fmt.Sprintf(`set -eu
-cd %s
-git status --short
-git log -1 --format=%%s`, dir))
-		if code != 0 || !strings.Contains(out, "first commit") {
-			h.fatal("step 8: builder's git in %s: exit %d: %s", dir, code, out)
-		}
-	}
-	out, code = h.box(ctx, "builder", fmt.Sprintf(`cd %s
-git config --get core.sharedRepository || echo "CAN'T READ .git/config"
-{ echo "# builder" >> .git/config; } 2>/dev/null && echo "WROTE .git/config"
-touch .git/hooks/post-checkout 2>/dev/null && echo "WROTE .git/hooks"
-{ echo "# builder" >> .git/hooks/pre-commit.sample; } 2>/dev/null && echo "WROTE a hook"
-true`, project))
-	if code != 0 || strings.Contains(out, "WROTE") || strings.Contains(out, "CAN'T READ") || !strings.Contains(out, "group") {
-		h.fatal("step 8: builder should read .git/config and write neither it nor .git/hooks: exit %d: %s", code, out)
-	}
-	t.Log("step 8: builder ran git in the project and the worktree; .git/config and .git/hooks are read-only to it")
+	t.Log("step 7: builder started; it reads the project, has its own clone on agent/builder, and can't read lead's")
 
 	h.wakeOnMessage(ctx, c)
 }

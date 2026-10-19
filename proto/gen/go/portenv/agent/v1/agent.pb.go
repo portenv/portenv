@@ -3384,9 +3384,15 @@ type StartTeamAgentRequest struct {
 	// last line) from portenvd's runner table: DeliverRoutine types only
 	// when it matches, with no question on screen, 5 s of quiet and not the
 	// alternate screen. Empty: routines are off for this runner (R-0258).
-	IdlePattern   string `protobuf:"bytes,6,opt,name=idle_pattern,json=idlePattern,proto3" json:"idle_pattern,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	IdlePattern string `protobuf:"bytes,6,opt,name=idle_pattern,json=idlePattern,proto3" json:"idle_pattern,omitempty"`
+	// The owner's project, /home/work/<workspace>, for an agent with
+	// checkout: own (ADR 0022 §2a): the helper makes the agent's own clone
+	// at /home/<id>/<workspace> on agent/<id>, as the agent, if it's
+	// missing, and starts the runner there. Empty: no clone, and the runner
+	// starts in the agent's home.
+	CloneProjectDir string `protobuf:"bytes,7,opt,name=clone_project_dir,json=cloneProjectDir,proto3" json:"clone_project_dir,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *StartTeamAgentRequest) Reset() {
@@ -3457,6 +3463,13 @@ func (x *StartTeamAgentRequest) GetHomeQuotaBytes() int64 {
 func (x *StartTeamAgentRequest) GetIdlePattern() string {
 	if x != nil {
 		return x.IdlePattern
+	}
+	return ""
+}
+
+func (x *StartTeamAgentRequest) GetCloneProjectDir() string {
+	if x != nil {
+		return x.CloneProjectDir
 	}
 	return ""
 }
@@ -5761,14 +5774,15 @@ const file_portenv_agent_v1_agent_proto_rawDesc = "" +
 	"\x05state\x18\x04 \x01(\x0e2\x1c.portenv.types.v1.AgentStateR\x05state\x125\n" +
 	"\x06status\x18\x05 \x01(\v2\x1d.portenv.types.v1.AgentStatusR\x06status\x12+\n" +
 	"\x11pending_decisions\x18\x06 \x01(\x05R\x10pendingDecisions\x12!\n" +
-	"\fidle_seconds\x18\a \x01(\x03R\vidleSeconds\"\xcd\x01\n" +
+	"\fidle_seconds\x18\a \x01(\x03R\vidleSeconds\"\xf9\x01\n" +
 	"\x15StartTeamAgentRequest\x12\x19\n" +
 	"\bagent_id\x18\x01 \x01(\tR\aagentId\x12\x12\n" +
 	"\x04argv\x18\x02 \x03(\tR\x04argv\x12\x1b\n" +
 	"\tagents_md\x18\x03 \x01(\tR\bagentsMd\x12\x1b\n" +
 	"\thome_seed\x18\x04 \x03(\tR\bhomeSeed\x12(\n" +
 	"\x10home_quota_bytes\x18\x05 \x01(\x03R\x0ehomeQuotaBytes\x12!\n" +
-	"\fidle_pattern\x18\x06 \x01(\tR\vidlePattern\"C\n" +
+	"\fidle_pattern\x18\x06 \x01(\tR\vidlePattern\x12*\n" +
+	"\x11clone_project_dir\x18\a \x01(\tR\x0fcloneProjectDir\"C\n" +
 	"\x16StartTeamAgentResponse\x12)\n" +
 	"\x04tabs\x18\x01 \x03(\v2\x15.portenv.types.v1.TabR\x04tabs\"1\n" +
 	"\x14StopTeamAgentRequest\x12\x19\n" +

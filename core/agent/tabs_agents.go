@@ -306,7 +306,11 @@ func (s *apiServer) StartAgentTerminals(ctx context.Context, spec AgentServerSpe
 	}
 	// The session, sealed as the owner's is (tmuxHidden, tmuxOwned,
 	// tmuxSealed), with the runner in its first tab, run with no shell.
-	args := append([]string{"new-session", "-d", "-s", agentSession, "-n", spec.ID, "-P", "-F", "#{pane_id}", "--"}, argv...)
+	args := []string{"new-session", "-d", "-s", agentSession, "-n", spec.ID, "-P", "-F", "#{pane_id}"}
+	if spec.WorkDir != "" {
+		args = append(args, "-c", spec.WorkDir)
+	}
+	args = append(append(args, "--"), argv...)
 	args = append(args, tmuxHidden...)
 	args = append(args, tmuxOwned...)
 	args = append(args, tmuxSealed...)
@@ -557,6 +561,9 @@ func checkAgentSpec(spec AgentServerSpec) error {
 	if spec.SocketDir != filepath.Join(TeamRunDir, spec.ID, "tmux") {
 		return fmt.Errorf("%q isn't %s's tmux folder", spec.SocketDir, spec.ID)
 	}
+	if w := spec.WorkDir; w != "" && (filepath.Dir(w) != spec.Home || filepath.Clean(w) != w || strings.HasPrefix(filepath.Base(w), ".")) {
+		return fmt.Errorf("%q isn't a folder in %s's home", w, spec.ID)
+	}
 	_, err := checkAsAgent(spec.UID, spec.GID, spec.Home)
 	return err
 }
@@ -581,12 +588,19 @@ func checkAsAgent(uid, gid int, home string) (string, error) {
 	return id, nil
 }
 
-// parseAsAgent reads "UID GID HOME -- tmux -S SOCKET ARGS…" and checks it:
-// the switch is to an agent only, the program is tmux only, and the
-// socket is that agent's own (TeamRunDir/<id>/tmux/default).
+// asAgentTeamIO are the team-io operations as-agent runs as an agent:
+// its own clone's (ADR 0022 §2a).
+var asAgentTeamIO = map[string]bool{"clone-own": true}
+
+// parseAsAgent reads "UID GID HOME -- tmux -S SOCKET ARGS…" or "UID GID
+// HOME -- team-io OP ARGS…" and checks it: the switch is to an agent
+// only; the program is tmux, on that agent's own socket
+// (TeamRunDir/<id>/tmux/default), or the plain binary's team-io, for one
+// of asAgentTeamIO's operations.
 func parseAsAgent(args []string) (uid, gid int, home string, argv []string, err error) {
-	if len(args) < 7 || args[3] != "--" || args[4] != "tmux" || args[5] != "-S" {
-		return 0, 0, "", nil, errors.New("usage: portenv-agent as-agent UID GID HOME -- tmux -S SOCKET ARGS")
+	teamIO := len(args) >= 6 && args[3] == "--" && args[4] == "team-io" && asAgentTeamIO[args[5]]
+	if !teamIO && (len(args) < 7 || args[3] != "--" || args[4] != "tmux" || args[5] != "-S") {
+		return 0, 0, "", nil, errors.New("usage: portenv-agent as-agent UID GID HOME -- tmux -S SOCKET ARGS | team-io OP ARGS")
 	}
 	if uid, err = strconv.Atoi(args[0]); err != nil {
 		return 0, 0, "", nil, err
@@ -597,6 +611,9 @@ func parseAsAgent(args []string) (uid, gid int, home string, argv []string, err 
 	id, err := checkAsAgent(uid, gid, args[2])
 	if err != nil {
 		return 0, 0, "", nil, err
+	}
+	if teamIO {
+		return uid, gid, args[2], args[4:], nil
 	}
 	if want := filepath.Join(TeamRunDir, id, "tmux", "default"); args[6] != want {
 		return 0, 0, "", nil, fmt.Errorf("%q isn't %s's tmux socket", args[6], id)

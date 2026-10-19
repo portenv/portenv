@@ -142,11 +142,14 @@ type AgentServiceClient interface {
 	// recipient's ~/inbox/<sender>/<timestamp>/ as the recipient (R-0257
 	// item 3): regular files only, no links, at most 100 MB, within quota.
 	HandoffFiles(ctx context.Context, in *HandoffFilesRequest, opts ...grpc.CallOption) (*HandoffFilesResponse, error)
-	// Served only by init: opens the project to the team at team start
-	// (ADR 0022 §2): /home/work 0711 with its dotfiles 0700, the project's
-	// group team, setgid folders and default ACLs, with .git/hooks,
-	// .git/config and .portenv/ never group-writable. Refuses with a plain
-	// line when the filesystem won't keep ACLs.
+	// Served only by init: makes the project readable by the team at team
+	// start (ADR 0022 §2a, R-0315): /home/work 0711 with its dotfiles 0700;
+	// every file in the project work's, with g:team:r-X and no write for
+	// group team, other users or any named entry; no core.sharedRepository
+	// and no system safe.directory from Portenv. Before it changes anything
+	// it checks for what an agent could have changed in what work's git
+	// reads, and refuses with a plain line if it finds any. Refuses too when
+	// the filesystem won't keep ACLs.
 	PrepareTeamProject(ctx context.Context, in *PrepareTeamProjectRequest, opts ...grpc.CallOption) (*PrepareTeamProjectResponse, error)
 	// Wakes an idle agent for new board lines (CC-0498): types the fixed
 	// line "[Portenv] new message from <from>; run portenv inbox", then
@@ -597,11 +600,14 @@ type AgentServiceServer interface {
 	// recipient's ~/inbox/<sender>/<timestamp>/ as the recipient (R-0257
 	// item 3): regular files only, no links, at most 100 MB, within quota.
 	HandoffFiles(context.Context, *HandoffFilesRequest) (*HandoffFilesResponse, error)
-	// Served only by init: opens the project to the team at team start
-	// (ADR 0022 §2): /home/work 0711 with its dotfiles 0700, the project's
-	// group team, setgid folders and default ACLs, with .git/hooks,
-	// .git/config and .portenv/ never group-writable. Refuses with a plain
-	// line when the filesystem won't keep ACLs.
+	// Served only by init: makes the project readable by the team at team
+	// start (ADR 0022 §2a, R-0315): /home/work 0711 with its dotfiles 0700;
+	// every file in the project work's, with g:team:r-X and no write for
+	// group team, other users or any named entry; no core.sharedRepository
+	// and no system safe.directory from Portenv. Before it changes anything
+	// it checks for what an agent could have changed in what work's git
+	// reads, and refuses with a plain line if it finds any. Refuses too when
+	// the filesystem won't keep ACLs.
 	PrepareTeamProject(context.Context, *PrepareTeamProjectRequest) (*PrepareTeamProjectResponse, error)
 	// Wakes an idle agent for new board lines (CC-0498): types the fixed
 	// line "[Portenv] new message from <from>; run portenv inbox", then

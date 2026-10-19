@@ -151,7 +151,8 @@ This closes every item of lane A's list:
 - The project folder, its `.git`, and everything git reads for `work` there stay `work`'s alone: owned by `work`, with no group or ACL write for `team` or any agent, and no default ACL that would give one.
 - Agents may read the project (`g:team:rX` on the tree, which they need to clone and to fetch the owner's new commits). Read is all.
 - No `core.sharedRepository`, and no system (`/etc/gitconfig`) `safe.directory` entry from Portenv, for the project or anything under it. git's own ownership check then refuses, for `work`, any repository under the project that an agent made.
-- **Checked at every team start, before any agent process runs:** the helper walks the project as `work`, through descriptors, never following a link. Anything under `.git` that isn't `work`'s, or is writable by another uid, stops the team's start with a plain line naming it; the migration below is the only thing that fixes it for the owner.
+- **Checked at every team start, before any agent process runs:** the helper walks the project as `work`, through descriptors, never following a link. Anything under `.git` that isn't `work`'s, or is writable by another uid, stops the team's start with a plain line naming it. So do a file anywhere in the project that isn't `work`'s, `core.sharedRepository`, and a Portenv `safe.directory` entry for the project. The migration below is the only thing that fixes these for the owner.
+- **As built (accepted, R-0328):** outside `.git`, a file of `work`'s that another uid could write is made read-only at the start (its ACL becomes the mode's entries plus `g:team:r-X`), not refused. Making the owner's own file stricter needs no decision, and nothing in it is something git runs.
 
 **2. Each coding agent has its own clone.**
 - **Where: `/home/<id>/<workspace>`,** in the agent's own 0700 home, owned by the agent. Chosen over a per-agent folder inside the project because nothing agent-writable then sits in the owner's tree, where the owner's git, editors and build tools walk; and the clone travels, saves and is measured with the rest of the agent's home (section 2's quota).
@@ -162,6 +163,17 @@ This closes every item of lane A's list:
   git -C /home/<id>/<workspace> switch -c agent/<id>   # from the owner's current branch, or the existing agent/<id> if the owner's repository has one
   ```
   The `safe.directory` is given for that command only, and written once into the agent's own `~/.gitconfig` for its later `git fetch owner`; only that agent's git reads either. Portenv never writes one into the system config, which `work`'s git also reads.
+
+  **As built (accepted, R-0328):**
+  - git's local clone runs upload-pack in the owner's repository with command-line settings removed, so the one-off `-c` above isn't enough. The agent's own `~/.gitconfig` therefore gets both `/home/work/<workspace>` and `/home/work/<workspace>/.git`, once, **before** the clone. It is still only that agent's git that reads them.
+  - The helper makes the clone in `~/.portenv-clone.<workspace>` and renames it into place, so a start that stops half-way leaves no half-made clone.
+  - The agent's runner starts in its clone.
+  - The size check estimates the clone from the size of the project's `.git`.
+- **Its git identity (accepted, R-0328):** when Portenv makes a clone, it sets, in the clone's **local** config:
+  - `user.name` "<Agent name> (Portenv agent)";
+  - `user.email` `<id>@agents.portenv.invalid`.
+
+  The `.invalid` top-level domain is reserved (RFC 2606, RFC 6761) and never resolves, so no mail can reach anyone by mistake, and the id is unique in the workspace. Every commit an agent makes says whose it is. A name that isn't plain text, or is over 40 characters, falls back to the id.
 - **Not `git clone --shared`,** which the first text suggested: a shared clone borrows the owner's object store, so the owner's `git gc` can remove objects the agent's branch still needs, and the clone stays tied to reading the owner's `.git` for its whole life. A full clone costs disk (it counts toward the agent's home limit, section 7), and stands alone. If the project is larger than the agent's free space, the start is refused with a plain line ("builder's files can't hold a copy of the project (3.1 GB; its limit is 2 GB). Raise its limit in Settings.").
 - **Its branch is `agent/<id>`.** The clone's remote `owner` is the owner's project, readable and never writable, so `git fetch owner` brings the owner's new commits and a push to it fails. Agents have no credentials for the project's real remote (section 2), so nothing else receives their pushes either.
 - **What a clone doesn't have:** the owner's untracked files (dependencies, build output, local settings such as `.env`). The agent installs its own dependencies in its clone. Files the owner wants it to have go through `home_seed` or the Agent files view (section 2).
@@ -188,6 +200,9 @@ This closes every item of lane A's list:
 **4. Read-only lenses (reviewer, design, trust-safety) read clones and never write.**
 - A lens's agent file names the clones it reads: `grant.read_clones: [builder, lead]` (only team agents with `checkout: own`; an override can only narrow it). The owner approves it with the rest of the file.
 - **The grant:** the helper gives the lens a named-user ACL on the writer's clone, `u:<lens>:rX` with the matching default ACL, so new files stay readable to it, and `u:<lens>:x` on the writer's home, so it can pass through to the clone and list nothing else there. Never `w`, and never through the group `team`, which every agent is in. It's reapplied at every team start and taken away when the grant goes.
+- **As built (accepted, R-0328):**
+  - The helper has no `cap_fowner`, so it can't change another user's ACLs. Each writer's own process sets them (`team-io lens-grant` through the user switch), at every agent start, to exactly the lenses granted now; every other agent's entry goes.
+  - A home's mode is set back to 0700 when its user is ensured, which masks the lens's traverse until the next agent start sets it again.
 - **A lens reads files; it doesn't run git in another agent's clone.** git refuses it there by ownership, Portenv never adds a `safe.directory` for it, and `portenv guide` tells lenses not to add one themselves: that would let the writer's config run as the lens. To read a writer's history, a lens has its own clone (`checkout: own` with nothing to share) and fetches the writer's branch with the same two-half fetch as point 3, into `refs/remotes/agents/<id>` (open question: whether lenses need this in the first build).
 
 **5. The gate (`make team-start`, for the code PR; each step with a mutation that makes it fail, lane E's rule):**
@@ -205,6 +220,14 @@ This closes every item of lane A's list:
   - every config file, hook and worktree registration under `.git` that isn't `work`'s, or that another uid could write;
   - every repository or worktree under the project that an agent made or worked in: a `.git` folder or file that isn't `work`'s, and the worktrees made for agents under R-0280, whoever owns them.
 - **Each agent gets its clone,** made as in point 2 from the owner's repository, on its existing branch if it had one (its commits are already in the owner's repository). Its old worktree's uncommitted changes are copied, as the agent, into the new clone (not committed). Nothing is deleted.
+- **As built (accepted, R-0328):**
+  - The old model kept no per-agent worktree in most workspaces: agents worked in the owner's checkout. So the files an agent **owns** in the owner's checkout are copied into its clone too, as well as those in its recorded repositories and worktrees.
+  - A copy never writes over a file already in the clone; the record notes what wasn't copied.
+  - R-0280's agent worktrees are recognised by their `agent/<id>` branch.
+  - Agent-owned files in the tree are their own entries in the record.
+  - `core.sharedRepository` and the `safe.directory` entries are listed, but they aren't a choice: they're already gone.
+  - The owner is asked about at most 200 entries; more stops the move with a plain line.
+  - The record waits in `/home/.portenv/team/migration.json` (root's). The owner's Approve names the entries to remove (`AnswerDecision.remove_items`); the rest become `work`'s.
 - **`.git` back to `work` alone.** init (root, which alone can change an owner) walks `.git` through descriptors, never following a link: everything becomes `work`'s, the `team` ACL entries and default ACLs go, and the modes lose group write. `core.sharedRepository` comes out of the owner's config, and Portenv's own `safe.directory` entries come out of the system config. A link inside `.git` that `work` didn't make stops the migration with a line naming it, for the owner to look at.
 - **The rest of the tree back to read-only for agents:** the same walk makes the project's agent-owned files `work`'s, with ACLs `g:team:rX`, except the repositories and worktrees recorded above, which it leaves as they are (git refuses them for `work` by ownership until the owner decides).
 - **The owner decides on the record before the team starts again:** the team-start decision lists it ("Agents could have changed these: …"). For each entry the owner keeps it (it becomes `work`'s, and the owner takes its content as their own) or removes it; an old worktree's removal shows its size and says its uncommitted changes are already in the agent's clone. Nothing is deleted without that answer, and the team doesn't start until the owner gives it.

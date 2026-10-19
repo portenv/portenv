@@ -2743,9 +2743,12 @@ func (x *Msg) GetText() string {
 }
 
 type AskOwner struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Text          string                 `protobuf:"bytes,1,opt,name=text,proto3" json:"text,omitempty"`
-	ThreadId      string                 `protobuf:"bytes,2,opt,name=thread_id,json=threadId,proto3" json:"thread_id,omitempty"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Text     string                 `protobuf:"bytes,1,opt,name=text,proto3" json:"text,omitempty"`
+	ThreadId string                 `protobuf:"bytes,2,opt,name=thread_id,json=threadId,proto3" json:"thread_id,omitempty"`
+	// --choice, in order: 2 to 4 labels, each 1 to 80 characters of plain
+	// text (CC-0501). Empty asks a yes/no question.
+	Choices       []string `protobuf:"bytes,3,rep,name=choices,proto3" json:"choices,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2792,6 +2795,13 @@ func (x *AskOwner) GetThreadId() string {
 		return x.ThreadId
 	}
 	return ""
+}
+
+func (x *AskOwner) GetChoices() []string {
+	if x != nil {
+		return x.Choices
+	}
+	return nil
 }
 
 type Inbox struct {
@@ -5749,10 +5759,11 @@ const file_portenv_agent_v1_agent_proto_rawDesc = "" +
 	"\x02to\x18\x01 \x01(\tR\x02to\x12\x1b\n" +
 	"\tthread_id\x18\x02 \x01(\tR\bthreadId\x121\n" +
 	"\x04type\x18\x03 \x01(\x0e2\x1d.portenv.types.v1.MessageTypeR\x04type\x12\x12\n" +
-	"\x04text\x18\x04 \x01(\tR\x04text\";\n" +
+	"\x04text\x18\x04 \x01(\tR\x04text\"U\n" +
 	"\bAskOwner\x12\x12\n" +
 	"\x04text\x18\x01 \x01(\tR\x04text\x12\x1b\n" +
-	"\tthread_id\x18\x02 \x01(\tR\bthreadId\">\n" +
+	"\tthread_id\x18\x02 \x01(\tR\bthreadId\x12\x18\n" +
+	"\achoices\x18\x03 \x03(\tR\achoices\">\n" +
 	"\x05Inbox\x12!\n" +
 	"\fsince_cursor\x18\x01 \x01(\tR\vsinceCursor\x12\x12\n" +
 	"\x04wait\x18\x02 \x01(\bR\x04wait\"\x9b\x01\n" +

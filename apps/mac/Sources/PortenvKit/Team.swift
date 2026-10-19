@@ -170,10 +170,17 @@ public struct TeamDecision: Equatable, Sendable, Identifiable {
     /// For the team's first start: the agents Approve starts, in
     /// portenvd, in the order the owner chose Start (R-0296).
     public var startAgents: [String]
+    /// An ask-owner's choices, in order (CC-0501): one button each, in
+    /// place of Approve. Empty for a yes/no question. As portenvd sent
+    /// them, because the answer must name the label exactly; the card
+    /// shows `shownChoices`.
+    public var choices: [String]
+    /// The owner's choice, counting from 1; 0 when none.
+    public var choice: Int
 
     public init(id: String, from: String, kind: Kind, summary: String, detail: String = "", state: State = .pending,
                 answerNote: String = "", createdAt: Date? = nil, answeredAt: Date? = nil, expiresAt: Date? = nil,
-                packages: [Package] = [], startAgents: [String] = []) {
+                packages: [Package] = [], startAgents: [String] = [], choices: [String] = [], choice: Int = 0) {
         self.id = id
         self.from = from
         self.kind = kind
@@ -186,6 +193,17 @@ public struct TeamDecision: Equatable, Sendable, Identifiable {
         self.expiresAt = expiresAt
         self.packages = packages
         self.startAgents = startAgents.map { TeamText.line($0, max: 64) }
+        self.choices = Array(choices.prefix(TeamText.maxChoices))
+        self.choice = choice
+    }
+
+    /// Each choice as the card shows it: plain text on one line, at most
+    /// 80 characters.
+    public var shownChoices: [String] { choices.map { TeamText.line($0, max: TeamText.maxChoiceCharacters) } }
+
+    /// The choice the owner made, as shown; nil when none.
+    public var chosen: String? {
+        state == .approved && choice >= 1 && choice <= choices.count ? shownChoices[choice - 1] : nil
     }
 
     /// Approve and Decline show only while it's pending; an expired
@@ -267,6 +285,14 @@ public enum TeamText {
     public static let approve = "Approve"
     public static let decline = "Decline\u{2026}"
     public static let answeredOnlyHere = "Answered only here, by you. Agents can ask but never approve."
+    /// An ask-owner's choices (CC-0501): at most 4, each at most 80
+    /// characters, as portenvd checks them.
+    public static let maxChoices = 4
+    public static let maxChoiceCharacters = 80
+
+    /// A choice button's VoiceOver label: what it answers, as Approve's
+    /// says ("Approve: merge #42").
+    public static func choose(_ label: String, summary: String) -> String { "Choose \u{201C}\(label)\u{201D}: \(summary)" }
 
     /// A status as a word (GUIDELINES: never colour alone).
     public static func word(_ s: AgentStatus) -> String {

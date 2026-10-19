@@ -119,13 +119,20 @@ struct AgentFileReviewCard: View {
 
 /// A decision (GUIDELINES 6.2): who asks, the question, its evidence,
 /// Decline… (with an optional reason) and Approve, no default button, and
-/// "Answered only here, by you."
+/// "Answered only here, by you." A question with choices (CC-0501) has
+/// one button per choice, in order, in Approve's place.
 struct DecisionCard: View {
     let decision: TeamDecision
     let asker: String
     /// Once answered: when, and what it's doing (R-0296).
     var answered: String?
+    /// A choice, counting from 0 as listed.
+    var choose: (_ index: Int) -> Void = { _ in }
     let answer: (_ approve: Bool, _ note: String) -> Void
+
+    /// The frame names of its buttons, for the tests that click them.
+    static func choiceFrame(_ index: Int) -> String { "choice-\(index)" }
+    static let declineFrame = "decline"
     @State private var declining = false
     @State private var reason = ""
 
@@ -139,7 +146,29 @@ struct DecisionCard: View {
                 Text(verbatim: decision.detail).font(.system(size: 12)).textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            if decision.answerable {
+            if decision.answerable && !decision.choices.isEmpty {
+                // Each label is plain text, never markup; none is the
+                // default (no Return shortcut).
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(Array(decision.shownChoices.enumerated()), id: \.offset) { i, label in
+                        Button { choose(i) } label: {
+                            Text(verbatim: label).font(.system(size: 13))
+                                .multilineTextAlignment(.leading)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .buttonStyle(ChoiceButtonStyle())
+                        .accessibilityLabel(TeamText.choose(label, summary: decision.summary))
+                        .reportsFrame(Self.choiceFrame(i))
+                    }
+                    HStack {
+                        Spacer()
+                        Button(TeamText.decline) { declining = true }
+                            .accessibilityLabel("Decline: \(decision.summary)")
+                            .reportsFrame(Self.declineFrame)
+                    }
+                }
+            } else if decision.answerable {
                 HStack {
                     Spacer()
                     Button(TeamText.decline) { declining = true }
@@ -167,6 +196,18 @@ struct DecisionCard: View {
     }
 }
 
+/// A choice's button (CC-0501): full width, its label wrapping to as many
+/// lines as it needs, so an 80-character label fits a narrow column.
+struct ChoiceButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .padding(.horizontal, 10).padding(.vertical, 6)
+            .background(RoundedRectangle(cornerRadius: 6).fill(SwiftUI.Color.primary.opacity(configuration.isPressed ? 0.16 : 0.07)))
+            .overlay(RoundedRectangle(cornerRadius: 6).stroke(SwiftUI.Color.primary.opacity(0.2), lineWidth: 1))
+            .contentShape(RoundedRectangle(cornerRadius: 6))
+    }
+}
+
 /// A decision Portenv asks on its own (the team's first start), selected
 /// in Needs you, in the inspector's place.
 struct DecisionColumn: View {
@@ -176,7 +217,8 @@ struct DecisionColumn: View {
     var body: some View {
         ScrollView {
             DecisionCard(decision: decision, asker: TeamText.asker(decision, team: team.state.agents),
-                         answered: TeamText.answered(decision, team: team.state.agents)) { approve, note in
+                         answered: TeamText.answered(decision, team: team.state.agents),
+                         choose: { i in Task { await team.choose(decision, index: i) } }) { approve, note in
                 Task { await team.answer(decision, approve: approve, note: note) }
             }
             .padding(14)

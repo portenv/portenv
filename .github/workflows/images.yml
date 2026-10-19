@@ -131,7 +131,9 @@ jobs:
       # An agent team's first start on a fresh workspace, as the owner
       # makes it in the app (R-0296): a real portenvd, portenv team init,
       # approve lead, the TEAM_START decision, start lead, whoami in its
-      # pane, and its ask-owner in the decision list; then the agents' own
+      # pane, and its ask-owner in the decision list; its ask-owner
+      # --choice answered by number over gRPC, with the label in its inbox
+      # (CC-0501); then the agents' own
       # clones, with what ADR 0022 §2a's gate checks (R-0315).
       # No fixtures. After the other tests, so a failure here never hides
       # theirs.

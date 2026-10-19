@@ -102,7 +102,8 @@ struct TeamColumn: View {
                         // (GUIDELINES 6.2). Inside the scroll: a long card
                         // never sets the column's (and window's) height.
                         ForEach(team.decisions(for: agent.id)) { d in
-                            DecisionCard(decision: d, asker: TeamText.asker(d, team: team.state.agents)) { approve, note in
+                            DecisionCard(decision: d, asker: TeamText.asker(d, team: team.state.agents),
+                                         choose: { i in Task { await team.choose(d, index: i) } }) { approve, note in
                                 Task { await team.answer(d, approve: approve, note: note) }
                             }
                             .id(d.id)

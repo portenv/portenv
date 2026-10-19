@@ -235,7 +235,18 @@ final class AppModel {
         }
         self.tabs = tabs
         split = SplitController(tabs: tabs)
-        team = TeamController(box: box, daemon: daemon)
+        let team = TeamController(box: box, daemon: daemon)
+        self.team = team
+        // An agent's decision or a tab's question notifies, and counts in
+        // the Dock badge (§5, R-0384).
+        let needsYou = NeedsYouNotifications.shared.center
+        team.changed = { [weak controller] state in
+            needsYou.team(box: box, state: state, location: controller?.state?.location.map(ServerName.display))
+        }
+        tabs.changed = { [weak controller, weak team] ts in
+            needsYou.tabs(box: box, tabs: ts, team: team?.state.agents ?? [],
+                          location: controller?.state?.location.map(ServerName.display))
+        }
         launch = .open(box)
         defaults.set(box, forKey: Self.lastBoxKey)
         onOpen?(controller)
@@ -295,6 +306,22 @@ final class AppModel {
         await refreshRunning()
     }
 
+    /// A notification's click (§5): the workspace's window in front, with
+    /// the decision selected as its Needs-you row selects it, or the
+    /// asking tab shown. A workspace no window shows any more just brings
+    /// Portenv forward.
+    func show(_ route: NotificationRoute) {
+        (NSApp.mainWindow ?? NSApp.windows.first { $0.isVisible })?.makeKeyAndOrderFront(nil)
+        guard let controller, controller.box == route.box else { return }
+        switch route {
+        case .decision(_, let id):
+            if let team, let selection = NotificationRoute.selection(decision: id, in: team.state) { team.selection = selection }
+        case .tab(_, let id):
+            team?.selection = .allTabs
+            Task { await tabs?.select(id) }
+        }
+    }
+
     /// Reads which workspaces run on this Mac.
     func refreshRunning() async {
         running = Set(await RunningWorkspaces.here(daemon))
@@ -305,6 +332,9 @@ final class AppModel {
         followTask?.cancel()
         followTask = nil
         openTask = nil
+        // The window no longer follows it: out of the badge, its
+        // notifications taken back (it keeps running, ADR 0023).
+        if let box = controller?.box { NeedsYouNotifications.shared.center.closed(box: box) }
         controller = nil
         tabs = nil
         split = nil

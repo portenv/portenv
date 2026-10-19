@@ -55,6 +55,8 @@ struct PortenvApp: App {
             AppRoot(model: model)
                 .task {
                     model.onOpen = { [delegate] controller in delegate.controller = controller }
+                    NeedsYouNotifications.shared.frontWorkspace = { [model] in model.controller?.box }
+                    NeedsYouNotifications.shared.show = { [model] route in model.show(route) }
                     delegate.runningNames = { [model] in model.knownRunning }
                     // One launch wait at a time; Try Again restarts it.
                     model.begin()
@@ -123,6 +125,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         OnScreen.fixAll()
+        // Needs-you notifications: their delegate and Show (no permission
+        // asked here, §5).
+        NeedsYouNotifications.shared.install()
         // SIGTERM (Xcode's Stop, logout, kill) and SIGINT (Ctrl-C in the
         // Terminal that started it) quit like ⌘Q, so open boxes are saved
         // and released.

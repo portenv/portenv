@@ -181,10 +181,14 @@ Shown when a program in the visible tab is waiting for an answer that Portenv ca
 | Waiting for input | orange dot on the tab | inline answer card | notification with answer buttons |
 | Agent connected or revoked | — | avatar appears or leaves | notification |
 | Move finished | — | state line | notification only if the move took longer than 10 s |
+| A new decision in Needs you (6.2) | the count in the workspace's window tab | its row in Needs you | notification with Show only |
 
 Notification rules:
 - Title: `<workspace> · <who> is asking` or `<workspace> · <event>`. Body: the question or result in one line. Subtitle line: who started it and where.
-- Answer buttons in the notification are the same two as the card, plus "Show".
+- Answer buttons in the notification are the same two as the card, plus "Show". A decision (6.2) never has answer buttons: Show only, whatever it asks, an agent file or the team's first start included. Clicking a notification, or Show, brings its workspace forward with the question selected (a decision as its Needs-you row selects it).
+- "Window not in front" means that workspace's own window: another workspace's window in front still gets the notification. A notification is taken back once its question is answered, expired or gone.
+- A password prompt's notification says only that it asks; its text stays in the terminal.
+- **Dock badge:** the number of Needs-you decisions across every workspace a window shows, cleared at 0.
 - One notification per question; a newer state replaces the older notification, it doesn't stack.
 - Notifications respect Focus modes and the user's per-app settings. No sound by default.
 - Dots always come with a text label for VoiceOver and a tooltip; colour is never the only signal.

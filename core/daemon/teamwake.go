@@ -52,6 +52,12 @@ func (b *teamBox) noteWakeLocked(line *agentv1.AppendBoardRequest) {
 			m.GetTo() == boardOwner || m.GetTo() == boardFrom || m.GetTo() == m.GetFrom() {
 			return
 		}
+		// An attachment doesn't wake an agent by itself (ADR 0030 point
+		// 9a): the owner's "attached SPEC.md" would type into the line the
+		// owner is about to finish.
+		if attachOnly(m) {
+			return
+		}
 		to, from = m.GetTo(), m.GetFrom()
 	case line.GetDecision() != nil:
 		d := line.GetDecision()

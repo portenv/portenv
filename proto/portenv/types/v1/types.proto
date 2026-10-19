@@ -274,6 +274,9 @@ message BoardMessage {
   // For Portenv's notices about one agent (a start that failed): its id,
   // so the app shows the notice in that agent's column. Empty otherwise.
   string about = 9;
+  // Files attached to it (ADR 0030): at most 5. The bytes are in this
+  // Mac's attachment store, never on the board.
+  repeated Attachment attachments = 10;
 }
 
 // A request for the owner (ADR 0022 §6). Only the app answers it.
@@ -312,6 +315,8 @@ message Decision {
   // to keep or remove, one by one. Approve keeps every item not named in
   // AnswerDecisionRequest.remove_items.
   repeated MigrationItem migration_items = 15;
+  // For DECISION_KIND_ASK_OWNER asked with --attach (ADR 0030): at most 5.
+  repeated Attachment attachments = 16;
 }
 
 // One thing the move to agents' own clones recorded (ADR 0022 §2a point
@@ -405,4 +410,39 @@ message Routine {
   string note = 2;
   bool paused = 3;
   google.protobuf.Timestamp next_at = 4;
+}
+
+// A file attached to a board message or decision (ADR 0030). The board
+// keeps this record; the bytes are in the Mac's attachment store, which
+// only portenvd reads.
+message Attachment {
+  // A ULID: the store's folder name.
+  string id = 1;
+  // The cleaned name (ADR 0030 point 3), with the extension of the type
+  // found from the content.
+  string name = 2;
+  // image/png, image/jpeg, image/gif, image/webp, application/pdf,
+  // text/markdown, text/plain, or (from the owner only)
+  // application/vnd.openxmlformats-officedocument.wordprocessingml.document.
+  string media_type = 3;
+  int64 size = 4;
+  // In hex.
+  string sha256 = 5;
+  // Images only, from the header.
+  int32 width = 6;
+  int32 height = 7;
+  // Where the recipient's copy landed, relative to its home
+  // (inbox/<sender>/<time>/<name>); empty for the owner.
+  string inbox_path = 8;
+}
+
+// How a dropped file's path reached the agent's pane (ADR 0030 point 8).
+enum InsertHow {
+  INSERT_HOW_UNSPECIFIED = 0;
+  // Typed at a shell prompt, quoted, with no Enter.
+  INSERT_HOW_TYPED = 1;
+  // Sent as one bracketed paste to the agent's runner, with no Enter.
+  INSERT_HOW_PASTED = 2;
+  // Nothing was typed: the path is shown for the owner to copy.
+  INSERT_HOW_NONE = 3;
 }

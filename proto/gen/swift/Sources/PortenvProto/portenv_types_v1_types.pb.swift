@@ -665,6 +665,55 @@ public nonisolated enum Portenv_Types_V1_GrantMode: SwiftProtobuf.Enum, Swift.Ca
 
 }
 
+/// How a dropped file's path reached the agent's pane (ADR 0030 point 8).
+public nonisolated enum Portenv_Types_V1_InsertHow: SwiftProtobuf.Enum, Swift.CaseIterable {
+  public typealias RawValue = Int
+  case unspecified // = 0
+
+  /// Typed at a shell prompt, quoted, with no Enter.
+  case typed // = 1
+
+  /// Sent as one bracketed paste to the agent's runner, with no Enter.
+  case pasted // = 2
+
+  /// Nothing was typed: the path is shown for the owner to copy.
+  case none // = 3
+  case UNRECOGNIZED(Int)
+
+  public init() {
+    self = .unspecified
+  }
+
+  public init?(rawValue: Int) {
+    switch rawValue {
+    case 0: self = .unspecified
+    case 1: self = .typed
+    case 2: self = .pasted
+    case 3: self = .none
+    default: self = .UNRECOGNIZED(rawValue)
+    }
+  }
+
+  public var rawValue: Int {
+    switch self {
+    case .unspecified: return 0
+    case .typed: return 1
+    case .pasted: return 2
+    case .none: return 3
+    case .UNRECOGNIZED(let i): return i
+    }
+  }
+
+  // The compiler won't synthesize support with the UNRECOGNIZED case.
+  public static let allCases: [Portenv_Types_V1_InsertHow] = [
+    .unspecified,
+    .typed,
+    .pasted,
+    .none,
+  ]
+
+}
+
 /// A box: a toolbox image plus a portable home. Only the home travels between
 /// machines; the image is pulled or rebuilt on each one.
 public nonisolated struct Portenv_Types_V1_Box: Sendable {
@@ -917,6 +966,10 @@ public nonisolated struct Portenv_Types_V1_BoardMessage: Sendable {
   /// so the app shows the notice in that agent's column. Empty otherwise.
   public var about: String = String()
 
+  /// Files attached to it (ADR 0030): at most 5. The bytes are in this
+  /// Mac's attachment store, never on the board.
+  public var attachments: [Portenv_Types_V1_Attachment] = []
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -1034,6 +1087,12 @@ public nonisolated struct Portenv_Types_V1_Decision: @unchecked Sendable {
   public var migrationItems: [Portenv_Types_V1_MigrationItem] {
     get {_storage._migrationItems}
     set {_uniqueStorage()._migrationItems = newValue}
+  }
+
+  /// For DECISION_KIND_ASK_OWNER asked with --attach (ADR 0030): at most 5.
+  public var attachments: [Portenv_Types_V1_Attachment] {
+    get {_storage._attachments}
+    set {_uniqueStorage()._attachments = newValue}
   }
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
@@ -1246,6 +1305,45 @@ public nonisolated struct Portenv_Types_V1_Routine: Sendable {
   fileprivate var _nextAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
 }
 
+/// A file attached to a board message or decision (ADR 0030). The board
+/// keeps this record; the bytes are in the Mac's attachment store, which
+/// only portenvd reads.
+public nonisolated struct Portenv_Types_V1_Attachment: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// A ULID: the store's folder name.
+  public var id: String = String()
+
+  /// The cleaned name (ADR 0030 point 3), with the extension of the type
+  /// found from the content.
+  public var name: String = String()
+
+  /// image/png, image/jpeg, image/gif, image/webp, application/pdf,
+  /// text/markdown, text/plain, or (from the owner only)
+  /// application/vnd.openxmlformats-officedocument.wordprocessingml.document.
+  public var mediaType: String = String()
+
+  public var size: Int64 = 0
+
+  /// In hex.
+  public var sha256: String = String()
+
+  /// Images only, from the header.
+  public var width: Int32 = 0
+
+  public var height: Int32 = 0
+
+  /// Where the recipient's copy landed, relative to its home
+  /// (inbox/<sender>/<time>/<name>); empty for the owner.
+  public var inboxPath: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
 // MARK: - Code below here is support for the SwiftProtobuf runtime.
 
 fileprivate nonisolated let _protobuf_package = "portenv.types.v1"
@@ -1296,6 +1394,10 @@ nonisolated extension Portenv_Types_V1_DecisionState: SwiftProtobuf._ProtoNamePr
 
 nonisolated extension Portenv_Types_V1_GrantMode: SwiftProtobuf._ProtoNameProviding {
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0GRANT_MODE_UNSPECIFIED\0\u{1}GRANT_MODE_ASK\0\u{1}GRANT_MODE_ALLOW\0\u{1}GRANT_MODE_NEVER\0")
+}
+
+nonisolated extension Portenv_Types_V1_InsertHow: SwiftProtobuf._ProtoNameProviding {
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0INSERT_HOW_UNSPECIFIED\0\u{1}INSERT_HOW_TYPED\0\u{1}INSERT_HOW_PASTED\0\u{1}INSERT_HOW_NONE\0")
 }
 
 nonisolated extension Portenv_Types_V1_Box: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
@@ -1621,7 +1723,7 @@ nonisolated extension Portenv_Types_V1_Tab: SwiftProtobuf.Message, SwiftProtobuf
 
 nonisolated extension Portenv_Types_V1_BoardMessage: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".BoardMessage"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}from\0\u{1}to\0\u{3}thread_id\0\u{1}type\0\u{1}text\0\u{3}created_at\0\u{1}files\0\u{1}about\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}from\0\u{1}to\0\u{3}thread_id\0\u{1}type\0\u{1}text\0\u{3}created_at\0\u{1}files\0\u{1}about\0\u{1}attachments\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1638,6 +1740,7 @@ nonisolated extension Portenv_Types_V1_BoardMessage: SwiftProtobuf.Message, Swif
       case 7: try { try decoder.decodeSingularMessageField(value: &self._createdAt) }()
       case 8: try { try decoder.decodeRepeatedMessageField(value: &self.files) }()
       case 9: try { try decoder.decodeSingularStringField(value: &self.about) }()
+      case 10: try { try decoder.decodeRepeatedMessageField(value: &self.attachments) }()
       default: break
       }
     }
@@ -1675,6 +1778,9 @@ nonisolated extension Portenv_Types_V1_BoardMessage: SwiftProtobuf.Message, Swif
     if !self.about.isEmpty {
       try visitor.visitSingularStringField(value: self.about, fieldNumber: 9)
     }
+    if !self.attachments.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.attachments, fieldNumber: 10)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -1688,6 +1794,7 @@ nonisolated extension Portenv_Types_V1_BoardMessage: SwiftProtobuf.Message, Swif
     if lhs._createdAt != rhs._createdAt {return false}
     if lhs.files != rhs.files {return false}
     if lhs.about != rhs.about {return false}
+    if lhs.attachments != rhs.attachments {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -1695,7 +1802,7 @@ nonisolated extension Portenv_Types_V1_BoardMessage: SwiftProtobuf.Message, Swif
 
 nonisolated extension Portenv_Types_V1_Decision: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Decision"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}from\0\u{1}kind\0\u{1}summary\0\u{1}detail\0\u{1}state\0\u{3}answer_note\0\u{3}created_at\0\u{3}answered_at\0\u{1}packages\0\u{3}expires_at\0\u{3}start_agent_ids\0\u{1}choices\0\u{1}choice\0\u{3}migration_items\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}from\0\u{1}kind\0\u{1}summary\0\u{1}detail\0\u{1}state\0\u{3}answer_note\0\u{3}created_at\0\u{3}answered_at\0\u{1}packages\0\u{3}expires_at\0\u{3}start_agent_ids\0\u{1}choices\0\u{1}choice\0\u{3}migration_items\0\u{1}attachments\0")
 
   fileprivate class _StorageClass {
     var _id: String = String()
@@ -1713,6 +1820,7 @@ nonisolated extension Portenv_Types_V1_Decision: SwiftProtobuf.Message, SwiftPro
     var _choices: [String] = []
     var _choice: Int32 = 0
     var _migrationItems: [Portenv_Types_V1_MigrationItem] = []
+    var _attachments: [Portenv_Types_V1_Attachment] = []
 
       // This property is used as the initial default value for new instances of the type.
       // The type itself is protecting the reference to its storage via CoW semantics.
@@ -1738,6 +1846,7 @@ nonisolated extension Portenv_Types_V1_Decision: SwiftProtobuf.Message, SwiftPro
       _choices = source._choices
       _choice = source._choice
       _migrationItems = source._migrationItems
+      _attachments = source._attachments
     }
   }
 
@@ -1771,6 +1880,7 @@ nonisolated extension Portenv_Types_V1_Decision: SwiftProtobuf.Message, SwiftPro
         case 13: try { try decoder.decodeRepeatedStringField(value: &_storage._choices) }()
         case 14: try { try decoder.decodeSingularInt32Field(value: &_storage._choice) }()
         case 15: try { try decoder.decodeRepeatedMessageField(value: &_storage._migrationItems) }()
+        case 16: try { try decoder.decodeRepeatedMessageField(value: &_storage._attachments) }()
         default: break
         }
       }
@@ -1828,6 +1938,9 @@ nonisolated extension Portenv_Types_V1_Decision: SwiftProtobuf.Message, SwiftPro
       if !_storage._migrationItems.isEmpty {
         try visitor.visitRepeatedMessageField(value: _storage._migrationItems, fieldNumber: 15)
       }
+      if !_storage._attachments.isEmpty {
+        try visitor.visitRepeatedMessageField(value: _storage._attachments, fieldNumber: 16)
+      }
     }
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -1852,6 +1965,7 @@ nonisolated extension Portenv_Types_V1_Decision: SwiftProtobuf.Message, SwiftPro
         if _storage._choices != rhs_storage._choices {return false}
         if _storage._choice != rhs_storage._choice {return false}
         if _storage._migrationItems != rhs_storage._migrationItems {return false}
+        if _storage._attachments != rhs_storage._attachments {return false}
         return true
       }
       if !storagesAreEqual {return false}
@@ -2213,6 +2327,71 @@ nonisolated extension Portenv_Types_V1_Routine: SwiftProtobuf.Message, SwiftProt
     if lhs.note != rhs.note {return false}
     if lhs.paused != rhs.paused {return false}
     if lhs._nextAt != rhs._nextAt {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Portenv_Types_V1_Attachment: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".Attachment"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}name\0\u{3}media_type\0\u{1}size\0\u{1}sha256\0\u{1}width\0\u{1}height\0\u{3}inbox_path\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.id) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.name) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.mediaType) }()
+      case 4: try { try decoder.decodeSingularInt64Field(value: &self.size) }()
+      case 5: try { try decoder.decodeSingularStringField(value: &self.sha256) }()
+      case 6: try { try decoder.decodeSingularInt32Field(value: &self.width) }()
+      case 7: try { try decoder.decodeSingularInt32Field(value: &self.height) }()
+      case 8: try { try decoder.decodeSingularStringField(value: &self.inboxPath) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.id.isEmpty {
+      try visitor.visitSingularStringField(value: self.id, fieldNumber: 1)
+    }
+    if !self.name.isEmpty {
+      try visitor.visitSingularStringField(value: self.name, fieldNumber: 2)
+    }
+    if !self.mediaType.isEmpty {
+      try visitor.visitSingularStringField(value: self.mediaType, fieldNumber: 3)
+    }
+    if self.size != 0 {
+      try visitor.visitSingularInt64Field(value: self.size, fieldNumber: 4)
+    }
+    if !self.sha256.isEmpty {
+      try visitor.visitSingularStringField(value: self.sha256, fieldNumber: 5)
+    }
+    if self.width != 0 {
+      try visitor.visitSingularInt32Field(value: self.width, fieldNumber: 6)
+    }
+    if self.height != 0 {
+      try visitor.visitSingularInt32Field(value: self.height, fieldNumber: 7)
+    }
+    if !self.inboxPath.isEmpty {
+      try visitor.visitSingularStringField(value: self.inboxPath, fieldNumber: 8)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Portenv_Types_V1_Attachment, rhs: Portenv_Types_V1_Attachment) -> Bool {
+    if lhs.id != rhs.id {return false}
+    if lhs.name != rhs.name {return false}
+    if lhs.mediaType != rhs.mediaType {return false}
+    if lhs.size != rhs.size {return false}
+    if lhs.sha256 != rhs.sha256 {return false}
+    if lhs.width != rhs.width {return false}
+    if lhs.height != rhs.height {return false}
+    if lhs.inboxPath != rhs.inboxPath {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

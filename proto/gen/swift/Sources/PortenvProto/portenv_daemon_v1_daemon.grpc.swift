@@ -763,6 +763,45 @@ public enum Portenv_Daemon_V1_DaemonService: Sendable {
                 type: .unary
             )
         }
+        /// Namespace for "ReadAttachment" metadata.
+        public enum ReadAttachment: Sendable {
+            /// Request type for "ReadAttachment".
+            public typealias Input = Portenv_Daemon_V1_ReadAttachmentRequest
+            /// Response type for "ReadAttachment".
+            public typealias Output = Portenv_Daemon_V1_ReadAttachmentResponse
+            /// Descriptor for "ReadAttachment".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "ReadAttachment",
+                type: .serverStreaming
+            )
+        }
+        /// Namespace for "SendAttachments" metadata.
+        public enum SendAttachments: Sendable {
+            /// Request type for "SendAttachments".
+            public typealias Input = Portenv_Daemon_V1_SendAttachmentsRequest
+            /// Response type for "SendAttachments".
+            public typealias Output = Portenv_Daemon_V1_SendAttachmentsResponse
+            /// Descriptor for "SendAttachments".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "SendAttachments",
+                type: .clientStreaming
+            )
+        }
+        /// Namespace for "RemoveAttachment" metadata.
+        public enum RemoveAttachment: Sendable {
+            /// Request type for "RemoveAttachment".
+            public typealias Input = Portenv_Daemon_V1_RemoveAttachmentRequest
+            /// Response type for "RemoveAttachment".
+            public typealias Output = Portenv_Daemon_V1_RemoveAttachmentResponse
+            /// Descriptor for "RemoveAttachment".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "RemoveAttachment",
+                type: .unary
+            )
+        }
         /// Descriptors for all methods in the "portenv.daemon.v1.DaemonService" service.
         public static let descriptors: [GRPCCore.MethodDescriptor] = [
             GetVersion.descriptor,
@@ -821,7 +860,10 @@ public enum Portenv_Daemon_V1_DaemonService: Sendable {
             ListAgentFiles.descriptor,
             ReadAgentFile.descriptor,
             AddAgentFiles.descriptor,
-            SetRoutinePaused.descriptor
+            SetRoutinePaused.descriptor,
+            ReadAttachment.descriptor,
+            SendAttachments.descriptor,
+            RemoveAttachment.descriptor
         ]
     }
 }
@@ -2194,6 +2236,77 @@ extension Portenv_Daemon_V1_DaemonService {
             deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_SetRoutinePausedResponse>,
             options: GRPCCore.CallOptions,
             onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_SetRoutinePausedResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "ReadAttachment" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Attachments (ADR 0030), the owner only: an agent caller is refused.
+        /// > ReadAttachment streams one from this Mac's store, the record first.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_ReadAttachmentRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_ReadAttachmentRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_ReadAttachmentResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func readAttachment<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_ReadAttachmentRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_ReadAttachmentRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_ReadAttachmentResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.StreamingClientResponse<Portenv_Daemon_V1_ReadAttachmentResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "SendAttachments" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > The owner's files for agents (drop or Attach…): stored once, copied
+        /// > into each agent's ~/inbox/owner/<time>/, one board notice per agent.
+        ///
+        /// - Parameters:
+        ///   - request: A streaming request producing `Portenv_Daemon_V1_SendAttachmentsRequest` messages.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_SendAttachmentsRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_SendAttachmentsResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func sendAttachments<Result>(
+            request: GRPCCore.StreamingClientRequest<Portenv_Daemon_V1_SendAttachmentsRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_SendAttachmentsRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_SendAttachmentsResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_SendAttachmentsResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "RemoveAttachment" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Remove from this Mac: deletes one attachment's bytes; its records stay.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_RemoveAttachmentRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_RemoveAttachmentRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_RemoveAttachmentResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func removeAttachment<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_RemoveAttachmentRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_RemoveAttachmentRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_RemoveAttachmentResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_RemoveAttachmentResponse>) async throws -> Result
         ) async throws -> Result where Result: Sendable
     }
 
@@ -4182,6 +4295,108 @@ extension Portenv_Daemon_V1_DaemonService {
                 onResponse: handleResponse
             )
         }
+
+        /// Call the "ReadAttachment" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Attachments (ADR 0030), the owner only: an agent caller is refused.
+        /// > ReadAttachment streams one from this Mac's store, the record first.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_ReadAttachmentRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_ReadAttachmentRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_ReadAttachmentResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func readAttachment<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_ReadAttachmentRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_ReadAttachmentRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_ReadAttachmentResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.StreamingClientResponse<Portenv_Daemon_V1_ReadAttachmentResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.serverStreaming(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.ReadAttachment.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
+
+        /// Call the "SendAttachments" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > The owner's files for agents (drop or Attach…): stored once, copied
+        /// > into each agent's ~/inbox/owner/<time>/, one board notice per agent.
+        ///
+        /// - Parameters:
+        ///   - request: A streaming request producing `Portenv_Daemon_V1_SendAttachmentsRequest` messages.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_SendAttachmentsRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_SendAttachmentsResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func sendAttachments<Result>(
+            request: GRPCCore.StreamingClientRequest<Portenv_Daemon_V1_SendAttachmentsRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_SendAttachmentsRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_SendAttachmentsResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_SendAttachmentsResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.clientStreaming(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.SendAttachments.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
+
+        /// Call the "RemoveAttachment" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Remove from this Mac: deletes one attachment's bytes; its records stay.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_RemoveAttachmentRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_RemoveAttachmentRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_RemoveAttachmentResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func removeAttachment<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_RemoveAttachmentRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_RemoveAttachmentRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_RemoveAttachmentResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_RemoveAttachmentResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.RemoveAttachment.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
     }
 }
 
@@ -5864,6 +6079,93 @@ extension Portenv_Daemon_V1_DaemonService.ClientProtocol {
             request: request,
             serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_SetRoutinePausedRequest>(),
             deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_SetRoutinePausedResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "ReadAttachment" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Attachments (ADR 0030), the owner only: an agent caller is refused.
+    /// > ReadAttachment streams one from this Mac's store, the record first.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_ReadAttachmentRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func readAttachment<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_ReadAttachmentRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.StreamingClientResponse<Portenv_Daemon_V1_ReadAttachmentResponse>) async throws -> Result
+    ) async throws -> Result where Result: Sendable {
+        try await self.readAttachment(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_ReadAttachmentRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_ReadAttachmentResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "SendAttachments" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > The owner's files for agents (drop or Attach…): stored once, copied
+    /// > into each agent's ~/inbox/owner/<time>/, one board notice per agent.
+    ///
+    /// - Parameters:
+    ///   - request: A streaming request producing `Portenv_Daemon_V1_SendAttachmentsRequest` messages.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func sendAttachments<Result>(
+        request: GRPCCore.StreamingClientRequest<Portenv_Daemon_V1_SendAttachmentsRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_SendAttachmentsResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.sendAttachments(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_SendAttachmentsRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_SendAttachmentsResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "RemoveAttachment" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Remove from this Mac: deletes one attachment's bytes; its records stay.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_RemoveAttachmentRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func removeAttachment<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_RemoveAttachmentRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_RemoveAttachmentResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.removeAttachment(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_RemoveAttachmentRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_RemoveAttachmentResponse>(),
             options: options,
             onResponse: handleResponse
         )
@@ -7779,6 +8081,106 @@ extension Portenv_Daemon_V1_DaemonService.ClientProtocol {
             metadata: metadata
         )
         return try await self.setRoutinePaused(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "ReadAttachment" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Attachments (ADR 0030), the owner only: an agent caller is refused.
+    /// > ReadAttachment streams one from this Mac's store, the record first.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func readAttachment<Result>(
+        _ message: Portenv_Daemon_V1_ReadAttachmentRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.StreamingClientResponse<Portenv_Daemon_V1_ReadAttachmentResponse>) async throws -> Result
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_ReadAttachmentRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.readAttachment(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "SendAttachments" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > The owner's files for agents (drop or Attach…): stored once, copied
+    /// > into each agent's ~/inbox/owner/<time>/, one board notice per agent.
+    ///
+    /// - Parameters:
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - producer: A closure producing request messages to send to the server. Returning
+    ///       from the closure closes the request stream.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func sendAttachments<Result>(
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        requestProducer producer: @Sendable @escaping (GRPCCore.RPCWriter<Portenv_Daemon_V1_SendAttachmentsRequest>) async throws -> Void,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_SendAttachmentsResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.StreamingClientRequest<Portenv_Daemon_V1_SendAttachmentsRequest>(
+            metadata: metadata,
+            producer: producer
+        )
+        return try await self.sendAttachments(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "RemoveAttachment" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Remove from this Mac: deletes one attachment's bytes; its records stay.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func removeAttachment<Result>(
+        _ message: Portenv_Daemon_V1_RemoveAttachmentRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_RemoveAttachmentResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_RemoveAttachmentRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.removeAttachment(
             request: request,
             options: options,
             onResponse: handleResponse

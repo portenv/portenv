@@ -28,6 +28,8 @@ type Guide struct {
 	Enums     map[string][]string     `json:"enums"`
 	Commands  []GuideCommand          `json:"commands"`
 	Routines  string                  `json:"routines"`
+	// Attachments is ADR 0030's guidance, R-0380's principle first.
+	Attachments []string `json:"attachments"`
 }
 
 // GuideField is one field of a type, as inbox --json writes it.
@@ -46,7 +48,7 @@ type GuideCommand struct {
 
 // guideTypes are the messages an agent reads (inbox, whoami, team status).
 var guideTypes = []protoreflect.ProtoMessage{
-	&typesv1.BoardMessage{}, &typesv1.Decision{}, &typesv1.MigrationItem{}, &typesv1.HandoffFile{}, &typesv1.AgentStatus{},
+	&typesv1.BoardMessage{}, &typesv1.Decision{}, &typesv1.MigrationItem{}, &typesv1.HandoffFile{}, &typesv1.Attachment{}, &typesv1.AgentStatus{},
 	&typesv1.AgentGrant{}, &typesv1.PackagePlan{}, &agentv1.InboxResult{}, &agentv1.WhoAmIResult{},
 	&agentv1.Teammate{}, &agentv1.TeamStatusResult{},
 }
@@ -100,6 +102,7 @@ func NewGuide() Guide {
 			"You reach only your own terminals and files. Opening a pane in the owner's window goes through portenv split or portenv tab new, and your grant.",
 			"Run portenv whoami for what you can do now.",
 			ShareLoginOff,
+			AttachDataRule,
 		},
 		Etiquette: []string{
 			"One topic per thread; reply in the thread (--thread).",
@@ -126,12 +129,28 @@ func NewGuide() Guide {
 			"panes":                       MaxAgentPanes,
 			"choices":                     MaxChoices,
 			"choice_characters":           MaxChoiceCharacters,
+			"attachment_bytes":            MaxAttachmentBytes,
+			"attachments_per_message":     MaxAttachmentsPerMessage,
+			"attachments_per_day":         AttachmentsPerDay,
+			"attachment_store_bytes":      DefaultAttachmentStore,
+			"image_side_pixels":           MaxImageSide,
+			"image_pixels":                MaxImagePixels,
 		},
 		Types: map[string][]GuideField{},
 		Enums: map[string][]string{},
 		Routines: fmt.Sprintf(`An agent file's routine: ["every 30m: <note>", "every 2h: <note>"]: at least %d minutes apart, at most %d. `+
 			`Portenv keeps the timer, posts the note to your inbox, and types "[Portenv routine] <note>" into your own pane when you're idle. `+
 			"A routine grants nothing; you decide what to do.", MinRoutineMinutes, MaxRoutines),
+		Attachments: []string{
+			AttachGuidance,
+			fmt.Sprintf("--attach FILE on msg and ask-owner, up to %d times: %s, at most %d MB each. The type comes from the content, never the name, and the name's extension is set to it.",
+				MaxAttachmentsPerMessage, strings.Join(AttachmentTypes, ", "), MaxAttachmentBytes>>20),
+			"Only regular files you own in your own home (your clone included), by their full path; never a link, a folder, a hidden path (any part starting with .), or a file of the project, /home/team or another agent. Copy a file into your home first.",
+			"Never secrets: hidden paths, these names (" + strings.Join(SecretNamePatterns, ", ") + "), and text holding a private key block or an AWS secret key are refused, whatever the name.",
+			"A teammate's attachments land in your home as inbox/<sender>/<time>/<name>, mode 0600; the owner's as inbox/owner/<time>/<name>. portenv inbox --json gives each one's inboxPath and sha256. A .docx from the owner is a ZIP that Portenv checked but never unpacked; your own tools parse it at your risk, in your home.",
+			fmt.Sprintf("At most %d attachments a day; portenv whoami --json reports attachmentsToday.", AttachmentsPerDay),
+			AttachDataRule,
+		},
 	}
 	for _, m := range guideTypes {
 		d := m.ProtoReflect().Descriptor()
@@ -151,16 +170,25 @@ func NewGuide() Guide {
 		}
 	}
 	kb := func(n int) string { return fmt.Sprintf("%d KB", n>>10) }
+	attachErrors := []string{
+		"Attach files from your own home (/home/builder), by their full path. Copy a file there first.",
+		"There's no file at ~/shots/login.png.",
+		"~/shots/latest.png is a link. Attach the file itself.",
+		"~/shots/login.png belongs to another user. Copy it into your home first.",
+		fmt.Sprintf("screenshot.png is 31 MB; an attachment can be at most %d MB. Make it smaller and attach it again.", MaxAttachmentBytes>>20),
+		"report.pdf isn't a PDF, PNG, JPEG, GIF, WebP, Markdown or text file. Attach one of those.",
+		AttachSecretLine("~/deploy.pem"),
+	}
 	g.Commands = []GuideCommand{
-		{"portenv msg AGENT TEXT [--thread ID] [--type notice|question|answer]", "A message to a teammate your grant names, or to the owner.",
-			`portenv msg reviewer "Ready for review on feature/cart" --type question`,
-			[]string{"builder may not message reviewer (its grant's message list doesn't name it).", "A message is 1 to " + kb(MaxMessageBytes) + " of plain text, with no control characters.", fmt.Sprintf("builder has sent %d messages in the last minute, its limit. Wait a moment.", MessagesPerMinute)}},
-		{`portenv ask-owner TEXT [--choice "LABEL" --choice "LABEL"...] [--thread ID]`,
+		{"portenv msg AGENT TEXT [--thread ID] [--type notice|question|answer] [--attach FILE]...", "A message to a teammate your grant names, or to the owner. --attach adds up to 5 files from your own home; see Attachments.",
+			`portenv msg lead "The login page is broken on narrow screens." --attach ~/shots/login-390.png`,
+			append([]string{"builder may not message reviewer (its grant's message list doesn't name it).", "A message is 1 to " + kb(MaxMessageBytes) + " of plain text, with no control characters.", fmt.Sprintf("builder has sent %d messages in the last minute, its limit. Wait a moment.", MessagesPerMinute)}, attachErrors...)},
+		{`portenv ask-owner TEXT [--choice "LABEL" --choice "LABEL"...] [--thread ID] [--attach FILE]...`,
 			fmt.Sprintf(`A decision for the owner, who answers in Portenv. Without --choice it's a yes/no question (approved or declined). With %d to %d --choice labels, the owner picks one, or declines; inbox then shows chose "LABEL", and inbox --json the decision's choice, counting from 1. Wait with portenv inbox --wait.`, MinChoices, MaxChoices),
-			`portenv ask-owner "Which way for the date parsing?" --choice "Option a: keep our parser" --choice "Option b: install deps"`,
-			[]string{"builder may not ask the owner (its grant has ask_owner: false).", fmt.Sprintf("builder has %d requests waiting for the owner, its limit. Wait for an answer first.", PendingDecisionsPerAgent),
+			`portenv ask-owner "Ship the redesign?" --choice "Ship it" --choice "Wait" --attach ~/acme-api/docs/redesign.md`,
+			append([]string{"builder may not ask the owner (its grant has ask_owner: false).", fmt.Sprintf("builder has %d requests waiting for the owner, its limit. Wait for an answer first.", PendingDecisionsPerAgent),
 				fmt.Sprintf("Give %d to %d choices, or none for a yes/no question.", MinChoices, MaxChoices),
-				fmt.Sprintf("A choice is 1 to %d characters of plain text on one line.", MaxChoiceCharacters), "Each choice must be different."}},
+				fmt.Sprintf("A choice is 1 to %d characters of plain text on one line.", MaxChoiceCharacters), "Each choice must be different."}, attachErrors...)},
 		{"portenv inbox [--wait] [--since CURSOR] [--json]", "Your messages, and your decisions' answers, since a cursor. --wait waits up to a minute for something new.",
 			`portenv inbox --wait --since 12 --json`,
 			[]string{"Stopped waiting."}},
@@ -198,7 +226,7 @@ func (g Guide) Text() string {
 	w("- A message is %s. Each has a thread; reply in it.\n", strings.Join(g.Enums["MessageType"], ", "))
 	w("- A decision is a request for the owner: %s. Its state is %s; an expired one is final, so ask again.\n", strings.Join(g.Enums["DecisionKind"], ", "), strings.Join(g.Enums["DecisionState"], ", "))
 	w("- portenv inbox --json writes one result, with these fields:\n")
-	for _, t := range []string{"InboxResult", "BoardMessage", "Decision", "HandoffFile"} {
+	for _, t := range []string{"InboxResult", "BoardMessage", "Decision", "HandoffFile", "Attachment"} {
 		var fs []string
 		for _, f := range g.Types[t] {
 			fs = append(fs, f.Name+" ("+f.Type+")")
@@ -206,7 +234,15 @@ func (g Guide) Text() string {
 		w("  %s: %s\n", t, strings.Join(fs, ", "))
 	}
 	w(`  Example: {"messages":[{"id":"01JAB…","from":"lead","to":"builder","threadId":"01JAB…","type":"MESSAGE_TYPE_QUESTION","text":"Which branch?","createdAt":"2026-10-18T09:00:00Z"}],"cursor":"12"}`)
-	w("\n\nCommands\n")
+	w("\n\nAttachments\n")
+	for i, a := range g.Attachments {
+		if i == 0 {
+			w("%s\n", a) // the guidance block, word for word
+			continue
+		}
+		w("- %s\n", a)
+	}
+	w("\nCommands\n")
 	for _, c := range g.Commands {
 		w("- %s\n  %s\n  Example: %s\n", c.Usage, c.Does, c.Example)
 		for _, e := range c.Errors {
@@ -215,7 +251,7 @@ func (g Guide) Text() string {
 	}
 	w("\nRoutines\n- %s\n", g.Routines)
 	w("\nLimits\n")
-	for _, k := range []string{"message_bytes", "messages_per_minute", "pending_decisions", "decision_expiry_hours", "status_characters", "handoff_bytes", "calls_in_flight", "choices", "choice_characters"} {
+	for _, k := range []string{"message_bytes", "messages_per_minute", "pending_decisions", "decision_expiry_hours", "status_characters", "handoff_bytes", "calls_in_flight", "choices", "choice_characters", "attachment_bytes", "attachments_per_message", "attachments_per_day"} {
 		w("- %s: %v\n", k, g.Limits[k])
 	}
 	w("\nEtiquette\n")

@@ -2729,6 +2729,121 @@ public nonisolated struct Portenv_Daemon_V1_SetRoutinePausedResponse: Sendable {
   fileprivate var _agent: Portenv_Daemon_V1_AgentInfo? = nil
 }
 
+public nonisolated struct Portenv_Daemon_V1_ReadAttachmentRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// The workspace.
+  public var name: String = String()
+
+  public var attachmentID: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+/// The record on the first message, then the bytes in pieces.
+public nonisolated struct Portenv_Daemon_V1_ReadAttachmentResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var attachment: Portenv_Types_V1_Attachment {
+    get {_attachment ?? Portenv_Types_V1_Attachment()}
+    set {_attachment = newValue}
+  }
+  /// Returns true if `attachment` has been explicitly set.
+  public var hasAttachment: Bool {self._attachment != nil}
+  /// Clears the value of `attachment`. Subsequent reads from it will return its default value.
+  public mutating func clearAttachment() {self._attachment = nil}
+
+  public var data: Data = Data()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _attachment: Portenv_Types_V1_Attachment? = nil
+}
+
+/// name, to, thread_id and pane_id on the first message; then one file at a
+/// time: file_name and size on its first piece, last_of_file on its last.
+public nonisolated struct Portenv_Daemon_V1_SendAttachmentsRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var name: String = String()
+
+  /// Agent ids; each gets its own copy.
+  public var to: [String] = []
+
+  public var threadID: String = String()
+
+  /// The pane it was dropped on, if any (one agent only).
+  public var paneID: String = String()
+
+  /// The base name only; the Mac path never leaves the app.
+  public var fileName: String = String()
+
+  public var size: Int64 = 0
+
+  public var data: Data = Data()
+
+  public var lastOfFile: Bool = false
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Portenv_Daemon_V1_SendAttachmentsResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// One per agent that got its copies.
+  public var messages: [Portenv_Types_V1_BoardMessage] = []
+
+  /// One plain line per agent or file that didn't.
+  public var refused: [String] = []
+
+  /// For a drop on a pane: how the path was offered, and the path.
+  public var inserted: Portenv_Types_V1_InsertHow = .unspecified
+
+  public var insertedPath: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Portenv_Daemon_V1_RemoveAttachmentRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var name: String = String()
+
+  public var attachmentID: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Portenv_Daemon_V1_RemoveAttachmentResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
 // MARK: - Code below here is support for the SwiftProtobuf runtime.
 
 fileprivate nonisolated let _protobuf_package = "portenv.daemon.v1"
@@ -7584,6 +7699,244 @@ nonisolated extension Portenv_Daemon_V1_SetRoutinePausedResponse: SwiftProtobuf.
 
   public static func ==(lhs: Portenv_Daemon_V1_SetRoutinePausedResponse, rhs: Portenv_Daemon_V1_SetRoutinePausedResponse) -> Bool {
     if lhs._agent != rhs._agent {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Portenv_Daemon_V1_ReadAttachmentRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ReadAttachmentRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{3}attachment_id\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.name) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.attachmentID) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.name.isEmpty {
+      try visitor.visitSingularStringField(value: self.name, fieldNumber: 1)
+    }
+    if !self.attachmentID.isEmpty {
+      try visitor.visitSingularStringField(value: self.attachmentID, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Portenv_Daemon_V1_ReadAttachmentRequest, rhs: Portenv_Daemon_V1_ReadAttachmentRequest) -> Bool {
+    if lhs.name != rhs.name {return false}
+    if lhs.attachmentID != rhs.attachmentID {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Portenv_Daemon_V1_ReadAttachmentResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ReadAttachmentResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}attachment\0\u{1}data\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularMessageField(value: &self._attachment) }()
+      case 2: try { try decoder.decodeSingularBytesField(value: &self.data) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._attachment {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+    } }()
+    if !self.data.isEmpty {
+      try visitor.visitSingularBytesField(value: self.data, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Portenv_Daemon_V1_ReadAttachmentResponse, rhs: Portenv_Daemon_V1_ReadAttachmentResponse) -> Bool {
+    if lhs._attachment != rhs._attachment {return false}
+    if lhs.data != rhs.data {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Portenv_Daemon_V1_SendAttachmentsRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".SendAttachmentsRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{1}to\0\u{3}thread_id\0\u{3}pane_id\0\u{3}file_name\0\u{1}size\0\u{1}data\0\u{3}last_of_file\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.name) }()
+      case 2: try { try decoder.decodeRepeatedStringField(value: &self.to) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.threadID) }()
+      case 4: try { try decoder.decodeSingularStringField(value: &self.paneID) }()
+      case 5: try { try decoder.decodeSingularStringField(value: &self.fileName) }()
+      case 6: try { try decoder.decodeSingularInt64Field(value: &self.size) }()
+      case 7: try { try decoder.decodeSingularBytesField(value: &self.data) }()
+      case 8: try { try decoder.decodeSingularBoolField(value: &self.lastOfFile) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.name.isEmpty {
+      try visitor.visitSingularStringField(value: self.name, fieldNumber: 1)
+    }
+    if !self.to.isEmpty {
+      try visitor.visitRepeatedStringField(value: self.to, fieldNumber: 2)
+    }
+    if !self.threadID.isEmpty {
+      try visitor.visitSingularStringField(value: self.threadID, fieldNumber: 3)
+    }
+    if !self.paneID.isEmpty {
+      try visitor.visitSingularStringField(value: self.paneID, fieldNumber: 4)
+    }
+    if !self.fileName.isEmpty {
+      try visitor.visitSingularStringField(value: self.fileName, fieldNumber: 5)
+    }
+    if self.size != 0 {
+      try visitor.visitSingularInt64Field(value: self.size, fieldNumber: 6)
+    }
+    if !self.data.isEmpty {
+      try visitor.visitSingularBytesField(value: self.data, fieldNumber: 7)
+    }
+    if self.lastOfFile != false {
+      try visitor.visitSingularBoolField(value: self.lastOfFile, fieldNumber: 8)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Portenv_Daemon_V1_SendAttachmentsRequest, rhs: Portenv_Daemon_V1_SendAttachmentsRequest) -> Bool {
+    if lhs.name != rhs.name {return false}
+    if lhs.to != rhs.to {return false}
+    if lhs.threadID != rhs.threadID {return false}
+    if lhs.paneID != rhs.paneID {return false}
+    if lhs.fileName != rhs.fileName {return false}
+    if lhs.size != rhs.size {return false}
+    if lhs.data != rhs.data {return false}
+    if lhs.lastOfFile != rhs.lastOfFile {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Portenv_Daemon_V1_SendAttachmentsResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".SendAttachmentsResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}messages\0\u{1}refused\0\u{1}inserted\0\u{3}inserted_path\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeRepeatedMessageField(value: &self.messages) }()
+      case 2: try { try decoder.decodeRepeatedStringField(value: &self.refused) }()
+      case 3: try { try decoder.decodeSingularEnumField(value: &self.inserted) }()
+      case 4: try { try decoder.decodeSingularStringField(value: &self.insertedPath) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.messages.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.messages, fieldNumber: 1)
+    }
+    if !self.refused.isEmpty {
+      try visitor.visitRepeatedStringField(value: self.refused, fieldNumber: 2)
+    }
+    if self.inserted != .unspecified {
+      try visitor.visitSingularEnumField(value: self.inserted, fieldNumber: 3)
+    }
+    if !self.insertedPath.isEmpty {
+      try visitor.visitSingularStringField(value: self.insertedPath, fieldNumber: 4)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Portenv_Daemon_V1_SendAttachmentsResponse, rhs: Portenv_Daemon_V1_SendAttachmentsResponse) -> Bool {
+    if lhs.messages != rhs.messages {return false}
+    if lhs.refused != rhs.refused {return false}
+    if lhs.inserted != rhs.inserted {return false}
+    if lhs.insertedPath != rhs.insertedPath {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Portenv_Daemon_V1_RemoveAttachmentRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".RemoveAttachmentRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{3}attachment_id\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.name) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.attachmentID) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.name.isEmpty {
+      try visitor.visitSingularStringField(value: self.name, fieldNumber: 1)
+    }
+    if !self.attachmentID.isEmpty {
+      try visitor.visitSingularStringField(value: self.attachmentID, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Portenv_Daemon_V1_RemoveAttachmentRequest, rhs: Portenv_Daemon_V1_RemoveAttachmentRequest) -> Bool {
+    if lhs.name != rhs.name {return false}
+    if lhs.attachmentID != rhs.attachmentID {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Portenv_Daemon_V1_RemoveAttachmentResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".RemoveAttachmentResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Portenv_Daemon_V1_RemoveAttachmentResponse, rhs: Portenv_Daemon_V1_RemoveAttachmentResponse) -> Bool {
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

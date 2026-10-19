@@ -58,6 +58,8 @@ const (
 	AgentService_FetchAgentBranch_FullMethodName     = "/portenv.agent.v1.AgentService/FetchAgentBranch"
 	AgentService_ResolveTeamMigration_FullMethodName = "/portenv.agent.v1.AgentService/ResolveTeamMigration"
 	AgentService_WakeAgent_FullMethodName            = "/portenv.agent.v1.AgentService/WakeAgent"
+	AgentService_ReadAttachmentSource_FullMethodName = "/portenv.agent.v1.AgentService/ReadAttachmentSource"
+	AgentService_InsertDroppedPath_FullMethodName    = "/portenv.agent.v1.AgentService/InsertDroppedPath"
 )
 
 // AgentServiceClient is the client API for AgentService service.
@@ -171,6 +173,14 @@ type AgentServiceClient interface {
 	// checks. The helper writes the line itself; no message text is ever
 	// typed, and from must be an agent id or "owner".
 	WakeAgent(ctx context.Context, in *WakeAgentRequest, opts ...grpc.CallOption) (*WakeAgentResponse, error)
+	// Reads one file an agent attaches (ADR 0030 point 2), as the agent: from
+	// its own home only, through descriptors, never a link, a file it owns,
+	// at most max_bytes. The size comes first, the SHA-256 last.
+	ReadAttachmentSource(ctx context.Context, in *ReadAttachmentSourceRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ReadAttachmentSourceResponse], error)
+	// Offers a file the owner dropped on an agent's pane (ADR 0030 point 8):
+	// typed at a shell prompt or pasted into the agent's runner, quoted and
+	// never with Enter; anywhere else nothing is typed.
+	InsertDroppedPath(ctx context.Context, in *InsertDroppedPathRequest, opts ...grpc.CallOption) (*InsertDroppedPathResponse, error)
 }
 
 type agentServiceClient struct {
@@ -550,6 +560,35 @@ func (c *agentServiceClient) WakeAgent(ctx context.Context, in *WakeAgentRequest
 	return out, nil
 }
 
+func (c *agentServiceClient) ReadAttachmentSource(ctx context.Context, in *ReadAttachmentSourceRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ReadAttachmentSourceResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &AgentService_ServiceDesc.Streams[7], AgentService_ReadAttachmentSource_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[ReadAttachmentSourceRequest, ReadAttachmentSourceResponse]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type AgentService_ReadAttachmentSourceClient = grpc.ServerStreamingClient[ReadAttachmentSourceResponse]
+
+func (c *agentServiceClient) InsertDroppedPath(ctx context.Context, in *InsertDroppedPathRequest, opts ...grpc.CallOption) (*InsertDroppedPathResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(InsertDroppedPathResponse)
+	err := c.cc.Invoke(ctx, AgentService_InsertDroppedPath_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AgentServiceServer is the server API for AgentService service.
 // All implementations must embed UnimplementedAgentServiceServer
 // for forward compatibility.
@@ -661,6 +700,14 @@ type AgentServiceServer interface {
 	// checks. The helper writes the line itself; no message text is ever
 	// typed, and from must be an agent id or "owner".
 	WakeAgent(context.Context, *WakeAgentRequest) (*WakeAgentResponse, error)
+	// Reads one file an agent attaches (ADR 0030 point 2), as the agent: from
+	// its own home only, through descriptors, never a link, a file it owns,
+	// at most max_bytes. The size comes first, the SHA-256 last.
+	ReadAttachmentSource(*ReadAttachmentSourceRequest, grpc.ServerStreamingServer[ReadAttachmentSourceResponse]) error
+	// Offers a file the owner dropped on an agent's pane (ADR 0030 point 8):
+	// typed at a shell prompt or pasted into the agent's runner, quoted and
+	// never with Enter; anywhere else nothing is typed.
+	InsertDroppedPath(context.Context, *InsertDroppedPathRequest) (*InsertDroppedPathResponse, error)
 	mustEmbedUnimplementedAgentServiceServer()
 }
 
@@ -769,6 +816,12 @@ func (UnimplementedAgentServiceServer) ResolveTeamMigration(context.Context, *Re
 }
 func (UnimplementedAgentServiceServer) WakeAgent(context.Context, *WakeAgentRequest) (*WakeAgentResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method WakeAgent not implemented")
+}
+func (UnimplementedAgentServiceServer) ReadAttachmentSource(*ReadAttachmentSourceRequest, grpc.ServerStreamingServer[ReadAttachmentSourceResponse]) error {
+	return status.Error(codes.Unimplemented, "method ReadAttachmentSource not implemented")
+}
+func (UnimplementedAgentServiceServer) InsertDroppedPath(context.Context, *InsertDroppedPathRequest) (*InsertDroppedPathResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method InsertDroppedPath not implemented")
 }
 func (UnimplementedAgentServiceServer) mustEmbedUnimplementedAgentServiceServer() {}
 func (UnimplementedAgentServiceServer) testEmbeddedByValue()                      {}
@@ -1320,6 +1373,35 @@ func _AgentService_WakeAgent_Handler(srv interface{}, ctx context.Context, dec f
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AgentService_ReadAttachmentSource_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(ReadAttachmentSourceRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(AgentServiceServer).ReadAttachmentSource(m, &grpc.GenericServerStream[ReadAttachmentSourceRequest, ReadAttachmentSourceResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type AgentService_ReadAttachmentSourceServer = grpc.ServerStreamingServer[ReadAttachmentSourceResponse]
+
+func _AgentService_InsertDroppedPath_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(InsertDroppedPathRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentServiceServer).InsertDroppedPath(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentService_InsertDroppedPath_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentServiceServer).InsertDroppedPath(ctx, req.(*InsertDroppedPathRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AgentService_ServiceDesc is the grpc.ServiceDesc for AgentService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1431,6 +1513,10 @@ var AgentService_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "WakeAgent",
 			Handler:    _AgentService_WakeAgent_Handler,
 		},
+		{
+			MethodName: "InsertDroppedPath",
+			Handler:    _AgentService_InsertDroppedPath_Handler,
+		},
 	},
 	Streams: []grpc.StreamDesc{
 		{
@@ -1469,6 +1555,11 @@ var AgentService_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "ReadBoard",
 			Handler:       _AgentService_ReadBoard_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "ReadAttachmentSource",
+			Handler:       _AgentService_ReadAttachmentSource_Handler,
 			ServerStreams: true,
 		},
 	},

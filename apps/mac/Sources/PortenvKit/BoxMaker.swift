@@ -27,6 +27,8 @@ public struct CreateRequest: Equatable, Sendable, CustomStringConvertible, Custo
     public let storage: String
     public let keys: [String: Data]
     public let recoveryPassword: Data
+    /// The team the owner approved in New workspace (ADR 0025), if any.
+    public var team: TeamChoice? = nil
 
     public var description: String { "[create \(name) as \(boxID)]" }
     public var debugDescription: String { description }
@@ -182,18 +184,18 @@ public struct BoxMaker: Sendable {
 
     /// Makes the box `name` on this Mac and returns its box ID. Opening it
     /// (OpenBox, where the first save happens) is the caller's.
-    public func make(name: String) async throws -> String {
+    public func make(name: String, team: TeamChoice? = nil) async throws -> String {
         try await lock.withLock {
             // D3's foreign repository: discard, and once more with the next entry.
             do {
-                return try await attempt(name: name)
+                return try await attempt(name: name, team: team)
             } catch Failure.refused(let e) where e.kind == .mismatch {
-                return try await attempt(name: name)
+                return try await attempt(name: name, team: team)
             }
         }
     }
 
-    private func attempt(name: String) async throws -> String {
+    private func attempt(name: String, team: TeamChoice?) async throws -> String {
         let pool = self.pool
         var boxes = try await daemon.listings()
         let entries = try await keychain { try pool.entries() }
@@ -224,7 +226,7 @@ public struct BoxMaker: Sendable {
         // repository may already be encrypted with it.
         let key = try await storedKey(for: entry.boxID)
         let request = CreateRequest(name: name, boxID: entry.boxID, storage: "", keys: [entry.boxID: key],
-                                    recoveryPassword: Data(entry.password.utf8))
+                                    recoveryPassword: Data(entry.password.utf8), team: team)
         do {
             _ = try await daemon.createBox(request)
         } catch let e as CreateBoxError {

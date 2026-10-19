@@ -48,7 +48,7 @@ struct FirstRunTests {
     /// The reduced first run: five steps, the Protection step gone into the
     /// recovery key's line (R-0126, R-0129).
     @Test func theFiveStepsInOrder() {
-        #expect(FirstRunStep.allCases == [.welcome, .recoveryKey, .storage, .firstBox, .gettingReady])
+        #expect(FirstRunStep.allCases == [.welcome, .recoveryKey, .storage, .firstBox, .gettingReady, .team, .review])
         #expect(FirstRunFlow(service: FakeFirstRunService()).step == .welcome)
     }
 

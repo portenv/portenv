@@ -110,7 +110,7 @@ func TestAnAgentsTerminalRunsItsRunnerInItsFirstTab(t *testing.T) {
 		t.Fatalf("tabs = %v, want one", tabs)
 	}
 	tab := tabs[0]
-	if !strings.HasPrefix(tab.GetId(), "builder:@") || tab.GetAgentId() != "builder" || tab.GetName() != "builder" || len(tab.GetPaneIds()) != 1 {
+	if !strings.HasPrefix(tab.GetId(), "builder:@") || tab.GetAgentId() != "builder" || tab.GetName() != "sh" || len(tab.GetPaneIds()) != 1 {
 		t.Errorf("tab = %v", tab)
 	}
 	// Sealed as the owner's server is.
@@ -155,7 +155,7 @@ func TestAgentPaneActionsActOnTheAgentsOwnServer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := fmt.Sprintf("%s %d %d", names(tabs), len(tabs[0].GetPaneIds()), len(tabs[1].GetPaneIds())); got != "builder*,tests 2 1" {
+	if got := fmt.Sprintf("%s %d %d", names(tabs), len(tabs[0].GetPaneIds()), len(tabs[1].GetPaneIds())); got != "sleep*,tests 2 1" {
 		t.Errorf("after split, tab and focus: %s", got)
 	}
 	paneAction(t, s, &agentv1.AgentPaneActionRequest{AgentId: "builder", Action: &agentv1.AgentPaneActionRequest_Close{
@@ -640,5 +640,56 @@ func TestARoutineIsNeverTypedIntoABusyAgent(t *testing.T) {
 		if err := s.SetAgentIdleInput("asks", bad); status.Code(err) != codes.InvalidArgument {
 			t.Errorf("pattern %.10q: %v", bad, err)
 		}
+	}
+}
+
+// An agent's tab is named after what runs in it, never after the agent
+// (R-0312): the app already says whose tab it is.
+func TestProgramTabName(t *testing.T) {
+	for _, tc := range []struct {
+		argv []string
+		want string
+	}{
+		{[]string{"claude", "--model", "opus"}, "claude"},
+		{[]string{"/usr/local/bin/claude", "--model", "opus"}, "claude"},
+		{[]string{"codex"}, "codex"},
+		{[]string{"env", "API_TOKEN=s3cret", "claude", "--model", "opus"}, "claude"},
+		{[]string{"/usr/bin/env", "A=1", "B=2", "aider"}, "aider"},
+		{[]string{"env", "-i", "claude"}, "main"},
+		{[]string{"env", "TOKEN=s3cret"}, "main"},
+		{[]string{"TOKEN=s3cret"}, "main"},
+		{nil, "main"},
+		{[]string{""}, "main"},
+		{[]string{"/"}, "main"},
+		{[]string{"-x"}, "main"},
+		{[]string{"a-program-name-longer-than-thirty-two"}, "main"},
+		{[]string{"tab\tname"}, "main"},
+		{[]string{`odd\;`}, "main"},
+	} {
+		if got := programTabName(tc.argv); got != tc.want {
+			t.Errorf("programTabName(%q) = %q, want %q", tc.argv, got, tc.want)
+		}
+	}
+}
+
+func TestAnAgentsFirstTabIsNamedAfterItsRunnersProgram(t *testing.T) {
+	s := testAgentServers(t)
+	tabs, err := s.StartAgentTerminals(context.Background(), testSpec(t, "writer", "sleep", "100"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tabs) != 1 || tabs[0].GetName() != "sleep" {
+		t.Fatalf("tabs = %v, want one named sleep", tabs)
+	}
+	// A later tab with no name of its own is named the same way.
+	ref := paneAction(t, s, &agentv1.AgentPaneActionRequest{AgentId: "writer", Action: &agentv1.AgentPaneActionRequest_Tab{
+		Tab: &agentv1.NewTeamTab{Argv: []string{"/bin/sh", "-c", "exec sleep 100"}}}})
+	a, _ := s.agents.get("writer")
+	all, err := a.tabs(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all) != 2 || all[1].GetId() != ref.GetTabId() || all[1].GetName() != "sh" {
+		t.Errorf("tabs = %v, want a second named sh", all)
 	}
 }

@@ -262,6 +262,7 @@ message TabTerminalRequest {
     TabTerminalOpen open = 1;
     // Keystrokes, pastes, clicks and IME input, as the app's terminal
     // produced them (never the emulator's replies; ADR 0020, decision 4).
+    // A paste comes between marker messages (TabTerminalReset.paste_markers).
     bytes input = 2;
     // The size this view can show, in cells. The tab takes the latest size
     // asked for, from any viewer.
@@ -314,6 +315,13 @@ message TabTerminalReset {
   // too far behind; ADR 0020, decision 11): the app tells the person and
   // marks the block that was running as skipped, never complete.
   bool skipped = 4;
+  // This helper takes input between ESC[200~ and ESC[201~ (bracketed-paste
+  // markers, each in an input message of its own) as one paste, and hands
+  // it to tmux's paste-buffer -p, which brackets it only if the program
+  // asked for bracketed paste (CC-0490). The app then marks every paste,
+  // whatever its own idea of the mode: tmux knows it, and a seed can't
+  // always say (tmux 3.4 has no format for it).
+  bool paste_markers = 5;
 }
 
 enum TabTerminalEnd {

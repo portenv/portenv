@@ -77,7 +77,10 @@ public final class MarkedTerminalView: TerminalView {
     }
 
     /// Pasted text is cleaned before it's sent (ADR 0020, R-0133 item 3),
-    /// then bracketed when the program asked for it.
+    /// then bracketed when the program asked for it, or always when the
+    /// helper takes marked pastes: tmux then brackets it only if the
+    /// program asked, which a reset's seed can't always tell this view
+    /// (CC-0490).
     public override func paste(_: Any) {
         paste(text: NSPasteboard.general.string(forType: .string) ?? "")
     }
@@ -96,7 +99,7 @@ public final class MarkedTerminalView: TerminalView {
     public func paste(text: String) {
         let clean = PasteText.clean(text)
         guard !clean.isEmpty else { return }
-        let bracketed = getTerminal().bracketedPasteMode
+        let bracketed = (source?.marksPastes ?? false) || getTerminal().bracketedPasteMode
         if bracketed { send(txt: "\u{1b}[200~") }
         send(txt: clean)
         if bracketed { send(txt: "\u{1b}[201~") }

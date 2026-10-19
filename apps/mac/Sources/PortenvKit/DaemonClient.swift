@@ -483,7 +483,7 @@ extension TabTerminalMessage {
     init?(_ m: Portenv_Daemon_V1_TabTerminalResponse) {
         switch m.msg {
         case let .reset(r):
-            self = .reset(TabTerminalSize(r.size), seed: [UInt8](r.seed), skipped: r.skipped)
+            self = .reset(TabTerminalSize(r.size), seed: [UInt8](r.seed), skipped: r.skipped, pasteMarkers: r.pasteMarkers)
         case let .output(d):
             self = .output([UInt8](d))
         case let .resized(s):

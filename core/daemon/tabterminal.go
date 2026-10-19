@@ -106,7 +106,7 @@ func (s *Server) TabTerminal(stream daemonv1.DaemonService_TabTerminalServer) er
 		var m daemonv1.TabTerminalResponse
 		switch v := r.GetMsg().(type) {
 		case *agentv1.TabTerminalResponse_Reset_:
-			reset := &daemonv1.TabTerminalReset{Size: daemonSize(v.Reset_.GetSize()), Seed: v.Reset_.GetSeed(), Skipped: v.Reset_.GetSkipped()}
+			reset := &daemonv1.TabTerminalReset{Size: daemonSize(v.Reset_.GetSize()), Seed: v.Reset_.GetSeed(), Skipped: v.Reset_.GetSkipped(), PasteMarkers: v.Reset_.GetPasteMarkers()}
 			for _, a := range v.Reset_.GetAuthors() {
 				if da := authorFor(a, who); da != nil {
 					reset.Authors = append(reset.Authors, da)

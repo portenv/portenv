@@ -10,8 +10,9 @@ import Foundation
 /// One message from a tab's stream, as portenvd sends it.
 public enum TabTerminalMessage: Equatable, Sendable {
     /// Start over. `skipped`: output was too fast to show in full, and the
-    /// seed is the current screen.
-    case reset(TabTerminalSize, seed: [UInt8], skipped: Bool)
+    /// seed is the current screen. `pasteMarkers`: the helper takes every
+    /// paste between markers (TabTerminalSource.marksPastes).
+    case reset(TabTerminalSize, seed: [UInt8], skipped: Bool, pasteMarkers: Bool = false)
     case output([UInt8])
     case resized(TabTerminalSize)
     /// Who ran a command, for its block (used by command blocks).
@@ -110,6 +111,12 @@ public final class ControlModeTabSource: TabTerminalSource {
     public let events: AsyncStream<TabTerminalEvent>
     /// Whether the last reset said output was skipped (the view's notice).
     public private(set) var lastResetSkipped = false
+    /// The helper takes every paste between markers (its last reset said).
+    public private(set) var marksPastes = false
+    /// The most bytes one input message carries: the helper takes at most
+    /// 1 MB, and a long paste goes as several (it's put back together
+    /// between its markers).
+    static let inputChunk = 256 << 10
     /// Why the stream gave up, when it says so (shown with Reconnect).
     public private(set) var failure: String?
     let box: String
@@ -135,8 +142,13 @@ public final class ControlModeTabSource: TabTerminalSource {
     }
 
     public func send(_ input: [UInt8]) {
-        guard live, !input.isEmpty else { return }
-        connection?.send(.input(input))
+        guard live, !input.isEmpty, let connection else { return }
+        var at = 0
+        while at < input.count {
+            let end = min(input.count, at + Self.inputChunk)
+            connection.send(.input(Array(input[at ..< end])))
+            at = end
+        }
     }
 
     public func resize(_ size: TabTerminalSize) {
@@ -202,9 +214,10 @@ public final class ControlModeTabSource: TabTerminalSource {
     /// Hands a message to the view; returns true when the stream is over.
     private func apply(_ message: TabTerminalMessage) -> Bool {
         switch message {
-        case let .reset(size, seed, skipped):
+        case let .reset(size, seed, skipped, pasteMarkers):
             live = true
             lastResetSkipped = skipped
+            marksPastes = pasteMarkers
             continuation.yield(.reset(size, seed: seed))
         case let .output(bytes):
             if live { continuation.yield(.output(bytes)) }

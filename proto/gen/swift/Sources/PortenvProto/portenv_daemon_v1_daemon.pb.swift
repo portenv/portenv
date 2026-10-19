@@ -1611,6 +1611,7 @@ public nonisolated struct Portenv_Daemon_V1_TabTerminalRequest: Sendable {
 
   /// Keystrokes, pastes, clicks and IME input, as the app's terminal
   /// produced them (never the emulator's replies; ADR 0020, decision 4).
+  /// A paste comes between marker messages (TabTerminalReset.paste_markers).
   public var input: Data {
     get {
       if case .input(let v)? = msg {return v}
@@ -1634,6 +1635,7 @@ public nonisolated struct Portenv_Daemon_V1_TabTerminalRequest: Sendable {
     case `open`(Portenv_Daemon_V1_TabTerminalOpen)
     /// Keystrokes, pastes, clicks and IME input, as the app's terminal
     /// produced them (never the emulator's replies; ADR 0020, decision 4).
+    /// A paste comes between marker messages (TabTerminalReset.paste_markers).
     case input(Data)
     /// The size this view can show, in cells.
     case resize(Portenv_Daemon_V1_TerminalSize)
@@ -1770,6 +1772,13 @@ public nonisolated struct Portenv_Daemon_V1_TabTerminalReset: Sendable {
   /// too far behind; ADR 0020, decision 11): the app tells the person and
   /// marks the block that was running as skipped, never complete.
   public var skipped: Bool = false
+
+  /// The helper takes a paste between bracketed-paste markers and lets tmux
+  /// bracket it only if the program asked (agent.v1's paste_markers): the
+  /// app sends ESC[200~, the text and ESC[201~ as three inputs for every
+  /// paste. False from an older helper: the app brackets only when its
+  /// terminal says the program asked.
+  public var pasteMarkers: Bool = false
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -5611,7 +5620,7 @@ nonisolated extension Portenv_Daemon_V1_TabTerminalResponse: SwiftProtobuf.Messa
 
 nonisolated extension Portenv_Daemon_V1_TabTerminalReset: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".TabTerminalReset"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}size\0\u{1}seed\0\u{1}authors\0\u{1}skipped\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}size\0\u{1}seed\0\u{1}authors\0\u{1}skipped\0\u{3}paste_markers\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -5623,6 +5632,7 @@ nonisolated extension Portenv_Daemon_V1_TabTerminalReset: SwiftProtobuf.Message,
       case 2: try { try decoder.decodeSingularBytesField(value: &self.seed) }()
       case 3: try { try decoder.decodeRepeatedMessageField(value: &self.authors) }()
       case 4: try { try decoder.decodeSingularBoolField(value: &self.skipped) }()
+      case 5: try { try decoder.decodeSingularBoolField(value: &self.pasteMarkers) }()
       default: break
       }
     }
@@ -5645,6 +5655,9 @@ nonisolated extension Portenv_Daemon_V1_TabTerminalReset: SwiftProtobuf.Message,
     if self.skipped != false {
       try visitor.visitSingularBoolField(value: self.skipped, fieldNumber: 4)
     }
+    if self.pasteMarkers != false {
+      try visitor.visitSingularBoolField(value: self.pasteMarkers, fieldNumber: 5)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -5653,6 +5666,7 @@ nonisolated extension Portenv_Daemon_V1_TabTerminalReset: SwiftProtobuf.Message,
     if lhs.seed != rhs.seed {return false}
     if lhs.authors != rhs.authors {return false}
     if lhs.skipped != rhs.skipped {return false}
+    if lhs.pasteMarkers != rhs.pasteMarkers {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

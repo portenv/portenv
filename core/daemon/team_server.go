@@ -213,7 +213,7 @@ func (s *Server) pumpTeamCalls(ctx context.Context, name string) error {
 		}
 		go func() {
 			var r *agentv1.TeamCallsRequest
-			if c.GetOwner() || c.GetPushList() != nil || c.GetPush() != nil {
+			if c.GetOwner() || c.GetPushList() != nil || c.GetPush() != nil || c.GetFetch() != nil {
 				// The owner's push, from work's own socket (R-0391).
 				r = s.handlePush(ctx, name, c)
 			} else {

@@ -255,6 +255,67 @@ func (s *Server) handlePush(ctx context.Context, name string, c *agentv1.TeamCal
 		return a.GetGithubToken(), ""
 	}
 
+	// A fetch, pull or ls-remote (R-0392): only the sign-in is asked for,
+	// and without one a public repository is read anonymously.
+	fetchAnswer := func() (string, string) {
+		q := &daemonv1.PushQuestion{Repo: repo.String(), List: true, Fetch: true}
+		a, err := s.ask(ctx, name, q)
+		switch {
+		case errors.Is(err, errNoWindow):
+			return "", "Open " + name + "\u2019s window in Portenv to fetch: Portenv asks you there."
+		case err != nil:
+			return "", "The fetch was stopped."
+		case a.GetSignedOut():
+			return "", ""
+		case !a.GetAllow():
+			return "", "You didn\u2019t allow the fetch in Portenv."
+		}
+		return a.GetGithubToken(), ""
+	}
+	fetchSignIn := func(token string) string {
+		if token == "" {
+			return "This repository needs a sign-in. Sign in with GitHub in Portenv, then fetch again."
+		}
+		return "Your GitHub sign-in in Portenv has ended, or can\u2019t read " + repo.String() + ". Sign in again in Portenv, then fetch again."
+	}
+
+	if c.GetPushList() != nil && c.GetPushList().GetFetch() {
+		token, line := fetchAnswer()
+		if line != "" {
+			return pushRefuse(id, line)
+		}
+		refs, head, err := githubrepo.ListForFetch(ctx, client, remote, token)
+		if errors.Is(err, githubrepo.ErrNeedsSignIn) {
+			return pushRefuse(id, fetchSignIn(token))
+		}
+		if err != nil {
+			return pushRefuse(id, "Portenv couldn\u2019t reach "+repo.String()+": "+err.Error()+".")
+		}
+		out := &agentv1.PushListResult{Head: head}
+		for _, r := range refs {
+			out.Refs = append(out.Refs, &agentv1.RemoteRef{Name: r.Name, Sha: r.SHA})
+		}
+		return &agentv1.TeamCallsRequest{CallId: id, Ok: true, Result: &agentv1.TeamCallsRequest_PushList{PushList: out}}
+	}
+
+	if f := c.GetFetch(); f != nil {
+		var wants []githubrepo.Ref
+		for _, w := range f.GetWants() {
+			if !githubrepo.CheckRefName(w.GetName()) {
+				return pushRefuse(id, "Portenv fetches only branches and tags.")
+			}
+			wants = append(wants, githubrepo.Ref{Name: w.GetName(), SHA: w.GetSha()})
+		}
+		if len(wants) == 0 {
+			return pushRefuse(id, "The fetch names nothing.")
+		}
+		token, line := fetchAnswer()
+		if line != "" {
+			return pushRefuse(id, line)
+		}
+		return s.fetchInto(ctx, name, id, remote, token, wants, f.GetHaves(), fetchSignIn)
+	}
+
 	if c.GetPushList() != nil {
 		token, line := answer(&daemonv1.PushQuestion{List: true})
 		if line != "" {
@@ -382,4 +443,61 @@ func (s *Server) readPushBundle(ctx context.Context, name, id string) (*os.File,
 		return nil, nil, err
 	}
 	return f, cleanup, nil
+}
+
+// fetchInto fetches the wanted refs from GitHub on the Mac into a 0600
+// bundle in portenvd's own folder, hands it to the helper and removes it.
+func (s *Server) fetchInto(ctx context.Context, name, id, remote, token string, wants []githubrepo.Ref, haves []string, signIn func(string) string) *agentv1.TeamCallsRequest {
+	dir := filepath.Join(s.env.Dir, "fetch")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return pushRefuse(id, "Portenv couldn\u2019t fetch: "+err.Error())
+	}
+	f, err := os.CreateTemp(dir, "bundle-*")
+	if err != nil {
+		return pushRefuse(id, "Portenv couldn\u2019t fetch: "+err.Error())
+	}
+	defer func() { _ = f.Close(); _ = os.Remove(f.Name()) }()
+	client := &http.Client{Timeout: 30 * time.Minute}
+	err = githubrepo.FetchRefs(ctx, client, remote, token, wants, haves, f, githubrepo.MaxFetchBytes)
+	switch {
+	case errors.Is(err, githubrepo.ErrNeedsSignIn):
+		return pushRefuse(id, signIn(token))
+	case errors.Is(err, githubrepo.ErrTooBig):
+		return pushRefuse(id, "This fetch is over 2 GB.")
+	case err != nil:
+		return pushRefuse(id, err.Error()+".")
+	}
+	size, err := f.Seek(0, io.SeekCurrent)
+	if err != nil {
+		return pushRefuse(id, err.Error())
+	}
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		return pushRefuse(id, err.Error())
+	}
+	h, err := s.agentFor(ctx, name)
+	if err != nil {
+		return pushRefuse(id, "Portenv lost the connection to this workspace. Fetch again.")
+	}
+	st, err := h.WriteFetchBundle(ctx)
+	if err != nil {
+		return pushRefuse(id, "Portenv couldn\u2019t hand the fetch in. Fetch again.")
+	}
+	buf := make([]byte, 1<<20)
+	for {
+		n, rerr := f.Read(buf)
+		if n > 0 {
+			if err := st.Send(&agentv1.WriteFetchBundleRequest{Chunk: buf[:n]}); err != nil {
+				break
+			}
+		}
+		if rerr != nil {
+			break
+		}
+	}
+	resp, err := st.CloseAndRecv()
+	if err != nil {
+		return pushRefuse(id, "Portenv couldn\u2019t hand the fetch in. Fetch again.")
+	}
+	s.log.Info("fetch", "refs", len(wants), "bytes", size)
+	return &agentv1.TeamCallsRequest{CallId: id, Ok: true, Result: &agentv1.TeamCallsRequest_Fetch{Fetch: &agentv1.FetchResult{BundleId: resp.GetBundleId(), BundleBytes: size}}}
 }

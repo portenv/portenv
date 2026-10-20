@@ -209,6 +209,25 @@ func TestPushANewBranchATagAndADelete(t *testing.T) {
 	}
 }
 
+// A new branch at a commit GitHub has: no bundle (git makes none), and it
+// goes; a new object with no bundle doesn't.
+func TestPushWithNoNewObjects(t *testing.T) {
+	r := newPushRig(t, "tok")
+	old := r.remoteRef("main")
+	st, err := Push(context.Background(), http.DefaultClient, r.url, "tok", []Update{{Dst: "refs/heads/again", New: old}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ok(t, st)
+	if r.remoteRef("again") != old {
+		t.Fatal("not pushed")
+	}
+	n := r.commit(r.local, "two")
+	if _, err := Push(context.Background(), http.DefaultClient, r.url, "tok", []Update{{Dst: "refs/heads/x", New: n}}, nil); err == nil {
+		t.Fatal("a new object with no bundle went")
+	}
+}
+
 func TestPushRefusesWhatItDoesntTake(t *testing.T) {
 	r := newPushRig(t, "tok")
 	old := r.remoteRef("main")
@@ -227,7 +246,6 @@ func TestPushRefusesWhatItDoesntTake(t *testing.T) {
 		"not in the bundle":  {[]Update{{Dst: "refs/heads/a", New: strings.Repeat("2", 40)}}, good},
 		"another bundle ref": {[]Update{{Dst: "refs/heads/a", New: n}}, bytes.Replace(good, []byte("refs/portenv-push/0"), []byte("refs/heads/sneak00"), 1)},
 		"not a bundle":       {[]Update{{Dst: "refs/heads/a", New: n}}, []byte("hello")},
-		"no bundle":          {[]Update{{Dst: "refs/heads/a", New: n}}, nil},
 	} {
 		var b *bytes.Reader
 		if tc.bundle != nil {

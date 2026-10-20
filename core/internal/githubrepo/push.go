@@ -4,6 +4,8 @@ package githubrepo
 
 import (
 	"bufio"
+	"bytes"
+	"crypto/sha1" // #nosec G505 -- git's pack checksum
 	"context"
 	"errors"
 	"fmt"
@@ -209,10 +211,9 @@ func pushWithLimit(ctx context.Context, c *http.Client, url, token string, updat
 		prereqs map[string]bool
 		pack    io.Reader
 	)
-	if needsPack {
-		if bundle == nil {
-			return nil, errors.New("the push came without its objects")
-		}
+	if needsPack && bundle == nil {
+		needsPack = false // every new object must be on GitHub already: checked below
+	} else if needsPack {
 		cr := &countingReader{r: bundle, limit: limit}
 		br := bufio.NewReaderSize(cr, 64<<10)
 		var tips map[string]bool
@@ -255,6 +256,17 @@ func pushWithLimit(ctx context.Context, c *http.Client, url, token string, updat
 			current[name] = h.String()
 		}
 	}
+	if bundle == nil {
+		have := map[string]bool{}
+		for _, v := range current {
+			have[v] = true
+		}
+		for _, u := range updates {
+			if u.New != "" && !have[u.New] {
+				return nil, errors.New("the push came without its objects")
+			}
+		}
+	}
 	statuses := make([]RefStatus, len(updates))
 	var commands []*packp.Command
 	for i, u := range updates {
@@ -295,6 +307,9 @@ func pushWithLimit(ctx context.Context, c *http.Client, url, token string, updat
 		}
 	}
 	if hasNew {
+		if pack == nil {
+			pack = bytes.NewReader(emptyPack())
+		}
 		req.Packfile = io.NopCloser(pack)
 	}
 	report, err := s.ReceivePack(ctx, req)
@@ -333,4 +348,12 @@ func (c *countingReader) lastErr() error {
 		return ErrTooBig
 	}
 	return nil
+}
+
+// emptyPack is a pack with no objects, which receive-pack takes when every
+// new object is on the remote already.
+func emptyPack() []byte {
+	b := []byte{'P', 'A', 'C', 'K', 0, 0, 0, 2, 0, 0, 0, 0}
+	sum := sha1.Sum(b) // #nosec G401 -- git's pack checksum, not security
+	return append(b, sum[:]...)
 }

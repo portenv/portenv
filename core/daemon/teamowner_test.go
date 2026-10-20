@@ -289,7 +289,8 @@ func TestTheOwnersCallsStillRunForTheOwner(t *testing.T) {
 // one must be added here on purpose.
 func TestAnAgentsTeamCallsHaveNoOwnerActions(t *testing.T) {
 	want := []string{
-		"ask_owner", "close", "focus", "handoff", "inbox", "msg", "propose", "propose_routine",
+		// fetch is the owner's (R-0392), taken and refused as push is below.
+		"ask_owner", "close", "fetch", "focus", "handoff", "inbox", "msg", "propose", "propose_routine",
 		// push and push_list are the owner's (R-0391): the helper takes them
 		// only from work's socket (SO_PEERCRED) and refuses them on an
 		// agent's, and handleCall refuses them from an agent too.

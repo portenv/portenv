@@ -41,7 +41,7 @@ var teamUsage = map[string]string{
 	"request-package":      "request-package NAME [--reason TEXT]",
 	"whoami":               "whoami",
 	"status":               "status set TEXT [--progress N/M] [--blocked REASON] | status clear",
-	"team":                 "team status | team init [--template starter|orchestrate] [--dir PROJECT]",
+	"team":                 "team status | team init [--template starter|orchestrate|app-product] [--dir PROJECT]",
 	"guide":                "guide [--json]",
 	"handoff":              "handoff AGENT PATH [--note TEXT]",
 }
@@ -515,7 +515,7 @@ func runGuide(args []string, stdout, stderr io.Writer) int {
 func runTeamInit(args []string, stdout, stderr io.Writer) int {
 	a, err := parseTeamArgs(args, nil, []string{"template", "dir"})
 	if err != nil || len(a.pos) != 0 || a.dash {
-		_, _ = fmt.Fprintln(stderr, "usage: portenv team init [--template starter|orchestrate] [--dir PROJECT]")
+		_, _ = fmt.Fprintln(stderr, "usage: portenv team init [--template starter|orchestrate|app-product] [--dir PROJECT]")
 		return 2
 	}
 	name := a.flags["template"]
@@ -536,21 +536,26 @@ func runTeamInit(args []string, stdout, stderr io.Writer) int {
 	}
 	agents := filepath.Join(dir, ".portenv", "agents")
 	for _, f := range teamkit.TemplateFiles(name) {
-		if _, err := os.Lstat(filepath.Join(agents, f)); err == nil {
-			_, _ = fmt.Fprintf(stderr, "portenv: %s is already there; nothing was written. Move it away to start from the %s template.\n", filepath.Join(".portenv", "agents", f), name)
+		if _, err := os.Lstat(filepath.Join(agents, filepath.FromSlash(f))); err == nil {
+			_, _ = fmt.Fprintf(stderr, "portenv: %s is already there; nothing was written. Move it away to start from the %s template.\n", filepath.Join(".portenv", "agents", filepath.FromSlash(f)), name)
 			return 1
 		}
 	}
-	if err := os.MkdirAll(agents, 0o755); err != nil { // #nosec G301 -- the project's, readable by the team
-		_, _ = fmt.Fprintln(stderr, "portenv:", err)
-		return 1
-	}
 	for _, f := range teamkit.TemplateFiles(name) {
-		if err := os.WriteFile(filepath.Join(agents, f), files[f], 0o644); err != nil { // #nosec G306 -- an agent file, read by the team
+		file := filepath.Join(agents, filepath.FromSlash(f))
+		if err := os.MkdirAll(filepath.Dir(file), 0o755); err != nil { // #nosec G301 -- the project's, readable by the team
+			_, _ = fmt.Fprintln(stderr, "portenv:", err)
+			return 1
+		}
+		if err := os.WriteFile(file, files[f], 0o644); err != nil { // #nosec G306 -- an agent file, read by the team
 			_, _ = fmt.Fprintln(stderr, "portenv:", err)
 			return 1
 		}
 	}
-	_, _ = fmt.Fprintf(stdout, "Wrote %d agent files to .portenv/agents/ (%s). Approve each in Portenv's Team section; nothing runs before you do.\n", len(files), strings.Join(teamkit.TemplateFiles(name), ", "))
+	on := teamkit.OnAgents(name)
+	_, _ = fmt.Fprintf(stdout, "Wrote %d agent files to .portenv/agents/ (%s). Approve each in Portenv's Team section; nothing runs before you do.\n", len(on), strings.Join(on, ", "))
+	for _, id := range teamkit.OffAgents(name) {
+		_, _ = fmt.Fprintf(stdout, "%s is off: its file is in .portenv/agents/%s/%s.md, which Portenv doesn't load. To turn it on, move it up to .portenv/agents/ and add it to its teammates' grant.message; the file says how.\n", id, teamkit.OffDir, id)
+	}
 	return 0
 }

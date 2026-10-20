@@ -54,7 +54,7 @@ const dirFlags = unix.O_RDONLY | unix.O_DIRECTORY | unix.O_NOFOLLOW | unix.O_CLO
 func openDirs(home string, parts []string, create bool) (int, error) {
 	fd, err := unix.Open(home, dirFlags, 0)
 	if err != nil {
-		return -1, fmt.Errorf("open the home: %w", err)
+		return -1, fmt.Errorf("open %s: %w", home, err)
 	}
 	for _, s := range parts {
 		next, err := unix.Openat(fd, s, dirFlags, 0)

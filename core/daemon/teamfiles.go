@@ -163,7 +163,7 @@ type AgentSpec struct {
 
 // grantSet records which grant keys a file sets, for overrides.
 type grantSet struct {
-	panes, maxPanes, message, askOwner, packages, teamStatus bool
+	panes, maxPanes, message, askOwner, packages, teamStatus, readClones bool
 }
 
 // An agent's checkout (ADR 0022 §2a): its own clone of the project, or
@@ -315,6 +315,24 @@ func LoadTeam(src TeamSource) (Team, error) {
 		a.Problems = p.lines
 	}
 
+	// read_clones names only other team agents with their own clone
+	// (ADR 0022 §2a, lenses).
+	for i := range team.Agents {
+		a := &team.Agents[i]
+		if a.Spec == nil {
+			continue
+		}
+		for _, r := range a.Spec.Grant.GetReadClones() {
+			w := team.agent(r)
+			switch {
+			case r == a.ID || w == nil || !members[r]:
+				a.Problems = append(a.Problems, fmt.Sprintf("%s: grant.read_clones names %q, which isn't another agent in this team.", a.ID, r))
+			case w.Spec != nil && !w.OwnClone():
+				a.Problems = append(a.Problems, fmt.Sprintf("%s: grant.read_clones names %q, which has no copy of the project to read (checkout: none).", a.ID, r))
+			}
+		}
+	}
+
 	if n := len(team.Agents); n > limits.MaxAgents {
 		team.Problems = append(team.Problems, fmt.Sprintf("The team has %d agents; the owner's limit is %d.", n, limits.MaxAgents))
 	}
@@ -393,7 +411,7 @@ func pathErrText(err error) error {
 
 var (
 	agentFileKeys = []string{"id", "name", "role", "runner", "via", "avatar", "share_login", "home_seed", "checkout", "routine", "grant"}
-	agentListLike = map[string]string{"share_login": "[claude]", "home_seed": "[docs/style-guide.md]", "routine": `["every 30m: Status round"]`, "grant.message": "[lead]"}
+	agentListLike = map[string]string{"share_login": "[claude]", "home_seed": "[docs/style-guide.md]", "routine": `["every 30m: Status round"]`, "grant.message": "[lead]", "grant.read_clones": "[builder]"}
 )
 
 // buildAgentSpec checks one file's content. For an override, missing keys
@@ -636,7 +654,7 @@ func buildGrant(keys *fmKeys, g *typesv1.AgentGrant, set *grantSet, override boo
 		v := keys.vals[key]
 		full := "grant." + key
 		switch key {
-		case "panes", "max_panes", "message", "ask_owner", "packages", "team_status":
+		case "panes", "max_panes", "message", "ask_owner", "packages", "team_status", "read_clones":
 		default:
 			p.addf("%q isn't a key an agent file may have.", full)
 			continue
@@ -648,13 +666,16 @@ func buildGrant(keys *fmKeys, g *typesv1.AgentGrant, set *grantSet, override boo
 			p.addf("%s has no value.", full)
 			continue
 		}
-		if key == "message" {
+		if key == "message" || key == "read_clones" {
 			if v.kind != fmList {
 				p.addf("%s must be a list, like %s.", full, agentListLike[full])
 				continue
 			}
-			g.Message = slices.Clone(v.list)
-			set.message = true
+			if key == "message" {
+				g.Message, set.message = slices.Clone(v.list), true
+			} else {
+				g.ReadClones, set.readClones = slices.Clone(v.list), true
+			}
 			continue
 		}
 		if v.kind != fmScalar {
@@ -792,6 +813,14 @@ func applyOverride(a *TeamAgent, src TeamSource, limits TeamLimits, p *problems)
 			}
 		}
 	}
+	if o.grant.readClones {
+		for _, m := range og.GetReadClones() {
+			if !slices.Contains(base.GetReadClones(), m) {
+				widerf("read_clones", "["+strings.Join(og.GetReadClones(), ", ")+"]", "["+strings.Join(base.GetReadClones(), ", ")+"]")
+				break
+			}
+		}
+	}
 	if o.grant.askOwner && og.GetAskOwner() && !base.GetAskOwner() {
 		widerf("ask_owner", "true", "false")
 	}
@@ -842,6 +871,9 @@ func applyOverride(a *TeamAgent, src TeamSource, limits TeamLimits, p *problems)
 	}
 	if o.grant.teamStatus {
 		a.Grant.TeamStatus = og.GetTeamStatus()
+	}
+	if o.grant.readClones {
+		a.Grant.ReadClones = slices.Clone(og.GetReadClones())
 	}
 }
 

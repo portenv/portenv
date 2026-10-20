@@ -89,13 +89,51 @@ func runTeamIOAsAgent(ctx context.Context, uid int, home string, args []string, 
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
 	if err != nil {
-		if msg := strings.TrimSpace(stderr.String()); msg != "" {
-			msg = strings.TrimPrefix(strings.TrimPrefix(msg, "portenv-agent: "), "portenv-agent as-agent: ")
-			return nil, errors.New(strings.Join(strings.Fields(strings.ReplaceAll(msg, "\n", " · ")), " "))
+		if msg := asAgentMessage(stderr.String()); msg != "" {
+			return nil, errors.New(msg)
 		}
 		return nil, fmt.Errorf("%s: %w", args[0], err)
 	}
 	return out, nil
+}
+
+// streamTeamIOAsAgent starts team-io as an agent with its standard output
+// on the returned reader, which the caller closes; wait reaps it and
+// returns what it said went wrong.
+func streamTeamIOAsAgent(ctx context.Context, uid int, home string, args []string) (io.ReadCloser, func() error, error) {
+	cmd, err := asAgentCommand(ctx, uid, home, args)
+	if err != nil {
+		return nil, nil, err
+	}
+	pr, pw, err := os.Pipe()
+	if err != nil {
+		return nil, nil, err
+	}
+	var stderr strings.Builder
+	cmd.Stdout, cmd.Stderr = pw, &stderr
+	if err := cmd.Start(); err != nil {
+		_ = pr.Close()
+		_ = pw.Close()
+		return nil, nil, err
+	}
+	_ = pw.Close()
+	wait := func() error {
+		if err := cmd.Wait(); err != nil {
+			if msg := asAgentMessage(stderr.String()); msg != "" {
+				return errors.New(msg)
+			}
+			return fmt.Errorf("%s: %w", args[0], err)
+		}
+		return nil
+	}
+	return pr, wait, nil
+}
+
+// asAgentMessage is what as-agent's team-io said on stderr, on one line.
+func asAgentMessage(s string) string {
+	msg := strings.TrimSpace(s)
+	msg = strings.TrimPrefix(strings.TrimPrefix(msg, "portenv-agent: "), "portenv-agent as-agent: ")
+	return strings.Join(strings.Fields(strings.ReplaceAll(msg, "\n", " · ")), " ")
 }
 
 // runAsAgent runs the plain portenv-agent binary as an agent's uid (its
@@ -107,7 +145,8 @@ func runAsAgent(ctx context.Context, uid int, args []string, stdin io.Reader, lo
 
 // runAsAgentInTeam is runAsAgent with the team group too, as the agent's
 // own sessions have it: for reading the project, which the team reads
-// through its ACL (home_seed, ADR 0022 §2).
+// through its ACL (home_seed, ADR 0022 §2; a hand-off from the project,
+// CC-0507).
 func runAsAgentInTeam(ctx context.Context, uid int, args []string, stdin io.Reader, local func(io.Writer) error) ([]byte, error) {
 	return runAsAgentWith(ctx, uid, true, args, stdin, local)
 }
@@ -127,11 +166,7 @@ func runAsAgentWith(ctx context.Context, uid int, team bool, args []string, stdi
 	cmd := exec.CommandContext(ctx, PlainBinary, args...) // #nosec G204 -- fixed binary; arguments made by the API process
 	cmd.Env = []string{"PATH=/usr/bin:/bin"}
 	u := uint32(uid) // #nosec G115 -- an agent's uid, 2001..2008
-	groups := []uint32{u}
-	if team {
-		groups = append(groups, TeamGID)
-	}
-	cmd.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: u, Gid: u, Groups: groups}}
+	cmd.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: u, Gid: u, Groups: agentGroups(uid, team)}}
 	if stdin != nil {
 		cmd.Stdin = stdin
 	}

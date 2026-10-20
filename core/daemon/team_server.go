@@ -318,6 +318,16 @@ func (s *Server) StartAgent(ctx context.Context, req *daemonv1.StartAgentRequest
 	return &daemonv1.StartAgentResponse{Agent: info}, nil
 }
 
+// FetchAgentBranch is the owner's Fetch of an agent's branch (ADR 0022
+// §2a).
+func (s *Server) FetchAgentBranch(ctx context.Context, req *daemonv1.FetchAgentBranchRequest) (*daemonv1.FetchAgentBranchResponse, error) {
+	r, err := s.teamEng().fetchAgent(ctx, req.GetName(), req.GetAgentId())
+	if err != nil {
+		return nil, teamStatus(err)
+	}
+	return &daemonv1.FetchAgentBranchResponse{Ref: r.GetRef(), Commit: r.GetCommit()}, nil
+}
+
 func (s *Server) StopAgent(ctx context.Context, req *daemonv1.StopAgentRequest) (*daemonv1.StopAgentResponse, error) {
 	info, err := s.teamEng().stopAgent(ctx, req.GetName(), req.GetAgentId())
 	if err != nil {
@@ -331,7 +341,7 @@ func (s *Server) StopAgent(ctx context.Context, req *daemonv1.StopAgentRequest) 
 // agent call answers one.
 func (s *Server) AnswerDecision(ctx context.Context, req *daemonv1.AnswerDecisionRequest) (*daemonv1.AnswerDecisionResponse, error) {
 	d, err := s.teamEng().answerChoice(ctx, req.GetName(), req.GetDecisionId(),
-		ownerAnswer{approve: req.GetApprove(), note: req.GetNote(), choice: req.GetChoice(), label: req.GetChoiceLabel()})
+		ownerAnswer{approve: req.GetApprove(), note: req.GetNote(), choice: req.GetChoice(), label: req.GetChoiceLabel(), remove: req.GetRemoveItems()})
 	if err != nil {
 		return nil, teamStatus(err)
 	}

@@ -828,6 +828,32 @@ public enum Portenv_Daemon_V1_DaemonService: Sendable {
                 type: .unary
             )
         }
+        /// Namespace for "WatchPushes" metadata.
+        public enum WatchPushes: Sendable {
+            /// Request type for "WatchPushes".
+            public typealias Input = Portenv_Daemon_V1_WatchPushesRequest
+            /// Response type for "WatchPushes".
+            public typealias Output = Portenv_Daemon_V1_PushQuestion
+            /// Descriptor for "WatchPushes".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "WatchPushes",
+                type: .serverStreaming
+            )
+        }
+        /// Namespace for "AnswerPush" metadata.
+        public enum AnswerPush: Sendable {
+            /// Request type for "AnswerPush".
+            public typealias Input = Portenv_Daemon_V1_AnswerPushRequest
+            /// Response type for "AnswerPush".
+            public typealias Output = Portenv_Daemon_V1_AnswerPushResponse
+            /// Descriptor for "AnswerPush".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "AnswerPush",
+                type: .unary
+            )
+        }
         /// Descriptors for all methods in the "portenv.daemon.v1.DaemonService" service.
         public static let descriptors: [GRPCCore.MethodDescriptor] = [
             GetVersion.descriptor,
@@ -891,7 +917,9 @@ public enum Portenv_Daemon_V1_DaemonService: Sendable {
             SetAgentsAllowed.descriptor,
             ListTeamTemplates.descriptor,
             PlanTeam.descriptor,
-            ApplyTeamPlan.descriptor
+            ApplyTeamPlan.descriptor,
+            WatchPushes.descriptor,
+            AnswerPush.descriptor
         ]
     }
 }
@@ -2383,6 +2411,51 @@ extension Portenv_Daemon_V1_DaemonService {
             deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_ApplyTeamPlanResponse>,
             options: GRPCCore.CallOptions,
             onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ApplyTeamPlanResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "WatchPushes" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Pushes from the workspace (R-0391) waiting for the app: each needs the
+        /// > owner's GitHub sign-in, and some the owner's yes (the first push from
+        /// > the workspace, a force, a delete). The window's app answers each with
+        /// > AnswerPush.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_WatchPushesRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_WatchPushesRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_PushQuestion` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func watchPushes<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_WatchPushesRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_WatchPushesRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_PushQuestion>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.StreamingClientResponse<Portenv_Daemon_V1_PushQuestion>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "AnswerPush" method.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_AnswerPushRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_AnswerPushRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_AnswerPushResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func answerPush<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_AnswerPushRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_AnswerPushRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_AnswerPushResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_AnswerPushResponse>) async throws -> Result
         ) async throws -> Result where Result: Sendable
     }
 
@@ -4545,6 +4618,71 @@ extension Portenv_Daemon_V1_DaemonService {
                 onResponse: handleResponse
             )
         }
+
+        /// Call the "WatchPushes" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Pushes from the workspace (R-0391) waiting for the app: each needs the
+        /// > owner's GitHub sign-in, and some the owner's yes (the first push from
+        /// > the workspace, a force, a delete). The window's app answers each with
+        /// > AnswerPush.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_WatchPushesRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_WatchPushesRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_PushQuestion` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func watchPushes<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_WatchPushesRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_WatchPushesRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_PushQuestion>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.StreamingClientResponse<Portenv_Daemon_V1_PushQuestion>) async throws -> Result
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.serverStreaming(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.WatchPushes.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
+
+        /// Call the "AnswerPush" method.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_AnswerPushRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_AnswerPushRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_AnswerPushResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func answerPush<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_AnswerPushRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_AnswerPushRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_AnswerPushResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_AnswerPushResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.AnswerPush.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
     }
 }
 
@@ -6376,6 +6514,61 @@ extension Portenv_Daemon_V1_DaemonService.ClientProtocol {
             request: request,
             serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_ApplyTeamPlanRequest>(),
             deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_ApplyTeamPlanResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "WatchPushes" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Pushes from the workspace (R-0391) waiting for the app: each needs the
+    /// > owner's GitHub sign-in, and some the owner's yes (the first push from
+    /// > the workspace, a force, a delete). The window's app answers each with
+    /// > AnswerPush.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_WatchPushesRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func watchPushes<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_WatchPushesRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.StreamingClientResponse<Portenv_Daemon_V1_PushQuestion>) async throws -> Result
+    ) async throws -> Result where Result: Sendable {
+        try await self.watchPushes(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_WatchPushesRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_PushQuestion>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "AnswerPush" method.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_AnswerPushRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func answerPush<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_AnswerPushRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_AnswerPushResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.answerPush(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_AnswerPushRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_AnswerPushResponse>(),
             options: options,
             onResponse: handleResponse
         )
@@ -8460,6 +8653,69 @@ extension Portenv_Daemon_V1_DaemonService.ClientProtocol {
             metadata: metadata
         )
         return try await self.applyTeamPlan(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "WatchPushes" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Pushes from the workspace (R-0391) waiting for the app: each needs the
+    /// > owner's GitHub sign-in, and some the owner's yes (the first push from
+    /// > the workspace, a force, a delete). The window's app answers each with
+    /// > AnswerPush.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func watchPushes<Result>(
+        _ message: Portenv_Daemon_V1_WatchPushesRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.StreamingClientResponse<Portenv_Daemon_V1_PushQuestion>) async throws -> Result
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_WatchPushesRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.watchPushes(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "AnswerPush" method.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func answerPush<Result>(
+        _ message: Portenv_Daemon_V1_AnswerPushRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_AnswerPushResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_AnswerPushRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.answerPush(
             request: request,
             options: options,
             onResponse: handleResponse

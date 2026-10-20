@@ -154,7 +154,7 @@ Each open workspace has a window of its own, and workspace windows group as **ma
     - **A link with any control or bidi character never opens,** since those could hide or reorder part of it. The state line says "Portenv won't open a link with hidden characters".
     - **A link with a user name before the address never opens** either (`https://apple.com@evil.com/` reads as apple.com). The state line names where it really goes, never the user name or password: "Portenv won't open a link with a user name before the address. It goes to evil.com."
 - **Right-click in the terminal** shows Copy (only with a selection), Paste, Select All and Find… (the same find bar as ⌘F), as in Terminal. Every item acts on the pane clicked. Paste is the only item that sends anything to the tab, and it takes the same path as ⌘V (cleaned, bracketed when the program asked); dropped text and Services stay refused (R-0167). Copy Output joins it once blocks ship.
-- **No blank terminal** (R-0384): until a tab's terminal first shows, the pane says "Opening <tab>…" with a small spinner (no spinner with Reduce Motion), or "Opening <workspace>…" while the tabs aren't known yet. If it fails before then, it says "Couldn't open <tab>", the reason, and Try Again, in place of the terminal; once a tab has shown, trouble is Reconnecting… and Disconnected as before.
+- **No blank terminal** (R-0384): until a tab's terminal first shows, the pane says "Opening <tab>…" with a small spinner (no spinner with Reduce Motion), or "Opening <workspace>…" while the tabs (or the workspace's window) aren't ready yet; first run says "Starting Portenv…" until its first step is ready. A workspace gone before it opens goes to the list, saying so. If it fails before then, or sends nothing at all for 20 s, it says "Couldn't open <tab>", the reason, and Try Again, in place of the terminal; once a tab has shown, trouble is Reconnecting… and Disconnected as before.
 - **Closing a tab that still runs a program asks first:** "Close this tab? <program> is still running.", with Close Tab and Cancel. The program is the tab's foreground process as the workspace helper reports it at that moment. A tab with only its shell closes without asking. The last tab has no close button; ⌘W closes the window instead.
 
 ### 4.2 Blocks
@@ -207,10 +207,14 @@ Shown when a program in the visible tab is waiting for an answer that Portenv ca
 | Waiting for input | orange dot on the tab | inline answer card | notification with answer buttons |
 | Agent connected or revoked | — | avatar appears or leaves | notification |
 | Move finished | — | state line | notification only if the move took longer than 10 s |
+| A new decision in Needs you (6.2) | the count in the workspace's window tab | its row in Needs you | notification with Show only |
 
 Notification rules:
 - Title: `<workspace> · <who> is asking` or `<workspace> · <event>`. Body: the question or result in one line. Subtitle line: who started it and where.
-- Answer buttons in the notification are the same two as the card, plus "Show".
+- Answer buttons in the notification are the same two as the card, plus "Show". A decision (6.2) never has answer buttons: Show only, whatever it asks, an agent file or the team's first start included. Clicking a notification, or Show, brings its workspace forward with the question selected (a decision as its Needs-you row selects it).
+- "Window not in front" means that workspace's own window: another workspace's window in front still gets the notification. A notification is taken back once its question is answered, expired or gone.
+- A password prompt's notification says only that it asks; its text stays in the terminal.
+- **Dock badge:** the number of Needs-you decisions across every workspace a window shows, cleared at 0.
 - One notification per question; a newer state replaces the older notification, it doesn't stack.
 - Notifications respect Focus modes and the user's per-app settings. No sound by default.
 - Dots always come with a text label for VoiceOver and a tooltip; colour is never the only signal.

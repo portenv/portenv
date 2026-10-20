@@ -182,3 +182,23 @@ public struct LaunchWindows: Sendable {
         return open == 0
     }
 }
+
+/// What the window says while the launch catches up with itself (basics
+/// audit row 28, R-0386), never a bare background: a workspace opening
+/// before its controller exists, or first run before its flow does.
+public enum LaunchGap {
+    /// The line to show, or nil when the screen has what it needs.
+    public static func line(_ launch: Launch?, hasController: Bool, hasFirstRunFlow: Bool) -> String? {
+        switch launch {
+        case let .open(box) where !hasController: TabTerminalShown.openingLine(tab: box)
+        case .firstRun where !hasFirstRunFlow: LaunchWait.starting
+        default: nil
+        }
+    }
+
+    /// Where the window goes when the box went before its open began: the
+    /// list, saying so, as at launch.
+    public static func boxGone(_ box: String) -> Launch {
+        .boxList(notice: LaunchDecision.missing(box))
+    }
+}

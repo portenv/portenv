@@ -220,3 +220,73 @@ struct DisconnectedDeadlineTests {
         #expect(shown.overdue, "no reset after Reconnect: the card again")
     }
 }
+
+/// No blank pane (basics audit, R-0384): until a tab's stream first resets,
+/// the terminal says "Opening <tab>…"; if it fails before then, a plain
+/// card with Try Again, never a bare background.
+@MainActor
+struct OpeningTabTests {
+    @Test func saysOpeningUntilTheFirstReset() {
+        let shown = TabTerminalShown(provider: TabTerminalShownTests.Provider())
+        shown.show(tab: "@1", generation: 1)
+        #expect(shown.overlay(serviceComing: false) == .opening)
+        #expect(shown.overlay(serviceComing: true) == .opening)
+        shown.reset(TabTerminalSize(cols: 80, rows: 24))
+        #expect(shown.overlay(serviceComing: false) == .none)
+        // Another tab, or the same tab after the box opened again: opening.
+        shown.show(tab: "@2", generation: 1)
+        #expect(shown.overlay(serviceComing: false) == .opening)
+        shown.reset(TabTerminalSize(cols: 80, rows: 24))
+        shown.show(tab: "@2", generation: 2)
+        #expect(shown.overlay(serviceComing: false) == .opening)
+        // The same tab and generation again changes nothing.
+        shown.reset(TabTerminalSize(cols: 80, rows: 24))
+        shown.show(tab: "@2", generation: 2)
+        #expect(shown.overlay(serviceComing: false) == .none)
+    }
+
+    @Test func aFailedOpenSaysSoAndTryAgainOpensAgain() {
+        let p = TabTerminalShownTests.Provider()
+        let shown = TabTerminalShown(provider: p)
+        shown.show(tab: "@1", generation: 1)
+        shown.ended(.lost(retrying: false))
+        #expect(shown.overlay(serviceComing: false) == .couldNotOpen(TabTerminalShown.notOpeningLine))
+        // While portenvd comes back, it's still opening.
+        #expect(shown.overlay(serviceComing: true) == .opening)
+        // Try Again: a new stream, opening again.
+        shown.reconnect()
+        #expect(p.opened.count == 2)
+        #expect(shown.overlay(serviceComing: false) == .opening)
+        shown.reset(TabTerminalSize(cols: 80, rows: 24))
+        #expect(shown.overlay(serviceComing: false) == .none)
+    }
+
+    @Test func retryingBeforeTheFirstResetIsStillOpening() {
+        let shown = TabTerminalShown(provider: TabTerminalShownTests.Provider())
+        shown.show(tab: "@1", generation: 1)
+        shown.ended(.lost(retrying: true))
+        #expect(shown.overlay(serviceComing: false) == .opening)
+    }
+
+    /// Past the deadline, an open that never got going shows the card,
+    /// saying nothing is being saved if portenvd is away.
+    @Test func anOpenPastTheDeadlineShowsTheCard() async {
+        let timers = ManualTimers()
+        let shown = TabTerminalShown(provider: TabTerminalShownTests.Provider(), deadline: .seconds(25),
+                                     settle: .seconds(2), sleep: timers.sleep)
+        shown.show(tab: "@1", generation: 1)
+        shown.ended(.lost(retrying: true))
+        for _ in 0..<1000 where timers.pending(.seconds(25)) == 0 { try? await Task.sleep(for: .milliseconds(5)) }
+        timers.fire(.seconds(25))
+        for _ in 0..<1000 where !shown.overdue { try? await Task.sleep(for: .milliseconds(5)) }
+        #expect(shown.overlay(serviceComing: false) == .couldNotOpen(TabTerminalShown.notOpeningLine))
+        #expect(shown.overlay(serviceComing: true) == .couldNotOpen(TabTerminalShown.serviceAwayLine))
+    }
+
+    @Test func theWords() {
+        #expect(TabTerminalShown.openingLine(tab: "server") == "Opening server\u{2026}")
+        #expect(TabTerminalShown.couldNotOpenTitle(tab: "server") == "Couldn\u{2019}t open server")
+        #expect(TabTerminalShown.openingLine(tab: "") == "Opening tab\u{2026}")
+        #expect(TabTerminalShown.tryAgain == "Try Again")
+    }
+}

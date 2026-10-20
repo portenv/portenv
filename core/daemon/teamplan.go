@@ -330,10 +330,13 @@ func (s *Server) ApplyTeamPlan(ctx context.Context, req *daemonv1.ApplyTeamPlanR
 	}
 	// The project first (ADR 0025 §2). A clone that fails writes and pins
 	// nothing, and the setup stays for Try Again.
-	if url := setup.GetProject().GetGithubUrl(); url != "" {
-		if line, signIn := s.cloneProject(ctx, h, req.GetName(), url, planned); line != "" {
-			s.log.Info("project not brought in", "box_id", box.ID, "sign_in", signIn)
-			return &daemonv1.ApplyTeamPlanResponse{ProjectError: line, NeedsSignIn: signIn}, nil
+	if setup.GetProject().GetGithubUrl() != "" {
+		if o := s.cloneProject(ctx, h, req.GetName(), setup.GetProject(), req.GetGithubToken(), planned); o != nil {
+			if o.needToken {
+				return &daemonv1.ApplyTeamPlanResponse{NeedsToken: true}, nil
+			}
+			s.log.Info("project not brought in", "box_id", box.ID, "sign_in", o.needsSignIn)
+			return &daemonv1.ApplyTeamPlanResponse{ProjectError: o.line, NeedsSignIn: o.needsSignIn}, nil
 		}
 	}
 	out := &daemonv1.ApplyTeamPlanResponse{Applied: true}
@@ -393,41 +396,144 @@ func (s *Server) ApplyTeamPlan(ctx context.Context, req *daemonv1.ApplyTeamPlanR
 	return out, nil
 }
 
-// cloneProject brings the GitHub repository in as the project, as work,
-// through the helper: GitHub's size first (a failed look leaves only the
-// check while bytes arrive), then the clone. It returns the plain line of a
-// failure, and whether it was one a sign-in would fix.
-func (s *Server) cloneProject(ctx context.Context, h agentv1.AgentServiceClient, name, url string, planned []teamkit.PlannedAgent) (string, bool) {
-	repo, err := githubrepo.Parse(url)
-	if err != nil {
-		return err.Error(), false
+// cloneMargin is the room a clone leaves free (ADR 0025 §2).
+const cloneMargin = 1_000_000_000
+
+// cloneLimit is the most a repository's pack may be, so that work's copy
+// and each coding agent's, each with its checkout (about twice the pack),
+// fit with the margin to spare; 0 when nothing fits.
+func cloneLimit(free uint64, copies int) int64 {
+	if free <= cloneMargin || copies < 1 {
+		return 0
 	}
-	copies := int32(1)
+	return int64((free - cloneMargin) / uint64(2*copies)) // #nosec G115 -- a disk's bytes
+}
+
+// tooBigLine is ADR 0025 §2's line for a repository the workspace can't
+// hold with its team.
+func tooBigLine(name string, each int64, copies int, free uint64) string {
+	need := uint64(each)*2*uint64(copies) + cloneMargin // #nosec G115 -- positive
+	return fmt.Sprintf("%s needs about %s with its team (%d copies of %s, each with its checkout). This workspace has %s free.",
+		name, gigabytes(need), copies, gigabytes(uint64(each)), gigabytes(free)) // #nosec G115 -- positive
+}
+
+const (
+	needsSignInLine = "This repository needs a sign-in. Sign in with GitHub, then try again."
+	signInEndedLine = "Your GitHub sign-in in Portenv has ended, or doesn\u2019t reach this repository. Sign in again, then try again."
+)
+
+// cloneOutcome is a project that couldn't be brought in.
+type cloneOutcome struct {
+	line                   string
+	needsSignIn, needToken bool
+}
+
+// cloneProject brings the GitHub repository in as the project (R-0391):
+// fetched here on the Mac, with the owner's sign-in only for a repository
+// that needs it, into a 0600 bundle in portenvd's own folder, streamed to
+// the helper, which checks it and clones from it as work with no network.
+// The bundle is removed whatever happens; the sign-in is used for this
+// fetch alone and never leaves this process.
+func (s *Server) cloneProject(ctx context.Context, h agentv1.AgentServiceClient, name string, src *daemonv1.ProjectSource, token string, planned []teamkit.PlannedAgent) *cloneOutcome {
+	repo, err := githubrepo.Parse(src.GetGithubUrl())
+	if err != nil {
+		return &cloneOutcome{line: err.Error()}
+	}
+	room, err := h.GetProjectRoom(ctx, &agentv1.GetProjectRoomRequest{ProjectDir: projectDir(name)})
+	if err != nil {
+		return &cloneOutcome{line: "Portenv couldn\u2019t look at the workspace\u2019s room for " + repo.String() + ". Try again."}
+	}
+	if room.GetExists() {
+		return nil // an earlier try brought it in
+	}
+	if src.GetUseSignIn() && token == "" {
+		return &cloneOutcome{needToken: true}
+	}
+	if !src.GetUseSignIn() {
+		token = ""
+	}
+	copies := 1
 	for _, p := range planned {
 		if p.Included && p.OwnClone {
 			copies++
 		}
 	}
-	base := s.githubAPI
-	if base == "" {
-		base = githubrepo.API
+	limit := cloneLimit(room.GetFreeBytes(), copies)
+	api, gitBase := s.githubAPI, s.githubGit
+	if api == "" {
+		api = githubrepo.API
 	}
+	if gitBase == "" {
+		gitBase = "https://github.com"
+	}
+	client := &http.Client{Timeout: 30 * time.Minute}
 	sctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	est, err := githubrepo.Size(sctx, &http.Client{Timeout: 10 * time.Second}, base, repo, "")
+	est, _ := githubrepo.Size(sctx, &http.Client{Timeout: 10 * time.Second}, api, repo, token)
 	cancel()
+	if est > limit {
+		return &cloneOutcome{line: tooBigLine(name, est, copies, room.GetFreeBytes())}
+	}
+	if limit <= 0 {
+		return &cloneOutcome{line: tooBigLine(name, max(est, 1), copies, room.GetFreeBytes())}
+	}
+
+	dir := filepath.Join(s.env.Dir, "clone")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return &cloneOutcome{line: "Portenv couldn\u2019t clone " + repo.String() + ". Try again."}
+	}
+	f, err := os.CreateTemp(dir, "bundle-*")
 	if err != nil {
-		est = 0
+		return &cloneOutcome{line: "Portenv couldn\u2019t clone " + repo.String() + ". Try again."}
 	}
-	_, err = h.CloneProject(ctx, &agentv1.CloneProjectRequest{ProjectDir: projectDir(name), Url: repo.URL(), Copies: copies, EstimateBytes: est})
-	if err == nil {
-		return "", false
+	defer func() { _ = os.Remove(f.Name()) }()
+	defer func() { _ = f.Close() }()
+	if err := f.Chmod(0o600); err != nil {
+		return &cloneOutcome{line: "Portenv couldn\u2019t clone " + repo.String() + ". Try again."}
 	}
-	st, _ := status.FromError(err)
-	switch st.Code() {
-	case codes.Unauthenticated:
-		return st.Message(), true
-	case codes.ResourceExhausted, codes.FailedPrecondition:
-		return st.Message(), false
+	got, err := githubrepo.FetchBundle(ctx, client, gitBase+"/"+repo.Owner+"/"+repo.Name, token, f, limit)
+	switch {
+	case errors.Is(err, githubrepo.ErrNeedsSignIn) && token != "":
+		return &cloneOutcome{line: signInEndedLine, needsSignIn: true}
+	case errors.Is(err, githubrepo.ErrNeedsSignIn):
+		return &cloneOutcome{line: needsSignInLine, needsSignIn: true}
+	case errors.Is(err, githubrepo.ErrTooBig):
+		return &cloneOutcome{line: tooBigLine(name, limit+1, copies, room.GetFreeBytes())}
+	case err != nil:
+		return &cloneOutcome{line: "Portenv couldn\u2019t clone " + repo.String() + ": " + err.Error() + "."}
 	}
-	return "Portenv couldn\u2019t clone " + repo.String() + ". Try again.", false
+	token = "" // used; not needed again
+	stream, err := h.CloneProject(ctx)
+	if err != nil {
+		return &cloneOutcome{line: "Portenv couldn\u2019t clone " + repo.String() + ". Try again."}
+	}
+	start := &agentv1.CloneProjectStart{ProjectDir: projectDir(name), Url: repo.URL(), MaxBytes: limit + 64<<20, Head: got.Head, Empty: got.Empty}
+	if err := stream.Send(&agentv1.CloneProjectRequest{Msg: &agentv1.CloneProjectRequest_Start{Start: start}}); err != nil {
+		return &cloneOutcome{line: "Portenv couldn\u2019t clone " + repo.String() + ". Try again."}
+	}
+	if !got.Empty {
+		if _, err := f.Seek(0, 0); err != nil {
+			return &cloneOutcome{line: "Portenv couldn\u2019t clone " + repo.String() + ". Try again."}
+		}
+		buf := make([]byte, 1<<20)
+		for {
+			n, rerr := f.Read(buf)
+			if n > 0 {
+				if err := stream.Send(&agentv1.CloneProjectRequest{Msg: &agentv1.CloneProjectRequest_Chunk{Chunk: buf[:n]}}); err != nil {
+					break // the answer below says why
+				}
+			}
+			if rerr != nil {
+				break
+			}
+		}
+	}
+	if _, err := stream.CloseAndRecv(); err != nil {
+		st, _ := status.FromError(err)
+		switch st.Code() {
+		case codes.ResourceExhausted, codes.FailedPrecondition:
+			return &cloneOutcome{line: st.Message()}
+		}
+		return &cloneOutcome{line: "Portenv couldn\u2019t clone " + repo.String() + ". Try again."}
+	}
+	return nil
 }

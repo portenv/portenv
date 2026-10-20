@@ -641,6 +641,9 @@ message ProjectSource {
     // https://github.com/OWNER/REPO, cloned when the workspace first runs.
     string github_url = 2;
   }
+  // Clone with the owner's GitHub sign-in (a private repository): the app
+  // passes it to ApplyTeamPlan, in memory; it's never kept.
+  bool use_sign_in = 3;
 }
 
 // What CreateBox keeps for ApplyTeamPlan: the project, then the team.
@@ -1021,6 +1024,11 @@ message PlannedAgent {
 
 message ApplyTeamPlanRequest {
   string name = 1;
+  // The owner's GitHub sign-in, from the Keychain, read by the app in front
+  // of the person, only when the kept setup clones with it (needs_token).
+  // portenvd uses it on the Mac for that fetch alone: never stored, logged
+  // or sent into the workspace.
+  string github_token = 2;
 }
 
 message ApplyTeamPlanResponse {
@@ -1037,6 +1045,9 @@ message ApplyTeamPlanResponse {
   string project_error = 4;
   // That failure was a repository that needs a GitHub sign-in.
   bool needs_sign_in = 5;
+  // The kept setup clones with the owner's sign-in and none was given: the
+  // app reads it and calls again. Nothing was done.
+  bool needs_token = 6;
 }
 
 message GetTeamSettingsRequest {}

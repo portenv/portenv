@@ -138,27 +138,57 @@ type fakeProjectAgent struct {
 	writes int
 	// Each WriteAgentFiles call's file names.
 	written [][]string
-	clones  []*agentv1.CloneProjectRequest
+	// Each CloneProject's start and the bundle that came with it.
+	clones  []*agentv1.CloneProjectStart
+	bundles [][]byte
 	// CloneProject fails with this, once, when set.
 	cloneErr error
+	// GetProjectRoom's free bytes (0: plenty).
+	free uint64
 }
 
-func (f *fakeProjectAgent) CloneProject(_ context.Context, r *agentv1.CloneProjectRequest) (*agentv1.CloneProjectResponse, error) {
+func (f *fakeProjectAgent) GetProjectRoom(_ context.Context, r *agentv1.GetProjectRoomRequest) (*agentv1.GetProjectRoomResponse, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.clones = append(f.clones, r)
+	out := &agentv1.GetProjectRoomResponse{FreeBytes: f.free}
+	if out.FreeBytes == 0 {
+		out.FreeBytes = 100 << 30
+	}
+	if _, err := os.Stat(f.dir(r.GetProjectDir())); err == nil {
+		out.Exists = true
+	}
+	return out, nil
+}
+
+func (f *fakeProjectAgent) CloneProject(stream agentv1.AgentService_CloneProjectServer) error {
+	first, err := stream.Recv()
+	if err != nil {
+		return err
+	}
+	var bundle []byte
+	for {
+		m, err := stream.Recv()
+		if err != nil {
+			break
+		}
+		bundle = append(bundle, m.GetChunk()...)
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.clones = append(f.clones, first.GetStart())
+	f.bundles = append(f.bundles, bundle)
 	if err := f.cloneErr; err != nil {
 		f.cloneErr = nil
-		return nil, err
+		return err
 	}
-	dir := f.dir(r.GetProjectDir())
-	if _, err := os.Stat(dir); err == nil {
-		return &agentv1.CloneProjectResponse{Existed: true}, nil
-	}
+	dir := f.dir(first.GetStart().GetProjectDir())
 	if err := os.MkdirAll(filepath.Join(dir, ".git"), 0o755); err != nil {
-		return nil, err
+		return err
 	}
-	return &agentv1.CloneProjectResponse{Bytes: 10}, os.WriteFile(filepath.Join(dir, "README.md"), []byte("cloned"), 0o644)
+	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte("cloned"), 0o644); err != nil {
+		return err
+	}
+	return stream.SendAndClose(&agentv1.CloneProjectResponse{})
 }
 
 func (f *fakeProjectAgent) dir(project string) string {

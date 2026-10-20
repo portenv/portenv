@@ -3880,7 +3880,10 @@ type ProjectSource struct {
 	//
 	//	*ProjectSource_Empty
 	//	*ProjectSource_GithubUrl
-	Source        isProjectSource_Source `protobuf_oneof:"source"`
+	Source isProjectSource_Source `protobuf_oneof:"source"`
+	// Clone with the owner's GitHub sign-in (a private repository): the app
+	// passes it to ApplyTeamPlan, in memory; it's never kept.
+	UseSignIn     bool `protobuf:"varint,3,opt,name=use_sign_in,json=useSignIn,proto3" json:"use_sign_in,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3938,6 +3941,13 @@ func (x *ProjectSource) GetGithubUrl() string {
 		}
 	}
 	return ""
+}
+
+func (x *ProjectSource) GetUseSignIn() bool {
+	if x != nil {
+		return x.UseSignIn
+	}
+	return false
 }
 
 type isProjectSource_Source interface {
@@ -6599,8 +6609,13 @@ func (x *PlannedAgent) GetProblems() []string {
 }
 
 type ApplyTeamPlanRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// The owner's GitHub sign-in, from the Keychain, read by the app in front
+	// of the person, only when the kept setup clones with it (needs_token).
+	// portenvd uses it on the Mac for that fetch alone: never stored, logged
+	// or sent into the workspace.
+	GithubToken   string `protobuf:"bytes,2,opt,name=github_token,json=githubToken,proto3" json:"github_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -6642,6 +6657,13 @@ func (x *ApplyTeamPlanRequest) GetName() string {
 	return ""
 }
 
+func (x *ApplyTeamPlanRequest) GetGithubToken() string {
+	if x != nil {
+		return x.GithubToken
+	}
+	return ""
+}
+
 type ApplyTeamPlanResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Whether a kept team was written now.
@@ -6656,7 +6678,10 @@ type ApplyTeamPlanResponse struct {
 	// kept for the next try.
 	ProjectError string `protobuf:"bytes,4,opt,name=project_error,json=projectError,proto3" json:"project_error,omitempty"`
 	// That failure was a repository that needs a GitHub sign-in.
-	NeedsSignIn   bool `protobuf:"varint,5,opt,name=needs_sign_in,json=needsSignIn,proto3" json:"needs_sign_in,omitempty"`
+	NeedsSignIn bool `protobuf:"varint,5,opt,name=needs_sign_in,json=needsSignIn,proto3" json:"needs_sign_in,omitempty"`
+	// The kept setup clones with the owner's sign-in and none was given: the
+	// app reads it and calls again. Nothing was done.
+	NeedsToken    bool `protobuf:"varint,6,opt,name=needs_token,json=needsToken,proto3" json:"needs_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -6722,6 +6747,13 @@ func (x *ApplyTeamPlanResponse) GetProjectError() string {
 func (x *ApplyTeamPlanResponse) GetNeedsSignIn() bool {
 	if x != nil {
 		return x.NeedsSignIn
+	}
+	return false
+}
+
+func (x *ApplyTeamPlanResponse) GetNeedsToken() bool {
+	if x != nil {
+		return x.NeedsToken
 	}
 	return false
 }
@@ -8879,11 +8911,12 @@ const file_portenv_daemon_v1_daemon_proto_rawDesc = "" +
 	" \x01(\v2 .portenv.daemon.v1.ProjectSourceR\aproject\x1a7\n" +
 	"\tKeysEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\fR\x05value:\x028\x01\"R\n" +
+	"\x05value\x18\x02 \x01(\fR\x05value:\x028\x01\"r\n" +
 	"\rProjectSource\x12\x16\n" +
 	"\x05empty\x18\x01 \x01(\bH\x00R\x05empty\x12\x1f\n" +
 	"\n" +
-	"github_url\x18\x02 \x01(\tH\x00R\tgithubUrlB\b\n" +
+	"github_url\x18\x02 \x01(\tH\x00R\tgithubUrl\x12\x1e\n" +
+	"\vuse_sign_in\x18\x03 \x01(\bR\tuseSignInB\b\n" +
 	"\x06source\"\x83\x01\n" +
 	"\x0eWorkspaceSetup\x12:\n" +
 	"\aproject\x18\x01 \x01(\v2 .portenv.daemon.v1.ProjectSourceR\aproject\x125\n" +
@@ -9066,15 +9099,18 @@ const file_portenv_daemon_v1_daemon_proto_rawDesc = "" +
 	"\achanges\x18\x13 \x03(\tR\achanges\x12\x16\n" +
 	"\x06grants\x18\x14 \x03(\tR\x06grants\x12\"\n" +
 	"\finstructions\x18\x15 \x01(\tR\finstructions\x12\x1a\n" +
-	"\bproblems\x18\x16 \x03(\tR\bproblems\"*\n" +
+	"\bproblems\x18\x16 \x03(\tR\bproblems\"M\n" +
 	"\x14ApplyTeamPlanRequest\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\"\xa8\x01\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12!\n" +
+	"\fgithub_token\x18\x02 \x01(\tR\vgithubToken\"\xc9\x01\n" +
 	"\x15ApplyTeamPlanResponse\x12\x18\n" +
 	"\aapplied\x18\x01 \x01(\bR\aapplied\x12\x16\n" +
 	"\x06pinned\x18\x02 \x03(\tR\x06pinned\x12\x14\n" +
 	"\x05lines\x18\x03 \x03(\tR\x05lines\x12#\n" +
 	"\rproject_error\x18\x04 \x01(\tR\fprojectError\x12\"\n" +
-	"\rneeds_sign_in\x18\x05 \x01(\bR\vneedsSignIn\"\x18\n" +
+	"\rneeds_sign_in\x18\x05 \x01(\bR\vneedsSignIn\x12\x1f\n" +
+	"\vneeds_token\x18\x06 \x01(\bR\n" +
+	"needsToken\"\x18\n" +
 	"\x16GetTeamSettingsRequest\"\xa4\x01\n" +
 	"\x17GetTeamSettingsResponse\x12%\n" +
 	"\x0eagents_allowed\x18\x01 \x01(\x05R\ragentsAllowed\x124\n" +

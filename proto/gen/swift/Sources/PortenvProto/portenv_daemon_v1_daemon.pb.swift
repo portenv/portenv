@@ -1477,6 +1477,10 @@ public nonisolated struct Portenv_Daemon_V1_ProjectSource: Sendable {
     set {source = .githubURL(newValue)}
   }
 
+  /// Clone with the owner's GitHub sign-in (a private repository): the app
+  /// passes it to ApplyTeamPlan, in memory; it's never kept.
+  public var useSignIn: Bool = false
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public nonisolated enum OneOf_Source: Equatable, Sendable {
@@ -2481,6 +2485,12 @@ public nonisolated struct Portenv_Daemon_V1_ApplyTeamPlanRequest: Sendable {
 
   public var name: String = String()
 
+  /// The owner's GitHub sign-in, from the Keychain, read by the app in front
+  /// of the person, only when the kept setup clones with it (needs_token).
+  /// portenvd uses it on the Mac for that fetch alone: never stored, logged
+  /// or sent into the workspace.
+  public var githubToken: String = String()
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -2508,6 +2518,10 @@ public nonisolated struct Portenv_Daemon_V1_ApplyTeamPlanResponse: Sendable {
 
   /// That failure was a repository that needs a GitHub sign-in.
   public var needsSignIn: Bool = false
+
+  /// The kept setup clones with the owner's sign-in and none was given: the
+  /// app reads it and calls again. Nothing was done.
+  public var needsToken: Bool = false
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -5602,7 +5616,7 @@ nonisolated extension Portenv_Daemon_V1_CreateBoxRequest: SwiftProtobuf.Message,
 
 nonisolated extension Portenv_Daemon_V1_ProjectSource: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ProjectSource"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}empty\0\u{3}github_url\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}empty\0\u{3}github_url\0\u{3}use_sign_in\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -5626,6 +5640,7 @@ nonisolated extension Portenv_Daemon_V1_ProjectSource: SwiftProtobuf.Message, Sw
           self.source = .githubURL(v)
         }
       }()
+      case 3: try { try decoder.decodeSingularBoolField(value: &self.useSignIn) }()
       default: break
       }
     }
@@ -5647,11 +5662,15 @@ nonisolated extension Portenv_Daemon_V1_ProjectSource: SwiftProtobuf.Message, Sw
     }()
     case nil: break
     }
+    if self.useSignIn != false {
+      try visitor.visitSingularBoolField(value: self.useSignIn, fieldNumber: 3)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Portenv_Daemon_V1_ProjectSource, rhs: Portenv_Daemon_V1_ProjectSource) -> Bool {
     if lhs.source != rhs.source {return false}
+    if lhs.useSignIn != rhs.useSignIn {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -7481,7 +7500,7 @@ nonisolated extension Portenv_Daemon_V1_PlannedAgent: SwiftProtobuf.Message, Swi
 
 nonisolated extension Portenv_Daemon_V1_ApplyTeamPlanRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ApplyTeamPlanRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{3}github_token\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -7490,6 +7509,7 @@ nonisolated extension Portenv_Daemon_V1_ApplyTeamPlanRequest: SwiftProtobuf.Mess
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularStringField(value: &self.name) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.githubToken) }()
       default: break
       }
     }
@@ -7499,11 +7519,15 @@ nonisolated extension Portenv_Daemon_V1_ApplyTeamPlanRequest: SwiftProtobuf.Mess
     if !self.name.isEmpty {
       try visitor.visitSingularStringField(value: self.name, fieldNumber: 1)
     }
+    if !self.githubToken.isEmpty {
+      try visitor.visitSingularStringField(value: self.githubToken, fieldNumber: 2)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Portenv_Daemon_V1_ApplyTeamPlanRequest, rhs: Portenv_Daemon_V1_ApplyTeamPlanRequest) -> Bool {
     if lhs.name != rhs.name {return false}
+    if lhs.githubToken != rhs.githubToken {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -7511,7 +7535,7 @@ nonisolated extension Portenv_Daemon_V1_ApplyTeamPlanRequest: SwiftProtobuf.Mess
 
 nonisolated extension Portenv_Daemon_V1_ApplyTeamPlanResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ApplyTeamPlanResponse"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}applied\0\u{1}pinned\0\u{1}lines\0\u{3}project_error\0\u{3}needs_sign_in\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}applied\0\u{1}pinned\0\u{1}lines\0\u{3}project_error\0\u{3}needs_sign_in\0\u{3}needs_token\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -7524,6 +7548,7 @@ nonisolated extension Portenv_Daemon_V1_ApplyTeamPlanResponse: SwiftProtobuf.Mes
       case 3: try { try decoder.decodeRepeatedStringField(value: &self.lines) }()
       case 4: try { try decoder.decodeSingularStringField(value: &self.projectError) }()
       case 5: try { try decoder.decodeSingularBoolField(value: &self.needsSignIn) }()
+      case 6: try { try decoder.decodeSingularBoolField(value: &self.needsToken) }()
       default: break
       }
     }
@@ -7545,6 +7570,9 @@ nonisolated extension Portenv_Daemon_V1_ApplyTeamPlanResponse: SwiftProtobuf.Mes
     if self.needsSignIn != false {
       try visitor.visitSingularBoolField(value: self.needsSignIn, fieldNumber: 5)
     }
+    if self.needsToken != false {
+      try visitor.visitSingularBoolField(value: self.needsToken, fieldNumber: 6)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -7554,6 +7582,7 @@ nonisolated extension Portenv_Daemon_V1_ApplyTeamPlanResponse: SwiftProtobuf.Mes
     if lhs.lines != rhs.lines {return false}
     if lhs.projectError != rhs.projectError {return false}
     if lhs.needsSignIn != rhs.needsSignIn {return false}
+    if lhs.needsToken != rhs.needsToken {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

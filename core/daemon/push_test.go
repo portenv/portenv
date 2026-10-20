@@ -306,3 +306,37 @@ func TestTheCloneRecordsTheRepository(t *testing.T) {
 		t.Fatalf("%q", got)
 	}
 }
+
+// The window's stream: each question, then its going once answered.
+func TestWatchPushesShowsEachQuestion(t *testing.T) {
+	s, _, c := servingProject(t)
+	r := newPushRemote(t)
+	s.githubGit = r.base
+	if err := keepGitHubRepo(filepath.Join(s.env.Dir, "state", "box-1"), "https://github.com/acme/api"); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	stream, err := c.WatchPushes(ctx, &daemonv1.WatchPushesRequest{Name: "acme-api"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan *agentv1.TeamCallsRequest, 1)
+	go func() {
+		done <- s.handlePush(ctx, "acme-api", &agentv1.TeamCallsResponse{Owner: true, Op: &agentv1.TeamCallsResponse_PushList{PushList: &agentv1.PushList{}}})
+	}()
+	m, err := stream.Recv()
+	if err != nil || !m.GetQuestion().GetList() || m.GetQuestion().GetRepo() != "github.com/acme/api" {
+		t.Fatalf("%v %v", m, err)
+	}
+	if _, err := c.AnswerPush(ctx, &daemonv1.AnswerPushRequest{Name: "acme-api", Id: m.GetQuestion().GetId(), Allow: true, GithubToken: testToken}); err != nil {
+		t.Fatal(err)
+	}
+	if reply := <-done; !reply.GetOk() {
+		t.Fatalf("%v", reply)
+	}
+	m, err = stream.Recv()
+	if err != nil || !m.GetQuestion().GetGone() {
+		t.Fatalf("%v %v", m, err)
+	}
+}

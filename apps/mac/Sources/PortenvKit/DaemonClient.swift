@@ -665,7 +665,8 @@ extension DaemonClient {
             let task = Task {
                 do {
                     try await api.watchPushes(req) { response in
-                        for try await q in response.messages {
+                        for try await message in response.messages {
+                            let q = message.question
                             continuation.yield(PushAsk(
                                 id: q.id, repo: TeamText.line(q.repo, max: 140), needsYes: q.needsYes, first: q.first, list: q.list,
                                 updates: q.updates.map { PushAsk.Update(dst: TeamText.line($0.dst, max: 255), newSHA: TeamText.line($0.newSha, max: 40), force: $0.force, delete: $0.delete) },

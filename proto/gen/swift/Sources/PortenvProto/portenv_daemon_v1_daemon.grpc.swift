@@ -833,7 +833,7 @@ public enum Portenv_Daemon_V1_DaemonService: Sendable {
             /// Request type for "WatchPushes".
             public typealias Input = Portenv_Daemon_V1_WatchPushesRequest
             /// Response type for "WatchPushes".
-            public typealias Output = Portenv_Daemon_V1_PushQuestion
+            public typealias Output = Portenv_Daemon_V1_WatchPushesResponse
             /// Descriptor for "WatchPushes".
             public static let descriptor = GRPCCore.MethodDescriptor(
                 service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
@@ -2425,7 +2425,7 @@ extension Portenv_Daemon_V1_DaemonService {
         /// - Parameters:
         ///   - request: A request containing a single `Portenv_Daemon_V1_WatchPushesRequest` message.
         ///   - serializer: A serializer for `Portenv_Daemon_V1_WatchPushesRequest` messages.
-        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_PushQuestion` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_WatchPushesResponse` messages.
         ///   - options: Options to apply to this RPC.
         ///   - handleResponse: A closure which handles the response and returns its result to
         ///       the caller. Returning from the closure will cancel the RPC if it hasn't
@@ -2434,9 +2434,9 @@ extension Portenv_Daemon_V1_DaemonService {
         func watchPushes<Result>(
             request: GRPCCore.ClientRequest<Portenv_Daemon_V1_WatchPushesRequest>,
             serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_WatchPushesRequest>,
-            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_PushQuestion>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_WatchPushesResponse>,
             options: GRPCCore.CallOptions,
-            onResponse handleResponse: @Sendable @escaping (GRPCCore.StreamingClientResponse<Portenv_Daemon_V1_PushQuestion>) async throws -> Result
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.StreamingClientResponse<Portenv_Daemon_V1_WatchPushesResponse>) async throws -> Result
         ) async throws -> Result where Result: Sendable
 
         /// Call the "AnswerPush" method.
@@ -4631,7 +4631,7 @@ extension Portenv_Daemon_V1_DaemonService {
         /// - Parameters:
         ///   - request: A request containing a single `Portenv_Daemon_V1_WatchPushesRequest` message.
         ///   - serializer: A serializer for `Portenv_Daemon_V1_WatchPushesRequest` messages.
-        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_PushQuestion` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_WatchPushesResponse` messages.
         ///   - options: Options to apply to this RPC.
         ///   - handleResponse: A closure which handles the response and returns its result to
         ///       the caller. Returning from the closure will cancel the RPC if it hasn't
@@ -4640,9 +4640,9 @@ extension Portenv_Daemon_V1_DaemonService {
         public func watchPushes<Result>(
             request: GRPCCore.ClientRequest<Portenv_Daemon_V1_WatchPushesRequest>,
             serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_WatchPushesRequest>,
-            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_PushQuestion>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_WatchPushesResponse>,
             options: GRPCCore.CallOptions = .defaults,
-            onResponse handleResponse: @Sendable @escaping (GRPCCore.StreamingClientResponse<Portenv_Daemon_V1_PushQuestion>) async throws -> Result
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.StreamingClientResponse<Portenv_Daemon_V1_WatchPushesResponse>) async throws -> Result
         ) async throws -> Result where Result: Sendable {
             try await self.client.serverStreaming(
                 request: request,
@@ -6538,12 +6538,12 @@ extension Portenv_Daemon_V1_DaemonService.ClientProtocol {
     public func watchPushes<Result>(
         request: GRPCCore.ClientRequest<Portenv_Daemon_V1_WatchPushesRequest>,
         options: GRPCCore.CallOptions = .defaults,
-        onResponse handleResponse: @Sendable @escaping (GRPCCore.StreamingClientResponse<Portenv_Daemon_V1_PushQuestion>) async throws -> Result
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.StreamingClientResponse<Portenv_Daemon_V1_WatchPushesResponse>) async throws -> Result
     ) async throws -> Result where Result: Sendable {
         try await self.watchPushes(
             request: request,
             serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_WatchPushesRequest>(),
-            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_PushQuestion>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_WatchPushesResponse>(),
             options: options,
             onResponse: handleResponse
         )
@@ -8680,7 +8680,7 @@ extension Portenv_Daemon_V1_DaemonService.ClientProtocol {
         _ message: Portenv_Daemon_V1_WatchPushesRequest,
         metadata: GRPCCore.Metadata = [:],
         options: GRPCCore.CallOptions = .defaults,
-        onResponse handleResponse: @Sendable @escaping (GRPCCore.StreamingClientResponse<Portenv_Daemon_V1_PushQuestion>) async throws -> Result
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.StreamingClientResponse<Portenv_Daemon_V1_WatchPushesResponse>) async throws -> Result
     ) async throws -> Result where Result: Sendable {
         let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_WatchPushesRequest>(
             message: message,

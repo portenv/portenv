@@ -5,12 +5,12 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"net"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -18,6 +18,7 @@ import (
 
 	"google.golang.org/protobuf/encoding/protojson"
 
+	"github.com/portenv/portenv/core/internal/bounded"
 	agentv1 "github.com/portenv/portenv/proto/gen/go/portenv/agent/v1"
 )
 
@@ -128,8 +129,15 @@ func runRemoteHelper(args []string, stdin io.Reader, stdout, stderr io.Writer, e
 	}
 }
 
+// gitWait bounds each git the remote helper runs (a bundle of a big
+// repository takes a while).
+const gitWait = 10 * time.Minute
+
 func gitIn(dir string, args ...string) (string, error) {
-	cmd := exec.Command("git", args...) // #nosec G204 -- git, with arguments made here
+	cmd, err := bounded.Command(context.Background(), gitWait, "git", args...)
+	if err != nil {
+		return "", err
+	}
 	cmd.Dir = dir
 	var out, errb bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errb

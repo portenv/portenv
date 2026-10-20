@@ -293,7 +293,7 @@ type DaemonServiceClient interface {
 	// owner's GitHub sign-in, and some the owner's yes (the first push from
 	// the workspace, a force, a delete). The window's app answers each with
 	// AnswerPush.
-	WatchPushes(ctx context.Context, in *WatchPushesRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[PushQuestion], error)
+	WatchPushes(ctx context.Context, in *WatchPushesRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[WatchPushesResponse], error)
 	AnswerPush(ctx context.Context, in *AnswerPushRequest, opts ...grpc.CallOption) (*AnswerPushResponse, error)
 }
 
@@ -970,13 +970,13 @@ func (c *daemonServiceClient) ApplyTeamPlan(ctx context.Context, in *ApplyTeamPl
 	return out, nil
 }
 
-func (c *daemonServiceClient) WatchPushes(ctx context.Context, in *WatchPushesRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[PushQuestion], error) {
+func (c *daemonServiceClient) WatchPushes(ctx context.Context, in *WatchPushesRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[WatchPushesResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	stream, err := c.cc.NewStream(ctx, &DaemonService_ServiceDesc.Streams[7], DaemonService_WatchPushes_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
-	x := &grpc.GenericClientStream[WatchPushesRequest, PushQuestion]{ClientStream: stream}
+	x := &grpc.GenericClientStream[WatchPushesRequest, WatchPushesResponse]{ClientStream: stream}
 	if err := x.ClientStream.SendMsg(in); err != nil {
 		return nil, err
 	}
@@ -987,7 +987,7 @@ func (c *daemonServiceClient) WatchPushes(ctx context.Context, in *WatchPushesRe
 }
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type DaemonService_WatchPushesClient = grpc.ServerStreamingClient[PushQuestion]
+type DaemonService_WatchPushesClient = grpc.ServerStreamingClient[WatchPushesResponse]
 
 func (c *daemonServiceClient) AnswerPush(ctx context.Context, in *AnswerPushRequest, opts ...grpc.CallOption) (*AnswerPushResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
@@ -1201,7 +1201,7 @@ type DaemonServiceServer interface {
 	// owner's GitHub sign-in, and some the owner's yes (the first push from
 	// the workspace, a force, a delete). The window's app answers each with
 	// AnswerPush.
-	WatchPushes(*WatchPushesRequest, grpc.ServerStreamingServer[PushQuestion]) error
+	WatchPushes(*WatchPushesRequest, grpc.ServerStreamingServer[WatchPushesResponse]) error
 	AnswerPush(context.Context, *AnswerPushRequest) (*AnswerPushResponse, error)
 	mustEmbedUnimplementedDaemonServiceServer()
 }
@@ -1399,7 +1399,7 @@ func (UnimplementedDaemonServiceServer) PlanTeam(context.Context, *PlanTeamReque
 func (UnimplementedDaemonServiceServer) ApplyTeamPlan(context.Context, *ApplyTeamPlanRequest) (*ApplyTeamPlanResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ApplyTeamPlan not implemented")
 }
-func (UnimplementedDaemonServiceServer) WatchPushes(*WatchPushesRequest, grpc.ServerStreamingServer[PushQuestion]) error {
+func (UnimplementedDaemonServiceServer) WatchPushes(*WatchPushesRequest, grpc.ServerStreamingServer[WatchPushesResponse]) error {
 	return status.Error(codes.Unimplemented, "method WatchPushes not implemented")
 }
 func (UnimplementedDaemonServiceServer) AnswerPush(context.Context, *AnswerPushRequest) (*AnswerPushResponse, error) {
@@ -2486,11 +2486,11 @@ func _DaemonService_WatchPushes_Handler(srv interface{}, stream grpc.ServerStrea
 	if err := stream.RecvMsg(m); err != nil {
 		return err
 	}
-	return srv.(DaemonServiceServer).WatchPushes(m, &grpc.GenericServerStream[WatchPushesRequest, PushQuestion]{ServerStream: stream})
+	return srv.(DaemonServiceServer).WatchPushes(m, &grpc.GenericServerStream[WatchPushesRequest, WatchPushesResponse]{ServerStream: stream})
 }
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type DaemonService_WatchPushesServer = grpc.ServerStreamingServer[PushQuestion]
+type DaemonService_WatchPushesServer = grpc.ServerStreamingServer[WatchPushesResponse]
 
 func _DaemonService_AnswerPush_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(AnswerPushRequest)

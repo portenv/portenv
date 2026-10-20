@@ -211,9 +211,9 @@ func pushWithLimit(ctx context.Context, c *http.Client, url, token string, updat
 		prereqs map[string]bool
 		pack    io.Reader
 	)
-	if needsPack && bundle == nil {
-		needsPack = false // every new object must be on GitHub already: checked below
-	} else if needsPack {
+	// With no bundle, every new object must be on GitHub already: checked
+	// once its refs are read, below.
+	if needsPack && bundle != nil {
 		cr := &countingReader{r: bundle, limit: limit}
 		br := bufio.NewReaderSize(cr, 64<<10)
 		var tips map[string]bool

@@ -161,7 +161,7 @@ func (s *Server) WatchPushes(req *daemonv1.WatchPushesRequest, stream daemonv1.D
 		for _, q := range s.pendingPushes(name) {
 			now[q.GetId()] = true
 			if !sent[q.GetId()] {
-				if err := stream.Send(q); err != nil {
+				if err := stream.Send(&daemonv1.WatchPushesResponse{Question: q}); err != nil {
 					return err
 				}
 				sent[q.GetId()] = true
@@ -169,7 +169,7 @@ func (s *Server) WatchPushes(req *daemonv1.WatchPushesRequest, stream daemonv1.D
 		}
 		for id := range sent {
 			if !now[id] {
-				if err := stream.Send(&daemonv1.PushQuestion{Id: id, Gone: true}); err != nil {
+				if err := stream.Send(&daemonv1.WatchPushesResponse{Question: &daemonv1.PushQuestion{Id: id, Gone: true}}); err != nil {
 					return err
 				}
 				delete(sent, id)

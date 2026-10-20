@@ -208,12 +208,16 @@ service DaemonService {
   // owner's GitHub sign-in, and some the owner's yes (the first push from
   // the workspace, a force, a delete). The window's app answers each with
   // AnswerPush.
-  rpc WatchPushes(WatchPushesRequest) returns (stream PushQuestion);
+  rpc WatchPushes(WatchPushesRequest) returns (stream WatchPushesResponse);
   rpc AnswerPush(AnswerPushRequest) returns (AnswerPushResponse);
 }
 
 message WatchPushesRequest {
   string name = 1;
+}
+
+message WatchPushesResponse {
+  PushQuestion question = 1;
 }
 
 message PushQuestion {

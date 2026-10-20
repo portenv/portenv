@@ -284,6 +284,22 @@ final class FakeDaemon: DaemonAPI, @unchecked Sendable {
         try await record(["app", "apply-team-plan", box, githubToken == nil ? "no-token" : "token"])
         return lock.withLock { appliedFirst.isEmpty ? applied : appliedFirst.removeFirst() }
     }
+    /// Pushes waiting for the app (R-0391), sent once by watchPushes.
+    var pushQuestions: [PushAsk] = []
+    func watchPushes(_ box: String) -> AsyncThrowingStream<PushAsk, Error> {
+        let qs: [PushAsk] = lock.withLock {
+            _calls.append(["app", "watch-pushes", box])
+            defer { pushQuestions = [] }
+            return pushQuestions
+        }
+        return AsyncThrowingStream { c in
+            for q in qs { c.yield(q) }
+        }
+    }
+    func answerPush(_ box: String, id: String, allow: Bool, githubToken: String?, signedOut: Bool) async throws {
+        // The sign-in is recorded only as whether one was given.
+        try await record(["app", "answer-push", box, id, signedOut ? "signed-out" : allow ? "allow" : "deny", githubToken == nil ? "no-token" : "token"])
+    }
     /// Settings › Team › Agents allowed (R-0347).
     var allowed = 4
     func agentsAllowed() async throws -> Int {

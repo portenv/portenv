@@ -658,6 +658,39 @@ extension DaemonClient {
         }
     }
 
+    public func watchPushes(_ box: String) -> AsyncThrowingStream<PushAsk, Error> {
+        let api = self.api
+        let req = Portenv_Daemon_V1_WatchPushesRequest.with { $0.name = box }
+        return AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    try await api.watchPushes(req) { response in
+                        for try await q in response.messages {
+                            continuation.yield(PushAsk(
+                                id: q.id, repo: TeamText.line(q.repo, max: 140), needsYes: q.needsYes, first: q.first, list: q.list,
+                                updates: q.updates.map { PushAsk.Update(dst: TeamText.line($0.dst, max: 255), newSHA: TeamText.line($0.newSha, max: 40), force: $0.force, delete: $0.delete) },
+                                gone: q.gone))
+                        }
+                    }
+                    continuation.finish()
+                } catch let e as RPCError {
+                    continuation.finish(throwing: DaemonError.fromRPC(message: e.message, unimplemented: e.code == .unimplemented, unavailable: e.code == .unavailable))
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
+    /// The sign-in goes only in this request, in memory (R-0391).
+    public func answerPush(_ box: String, id: String, allow: Bool, githubToken: String?, signedOut: Bool) async throws {
+        let req = Portenv_Daemon_V1_AnswerPushRequest.with {
+            $0.name = box; $0.id = id; $0.allow = allow; $0.githubToken = githubToken ?? ""; $0.signedOut = signedOut
+        }
+        _ = try await call { try await api.answerPush(req) }
+    }
+
     public func answerDecision(_ box: String, id: String, approve: Bool, note: String) async throws -> TeamDecision {
         let req = Portenv_Daemon_V1_AnswerDecisionRequest.with { $0.name = box; $0.decisionID = id; $0.approve = approve; $0.note = note }
         return try await call { TeamDecision(try await api.answerDecision(req).decision) }

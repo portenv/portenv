@@ -168,3 +168,30 @@ struct SetupBanner: View {
         }
     }
 }
+
+/// A push that needs the owner's yes (R-0391): the workspace's first push,
+/// a force or a delete. No default button.
+struct PushSheet: View {
+    let ask: PushAsk
+    let workspace: String
+    let push: PushController
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Image(systemName: "arrow.up.circle").font(.title).accessibilityHidden(true)
+            Text(verbatim: PushText.title(ask, workspace: workspace)).font(.headline).accessibilityAddTraits(.isHeader)
+            Text(PushText.message(ask)).fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(PushText.refs(ask), id: \.self) { Text(verbatim: $0).font(.system(size: 12, design: .monospaced)) }
+            }
+            HStack {
+                Spacer()
+                Button(PushText.deny) { Task { await push.answer(ask, allow: false) } }
+                Button(PushText.button(ask)) { Task { await push.answer(ask, allow: true) } }
+            }
+        }
+        .padding(20)
+        .frame(width: 420)
+        .interactiveDismissDisabled()
+    }
+}

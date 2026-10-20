@@ -253,6 +253,10 @@ enum ScreenRenders {
             let team = FirstRunFlow(service: Sample(), at: .firstBox, fromBoxList: true, teamPlanner: SampleTeams())
             team.boxName = "acme-api"
             await team.next()
+            team.projectKind = .github
+            team.githubURL = "https://github.com/acme/acme-api"
+            try snapshot(FirstRunView(flow: team, opened: { _ in }, cancel: {}, followsDocker: false), name: "new-workspace-project", size: NSSize(width: 880, height: 660), in: dir)
+            await team.next()
             await team.team.load()
             await team.team.choose("starter")
             await team.team.setModel("reviewer", "opus")

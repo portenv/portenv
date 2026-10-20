@@ -14,6 +14,9 @@ import Observation
 ///   (R-0294). Only a stream that stays up for `settle` after its reset
 ///   ends the trouble: a reconnect blip shorter than that doesn't start
 ///   the clock over.
+/// - Until the stream's first reset the tab is `.opening` ("Opening
+///   <tab>…"), and a stream that fails before then is `.couldNotOpen`, with
+///   Try Again: never a bare background (basics audit, R-0384).
 @MainActor
 @Observable
 public final class TabTerminalShown {
@@ -35,7 +38,29 @@ public final class TabTerminalShown {
         case reconnecting
         /// The card: "Disconnected", why, and Reconnect.
         case disconnected(String?)
+        /// In place of the terminal, before the tab's first reset:
+        /// "Opening <tab>…" with a small spinner.
+        case opening
+        /// In place of the terminal, when it never opened: "Couldn't open
+        /// <tab>", why, and Try Again.
+        case couldNotOpen(String)
     }
+
+    /// What the pane says while the tab opens.
+    public static func openingLine(tab: String) -> String {
+        "Opening \(tab.isEmpty ? "tab" : tab)\u{2026}"
+    }
+
+    /// The card's title when the tab's terminal didn't open.
+    public static func couldNotOpenTitle(tab: String) -> String {
+        "Couldn\u{2019}t open \(tab.isEmpty ? "the tab" : tab)"
+    }
+
+    /// The card's button: opens the tab's stream again.
+    public static let tryAgain = "Try Again"
+
+    /// Said on the card when the tab never opened and nothing better is known.
+    public static let notOpeningLine = "This tab\u{2019}s terminal didn\u{2019}t open. The tab keeps running in your workspace; click Try Again."
 
     /// Said on the card when portenvd is away (R-0294): never a modal on
     /// top (GUIDELINES.md), and it says nothing is being saved.
@@ -45,9 +70,13 @@ public final class TabTerminalShown {
 
     public func overlay(serviceComing: Bool) -> Overlay {
         if overdue {
-            if serviceComing { return .disconnected(Self.serviceAwayLine) }
-            if case let .disconnected(why) = connection, let why { return .disconnected(why) }
-            return .disconnected(failure ?? Self.notAnsweringLine)
+            if serviceComing { return opened ? .disconnected(Self.serviceAwayLine) : .couldNotOpen(Self.serviceAwayLine) }
+            if case let .disconnected(why) = connection, let why { return opened ? .disconnected(why) : .couldNotOpen(why) }
+            return opened ? .disconnected(failure ?? Self.notAnsweringLine) : .couldNotOpen(failure ?? Self.notOpeningLine)
+        }
+        if !opened {
+            if case let .disconnected(why) = connection, !serviceComing { return .couldNotOpen(why ?? Self.notOpeningLine) }
+            return .opening
         }
         switch connection {
         case .connecting, .live: return .none
@@ -72,6 +101,10 @@ public final class TabTerminalShown {
     public private(set) var size = TabTerminalSize(cols: 80, rows: 24)
     /// The trouble has lasted past the deadline: the card shows.
     public private(set) var overdue = false
+    /// The shown tab's stream has reset at least once since it was shown:
+    /// there's something on screen. Reconnect keeps it; another tab or a
+    /// new generation clears it.
+    public private(set) var opened = false
     @ObservationIgnored private let provider: any TabTerminalProvider
     @ObservationIgnored private var shown: (tab: String, generation: Int)?
     @ObservationIgnored private let deadline: Duration
@@ -102,6 +135,7 @@ public final class TabTerminalShown {
     public func show(tab: String, generation: Int) {
         if let shown, shown.tab == tab, shown.generation == generation, source != nil { return }
         shown = (tab, generation)
+        opened = false
         open()
     }
 
@@ -117,12 +151,14 @@ public final class TabTerminalShown {
         source?.close()
         source = nil
         shown = nil
+        opened = false
         clearTrouble()
     }
 
     public func reset(_ size: TabTerminalSize) {
         self.size = size
         connection = .live
+        opened = true
         guard inTrouble, settling == nil else { return }
         settling = Task { [weak self, settle, sleep] in
             await sleep(settle)

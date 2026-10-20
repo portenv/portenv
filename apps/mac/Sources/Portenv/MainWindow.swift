@@ -287,10 +287,12 @@ struct MainWindow: View {
                         // bar marks current, never another (R-0314).
                         MainTabTerminal(shown: TabTerminalShown(provider: provider), tab: tab.id,
                                         generation: controller.terminalGeneration, label: terminalLabel,
+                                        tabName: TerminalLabel.title(tab, team: team?.state.agents ?? []),
                                         serviceComing: controller.reconnectingToService)
                     } else if !AppTerminal.attached, controller.tabTerminals != nil {
-                        // The tabs aren't known yet.
-                        Color(nsColor: .textBackgroundColor)
+                        // The tabs aren't known yet: "Opening <workspace>…",
+                        // never a bare background (R-0384).
+                        TerminalOpening(line: TabTerminalShown.openingLine(tab: controller.box))
                     } else {
                         BoxTerminal(box: controller.box, generation: controller.terminalGeneration,
                                     onEnded: { Task { await controller.terminalEnded() } },

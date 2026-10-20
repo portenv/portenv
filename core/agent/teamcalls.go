@@ -242,7 +242,7 @@ func (h *teamHub) handle(a *teamAgent, conn *net.UnixConn) {
 		refuse("The request names no command.")
 		return
 	}
-	if c.GetPushList() != nil || c.GetPush() != nil {
+	if c.GetPushList() != nil || c.GetPush() != nil || c.GetFetch() != nil {
 		refuse(notTheOwner)
 		return
 	}

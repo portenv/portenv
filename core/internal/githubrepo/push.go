@@ -193,11 +193,11 @@ func (c *countingReader) Read(p []byte) (int, error) {
 
 // Push checks the updates and the bundle, then pushes them to url with
 // token. bundle is nil when every update is a delete.
-func Push(ctx context.Context, c *http.Client, url, token string, updates []Update, bundle io.Reader) ([]RefStatus, error) {
+func Push(ctx context.Context, c *http.Client, url, token string, updates []Update, bundle io.ReadSeeker) ([]RefStatus, error) {
 	return pushWithLimit(ctx, c, url, token, updates, bundle, MaxPushBytes)
 }
 
-func pushWithLimit(ctx context.Context, c *http.Client, url, token string, updates []Update, bundle io.Reader, limit int64) ([]RefStatus, error) {
+func pushWithLimit(ctx context.Context, c *http.Client, url, token string, updates []Update, bundle io.ReadSeeker, limit int64) ([]RefStatus, error) {
 	if err := CheckUpdates(updates); err != nil {
 		return nil, err
 	}
@@ -207,18 +207,21 @@ func pushWithLimit(ctx context.Context, c *http.Client, url, token string, updat
 			needsPack = true
 		}
 	}
-	var (
-		prereqs map[string]bool
-		pack    io.Reader
-	)
+	var pack io.Reader
 	// With no bundle, every new object must be on GitHub already: checked
 	// once its refs are read, below.
+	// Fast-forwards are proven from the pack (R-0393), before it's sent.
+	var ff map[string]bool
 	if needsPack && bundle != nil {
+		ff = FastForwards(bundle, updates)
+		if _, err := bundle.Seek(0, io.SeekStart); err != nil {
+			return nil, err
+		}
 		cr := &countingReader{r: bundle, limit: limit}
 		br := bufio.NewReaderSize(cr, 64<<10)
 		var tips map[string]bool
 		var err error
-		if prereqs, tips, err = readBundleHeader(br); err != nil {
+		if _, tips, err = readBundleHeader(br); err != nil {
 			if errors.Is(cr.lastErr(), ErrTooBig) {
 				return nil, ErrTooBig
 			}
@@ -279,7 +282,7 @@ func pushWithLimit(ctx context.Context, c *http.Client, url, token string, updat
 		case cur != "" && u.New != "" && !u.Force && strings.HasPrefix(u.Dst, "refs/tags/"):
 			statuses[i].Reason = "already exists"
 			continue
-		case cur != "" && u.New != "" && !u.Force && !prereqs[cur]:
+		case cur != "" && u.New != "" && !u.Force && !ff[u.Dst]:
 			statuses[i].Reason = "non-fast-forward"
 			continue
 		}

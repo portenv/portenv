@@ -276,31 +276,16 @@ func (s *Server) handlePush(ctx context.Context, name string, c *agentv1.TeamCal
 
 	p := c.GetPush()
 	var updates []githubrepo.Update
-	q := &daemonv1.PushQuestion{}
-	allowedFile := filepath.Join(state, pushesAllowedFile)
-	_, aerr := os.Stat(allowedFile)
-	q.First = errors.Is(aerr, fs.ErrNotExist)
-	q.NeedsYes = q.First
 	for _, u := range p.GetUpdates() {
 		updates = append(updates, githubrepo.Update{Dst: u.GetDst(), New: u.GetNewSha(), Old: u.GetOldSha(), Force: u.GetForce()})
-		del := u.GetNewSha() == ""
-		q.Updates = append(q.Updates, &daemonv1.PushUpdateInfo{Dst: u.GetDst(), NewSha: u.GetNewSha(), Force: u.GetForce(), Delete: del})
-		if u.GetForce() || del {
-			q.NeedsYes = true
-		}
 	}
 	if err := githubrepo.CheckUpdates(updates); err != nil {
 		return pushRefuse(id, err.Error()+".")
 	}
-	token, line := answer(q)
-	if line != "" {
-		return pushRefuse(id, line)
-	}
-	if q.First {
-		_ = writePrivateAtomic(allowedFile, []byte("yes\n"))
-	}
-
-	var bundle io.Reader
+	// The bundle first: a fast-forward is proven from its pack, never
+	// taken from what the workspace says (R-0393). An update that isn't
+	// proven is a force: the owner is asked.
+	var bundle io.ReadSeeker
 	if bid := p.GetBundleId(); bid != "" {
 		f, cleanup, err := s.readPushBundle(ctx, name, bid)
 		if err != nil {
@@ -308,6 +293,30 @@ func (s *Server) handlePush(ctx context.Context, name string, c *agentv1.TeamCal
 		}
 		defer cleanup()
 		bundle = f
+	}
+	ff := githubrepo.FastForwards(bundle, updates)
+	q := &daemonv1.PushQuestion{}
+	allowedFile := filepath.Join(state, pushesAllowedFile)
+	_, aerr := os.Stat(allowedFile)
+	q.First = errors.Is(aerr, fs.ErrNotExist)
+	q.NeedsYes = q.First
+	for i := range updates {
+		u := &updates[i]
+		del := u.New == ""
+		if !u.Force && u.Old != "" && !del && !ff[u.Dst] {
+			u.Force = true
+		}
+		q.Updates = append(q.Updates, &daemonv1.PushUpdateInfo{Dst: u.Dst, NewSha: u.New, Force: u.Force, Delete: del})
+		if u.Force || del {
+			q.NeedsYes = true
+		}
+	}
+	token, line := answer(q)
+	if line != "" {
+		return pushRefuse(id, line)
+	}
+	if q.First {
+		_ = writePrivateAtomic(allowedFile, []byte("yes\n"))
 	}
 	statuses, err := githubrepo.Push(ctx, client, remote, token, updates, bundle)
 	token = ""

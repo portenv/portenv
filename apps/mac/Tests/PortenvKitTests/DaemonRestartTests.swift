@@ -190,24 +190,28 @@ struct DaemonRestartTests {
     }
 
     /// launchd brings portenvd back; until then the line shows the real
-    /// state. Past the deadline the window says so plainly, and the message
-    /// goes once portenvd answers again.
-    @Test func pastTheDeadlineTheWindowSaysSo() async {
+    /// state, and the tab's terminal says it's reconnecting. However long
+    /// it lasts, no alert comes up on top (R-0294): the terminal's card
+    /// says it instead (TabTerminalShown).
+    @Test func pastTheDeadlineNoAlert() async {
         let cli = FakeDaemon()
-        let c = BoxController(box: "acme-api", daemon: cli, ensureDaemon: { nil }, daemonDeadline: .milliseconds(150))
+        let awake = FakeAwakeClock()
+        let c = BoxController(box: "acme-api", daemon: cli, ensureDaemon: { nil }, daemonDeadline: .seconds(30), awake: { awake.now })
         await c.open()
         cli.failing["state"] = "portenvd is not running"
         cli.failing["ping"] = "portenvd is not running"
         await c.refresh()
-        #expect(c.error == nil, "not yet: launchd is starting it")
         #expect(c.state?.save == .notSaved)
-        try? await Task.sleep(for: .milliseconds(200))
+        #expect(c.reconnectingToService)
+        awake.advance(by: .seconds(120))
         await c.refresh()
-        #expect(c.error == BoxController.daemonGone)
+        #expect(c.error == nil, "never a modal for portenvd being away")
+        #expect(c.reconnectingToService)
         cli.failing = [:]
         cli.state = #"{"state":"SAVE_STATE_SAVED","saved_at":"\#(savedAt)"}"#
         await c.refresh()
-        #expect(c.error == nil, "portenvd is back")
+        #expect(c.error == nil)
+        #expect(!c.reconnectingToService, "portenvd is back")
     }
 
     /// The login item needs the person's approval: said at once, in their
@@ -230,25 +234,6 @@ struct DaemonRestartTests {
         let c = BoxController(box: "acme-api", daemon: cli, ensureDaemon: { nil }, daemonDeadline: .milliseconds(150))
         cli.failing["ping"] = "portenvd is not running"
         await c.waitForDaemon()
-        #expect(c.error == BoxController.daemonGone)
-    }
-
-    /// The deadline counts time awake (the 2026-10-16 sleep flake): a Mac
-    /// asleep while portenvd was away doesn't wake to "isn't running" at
-    /// once; time awake past the deadline does say it.
-    @Test func theDeadlineCountsTimeAwake() async {
-        let cli = FakeDaemon()
-        let awake = FakeAwakeClock()
-        let c = BoxController(box: "acme-api", daemon: cli, ensureDaemon: { nil }, daemonDeadline: .seconds(30), awake: { awake.now })
-        await c.open()
-        cli.failing["state"] = "portenvd is not running"
-        cli.failing["ping"] = "portenvd is not running"
-        await c.refresh()
-        awake.advance(by: .seconds(10)) // asleep for hours meanwhile: never counted
-        await c.refresh()
-        #expect(c.error == nil)
-        awake.advance(by: .seconds(21))
-        await c.refresh()
         #expect(c.error == BoxController.daemonGone)
     }
 }

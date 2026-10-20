@@ -2291,6 +2291,35 @@ public nonisolated struct Portenv_Daemon_V1_WatchTeamResponse: Sendable {
   public init() {}
 }
 
+public nonisolated struct Portenv_Daemon_V1_FetchAgentBranchRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var name: String = String()
+
+  public var agentID: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Portenv_Daemon_V1_FetchAgentBranchResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// refs/remotes/agents/<id>.
+  public var ref: String = String()
+
+  public var commit: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
 public nonisolated struct Portenv_Daemon_V1_StartAgentRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
@@ -2381,6 +2410,10 @@ public nonisolated struct Portenv_Daemon_V1_AnswerDecisionRequest: Sendable {
   public var choice: Int32 = 0
 
   public var choiceLabel: String = String()
+
+  /// For a team_start decision with migration items: the items to remove
+  /// (their ids). Every other item is kept: it becomes the owner's.
+  public var removeItems: [String] = []
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -6638,6 +6671,76 @@ nonisolated extension Portenv_Daemon_V1_WatchTeamResponse: SwiftProtobuf.Message
   }
 }
 
+nonisolated extension Portenv_Daemon_V1_FetchAgentBranchRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".FetchAgentBranchRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{3}agent_id\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.name) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.agentID) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.name.isEmpty {
+      try visitor.visitSingularStringField(value: self.name, fieldNumber: 1)
+    }
+    if !self.agentID.isEmpty {
+      try visitor.visitSingularStringField(value: self.agentID, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Portenv_Daemon_V1_FetchAgentBranchRequest, rhs: Portenv_Daemon_V1_FetchAgentBranchRequest) -> Bool {
+    if lhs.name != rhs.name {return false}
+    if lhs.agentID != rhs.agentID {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Portenv_Daemon_V1_FetchAgentBranchResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".FetchAgentBranchResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}ref\0\u{1}commit\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.ref) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.commit) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.ref.isEmpty {
+      try visitor.visitSingularStringField(value: self.ref, fieldNumber: 1)
+    }
+    if !self.commit.isEmpty {
+      try visitor.visitSingularStringField(value: self.commit, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Portenv_Daemon_V1_FetchAgentBranchResponse, rhs: Portenv_Daemon_V1_FetchAgentBranchResponse) -> Bool {
+    if lhs.ref != rhs.ref {return false}
+    if lhs.commit != rhs.commit {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
 nonisolated extension Portenv_Daemon_V1_StartAgentRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".StartAgentRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{3}agent_id\0")
@@ -6778,7 +6881,7 @@ nonisolated extension Portenv_Daemon_V1_StopAgentResponse: SwiftProtobuf.Message
 
 nonisolated extension Portenv_Daemon_V1_AnswerDecisionRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".AnswerDecisionRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{3}decision_id\0\u{1}approve\0\u{1}note\0\u{1}choice\0\u{3}choice_label\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{3}decision_id\0\u{1}approve\0\u{1}note\0\u{1}choice\0\u{3}choice_label\0\u{3}remove_items\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -6792,6 +6895,7 @@ nonisolated extension Portenv_Daemon_V1_AnswerDecisionRequest: SwiftProtobuf.Mes
       case 4: try { try decoder.decodeSingularStringField(value: &self.note) }()
       case 5: try { try decoder.decodeSingularInt32Field(value: &self.choice) }()
       case 6: try { try decoder.decodeSingularStringField(value: &self.choiceLabel) }()
+      case 7: try { try decoder.decodeRepeatedStringField(value: &self.removeItems) }()
       default: break
       }
     }
@@ -6816,6 +6920,9 @@ nonisolated extension Portenv_Daemon_V1_AnswerDecisionRequest: SwiftProtobuf.Mes
     if !self.choiceLabel.isEmpty {
       try visitor.visitSingularStringField(value: self.choiceLabel, fieldNumber: 6)
     }
+    if !self.removeItems.isEmpty {
+      try visitor.visitRepeatedStringField(value: self.removeItems, fieldNumber: 7)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -6826,6 +6933,7 @@ nonisolated extension Portenv_Daemon_V1_AnswerDecisionRequest: SwiftProtobuf.Mes
     if lhs.note != rhs.note {return false}
     if lhs.choice != rhs.choice {return false}
     if lhs.choiceLabel != rhs.choiceLabel {return false}
+    if lhs.removeItems != rhs.removeItems {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

@@ -27,3 +27,8 @@ func fileProjectOps() projectOps {
 func statType(st *unix.Stat_t) uint32 { return uint32(st.Mode) & unix.S_IFMT }
 
 func statDev(st *unix.Stat_t) uint64 { return uint64(st.Dev) } // #nosec G115 -- a device number
+
+// fileLensOps: ACLs are Linux's.
+func fileLensOps() lensOps {
+	return lensOps{set: func(*os.File, bool, []uint32, bool) error { return errors.ErrUnsupported }}
+}

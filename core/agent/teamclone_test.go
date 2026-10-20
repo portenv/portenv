@@ -76,7 +76,7 @@ func cloneIn(t *testing.T, project, home, quota string) (CloneResult, []string, 
 	t.Helper()
 	var calls []string
 	var out bytes.Buffer
-	err := cloneOwn(context.Background(), project, home, "builder", quota, testGit(t, home, &calls), &out)
+	err := cloneOwn(context.Background(), project, home, "builder", quota, "Builder", testGit(t, home, &calls), &out)
 	var r CloneResult
 	if err == nil {
 		if jerr := json.Unmarshal(out.Bytes(), &r); jerr != nil {
@@ -120,6 +120,18 @@ func TestCloneOwnMakesTheAgentsClone(t *testing.T) {
 	}
 	if got := gitOut(t, home, dest, "log", "--format=%s"); got != "first" {
 		t.Errorf("log %q, want the owner's commit", got)
+	}
+	// Its git identity, in the clone's own config (R-0328): an agent's
+	// commit says whose it is.
+	if got := gitOut(t, home, dest, "config", "--local", "--get", "user.name"); got != "Builder (Portenv agent)" {
+		t.Errorf("user.name %q", got)
+	}
+	if got := gitOut(t, home, dest, "config", "--local", "--get", "user.email"); got != "builder@agents.portenv.invalid" {
+		t.Errorf("user.email %q", got)
+	}
+	gitOut(t, home, dest, "commit", "--quiet", "--allow-empty", "-m", "builder's")
+	if got := gitOut(t, home, dest, "log", "-1", "--format=%an <%ae>|%cn <%ce>"); got != "Builder (Portenv agent) <builder@agents.portenv.invalid>|Builder (Portenv agent) <builder@agents.portenv.invalid>" {
+		t.Errorf("an agent's commit is by %q", got)
 	}
 	if !slices.ContainsFunc(calls, func(c string) bool {
 		return strings.HasPrefix(c, "clone --quiet --no-hardlinks --origin owner -- "+project+" ")
@@ -229,7 +241,7 @@ func TestCloneOwnRefuses(t *testing.T) {
 			{project, home, "builder", "0"},
 		} {
 			var calls []string
-			if err := cloneOwn(context.Background(), args[0], args[1], args[2], args[3], testGit(t, home, &calls), &bytes.Buffer{}); err == nil {
+			if err := cloneOwn(context.Background(), args[0], args[1], args[2], args[3], "Builder", testGit(t, home, &calls), &bytes.Buffer{}); err == nil {
 				t.Errorf("clone-own %v accepted", args)
 			}
 		}
@@ -248,11 +260,11 @@ func TestStartTeamAgentMakesItsClone(t *testing.T) {
 		return json.Marshal(CloneResult{Dir: "/home/builder/shop", Made: true, Branch: "agent/builder"})
 	}
 	if _, err := s.StartTeamAgent(context.Background(), &agentv1.StartTeamAgentRequest{
-		AgentId: "builder", Argv: []string{"claude"}, HomeQuotaBytes: 2 << 30, CloneProjectDir: "/home/work/shop",
+		AgentId: "builder", AgentName: "Builder", Argv: []string{"claude"}, HomeQuotaBytes: 2 << 30, CloneProjectDir: "/home/work/shop",
 	}); err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"2001", "/home/builder", "clone-own", "/home/work/shop", "/home/builder", "builder", "2147483648"}
+	want := []string{"2001", "/home/builder", "clone-own", "/home/work/shop", "/home/builder", "builder", "2147483648", "Builder"}
 	if len(asked) != 1 || !slices.Equal(asked[0], want) {
 		t.Errorf("asked %q, want %q", asked, want)
 	}
@@ -282,6 +294,20 @@ func TestStartTeamAgentMakesItsClone(t *testing.T) {
 		}
 		if _, err := s3.StartTeamAgent(context.Background(), &agentv1.StartTeamAgentRequest{AgentId: "builder", Argv: []string{"claude"}, HomeQuotaBytes: 1, CloneProjectDir: bad}); err == nil {
 			t.Errorf("clone of %s accepted", bad)
+		}
+	}
+}
+
+func TestAgentGitIdentity(t *testing.T) {
+	for _, c := range [][4]string{
+		{"builder", "Builder", "Builder (Portenv agent)", "builder@agents.portenv.invalid"},
+		{"design-2", "Design Keeper", "Design Keeper (Portenv agent)", "design-2@agents.portenv.invalid"},
+		{"lead", "", "lead (Portenv agent)", "lead@agents.portenv.invalid"},
+		{"lead", "Lead\nEvil: x", "lead (Portenv agent)", "lead@agents.portenv.invalid"},
+		{"lead", strings.Repeat("L", 41), "lead (Portenv agent)", "lead@agents.portenv.invalid"},
+	} {
+		if n, e := AgentGitIdentity(c[0], c[1]); n != c[2] || e != c[3] {
+			t.Errorf("AgentGitIdentity(%q, %q) = %q, %q", c[0], c[1], n, e)
 		}
 	}
 }

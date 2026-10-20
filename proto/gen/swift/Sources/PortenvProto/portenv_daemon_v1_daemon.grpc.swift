@@ -763,6 +763,45 @@ public enum Portenv_Daemon_V1_DaemonService: Sendable {
                 type: .unary
             )
         }
+        /// Namespace for "WakeAgent" metadata.
+        public enum WakeAgent: Sendable {
+            /// Request type for "WakeAgent".
+            public typealias Input = Portenv_Daemon_V1_WakeAgentRequest
+            /// Response type for "WakeAgent".
+            public typealias Output = Portenv_Daemon_V1_WakeAgentResponse
+            /// Descriptor for "WakeAgent".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "WakeAgent",
+                type: .unary
+            )
+        }
+        /// Namespace for "ListDecisions" metadata.
+        public enum ListDecisions: Sendable {
+            /// Request type for "ListDecisions".
+            public typealias Input = Portenv_Daemon_V1_ListDecisionsRequest
+            /// Response type for "ListDecisions".
+            public typealias Output = Portenv_Daemon_V1_ListDecisionsResponse
+            /// Descriptor for "ListDecisions".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "ListDecisions",
+                type: .unary
+            )
+        }
+        /// Namespace for "Deploy" metadata.
+        public enum Deploy: Sendable {
+            /// Request type for "Deploy".
+            public typealias Input = Portenv_Daemon_V1_DeployRequest
+            /// Response type for "Deploy".
+            public typealias Output = Portenv_Daemon_V1_DeployResponse
+            /// Descriptor for "Deploy".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "Deploy",
+                type: .unary
+            )
+        }
         /// Descriptors for all methods in the "portenv.daemon.v1.DaemonService" service.
         public static let descriptors: [GRPCCore.MethodDescriptor] = [
             GetVersion.descriptor,
@@ -821,7 +860,10 @@ public enum Portenv_Daemon_V1_DaemonService: Sendable {
             ListAgentFiles.descriptor,
             ReadAgentFile.descriptor,
             AddAgentFiles.descriptor,
-            SetRoutinePaused.descriptor
+            SetRoutinePaused.descriptor,
+            WakeAgent.descriptor,
+            ListDecisions.descriptor,
+            Deploy.descriptor
         ]
     }
 }
@@ -2194,6 +2236,82 @@ extension Portenv_Daemon_V1_DaemonService {
             deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_SetRoutinePausedResponse>,
             options: GRPCCore.CallOptions,
             onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_SetRoutinePausedResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "WakeAgent" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > The owner's portenv wake (ADR 0027 §5): types the agent's fixed
+        /// > wake-up line for its unread messages, under the helper's checks, so a
+        /// > busy agent is never typed into. Refused, with a plain line, when the
+        /// > agent isn't running, has nothing unread, or its runner can't be woken.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_WakeAgentRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_WakeAgentRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_WakeAgentResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func wakeAgent<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_WakeAgentRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_WakeAgentRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_WakeAgentResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_WakeAgentResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "ListDecisions" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > The workspace's decisions, oldest first: pending ones only unless
+        /// > all is set (portenv decision list). Read only.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_ListDecisionsRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_ListDecisionsRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_ListDecisionsResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func listDecisions<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_ListDecisionsRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_ListDecisionsRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_ListDecisionsResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ListDecisionsResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "Deploy" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > The owner's portenv deploy (ADR 0027 §5, ADR 0026): refused with a
+        /// > plain line when the project has no deploy runbook, and, until ADR
+        /// > 0026's run-with-secret is built, refused when it has one too. Nothing
+        /// > runs.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_DeployRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_DeployRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_DeployResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func deploy<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_DeployRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_DeployRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_DeployResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_DeployResponse>) async throws -> Result
         ) async throws -> Result where Result: Sendable
     }
 
@@ -4182,6 +4300,115 @@ extension Portenv_Daemon_V1_DaemonService {
                 onResponse: handleResponse
             )
         }
+
+        /// Call the "WakeAgent" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > The owner's portenv wake (ADR 0027 §5): types the agent's fixed
+        /// > wake-up line for its unread messages, under the helper's checks, so a
+        /// > busy agent is never typed into. Refused, with a plain line, when the
+        /// > agent isn't running, has nothing unread, or its runner can't be woken.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_WakeAgentRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_WakeAgentRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_WakeAgentResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func wakeAgent<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_WakeAgentRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_WakeAgentRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_WakeAgentResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_WakeAgentResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.WakeAgent.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
+
+        /// Call the "ListDecisions" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > The workspace's decisions, oldest first: pending ones only unless
+        /// > all is set (portenv decision list). Read only.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_ListDecisionsRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_ListDecisionsRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_ListDecisionsResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func listDecisions<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_ListDecisionsRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_ListDecisionsRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_ListDecisionsResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ListDecisionsResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.ListDecisions.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
+
+        /// Call the "Deploy" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > The owner's portenv deploy (ADR 0027 §5, ADR 0026): refused with a
+        /// > plain line when the project has no deploy runbook, and, until ADR
+        /// > 0026's run-with-secret is built, refused when it has one too. Nothing
+        /// > runs.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_DeployRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_DeployRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_DeployResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func deploy<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_DeployRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_DeployRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_DeployResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_DeployResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.Deploy.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
     }
 }
 
@@ -5864,6 +6091,100 @@ extension Portenv_Daemon_V1_DaemonService.ClientProtocol {
             request: request,
             serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_SetRoutinePausedRequest>(),
             deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_SetRoutinePausedResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "WakeAgent" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > The owner's portenv wake (ADR 0027 §5): types the agent's fixed
+    /// > wake-up line for its unread messages, under the helper's checks, so a
+    /// > busy agent is never typed into. Refused, with a plain line, when the
+    /// > agent isn't running, has nothing unread, or its runner can't be woken.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_WakeAgentRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func wakeAgent<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_WakeAgentRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_WakeAgentResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.wakeAgent(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_WakeAgentRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_WakeAgentResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "ListDecisions" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > The workspace's decisions, oldest first: pending ones only unless
+    /// > all is set (portenv decision list). Read only.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_ListDecisionsRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func listDecisions<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_ListDecisionsRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ListDecisionsResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.listDecisions(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_ListDecisionsRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_ListDecisionsResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "Deploy" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > The owner's portenv deploy (ADR 0027 §5, ADR 0026): refused with a
+    /// > plain line when the project has no deploy runbook, and, until ADR
+    /// > 0026's run-with-secret is built, refused when it has one too. Nothing
+    /// > runs.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_DeployRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func deploy<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_DeployRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_DeployResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.deploy(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_DeployRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_DeployResponse>(),
             options: options,
             onResponse: handleResponse
         )
@@ -7779,6 +8100,112 @@ extension Portenv_Daemon_V1_DaemonService.ClientProtocol {
             metadata: metadata
         )
         return try await self.setRoutinePaused(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "WakeAgent" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > The owner's portenv wake (ADR 0027 §5): types the agent's fixed
+    /// > wake-up line for its unread messages, under the helper's checks, so a
+    /// > busy agent is never typed into. Refused, with a plain line, when the
+    /// > agent isn't running, has nothing unread, or its runner can't be woken.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func wakeAgent<Result>(
+        _ message: Portenv_Daemon_V1_WakeAgentRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_WakeAgentResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_WakeAgentRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.wakeAgent(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "ListDecisions" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > The workspace's decisions, oldest first: pending ones only unless
+    /// > all is set (portenv decision list). Read only.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func listDecisions<Result>(
+        _ message: Portenv_Daemon_V1_ListDecisionsRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ListDecisionsResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_ListDecisionsRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.listDecisions(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "Deploy" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > The owner's portenv deploy (ADR 0027 §5, ADR 0026): refused with a
+    /// > plain line when the project has no deploy runbook, and, until ADR
+    /// > 0026's run-with-secret is built, refused when it has one too. Nothing
+    /// > runs.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func deploy<Result>(
+        _ message: Portenv_Daemon_V1_DeployRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_DeployResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_DeployRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.deploy(
             request: request,
             options: options,
             onResponse: handleResponse

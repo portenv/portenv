@@ -46,7 +46,7 @@ type GuideCommand struct {
 
 // guideTypes are the messages an agent reads (inbox, whoami, team status).
 var guideTypes = []protoreflect.ProtoMessage{
-	&typesv1.BoardMessage{}, &typesv1.Decision{}, &typesv1.HandoffFile{}, &typesv1.AgentStatus{},
+	&typesv1.BoardMessage{}, &typesv1.Decision{}, &typesv1.MigrationItem{}, &typesv1.HandoffFile{}, &typesv1.AgentStatus{},
 	&typesv1.AgentGrant{}, &typesv1.PackagePlan{}, &agentv1.InboxResult{}, &agentv1.WhoAmIResult{},
 	&agentv1.Teammate{}, &agentv1.TeamStatusResult{},
 }

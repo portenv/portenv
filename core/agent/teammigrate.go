@@ -95,6 +95,9 @@ const maxMigrationItems = 200
 type PrepareOptions struct {
 	CloneAgents []string
 	HomeQuota   int64
+	// Names are the agents' display names, by id, for their clones' git
+	// identity.
+	Names map[string]string
 }
 
 // migrateOps are the move's looks and changes as root, and its runs as an
@@ -591,7 +594,7 @@ func (t *TeamUsers) cloneAndCopy(ctx context.Context, project string, rec *migra
 			continue // never started: it gets its clone at its start
 		}
 		home := t.home(id)
-		out, err := ops.asAgent(ctx, u.UID, home, []string{"clone-own", project, home, id, quota}, nil)
+		out, err := ops.asAgent(ctx, u.UID, home, []string{"clone-own", project, home, id, quota, opt.Names[id]}, nil)
 		if err != nil {
 			return fmt.Errorf("%s's copy of the project: %w", id, err)
 		}

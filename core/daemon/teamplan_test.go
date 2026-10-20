@@ -3,9 +3,9 @@
 package daemon
 
 import (
-	"fmt"
 	"context"
 	"errors"
+	"fmt"
 	"io/fs"
 	"net"
 	"os"

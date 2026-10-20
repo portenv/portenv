@@ -372,7 +372,7 @@ func (w *writeFetchStream) SendAndClose(r *agentv1.WriteFetchBundleResponse) err
 	w.resp = r
 	return nil
 }
-func (w *writeFetchStream) Context() context.Context      { return w.ctx }
+func (w *writeFetchStream) Context() context.Context     { return w.ctx }
 func (w *writeFetchStream) SetHeader(metadata.MD) error  { return nil }
 func (w *writeFetchStream) SendHeader(metadata.MD) error { return nil }
 func (w *writeFetchStream) SetTrailer(metadata.MD)       {}

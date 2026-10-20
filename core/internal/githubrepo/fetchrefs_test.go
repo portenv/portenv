@@ -76,13 +76,13 @@ func TestFetchRefsRefuses(t *testing.T) {
 		wants []Ref
 		haves []string
 	}{
-		"nothing":            {nil, nil},
-		"a pull ref":         {[]Ref{{Name: "refs/pull/1/head", SHA: main}}, nil},
-		"not on the remote":  {[]Ref{{Name: "refs/heads/nope", SHA: main}}, nil},
-		"another object":     {[]Ref{{Name: "refs/heads/main", SHA: strings.Repeat("1", 40)}}, nil},
-		"a bad have":         {[]Ref{{Name: "refs/heads/main", SHA: main}}, []string{"zz"}},
-		"a ref with ..":      {[]Ref{{Name: "refs/heads/../main", SHA: main}}, nil},
-		"too many haves":     {[]Ref{{Name: "refs/heads/main", SHA: main}}, bytes2haves(300)},
+		"nothing":           {nil, nil},
+		"a pull ref":        {[]Ref{{Name: "refs/pull/1/head", SHA: main}}, nil},
+		"not on the remote": {[]Ref{{Name: "refs/heads/nope", SHA: main}}, nil},
+		"another object":    {[]Ref{{Name: "refs/heads/main", SHA: strings.Repeat("1", 40)}}, nil},
+		"a bad have":        {[]Ref{{Name: "refs/heads/main", SHA: main}}, []string{"zz"}},
+		"a ref with ..":     {[]Ref{{Name: "refs/heads/../main", SHA: main}}, nil},
+		"too many haves":    {[]Ref{{Name: "refs/heads/main", SHA: main}}, bytes2haves(300)},
 	} {
 		var b bytes.Buffer
 		if err := FetchRefs(context.Background(), http.DefaultClient, r.url, "tok", tc.wants, tc.haves, &b, 1<<20); err == nil {

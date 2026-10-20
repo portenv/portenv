@@ -224,12 +224,18 @@ func contains(l []string, s string) bool {
 // and nothing is unbundled.
 func TestAFetchsBundleIsCheckedFirst(t *testing.T) {
 	for name, mangle := range map[string]func([]byte) []byte{
-		"a pull ref":      func(b []byte) []byte { return bytes.Replace(b, []byte(" refs/heads/main"), []byte(" refs/pull/1/he"), 1) },
-		"a cut pack":      func(b []byte) []byte { return b[:len(b)-30] },
-		"not a bundle":    func([]byte) []byte { return []byte("hello\n\n") },
-		"a ref with ..":   func(b []byte) []byte { return bytes.Replace(b, []byte(" refs/heads/main"), []byte(" refs/heads/.."), 1) },
-		"a want missing":  func(b []byte) []byte { return bytes.Replace(b, []byte(" refs/heads/main"), []byte(" refs/heads/nain"), 1) },
-		"version 3":       func(b []byte) []byte { return append([]byte("# v3 git bundle\n"), b[len("# v2 git bundle\n"):]...) },
+		"a pull ref": func(b []byte) []byte {
+			return bytes.Replace(b, []byte(" refs/heads/main"), []byte(" refs/pull/1/he"), 1)
+		},
+		"a cut pack":   func(b []byte) []byte { return b[:len(b)-30] },
+		"not a bundle": func([]byte) []byte { return []byte("hello\n\n") },
+		"a ref with ..": func(b []byte) []byte {
+			return bytes.Replace(b, []byte(" refs/heads/main"), []byte(" refs/heads/.."), 1)
+		},
+		"a want missing": func(b []byte) []byte {
+			return bytes.Replace(b, []byte(" refs/heads/main"), []byte(" refs/heads/nain"), 1)
+		},
+		"version 3": func(b []byte) []byte { return append([]byte("# v3 git bundle\n"), b[len("# v2 git bundle\n"):]...) },
 	} {
 		r := newFetchRig(t)
 		n := r.commit(r.other, "two")

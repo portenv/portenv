@@ -317,6 +317,14 @@ From the own-route rule (ADR 0008):
 - Never required, never blocking, no banners or badges asking for an account, no "coming soon" items.
 - If the service is unreachable, say so only when the user picks that option: "Can't reach Portenv right now. Your workspaces keep working."
 
+### 9.1 Settings › Experimental (ADR 0027, phase 1)
+
+- **Smart input** is one switch, off by default. Off, the terminal is exactly as it was: no marker, no call, no key read. Its line says what it does in plain words.
+- **Recognising requests:** "Built-in rules" (the default, on this Mac) or "jev (TypeSafe)". **Suggestions:** "Anthropic" or "None". Each hosted choice says, in its line, exactly what it receives. Its model is a text field with the default as the placeholder; jev also has "Confidence needed" (0.5 to 1, 0.8 to start). These rows are dimmed while the switch is off.
+- **Keys:** one row per hosted adapter: a secure field ("Paste a key"), Save and Remove. A saved key is never shown back, in full or in part: the row says "Saved on 19 Oct" or "Not set". A paste that can't be a key gets "That doesn't look like a key. Paste it again, without spaces." The footer says where keys live: "Keys are kept in this Mac's Keychain and used only by this app. Portenv's background service, the workspace and agents never see them."
+- **Usage on this Mac:** one row per adapter that has been asked: requests, fell through, failed, typical and slowest-5% latency, tokens in and out, the answering model; and Reset. Numbers only, never a line or an answer.
+- A failed or slow adapter never shows an alert or a badge: the line is sent as typed (ADR 0027 §4), and only the counter records it.
+
 ---
 
 ## 10. Writing

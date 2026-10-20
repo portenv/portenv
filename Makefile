@@ -270,6 +270,8 @@ app: build $(TOOLS_STAMP)
 	# portenvd's launch agent (the login item; SMAppService.agent registers it).
 	mkdir -p $(BIN)/Portenv.app/Contents/Library/LaunchAgents
 	cp apps/mac/LaunchAgents/com.portenv.portenvd.plist $(BIN)/Portenv.app/Contents/Library/LaunchAgents/
+	# The CLI's command list (ADR 0027 §7), for the editor's completions and suggestions.
+	mkdir -p $(BIN)/Portenv.app/Contents/Resources && cp apps/mac/Resources/portenv-commands.json $(BIN)/Portenv.app/Contents/Resources/
 	mkdir -p $(BIN)/Portenv.app/Contents/Resources && for b in "$(APP_BUILD)"/release/*.bundle; do [ -e "$$b" ] && cp -R "$$b" $(BIN)/Portenv.app/Contents/Resources/; done; true
 	# Third-party notices (R-0096): the licence files of every Go module in the
 	# helpers (read from the binaries), Go's own, and every Swift pin, plus

@@ -5,8 +5,8 @@ package githubrepo
 import (
 	"bufio"
 	"bytes"
-	"crypto/sha1" // #nosec G505 -- git's pack checksum
 	"context"
+	"crypto/sha1" // #nosec G505 -- git's pack checksum
 	"errors"
 	"fmt"
 	"io"

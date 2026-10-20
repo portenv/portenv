@@ -24,8 +24,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	"golang.org/x/term"

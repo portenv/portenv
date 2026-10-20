@@ -32,6 +32,9 @@ public final class TeamController {
     public private(set) var review: AgentFileReview?
     private let daemon: DaemonAPI
     private let retry: Duration
+    /// Told after the team changes (from the stream, or an answer given
+    /// here): the session's notifications and the Dock badge (§5).
+    @ObservationIgnored public var changed: (@MainActor (TeamState) -> Void)?
 
     public init(box: String, daemon: DaemonAPI, retry: Duration = .seconds(1)) {
         self.box = box
@@ -54,6 +57,7 @@ public final class TeamController {
                 for try await (event, cursor) in daemon.watchTeam(box, cursor: state.cursor) {
                     state.apply(event, cursor: cursor)
                     if case .removed(let id) = event, selection == .agent(id) { selection = .allTabs }
+                    changed?(state)
                 }
             } catch let e as DaemonError where e.message == DaemonError.outOfDate {
                 supported = false
@@ -90,11 +94,29 @@ public final class TeamController {
 
     private func answered(_ d: TeamDecision) {
         state.apply(.decision(d))
+        changed?(state)
         if selection == .decision(d.id), !d.answerable {
             let next = d.state == .approved ? d.startAgents.first { state.agent($0) != nil } : nil
             selection = next.map { .agent($0) } ?? .allTabs
         }
     }
+
+    /// The Team section's Raise, after the owner confirmed it (R-0347):
+    /// Agents allowed goes to `n` through portenvd, which then sends the
+    /// new limit in WatchTeam. A refusal is the section's error line.
+    public func raiseAgentLimit(to n: Int) async {
+        do {
+            _ = try await AgentsAllowed.set(n, daemon: daemon)
+            limitError = nil
+        } catch let e as DaemonError {
+            limitError = e.message
+        } catch {
+            limitError = error.localizedDescription
+        }
+    }
+
+    /// Why the last Raise was refused; shown under the limit's line.
+    public private(set) var limitError: String?
 
     /// The owner's message to an agent. Nothing is sent when it's empty.
     public func send(_ text: String, to agent: String, thread: String = "") async {
@@ -212,7 +234,10 @@ public final class TeamController {
     public func closeFile() { review = nil }
 
     /// Tests: an event as if from the stream.
-    func receive(_ event: TeamEvent) { state.apply(event) }
+    func receive(_ event: TeamEvent) {
+        state.apply(event)
+        changed?(state)
+    }
 
     public func dismissError() { error = nil }
 

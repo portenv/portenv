@@ -218,6 +218,8 @@ public enum TeamEvent: Equatable, Sendable {
     case message(TeamMessage)
     case decision(TeamDecision)
     case removed(String)
+    /// The team against the owner's agent limit (R-0347).
+    case limit(TeamLimit)
 }
 
 /// The team as the app knows it: the stream's events folded in.
@@ -228,6 +230,9 @@ public struct TeamState: Equatable, Sendable {
     public private(set) var messages: [TeamMessage] = []
     /// Every decision, by first appearance, at its latest state.
     public private(set) var decisions: [TeamDecision] = []
+    /// The team against the owner's agent limit (R-0347); nil from a
+    /// portenvd that doesn't send it.
+    public private(set) var limit: TeamLimit?
     /// Where the stream got to.
     public private(set) var cursor = ""
 
@@ -248,6 +253,8 @@ public struct TeamState: Equatable, Sendable {
             if !messages.contains(where: { $0.id == m.id }) { messages.append(m) }
         case .decision(let d):
             if let i = decisions.firstIndex(where: { $0.id == d.id }) { decisions[i] = d } else { decisions.append(d) }
+        case .limit(let l):
+            limit = l
         }
         if !cursor.isEmpty { self.cursor = cursor }
     }

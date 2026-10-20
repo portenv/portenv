@@ -83,6 +83,11 @@ public protocol DaemonAPI: Sendable {
     /// Pins the agent file whose text hashes to `sha256`; only the owner's
     /// app calls it (R-0285).
     func approveAgentFile(_ box: String, id: String, sha256: String) async throws -> TeamAgent
+    /// Settings › Team › Agents allowed (R-0347), as portenvd keeps it.
+    func agentsAllowed() async throws -> Int
+    /// Sets it; portenvd refuses anything outside 1 to 8. Only after the
+    /// owner chose it.
+    func setAgentsAllowed(_ n: Int) async throws -> Int
 }
 
 public extension DaemonAPI {
@@ -111,6 +116,8 @@ public extension DaemonAPI {
     func stopAgent(_: String, id _: String) async throws -> TeamAgent { throw DaemonError(DaemonError.outOfDate) }
     func getAgentFile(_: String, id _: String) async throws -> AgentFileContent { throw DaemonError(DaemonError.outOfDate) }
     func approveAgentFile(_: String, id _: String, sha256 _: String) async throws -> TeamAgent { throw DaemonError(DaemonError.outOfDate) }
+    func agentsAllowed() async throws -> Int { throw DaemonError(DaemonError.outOfDate) }
+    func setAgentsAllowed(_: Int) async throws -> Int { throw DaemonError(DaemonError.outOfDate) }
 }
 
 /// A box saved in the background after Quit Anyway.

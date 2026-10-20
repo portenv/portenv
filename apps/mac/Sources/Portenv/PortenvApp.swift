@@ -56,6 +56,10 @@ struct PortenvApp: App {
             AppRoot(model: model)
                 .task {
                     delegate.sessions = model.sessions
+                    // The workspace whose tab is in front, as Notifier
+                    // reads it (R-0344).
+                    NeedsYouNotifications.shared.frontWorkspace = { Notifier.frontWorkspace() }
+                    NeedsYouNotifications.shared.show = { [model] route in model.show(route) }
                     delegate.runningNames = { [model] in model.knownRunning }
                 }
         }
@@ -128,6 +132,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         OnScreen.fixAll()
+        // Needs-you notifications: their delegate and Show (no permission
+        // asked here, §5).
+        NeedsYouNotifications.shared.install()
         // ⌃Tab / ⌃⇧Tab: the next and previous workspace tab (R-0345).
         controlTab = WorkspaceWindows.watchControlTab()
         // SIGTERM (Xcode's Stop, logout, kill) and SIGINT (Ctrl-C in the

@@ -167,6 +167,8 @@ A sheet on the window, the only confirmation in the app that asks for typing (Pr
     - **The host shows in punycode,** so a look-alike domain shows as `xn--…`.
     - **A link with any control or bidi character never opens,** since those could hide or reorder part of it. The state line says "Portenv won't open a link with hidden characters".
     - **A link with a user name before the address never opens** either (`https://apple.com@evil.com/` reads as apple.com). The state line names where it really goes, never the user name or password: "Portenv won't open a link with a user name before the address. It goes to evil.com."
+- **Right-click in the terminal** shows Copy (only with a selection), Paste, Select All and Find… (the same find bar as ⌘F), as in Terminal. Every item acts on the pane clicked. Paste is the only item that sends anything to the tab, and it takes the same path as ⌘V (cleaned, bracketed when the program asked); dropped text and Services stay refused (R-0167). Copy Output joins it once blocks ship.
+- **No blank terminal** (R-0384): until a tab's terminal first shows, the pane says "Opening <tab>…" with a small spinner (no spinner with Reduce Motion), or "Opening <workspace>…" while the tabs (or the workspace's window) aren't ready yet; first run says "Starting Portenv…" until its first step is ready. A workspace gone before it opens goes to the list, saying so. If it fails before then, or sends nothing at all for 20 s, it says "Couldn't open <tab>", the reason, and Try Again, in place of the terminal; once a tab has shown, trouble is Reconnecting… and Disconnected as before.
 - **Closing a tab that still runs a program asks first:** "Close this tab? <program> is still running.", with Close Tab and Cancel. The program is the tab's foreground process as the workspace helper reports it at that moment. A tab with only its shell closes without asking. The last tab has no close button; ⌘W closes the window instead.
 
 ### 4.2 Blocks
@@ -219,10 +221,14 @@ Shown when a program in the visible tab is waiting for an answer that Portenv ca
 | Waiting for input | orange dot on the tab | inline answer card | notification with answer buttons |
 | Agent connected or revoked | — | avatar appears or leaves | notification |
 | Move finished | — | state line | notification only if the move took longer than 10 s |
+| A new decision in Needs you (6.2) | the count in the workspace's window tab | its row in Needs you | notification with Show only |
 
 Notification rules:
 - Title: `<workspace> · <who> is asking` or `<workspace> · <event>`. Body: the question or result in one line. Subtitle line: who started it and where.
-- Answer buttons in the notification are the same two as the card, plus "Show".
+- Answer buttons in the notification are the same two as the card, plus "Show". A decision (6.2) never has answer buttons: Show only, whatever it asks, an agent file or the team's first start included. Clicking a notification, or Show, brings its workspace forward with the question selected (a decision as its Needs-you row selects it).
+- "Window not in front" means that workspace's own window: another workspace's window in front still gets the notification. A notification is taken back once its question is answered, expired or gone.
+- A password prompt's notification says only that it asks; its text stays in the terminal.
+- **Dock badge:** the number of Needs-you decisions across every workspace a window shows, cleared at 0.
 - One notification per question; a newer state replaces the older notification, it doesn't stack.
 - Notifications respect Focus modes and the user's per-app settings. No sound by default.
 - Dots always come with a text label for VoiceOver and a tooltip; colour is never the only signal.
@@ -277,6 +283,11 @@ The Team section is the workspace's sidebar when the workspace has a team (agent
   3. **Team:** You first ("You", with your tab count), then one row per agent in agent-file order, then files that can't start, then **Add Agent…**.
 - An agent row: avatar, name, status as a word and a symbol, and the agent's latest board line, one line, truncated. Statuses: ▶ running (accent), ◌ idle, ■ stopped, ● needs you (orange), ⚠ can't start (red, with portenvd's reason as the line), starting. Colour never carries the status alone.
 - Remote agents (ADR 0022 §10) appear only once a remote way in exists, under **Connected from outside**, as connected or disconnected. Portenv never starts them.
+- **The agent limit** (R-0347): **Settings › Team › Agents allowed** is how many agents can run at once in one workspace, 1 to 8, 4 by default, for every workspace on the Mac. `portenvd` keeps and enforces it; the app only shows it. Its line: "How many agents can run at once in one workspace, from 1 to 8. Lowering it stops no agent that's running." Below the agent rows, the Team section shows `portenvd`'s line about it:
+  - one short of the limit or at it, a quiet secondary line: "3 of 4 agents allowed in this workspace.", "4 of 4 agents allowed: the team is at your limit.";
+  - over it, a warning (orange ⚠ and primary text): "This team has 6 agents, and you allow 4 in a workspace: only 4 can run at once.", with **Raise to 6…**, which asks first: "Allow 6 agents in each workspace?", "Agents allowed in Settings › Team goes from 4 to 6, for every workspace on this Mac. You can lower it there.", **Allow 6** and Cancel. The raise is the owner's choice, never automatic;
+  - after a lower setting: "6 agents are running, and you now allow 4. They keep running; no more start until fewer than 4 run." Lowering never stops an agent.
+  - A Start or Approve past the limit is refused by `portenvd` with one line under the button that says what to do: "Builder can't start: 4 agents are running in this workspace, and you allow 4. Stop one, or raise Agents allowed in Portenv's Settings › Team."
 
 **Selecting:**
 - **An agent:** its tabs expand beneath its row, the tab bar shows only its tabs (named "Builder · tests"), with **All tabs** at its trailing end, and its column takes the inspector's place: who it runs as, its runner and its pane grant ("Runs as user builder · Claude Code · may open 4 panes"), its messages with you, its Team section, its Agent files, and a field to message it (R-0313, R-0314).

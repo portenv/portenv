@@ -331,7 +331,16 @@ func (s *Server) ApplyTeamPlan(ctx context.Context, req *daemonv1.ApplyTeamPlanR
 	// The project first (ADR 0025 §2). A clone that fails writes and pins
 	// nothing, and the setup stays for Try Again.
 	if setup.GetProject().GetGithubUrl() != "" {
-		if o := s.cloneProject(ctx, h, req.GetName(), setup.GetProject(), req.GetGithubToken(), planned); o != nil {
+		o := s.cloneProject(ctx, h, req.GetName(), setup.GetProject(), req.GetGithubToken(), planned)
+		if o == nil {
+			// The workspace's own repository, the one pushes go to (R-0391).
+			if repo, err := githubrepo.Parse(setup.GetProject().GetGithubUrl()); err == nil {
+				if err := keepGitHubRepo(state, repo.URL()); err != nil {
+					return nil, err
+				}
+			}
+		}
+		if o != nil {
 			if o.needToken {
 				return &daemonv1.ApplyTeamPlanResponse{NeedsToken: true}, nil
 			}

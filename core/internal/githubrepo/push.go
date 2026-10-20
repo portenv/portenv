@@ -118,9 +118,9 @@ func ListRemote(ctx context.Context, c *http.Client, url, token string) ([]Ref, 
 	return refs, nil
 }
 
-// checkUpdates refuses a push that names refs Portenv doesn't push, a
+// CheckUpdates refuses a push that names refs Portenv doesn't push, a
 // bad object name, or the same ref twice.
-func checkUpdates(updates []Update) error {
+func CheckUpdates(updates []Update) error {
 	if len(updates) == 0 || len(updates) > maxPushUpdates {
 		return fmt.Errorf("a push names 1 to %d refs", maxPushUpdates)
 	}
@@ -198,7 +198,7 @@ func Push(ctx context.Context, c *http.Client, url, token string, updates []Upda
 }
 
 func pushWithLimit(ctx context.Context, c *http.Client, url, token string, updates []Update, bundle io.Reader, limit int64) ([]RefStatus, error) {
-	if err := checkUpdates(updates); err != nil {
+	if err := CheckUpdates(updates); err != nil {
 		return nil, err
 	}
 	needsPack := false

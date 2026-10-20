@@ -288,7 +288,7 @@ struct PDFPageView: View {
 
 /// Markdown, drawn by Portenv's own views from the parsed blocks: no HTML,
 /// no CSS, no fonts or images from the file. A link shows its text with its
-/// URL beside it, and a click goes through the link rules.
+/// URL beside it, and a click asks before anything opens.
 struct MarkdownBlocks: View {
     let blocks: [AttachmentMarkdown.Block]
     @State private var confirm: (URL, String)?
@@ -301,14 +301,14 @@ struct MarkdownBlocks: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .textSelection(.enabled)
         .environment(\.openURL, OpenURLAction { url in
+            // Every link asks first (R-0393); Open is never the default.
             switch AttachmentLink.policy(url.absoluteString) {
-            case .open(let u): NSWorkspace.shared.open(u)
-            case .confirm(let u, let shown): confirm = (u, shown)
+            case .confirm(let u, let question): confirm = (u, question)
             case .refuse: refused = url.absoluteString
             }
             return .handled
         })
-        .alert(confirm.map { AttachmentText.insecureLink($0.1) } ?? "", isPresented: Binding(get: { confirm != nil }, set: { if !$0 { confirm = nil } })) {
+        .alert(confirm?.1 ?? "", isPresented: Binding(get: { confirm != nil }, set: { if !$0 { confirm = nil } })) {
             Button("Cancel", role: .cancel) { confirm = nil }.keyboardShortcut(.defaultAction)
             Button("Open") {
                 if let u = confirm?.0 { NSWorkspace.shared.open(u) }

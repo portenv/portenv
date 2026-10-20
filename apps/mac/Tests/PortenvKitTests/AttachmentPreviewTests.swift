@@ -74,19 +74,31 @@ struct AttachmentPreviewTests {
         #expect(AttachmentMarkdown.parse(Data(deep.utf8)) == [.plain("deep")])
     }
 
-    // MARK: Links: shown with their URL, opened only by scheme
+    // MARK: Links: shown with their URL, opened only by scheme, never without asking
 
     @Test func linkPolicyPerScheme() throws {
-        #expect(AttachmentLink.policy("https://example.com/a") == .open(URL(string: "https://example.com/a")!))
-        #expect(AttachmentLink.policy("http://example.com/a") == .confirm(URL(string: "http://example.com/a")!, shown: "http://example.com/a"))
-        #expect(AttachmentLink.policy("mailto:a@example.com") == .confirm(URL(string: "mailto:a@example.com")!, shown: "mailto:a@example.com"))
+        // Every link asks first, https included (R-0393): nothing in an
+        // attachment opens on a single click.
+        #expect(AttachmentLink.policy("https://example.com/a")
+            == .confirm(URL(string: "https://example.com/a")!, question: "Open this link? https://example.com/a opens in your browser."))
+        #expect(AttachmentLink.policy("http://example.com/a")
+            == .confirm(URL(string: "http://example.com/a")!, question: "Open this link? http://example.com/a isn\u{2019}t a secure link."))
+        #expect(AttachmentLink.policy("mailto:a@example.com")
+            == .confirm(URL(string: "mailto:a@example.com")!, question: "Open this link? mailto:a@example.com isn\u{2019}t a secure link."))
         // International host names are shown in their ASCII form.
-        guard case .confirm(_, let shown) = AttachmentLink.policy("http://bücher.example/a") else { Issue.record("not confirmed"); return }
-        #expect(shown == "http://xn--bcher-kva.example/a")
-        for refused in ["file:///etc/passwd", "relative/path.md", "../x", "ssh://host", "vscode://open", "x-apple.systempreferences:", "javascript:alert(1)", "myapp://x", ""] {
+        for idn in ["http://bücher.example/a", "https://bücher.example/a"] {
+            guard case .confirm(_, let question) = AttachmentLink.policy(idn) else { Issue.record("\(idn) not confirmed"); return }
+            #expect(question.contains("://xn--bcher-kva.example/a") && !question.contains("ü"))
+        }
+        for refused in ["file:///etc/passwd", "relative/path.md", "../x", "ssh://host", "vscode://open", "x-apple.systempreferences:", "javascript:alert(1)", "myapp://x", "",
+                        "https://", "http://"] {
             #expect(AttachmentLink.policy(refused) == .refuse, "\(refused) isn't refused")
         }
-        #expect(AttachmentText.insecureLink("http://example.com/a") == "Open this link? http://example.com/a isn\u{2019}t a secure link.")
+        // No link of any scheme, case or shape opens without a question.
+        for link in ["https://example.com", "HTTPS://example.com/x", "https://user@example.com:8443/a?b#c", "http://example.com", "mailto:x@y.z", "file:///x", "ftp://x"] {
+            if case .confirm = AttachmentLink.policy(link) { continue }
+            #expect(AttachmentLink.policy(link) == .refuse, "\(link) opens without asking")
+        }
         #expect(AttachmentText.linkRefused == "Portenv doesn\u{2019}t open file or app links from attachments.")
     }
 

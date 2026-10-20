@@ -249,6 +249,7 @@ public enum AttachmentText {
     public static func panelHeading(_ n: Int) -> String { "Attachments \u{00B7} \(n)" }
     public static func mute(_ agent: String, muted: Bool) -> String { (muted ? "Unmute" : "Mute") + " Attachments from \(agent)" }
     public static func insecureLink(_ shown: String) -> String { "Open this link? \(shown) isn\u{2019}t a secure link." }
+    public static func secureLink(_ shown: String) -> String { "Open this link? \(shown) opens in your browser." }
 
     /// What's attached, as a notification's title says it.
     public static func attached(_ list: [TeamAttachment]) -> String {
@@ -286,21 +287,23 @@ public enum AttachmentText {
 }
 
 /// What a click on a link in a previewed attachment does (ADR 0030 point
-/// 5): https opens in the browser; http and mailto ask first, showing the
-/// whole URL with its host in ASCII; file, relative and every other scheme
-/// never open.
+/// 5, R-0393): every link asks first, with the whole URL and its host in
+/// ASCII: https says it opens in the browser, http and mailto that they
+/// aren't secure. file, relative and every other scheme never open. Nothing
+/// in an attachment opens on a single click.
 public enum AttachmentLink: Equatable, Sendable {
-    case open(URL)
-    case confirm(URL, shown: String)
+    /// Ask with this question, Cancel the default; open only on Open.
+    case confirm(URL, question: String)
     case refuse
 
     public static func policy(_ link: String) -> AttachmentLink {
         // URL's parser writes an international host in its ASCII form.
         guard let url = URL(string: link), let scheme = url.scheme?.lowercased() else { return .refuse }
+        let shown = url.absoluteString
         switch scheme {
-        case "https" where url.host?.isEmpty == false: return .open(url)
-        case "http" where url.host?.isEmpty == false: return .confirm(url, shown: url.absoluteString)
-        case "mailto": return .confirm(url, shown: url.absoluteString)
+        case "https" where url.host?.isEmpty == false: return .confirm(url, question: AttachmentText.secureLink(shown))
+        case "http" where url.host?.isEmpty == false: return .confirm(url, question: AttachmentText.insecureLink(shown))
+        case "mailto": return .confirm(url, question: AttachmentText.insecureLink(shown))
         default: return .refuse
         }
     }

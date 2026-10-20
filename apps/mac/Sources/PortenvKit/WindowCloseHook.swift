@@ -8,8 +8,9 @@ import AppKit
 /// content at the old screen's size on a second display (R-0077–R-0080).
 /// Instead, the close button's action comes here, and File › Close Tab ⌘W
 /// (TabCommands) calls `requestClose`; the File menu has no other Close.
-/// macOS's own window tabs are off: Portenv has its own tab bar, and a
-/// native tab's close would go around the hook (R-0081).
+/// Workspace windows are macOS window tabs (R-0344, R-0345): a native
+/// tab's close button is the window's own, which comes here too. Every
+/// other window keeps tabbing off.
 @MainActor
 public final class WindowCloseHook: NSObject {
     private static let hooks = NSMapTable<NSWindow, WindowCloseHook>.weakToStrongObjects()
@@ -27,11 +28,17 @@ public final class WindowCloseHook: NSObject {
         self.shouldClose = shouldClose
     }
 
+    /// The tab group workspace windows share (GUIDELINES §3.3).
+    public static let workspaceTabs = "workspace"
+
     /// The window's hook, made the first time. Installing again only takes
-    /// the new answer and points the close button back here.
+    /// the new answer and points the close button back here. `tabs`: the
+    /// window joins the workspace windows' tab group (a workspace window);
+    /// otherwise it never becomes a tab (first run).
     @discardableResult
-    public static func install(on window: NSWindow, shouldClose: @escaping @MainActor (NSWindow) -> Bool) -> WindowCloseHook {
-        window.tabbingMode = .disallowed
+    public static func install(on window: NSWindow, tabs: Bool = false,
+                               shouldClose: @escaping @MainActor (NSWindow) -> Bool) -> WindowCloseHook {
+        setTabbing(window, tabs: tabs)
         if let hook = hooks.object(forKey: window) {
             hook.shouldClose = shouldClose
             hook.attach()
@@ -53,11 +60,26 @@ public final class WindowCloseHook: NSObject {
         return hook
     }
 
-    /// Turns off macOS's window tabs for the whole app, so the Window menu
-    /// has no Show Tab Bar, Merge All Windows or Move Tab to New Window.
-    /// Call before the first window is made (applicationWillFinishLaunching).
-    public static func turnOffNativeTabs() {
-        NSWindow.allowsAutomaticWindowTabbing = false
+    /// Turns on macOS's window tabs for the app, so workspace windows group
+    /// as tabs and the Window menu has Show Previous Tab (⌃⇧Tab), Show
+    /// Next Tab (⌃Tab), Move Tab to New Window and Merge All Windows (R-0345).
+    /// Only windows that ask for tabs (`install(on:tabs:)`) become tabs;
+    /// every other window (Settings, Acknowledgements) says so itself with
+    /// `.disallowed`. Call before the first window is made
+    /// (applicationWillFinishLaunching).
+    public static func turnOnWorkspaceTabs() {
+        NSWindow.allowsAutomaticWindowTabbing = true
+    }
+
+    /// A workspace window prefers tabs, in the workspace group; any other
+    /// window never becomes one.
+    static func setTabbing(_ window: NSWindow, tabs: Bool) {
+        if tabs {
+            window.tabbingIdentifier = workspaceTabs
+            window.tabbingMode = .preferred
+        } else {
+            window.tabbingMode = .disallowed
+        }
     }
 
     /// The window's hook, if it has one.
@@ -65,9 +87,15 @@ public final class WindowCloseHook: NSObject {
         hooks.object(forKey: window)
     }
 
-    /// The windows with a hook, still open (to count box windows).
+    /// The windows with a hook, still open (to count box windows): those
+    /// on screen, and the tabs behind them in a tab group (a background
+    /// tab isn't visible, but it's open).
     public static var hookedWindows: [NSWindow] {
-        (hooks.keyEnumerator().allObjects as? [NSWindow] ?? []).filter(\.isVisible)
+        (hooks.keyEnumerator().allObjects as? [NSWindow] ?? []).filter(isOpen)
+    }
+
+    static func isOpen(_ window: NSWindow) -> Bool {
+        window.isVisible || (window.tabbedWindows?.contains { $0 !== window && $0.isVisible } ?? false)
     }
 
     /// Closes the window if its hook (if any) lets it, then SwiftUI's

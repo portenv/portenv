@@ -50,7 +50,7 @@ func newHandoffServer(t *testing.T) (*apiServer, string, *[]int) {
 	var uids []int
 	s := &apiServer{
 		cfg: Config{User: "work", UID: 1000, HomeRoot: root},
-		runHomeIO: func(_ context.Context, uid int, args []string, stdin io.Reader) ([]byte, error) {
+		runHomeIO: func(_ context.Context, uid int, _ []uint32, args []string, stdin io.Reader) ([]byte, error) {
 			uids = append(uids, uid)
 			var out bytes.Buffer
 			err := TeamIO(args, stdin, &out)
@@ -158,5 +158,46 @@ func TestAHandoffPastTheQuotaLandsNothing(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "full") {
 		t.Errorf("err %q doesn't say full", err)
+	}
+}
+
+// agentGroups is the agent's own group, with group team only when asked.
+func TestAgentGroups(t *testing.T) {
+	if g := fmt.Sprint(agentGroups(2001, false)); g != "[2001]" {
+		t.Errorf("own: %s", g)
+	}
+	if g := fmt.Sprint(agentGroups(2001, true)); g != fmt.Sprint([]uint32{2001, TeamGID}) {
+		t.Errorf("team: %s", g)
+	}
+}
+
+// A hand-off reads the project with group team, as the team reads it
+// (CC-0507), and everything else with the agent's own group only: packing
+// from the sender's home, and unpacking in the recipient's (R-0334).
+func TestAHandoffHasTheTeamGroupOnlyToReadTheProject(t *testing.T) {
+	s, _, _ := newHandoffServer(t)
+	run := s.runHomeIO
+	var calls []string
+	s.runHomeIO = func(ctx context.Context, uid int, g []uint32, args []string, stdin io.Reader) ([]byte, error) {
+		calls = append(calls, fmt.Sprintf("%s %d %v", args[0], uid, g))
+		return run(ctx, uid, g, args, stdin)
+	}
+	team := fmt.Sprint(TeamGID)
+	for _, c := range []struct {
+		src  string
+		want []string
+	}{
+		{"/home/work/shop/exports/report.txt", []string{"handoff-pack 2001 [2001 " + team + "]", "handoff-unpack 2002 [2002]"}},
+		{"/home/builder/design/v2", []string{"handoff-pack 2001 [2001]", "handoff-unpack 2002 [2002]"}},
+	} {
+		calls = nil
+		if _, err := s.HandoffFiles(context.Background(), &agentv1.HandoffFilesRequest{
+			FromAgent: "builder", ToAgent: "lead", SourcePath: c.src, RecipientQuotaBytes: 1 << 20,
+		}); err != nil {
+			t.Fatalf("%s: %v", c.src, err)
+		}
+		if strings.Join(calls, "; ") != strings.Join(c.want, "; ") {
+			t.Errorf("%s: calls %q, want %q", c.src, calls, c.want)
+		}
 	}
 }

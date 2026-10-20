@@ -14,7 +14,15 @@ public enum WindowPlacement {
     /// The frame unchanged when its title bar is on one of `screens` (visible
     /// frames, the main screen first); otherwise the same size, shrunk to fit
     /// if need be, centred on the main screen.
-    public static func visible(_ frame: CGRect, screens: [CGRect]) -> CGRect {
+    ///
+    /// A full-screen window is always left alone (CC-0500): it fills its
+    /// display, so its top edge lies in the menu bar's strip, outside every
+    /// visible frame, and it would count as off screen. Moving it there
+    /// (its window becomes key again when you swipe back to its Space)
+    /// shrinks it to the main screen's size inside its full-screen Space:
+    /// drawn small in the top-left, the rest black.
+    public static func visible(_ frame: CGRect, screens: [CGRect], fullScreen: Bool = false) -> CGRect {
+        if fullScreen { return frame }
         guard let main = screens.first else { return frame }
         let title = CGRect(x: frame.minX, y: frame.maxY - titleBar, width: frame.width, height: titleBar)
         for screen in screens {

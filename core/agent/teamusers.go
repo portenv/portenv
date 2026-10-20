@@ -91,6 +91,11 @@ type TeamUsers struct {
 	// fake in tests).
 	homeFixes []string
 	groupOf   func(string) int
+	// migrate is the move to agents' own clones' file work as root and
+	// its runs as agents (nil: defaultMigrateOps; a fake in tests).
+	migrate *migrateOps
+	// onMove sees what started a move (tests).
+	onMove func(ProjectFindings)
 }
 
 type agentUserRecord struct {

@@ -283,7 +283,7 @@ func TestStartTeamAgentSeedsItsHome(t *testing.T) {
 	}
 	var calls []call
 	var seedErr error
-	s.runHomeIO = func(_ context.Context, uid int, args []string, _ io.Reader) ([]byte, error) {
+	s.runHomeIO = func(_ context.Context, uid int, _ []uint32, args []string, _ io.Reader) ([]byte, error) {
 		calls = append(calls, call{uid, args})
 		return []byte(`{"copied":["docs/style-guide.md"]}`), seedErr
 	}

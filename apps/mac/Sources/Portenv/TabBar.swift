@@ -18,8 +18,6 @@ struct TabBar: View {
     /// The tab being renamed, and the name being typed.
     @State private var renaming: String?
     @State private var draft = ""
-    /// The ⌃Tab / ⌃⇧Tab monitor, seen before the terminal gets the key.
-    @State private var keyMonitor: Any?
 
     var body: some View {
         HStack(spacing: 0) {
@@ -67,19 +65,6 @@ struct TabBar: View {
         } message: {
             Text(tabs.error ?? "")
         }
-        .onAppear {
-            keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-                let m = event.modifierFlags
-                guard let step = TabKeys.step(keyCode: event.keyCode, control: m.contains(.control), shift: m.contains(.shift),
-                                              option: m.contains(.option), command: m.contains(.command)) else { return event }
-                Task { step > 0 ? await tabs.selectNext() : await tabs.selectPrevious() }
-                return nil
-            }
-        }
-        .onDisappear {
-            if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
-            keyMonitor = nil
-        }
         // A tab that still runs a program asks before it closes (§4.1).
         .alert(tabs.pendingClose.map(TabText.closeQuestion) ?? "",
                isPresented: Binding(get: { tabs.pendingClose != nil }, set: { if !$0 { tabs.cancelClose() } }),
@@ -91,9 +76,10 @@ struct TabBar: View {
 }
 
 /// The tab shortcuts (§4.1), in the menu bar: File › New Tab ⌘T and Close
-/// Tab ⌘W (the last tab closes the window, which saves and releases the
-/// box), Window › Show Previous Tab ⌘⇧[, Show Next Tab ⌘⇧] and Show Tab
-/// ▸ 1–9 (⌘1–⌘9). ⌃Tab and ⌃⇧Tab are handled by the tab bar's key monitor.
+/// Tab ⌘W (the last tab closes the window; the workspace keeps running),
+/// Window › Show Previous Terminal Tab ⌘⇧[, Show Next Terminal Tab ⌘⇧]
+/// and Show Terminal Tab ▸ 1–9 (⌘1–⌘9). ⌃Tab and ⌃⇧Tab are the workspace
+/// tabs' now (WorkspaceWindows, R-0345).
 struct TabCommands: Commands {
     /// The open box's tabs; none during first run or the box list, when the
     /// tab commands are off and ⌘W closes the window.
@@ -130,13 +116,13 @@ struct TabCommands: Commands {
             .keyboardShortcut("w", modifiers: .command)
         }
         CommandGroup(before: .windowArrangement) {
-            Button("Show Previous Tab") { Task { await tabs?.selectPrevious() } }
+            Button(TabText.showPrevious) { Task { await tabs?.selectPrevious() } }
                 .keyboardShortcut("[", modifiers: [.command, .shift])
                 .disabled(tabs == nil)
-            Button("Show Next Tab") { Task { await tabs?.selectNext() } }
+            Button(TabText.showNext) { Task { await tabs?.selectNext() } }
                 .keyboardShortcut("]", modifiers: [.command, .shift])
                 .disabled(tabs == nil)
-            Menu("Show Tab") {
+            Menu(TabText.showTab) {
                 ForEach(1...9, id: \.self) { n in
                     Button("\(n)") { Task { await tabs?.select(number: n) } }
                         .keyboardShortcut(KeyEquivalent(Character("\(n)")), modifiers: .command)

@@ -6421,8 +6421,11 @@ type AnswerDecisionRequest struct {
 	// 1, with approve true. portenvd refuses it unless choice_label is
 	// exactly the decision's stored choices[choice-1]. 0 for Decline and for
 	// a decision without choices.
-	Choice        int32  `protobuf:"varint,5,opt,name=choice,proto3" json:"choice,omitempty"`
-	ChoiceLabel   string `protobuf:"bytes,6,opt,name=choice_label,json=choiceLabel,proto3" json:"choice_label,omitempty"`
+	Choice      int32  `protobuf:"varint,5,opt,name=choice,proto3" json:"choice,omitempty"`
+	ChoiceLabel string `protobuf:"bytes,6,opt,name=choice_label,json=choiceLabel,proto3" json:"choice_label,omitempty"`
+	// For a team_start decision with migration items: the items to remove
+	// (their ids). Every other item is kept: it becomes the owner's.
+	RemoveItems   []string `protobuf:"bytes,7,rep,name=remove_items,json=removeItems,proto3" json:"remove_items,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -6497,6 +6500,13 @@ func (x *AnswerDecisionRequest) GetChoiceLabel() string {
 		return x.ChoiceLabel
 	}
 	return ""
+}
+
+func (x *AnswerDecisionRequest) GetRemoveItems() []string {
+	if x != nil {
+		return x.RemoveItems
+	}
+	return nil
 }
 
 type AnswerDecisionResponse struct {
@@ -8106,7 +8116,7 @@ const file_portenv_daemon_v1_daemon_proto_rawDesc = "" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x19\n" +
 	"\bagent_id\x18\x02 \x01(\tR\aagentId\"G\n" +
 	"\x11StopAgentResponse\x122\n" +
-	"\x05agent\x18\x01 \x01(\v2\x1c.portenv.daemon.v1.AgentInfoR\x05agent\"\xb5\x01\n" +
+	"\x05agent\x18\x01 \x01(\v2\x1c.portenv.daemon.v1.AgentInfoR\x05agent\"\xd8\x01\n" +
 	"\x15AnswerDecisionRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1f\n" +
 	"\vdecision_id\x18\x02 \x01(\tR\n" +
@@ -8114,7 +8124,8 @@ const file_portenv_daemon_v1_daemon_proto_rawDesc = "" +
 	"\aapprove\x18\x03 \x01(\bR\aapprove\x12\x12\n" +
 	"\x04note\x18\x04 \x01(\tR\x04note\x12\x16\n" +
 	"\x06choice\x18\x05 \x01(\x05R\x06choice\x12!\n" +
-	"\fchoice_label\x18\x06 \x01(\tR\vchoiceLabel\"P\n" +
+	"\fchoice_label\x18\x06 \x01(\tR\vchoiceLabel\x12!\n" +
+	"\fremove_items\x18\a \x03(\tR\vremoveItems\"P\n" +
 	"\x16AnswerDecisionResponse\x126\n" +
 	"\bdecision\x18\x01 \x01(\v2\x1a.portenv.types.v1.DecisionR\bdecision\"D\n" +
 	"\x13GetAgentFileRequest\x12\x12\n" +

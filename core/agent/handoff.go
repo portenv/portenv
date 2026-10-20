@@ -223,7 +223,14 @@ func (s *apiServer) HandoffFiles(ctx context.Context, req *agentv1.HandoffFilesR
 	if req.GetRecipientQuotaBytes() <= 0 {
 		return nil, status.Error(codes.InvalidArgument, "no quota given")
 	}
-	packed, err := s.homeIO(ctx, fromUID, []string{"handoff-pack", base, rel}, nil)
+	// Read as the sender: from its own home with its own group only, from
+	// the project with group team too, as the team reads it (CC-0507,
+	// R-0334). Written as the recipient, with its own group only.
+	pack := s.homeIO
+	if base != filepath.Join(s.cfg.HomeRoot, from) {
+		pack = s.projectIO
+	}
+	packed, err := pack(ctx, fromUID, []string{"handoff-pack", base, rel}, nil)
 	if err != nil {
 		return nil, homeErr(err)
 	}

@@ -88,9 +88,10 @@ type apiServer struct {
 	// runTeamIO runs "portenv-agent team-io" as work (teamIOAs; in this
 	// process in tests).
 	runTeamIO func(ctx context.Context, args []string, stdin io.Reader) ([]byte, error)
-	// runHomeIO runs team-io as an agent, for its home's files (nil: as
+	// runHomeIO runs team-io as an agent with these supplementary groups,
+	// for its home's files, a hand-off or home_seed (nil: as
 	// the agent's uid, runAsAgent).
-	runHomeIO func(ctx context.Context, uid int, args []string, stdin io.Reader) ([]byte, error)
+	runHomeIO func(ctx context.Context, uid int, groups []uint32, args []string, stdin io.Reader) ([]byte, error)
 	// asAgentIO runs team-io as an agent through as-agent's switch, for
 	// its clone (nil: runTeamIOAsAgent; tests replace it).
 	asAgentIO func(ctx context.Context, uid int, home string, args []string, stdin io.Reader) ([]byte, error)

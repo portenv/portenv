@@ -60,7 +60,8 @@ func TestAPanickingHandlerDoesNotStopTheDaemon(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	go func() { _ = srv.Serve(lis) }()
+	// Through ownerOnly, as Serve does: every call has its caller.
+	go func() { _ = srv.Serve(ownerOnly{Listener: lis, peerUID: socketPeerUID}) }()
 	t.Cleanup(srv.Stop)
 	conn, err := grpc.NewClient("unix://"+sock, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {

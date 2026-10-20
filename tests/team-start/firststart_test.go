@@ -24,8 +24,9 @@
 //     there; work's repository is never agent-writable: lead can't create,
 //     change or remove anything in the project or its .git, the system git
 //     config trusts nothing in the project, and the project has no
-//     core.sharedRepository; lead commits in its own clone, and work's git
-//     in the project still works;
+//     core.sharedRepository; lead commits in its own clone, as "Lead
+//     (Portenv agent) <lead@agents.portenv.invalid>" (the identity Portenv
+//     sets in the clone), and work's git in the project still works;
 //  7. approve and start builder: its start checks the project again, and
 //     whoami in builder's pane says builder; builder reads the project,
 //     has its own clone, and can't read lead's;
@@ -52,7 +53,10 @@
 //     lead's start moves it and waits for the owner: .git is work's alone,
 //     the settings are gone, builder's clone holds its file uncommitted,
 //     nothing is deleted; Approve removes the hook and the worktree and
-//     keeps lead's file, lead starts, and the earlier checks pass again.
+//     keeps lead's file, lead starts, and the earlier checks pass again;
+//  12. a hand-off (CC-0507): lead hands a file to builder, and builder finds
+//     it in ~/inbox/lead/…, builder's, readable only by builder, its home
+//     still closed to others.
 //
 // The harness's own docker exec only sets the project up (step 1, as work),
 // tries what each agent may and may not do (as that agent), and reads the
@@ -407,9 +411,10 @@ getfacl -cp %[1]s/.git/config %[1]s/.git/hooks 2>&1`, project))
 cd /home/lead/%s
 echo "from lead" > from-lead.txt
 git add from-lead.txt
-git -c user.name=Lead -c user.email=lead@example.invalid commit -q -m "from lead"
-git log -1 --format=%%s`, workspace))
-	if code != 0 || !strings.HasSuffix(out, "from lead") {
+git commit -q -m "from lead"
+git log -1 --format='%%an <%%ae>|%%cn <%%ce>|%%s'`, workspace))
+	// Its commit carries the identity Portenv gave its clone (R-0328).
+	if code != 0 || !strings.HasSuffix(out, "Lead (Portenv agent) <lead@agents.portenv.invalid>|Lead (Portenv agent) <lead@agents.portenv.invalid>|from lead") {
 		h.fatal("step 6: lead couldn't commit in its own clone: exit %d: %s", code, out)
 	}
 	out, code = h.box(ctx, "work", fmt.Sprintf(`set -eu
@@ -420,7 +425,7 @@ test ! -e from-lead.txt`, project))
 	if code != 0 || !strings.HasSuffix(out, "first commit") {
 		h.fatal("step 6: work's git in the project after lead's commit: exit %d: %s", code, out)
 	}
-	t.Log("step 6: lead committed in its own clone; work's project is as it was")
+	t.Log("step 6: lead committed in its own clone as Lead (Portenv agent) <lead@agents.portenv.invalid>; work's project is as it was")
 
 	// Step 7: start builder. Its start checks the project again and must
 	// succeed.
@@ -680,6 +685,44 @@ git -c user.name=Builder -c user.email=builder@example.invalid -c core.hooksPath
 		h.fatal("step 11: builder's branch after the move, or a marker of work's:\n%s", out)
 	}
 	t.Log("step 11: after the move every check passes again: lead refused, team reads only, builder's branch fetched, no marker of work's")
+
+	// Step 12: lead hands a file to builder (CC-0507): the unpack runs as
+	// builder, into builder's 0700 home.
+	out, code = h.box(ctx, "lead", `set -eu
+mkdir -p ~/handoff && echo "for builder" > ~/handoff/note.txt
+PORTENV_AGENT=lead PORTENV_SOCKET=/run/portenv-team/lead/portenv.sock portenv handoff builder /home/lead/handoff/note.txt --note "the gate's hand-off"`)
+	if code != 0 {
+		h.fatal("step 12: lead's hand-off to builder: exit %d:\n%s", code, out)
+	}
+	t.Logf("step 12: lead's hand-off: %s", out)
+	out, code = h.box(ctx, "builder", `set -eu
+f=$(ls -d ~/inbox/lead/*/note.txt)
+cat "$f"
+stat -c '%U %a %n' "$f"`)
+	if code != 0 || !strings.HasPrefix(out, "for builder") || !strings.Contains(out, "builder 600 /home/builder/inbox/lead/") {
+		h.fatal("step 12: builder's inbox: exit %d:\n%s", code, out)
+	}
+	t.Logf("step 12: builder's inbox:\n%s", out)
+	out, _ = h.box(ctx, "root", `stat -c '%U %a' /home/builder; getfacl -cp /home/builder 2>/dev/null | grep -v '^#'
+for who in lead reviewer work; do runuser -u $who -- sh -c 'cat /home/builder/inbox/lead/*/note.txt' >/dev/null 2>&1; echo "$who reads it: $?"; done`)
+	if !strings.HasPrefix(out, "builder 7") || !strings.Contains(out, "other::---") || strings.Contains(out, "reads it: 0") {
+		h.fatal("step 12: builder's home isn't closed to others, or another user read the hand-off:\n%s", out)
+	}
+	t.Logf("step 12: builder's home and the hand-off are builder's alone:\n%s", out)
+	// A file from the project, with the project closed to other users (as
+	// the app makes it: agents reach it through group team only).
+	if out, code = h.box(ctx, "root", fmt.Sprintf(`chmod o-rwx %s && stat -c '%%A %%U:%%G' %s`, project, project)); code != 0 {
+		h.fatal("step 12: closing the project to other users: exit %d: %s", code, out)
+	}
+	out, code = h.box(ctx, "lead", fmt.Sprintf(`PORTENV_AGENT=lead PORTENV_SOCKET=/run/portenv-team/lead/portenv.sock portenv handoff builder %s`, script))
+	if code != 0 {
+		h.fatal("step 12: lead's hand-off of a project file to builder: exit %d:\n%s", code, out)
+	}
+	out, code = h.box(ctx, "builder", `stat -c '%U %a %n' ~/inbox/lead/*/first-start.sh`)
+	if code != 0 || !strings.HasPrefix(out, "builder 600 ") {
+		h.fatal("step 12: the project file in builder's inbox: exit %d:\n%s", code, out)
+	}
+	t.Logf("step 12: a project file handed over, with the project closed to others:\n%s", out)
 }
 
 // waitRunning waits for portenvd to list the agent as running (or needing

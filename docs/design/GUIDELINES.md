@@ -99,6 +99,29 @@ While the workspace is closed, **Open** comes first, then a divider (R-0211). Th
 
 Menu items that can't work right now are disabled with no explanation in the menu; the explanation appears in the inspector or as an alert when chosen from the palette.
 
+### 3.3 Workspace tabs (R-0344, R-0345; [ADR 0028](../adr/0028-workspace-tabs-native-window-tabs.md))
+
+Each open workspace has a window of its own, and workspace windows group as **macOS window tabs**, as documents do in Pages and Finder. No other window becomes a tab: Settings, Acknowledgements and first run keep tabbing off.
+
+- **Each window has its own session:** its workspace's tabs, team, panes, selected agent, current tab and split layout. Switching workspace tabs never changes another workspace's.
+- **Opening a workspace that's already open** brings its tab to the front; it never opens twice. A new tab that was only picking it goes.
+- **A new tab** (the tab bar's ＋, File › Open Workspace… ⌘N) shows "Your workspaces" to pick one, or New Workspace….
+- **A tab dragged out** of the tab bar becomes a window of its own, and back in, a tab again (macOS's own Move Tab to New Window and Merge All Windows work too).
+- **Closing a tab** closes that window only; the workspace keeps running (ADR 0023). Closing the last workspace window goes back to "Your workspaces" in it.
+- **The menu bar acts on the workspace in front:** the Workspace menu, the tab, split, inspector and sidebar commands follow the main window. The title menu (⌄) stays the window's own workspace's actions.
+- **The tab's title:** the workspace's name, where it runs (This Mac, or the server's name) and, when decisions wait for you, how many: `acme-api · This Mac · 2`. Its tooltip names the count: `acme-api · This Mac · Needs you · 2`. A tab showing the list is "Your workspaces". The count comes from the team that tab's session follows, so a tab not in front stays current.
+- **A notification** about a workspace counts its window as in front only when its own tab is.
+- **Quit** names every running workspace once, in one confirmation, and closes each (ADR 0023). Waking from sleep checks every open workspace; an update's relaunch leaves every one running. A Keychain prompt brings forward the tab that asked.
+- **Shortcuts:**
+
+  | Shortcut | Action | Menu |
+  | --- | --- | --- |
+  | ⌘N | "Your workspaces" in a new tab | File › Open Workspace… |
+  | ⌃⌘1–⌃⌘9 | Show the workspace tab at that position in the window's tab group; past the last, nothing | Window › Show Workspace Tab ▸ |
+  | ⌃Tab / ⌃⇧Tab | Show the next / previous workspace tab, wrapping around | Window › Show Next Tab, Show Previous Tab (macOS's own) |
+
+  Terminal tabs keep ⌘1–⌘9 (§4.1).
+
 ---
 
 ## 4. Terminal
@@ -108,7 +131,7 @@ Menu items that can't work right now are disabled with no explanation in the men
 - Each tab is a persistent session in the workspace, so work survives the window closing, the Mac sleeping and the workspace moving.
 - tmux is plumbing. Its status bar is always off, its prefix key never surfaces, and nothing in the UI mentions it.
 - The app, not tmux, owns tab names, order, badges and the new-tab button.
-- **macOS's own window tabs are off** (no Show Tab Bar, Merge All Windows or Move Tab to New Window in the Window menu): the app's tab bar is the only tabs.
+- **The tab bar's tabs are the workspace's terminal tabs;** macOS's own window tabs hold workspaces (§3.3).
 - **The current tab is marked by more than a shade** (§12): its name in semibold, and an accent line along its bottom edge, on top of the mockup's background. (A shade alone was too faint at the Mac, 2026-10-10.)
 - **Each viewer keeps its own current tab.** The app and each agent see the same tabs, but choosing a tab moves only that viewer's terminal: an agent switching tabs never changes the owner's.
 - **Tab shortcuts:**
@@ -116,10 +139,11 @@ Menu items that can't work right now are disabled with no explanation in the men
   | Shortcut | Action | Menu |
   | --- | --- | --- |
   | ⌘T | New tab | File › New Tab |
-  | ⌘W | Close the current tab; on the last tab, close the window (which saves and releases the workspace), like Terminal and Safari | File › Close Tab |
-  | ⌘1–⌘9 | Show the tab at that position; past the last tab, nothing | Window › Show Tab ▸ |
-  | ⌘⇧[ / ⌘⇧] | Show the previous / next tab, wrapping around | Window › Show Previous Tab, Show Next Tab |
-  | ⌃⇧Tab / ⌃Tab | The same, on any keyboard layout (⌘⇧[ needs a bracket key, which AZERTY and other layouts lack), as in Safari and Terminal | — |
+  | ⌘W | Close the current tab; on the last tab, close the window (the workspace keeps running, §3.3), like Terminal and Safari | File › Close Tab |
+  | ⌘1–⌘9 | Show the tab at that position; past the last tab, nothing | Window › Show Terminal Tab ▸ |
+  | ⌘⇧[ / ⌘⇧] | Show the previous / next tab, wrapping around | Window › Show Previous Terminal Tab, Show Next Terminal Tab |
+
+  ⌃Tab and ⌃⇧Tab go between workspace tabs (§3.3, R-0345); on a keyboard without bracket keys (AZERTY), ⌘1–⌘9 and the Window menu reach every terminal tab.
 
 - **What a program in the workspace can't make the terminal do** (R-0133, R-0134; `TerminalGuard`, which every terminal view gets from `TerminalViews`):
   - **The clipboard:** it can't read or set the Mac's clipboard (OSC 52).
@@ -334,6 +358,14 @@ From the own-route rule (ADR 0008):
 - Hosted options appear as ordinary choices once they exist. Choosing one opens a sheet that explains it and offers sign-in.
 - Never required, never blocking, no banners or badges asking for an account, no "coming soon" items.
 - If the service is unreachable, say so only when the user picks that option: "Can't reach Portenv right now. Your workspaces keep working."
+
+### 9.1 Settings › Experimental (ADR 0027, phase 1)
+
+- **Smart input** is one switch, off by default. Off, the terminal is exactly as it was: no marker, no call, no key read. Its line says what it does in plain words.
+- **Recognising requests:** "Built-in rules" (the default, on this Mac) or "jev (TypeSafe)". **Suggestions:** "Anthropic" or "None". Each hosted choice says, in its line, exactly what it receives. Its model is a text field with the default as the placeholder; jev also has "Confidence needed" (0.5 to 1, 0.8 to start). These rows are dimmed while the switch is off.
+- **Keys:** one row per hosted adapter: a secure field ("Paste a key"), Save and Remove. A saved key is never shown back, in full or in part: the row says "Saved on 19 Oct" or "Not set". A paste that can't be a key gets "That doesn't look like a key. Paste it again, without spaces." The footer says where keys live: "Keys are kept in this Mac's Keychain and used only by this app. Portenv's background service, the workspace and agents never see them."
+- **Usage on this Mac:** one row per adapter that has been asked: requests, fell through, failed, typical and slowest-5% latency, tokens in and out, the answering model; and Reset. Numbers only, never a line or an answer.
+- A failed or slow adapter never shows an alert or a badge: the line is sent as typed (ADR 0027 §4), and only the counter records it.
 
 ---
 

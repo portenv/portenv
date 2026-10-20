@@ -179,7 +179,9 @@ func cloneFromBundle(ctx context.Context, req cloneBundleRequest, r io.Reader, r
 		"GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null", "GIT_TERMINAL_PROMPT=0", "GIT_ASKPASS=/bin/false", "GIT_LFS_SKIP_SMUDGE=1"}
 	safe := []string{"-c", "protocol.allow=never", "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false",
 		"-c", "credential.helper=", "-c", "transfer.fsckObjects=true", "-c", "fetch.fsckObjects=true"}
-	git := func(dir string, args ...string) ([]byte, error) { return run(ctx, env, dir, append(slicesClone(safe), args...)...) }
+	git := func(dir string, args ...string) ([]byte, error) {
+		return run(ctx, env, dir, append(slicesClone(safe), args...)...)
+	}
 
 	tmp := filepath.Join(work, ".portenv-clone-"+name)
 	if err := os.RemoveAll(tmp); err != nil { // a try that stopped half-way

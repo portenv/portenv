@@ -3,10 +3,10 @@
 import Foundation
 import Security
 
-/// Portenv › Settings… (⌘,): a toolbar window with five panes, in the
-/// settings board's order (R-0137).
+/// Portenv › Settings… (⌘,): a toolbar window with its panes in the
+/// settings board's order (R-0137), Experimental last (ADR 0027).
 public enum SettingsPane: String, CaseIterable, Sendable {
-    case general, servers, agents, recoveryKey, updates
+    case general, servers, agents, recoveryKey, updates, experimental
 
     public var title: String {
         switch self {
@@ -15,6 +15,7 @@ public enum SettingsPane: String, CaseIterable, Sendable {
         case .agents: "Agents"
         case .recoveryKey: "Recovery Key"
         case .updates: "Updates"
+        case .experimental: "Experimental"
         }
     }
 
@@ -26,6 +27,7 @@ public enum SettingsPane: String, CaseIterable, Sendable {
         case .agents: "person.2"
         case .recoveryKey: "key"
         case .updates: "arrow.clockwise"
+        case .experimental: "flask"
         }
     }
 }

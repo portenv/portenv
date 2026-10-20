@@ -51,8 +51,9 @@ func ownerCall(t *testing.T, h *teamHub, line string, body []byte) *agentv1.Team
 	if _, err := io.WriteString(conn, line+"\n"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := conn.Write(body); err != nil {
-		t.Fatal(err)
+	if len(body) > 0 {
+		// The helper may stop reading early (a refusal); the reply says why.
+		_, _ = conn.Write(body)
 	}
 	_ = conn.(*net.UnixConn).CloseWrite()
 	reply, err := bufio.NewReader(conn).ReadString('\n')

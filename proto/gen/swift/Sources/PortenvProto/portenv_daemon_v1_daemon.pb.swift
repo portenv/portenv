@@ -257,6 +257,55 @@ public nonisolated enum Portenv_Daemon_V1_Answers: SwiftProtobuf.Enum, Swift.Cas
 
 }
 
+public nonisolated struct Portenv_Daemon_V1_GetPushesRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var name: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Portenv_Daemon_V1_GetPushesResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// github.com/OWNER/REPO, or empty when the workspace has none.
+  public var repo: String = String()
+
+  public var allowed: Bool = false
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Portenv_Daemon_V1_StopAllowingPushesRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var name: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Portenv_Daemon_V1_StopAllowingPushesResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
 public nonisolated struct Portenv_Daemon_V1_WatchPushesRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
@@ -313,6 +362,10 @@ public nonisolated struct Portenv_Daemon_V1_PushQuestion: Sendable {
 
   /// The question was answered or gave up: the app takes it down.
   public var gone: Bool = false
+
+  /// A fetch, pull or ls-remote (R-0392): only the sign-in is asked for, and
+  /// a public repository works without one.
+  public var fetch: Bool = false
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -3383,6 +3436,120 @@ nonisolated extension Portenv_Daemon_V1_Answers: SwiftProtobuf._ProtoNameProvidi
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0ANSWERS_UNSPECIFIED\0\u{1}ANSWERS_YES\0\u{1}ANSWERS_NO\0\u{1}ANSWERS_CANNOT_ASK\0")
 }
 
+nonisolated extension Portenv_Daemon_V1_GetPushesRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".GetPushesRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.name) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.name.isEmpty {
+      try visitor.visitSingularStringField(value: self.name, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Portenv_Daemon_V1_GetPushesRequest, rhs: Portenv_Daemon_V1_GetPushesRequest) -> Bool {
+    if lhs.name != rhs.name {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Portenv_Daemon_V1_GetPushesResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".GetPushesResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}repo\0\u{1}allowed\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.repo) }()
+      case 2: try { try decoder.decodeSingularBoolField(value: &self.allowed) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.repo.isEmpty {
+      try visitor.visitSingularStringField(value: self.repo, fieldNumber: 1)
+    }
+    if self.allowed != false {
+      try visitor.visitSingularBoolField(value: self.allowed, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Portenv_Daemon_V1_GetPushesResponse, rhs: Portenv_Daemon_V1_GetPushesResponse) -> Bool {
+    if lhs.repo != rhs.repo {return false}
+    if lhs.allowed != rhs.allowed {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Portenv_Daemon_V1_StopAllowingPushesRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".StopAllowingPushesRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.name) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.name.isEmpty {
+      try visitor.visitSingularStringField(value: self.name, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Portenv_Daemon_V1_StopAllowingPushesRequest, rhs: Portenv_Daemon_V1_StopAllowingPushesRequest) -> Bool {
+    if lhs.name != rhs.name {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Portenv_Daemon_V1_StopAllowingPushesResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".StopAllowingPushesResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Portenv_Daemon_V1_StopAllowingPushesResponse, rhs: Portenv_Daemon_V1_StopAllowingPushesResponse) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
 nonisolated extension Portenv_Daemon_V1_WatchPushesRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".WatchPushesRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0")
@@ -3449,7 +3616,7 @@ nonisolated extension Portenv_Daemon_V1_WatchPushesResponse: SwiftProtobuf.Messa
 
 nonisolated extension Portenv_Daemon_V1_PushQuestion: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".PushQuestion"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}repo\0\u{3}needs_yes\0\u{1}first\0\u{1}updates\0\u{1}list\0\u{1}gone\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}repo\0\u{3}needs_yes\0\u{1}first\0\u{1}updates\0\u{1}list\0\u{1}gone\0\u{1}fetch\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -3464,6 +3631,7 @@ nonisolated extension Portenv_Daemon_V1_PushQuestion: SwiftProtobuf.Message, Swi
       case 5: try { try decoder.decodeRepeatedMessageField(value: &self.updates) }()
       case 6: try { try decoder.decodeSingularBoolField(value: &self.list) }()
       case 7: try { try decoder.decodeSingularBoolField(value: &self.gone) }()
+      case 8: try { try decoder.decodeSingularBoolField(value: &self.fetch) }()
       default: break
       }
     }
@@ -3491,6 +3659,9 @@ nonisolated extension Portenv_Daemon_V1_PushQuestion: SwiftProtobuf.Message, Swi
     if self.gone != false {
       try visitor.visitSingularBoolField(value: self.gone, fieldNumber: 7)
     }
+    if self.fetch != false {
+      try visitor.visitSingularBoolField(value: self.fetch, fieldNumber: 8)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -3502,6 +3673,7 @@ nonisolated extension Portenv_Daemon_V1_PushQuestion: SwiftProtobuf.Message, Swi
     if lhs.updates != rhs.updates {return false}
     if lhs.list != rhs.list {return false}
     if lhs.gone != rhs.gone {return false}
+    if lhs.fetch != rhs.fetch {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

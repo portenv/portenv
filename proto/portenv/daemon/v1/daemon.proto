@@ -210,7 +210,27 @@ service DaemonService {
   // AnswerPush.
   rpc WatchPushes(WatchPushesRequest) returns (stream WatchPushesResponse);
   rpc AnswerPush(AnswerPushRequest) returns (AnswerPushResponse);
+  // Whether the workspace's pushes are allowed (the first push's yes, kept
+  // on the Mac), and the inspector's Stop Allowing Pushes.
+  rpc GetPushes(GetPushesRequest) returns (GetPushesResponse);
+  rpc StopAllowingPushes(StopAllowingPushesRequest) returns (StopAllowingPushesResponse);
 }
+
+message GetPushesRequest {
+  string name = 1;
+}
+
+message GetPushesResponse {
+  // github.com/OWNER/REPO, or empty when the workspace has none.
+  string repo = 1;
+  bool allowed = 2;
+}
+
+message StopAllowingPushesRequest {
+  string name = 1;
+}
+
+message StopAllowingPushesResponse {}
 
 message WatchPushesRequest {
   string name = 1;
@@ -233,6 +253,9 @@ message PushQuestion {
   bool list = 6;
   // The question was answered or gave up: the app takes it down.
   bool gone = 7;
+  // A fetch, pull or ls-remote (R-0392): only the sign-in is asked for, and
+  // a public repository works without one.
+  bool fetch = 8;
 }
 
 message PushUpdateInfo {

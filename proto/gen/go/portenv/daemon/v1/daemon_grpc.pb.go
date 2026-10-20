@@ -89,6 +89,8 @@ const (
 	DaemonService_ApplyTeamPlan_FullMethodName         = "/portenv.daemon.v1.DaemonService/ApplyTeamPlan"
 	DaemonService_WatchPushes_FullMethodName           = "/portenv.daemon.v1.DaemonService/WatchPushes"
 	DaemonService_AnswerPush_FullMethodName            = "/portenv.daemon.v1.DaemonService/AnswerPush"
+	DaemonService_GetPushes_FullMethodName             = "/portenv.daemon.v1.DaemonService/GetPushes"
+	DaemonService_StopAllowingPushes_FullMethodName    = "/portenv.daemon.v1.DaemonService/StopAllowingPushes"
 )
 
 // DaemonServiceClient is the client API for DaemonService service.
@@ -295,6 +297,10 @@ type DaemonServiceClient interface {
 	// AnswerPush.
 	WatchPushes(ctx context.Context, in *WatchPushesRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[WatchPushesResponse], error)
 	AnswerPush(ctx context.Context, in *AnswerPushRequest, opts ...grpc.CallOption) (*AnswerPushResponse, error)
+	// Whether the workspace's pushes are allowed (the first push's yes, kept
+	// on the Mac), and the inspector's Stop Allowing Pushes.
+	GetPushes(ctx context.Context, in *GetPushesRequest, opts ...grpc.CallOption) (*GetPushesResponse, error)
+	StopAllowingPushes(ctx context.Context, in *StopAllowingPushesRequest, opts ...grpc.CallOption) (*StopAllowingPushesResponse, error)
 }
 
 type daemonServiceClient struct {
@@ -999,6 +1005,26 @@ func (c *daemonServiceClient) AnswerPush(ctx context.Context, in *AnswerPushRequ
 	return out, nil
 }
 
+func (c *daemonServiceClient) GetPushes(ctx context.Context, in *GetPushesRequest, opts ...grpc.CallOption) (*GetPushesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetPushesResponse)
+	err := c.cc.Invoke(ctx, DaemonService_GetPushes_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) StopAllowingPushes(ctx context.Context, in *StopAllowingPushesRequest, opts ...grpc.CallOption) (*StopAllowingPushesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(StopAllowingPushesResponse)
+	err := c.cc.Invoke(ctx, DaemonService_StopAllowingPushes_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DaemonServiceServer is the server API for DaemonService service.
 // All implementations must embed UnimplementedDaemonServiceServer
 // for forward compatibility.
@@ -1203,6 +1229,10 @@ type DaemonServiceServer interface {
 	// AnswerPush.
 	WatchPushes(*WatchPushesRequest, grpc.ServerStreamingServer[WatchPushesResponse]) error
 	AnswerPush(context.Context, *AnswerPushRequest) (*AnswerPushResponse, error)
+	// Whether the workspace's pushes are allowed (the first push's yes, kept
+	// on the Mac), and the inspector's Stop Allowing Pushes.
+	GetPushes(context.Context, *GetPushesRequest) (*GetPushesResponse, error)
+	StopAllowingPushes(context.Context, *StopAllowingPushesRequest) (*StopAllowingPushesResponse, error)
 	mustEmbedUnimplementedDaemonServiceServer()
 }
 
@@ -1404,6 +1434,12 @@ func (UnimplementedDaemonServiceServer) WatchPushes(*WatchPushesRequest, grpc.Se
 }
 func (UnimplementedDaemonServiceServer) AnswerPush(context.Context, *AnswerPushRequest) (*AnswerPushResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method AnswerPush not implemented")
+}
+func (UnimplementedDaemonServiceServer) GetPushes(context.Context, *GetPushesRequest) (*GetPushesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetPushes not implemented")
+}
+func (UnimplementedDaemonServiceServer) StopAllowingPushes(context.Context, *StopAllowingPushesRequest) (*StopAllowingPushesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method StopAllowingPushes not implemented")
 }
 func (UnimplementedDaemonServiceServer) mustEmbedUnimplementedDaemonServiceServer() {}
 func (UnimplementedDaemonServiceServer) testEmbeddedByValue()                       {}
@@ -2510,6 +2546,42 @@ func _DaemonService_AnswerPush_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _DaemonService_GetPushes_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetPushesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).GetPushes(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_GetPushes_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).GetPushes(ctx, req.(*GetPushesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_StopAllowingPushes_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StopAllowingPushesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).StopAllowingPushes(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_StopAllowingPushes_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).StopAllowingPushes(ctx, req.(*StopAllowingPushesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // DaemonService_ServiceDesc is the grpc.ServiceDesc for DaemonService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -2740,6 +2812,14 @@ var DaemonService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "AnswerPush",
 			Handler:    _DaemonService_AnswerPush_Handler,
+		},
+		{
+			MethodName: "GetPushes",
+			Handler:    _DaemonService_GetPushes_Handler,
+		},
+		{
+			MethodName: "StopAllowingPushes",
+			Handler:    _DaemonService_StopAllowingPushes_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

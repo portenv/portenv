@@ -854,6 +854,32 @@ public enum Portenv_Daemon_V1_DaemonService: Sendable {
                 type: .unary
             )
         }
+        /// Namespace for "GetPushes" metadata.
+        public enum GetPushes: Sendable {
+            /// Request type for "GetPushes".
+            public typealias Input = Portenv_Daemon_V1_GetPushesRequest
+            /// Response type for "GetPushes".
+            public typealias Output = Portenv_Daemon_V1_GetPushesResponse
+            /// Descriptor for "GetPushes".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "GetPushes",
+                type: .unary
+            )
+        }
+        /// Namespace for "StopAllowingPushes" metadata.
+        public enum StopAllowingPushes: Sendable {
+            /// Request type for "StopAllowingPushes".
+            public typealias Input = Portenv_Daemon_V1_StopAllowingPushesRequest
+            /// Response type for "StopAllowingPushes".
+            public typealias Output = Portenv_Daemon_V1_StopAllowingPushesResponse
+            /// Descriptor for "StopAllowingPushes".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "StopAllowingPushes",
+                type: .unary
+            )
+        }
         /// Descriptors for all methods in the "portenv.daemon.v1.DaemonService" service.
         public static let descriptors: [GRPCCore.MethodDescriptor] = [
             GetVersion.descriptor,
@@ -919,7 +945,9 @@ public enum Portenv_Daemon_V1_DaemonService: Sendable {
             PlanTeam.descriptor,
             ApplyTeamPlan.descriptor,
             WatchPushes.descriptor,
-            AnswerPush.descriptor
+            AnswerPush.descriptor,
+            GetPushes.descriptor,
+            StopAllowingPushes.descriptor
         ]
     }
 }
@@ -2456,6 +2484,49 @@ extension Portenv_Daemon_V1_DaemonService {
             deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_AnswerPushResponse>,
             options: GRPCCore.CallOptions,
             onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_AnswerPushResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "GetPushes" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Whether the workspace's pushes are allowed (the first push's yes, kept
+        /// > on the Mac), and the inspector's Stop Allowing Pushes.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_GetPushesRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_GetPushesRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_GetPushesResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func getPushes<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_GetPushesRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_GetPushesRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_GetPushesResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_GetPushesResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "StopAllowingPushes" method.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_StopAllowingPushesRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_StopAllowingPushesRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_StopAllowingPushesResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func stopAllowingPushes<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_StopAllowingPushesRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_StopAllowingPushesRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_StopAllowingPushesResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_StopAllowingPushesResponse>) async throws -> Result
         ) async throws -> Result where Result: Sendable
     }
 
@@ -4683,6 +4754,71 @@ extension Portenv_Daemon_V1_DaemonService {
                 onResponse: handleResponse
             )
         }
+
+        /// Call the "GetPushes" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Whether the workspace's pushes are allowed (the first push's yes, kept
+        /// > on the Mac), and the inspector's Stop Allowing Pushes.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_GetPushesRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_GetPushesRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_GetPushesResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func getPushes<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_GetPushesRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_GetPushesRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_GetPushesResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_GetPushesResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.GetPushes.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
+
+        /// Call the "StopAllowingPushes" method.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_StopAllowingPushesRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_StopAllowingPushesRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_StopAllowingPushesResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func stopAllowingPushes<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_StopAllowingPushesRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_StopAllowingPushesRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_StopAllowingPushesResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_StopAllowingPushesResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.StopAllowingPushes.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
     }
 }
 
@@ -6569,6 +6705,61 @@ extension Portenv_Daemon_V1_DaemonService.ClientProtocol {
             request: request,
             serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_AnswerPushRequest>(),
             deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_AnswerPushResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "GetPushes" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Whether the workspace's pushes are allowed (the first push's yes, kept
+    /// > on the Mac), and the inspector's Stop Allowing Pushes.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_GetPushesRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func getPushes<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_GetPushesRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_GetPushesResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.getPushes(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_GetPushesRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_GetPushesResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "StopAllowingPushes" method.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_StopAllowingPushesRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func stopAllowingPushes<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_StopAllowingPushesRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_StopAllowingPushesResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.stopAllowingPushes(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_StopAllowingPushesRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_StopAllowingPushesResponse>(),
             options: options,
             onResponse: handleResponse
         )
@@ -8716,6 +8907,69 @@ extension Portenv_Daemon_V1_DaemonService.ClientProtocol {
             metadata: metadata
         )
         return try await self.answerPush(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "GetPushes" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Whether the workspace's pushes are allowed (the first push's yes, kept
+    /// > on the Mac), and the inspector's Stop Allowing Pushes.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func getPushes<Result>(
+        _ message: Portenv_Daemon_V1_GetPushesRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_GetPushesResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_GetPushesRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.getPushes(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "StopAllowingPushes" method.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func stopAllowingPushes<Result>(
+        _ message: Portenv_Daemon_V1_StopAllowingPushesRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_StopAllowingPushesResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_StopAllowingPushesRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.stopAllowingPushes(
             request: request,
             options: options,
             onResponse: handleResponse

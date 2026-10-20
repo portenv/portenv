@@ -29,6 +29,9 @@ public struct Instance: Equatable, Sendable {
     public var recoveryPoolService: String { suffixed("dev.portenv.recovery-pool", ".") }
     /// The keys Portenv makes for servers (ADR 0021): only the app reads it.
     public var serverKeyService: String { suffixed("dev.portenv.server-key", ".") }
+    /// Smart input's hosted adapters' keys (ADR 0027, S5a): only the app
+    /// reads it, when it makes a call; portenvd and the CLI never do.
+    public var smartInputKeyService: String { suffixed("dev.portenv.smart-input-keys", ".") }
     public var folder: String { suffixed("Portenv", "-") }
     /// Set for what the app starts (the CLI, attach), so it uses the same
     /// Keychain service and folder.

@@ -201,6 +201,8 @@ public final class TabsController {
     /// program ended), with how long it ran: the app decides whether it's
     /// worth a notification (§5).
     public var commandFinished: (@MainActor (CommandWatch.Finished) -> Void)?
+    /// Told after the tabs change: a tab's question notifies (§5).
+    @ObservationIgnored public var changed: (@MainActor ([TabInfo]) -> Void)?
 
     public init(box: String, daemon: DaemonAPI, retry: Duration = .seconds(1),
                 now: @escaping @Sendable () -> Date = { Date() }) {
@@ -287,6 +289,7 @@ public final class TabsController {
     private func tabsUpdated() {
         remember()
         if terminalTab == nil, let id = target(for: selection) { choose(id) }
+        changed?(tabs)
     }
 
     private func remember() {

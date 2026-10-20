@@ -76,6 +76,7 @@ final class AppModel {
     /// A window closed: its session ends; the workspace keeps running
     /// (ADR 0023).
     func detach(_ session: WorkspaceSession) {
+        if let box = session.box { NeedsYouNotifications.shared.center.closed(box: box) }
         sessions.remove(session)
     }
 
@@ -272,6 +273,20 @@ final class AppModel {
             let place = controller?.state?.location.map(ServerName.display)
             Task { await Notifier.shared.commandFinished(box: box, finished: f, location: place) }
         }
+        // This session's decisions and tab questions notify, and count in
+        // the Dock badge, whether its tab is in front or not (§5, R-0384).
+        let needsYou = NeedsYouNotifications.shared.center
+        let team = s.team
+        // Only while this window still shows it: nothing late after it left.
+        team?.changed = { [weak controller, weak s] state in
+            guard s?.box == box else { return }
+            needsYou.team(box: box, state: state, location: controller?.state?.location.map(ServerName.display))
+        }
+        tabs.changed = { [weak controller, weak team, weak s] ts in
+            guard s?.box == box else { return }
+            needsYou.tabs(box: box, tabs: ts, team: team?.state.agents ?? [],
+                          location: controller?.state?.location.map(ServerName.display))
+        }
         if s === launchSession { launch = .open(box) }
         defaults.set(box, forKey: Self.lastBoxKey)
         // The team while the window is open, whether its tab is in front
@@ -336,6 +351,27 @@ final class AppModel {
         await refreshRunning()
     }
 
+    /// A notification's click (§5): the workspace's window in front, with
+    /// the decision selected as its Needs-you row selects it, or the
+    /// asking tab shown. A workspace no window shows any more just brings
+    /// Portenv forward.
+    func show(_ route: NotificationRoute) {
+        guard let s = sessions.showing(route.box) else {
+            (NSApp.mainWindow ?? NSApp.windows.first { $0.isVisible })?.makeKeyAndOrderFront(nil)
+            return
+        }
+        s.bringForward()
+        switch route {
+        case .decision(_, let id):
+            if let team = s.team, let selection = NotificationRoute.selection(decision: id, in: team.state) {
+                team.selection = selection
+            }
+        case .tab(_, let id):
+            s.team?.selection = .allTabs
+            Task { await s.tabs?.select(id) }
+        }
+    }
+
     /// Reads which workspaces run on this Mac.
     func refreshRunning() async {
         running = Set(await RunningWorkspaces.here(daemon))
@@ -343,6 +379,9 @@ final class AppModel {
 
     /// Back to "Your workspaces"; the workspace shown may still be running.
     private func showList(_ s: WorkspaceSession) async {
+        // The window no longer follows it: out of the badge, its
+        // notifications taken back (it keeps running, ADR 0023).
+        if let box = s.box { NeedsYouNotifications.shared.center.closed(box: box) }
         s.leave()
         if s === launchSession { launch = .boxList(notice: nil) }
         if let listed = try? await daemon.boxes() { boxes = listed }

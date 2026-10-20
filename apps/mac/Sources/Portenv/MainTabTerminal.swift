@@ -9,6 +9,8 @@ import SwiftUI
 /// the box, in a tab view (TabTerminalShown). Choosing another tab shows
 /// that tab's stream in the same view; a lost stream says "Reconnecting…"
 /// while it comes back, and "Disconnected" with Reconnect if it doesn't.
+/// Until the tab's first reset it says "Opening <tab>…", and "Couldn't open
+/// <tab>" with Try Again if that fails: never a blank pane (R-0384).
 struct MainTabTerminal: View {
     @State var shown: TabTerminalShown
     /// The workspace: its terminal text size (R-0362).
@@ -18,6 +20,8 @@ struct MainTabTerminal: View {
     /// A new generation (the box opened or restarted) opens the stream again.
     let generation: Int
     let label: String
+    /// The tab's name as the tab bar shows it ("Opening server…").
+    var tabName = ""
     /// portenvd is away or the workspace is being reopened (R-0242).
     var serviceComing = false
     /// Split view: whether this is the focused pane, whose terminal takes
@@ -65,6 +69,20 @@ struct MainTabTerminal: View {
                 .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
                 .frame(maxWidth: 420)
                 .accessibilityElement(children: .contain)
+            case .opening:
+                TerminalOpening(line: TabTerminalShown.openingLine(tab: tabName))
+            case let .couldNotOpen(why):
+                VStack(spacing: 8) {
+                    Text(TabTerminalShown.couldNotOpenTitle(tab: tabName)).font(.headline)
+                    Text(why).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                    Button(TabTerminalShown.tryAgain) { shown.reconnect() }
+                        .keyboardShortcut(.defaultAction)
+                }
+                .padding(16)
+                .frame(maxWidth: 420)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color(nsColor: .textBackgroundColor))
+                .accessibilityElement(children: .contain)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -89,5 +107,34 @@ struct MainTabTerminal: View {
         .onChange(of: focused) { if focused { onFocus() } }
         .onChange(of: "\(generation)/\(tab)") { shown.show(tab: tab, generation: generation) }
         .onDisappear { shown.stop() }
+    }
+}
+
+/// In place of a terminal that isn't showing yet: "Opening server…" with a
+/// small spinner (none with Reduce Motion), over the terminal's own
+/// background so nothing of another tab shows through. It appears after a
+/// moment, so a quick switch between tabs doesn't flash it.
+struct TerminalOpening: View {
+    let line: String
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var visible = false
+
+    var body: some View {
+        ZStack {
+            Color(nsColor: .textBackgroundColor)
+            if visible {
+                HStack(spacing: 8) {
+                    if !reduceMotion { ProgressView().controlSize(.small) }
+                    Text(line).foregroundStyle(.secondary)
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(line)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .task {
+            try? await Task.sleep(for: .milliseconds(300))
+            visible = true
+        }
     }
 }

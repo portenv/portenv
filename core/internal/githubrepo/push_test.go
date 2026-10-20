@@ -188,7 +188,7 @@ func TestPushANewBranchATagAndADelete(t *testing.T) {
 	r := newPushRig(t, "tok")
 	old := r.remoteRef("main")
 	n := r.commit(r.local, "two")
-	r.run(r.local, "tag", "-a", "-m", "v1", "v1")
+	r.run(r.local, "-c", "user.name=t", "-c", "user.email=t@example.invalid", "tag", "-a", "-m", "v1", "v1")
 	tag := r.run(r.local, "rev-parse", "v1")
 	st, err := Push(context.Background(), http.DefaultClient, r.url, "tok",
 		[]Update{{Dst: "refs/heads/feature", New: n}, {Dst: "refs/tags/v1", New: tag}}, bytes.NewReader(r.bundle([]string{n, tag}, old)))

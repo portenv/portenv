@@ -47,6 +47,7 @@ const (
 	AgentService_WriteHomeFiles_FullMethodName       = "/portenv.agent.v1.AgentService/WriteHomeFiles"
 	AgentService_WriteAgentFiles_FullMethodName      = "/portenv.agent.v1.AgentService/WriteAgentFiles"
 	AgentService_CloneProject_FullMethodName         = "/portenv.agent.v1.AgentService/CloneProject"
+	AgentService_GetProjectRoom_FullMethodName       = "/portenv.agent.v1.AgentService/GetProjectRoom"
 	AgentService_EnsureAgentUser_FullMethodName      = "/portenv.agent.v1.AgentService/EnsureAgentUser"
 	AgentService_RemoveAgentUser_FullMethodName      = "/portenv.agent.v1.AgentService/RemoveAgentUser"
 	AgentService_SimulatePackage_FullMethodName      = "/portenv.agent.v1.AgentService/SimulatePackage"
@@ -125,14 +126,18 @@ type AgentServiceClient interface {
 	// through a link. A missing project folder is made empty, with git, on
 	// main. Runs nothing from the files.
 	WriteAgentFiles(ctx context.Context, in *WriteAgentFilesRequest, opts ...grpc.CallOption) (*WriteAgentFilesResponse, error)
-	// New workspace's From GitHub (ADR 0025 §2): clones a repository into
-	// the project folder as work, https only, with no submodules, no LFS,
-	// no credential helper and git's config from nowhere else; the size is
-	// checked before and while bytes arrive. A project already there is left
-	// as it is. Refusals: Unauthenticated (it needs a sign-in),
-	// ResourceExhausted (too big), FailedPrecondition (anything else), each
-	// with one plain line.
-	CloneProject(ctx context.Context, in *CloneProjectRequest, opts ...grpc.CallOption) (*CloneProjectResponse, error)
+	// New workspace's From GitHub (ADR 0025 §2, R-0391). portenvd fetches
+	// on the Mac, with any sign-in, and streams a whole git bundle here: the
+	// sign-in never reaches the workspace. The helper checks the bundle (its
+	// size, a v2 header with no prerequisites, refs only under refs/heads and
+	// refs/tags, git bundle verify), then clones from that file as work with
+	// no network, no config but the project's, no template and no hooks, and
+	// sets origin to the plain https address. A project already there is
+	// left as it is. Refusals: ResourceExhausted (too big) or
+	// FailedPrecondition, each with one plain line.
+	CloneProject(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[CloneProjectRequest, CloneProjectResponse], error)
+	// Whether the project folder exists, and the room left for it.
+	GetProjectRoom(ctx context.Context, in *GetProjectRoomRequest, opts ...grpc.CallOption) (*GetProjectRoomResponse, error)
 	// Served only by init (root) on its local socket, which only the API
 	// process reaches; the channel's server answers Unimplemented. init checks
 	// every id and package name itself.
@@ -436,10 +441,23 @@ func (c *agentServiceClient) WriteAgentFiles(ctx context.Context, in *WriteAgent
 	return out, nil
 }
 
-func (c *agentServiceClient) CloneProject(ctx context.Context, in *CloneProjectRequest, opts ...grpc.CallOption) (*CloneProjectResponse, error) {
+func (c *agentServiceClient) CloneProject(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[CloneProjectRequest, CloneProjectResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(CloneProjectResponse)
-	err := c.cc.Invoke(ctx, AgentService_CloneProject_FullMethodName, in, out, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &AgentService_ServiceDesc.Streams[6], AgentService_CloneProject_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[CloneProjectRequest, CloneProjectResponse]{ClientStream: stream}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type AgentService_CloneProjectClient = grpc.ClientStreamingClient[CloneProjectRequest, CloneProjectResponse]
+
+func (c *agentServiceClient) GetProjectRoom(ctx context.Context, in *GetProjectRoomRequest, opts ...grpc.CallOption) (*GetProjectRoomResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetProjectRoomResponse)
+	err := c.cc.Invoke(ctx, AgentService_GetProjectRoom_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -498,7 +516,7 @@ func (c *agentServiceClient) AgentPaneAction(ctx context.Context, in *AgentPaneA
 
 func (c *agentServiceClient) ReadBoard(ctx context.Context, in *ReadBoardRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ReadBoardResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &AgentService_ServiceDesc.Streams[6], AgentService_ReadBoard_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &AgentService_ServiceDesc.Streams[7], AgentService_ReadBoard_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -648,14 +666,18 @@ type AgentServiceServer interface {
 	// through a link. A missing project folder is made empty, with git, on
 	// main. Runs nothing from the files.
 	WriteAgentFiles(context.Context, *WriteAgentFilesRequest) (*WriteAgentFilesResponse, error)
-	// New workspace's From GitHub (ADR 0025 §2): clones a repository into
-	// the project folder as work, https only, with no submodules, no LFS,
-	// no credential helper and git's config from nowhere else; the size is
-	// checked before and while bytes arrive. A project already there is left
-	// as it is. Refusals: Unauthenticated (it needs a sign-in),
-	// ResourceExhausted (too big), FailedPrecondition (anything else), each
-	// with one plain line.
-	CloneProject(context.Context, *CloneProjectRequest) (*CloneProjectResponse, error)
+	// New workspace's From GitHub (ADR 0025 §2, R-0391). portenvd fetches
+	// on the Mac, with any sign-in, and streams a whole git bundle here: the
+	// sign-in never reaches the workspace. The helper checks the bundle (its
+	// size, a v2 header with no prerequisites, refs only under refs/heads and
+	// refs/tags, git bundle verify), then clones from that file as work with
+	// no network, no config but the project's, no template and no hooks, and
+	// sets origin to the plain https address. A project already there is
+	// left as it is. Refusals: ResourceExhausted (too big) or
+	// FailedPrecondition, each with one plain line.
+	CloneProject(grpc.ClientStreamingServer[CloneProjectRequest, CloneProjectResponse]) error
+	// Whether the project folder exists, and the room left for it.
+	GetProjectRoom(context.Context, *GetProjectRoomRequest) (*GetProjectRoomResponse, error)
 	// Served only by init (root) on its local socket, which only the API
 	// process reaches; the channel's server answers Unimplemented. init checks
 	// every id and package name itself.
@@ -782,8 +804,11 @@ func (UnimplementedAgentServiceServer) WriteHomeFiles(grpc.ClientStreamingServer
 func (UnimplementedAgentServiceServer) WriteAgentFiles(context.Context, *WriteAgentFilesRequest) (*WriteAgentFilesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method WriteAgentFiles not implemented")
 }
-func (UnimplementedAgentServiceServer) CloneProject(context.Context, *CloneProjectRequest) (*CloneProjectResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method CloneProject not implemented")
+func (UnimplementedAgentServiceServer) CloneProject(grpc.ClientStreamingServer[CloneProjectRequest, CloneProjectResponse]) error {
+	return status.Error(codes.Unimplemented, "method CloneProject not implemented")
+}
+func (UnimplementedAgentServiceServer) GetProjectRoom(context.Context, *GetProjectRoomRequest) (*GetProjectRoomResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetProjectRoom not implemented")
 }
 func (UnimplementedAgentServiceServer) EnsureAgentUser(context.Context, *EnsureAgentUserRequest) (*EnsureAgentUserResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method EnsureAgentUser not implemented")
@@ -1165,20 +1190,27 @@ func _AgentService_WriteAgentFiles_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
-func _AgentService_CloneProject_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CloneProjectRequest)
+func _AgentService_CloneProject_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(AgentServiceServer).CloneProject(&grpc.GenericServerStream[CloneProjectRequest, CloneProjectResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type AgentService_CloneProjectServer = grpc.ClientStreamingServer[CloneProjectRequest, CloneProjectResponse]
+
+func _AgentService_GetProjectRoom_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetProjectRoomRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(AgentServiceServer).CloneProject(ctx, in)
+		return srv.(AgentServiceServer).GetProjectRoom(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: AgentService_CloneProject_FullMethodName,
+		FullMethod: AgentService_GetProjectRoom_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AgentServiceServer).CloneProject(ctx, req.(*CloneProjectRequest))
+		return srv.(AgentServiceServer).GetProjectRoom(ctx, req.(*GetProjectRoomRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1478,8 +1510,8 @@ var AgentService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _AgentService_WriteAgentFiles_Handler,
 		},
 		{
-			MethodName: "CloneProject",
-			Handler:    _AgentService_CloneProject_Handler,
+			MethodName: "GetProjectRoom",
+			Handler:    _AgentService_GetProjectRoom_Handler,
 		},
 		{
 			MethodName: "EnsureAgentUser",
@@ -1562,6 +1594,11 @@ var AgentService_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "WriteHomeFiles",
 			Handler:       _AgentService_WriteHomeFiles_Handler,
+			ClientStreams: true,
+		},
+		{
+			StreamName:    "CloneProject",
+			Handler:       _AgentService_CloneProject_Handler,
 			ClientStreams: true,
 		},
 		{

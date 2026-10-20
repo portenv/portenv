@@ -188,8 +188,11 @@ struct MainWindow: View {
                     run: { action in Task { await controller.run(action) } },
                     retryPackages: { Task { await controller.retryPackages() } },
                     revert: { Task { await controller.revertToLastSavePoint() } },
-                    retrySaves: { Task { await controller.refreshSaves() } }
+                    retrySaves: { Task { await controller.refreshSaves() } },
+                    canPush: team?.push.canPushLine,
+                    stopAllowingPushes: { Task { await team?.push.stopAllowing() } }
                 )
+                .task(id: controller.box) { await team?.push.refreshPermission() }
                 // Read the saves while open and wherever the box runs,
                 // quietly trying again if that fails. A new save reads them
                 // again from the controller (savedAtChanged).

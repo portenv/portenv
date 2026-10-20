@@ -54,6 +54,28 @@ public final class PushController {
     public let box: String
     /// The push waiting for the owner's yes, if any.
     public private(set) var asking: PushAsk?
+    /// The workspace's repository, and whether its pushes are allowed (the
+    /// first push's yes, kept on the Mac).
+    public private(set) var repo = ""
+    public private(set) var allowed = false
+
+    /// The inspector's line, while pushes are allowed.
+    public var canPushLine: String? {
+        allowed && !repo.isEmpty ? "This workspace can push to \(PushText.repoName(repo))" : nil
+    }
+
+    public func refreshPermission() async {
+        if let p = try? await daemon.pushPermission(box) {
+            repo = p.repo
+            allowed = p.allowed
+        }
+    }
+
+    /// Stop Allowing Pushes: the next push asks again.
+    public func stopAllowing() async {
+        try? await daemon.stopAllowingPushes(box)
+        await refreshPermission()
+    }
     private var queue: [PushAsk] = []
     private let daemon: DaemonAPI
     private let github: GitHubAccount
@@ -103,6 +125,7 @@ public final class PushController {
             return
         }
         try? await daemon.answerPush(box, id: q.id, allow: true, githubToken: token, signedOut: false)
+        if q.first { await refreshPermission() }
     }
 }
 
@@ -113,7 +136,7 @@ public enum PushText {
         return ref
     }
 
-    static func repoName(_ repo: String) -> String { repo.replacingOccurrences(of: "github.com/", with: "") }
+    public static func repoName(_ repo: String) -> String { repo.replacingOccurrences(of: "github.com/", with: "") }
 
     public static func title(_ q: PushAsk, workspace: String) -> String {
         let repo = repoName(q.repo)
@@ -136,6 +159,7 @@ public enum PushText {
     }
 
     public static let deny = "Don\u{2019}t Allow"
+    public static let stopAllowing = "Stop Allowing Pushes"
 
     /// Each ref the push changes, one line.
     public static func refs(_ q: PushAsk) -> [String] {

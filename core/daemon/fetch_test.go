@@ -121,3 +121,25 @@ func TestAFetchRefusesWhatItDoesntTake(t *testing.T) {
 		t.Fatal("a bundle was handed in")
 	}
 }
+
+// The inspector's Stop Allowing Pushes (CC-0645): the next push asks again.
+func TestStopAllowingPushes(t *testing.T) {
+	s, _, _, _ := pushServer(t)
+	state := filepath.Join(s.env.Dir, "state", "box-1")
+	if err := writePrivateAtomic(filepath.Join(state, pushesAllowedFile), []byte("yes\n")); err != nil {
+		t.Fatal(err)
+	}
+	r, err := s.GetPushes(ownerCtx(), &daemonv1.GetPushesRequest{Name: "acme-api"})
+	if err != nil || r.GetRepo() != "github.com/acme/api" || !r.GetAllowed() {
+		t.Fatalf("%v %v", r, err)
+	}
+	if _, err := s.StopAllowingPushes(ownerCtx(), &daemonv1.StopAllowingPushesRequest{Name: "acme-api"}); err != nil {
+		t.Fatal(err)
+	}
+	if r, _ := s.GetPushes(ownerCtx(), &daemonv1.GetPushesRequest{Name: "acme-api"}); r.GetAllowed() {
+		t.Fatal("still allowed")
+	}
+	if _, err := s.StopAllowingPushes(context.Background(), &daemonv1.StopAllowingPushesRequest{Name: "acme-api"}); err == nil {
+		t.Fatal("anyone but the app could change it")
+	}
+}

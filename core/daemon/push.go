@@ -501,3 +501,54 @@ func (s *Server) fetchInto(ctx context.Context, name, id, remote, token string, 
 	s.log.Info("fetch", "refs", len(wants), "bytes", size)
 	return &agentv1.TeamCallsRequest{CallId: id, Ok: true, Result: &agentv1.TeamCallsRequest_Fetch{Fetch: &agentv1.FetchResult{BundleId: resp.GetBundleId(), BundleBytes: size}}}
 }
+
+// GetPushes is the inspector's line: the workspace's repository, and
+// whether its pushes are allowed (ADR 0025 §6).
+func (s *Server) GetPushes(ctx context.Context, req *daemonv1.GetPushesRequest) (*daemonv1.GetPushesResponse, error) {
+	if err := appOnly(ctx); err != nil {
+		return nil, err
+	}
+	box, err := s.env.LoadBox(req.GetName())
+	if err != nil {
+		return nil, teamStatus(err)
+	}
+	state := filepath.Join(s.env.Dir, "state", box.ID)
+	out := &daemonv1.GetPushesResponse{}
+	if url, err := loadGitHubRepo(state); err == nil {
+		if repo, err := githubrepo.Parse(url); err == nil {
+			out.Repo = repo.String()
+		}
+	}
+	if _, err := os.Stat(filepath.Join(state, pushesAllowedFile)); err == nil {
+		out.Allowed = true
+	}
+	return out, nil
+}
+
+// StopAllowingPushes is the inspector's Stop Allowing Pushes: the next push
+// asks the owner again.
+func (s *Server) StopAllowingPushes(ctx context.Context, req *daemonv1.StopAllowingPushesRequest) (*daemonv1.StopAllowingPushesResponse, error) {
+	if err := appOnly(ctx); err != nil {
+		return nil, err
+	}
+	box, err := s.env.LoadBox(req.GetName())
+	if err != nil {
+		return nil, teamStatus(err)
+	}
+	if err := os.Remove(filepath.Join(s.env.Dir, "state", box.ID, pushesAllowedFile)); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return nil, err
+	}
+	s.log.Info("pushes no longer allowed", "box_id", box.ID)
+	return &daemonv1.StopAllowingPushesResponse{}, nil
+}
+
+func appOnly(ctx context.Context) error {
+	c, err := callerFrom(ctx)
+	if err != nil {
+		return err
+	}
+	if c.kind != callerApp {
+		return status.Error(codes.PermissionDenied, "only the owner's Portenv on this Mac changes pushes")
+	}
+	return nil
+}

@@ -501,7 +501,6 @@ func (s *Server) cloneProject(ctx context.Context, h agentv1.AgentServiceClient,
 	case err != nil:
 		return &cloneOutcome{line: "Portenv couldn\u2019t clone " + repo.String() + ": " + err.Error() + "."}
 	}
-	token = "" // used; not needed again
 	stream, err := h.CloneProject(ctx)
 	if err != nil {
 		return &cloneOutcome{line: "Portenv couldn\u2019t clone " + repo.String() + ". Try again."}

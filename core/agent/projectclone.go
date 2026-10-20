@@ -302,7 +302,7 @@ func freeBytes(dir string) (uint64, error) {
 	if err := syscall.Statfs(dir, &st); err != nil {
 		return 0, err
 	}
-	return uint64(st.Bavail) * uint64(st.Bsize), nil // #nosec G115 -- the filesystem's own counts
+	return st.Bavail * uint64(st.Bsize), nil // #nosec G115 -- the filesystem's own counts
 }
 
 // cloneStatus is a clone's refusal as the code portenvd tells apart.
@@ -321,15 +321,22 @@ func cloneStatus(err error) error {
 // [empty]", as work, the bundle on stdin: the result as JSON, a refusal as
 // {"error_kind","error_line"}.
 func teamIOCloneBundle(args []string, stdin io.Reader, stdout io.Writer) error {
-	limit, err := strconv.ParseInt(args[2], 10, 64)
+	if len(args) != 4 && len(args) != 5 {
+		return errors.New("clone-bundle PROJECT URL MAXBYTES HEAD|- [empty]")
+	}
+	project, url, max, head := args[0], args[1], args[2], args[3]
+	limit, err := strconv.ParseInt(max, 10, 64)
 	if err != nil {
 		return errors.New("no limit given")
 	}
-	head := args[3]
 	if head == "-" {
 		head = ""
 	}
-	req := cloneBundleRequest{Project: args[0], URL: args[1], MaxBytes: limit, Head: head, Empty: len(args) == 5 && args[4] == "empty"}
+	empty := false
+	if len(args) == 5 {
+		empty = args[4] == "empty"
+	}
+	req := cloneBundleRequest{Project: project, URL: url, MaxBytes: limit, Head: head, Empty: empty}
 	res, err := cloneFromBundle(context.Background(), req, stdin, bundleGit(agentGitPath))
 	if err != nil {
 		var ce *cloneError

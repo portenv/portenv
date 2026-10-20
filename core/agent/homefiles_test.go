@@ -147,7 +147,7 @@ func newHomeServer(t *testing.T) (*apiServer, string) {
 	}
 	s := &apiServer{
 		cfg: Config{User: "work", UID: 1000, HomeRoot: root},
-		runHomeIO: func(_ context.Context, uid int, args []string, stdin io.Reader) ([]byte, error) {
+		runHomeIO: func(_ context.Context, uid int, _ []uint32, args []string, stdin io.Reader) ([]byte, error) {
 			if uid != 2001 {
 				return nil, fmt.Errorf("ran as uid %d, want builder's 2001", uid)
 			}
@@ -215,5 +215,32 @@ func TestTheAgentFilesCallsRunAsTheAgentInItsHome(t *testing.T) {
 	bad := &writeHomeStream{in: []*agentv1.WriteHomeFilesRequest{{AgentId: "builder", HomeQuotaBytes: 1 << 20, Path: "../work/x", Data: []byte("x"), Last: true}}}
 	if err := s.WriteHomeFiles(bad); status.Code(err) != codes.InvalidArgument {
 		t.Errorf("a path out of the home: %v", err)
+	}
+}
+
+// The Agent files view runs as the agent with its own group only, never
+// group team (R-0334): an agent's home needs nothing more.
+func TestTheAgentFilesViewRunsWithoutTheTeamGroup(t *testing.T) {
+	s, _ := newHomeServer(t)
+	run := s.runHomeIO
+	var groups [][]uint32
+	s.runHomeIO = func(ctx context.Context, uid int, g []uint32, args []string, stdin io.Reader) ([]byte, error) {
+		groups = append(groups, g)
+		return run(ctx, uid, g, args, stdin)
+	}
+	st := &writeHomeStream{in: []*agentv1.WriteHomeFilesRequest{{AgentId: "builder", HomeQuotaBytes: 1 << 20, Path: "one.md", Data: []byte("one"), Last: true}}}
+	if err := s.WriteHomeFiles(st); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.ListHomeFiles(context.Background(), &agentv1.ListHomeFilesRequest{AgentId: "builder"}); err != nil {
+		t.Fatal(err)
+	}
+	if len(groups) != 2 {
+		t.Fatalf("%d calls, want 2", len(groups))
+	}
+	for _, g := range groups {
+		if fmt.Sprint(g) != "[2001]" {
+			t.Errorf("groups %v, want builder's own [2001] only", g)
+		}
 	}
 }

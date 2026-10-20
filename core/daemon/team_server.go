@@ -356,7 +356,7 @@ func (s *Server) StopAgent(ctx context.Context, req *daemonv1.StopAgentRequest) 
 // agent call answers one.
 func (s *Server) AnswerDecision(ctx context.Context, req *daemonv1.AnswerDecisionRequest) (*daemonv1.AnswerDecisionResponse, error) {
 	d, err := s.teamEng().answerChoice(ctx, req.GetName(), req.GetDecisionId(),
-		ownerAnswer{approve: req.GetApprove(), note: req.GetNote(), choice: req.GetChoice(), label: req.GetChoiceLabel()})
+		ownerAnswer{approve: req.GetApprove(), note: req.GetNote(), choice: req.GetChoice(), label: req.GetChoiceLabel(), remove: req.GetRemoveItems()})
 	if err != nil {
 		return nil, teamStatus(err)
 	}

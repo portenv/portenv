@@ -127,12 +127,19 @@ func (s *apiServer) StartTeamAgent(ctx context.Context, req *agentv1.StartTeamAg
 	// (ADR 0022 §2a): the owner's project is never the agent's to write.
 	workDir := ""
 	if p := req.GetCloneProjectDir(); p != "" {
-		dir, err := s.ensureClone(ctx, id, u, p, req.GetHomeQuotaBytes())
+		dir, err := s.ensureClone(ctx, id, req.GetAgentName(), u, p, req.GetHomeQuotaBytes())
 		if err != nil {
 			s.team.removeAgent(id)
 			return nil, err
 		}
 		workDir = dir
+	}
+	// Each clone readable by exactly the lenses granted on it now.
+	if p := req.GetProjectDir(); p != "" {
+		if err := s.applyLensGrants(ctx, p, req.GetCloneReaders()); err != nil {
+			s.team.removeAgent(id)
+			return nil, err
+		}
 	}
 	spec := AgentServerSpec{
 		ID: id, UID: u.UID, GID: u.UID, Home: u.Home,
@@ -244,7 +251,7 @@ func (s *apiServer) seedAgentHome(ctx context.Context, id string, uid int, proje
 	args := append([]string{"seed-home", project, home, strconv.FormatInt(quota, 10)}, seeds...)
 	var err error
 	if s.runHomeIO != nil {
-		_, err = s.runHomeIO(ctx, uid, args, nil)
+		_, err = s.runHomeIO(ctx, uid, agentGroups(uid, true), args, nil)
 	} else {
 		_, err = runAsAgentInTeam(ctx, uid, append([]string{"team-io"}, args...), nil, func(w io.Writer) error { return TeamIO(args, nil, w) })
 	}

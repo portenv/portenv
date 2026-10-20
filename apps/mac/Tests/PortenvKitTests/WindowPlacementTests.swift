@@ -72,4 +72,25 @@ struct WindowPlacementTests {
         #expect(WindowPlacement.firstRun(pointer: .zero, screens: [small]) == small)
         #expect(WindowPlacement.firstRun(pointer: .zero, screens: []) == nil)
     }
+
+    /// CC-0500: a window full screen on the external display fills it
+    /// (2560 x 1440 at y -484), so its title strip (y 928 to 956) is above
+    /// that display's visible frame (it ends at 926, under its menu bar).
+    /// The title-bar check alone calls it off screen and shrinks it to the
+    /// laptop's visible size, 57% of the display: the owner's "drawn at
+    /// ~58% in the top-left" after swiping Spaces. Full screen, it stays.
+    @Test func aFullScreenWindowIsNeverMoved() {
+        let fullScreenOnExternal = CGRect(x: 1470, y: -484, width: 2560, height: 1440)
+        let moved = WindowPlacement.visible(fullScreenOnExternal, screens: [laptop, external])
+        #expect(moved.size == laptop.size) // what happened before the fix
+        #expect(WindowPlacement.visible(fullScreenOnExternal, screens: [laptop, external], fullScreen: true)
+            == fullScreenOnExternal)
+        // On the laptop: the notch's menu bar strip is outside the visible frame too.
+        let fullScreenOnLaptop = CGRect(x: 0, y: 0, width: 1470, height: 956)
+        #expect(WindowPlacement.visible(fullScreenOnLaptop, screens: [laptop, external]) != fullScreenOnLaptop)
+        #expect(WindowPlacement.visible(fullScreenOnLaptop, screens: [laptop, external], fullScreen: true)
+            == fullScreenOnLaptop)
+        // With no screens known, still left alone.
+        #expect(WindowPlacement.visible(fullScreenOnLaptop, screens: [], fullScreen: true) == fullScreenOnLaptop)
+    }
 }

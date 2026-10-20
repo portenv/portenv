@@ -1,0 +1,880 @@
+{
+  "schema": "portenv.commands/1",
+  "version": "1.0.0",
+  "commands": [
+    {
+      "path": [
+        "msg"
+      ],
+      "aliases": [],
+      "summary": "Send a message to an agent on the team's board.",
+      "caller": [
+        "owner",
+        "agent"
+      ],
+      "approval": "never",
+      "approval_note": "",
+      "args": [
+        {
+          "name": "agent",
+          "type": "agent_id",
+          "required": true,
+          "repeated": false
+        },
+        {
+          "name": "text",
+          "type": "text",
+          "required": true,
+          "repeated": false
+        }
+      ],
+      "flags": [
+        {
+          "name": "thread",
+          "type": "string",
+          "required": false,
+          "repeated": false
+        },
+        {
+          "name": "type",
+          "type": "choice",
+          "required": false,
+          "repeated": false,
+          "choices": [
+            "notice",
+            "question",
+            "answer"
+          ],
+          "caller": [
+            "agent"
+          ]
+        },
+        {
+          "name": "workspace",
+          "type": "string",
+          "required": false,
+          "repeated": false,
+          "caller": [
+            "owner"
+          ]
+        },
+        {
+          "name": "json",
+          "type": "bool",
+          "required": false,
+          "repeated": false,
+          "caller": [
+            "agent"
+          ]
+        }
+      ],
+      "since": "1.0.0"
+    },
+    {
+      "path": [
+        "wake"
+      ],
+      "aliases": [],
+      "summary": "Ask an idle agent to read its new messages; a busy agent is never typed into.",
+      "caller": [
+        "owner"
+      ],
+      "approval": "never",
+      "approval_note": "",
+      "args": [
+        {
+          "name": "agent",
+          "type": "agent_id",
+          "required": true,
+          "repeated": false
+        }
+      ],
+      "flags": [
+        {
+          "name": "workspace",
+          "type": "string",
+          "required": false,
+          "repeated": false,
+          "caller": [
+            "owner"
+          ]
+        }
+      ],
+      "since": "1.0.0"
+    },
+    {
+      "path": [
+        "tab",
+        "new"
+      ],
+      "aliases": [],
+      "summary": "Open a new tab: a shell for the owner, a command in its own tab for an agent.",
+      "caller": [
+        "owner",
+        "agent"
+      ],
+      "approval": "never",
+      "approval_note": "",
+      "args": [
+        {
+          "name": "command",
+          "type": "command",
+          "required": true,
+          "repeated": true,
+          "caller": [
+            "agent"
+          ]
+        }
+      ],
+      "flags": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": true,
+          "repeated": false
+        },
+        {
+          "name": "workspace",
+          "type": "string",
+          "required": false,
+          "repeated": false,
+          "caller": [
+            "owner"
+          ]
+        },
+        {
+          "name": "json",
+          "type": "bool",
+          "required": false,
+          "repeated": false,
+          "caller": [
+            "agent"
+          ]
+        }
+      ],
+      "since": "1.0.0"
+    },
+    {
+      "path": [
+        "team",
+        "start"
+      ],
+      "aliases": [],
+      "summary": "Start the team's agents, or the ones named.",
+      "caller": [
+        "owner"
+      ],
+      "approval": "depends",
+      "approval_note": "The team's first start asks you in the app.",
+      "args": [
+        {
+          "name": "agent",
+          "type": "agent_id",
+          "required": false,
+          "repeated": true
+        }
+      ],
+      "flags": [
+        {
+          "name": "workspace",
+          "type": "string",
+          "required": false,
+          "repeated": false,
+          "caller": [
+            "owner"
+          ]
+        }
+      ],
+      "since": "1.0.0"
+    },
+    {
+      "path": [
+        "team",
+        "stop"
+      ],
+      "aliases": [],
+      "summary": "Stop the team's running agents, or the ones named.",
+      "caller": [
+        "owner"
+      ],
+      "approval": "never",
+      "approval_note": "",
+      "args": [
+        {
+          "name": "agent",
+          "type": "agent_id",
+          "required": false,
+          "repeated": true
+        }
+      ],
+      "flags": [
+        {
+          "name": "workspace",
+          "type": "string",
+          "required": false,
+          "repeated": false,
+          "caller": [
+            "owner"
+          ]
+        }
+      ],
+      "since": "1.0.0"
+    },
+    {
+      "path": [
+        "deploy"
+      ],
+      "aliases": [],
+      "summary": "Run the project's deploy runbook for a target.",
+      "caller": [
+        "owner"
+      ],
+      "approval": "depends",
+      "approval_note": "Production always asks in the app.",
+      "args": [
+        {
+          "name": "target",
+          "type": "runbook_target",
+          "required": true,
+          "repeated": false
+        }
+      ],
+      "flags": [
+        {
+          "name": "workspace",
+          "type": "string",
+          "required": false,
+          "repeated": false,
+          "caller": [
+            "owner"
+          ]
+        }
+      ],
+      "since": "1.0.0"
+    },
+    {
+      "path": [
+        "decision",
+        "list"
+      ],
+      "aliases": [],
+      "summary": "List the requests waiting for the owner.",
+      "caller": [
+        "owner"
+      ],
+      "approval": "never",
+      "approval_note": "",
+      "args": [],
+      "flags": [
+        {
+          "name": "all",
+          "type": "bool",
+          "required": false,
+          "repeated": false
+        },
+        {
+          "name": "json",
+          "type": "bool",
+          "required": false,
+          "repeated": false
+        },
+        {
+          "name": "workspace",
+          "type": "string",
+          "required": false,
+          "repeated": false,
+          "caller": [
+            "owner"
+          ]
+        }
+      ],
+      "since": "1.0.0"
+    },
+    {
+      "path": [
+        "decision",
+        "answer"
+      ],
+      "aliases": [],
+      "summary": "Check a request and an answer to it; the owner answers it in the app.",
+      "caller": [
+        "owner"
+      ],
+      "approval": "always",
+      "approval_note": "Only the app answers a request, in front of you.",
+      "args": [
+        {
+          "name": "decision",
+          "type": "decision_id",
+          "required": true,
+          "repeated": false
+        },
+        {
+          "name": "answer",
+          "type": "string",
+          "required": true,
+          "repeated": false
+        }
+      ],
+      "flags": [
+        {
+          "name": "workspace",
+          "type": "string",
+          "required": false,
+          "repeated": false,
+          "caller": [
+            "owner"
+          ]
+        }
+      ],
+      "since": "1.0.0"
+    },
+    {
+      "path": [
+        "status"
+      ],
+      "aliases": [],
+      "summary": "Show what this Mac recorded about a workspace, without starting it.",
+      "caller": [
+        "owner"
+      ],
+      "approval": "never",
+      "approval_note": "",
+      "args": [
+        {
+          "name": "workspace",
+          "type": "string",
+          "required": true,
+          "repeated": false
+        }
+      ],
+      "flags": [],
+      "since": "1.0.0"
+    },
+    {
+      "path": [
+        "split"
+      ],
+      "aliases": [],
+      "summary": "Split the agent's own pane and run a command in the new one.",
+      "caller": [
+        "agent"
+      ],
+      "approval": "depends",
+      "approval_note": "Asks you in the app unless the agent's grant allows panes.",
+      "args": [
+        {
+          "name": "command",
+          "type": "command",
+          "required": true,
+          "repeated": true
+        }
+      ],
+      "flags": [
+        {
+          "name": "right",
+          "type": "bool",
+          "required": false,
+          "repeated": false
+        },
+        {
+          "name": "down",
+          "type": "bool",
+          "required": false,
+          "repeated": false
+        },
+        {
+          "name": "pane",
+          "type": "string",
+          "required": false,
+          "repeated": false
+        },
+        {
+          "name": "json",
+          "type": "bool",
+          "required": false,
+          "repeated": false,
+          "caller": [
+            "agent"
+          ]
+        }
+      ],
+      "since": "1.0.0"
+    },
+    {
+      "path": [
+        "focus"
+      ],
+      "aliases": [],
+      "summary": "Bring one of the agent's own panes to the front.",
+      "caller": [
+        "agent"
+      ],
+      "approval": "never",
+      "approval_note": "",
+      "args": [
+        {
+          "name": "pane",
+          "type": "string",
+          "required": true,
+          "repeated": false
+        }
+      ],
+      "flags": [
+        {
+          "name": "json",
+          "type": "bool",
+          "required": false,
+          "repeated": false,
+          "caller": [
+            "agent"
+          ]
+        }
+      ],
+      "since": "1.0.0"
+    },
+    {
+      "path": [
+        "close"
+      ],
+      "aliases": [],
+      "summary": "Close one of the agent's own panes.",
+      "caller": [
+        "agent"
+      ],
+      "approval": "never",
+      "approval_note": "",
+      "args": [
+        {
+          "name": "pane",
+          "type": "string",
+          "required": true,
+          "repeated": false
+        }
+      ],
+      "flags": [
+        {
+          "name": "json",
+          "type": "bool",
+          "required": false,
+          "repeated": false,
+          "caller": [
+            "agent"
+          ]
+        }
+      ],
+      "since": "1.0.0"
+    },
+    {
+      "path": [
+        "ask-owner"
+      ],
+      "aliases": [],
+      "summary": "Ask the owner a question, with up to four choices.",
+      "caller": [
+        "agent"
+      ],
+      "approval": "always",
+      "approval_note": "You answer it in the app.",
+      "args": [
+        {
+          "name": "text",
+          "type": "text",
+          "required": true,
+          "repeated": false
+        }
+      ],
+      "flags": [
+        {
+          "name": "choice",
+          "type": "string",
+          "required": false,
+          "repeated": true
+        },
+        {
+          "name": "thread",
+          "type": "string",
+          "required": false,
+          "repeated": false
+        },
+        {
+          "name": "json",
+          "type": "bool",
+          "required": false,
+          "repeated": false,
+          "caller": [
+            "agent"
+          ]
+        }
+      ],
+      "since": "1.0.0"
+    },
+    {
+      "path": [
+        "inbox"
+      ],
+      "aliases": [],
+      "summary": "Read the agent's messages and answers.",
+      "caller": [
+        "agent"
+      ],
+      "approval": "never",
+      "approval_note": "",
+      "args": [],
+      "flags": [
+        {
+          "name": "wait",
+          "type": "bool",
+          "required": false,
+          "repeated": false
+        },
+        {
+          "name": "since",
+          "type": "string",
+          "required": false,
+          "repeated": false
+        },
+        {
+          "name": "json",
+          "type": "bool",
+          "required": false,
+          "repeated": false,
+          "caller": [
+            "agent"
+          ]
+        }
+      ],
+      "since": "1.0.0"
+    },
+    {
+      "path": [
+        "share"
+      ],
+      "aliases": [],
+      "summary": "Tell the owner the agent's work is ready to look at.",
+      "caller": [
+        "agent"
+      ],
+      "approval": "never",
+      "approval_note": "",
+      "args": [
+        {
+          "name": "branch",
+          "type": "string",
+          "required": false,
+          "repeated": false
+        }
+      ],
+      "flags": [
+        {
+          "name": "text",
+          "type": "text",
+          "required": false,
+          "repeated": false
+        },
+        {
+          "name": "json",
+          "type": "bool",
+          "required": false,
+          "repeated": false,
+          "caller": [
+            "agent"
+          ]
+        }
+      ],
+      "since": "1.0.0"
+    },
+    {
+      "path": [
+        "propose-agent-change"
+      ],
+      "aliases": [],
+      "summary": "Propose a change to an agent file.",
+      "caller": [
+        "agent"
+      ],
+      "approval": "always",
+      "approval_note": "You approve the change in the app.",
+      "args": [
+        {
+          "name": "file",
+          "type": "path",
+          "required": true,
+          "repeated": false
+        }
+      ],
+      "flags": [
+        {
+          "name": "json",
+          "type": "bool",
+          "required": false,
+          "repeated": false,
+          "caller": [
+            "agent"
+          ]
+        }
+      ],
+      "since": "1.0.0"
+    },
+    {
+      "path": [
+        "request-package"
+      ],
+      "aliases": [],
+      "summary": "Ask for a system package to be installed.",
+      "caller": [
+        "agent"
+      ],
+      "approval": "always",
+      "approval_note": "You approve the exact packages in the app.",
+      "args": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": true,
+          "repeated": false
+        }
+      ],
+      "flags": [
+        {
+          "name": "reason",
+          "type": "text",
+          "required": false,
+          "repeated": false
+        },
+        {
+          "name": "json",
+          "type": "bool",
+          "required": false,
+          "repeated": false,
+          "caller": [
+            "agent"
+          ]
+        }
+      ],
+      "since": "1.0.0"
+    },
+    {
+      "path": [
+        "whoami"
+      ],
+      "aliases": [],
+      "summary": "Show the agent's identity, grant and teammates.",
+      "caller": [
+        "agent"
+      ],
+      "approval": "never",
+      "approval_note": "",
+      "args": [],
+      "flags": [
+        {
+          "name": "json",
+          "type": "bool",
+          "required": false,
+          "repeated": false,
+          "caller": [
+            "agent"
+          ]
+        }
+      ],
+      "since": "1.0.0"
+    },
+    {
+      "path": [
+        "status",
+        "set"
+      ],
+      "aliases": [],
+      "summary": "Say what the agent is working on.",
+      "caller": [
+        "agent"
+      ],
+      "approval": "never",
+      "approval_note": "",
+      "args": [
+        {
+          "name": "text",
+          "type": "text",
+          "required": true,
+          "repeated": false
+        }
+      ],
+      "flags": [
+        {
+          "name": "progress",
+          "type": "string",
+          "required": false,
+          "repeated": false
+        },
+        {
+          "name": "blocked",
+          "type": "text",
+          "required": false,
+          "repeated": false
+        },
+        {
+          "name": "json",
+          "type": "bool",
+          "required": false,
+          "repeated": false,
+          "caller": [
+            "agent"
+          ]
+        }
+      ],
+      "since": "1.0.0"
+    },
+    {
+      "path": [
+        "status",
+        "clear"
+      ],
+      "aliases": [],
+      "summary": "Clear what the agent said it's working on.",
+      "caller": [
+        "agent"
+      ],
+      "approval": "never",
+      "approval_note": "",
+      "args": [],
+      "flags": [
+        {
+          "name": "json",
+          "type": "bool",
+          "required": false,
+          "repeated": false,
+          "caller": [
+            "agent"
+          ]
+        }
+      ],
+      "since": "1.0.0"
+    },
+    {
+      "path": [
+        "team",
+        "status"
+      ],
+      "aliases": [],
+      "summary": "Show the teammates' state, if the agent's grant allows it.",
+      "caller": [
+        "agent"
+      ],
+      "approval": "never",
+      "approval_note": "",
+      "args": [],
+      "flags": [
+        {
+          "name": "json",
+          "type": "bool",
+          "required": false,
+          "repeated": false,
+          "caller": [
+            "agent"
+          ]
+        }
+      ],
+      "since": "1.0.0"
+    },
+    {
+      "path": [
+        "team",
+        "init"
+      ],
+      "aliases": [],
+      "summary": "Write a team template's agent files into the project.",
+      "caller": [
+        "owner"
+      ],
+      "approval": "never",
+      "approval_note": "",
+      "args": [],
+      "flags": [
+        {
+          "name": "template",
+          "type": "choice",
+          "required": false,
+          "repeated": false,
+          "choices": [
+            "starter",
+            "orchestrate"
+          ]
+        },
+        {
+          "name": "dir",
+          "type": "path",
+          "required": false,
+          "repeated": false
+        }
+      ],
+      "since": "1.0.0"
+    },
+    {
+      "path": [
+        "guide"
+      ],
+      "aliases": [],
+      "summary": "Show the team guide: how agents work in Portenv.",
+      "caller": [
+        "owner",
+        "agent"
+      ],
+      "approval": "never",
+      "approval_note": "",
+      "args": [],
+      "flags": [
+        {
+          "name": "json",
+          "type": "bool",
+          "required": false,
+          "repeated": false
+        }
+      ],
+      "since": "1.0.0"
+    },
+    {
+      "path": [
+        "handoff"
+      ],
+      "aliases": [],
+      "summary": "Hand a file or folder to a teammate.",
+      "caller": [
+        "agent"
+      ],
+      "approval": "never",
+      "approval_note": "",
+      "args": [
+        {
+          "name": "agent",
+          "type": "agent_id",
+          "required": true,
+          "repeated": false
+        },
+        {
+          "name": "path",
+          "type": "path",
+          "required": true,
+          "repeated": false
+        }
+      ],
+      "flags": [
+        {
+          "name": "note",
+          "type": "text",
+          "required": false,
+          "repeated": false
+        },
+        {
+          "name": "json",
+          "type": "bool",
+          "required": false,
+          "repeated": false,
+          "caller": [
+            "agent"
+          ]
+        }
+      ],
+      "since": "1.0.0"
+    }
+  ]
+}

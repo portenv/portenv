@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"net"
 	"os"
@@ -213,3 +214,52 @@ func (p *pushBundleStream) SendHeader(metadata.MD) error                 { retur
 func (p *pushBundleStream) SetTrailer(metadata.MD)                       {}
 func (p *pushBundleStream) SendMsg(any) error                            { return nil }
 func (p *pushBundleStream) RecvMsg(any) error                            { return nil }
+
+// R-0393: the bundle's read has an idle deadline, not one for the whole
+// stream: a slow, steady stream longer than the idle limit goes; a stream
+// that stops is cut off.
+func TestABundleStreamsAsLongAsBytesKeepComing(t *testing.T) {
+	old := ownerIdle
+	ownerIdle = 300 * time.Millisecond
+	defer func() { ownerIdle = old }()
+	uid := 1000
+	h := newTestHub(t, &uid)
+	addTestOwner(t, h, 1000)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	pd := attachFake(t, ctx, h)
+	go func() {
+		for c := range pd.calls {
+			pd.replies <- &agentv1.TeamCallsRequest{CallId: c.GetCallId(), Ok: true}
+		}
+	}()
+	send := func(pause time.Duration, chunks int) *agentv1.TeamCallsRequest {
+		conn, err := net.Dial("unix", filepath.Join(h.dir, "work", "portenv.sock"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = conn.Close() }()
+		line := `{"push":{"updates":[{"dst":"refs/heads/main","newSha":"` + strings.Repeat("a", 40) + `"}],"bundleBytes":"` + fmt.Sprint(chunks*10) + `"}}` + "\n"
+		_, _ = io.WriteString(conn, line)
+		for i := 0; i < chunks; i++ {
+			time.Sleep(pause)
+			if _, err := conn.Write(bytes.Repeat([]byte("b"), 10)); err != nil {
+				break
+			}
+		}
+		_ = conn.(*net.UnixConn).CloseWrite()
+		_ = conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+		reply, _ := bufio.NewReader(conn).ReadString('\n')
+		var r agentv1.TeamCallsRequest
+		_ = protojson.Unmarshal([]byte(reply), &r)
+		return &r
+	}
+	// 12 chunks, 100 ms apart: 1.2 s in all, four times the idle limit.
+	if r := send(100*time.Millisecond, 12); !r.GetOk() {
+		t.Fatalf("a slow, steady stream was cut off: %v", r)
+	}
+	// A pause longer than the idle limit: cut off.
+	if r := send(600*time.Millisecond, 2); r.GetOk() {
+		t.Fatalf("a stalled stream went through: %v", r)
+	}
+}

@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/cgi"
 	"net/http/httptest"
@@ -247,15 +248,9 @@ func TestPushRefusesWhatItDoesntTake(t *testing.T) {
 		"another bundle ref": {[]Update{{Dst: "refs/heads/a", New: n}}, bytes.Replace(good, []byte("refs/portenv-push/0"), []byte("refs/heads/sneak00"), 1)},
 		"not a bundle":       {[]Update{{Dst: "refs/heads/a", New: n}}, []byte("hello")},
 	} {
-		var b *bytes.Reader
+		var rd io.ReadSeeker
 		if tc.bundle != nil {
-			b = bytes.NewReader(tc.bundle)
-		}
-		var rd interface {
-			Read([]byte) (int, error)
-		}
-		if b != nil {
-			rd = b
+			rd = bytes.NewReader(tc.bundle)
 		}
 		if _, err := Push(context.Background(), http.DefaultClient, r.url, "tok", tc.updates, rd); err == nil {
 			t.Errorf("%s: not refused", name)
@@ -272,5 +267,37 @@ func TestPushCapsTheBundle(t *testing.T) {
 	b := r.bundle([]string{n}, r.remoteRef("main"))
 	if _, err := pushWithLimit(context.Background(), http.DefaultClient, r.url, "tok", []Update{{Dst: "refs/heads/main", New: n, Old: r.remoteRef("main")}}, bytes.NewReader(b), int64(len(b)-1)); !errors.Is(err, ErrTooBig) {
 		t.Fatalf("%v", err)
+	}
+}
+
+// R-0393: a crafted bundle naming the current tip as a prerequisite, with
+// an unrelated commit as the new value and no force, isn't a fast-forward:
+// ancestry is proven from the pack, never taken from the prerequisites.
+func TestPushRefusesACraftedFastForward(t *testing.T) {
+	r := newPushRig(t, "tok")
+	old := r.remoteRef("main")
+	r.run(r.local, "checkout", "-q", "--orphan", "unrelated")
+	n := r.commit(r.local, "unrelated")
+	b := r.bundle([]string{n})
+	// The prerequisite line a real fast-forward would have.
+	crafted := bytes.Replace(b, []byte("# v2 git bundle\n"), []byte("# v2 git bundle\n-"+old+" one\n"), 1)
+	if ff := FastForwards(bytes.NewReader(crafted), []Update{{Dst: "refs/heads/main", New: n, Old: old}}); ff["refs/heads/main"] {
+		t.Fatal("the crafted bundle was taken for a fast-forward")
+	}
+	st, err := Push(context.Background(), http.DefaultClient, r.url, "tok", []Update{{Dst: "refs/heads/main", New: n, Old: old}}, bytes.NewReader(crafted))
+	if err != nil || st[0].OK || st[0].Reason != "non-fast-forward" || r.remoteRef("main") != old {
+		t.Fatalf("%v %v", st, err)
+	}
+}
+
+// A real fast-forward, two commits on, is proven.
+func TestAFastForwardIsProven(t *testing.T) {
+	r := newPushRig(t, "tok")
+	old := r.remoteRef("main")
+	r.commit(r.local, "two")
+	n := r.commit(r.local, "three")
+	b := r.bundle([]string{n}, old)
+	if ff := FastForwards(bytes.NewReader(b), []Update{{Dst: "refs/heads/main", New: n, Old: old}}); !ff["refs/heads/main"] {
+		t.Fatal("a real fast-forward wasn't proven")
 	}
 }

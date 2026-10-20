@@ -233,8 +233,11 @@ func TestPushRefusals(t *testing.T) {
 	s, fake, r, _ := pushServer(t)
 	old := r.ref("main")
 	n := r.commit(r.local, "two")
-	fake.pushBundles = map[string][]byte{"b": r.bundle(n, old)}
+	bundle := r.bundle(n, old)
 	push := func() *agentv1.TeamCallsResponse {
+		fake.mu.Lock()
+		fake.pushBundles = map[string][]byte{"b": bundle} // read once per push
+		fake.mu.Unlock()
 		c := ownerPush(&agentv1.PushUpdate{Dst: "refs/heads/main", NewSha: n, OldSha: old})
 		c.GetPush().BundleId = "b"
 		return c
@@ -338,5 +341,34 @@ func TestWatchPushesShowsEachQuestion(t *testing.T) {
 	m, err = stream.Recv()
 	if err != nil || !m.GetQuestion().GetGone() {
 		t.Fatalf("%v %v", m, err)
+	}
+}
+
+// R-0393: a crafted bundle (the current tip as a prerequisite, an
+// unrelated commit as the new value, no force) is treated as a force: the
+// owner is asked, and a no leaves GitHub as it was.
+func TestACraftedFastForwardAsksTheOwner(t *testing.T) {
+	s, fake, r, _ := pushServer(t)
+	if err := writePrivateAtomic(filepath.Join(s.env.Dir, "state", "box-1", pushesAllowedFile), []byte("yes\n")); err != nil {
+		t.Fatal(err)
+	}
+	old := r.ref("main")
+	r.run(r.local, "checkout", "-q", "--orphan", "unrelated")
+	n := r.commit(r.local, "unrelated")
+	r.run(r.local, "update-ref", "refs/portenv-push/0", n)
+	f := filepath.Join(t.TempDir(), "b")
+	r.run(r.local, "bundle", "create", "-q", f, "refs/portenv-push/0")
+	b, _ := os.ReadFile(f)
+	fake.pushBundles = map[string][]byte{"c": bytes.Replace(b, []byte("# v2 git bundle\n"), []byte("# v2 git bundle\n-"+old+" one\n"), 1)}
+	var seen []*daemonv1.PushQuestion
+	defer app(t, s, false, false, &seen)()
+	c := ownerPush(&agentv1.PushUpdate{Dst: "refs/heads/main", NewSha: n, OldSha: old})
+	c.GetPush().BundleId = "c"
+	reply := s.handlePush(context.Background(), "acme-api", c)
+	if reply.GetOk() || len(seen) != 1 || !seen[0].GetNeedsYes() || !seen[0].GetUpdates()[0].GetForce() {
+		t.Fatalf("%v %v", reply, seen)
+	}
+	if r.ref("main") != old {
+		t.Fatal("history was rewritten without the owner's yes")
 	}
 }

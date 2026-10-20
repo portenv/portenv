@@ -49,6 +49,11 @@ const ownerCallWait = 10 * time.Minute
 
 var pushBundleIDRE = regexp.MustCompile(`^[0-9a-f]{32}$`)
 
+// ownerIdle is how long work's socket waits for the next bytes of a call
+// (its line, then its bundle): an idle limit, so a big push that keeps
+// streaming is never cut off, and one that stops is.
+var ownerIdle = 10 * time.Second
+
 // ensureOwnerRunDir makes work's run folder, as root.
 func (t *TeamUsers) ensureOwnerRunDir(uid int) (string, error) {
 	if err := t.ensureRunRoot(); err != nil {
@@ -142,8 +147,7 @@ func (h *teamHub) handleOwner(conn *net.UnixConn) {
 	}
 	refuse := func(line string) { reply(&agentv1.TeamCallsRequest{Line: line}) }
 
-	_ = conn.SetReadDeadline(time.Now().Add(10 * time.Second))
-	br := bufio.NewReaderSize(conn, 64<<10)
+	br := bufio.NewReaderSize(idleReader{conn}, 64<<10)
 	line, err := br.ReadSlice('\n')
 	if err != nil && !errors.Is(err, io.EOF) {
 		refuse("Portenv couldn’t read the request.")
@@ -241,4 +245,13 @@ func (s *apiServer) ReadPushBundle(req *agentv1.ReadPushBundleRequest, stream ag
 			return status.Errorf(codes.Internal, "read the push: %v", rerr)
 		}
 	}
+}
+
+// idleReader reads conn with a deadline per read: each read waits at most
+// ownerIdle for bytes.
+type idleReader struct{ conn *net.UnixConn }
+
+func (r idleReader) Read(p []byte) (int, error) {
+	_ = r.conn.SetReadDeadline(time.Now().Add(ownerIdle))
+	return r.conn.Read(p)
 }

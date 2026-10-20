@@ -62,7 +62,7 @@ func packParents(bundle io.ReadSeeker) (map[string][]string, error) {
 			return nil, fmt.Errorf("the pack holds over %d commits", maxAncestryCommits)
 		}
 		sum := sha1.New() // #nosec G401 -- git's object name
-		fmt.Fprintf(sum, "commit %d\x00", content.Len())
+		_, _ = fmt.Fprintf(sum, "commit %d\x00", content.Len())
 		sum.Write(content.Bytes())
 		name := hex.EncodeToString(sum.Sum(nil))
 		var ps []string

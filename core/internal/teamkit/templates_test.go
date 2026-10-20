@@ -15,8 +15,11 @@ func TestTheBuiltInTemplates(t *testing.T) {
 		t.Fatalf("Templates = %v, want %v", Templates, want)
 	}
 	want := map[string][]string{
-		"starter":     {"builder.md", "lead.md", "reviewer.md"},
-		"orchestrate": {"builder.md", "design.md", "lead.md", "reviewer.md"},
+		"starter": {"builder.md", "lead.md", "reviewer.md"},
+		"orchestrate": {
+			"builder-a.md", "builder-b.md", "builder-c.md", "coordinator.md",
+			"devops.md", "off/design-system.md", "reviewer.md",
+		},
 		"app-product": {
 			"design-system.md", "designer.md", "devops.md", "lead.md",
 			"off/social.md", "release.md", "reviewer.md", "trust-safety.md", "writer.md",
@@ -64,5 +67,8 @@ func TestOffAgentsAreInTheOffFolder(t *testing.T) {
 	}
 	if got := OffAgents("app-product"); !slices.Equal(got, []string{"social"}) {
 		t.Errorf("app-product's off agents: %v", got)
+	}
+	if got := OffAgents("orchestrate"); !slices.Equal(got, []string{"design-system"}) {
+		t.Errorf("orchestrate's off agents: %v", got)
 	}
 }

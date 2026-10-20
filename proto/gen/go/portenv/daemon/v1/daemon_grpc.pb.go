@@ -82,6 +82,9 @@ const (
 	DaemonService_ReadAgentFile_FullMethodName         = "/portenv.daemon.v1.DaemonService/ReadAgentFile"
 	DaemonService_AddAgentFiles_FullMethodName         = "/portenv.daemon.v1.DaemonService/AddAgentFiles"
 	DaemonService_SetRoutinePaused_FullMethodName      = "/portenv.daemon.v1.DaemonService/SetRoutinePaused"
+	DaemonService_WakeAgent_FullMethodName             = "/portenv.daemon.v1.DaemonService/WakeAgent"
+	DaemonService_ListDecisions_FullMethodName         = "/portenv.daemon.v1.DaemonService/ListDecisions"
+	DaemonService_Deploy_FullMethodName                = "/portenv.daemon.v1.DaemonService/Deploy"
 	DaemonService_ReadAttachment_FullMethodName        = "/portenv.daemon.v1.DaemonService/ReadAttachment"
 	DaemonService_SendAttachments_FullMethodName       = "/portenv.daemon.v1.DaemonService/SendAttachments"
 	DaemonService_RemoveAttachment_FullMethodName      = "/portenv.daemon.v1.DaemonService/RemoveAttachment"
@@ -268,6 +271,19 @@ type DaemonServiceClient interface {
 	AddAgentFiles(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[AddAgentFilesRequest, AddAgentFilesResponse], error)
 	// Pauses or resumes one of an agent's routines (R-0258).
 	SetRoutinePaused(ctx context.Context, in *SetRoutinePausedRequest, opts ...grpc.CallOption) (*SetRoutinePausedResponse, error)
+	// The owner's portenv wake (ADR 0027 §5): types the agent's fixed
+	// wake-up line for its unread messages, under the helper's checks, so a
+	// busy agent is never typed into. Refused, with a plain line, when the
+	// agent isn't running, has nothing unread, or its runner can't be woken.
+	WakeAgent(ctx context.Context, in *WakeAgentRequest, opts ...grpc.CallOption) (*WakeAgentResponse, error)
+	// The workspace's decisions, oldest first: pending ones only unless
+	// all is set (portenv decision list). Read only.
+	ListDecisions(ctx context.Context, in *ListDecisionsRequest, opts ...grpc.CallOption) (*ListDecisionsResponse, error)
+	// The owner's portenv deploy (ADR 0027 §5, ADR 0026): refused with a
+	// plain line when the project has no deploy runbook, and, until ADR
+	// 0026's run-with-secret is built, refused when it has one too. Nothing
+	// runs.
+	Deploy(ctx context.Context, in *DeployRequest, opts ...grpc.CallOption) (*DeployResponse, error)
 	// Attachments (ADR 0030), the owner only: an agent caller is refused.
 	// ReadAttachment streams one from this Mac's store, the record first.
 	ReadAttachment(ctx context.Context, in *ReadAttachmentRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ReadAttachmentResponse], error)
@@ -901,6 +917,36 @@ func (c *daemonServiceClient) SetRoutinePaused(ctx context.Context, in *SetRouti
 	return out, nil
 }
 
+func (c *daemonServiceClient) WakeAgent(ctx context.Context, in *WakeAgentRequest, opts ...grpc.CallOption) (*WakeAgentResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WakeAgentResponse)
+	err := c.cc.Invoke(ctx, DaemonService_WakeAgent_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) ListDecisions(ctx context.Context, in *ListDecisionsRequest, opts ...grpc.CallOption) (*ListDecisionsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListDecisionsResponse)
+	err := c.cc.Invoke(ctx, DaemonService_ListDecisions_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) Deploy(ctx context.Context, in *DeployRequest, opts ...grpc.CallOption) (*DeployResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeployResponse)
+	err := c.cc.Invoke(ctx, DaemonService_Deploy_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *daemonServiceClient) ReadAttachment(ctx context.Context, in *ReadAttachmentRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ReadAttachmentResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	stream, err := c.cc.NewStream(ctx, &DaemonService_ServiceDesc.Streams[7], DaemonService_ReadAttachment_FullMethodName, cOpts...)
@@ -1124,6 +1170,19 @@ type DaemonServiceServer interface {
 	AddAgentFiles(grpc.ClientStreamingServer[AddAgentFilesRequest, AddAgentFilesResponse]) error
 	// Pauses or resumes one of an agent's routines (R-0258).
 	SetRoutinePaused(context.Context, *SetRoutinePausedRequest) (*SetRoutinePausedResponse, error)
+	// The owner's portenv wake (ADR 0027 §5): types the agent's fixed
+	// wake-up line for its unread messages, under the helper's checks, so a
+	// busy agent is never typed into. Refused, with a plain line, when the
+	// agent isn't running, has nothing unread, or its runner can't be woken.
+	WakeAgent(context.Context, *WakeAgentRequest) (*WakeAgentResponse, error)
+	// The workspace's decisions, oldest first: pending ones only unless
+	// all is set (portenv decision list). Read only.
+	ListDecisions(context.Context, *ListDecisionsRequest) (*ListDecisionsResponse, error)
+	// The owner's portenv deploy (ADR 0027 §5, ADR 0026): refused with a
+	// plain line when the project has no deploy runbook, and, until ADR
+	// 0026's run-with-secret is built, refused when it has one too. Nothing
+	// runs.
+	Deploy(context.Context, *DeployRequest) (*DeployResponse, error)
 	// Attachments (ADR 0030), the owner only: an agent caller is refused.
 	// ReadAttachment streams one from this Mac's store, the record first.
 	ReadAttachment(*ReadAttachmentRequest, grpc.ServerStreamingServer[ReadAttachmentResponse]) error
@@ -1312,6 +1371,15 @@ func (UnimplementedDaemonServiceServer) AddAgentFiles(grpc.ClientStreamingServer
 }
 func (UnimplementedDaemonServiceServer) SetRoutinePaused(context.Context, *SetRoutinePausedRequest) (*SetRoutinePausedResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SetRoutinePaused not implemented")
+}
+func (UnimplementedDaemonServiceServer) WakeAgent(context.Context, *WakeAgentRequest) (*WakeAgentResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method WakeAgent not implemented")
+}
+func (UnimplementedDaemonServiceServer) ListDecisions(context.Context, *ListDecisionsRequest) (*ListDecisionsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListDecisions not implemented")
+}
+func (UnimplementedDaemonServiceServer) Deploy(context.Context, *DeployRequest) (*DeployResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Deploy not implemented")
 }
 func (UnimplementedDaemonServiceServer) ReadAttachment(*ReadAttachmentRequest, grpc.ServerStreamingServer[ReadAttachmentResponse]) error {
 	return status.Error(codes.Unimplemented, "method ReadAttachment not implemented")
@@ -2308,6 +2376,60 @@ func _DaemonService_SetRoutinePaused_Handler(srv interface{}, ctx context.Contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _DaemonService_WakeAgent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WakeAgentRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).WakeAgent(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_WakeAgent_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).WakeAgent(ctx, req.(*WakeAgentRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_ListDecisions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListDecisionsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).ListDecisions(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_ListDecisions_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).ListDecisions(ctx, req.(*ListDecisionsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_Deploy_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeployRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).Deploy(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_Deploy_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).Deploy(ctx, req.(*DeployRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _DaemonService_ReadAttachment_Handler(srv interface{}, stream grpc.ServerStream) error {
 	m := new(ReadAttachmentRequest)
 	if err := stream.RecvMsg(m); err != nil {
@@ -2550,6 +2672,18 @@ var DaemonService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SetRoutinePaused",
 			Handler:    _DaemonService_SetRoutinePaused_Handler,
+		},
+		{
+			MethodName: "WakeAgent",
+			Handler:    _DaemonService_WakeAgent_Handler,
+		},
+		{
+			MethodName: "ListDecisions",
+			Handler:    _DaemonService_ListDecisions_Handler,
+		},
+		{
+			MethodName: "Deploy",
+			Handler:    _DaemonService_Deploy_Handler,
 		},
 		{
 			MethodName: "RemoveAttachment",

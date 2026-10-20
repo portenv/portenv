@@ -193,6 +193,18 @@ struct AttachmentPanelRow: View {
     }
 }
 
+/// The View menu's team items: Show Sidebar (⌘0) and Show Attachments
+/// (⌥⌘A), as one entry of the app's commands.
+struct TeamViewCommands: Commands {
+    let box: String?
+    let team: TeamController?
+
+    var body: some Commands {
+        TeamSidebarToggle(box: box, team: team)
+        AttachmentsCommand(team: team)
+    }
+}
+
 /// View › Show Attachments (⌥⌘A).
 struct AttachmentsCommand: Commands {
     static let title = AttachmentText.showAttachments

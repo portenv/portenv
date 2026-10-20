@@ -16,20 +16,9 @@ import (
 )
 
 // The app's attachment calls (ADR 0030 point 10): the person at this Mac
-// only. An agent caller is refused before anything is looked at, and no
+// only. The server's interceptor refuses an agent caller (ownerOnlyCall);
+// each call checks again itself, before anything is looked at, and no
 // team call maps to these.
-
-// ownerOnlyCall refuses every caller but the owner's app.
-func ownerOnlyCall(ctx context.Context) error {
-	who, err := callerFrom(ctx)
-	if err != nil {
-		return err
-	}
-	if who.kind != callerApp {
-		return status.Error(codes.PermissionDenied, "Only the person at this Mac can do that.")
-	}
-	return nil
-}
 
 // storeBoxIDRE is a box id that's safe as a folder name.
 var storeBoxIDRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`)
@@ -57,7 +46,7 @@ func attachStatus(err error) error {
 
 // ReadAttachment streams one attachment from this Mac's store to the app.
 func (s *Server) ReadAttachment(req *daemonv1.ReadAttachmentRequest, stream daemonv1.DaemonService_ReadAttachmentServer) error {
-	if err := ownerOnlyCall(stream.Context()); err != nil {
+	if err := ownerOnlyCall(stream.Context(), daemonv1.DaemonService_ReadAttachment_FullMethodName); err != nil {
 		return err
 	}
 	if err := s.teamEng().readAttachment(stream.Context(), req.GetName(), req.GetAttachmentId(), stream.Send); err != nil {
@@ -68,7 +57,7 @@ func (s *Server) ReadAttachment(req *daemonv1.ReadAttachmentRequest, stream daem
 
 // SendAttachments is the owner's files for agents: a drop, or Attach….
 func (s *Server) SendAttachments(stream daemonv1.DaemonService_SendAttachmentsServer) error {
-	if err := ownerOnlyCall(stream.Context()); err != nil {
+	if err := ownerOnlyCall(stream.Context(), daemonv1.DaemonService_SendAttachments_FullMethodName); err != nil {
 		return err
 	}
 	r, err := s.teamEng().sendAttachments(stream.Context(), stream.Recv)
@@ -80,7 +69,7 @@ func (s *Server) SendAttachments(stream daemonv1.DaemonService_SendAttachmentsSe
 
 // RemoveAttachment is Remove from this Mac.
 func (s *Server) RemoveAttachment(ctx context.Context, req *daemonv1.RemoveAttachmentRequest) (*daemonv1.RemoveAttachmentResponse, error) {
-	if err := ownerOnlyCall(ctx); err != nil {
+	if err := ownerOnlyCall(ctx, daemonv1.DaemonService_RemoveAttachment_FullMethodName); err != nil {
 		return nil, err
 	}
 	if err := s.teamEng().removeAttachment(ctx, req.GetName(), req.GetAttachmentId()); err != nil {

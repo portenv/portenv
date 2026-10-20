@@ -5,31 +5,32 @@ import PortenvKit
 import ServiceManagement
 import SwiftUI
 
-/// What the window shows (PLAN.md 1.5): first run with no box, the box list
+/// What the windows show (PLAN.md 1.5): first run with no box, the box list
 /// when the box asked for isn't here, and the box itself otherwise. Never a
-/// window for a box that doesn't exist.
+/// window for a box that doesn't exist. Each workspace has a window of its
+/// own, grouped as macOS window tabs, with its own session
+/// (WorkspaceSession, R-0344); the first window shows the launch.
 @MainActor
 @Observable
 final class AppModel {
+    /// The launch's decision, for the first window (its session's
+    /// `.launch` screen).
     private(set) var launch: Launch?
     private(set) var boxes: [String] = []
     /// The workspaces running on this Mac, with or without a window (ADR
     /// 0023): the list shows them as "Running", with Close Workspace.
     private(set) var running: Set<String> = []
-    private(set) var controller: BoxController?
+    /// Every window's session; the menus act on `sessions.current`.
+    let sessions = WorkspaceSessions()
+    /// The first window's session, which shows the launch.
+    private(set) weak var launchSession: WorkspaceSession?
+    private var launchClaimed = false
     /// The workspaces known to be running when portenvd last answered, and
-    /// the window's if it's open: what Quit names when portenvd doesn't
+    /// those open in a window here: what Quit names when portenvd doesn't
     /// answer (R-0252).
-    var knownRunning: [String] {
-        var names = running
-        if let c = controller, c.isOpen { names.insert(c.box) }
-        return names.sorted()
-    }
-    private(set) var tabs: TabsController?
-    /// The open workspace's split view (PLAN 1.2b): one pane on each open.
-    private(set) var split: SplitController?
-    /// The open workspace's agent team (ADR 0022).
-    private(set) var team: TeamController?
+    var knownRunning: [String] { sessions.knownRunning(also: running) }
+    /// The launch window's first run (New Workspace… from another window's
+    /// list is that session's own, `newBox`).
     private(set) var firstRun: FirstRunFlow?
     /// Why portenvd isn't there, said plainly: with Open Login Items when it
     /// waits for approval, with Try Again otherwise.
@@ -37,14 +38,46 @@ final class AppModel {
 
     private let daemon = SharedDaemon.client
     private let defaults = UserDefaults.standard
-    /// Set once the box's window exists, so quitting closes the box; nil
-    /// once the window has gone back to the box list.
-    var onOpen: ((BoxController?) -> Void)?
-    /// Opening the box (up to following its state), and following it.
-    private var openTask: Task<Void, Never>?
-    private var followTask: Task<Void, Never>?
-    /// Closing the box to go back to the list: one close at a time.
-    private(set) var closing = false
+
+    /// A new window's session. Its controller brings this window (its tab)
+    /// forward before a read that may raise a Keychain prompt (R-0214).
+    static func makeSession() -> WorkspaceSession {
+        let ref = SessionRef()
+        let daemon = SharedDaemon.client
+        let session = WorkspaceSession(daemon: daemon) { box in
+            BoxController(box: box, daemon: daemon, notifier: Notifier.shared, ensureDaemon: LoginItem.ensureRegistered,
+                          bringForward: {
+                              Task { @MainActor in
+                                  NSApp.activate()
+                                  ref.session?.bringForward()
+                              }
+                          })
+        }
+        ref.session = session
+        return session
+    }
+
+    /// A window's session, once it's in its window: the first one shows
+    /// the launch and starts it.
+    func attach(_ session: WorkspaceSession) {
+        sessions.add(session)
+        guard !launchClaimed else { return }
+        // A notification is for a workspace whose tab isn't in front.
+        Notifier.frontWorkspace = { [sessions] in
+            sessions.all.first { $0.window != nil && $0.window === NSApp.mainWindow }?.box
+        }
+        launchClaimed = true
+        launchSession = session
+        session.screen = .launch
+        // One launch wait at a time; Try Again restarts it.
+        begin()
+    }
+
+    /// A window closed: its session ends; the workspace keeps running
+    /// (ADR 0023).
+    func detach(_ session: WorkspaceSession) {
+        sessions.remove(session)
+    }
 
     static let lastBoxKey = "lastBox"
     static let firstRunDoneKey = "firstRunDone"
@@ -207,42 +240,49 @@ final class AppModel {
             // making the first workspace (R-0098, R-0211).
             firstRun = makeFlow(at: step, fromBoxList: false, memory: DefaultsFirstRunMemory())
         case let .open(box):
-            Task { await open(box) }
+            if let s = launchSession { Task { await open(box, in: s) } }
         case .boxList:
             break
         }
     }
 
-    /// Opens a box that exists: its controllers, then the same sequence the
-    /// window always ran (1.1).
-    func open(_ box: String) async {
-        guard boxes.contains(box) || firstRun?.made == box else { return }
-        if firstRun?.made == box { defaults.set(true, forKey: Self.firstRunDoneKey) }
-        firstRun = nil
-        let controller = BoxController(
-            box: box,
-            daemon: daemon,
-            notifier: Notifier.shared,
-            ensureDaemon: LoginItem.ensureRegistered
-        )
-        self.controller = controller
-        let tabs = TabsController(box: box, daemon: daemon)
+    /// Opens a box that exists in a window: its own controllers, then the
+    /// same sequence the window always ran (1.1). A workspace already open
+    /// in another window brings that tab forward instead; a new tab that
+    /// was only picking goes (R-0344).
+    func open(_ box: String, in s: WorkspaceSession) async {
+        // Never in a window that has closed meanwhile.
+        guard sessions.all.contains(where: { $0 === s }) else { return }
+        let flow = s.screen == .launch ? firstRun : s.newBox
+        guard boxes.contains(box) || flow?.made == box else { return }
+        if flow?.made == box { defaults.set(true, forKey: Self.firstRunDoneKey) }
+        if case let .focus(other) = sessions.choose(box, for: s) {
+            other.bringForward()
+            if s.controller == nil, let w = s.window, WindowCloseHook.hookedWindows.count > 1 {
+                WindowCloseHook.requestClose(w)
+            }
+            return
+        }
+        if s.screen == .launch { firstRun = nil }
+        let controller = s.show(box)
+        guard let tabs = s.tabs else { return }
         // A long command finishing in a tab, when the window isn't in
         // front (§5).
         tabs.commandFinished = { [weak controller] f in
             let place = controller?.state?.location.map(ServerName.display)
             Task { await Notifier.shared.commandFinished(box: box, finished: f, location: place) }
         }
-        self.tabs = tabs
-        split = SplitController(tabs: tabs)
         // An attachment pushed to the owner notifies, unless its agent's
         // attachments are muted (ADR 0030 point 9a).
-        team = TeamController(box: box, daemon: daemon) { notice in
+        s.onAttachmentNotice = { box, notice in
             Task { await Notifier.shared.attachment(box: box, notice: notice) }
         }
-        launch = .open(box)
+        if s === launchSession { launch = .open(box) }
         defaults.set(box, forKey: Self.lastBoxKey)
-        onOpen?(controller)
+        // The team while the window is open, whether its tab is in front
+        // or not, so the tab's Needs you count is always current; it
+        // watches again after a restart or a move.
+        if let team = s.team { s.keep(Task { await team.follow() }) }
         let opening = Task {
             await controller.waitForDaemon()
             // Boxes saved in the background after Quit Anyway: say so once.
@@ -252,32 +292,34 @@ final class AppModel {
             await NetworkWatch.shared.start()
             await controller.open()
         }
-        openTask = opening
+        s.openTask = opening
         await opening.value
-        guard self.controller === controller else { return } // closed meanwhile
+        guard s.controller === controller else { return } // closed meanwhile
         // The state line follows the state portenvd pushes (WatchBoxState).
         // Alongside, whether Docker Desktop stopped (R-0098).
-        followTask = Task {
+        s.keep(Task {
             async let follow: Void = controller.follow()
             async let engine: Void = controller.watchEngine()
             _ = await (follow, engine)
-        }
+        })
     }
 
-    /// The window is closing. Closing the last workspace window goes back to
-    /// "Your workspaces", and the workspace keeps running (ADR 0023): nothing
-    /// is saved, released or stopped. Close Workspace, Quit or Move closes
-    /// it. Any other window just closes.
-    func windowShouldClose(_ window: NSWindow) -> Bool {
-        guard case .open = launch, controller != nil else { return true }
+    /// A window is closing. Closing the last workspace window goes back to
+    /// "Your workspaces", and the workspace keeps running (ADR 0023):
+    /// nothing is saved, released or stopped. Closing a workspace tab while
+    /// other windows are open just closes it (the workspace keeps running).
+    /// Close Workspace, Quit or Move closes it. Any other window just
+    /// closes.
+    func windowShouldClose(_ window: NSWindow, session s: WorkspaceSession) -> Bool {
+        guard s.controller != nil else { return true }
         let others = WindowCloseHook.hookedWindows.filter { $0 !== window }.count
         switch WindowClose.action(showingBox: true, otherBoxWindows: others) {
         case .closeWindow:
             return true
         case .showListLeavingItRunning:
-            if !closing {
-                closing = true
-                Task { await leaveToList() }
+            if !s.closing {
+                s.closing = true
+                Task { await leaveToList(s) }
             }
             return false
         }
@@ -285,10 +327,10 @@ final class AppModel {
 
     /// Back to the list, the workspace still running (once it has finished
     /// opening, so an open in progress is never cut short).
-    private func leaveToList() async {
-        defer { closing = false }
-        await openTask?.value
-        await showList()
+    private func leaveToList(_ s: WorkspaceSession) async {
+        defer { s.closing = false }
+        await s.openTask?.value
+        await showList(s)
     }
 
     /// Close Workspace from the list: saved and released, asking on a
@@ -305,17 +347,11 @@ final class AppModel {
     }
 
     /// Back to "Your workspaces"; the workspace shown may still be running.
-    private func showList() async {
-        followTask?.cancel()
-        followTask = nil
-        openTask = nil
-        controller = nil
-        tabs = nil
-        split = nil
-        onOpen?(nil)
+    private func showList(_ s: WorkspaceSession) async {
+        s.leave()
+        if s === launchSession { launch = .boxList(notice: nil) }
         if let listed = try? await daemon.boxes() { boxes = listed }
         await refreshRunning()
-        launch = .boxList(notice: nil)
     }
 
     /// A first-run flow with real keys, its Keychain waits said in the
@@ -341,16 +377,35 @@ final class AppModel {
     }
 
     /// The box list's New Box…: first run's first-box step, titled "New
-    /// box", with Cancel back to the list.
-    func newBox() {
-        firstRun = makeFlow(at: .firstBox, fromBoxList: true, memory: NoFirstRunMemory())
-        launch = .firstRun(.firstBox)
+    /// box", with Cancel back to the list. In the launch window it's the
+    /// launch's first run; in any other window, that window's own.
+    func newBox(in s: WorkspaceSession) {
+        let flow = makeFlow(at: .firstBox, fromBoxList: true, memory: NoFirstRunMemory())
+        if s.screen == .launch {
+            firstRun = flow
+            launch = .firstRun(.firstBox)
+        } else {
+            s.newBox = flow
+            s.screen = .newBox
+        }
     }
 
     /// Cancel, ⎋ or "Your boxes" from New Box…: back to the list.
-    func cancelNewBox() {
-        firstRun = nil
-        launch = .boxList(notice: nil)
+    func cancelNewBox(in s: WorkspaceSession) {
+        if s.screen == .launch {
+            firstRun = nil
+            launch = .boxList(notice: nil)
+        } else {
+            s.newBox = nil
+            s.screen = .list
+        }
+    }
+
+    /// Whether the window may be a tab: not while it shows the launch's
+    /// first run (the first-run window keeps tabbing off).
+    func windowTabs(_ s: WorkspaceSession) -> Bool {
+        guard s.screen == .launch, s.controller == nil, case .firstRun = launch else { return true }
+        return false
     }
 }
 
@@ -362,9 +417,19 @@ struct UnavailableFirstRunService: FirstRunService {
     func createBox(_: NewBox) async throws { throw FirstRunError(FirstRunText.noBackgroundService) }
 }
 
-/// The window's content, from the model's decision.
+/// A session, for a closure that must be Sendable (the Keychain's
+/// bring-forward); read on the main actor only.
+final class SessionRef: @unchecked Sendable {
+    weak var session: WorkspaceSession?
+}
+
+/// One window's content: its own session (a workspace, the list, New
+/// Workspace…), or the launch in the first window (R-0344).
 struct AppRoot: View {
     @Bindable var model: AppModel
+    /// This window's session: its workspace, tabs, team and panes.
+    @State private var session = AppModel.makeSession()
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         Group {
@@ -396,49 +461,88 @@ struct AppRoot: View {
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
                     model.begin()
                 }
+            } else if let controller = session.controller, let tabs = session.tabs {
+                MainWindow(controller: controller, tabs: tabs, team: session.team, split: session.split)
             } else {
-                switch model.launch {
-                case nil:
-                    // Never without end: after about 4 s, Welcome or the
-                    // list says the service isn't answering (R-0121).
-                    ProgressView().controlSize(.small)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .accessibilityElement()
-                        .accessibilityLabel(LaunchWait.starting)
-                case .firstRun:
-                    if let flow = model.firstRun {
-                        FirstRunView(flow: flow, opened: { box in Task { await model.open(box) } },
-                                     cancel: flow.fromBoxList ? { model.cancelNewBox() } : nil, refill: model.refill)
+                switch session.screen {
+                case .launch:
+                    launchContent
+                case .newBox:
+                    if let flow = session.newBox {
+                        FirstRunView(flow: flow, opened: { box in Task { await model.open(box, in: session) } },
+                                     cancel: { model.cancelNewBox(in: session) }, refill: model.refill)
                     }
-                case let .boxList(notice):
-                    BoxListView(boxes: model.boxes, notice: notice,
-                                retry: model.serviceNotAnswering ? { model.begin() } : nil,
-                                running: model.running,
-                                close: { box in Task { await model.closeWorkspace(box) } },
-                                refresh: { await model.refreshRunning() }) { box in
-                        Task { await model.open(box) }
-                    } newBox: {
-                        model.newBox()
-                    }
-                case .open:
-                    if let controller = model.controller, let tabs = model.tabs {
-                        MainWindow(controller: controller, tabs: tabs, team: model.team, split: model.split)
+                case .list, .workspace:
+                    if model.launch == nil {
+                        starting
+                    } else {
+                        list(notice: nil)
                     }
                 }
             }
         }
         .frame(minWidth: 640, minHeight: 440)
-        .background(WindowCloseGuard { window in model.windowShouldClose(window) })
+        .background(WindowCloseGuard(tabs: model.windowTabs(session)) { window in
+            model.windowShouldClose(window, session: session)
+        })
+        // The window's tab: its title, and the menus' target while it's main.
+        .background(SessionWindow(session: session, sessions: model.sessions))
+        // The window closing ends its session, not the workspace (ADR 0023).
+        .background(EndsWithWindow { model.detach(session) })
+        .task {
+            WorkspaceWindows.open = { openWindow(id: WorkspaceWindows.id) }
+            model.attach(session)
+        }
         .onAppear { model.windowAppeared() }
         .onDisappear { model.windowDisappeared() }
-        // On the window, so it travels with it and never hides on another
-        // Space; the launch carries on behind it (R-0121).
-        .sheet(isPresented: $model.moveOffered) {
+        // On the launch window, so it travels with it and never hides on
+        // another Space; the launch carries on behind it (R-0121).
+        .sheet(isPresented: Binding(get: { model.moveOffered && model.launchSession === session },
+                                    set: { model.moveOffered = $0 })) {
             MoveOfferView { model.answerMove($0) }
         }
-        .alert(model.moveError ?? "", isPresented: Binding(get: { model.moveError != nil },
+        .alert(model.moveError ?? "", isPresented: Binding(get: { model.moveError != nil && model.launchSession === session },
                                                           set: { if !$0 { model.moveError = nil } })) {
             Button("OK") { model.moveError = nil }
+        }
+    }
+
+    /// Never without end: after about 4 s, Welcome or the list says the
+    /// service isn't answering (R-0121).
+    private var starting: some View {
+        ProgressView().controlSize(.small)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .accessibilityElement()
+            .accessibilityLabel(LaunchWait.starting)
+    }
+
+    /// The first window, from the launch's decision.
+    @ViewBuilder private var launchContent: some View {
+        switch model.launch {
+        case nil:
+            starting
+        case .firstRun:
+            if let flow = model.firstRun {
+                FirstRunView(flow: flow, opened: { box in Task { await model.open(box, in: session) } },
+                             cancel: flow.fromBoxList ? { model.cancelNewBox(in: session) } : nil, refill: model.refill)
+            }
+        case let .boxList(notice):
+            list(notice: notice)
+        case .open:
+            // Opening: the workspace shows once its session has it.
+            starting
+        }
+    }
+
+    private func list(notice: String?) -> some View {
+        BoxListView(boxes: model.boxes, notice: notice,
+                    retry: model.serviceNotAnswering ? { model.begin() } : nil,
+                    running: model.running,
+                    close: { box in Task { await model.closeWorkspace(box) } },
+                    refresh: { await model.refreshRunning() }) { box in
+            Task { await model.open(box, in: session) }
+        } newBox: {
+            model.newBox(in: session)
         }
     }
 }

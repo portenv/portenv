@@ -14,15 +14,23 @@ func TestEveryTemplateCarriesTheAttachGuidance(t *testing.T) {
 	if !strings.HasPrefix(AttachGuidance, "Attach something for the owner only when he needs to see it to understand or decide. By default, attach nothing.") {
 		t.Fatalf("R-0380's sentence isn't first: %q", AttachGuidance)
 	}
+	// Every agent file of every template, those shipped off included.
+	checked := map[string]bool{}
 	for _, name := range Templates {
 		files, err := Template(name)
 		if err != nil {
 			t.Fatal(err)
 		}
 		for file, b := range files {
+			checked[name+"/"+file] = true
 			if !strings.Contains(string(b), AttachGuidance) {
 				t.Errorf("%s/%s doesn't carry the attachment guidance word for word", name, file)
 			}
+		}
+	}
+	for _, f := range []string{"starter/builder.md", "orchestrate/coordinator.md", "orchestrate/builder-c.md", "orchestrate/off/design-system.md", "app-product/off/social.md", "app-product/writer.md"} {
+		if !checked[f] {
+			t.Errorf("%s wasn't checked", f)
 		}
 	}
 	text := NewGuide().Text()

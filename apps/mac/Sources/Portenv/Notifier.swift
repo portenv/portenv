@@ -25,7 +25,7 @@ final class Notifier: KeychainWaitNotifying, @unchecked Sendable {
     /// and the window isn't in front (§5). One per tab: a newer one
     /// replaces the older.
     func commandFinished(box: String, finished f: CommandWatch.Finished, location: String?) async {
-        guard NotifyRules.commandFinished(seconds: f.seconds, windowInFront: await Self.windowInFront()) else { return }
+        guard NotifyRules.commandFinished(seconds: f.seconds, windowInFront: await Self.windowInFront(box)) else { return }
         await post(NotifyText.commandFinished(box: box, tab: f.tab, program: f.program, seconds: f.seconds, location: location),
                    id: "command-\(box)-\(f.tab)")
     }
@@ -33,7 +33,7 @@ final class Notifier: KeychainWaitNotifying, @unchecked Sendable {
     /// A move finished: notified when it took longer than 10 s and the
     /// window isn't in front (§5).
     func moveFinished(box: String, to place: String, seconds: Int) async {
-        guard NotifyRules.moveFinished(seconds: seconds, windowInFront: await Self.windowInFront()) else { return }
+        guard NotifyRules.moveFinished(seconds: seconds, windowInFront: await Self.windowInFront(box)) else { return }
         await post(NotifyText.moveFinished(box: box, to: place, seconds: seconds), id: "move-\(box)")
     }
 
@@ -62,8 +62,13 @@ final class Notifier: KeychainWaitNotifying, @unchecked Sendable {
 
     private static let log = Logger(subsystem: "com.portenv.Portenv", category: "notifications")
 
-    @MainActor private static func windowInFront() -> Bool {
-        NSApplication.shared.isActive && NSApplication.shared.keyWindow != nil
+    /// The workspace whose window (tab) is in front, if one is (AppModel
+    /// sets it): another workspace's tab in front doesn't count as this
+    /// one's window being in front (R-0344).
+    @MainActor static var frontWorkspace: () -> String? = { nil }
+
+    @MainActor private static func windowInFront(_ box: String) -> Bool {
+        NSApplication.shared.isActive && NSApplication.shared.keyWindow != nil && frontWorkspace() == box
     }
 
     /// An attachment pushed to the owner (ADR 0030 point 9a): on a message

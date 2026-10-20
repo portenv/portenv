@@ -4,9 +4,10 @@ import AppKit
 import PortenvKit
 import SwiftUI
 
-/// One window: first run when there's no box, the box list when the box
-/// asked for (PORTENV_BOX) isn't here, and the box otherwise (PLAN.md 1.5).
-/// Never a window for a box that doesn't exist.
+/// First run when there's no box, the box list when the box asked for
+/// (PORTENV_BOX) isn't here, and the box otherwise (PLAN.md 1.5). Never a
+/// window for a box that doesn't exist. Each workspace has a window of its
+/// own, grouped as macOS window tabs (R-0344).
 @main
 struct PortenvApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
@@ -51,30 +52,35 @@ struct PortenvApp: App {
     }
 
     var body: some Scene {
-        WindowGroup {
+        WindowGroup(id: WorkspaceWindows.id) {
             AppRoot(model: model)
                 .task {
-                    model.onOpen = { [delegate] controller in delegate.controller = controller }
+                    delegate.sessions = model.sessions
+                    // The workspace whose tab is in front, as Notifier
+                    // reads it (R-0344).
+                    NeedsYouNotifications.shared.frontWorkspace = { Notifier.frontWorkspace() }
+                    NeedsYouNotifications.shared.show = { [model] route in model.show(route) }
                     delegate.runningNames = { [model] in model.knownRunning }
-                    // One launch wait at a time; Try Again restarts it.
-                    model.begin()
                 }
         }
         .windowToolbarStyle(.unified(showsTitle: true))
         .commands {
+            // The menus act on the workspace whose window is main (R-0344).
+            let current = model.sessions.current
             // Make a Save Point (⌘S) is in the Box menu (§3.2), not File.
             CommandGroup(replacing: .saveItem) {}
             // The title menu's box actions, also in the menu bar, once a box
             // is open.
             CommandMenu("Workspace") {
-                if let controller = model.controller {
+                if let controller = current?.controller {
                     BoxMenu(controller: controller)
                 }
             }
-            TabCommands(tabs: model.tabs, split: model.split)
-            SplitCommands(split: model.split)
-            InspectorToggle(box: model.controller?.box)
-            TeamSidebarToggle(box: model.controller?.box, team: model.team)
+            WorkspaceTabCommands(hasWindow: !model.sessions.all.isEmpty)
+            TabCommands(tabs: current?.tabs, split: current?.split)
+            SplitCommands(split: current?.split)
+            InspectorToggle(box: current?.controller?.box)
+            TeamSidebarToggle(box: current?.controller?.box, team: current?.team)
             FindCommands()
             FeedbackCommands()
             // Portenv › Settings… (⌘,): the toolbar window (R-0137).
@@ -89,8 +95,10 @@ struct PortenvApp: App {
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var signals: [DispatchSourceSignal] = []
-    /// The window's box: quitting closes it, waking checks it.
-    var controller: BoxController?
+    /// Every window's session (R-0344): waking checks each workspace shown,
+    /// and relaunching for an update leaves each running.
+    var sessions: WorkspaceSessions?
+    private var controlTab: Any?
     /// The workspaces the app knows are running (AppModel.knownRunning).
     var runningNames: () -> [String] = { [] }
     var knownRunning: [String] { runningNames() }
@@ -102,8 +110,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillFinishLaunching(_: Notification) {
         // The display Portenv was launched from: first run opens there.
         FirstRunLaunch.pointer = NSEvent.mouseLocation
-        // Portenv's tab bar is the only tabs: no native window tabs.
-        WindowCloseHook.turnOffNativeTabs()
+        // Workspace windows are macOS window tabs; every other window keeps
+        // tabbing off (R-0344, R-0345).
+        WindowCloseHook.turnOnWorkspaceTabs()
     }
 
     func applicationDidFinishLaunching(_: Notification) {
@@ -123,6 +132,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         OnScreen.fixAll()
+        // Needs-you notifications: their delegate and Show (no permission
+        // asked here, §5).
+        NeedsYouNotifications.shared.install()
+        // ⌃Tab / ⌃⇧Tab: the next and previous workspace tab (R-0345).
+        controlTab = WorkspaceWindows.watchControlTab()
         // SIGTERM (Xcode's Stop, logout, kill) and SIGINT (Ctrl-C in the
         // Terminal that started it) quit like ⌘Q, so open boxes are saved
         // and released.
@@ -139,16 +153,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated {
-                guard let controller = self?.controller else { return }
-                Task { await controller.woke() }
+                for controller in self?.sessions?.controllers ?? [] {
+                    Task { await controller.woke() }
+                }
             }
         }
     }
 
-    /// A box window never closes by itself: closing it goes back to "Your
-    /// boxes" (AppModel.windowShouldClose). Closing the list or first run,
-    /// the last window, quits.
+    /// The last workspace window never closes by itself: closing it goes
+    /// back to "Your workspaces" (AppModel.windowShouldClose). Closing the
+    /// list or first run, the last window, quits.
     func applicationShouldTerminateAfterLastWindowClosed(_: NSApplication) -> Bool { true }
+
+    /// The tab bar's ＋ (and Window › New Tab): "Your workspaces" in a new
+    /// tab, when no window answers it first.
+    @objc func newWindowForTab(_: Any?) {
+        WorkspaceWindows.open?()
+    }
 
     func applicationShouldTerminate(_: NSApplication) -> NSApplication.TerminateReply {
         // Quitting never fails silently: close (save and release) the box
@@ -158,12 +179,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // While AppKit waits for the reply it runs the main run loop in a
         // modal mode, where main-actor tasks do not run: work off the main
         // actor and show the alert and the reply in that mode.
-        let flow = controller?.quitFlow
+        let controllers = sessions?.controllers ?? []
+        let flow = controllers.first?.quitFlow
         // The workspaces the app knows are running, named if portenvd
         // doesn't answer (R-0252).
         let known = knownRunning
         let relaunching = relaunchingForUpdate
-        if relaunching { controller?.relaunchingForUpdate() }
+        // Every window's workspace keeps running for the next portenvd.
+        if relaunching { controllers.forEach { $0.relaunchingForUpdate() } }
         Task.detached {
             if relaunching {
                 // portenvd stops by itself, leaving the box running.

@@ -5,7 +5,8 @@ import PortenvKit
 
 /// Keeps Portenv's windows on a screen you can see (R-0044): a frame
 /// restored from a display that's gone, or left behind when one is
-/// unplugged, is centred on the main screen.
+/// unplugged, is centred on the main screen. A full-screen window is
+/// macOS's to place, never moved here (CC-0500).
 @MainActor
 enum OnScreen {
     static func fixAll() {
@@ -15,7 +16,9 @@ enum OnScreen {
     static func fix(_ window: NSWindow) {
         // The screen with the menu bar first.
         let screens = NSScreen.screens.map(\.visibleFrame)
-        let placed = WindowPlacement.visible(window.frame, screens: screens)
+        // Never a full-screen window: macOS places it (CC-0500).
+        let placed = WindowPlacement.visible(window.frame, screens: screens,
+                                             fullScreen: window.styleMask.contains(.fullScreen))
         if placed != window.frame { window.setFrame(placed, display: true) }
     }
 

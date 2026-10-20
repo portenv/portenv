@@ -44,7 +44,7 @@ func (s *Server) grpcServer(opts ...grpc.ServerOption) *grpc.Server {
 			defer s.recoverRequest(info.FullMethod, &err)
 			return handler(srv, ss)
 		}),
-	}, opts...)...)
+	}, append(ownerOnlyInterceptors(), opts...)...)...)
 }
 
 func (s *Server) recoverRequest(method string, err *error) {

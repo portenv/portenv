@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"syscall"
 	"unicode"
@@ -115,6 +116,13 @@ func checkBoardLine(l *agentv1.AppendBoardRequest) (file string, err error) {
 		for _, c := range d.GetChoices() {
 			if strings.TrimSpace(c) == "" || utf8.RuneCountInString(c) > 80 || !plainText(c, false) {
 				return bad("a decision's choice is 1 to 80 characters of plain text on one line")
+			}
+		}
+		for _, m := range d.GetMigrationItems() {
+			switch {
+			case !boardIDRE.MatchString(m.GetId()), !plainText(m.GetPath(), false), !plainText(m.GetNote(), false), len(m.GetPath())+len(m.GetNote()) > 8<<10,
+				m.GetAgent() != "" && !boardPartyRE.MatchString(m.GetAgent()), !slices.Contains([]string{"git", "repo", "worktree", "file", "setting"}, m.GetKind()):
+				return bad("a decision's migration items hold only plain paths, notes, agent ids and kinds")
 			}
 		}
 		for _, p := range d.GetPackages() {
@@ -322,10 +330,10 @@ func TeamIO(args []string, stdin io.Reader, stdout io.Writer) error {
 		return json.NewEncoder(stdout).Encode(found)
 	case "clone-own":
 		// As the agent, through as-agent (ADR 0022 §2a point 2).
-		if len(args) != 5 {
-			return errors.New("clone-own PROJECT HOME ID QUOTA")
+		if len(args) != 6 {
+			return errors.New("clone-own PROJECT HOME ID QUOTA NAME")
 		}
-		return cloneOwn(context.Background(), dir, args[2], args[3], args[4], homeGit(args[2]), stdout)
+		return cloneOwn(context.Background(), dir, args[2], args[3], args[4], args[5], homeGit(args[2]), stdout)
 	case "bundle-own":
 		// As the agent, through as-agent (ADR 0022 §2a point 3): its
 		// branch's bundle on stdout.
@@ -333,6 +341,12 @@ func TeamIO(args []string, stdin io.Reader, stdout io.Writer) error {
 			return errors.New("bundle-own HOME NAME ID thin|full")
 		}
 		return bundleOwn(context.Background(), dir, args[2], args[3], args[4], streamGit(dir), stdout)
+	case "migrate-copy":
+		// As the agent, from init's move (ADR 0022 §2a point 6).
+		if len(args) != 5 {
+			return errors.New("migrate-copy HOME SRC DEST QUOTA")
+		}
+		return migrateCopy(dir, args[2], args[3], args[4], ownedByMe, stdin, stdout)
 	case "lens-grant":
 		// As the writer, through as-agent (ADR 0022 §2a point 4).
 		if len(args) != 4 {

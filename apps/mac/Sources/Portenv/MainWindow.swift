@@ -48,7 +48,8 @@ struct MainWindow: View {
         HStack(spacing: 0) {
             if TeamSidebarToggle.shows(choice: sidebarChoice, team: team), let team {
                 TeamSidebar(state: team.state, tabs: tabs.tabs,
-                            selection: Binding(get: { team.selection }, set: { choose($0) }), compact: narrow)
+                            selection: Binding(get: { team.selection }, set: { choose($0) }), compact: narrow,
+                            onRaise: { n in Task { await team.raiseAgentLimit(to: n) } }, error: team.limitError)
                 Divider()
             }
             content
@@ -281,10 +282,12 @@ struct MainWindow: View {
                         // bar marks current, never another (R-0314).
                         MainTabTerminal(shown: TabTerminalShown(provider: provider), tab: tab.id,
                                         generation: controller.terminalGeneration, label: terminalLabel,
+                                        tabName: TerminalLabel.title(tab, team: team?.state.agents ?? []),
                                         serviceComing: controller.reconnectingToService)
                     } else if !AppTerminal.attached, controller.tabTerminals != nil {
-                        // The tabs aren't known yet.
-                        Color(nsColor: .textBackgroundColor)
+                        // The tabs aren't known yet: "Opening <workspace>…",
+                        // never a bare background (R-0384).
+                        TerminalOpening(line: TabTerminalShown.openingLine(tab: controller.box))
                     } else {
                         BoxTerminal(box: controller.box, generation: controller.terminalGeneration,
                                     onEnded: { Task { await controller.terminalEnded() } },

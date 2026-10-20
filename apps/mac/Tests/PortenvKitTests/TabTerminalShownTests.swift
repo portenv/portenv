@@ -220,3 +220,126 @@ struct DisconnectedDeadlineTests {
         #expect(shown.overdue, "no reset after Reconnect: the card again")
     }
 }
+
+/// No blank pane (basics audit, R-0384): until a tab's stream first resets,
+/// the terminal says "Opening <tab>…"; if it fails before then, a plain
+/// card with Try Again, never a bare background.
+@MainActor
+struct OpeningTabTests {
+    @Test func saysOpeningUntilTheFirstReset() {
+        let shown = TabTerminalShown(provider: TabTerminalShownTests.Provider())
+        shown.show(tab: "@1", generation: 1)
+        #expect(shown.overlay(serviceComing: false) == .opening)
+        #expect(shown.overlay(serviceComing: true) == .opening)
+        shown.reset(TabTerminalSize(cols: 80, rows: 24))
+        #expect(shown.overlay(serviceComing: false) == .none)
+        // Another tab, or the same tab after the box opened again: opening.
+        shown.show(tab: "@2", generation: 1)
+        #expect(shown.overlay(serviceComing: false) == .opening)
+        shown.reset(TabTerminalSize(cols: 80, rows: 24))
+        shown.show(tab: "@2", generation: 2)
+        #expect(shown.overlay(serviceComing: false) == .opening)
+        // The same tab and generation again changes nothing.
+        shown.reset(TabTerminalSize(cols: 80, rows: 24))
+        shown.show(tab: "@2", generation: 2)
+        #expect(shown.overlay(serviceComing: false) == .none)
+    }
+
+    @Test func aFailedOpenSaysSoAndTryAgainOpensAgain() {
+        let p = TabTerminalShownTests.Provider()
+        let shown = TabTerminalShown(provider: p)
+        shown.show(tab: "@1", generation: 1)
+        shown.ended(.lost(retrying: false))
+        #expect(shown.overlay(serviceComing: false) == .couldNotOpen(TabTerminalShown.notOpeningLine))
+        // While portenvd comes back, it's still opening.
+        #expect(shown.overlay(serviceComing: true) == .opening)
+        // Try Again: a new stream, opening again.
+        shown.reconnect()
+        #expect(p.opened.count == 2)
+        #expect(shown.overlay(serviceComing: false) == .opening)
+        shown.reset(TabTerminalSize(cols: 80, rows: 24))
+        #expect(shown.overlay(serviceComing: false) == .none)
+    }
+
+    @Test func retryingBeforeTheFirstResetIsStillOpening() {
+        let shown = TabTerminalShown(provider: TabTerminalShownTests.Provider())
+        shown.show(tab: "@1", generation: 1)
+        shown.ended(.lost(retrying: true))
+        #expect(shown.overlay(serviceComing: false) == .opening)
+    }
+
+    /// Past the deadline, an open that never got going shows the card,
+    /// saying nothing is being saved if portenvd is away.
+    @Test func anOpenPastTheDeadlineShowsTheCard() async {
+        let timers = ManualTimers()
+        let shown = TabTerminalShown(provider: TabTerminalShownTests.Provider(), deadline: .seconds(25),
+                                     settle: .seconds(2), sleep: timers.sleep)
+        shown.show(tab: "@1", generation: 1)
+        shown.ended(.lost(retrying: true))
+        for _ in 0..<1000 where timers.pending(.seconds(25)) == 0 { try? await Task.sleep(for: .milliseconds(5)) }
+        timers.fire(.seconds(25))
+        for _ in 0..<1000 where !shown.overdue { try? await Task.sleep(for: .milliseconds(5)) }
+        #expect(shown.overlay(serviceComing: false) == .couldNotOpen(TabTerminalShown.notOpeningLine))
+        #expect(shown.overlay(serviceComing: true) == .couldNotOpen(TabTerminalShown.serviceAwayLine))
+    }
+
+    /// An open that never sends anything (no reset, no end) says so after
+    /// `openDeadline`, with Try Again, rather than "Opening…" for ever.
+    @Test func anOpenThatNeverAnswersShowsTheCard() async {
+        let timers = ManualTimers()
+        let p = TabTerminalShownTests.Provider()
+        let shown = TabTerminalShown(provider: p, deadline: .seconds(25), settle: .seconds(2),
+                                     openDeadline: .seconds(20), sleep: timers.sleep)
+        #expect(TabTerminalShown.openDeadline == .seconds(20))
+        shown.show(tab: "@1", generation: 1)
+        #expect(shown.overlay(serviceComing: false) == .opening)
+        for _ in 0..<1000 where timers.pending(.seconds(20)) == 0 { try? await Task.sleep(for: .milliseconds(5)) }
+        timers.fire(.seconds(20))
+        for _ in 0..<1000 where !shown.openTimedOut { try? await Task.sleep(for: .milliseconds(5)) }
+        #expect(shown.overlay(serviceComing: false) == .couldNotOpen(TabTerminalShown.notOpeningLine))
+        #expect(shown.overlay(serviceComing: true) == .couldNotOpen(TabTerminalShown.serviceAwayLine))
+        // Try Again: opening again, with its own 20 s.
+        shown.reconnect()
+        #expect(p.opened.count == 2)
+        #expect(shown.overlay(serviceComing: false) == .opening)
+        for _ in 0..<1000 where timers.pending(.seconds(20)) == 0 { try? await Task.sleep(for: .milliseconds(5)) }
+        shown.reset(TabTerminalSize(cols: 80, rows: 24))
+        timers.fire(.seconds(20)) // too late: it opened
+        for _ in 0..<20 { await Task.yield() }
+        #expect(!shown.openTimedOut)
+        #expect(shown.overlay(serviceComing: false) == .none)
+    }
+
+    /// Any event stops the 20 s: a stream that's retrying is left to the
+    /// trouble deadline; another tab starts its own.
+    @Test func anyEventOrAnotherTabStopsTheOpenTimer() async {
+        let timers = ManualTimers()
+        let shown = TabTerminalShown(provider: TabTerminalShownTests.Provider(), deadline: .seconds(25), settle: .seconds(2),
+                                     openDeadline: .seconds(20), sleep: timers.sleep)
+        shown.show(tab: "@1", generation: 1)
+        for _ in 0..<1000 where timers.pending(.seconds(20)) == 0 { try? await Task.sleep(for: .milliseconds(5)) }
+        shown.ended(.lost(retrying: true))
+        timers.fire(.seconds(20))
+        for _ in 0..<20 { await Task.yield() }
+        #expect(!shown.openTimedOut)
+        #expect(shown.overlay(serviceComing: false) == .opening)
+        // Another tab: a fresh open, timed on its own.
+        shown.show(tab: "@2", generation: 1)
+        for _ in 0..<1000 where timers.pending(.seconds(20)) == 0 { try? await Task.sleep(for: .milliseconds(5)) }
+        timers.fire(.seconds(20))
+        for _ in 0..<1000 where !shown.openTimedOut { try? await Task.sleep(for: .milliseconds(5)) }
+        #expect(shown.openTimedOut)
+        shown.show(tab: "@3", generation: 1)
+        #expect(!shown.openTimedOut)
+        #expect(shown.overlay(serviceComing: false) == .opening)
+        shown.stop()
+        #expect(!shown.openTimedOut)
+    }
+
+    @Test func theWords() {
+        #expect(TabTerminalShown.openingLine(tab: "server") == "Opening server\u{2026}")
+        #expect(TabTerminalShown.couldNotOpenTitle(tab: "server") == "Couldn\u{2019}t open server")
+        #expect(TabTerminalShown.openingLine(tab: "") == "Opening tab\u{2026}")
+        #expect(TabTerminalShown.tryAgain == "Try Again")
+    }
+}

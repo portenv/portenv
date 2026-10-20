@@ -85,6 +85,8 @@ const (
 	DaemonService_WakeAgent_FullMethodName             = "/portenv.daemon.v1.DaemonService/WakeAgent"
 	DaemonService_ListDecisions_FullMethodName         = "/portenv.daemon.v1.DaemonService/ListDecisions"
 	DaemonService_Deploy_FullMethodName                = "/portenv.daemon.v1.DaemonService/Deploy"
+	DaemonService_GetTeamSettings_FullMethodName       = "/portenv.daemon.v1.DaemonService/GetTeamSettings"
+	DaemonService_SetAgentsAllowed_FullMethodName      = "/portenv.daemon.v1.DaemonService/SetAgentsAllowed"
 )
 
 // DaemonServiceClient is the client API for DaemonService service.
@@ -281,6 +283,11 @@ type DaemonServiceClient interface {
 	// 0026's run-with-secret is built, refused when it has one too. Nothing
 	// runs.
 	Deploy(ctx context.Context, in *DeployRequest, opts ...grpc.CallOption) (*DeployResponse, error)
+	// The owner's team settings (R-0347): how many agents may run in one
+	// workspace (Settings › Team › Agents allowed). Set only by the app, in
+	// front of the person: from Settings, or the owner's confirmed Raise.
+	GetTeamSettings(ctx context.Context, in *GetTeamSettingsRequest, opts ...grpc.CallOption) (*GetTeamSettingsResponse, error)
+	SetAgentsAllowed(ctx context.Context, in *SetAgentsAllowedRequest, opts ...grpc.CallOption) (*SetAgentsAllowedResponse, error)
 }
 
 type daemonServiceClient struct {
@@ -936,6 +943,26 @@ func (c *daemonServiceClient) Deploy(ctx context.Context, in *DeployRequest, opt
 	return out, nil
 }
 
+func (c *daemonServiceClient) GetTeamSettings(ctx context.Context, in *GetTeamSettingsRequest, opts ...grpc.CallOption) (*GetTeamSettingsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetTeamSettingsResponse)
+	err := c.cc.Invoke(ctx, DaemonService_GetTeamSettings_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) SetAgentsAllowed(ctx context.Context, in *SetAgentsAllowedRequest, opts ...grpc.CallOption) (*SetAgentsAllowedResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetAgentsAllowedResponse)
+	err := c.cc.Invoke(ctx, DaemonService_SetAgentsAllowed_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DaemonServiceServer is the server API for DaemonService service.
 // All implementations must embed UnimplementedDaemonServiceServer
 // for forward compatibility.
@@ -1130,6 +1157,11 @@ type DaemonServiceServer interface {
 	// 0026's run-with-secret is built, refused when it has one too. Nothing
 	// runs.
 	Deploy(context.Context, *DeployRequest) (*DeployResponse, error)
+	// The owner's team settings (R-0347): how many agents may run in one
+	// workspace (Settings › Team › Agents allowed). Set only by the app, in
+	// front of the person: from Settings, or the owner's confirmed Raise.
+	GetTeamSettings(context.Context, *GetTeamSettingsRequest) (*GetTeamSettingsResponse, error)
+	SetAgentsAllowed(context.Context, *SetAgentsAllowedRequest) (*SetAgentsAllowedResponse, error)
 	mustEmbedUnimplementedDaemonServiceServer()
 }
 
@@ -1319,6 +1351,12 @@ func (UnimplementedDaemonServiceServer) ListDecisions(context.Context, *ListDeci
 }
 func (UnimplementedDaemonServiceServer) Deploy(context.Context, *DeployRequest) (*DeployResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Deploy not implemented")
+}
+func (UnimplementedDaemonServiceServer) GetTeamSettings(context.Context, *GetTeamSettingsRequest) (*GetTeamSettingsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetTeamSettings not implemented")
+}
+func (UnimplementedDaemonServiceServer) SetAgentsAllowed(context.Context, *SetAgentsAllowedRequest) (*SetAgentsAllowedResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetAgentsAllowed not implemented")
 }
 func (UnimplementedDaemonServiceServer) mustEmbedUnimplementedDaemonServiceServer() {}
 func (UnimplementedDaemonServiceServer) testEmbeddedByValue()                       {}
@@ -2360,6 +2398,42 @@ func _DaemonService_Deploy_Handler(srv interface{}, ctx context.Context, dec fun
 	return interceptor(ctx, in, info, handler)
 }
 
+func _DaemonService_GetTeamSettings_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetTeamSettingsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).GetTeamSettings(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_GetTeamSettings_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).GetTeamSettings(ctx, req.(*GetTeamSettingsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_SetAgentsAllowed_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetAgentsAllowedRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).SetAgentsAllowed(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_SetAgentsAllowed_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).SetAgentsAllowed(ctx, req.(*SetAgentsAllowedRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // DaemonService_ServiceDesc is the grpc.ServiceDesc for DaemonService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -2578,6 +2652,14 @@ var DaemonService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Deploy",
 			Handler:    _DaemonService_Deploy_Handler,
+		},
+		{
+			MethodName: "GetTeamSettings",
+			Handler:    _DaemonService_GetTeamSettings_Handler,
+		},
+		{
+			MethodName: "SetAgentsAllowed",
+			Handler:    _DaemonService_SetAgentsAllowed_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

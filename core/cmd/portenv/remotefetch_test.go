@@ -165,7 +165,10 @@ func (r *fetchRig) commit(dir, msg string) string {
 func (r *fetchRig) inBox(args ...string) (string, error) {
 	cmd := exec.Command("git", args...) // #nosec G204 -- the test's own git
 	cmd.Dir = r.box
-	cmd.Env = append(os.Environ(), "PATH="+r.bin+":"+os.Getenv("PATH"), "PORTENV_PUSH_SOCKET="+r.sock, "GIT_CONFIG_NOSYSTEM=1", "HOME="+r.t.TempDir())
+	// No background gc or maintenance after a pull: it would still be
+	// writing in the clone when the test's folders are removed.
+	cmd.Env = append(os.Environ(), "PATH="+r.bin+":"+os.Getenv("PATH"), "PORTENV_PUSH_SOCKET="+r.sock, "GIT_CONFIG_NOSYSTEM=1", "HOME="+r.t.TempDir(),
+		"GIT_CONFIG_COUNT=2", "GIT_CONFIG_KEY_0=gc.auto", "GIT_CONFIG_VALUE_0=0", "GIT_CONFIG_KEY_1=maintenance.auto", "GIT_CONFIG_VALUE_1=false")
 	out, err := cmd.CombinedOutput()
 	return string(out), err
 }

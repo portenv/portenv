@@ -118,9 +118,10 @@ public enum TabViewer {
     public static let app = "app"
 }
 
-/// ⌃Tab and ⌃⇧Tab (§4.1): the next and previous tab on any keyboard
-/// layout, as in Safari and Terminal. Next is 1, previous is -1; any other
-/// key, or Tab with ⌥ or ⌘, is not a tab key and returns nil.
+/// ⌃Tab and ⌃⇧Tab (GUIDELINES §3.3): the next and previous workspace tab,
+/// as macOS's Window › Show Next Tab and Show Previous Tab (R-0345). Next
+/// is 1, previous is -1; any other key, or Tab with ⌥ or ⌘, is not a tab
+/// key and returns nil.
 public enum TabKeys {
     public static let tabKeyCode: UInt16 = 48
 
@@ -151,6 +152,12 @@ public enum TabText {
     /// The question before closing a tab that still runs a program.
     public static func closeQuestion(_ p: PendingClose) -> String { "Close this tab? \(p.program) is still running." }
     public static let closeButton = "Close Tab"
+    /// Window menu: the terminal's tabs, named apart from macOS's own Show
+    /// Previous Tab and Show Next Tab, which go between workspace tabs
+    /// (R-0345).
+    public static let showPrevious = "Show Previous Terminal Tab"
+    public static let showNext = "Show Next Terminal Tab"
+    public static let showTab = "Show Terminal Tab"
 }
 
 /// Tab names: the app owns them (§4.1).
@@ -194,6 +201,8 @@ public final class TabsController {
     /// program ended), with how long it ran: the app decides whether it's
     /// worth a notification (§5).
     public var commandFinished: (@MainActor (CommandWatch.Finished) -> Void)?
+    /// Told after the tabs change: a tab's question notifies (§5).
+    @ObservationIgnored public var changed: (@MainActor ([TabInfo]) -> Void)?
 
     public init(box: String, daemon: DaemonAPI, retry: Duration = .seconds(1),
                 now: @escaping @Sendable () -> Date = { Date() }) {
@@ -280,6 +289,7 @@ public final class TabsController {
     private func tabsUpdated() {
         remember()
         if terminalTab == nil, let id = target(for: selection) { choose(id) }
+        changed?(tabs)
     }
 
     private func remember() {

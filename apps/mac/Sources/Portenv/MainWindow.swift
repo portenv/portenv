@@ -55,9 +55,8 @@ struct MainWindow: View {
             }
             content
         }
-            // The team while the window is open; it watches again after a
-            // restart or a move.
-            .task(id: controller.box) { await team?.follow() }
+            // The team is followed by the window's session (AppModel.open),
+            // so a tab not in front still counts what needs you (R-0344).
             .onGeometryChange(for: Bool.self) { $0.size.width < 900 } action: { narrow = $0 }
             // The terminal side and the inspector share the window's width;
             // only the window has a minimum width (R-0073, R-0075).
@@ -284,10 +283,12 @@ struct MainWindow: View {
                         // bar marks current, never another (R-0314).
                         MainTabTerminal(shown: TabTerminalShown(provider: provider), tab: tab.id,
                                         generation: controller.terminalGeneration, label: terminalLabel,
+                                        tabName: TerminalLabel.title(tab, team: team?.state.agents ?? []),
                                         serviceComing: controller.reconnectingToService)
                     } else if !AppTerminal.attached, controller.tabTerminals != nil {
-                        // The tabs aren't known yet.
-                        Color(nsColor: .textBackgroundColor)
+                        // The tabs aren't known yet: "Opening <workspace>…",
+                        // never a bare background (R-0384).
+                        TerminalOpening(line: TabTerminalShown.openingLine(tab: controller.box))
                     } else {
                         BoxTerminal(box: controller.box, generation: controller.terminalGeneration,
                                     onEnded: { Task { await controller.terminalEnded() } },

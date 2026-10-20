@@ -39,7 +39,7 @@ enum SettingsWindow {
     }
 }
 
-/// The six panes as toolbar items.
+/// The panes as toolbar items.
 final class SettingsTabs: NSTabViewController {
     init(sample: SettingsSample? = nil) {
         super.init(nibName: nil, bundle: nil)
@@ -88,6 +88,7 @@ struct SettingsPaneView: View {
             case .team: TeamPane(sample: sample?.agentsAllowed)
             case .recoveryKey: RecoveryKeyPane(sample: sample?.recoveryKey)
             case .updates: UpdatesPane()
+            case .experimental: ExperimentalPane(sample: sample?.experimental)
             }
         }
         .formStyle(.grouped)
@@ -100,6 +101,13 @@ struct SettingsSample {
     var servers: [String]
     var recoveryKey: RecoveryKeyState
     var agentsAllowed: Int = AgentsAllowed.defaultValue
+    /// Experimental: each key's state line and the usage counter.
+    var experimental: ExperimentalSample?
+}
+
+struct ExperimentalSample {
+    var keys: [ProviderKeyID: String]
+    var usage: [String: AdapterCounts]
 }
 
 /// A row: a label with the line under it, and its state or control at the
@@ -290,13 +298,176 @@ private struct UpdatesPane: View {
     }
 }
 
+/// Settings › Experimental (ADR 0027 §0, S5a; GUIDELINES §9.1): the smart
+/// input toggle, off by default; the adapters and their models; the keys,
+/// written to the Keychain from here only and never shown back; the local
+/// usage counter.
+private struct ExperimentalPane: View {
+    var sample: ExperimentalSample?
+    private let settings = SmartInputSettings()
+    @State private var enabled = false
+    @State private var classifier = ClassifierChoice.rules
+    @State private var suggester = SuggesterChoice.anthropic
+    @State private var anthropicModel = ""
+    @State private var jevModel = ""
+    @State private var threshold = JevClassifier.defaultThreshold
+    @State private var keyStates: [ProviderKeyID: String] = [:]
+    @State private var entries: [ProviderKeyID: String] = [:]
+    @State private var keyErrors: [ProviderKeyID: String] = [:]
+    @State private var usage: [String: AdapterCounts] = [:]
+
+    var body: some View {
+        Form {
+            Section(SmartInputText.heading) {
+                Toggle(isOn: Binding(get: { enabled }, set: { enabled = $0; if sample == nil { settings.enabled = $0 } })) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(SmartInputText.smartInput)
+                        Text(SmartInputText.smartInputLine).font(.callout).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .toggleStyle(.switch)
+            }
+            Section {
+                Picker(selection: Binding(get: { classifier }, set: { classifier = $0; if sample == nil { settings.classifier = $0 } })) {
+                    ForEach(ClassifierChoice.allCases, id: \.self) { Text($0.title).tag($0) }
+                } label: {
+                    labelled(SmartInputText.classifierLabel, SmartInputText.classifierLine)
+                }
+                if classifier == .jev {
+                    TextField(SmartInputText.model, text: $jevModel, prompt: Text(JevClassifier.defaultModel))
+                        .onChange(of: jevModel) { _, v in if sample == nil { settings.jevModel = v } }
+                    Stepper(value: Binding(get: { threshold }, set: { threshold = $0; if sample == nil { settings.jevThreshold = $0 } }),
+                            in: 0.5 ... 1, step: 0.05) {
+                        Text("\(SmartInputText.threshold): \(threshold, format: .number.precision(.fractionLength(2)))")
+                    }
+                }
+                Picker(selection: Binding(get: { suggester }, set: { suggester = $0; if sample == nil { settings.suggester = $0 } })) {
+                    ForEach(SuggesterChoice.allCases, id: \.self) { Text($0.title).tag($0) }
+                } label: {
+                    labelled(SmartInputText.suggesterLabel, SmartInputText.suggesterLine)
+                }
+                if suggester == .anthropic {
+                    TextField(SmartInputText.model, text: $anthropicModel, prompt: Text(AnthropicSuggester.defaultModel))
+                        .onChange(of: anthropicModel) { _, v in if sample == nil { settings.anthropicModel = v } }
+                }
+            }
+            .disabled(!enabled)
+            Section {
+                ForEach(ProviderKeyID.allCases, id: \.self) { id in keyRow(id) }
+            } header: {
+                Text(SmartInputText.keysHeading)
+            } footer: {
+                Text(SmartInputText.keysFooter).font(.callout).foregroundStyle(.secondary)
+            }
+            Section(SmartInputText.usageHeading) {
+                let rows = usage.sorted { $0.key < $1.key }
+                if rows.isEmpty {
+                    SettingRow(label: SmartInputText.noUsage)
+                } else {
+                    ForEach(rows, id: \.key) { id, counts in
+                        SettingRow(label: SmartInputText.adapterName(id), line: SmartInputText.usage(counts))
+                    }
+                    Button(SmartInputText.resetUsage) {
+                        if sample == nil { SmartInputUsage.app.reset() }
+                        usage = [:]
+                    }
+                }
+            }
+        }
+        .task { await load() }
+    }
+
+    private func labelled(_ label: String, _ line: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label)
+            Text(line).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    /// A key's row: when it was saved (never the key), a field to paste a
+    /// new one, Save and Remove.
+    private func keyRow(_ id: ProviderKeyID) -> some View {
+        SettingRow(label: SmartInputText.keyLabel(id), line: keyErrors[id] ?? keyStates[id] ?? "") {
+            SecureField(SmartInputText.keyPlaceholder, text: Binding(get: { entries[id] ?? "" }, set: { entries[id] = $0 }))
+                .labelsHidden()
+                .frame(width: 180)
+                .accessibilityLabel(SmartInputText.keyLabel(id))
+            Button(SmartInputText.saveKey) { save(id) }
+                .disabled((entries[id] ?? "").isEmpty)
+            if keyStates[id] != SmartInputText.keyState(savedOn: nil) {
+                Button(SmartInputText.removeKey) { remove(id) }
+            }
+        }
+    }
+
+    private func load() async {
+        enabled = settings.enabled
+        classifier = settings.classifier
+        suggester = settings.suggester
+        anthropicModel = settings.anthropicModel
+        jevModel = settings.jevModel
+        threshold = settings.jevThreshold
+        if let sample {
+            enabled = true
+            keyStates = sample.keys
+            usage = sample.usage
+            return
+        }
+        usage = SmartInputUsage.app.snapshot()
+        let keys = KeychainProviderKeys()
+        for id in ProviderKeyID.allCases {
+            // Attributes only: whether, and when, a key was saved.
+            keyStates[id] = SmartInputText.keyState(savedOn: try? await keys.savedOn(id))
+        }
+    }
+
+    private func save(_ id: ProviderKeyID) {
+        guard let key = ProviderKeyEntry.clean(entries[id] ?? "") else {
+            keyErrors[id] = SmartInputText.notAKey
+            return
+        }
+        entries[id] = ""
+        guard sample == nil else { return }
+        Task {
+            let keys = KeychainProviderKeys()
+            do {
+                try await keys.save(key, for: id)
+                keyErrors[id] = nil
+                keyStates[id] = SmartInputText.keyState(savedOn: try? await keys.savedOn(id))
+            } catch {
+                keyErrors[id] = SmartInputText.keychainRefused
+            }
+        }
+    }
+
+    private func remove(_ id: ProviderKeyID) {
+        guard sample == nil else { keyStates[id] = SmartInputText.keyState(savedOn: nil); return }
+        Task {
+            try? await KeychainProviderKeys().remove(id)
+            keyErrors[id] = nil
+            keyStates[id] = SmartInputText.keyState(savedOn: try? await KeychainProviderKeys().savedOn(id))
+        }
+    }
+}
+
 /// Settings for `--render-screens`: each pane, light and dark, in the real
 /// window, with the board's sample servers and a saved recovery key.
 @MainActor
 enum SettingsRender {
     static func render(to dir: URL) async throws {
         let saved = Calendar.current.date(from: DateComponents(year: 2026, month: 10, day: 12, hour: 21)) ?? Date()
-        let sample = SettingsSample(servers: ["portenv@test-server"], recoveryKey: .made(saved))
+        var counts = AdapterCounts()
+        counts.requests = 42
+        counts.fallbacks = 3
+        counts.failures = 1
+        counts.inputTokens = 12_400
+        counts.outputTokens = 380
+        counts.model = AnthropicSuggester.defaultModel
+        counts.latenciesMs = Array(stride(from: 600, through: 1500, by: 25))
+        let experimental = ExperimentalSample(keys: [.anthropic: SmartInputText.keyState(savedOn: saved), .jev: SmartInputText.keyState(savedOn: nil)],
+                                              usage: ["anthropic": counts])
+        let sample = SettingsSample(servers: ["portenv@test-server"], recoveryKey: .made(saved), experimental: experimental)
         let before = NSApp.appearance
         defer { NSApp.appearance = before }
         for (suffix, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {

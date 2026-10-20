@@ -1432,10 +1432,93 @@ public nonisolated struct Portenv_Daemon_V1_CreateBoxRequest: Sendable {
   /// Clears the value of `team`. Subsequent reads from it will return its default value.
   public mutating func clearTeam() {self._team = nil}
 
+  /// Where the project comes from (ADR 0025 §2); unset keeps today's
+  /// behaviour, no project. Kept with the team for ApplyTeamPlan.
+  public var project: Portenv_Daemon_V1_ProjectSource {
+    get {_project ?? Portenv_Daemon_V1_ProjectSource()}
+    set {_project = newValue}
+  }
+  /// Returns true if `project` has been explicitly set.
+  public var hasProject: Bool {self._project != nil}
+  /// Clears the value of `project`. Subsequent reads from it will return its default value.
+  public mutating func clearProject() {self._project = nil}
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
 
+  fileprivate var _team: Portenv_Daemon_V1_TeamPlanChoice? = nil
+  fileprivate var _project: Portenv_Daemon_V1_ProjectSource? = nil
+}
+
+/// New workspace's Project step (ADR 0025 §2).
+public nonisolated struct Portenv_Daemon_V1_ProjectSource: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var source: Portenv_Daemon_V1_ProjectSource.OneOf_Source? = nil
+
+  /// An empty project, git on main.
+  public var empty: Bool {
+    get {
+      if case .empty(let v)? = source {return v}
+      return false
+    }
+    set {source = .empty(newValue)}
+  }
+
+  /// https://github.com/OWNER/REPO, cloned when the workspace first runs.
+  public var githubURL: String {
+    get {
+      if case .githubURL(let v)? = source {return v}
+      return String()
+    }
+    set {source = .githubURL(newValue)}
+  }
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public nonisolated enum OneOf_Source: Equatable, Sendable {
+    /// An empty project, git on main.
+    case empty(Bool)
+    /// https://github.com/OWNER/REPO, cloned when the workspace first runs.
+    case githubURL(String)
+
+  }
+
+  public init() {}
+}
+
+/// What CreateBox keeps for ApplyTeamPlan: the project, then the team.
+public nonisolated struct Portenv_Daemon_V1_WorkspaceSetup: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var project: Portenv_Daemon_V1_ProjectSource {
+    get {_project ?? Portenv_Daemon_V1_ProjectSource()}
+    set {_project = newValue}
+  }
+  /// Returns true if `project` has been explicitly set.
+  public var hasProject: Bool {self._project != nil}
+  /// Clears the value of `project`. Subsequent reads from it will return its default value.
+  public mutating func clearProject() {self._project = nil}
+
+  public var team: Portenv_Daemon_V1_TeamPlanChoice {
+    get {_team ?? Portenv_Daemon_V1_TeamPlanChoice()}
+    set {_team = newValue}
+  }
+  /// Returns true if `team` has been explicitly set.
+  public var hasTeam: Bool {self._team != nil}
+  /// Clears the value of `team`. Subsequent reads from it will return its default value.
+  public mutating func clearTeam() {self._team = nil}
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _project: Portenv_Daemon_V1_ProjectSource? = nil
   fileprivate var _team: Portenv_Daemon_V1_TeamPlanChoice? = nil
 }
 
@@ -2417,6 +2500,14 @@ public nonisolated struct Portenv_Daemon_V1_ApplyTeamPlanResponse: Sendable {
   /// Anything the owner should know, one plain line each: a file already
   /// there (the project's wins), or one that isn't what was approved.
   public var lines: [String] = []
+
+  /// The project couldn't be brought in (a clone that failed or was too
+  /// big): one plain line. Nothing was written or pinned, and the setup is
+  /// kept for the next try.
+  public var projectError: String = String()
+
+  /// That failure was a repository that needs a GitHub sign-in.
+  public var needsSignIn: Bool = false
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -5432,7 +5523,7 @@ nonisolated extension Portenv_Daemon_V1_WatchTabsResponse: SwiftProtobuf.Message
 
 nonisolated extension Portenv_Daemon_V1_CreateBoxRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".CreateBoxRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{3}box_id\0\u{1}image\0\u{1}storage\0\u{3}storage_host_key\0\u{3}storage_rest\0\u{1}keys\0\u{3}recovery_password\0\u{1}team\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{3}box_id\0\u{1}image\0\u{1}storage\0\u{3}storage_host_key\0\u{3}storage_rest\0\u{1}keys\0\u{3}recovery_password\0\u{1}team\0\u{1}project\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -5449,6 +5540,7 @@ nonisolated extension Portenv_Daemon_V1_CreateBoxRequest: SwiftProtobuf.Message,
       case 7: try { try decoder.decodeMapField(fieldType: SwiftProtobuf._ProtobufMap<SwiftProtobuf.ProtobufString,SwiftProtobuf.ProtobufBytes>.self, value: &self.keys) }()
       case 8: try { try decoder.decodeSingularBytesField(value: &self.recoveryPassword) }()
       case 9: try { try decoder.decodeSingularMessageField(value: &self._team) }()
+      case 10: try { try decoder.decodeSingularMessageField(value: &self._project) }()
       default: break
       }
     }
@@ -5486,6 +5578,9 @@ nonisolated extension Portenv_Daemon_V1_CreateBoxRequest: SwiftProtobuf.Message,
     try { if let v = self._team {
       try visitor.visitSingularMessageField(value: v, fieldNumber: 9)
     } }()
+    try { if let v = self._project {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 10)
+    } }()
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -5498,6 +5593,103 @@ nonisolated extension Portenv_Daemon_V1_CreateBoxRequest: SwiftProtobuf.Message,
     if lhs.storageRest != rhs.storageRest {return false}
     if lhs.keys != rhs.keys {return false}
     if lhs.recoveryPassword != rhs.recoveryPassword {return false}
+    if lhs._team != rhs._team {return false}
+    if lhs._project != rhs._project {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Portenv_Daemon_V1_ProjectSource: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ProjectSource"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}empty\0\u{3}github_url\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try {
+        var v: Bool?
+        try decoder.decodeSingularBoolField(value: &v)
+        if let v = v {
+          if self.source != nil {try decoder.handleConflictingOneOf()}
+          self.source = .empty(v)
+        }
+      }()
+      case 2: try {
+        var v: String?
+        try decoder.decodeSingularStringField(value: &v)
+        if let v = v {
+          if self.source != nil {try decoder.handleConflictingOneOf()}
+          self.source = .githubURL(v)
+        }
+      }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    switch self.source {
+    case .empty?: try {
+      guard case .empty(let v)? = self.source else { preconditionFailure() }
+      try visitor.visitSingularBoolField(value: v, fieldNumber: 1)
+    }()
+    case .githubURL?: try {
+      guard case .githubURL(let v)? = self.source else { preconditionFailure() }
+      try visitor.visitSingularStringField(value: v, fieldNumber: 2)
+    }()
+    case nil: break
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Portenv_Daemon_V1_ProjectSource, rhs: Portenv_Daemon_V1_ProjectSource) -> Bool {
+    if lhs.source != rhs.source {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Portenv_Daemon_V1_WorkspaceSetup: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".WorkspaceSetup"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}project\0\u{1}team\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularMessageField(value: &self._project) }()
+      case 2: try { try decoder.decodeSingularMessageField(value: &self._team) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._project {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+    } }()
+    try { if let v = self._team {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Portenv_Daemon_V1_WorkspaceSetup, rhs: Portenv_Daemon_V1_WorkspaceSetup) -> Bool {
+    if lhs._project != rhs._project {return false}
     if lhs._team != rhs._team {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
@@ -7319,7 +7511,7 @@ nonisolated extension Portenv_Daemon_V1_ApplyTeamPlanRequest: SwiftProtobuf.Mess
 
 nonisolated extension Portenv_Daemon_V1_ApplyTeamPlanResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ApplyTeamPlanResponse"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}applied\0\u{1}pinned\0\u{1}lines\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}applied\0\u{1}pinned\0\u{1}lines\0\u{3}project_error\0\u{3}needs_sign_in\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -7330,6 +7522,8 @@ nonisolated extension Portenv_Daemon_V1_ApplyTeamPlanResponse: SwiftProtobuf.Mes
       case 1: try { try decoder.decodeSingularBoolField(value: &self.applied) }()
       case 2: try { try decoder.decodeRepeatedStringField(value: &self.pinned) }()
       case 3: try { try decoder.decodeRepeatedStringField(value: &self.lines) }()
+      case 4: try { try decoder.decodeSingularStringField(value: &self.projectError) }()
+      case 5: try { try decoder.decodeSingularBoolField(value: &self.needsSignIn) }()
       default: break
       }
     }
@@ -7345,6 +7539,12 @@ nonisolated extension Portenv_Daemon_V1_ApplyTeamPlanResponse: SwiftProtobuf.Mes
     if !self.lines.isEmpty {
       try visitor.visitRepeatedStringField(value: self.lines, fieldNumber: 3)
     }
+    if !self.projectError.isEmpty {
+      try visitor.visitSingularStringField(value: self.projectError, fieldNumber: 4)
+    }
+    if self.needsSignIn != false {
+      try visitor.visitSingularBoolField(value: self.needsSignIn, fieldNumber: 5)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -7352,6 +7552,8 @@ nonisolated extension Portenv_Daemon_V1_ApplyTeamPlanResponse: SwiftProtobuf.Mes
     if lhs.applied != rhs.applied {return false}
     if lhs.pinned != rhs.pinned {return false}
     if lhs.lines != rhs.lines {return false}
+    if lhs.projectError != rhs.projectError {return false}
+    if lhs.needsSignIn != rhs.needsSignIn {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

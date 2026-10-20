@@ -136,6 +136,29 @@ type fakeProjectAgent struct {
 	mu     sync.Mutex
 	root   string // stands for /home/work
 	writes int
+	// Each WriteAgentFiles call's file names.
+	written [][]string
+	clones  []*agentv1.CloneProjectRequest
+	// CloneProject fails with this, once, when set.
+	cloneErr error
+}
+
+func (f *fakeProjectAgent) CloneProject(_ context.Context, r *agentv1.CloneProjectRequest) (*agentv1.CloneProjectResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.clones = append(f.clones, r)
+	if err := f.cloneErr; err != nil {
+		f.cloneErr = nil
+		return nil, err
+	}
+	dir := f.dir(r.GetProjectDir())
+	if _, err := os.Stat(dir); err == nil {
+		return &agentv1.CloneProjectResponse{Existed: true}, nil
+	}
+	if err := os.MkdirAll(filepath.Join(dir, ".git"), 0o755); err != nil {
+		return nil, err
+	}
+	return &agentv1.CloneProjectResponse{Bytes: 10}, os.WriteFile(filepath.Join(dir, "README.md"), []byte("cloned"), 0o644)
 }
 
 func (f *fakeProjectAgent) dir(project string) string {
@@ -146,7 +169,15 @@ func (f *fakeProjectAgent) WriteAgentFiles(_ context.Context, r *agentv1.WriteAg
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.writes++
+	var names []string
+	for _, file := range r.GetFiles() {
+		names = append(names, file.GetName())
+	}
+	f.written = append(f.written, names)
 	out := &agentv1.WriteAgentFilesResponse{}
+	if err := os.MkdirAll(f.dir(r.GetProjectDir()), 0o755); err != nil {
+		return nil, err
+	}
 	agents := filepath.Join(f.dir(r.GetProjectDir()), ".portenv", "agents")
 	for _, file := range r.GetFiles() {
 		p := filepath.Join(agents, filepath.FromSlash(file.GetName()))
@@ -303,7 +334,7 @@ func TestTheKeptTeamIsPrivate(t *testing.T) {
 	if err := keepTeamPlan(dir, approvedChoice(t, "starter")); err != nil {
 		t.Fatal(err)
 	}
-	fi, err := os.Stat(filepath.Join(dir, teamPlanFile))
+	fi, err := os.Stat(filepath.Join(dir, setupFile))
 	if err != nil || fi.Mode().Perm() != 0o600 {
 		t.Fatalf("%v %v", fi, err)
 	}
@@ -338,7 +369,7 @@ func TestCreateBoxKeepsTheApprovedTeam(t *testing.T) {
 	if err != nil || kept.GetTemplate() != "starter" {
 		t.Fatalf("%v %v", kept, err)
 	}
-	if err := os.Remove(filepath.Join(state, teamPlanFile)); err != nil {
+	if err := os.Remove(filepath.Join(state, setupFile)); err != nil {
 		t.Fatal(err)
 	}
 	if again, err := s.CreateBox(ctx, req); err != nil || !again.GetAlreadyCreated() {

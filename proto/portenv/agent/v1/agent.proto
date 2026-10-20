@@ -68,6 +68,14 @@ service AgentService {
   // through a link. A missing project folder is made empty, with git, on
   // main. Runs nothing from the files.
   rpc WriteAgentFiles(WriteAgentFilesRequest) returns (WriteAgentFilesResponse);
+  // New workspace's From GitHub (ADR 0025 §2): clones a repository into
+  // the project folder as work, https only, with no submodules, no LFS,
+  // no credential helper and git's config from nowhere else; the size is
+  // checked before and while bytes arrive. A project already there is left
+  // as it is. Refusals: Unauthenticated (it needs a sign-in),
+  // ResourceExhausted (too big), FailedPrecondition (anything else), each
+  // with one plain line.
+  rpc CloneProject(CloneProjectRequest) returns (CloneProjectResponse);
   // Served only by init (root) on its local socket, which only the API
   // process reaches; the channel's server answers Unimplemented. init checks
   // every id and package name itself.
@@ -846,4 +854,21 @@ message WriteAgentFilesResponse {
   repeated string existing = 2;
   // Whether the project folder was made.
   bool made_project = 3;
+}
+
+message CloneProjectRequest {
+  // The project folder, /home/work/<workspace>.
+  string project_dir = 1;
+  // https://github.com/OWNER/REPO.
+  string url = 2;
+  // The workspace's copies of the project: work's and each coding agent's.
+  int32 copies = 3;
+  // GitHub's size for it, in bytes; 0 when unknown.
+  int64 estimate_bytes = 4;
+}
+
+message CloneProjectResponse {
+  // The project was already there, so nothing was cloned.
+  bool existed = 1;
+  int64 bytes = 2;
 }

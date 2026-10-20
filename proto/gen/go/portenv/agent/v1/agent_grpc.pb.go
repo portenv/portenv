@@ -46,6 +46,7 @@ const (
 	AgentService_ReadHomeFile_FullMethodName         = "/portenv.agent.v1.AgentService/ReadHomeFile"
 	AgentService_WriteHomeFiles_FullMethodName       = "/portenv.agent.v1.AgentService/WriteHomeFiles"
 	AgentService_WriteAgentFiles_FullMethodName      = "/portenv.agent.v1.AgentService/WriteAgentFiles"
+	AgentService_CloneProject_FullMethodName         = "/portenv.agent.v1.AgentService/CloneProject"
 	AgentService_EnsureAgentUser_FullMethodName      = "/portenv.agent.v1.AgentService/EnsureAgentUser"
 	AgentService_RemoveAgentUser_FullMethodName      = "/portenv.agent.v1.AgentService/RemoveAgentUser"
 	AgentService_SimulatePackage_FullMethodName      = "/portenv.agent.v1.AgentService/SimulatePackage"
@@ -124,6 +125,14 @@ type AgentServiceClient interface {
 	// through a link. A missing project folder is made empty, with git, on
 	// main. Runs nothing from the files.
 	WriteAgentFiles(ctx context.Context, in *WriteAgentFilesRequest, opts ...grpc.CallOption) (*WriteAgentFilesResponse, error)
+	// New workspace's From GitHub (ADR 0025 §2): clones a repository into
+	// the project folder as work, https only, with no submodules, no LFS,
+	// no credential helper and git's config from nowhere else; the size is
+	// checked before and while bytes arrive. A project already there is left
+	// as it is. Refusals: Unauthenticated (it needs a sign-in),
+	// ResourceExhausted (too big), FailedPrecondition (anything else), each
+	// with one plain line.
+	CloneProject(ctx context.Context, in *CloneProjectRequest, opts ...grpc.CallOption) (*CloneProjectResponse, error)
 	// Served only by init (root) on its local socket, which only the API
 	// process reaches; the channel's server answers Unimplemented. init checks
 	// every id and package name itself.
@@ -427,6 +436,16 @@ func (c *agentServiceClient) WriteAgentFiles(ctx context.Context, in *WriteAgent
 	return out, nil
 }
 
+func (c *agentServiceClient) CloneProject(ctx context.Context, in *CloneProjectRequest, opts ...grpc.CallOption) (*CloneProjectResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CloneProjectResponse)
+	err := c.cc.Invoke(ctx, AgentService_CloneProject_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *agentServiceClient) EnsureAgentUser(ctx context.Context, in *EnsureAgentUserRequest, opts ...grpc.CallOption) (*EnsureAgentUserResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(EnsureAgentUserResponse)
@@ -629,6 +648,14 @@ type AgentServiceServer interface {
 	// through a link. A missing project folder is made empty, with git, on
 	// main. Runs nothing from the files.
 	WriteAgentFiles(context.Context, *WriteAgentFilesRequest) (*WriteAgentFilesResponse, error)
+	// New workspace's From GitHub (ADR 0025 §2): clones a repository into
+	// the project folder as work, https only, with no submodules, no LFS,
+	// no credential helper and git's config from nowhere else; the size is
+	// checked before and while bytes arrive. A project already there is left
+	// as it is. Refusals: Unauthenticated (it needs a sign-in),
+	// ResourceExhausted (too big), FailedPrecondition (anything else), each
+	// with one plain line.
+	CloneProject(context.Context, *CloneProjectRequest) (*CloneProjectResponse, error)
 	// Served only by init (root) on its local socket, which only the API
 	// process reaches; the channel's server answers Unimplemented. init checks
 	// every id and package name itself.
@@ -754,6 +781,9 @@ func (UnimplementedAgentServiceServer) WriteHomeFiles(grpc.ClientStreamingServer
 }
 func (UnimplementedAgentServiceServer) WriteAgentFiles(context.Context, *WriteAgentFilesRequest) (*WriteAgentFilesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method WriteAgentFiles not implemented")
+}
+func (UnimplementedAgentServiceServer) CloneProject(context.Context, *CloneProjectRequest) (*CloneProjectResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CloneProject not implemented")
 }
 func (UnimplementedAgentServiceServer) EnsureAgentUser(context.Context, *EnsureAgentUserRequest) (*EnsureAgentUserResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method EnsureAgentUser not implemented")
@@ -1135,6 +1165,24 @@ func _AgentService_WriteAgentFiles_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AgentService_CloneProject_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CloneProjectRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentServiceServer).CloneProject(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentService_CloneProject_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentServiceServer).CloneProject(ctx, req.(*CloneProjectRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _AgentService_EnsureAgentUser_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(EnsureAgentUserRequest)
 	if err := dec(in); err != nil {
@@ -1428,6 +1476,10 @@ var AgentService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "WriteAgentFiles",
 			Handler:    _AgentService_WriteAgentFiles_Handler,
+		},
+		{
+			MethodName: "CloneProject",
+			Handler:    _AgentService_CloneProject_Handler,
 		},
 		{
 			MethodName: "EnsureAgentUser",

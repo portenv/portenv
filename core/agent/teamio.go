@@ -386,6 +386,12 @@ func TeamIO(args []string, stdin io.Reader, stdout io.Writer) error {
 			return errors.New("seed-home PROJECT HOME QUOTA PATH…")
 		}
 		return seedHome(dir, args[2], args[3], args[4:], stdout)
+	case "clone-project":
+		// As work (ADR 0025 §2): New workspace's From GitHub.
+		if len(args) != 5 {
+			return errors.New("clone-project PROJECT URL COPIES ESTIMATE")
+		}
+		return teamIOCloneProject(args[1:], stdout)
 	case "write-agent-files":
 		// As work (ADR 0025 §5): the New-workspace team's files.
 		if len(args) != 2 {

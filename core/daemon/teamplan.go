@@ -7,15 +7,18 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
 
+	"github.com/portenv/portenv/core/internal/githubrepo"
 	"github.com/portenv/portenv/core/internal/teamkit"
 	agentv1 "github.com/portenv/portenv/proto/gen/go/portenv/agent/v1"
 	daemonv1 "github.com/portenv/portenv/proto/gen/go/portenv/daemon/v1"
@@ -31,7 +34,9 @@ import (
 // the ones approved. Nothing starts: the team's first start still asks
 // the owner, as ADR 0022 has it.
 
-const teamPlanFile = "team-plan.json"
+// setupFile is what CreateBox keeps for ApplyTeamPlan: the project's
+// source and the team (WorkspaceSetup).
+const setupFile = "workspace-setup.json"
 
 func choices(c *daemonv1.TeamPlanChoice) []teamkit.AgentChoice {
 	var out []teamkit.AgentChoice
@@ -204,33 +209,67 @@ func checkTeamChoice(c *daemonv1.TeamPlanChoice, allowed int) error {
 	return nil
 }
 
-// keepTeamPlan keeps the approved choice in the workspace's state folder
-// (0600), for ApplyTeamPlan.
-func keepTeamPlan(stateDir string, c *daemonv1.TeamPlanChoice) error {
+// checkSetup is CreateBox's check: the project's source (Empty, or a
+// GitHub https address), and the team, approved file by file.
+func checkSetup(st *daemonv1.WorkspaceSetup, allowed int) error {
+	if p := st.GetProject(); p != nil {
+		switch src := p.GetSource().(type) {
+		case *daemonv1.ProjectSource_Empty:
+		case *daemonv1.ProjectSource_GithubUrl:
+			if _, err := githubrepo.Parse(src.GithubUrl); err != nil {
+				return status.Error(codes.InvalidArgument, "Use a GitHub repository\u2019s https address, like https://github.com/acme/acme-api.")
+			}
+		default:
+			return status.Error(codes.InvalidArgument, "Choose where the project comes from.")
+		}
+	}
+	if t := st.GetTeam(); t != nil {
+		return checkTeamChoice(t, allowed)
+	}
+	return nil
+}
+
+// keepSetup keeps what New workspace chose in the workspace's state
+// folder (0600), for ApplyTeamPlan. It never holds a sign-in.
+func keepSetup(stateDir string, st *daemonv1.WorkspaceSetup) error {
 	if err := os.MkdirAll(stateDir, 0o700); err != nil {
 		return err
 	}
-	b, err := protojson.Marshal(c)
+	b, err := protojson.Marshal(st)
 	if err != nil {
 		return err
 	}
-	return writePrivateAtomic(filepath.Join(stateDir, teamPlanFile), append(b, '\n'))
+	return writePrivateAtomic(filepath.Join(stateDir, setupFile), append(b, '\n'))
 }
 
-// loadTeamPlan is the kept choice; nil when there is none.
-func loadTeamPlan(stateDir string) (*daemonv1.TeamPlanChoice, error) {
-	b, err := os.ReadFile(filepath.Join(stateDir, teamPlanFile)) // #nosec G304 -- portenvd's own folder for the workspace
+// keepTeamPlan keeps a team with no project source.
+func keepTeamPlan(stateDir string, c *daemonv1.TeamPlanChoice) error {
+	return keepSetup(stateDir, &daemonv1.WorkspaceSetup{Team: c})
+}
+
+// loadSetup is the kept setup; nil when there is none.
+func loadSetup(stateDir string) (*daemonv1.WorkspaceSetup, error) {
+	b, err := os.ReadFile(filepath.Join(stateDir, setupFile)) // #nosec G304 -- portenvd's own folder for the workspace
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	var c daemonv1.TeamPlanChoice
-	if err := protojson.Unmarshal(b, &c); err != nil {
-		return nil, fmt.Errorf("the team kept for this workspace can't be read: %w", err)
+	var st daemonv1.WorkspaceSetup
+	if err := protojson.Unmarshal(b, &st); err != nil {
+		return nil, fmt.Errorf("what New workspace kept for this workspace can't be read: %w", err)
 	}
-	return &c, nil
+	return &st, nil
+}
+
+// loadTeamPlan is the kept team; nil when there is none.
+func loadTeamPlan(stateDir string) (*daemonv1.TeamPlanChoice, error) {
+	st, err := loadSetup(stateDir)
+	if st == nil || err != nil {
+		return nil, err
+	}
+	return st.GetTeam(), nil
 }
 
 // teamPlanMu keeps two ApplyTeamPlans (two windows) from both writing.
@@ -271,20 +310,40 @@ func (s *Server) ApplyTeamPlan(ctx context.Context, req *daemonv1.ApplyTeamPlanR
 		return nil, teamStatus(err)
 	}
 	state := filepath.Join(s.env.Dir, "state", box.ID)
-	choice, err := loadTeamPlan(state)
+	setup, err := loadSetup(state)
 	if err != nil {
 		return nil, teamStatus(err)
 	}
-	if choice == nil {
+	if setup == nil {
 		return &daemonv1.ApplyTeamPlanResponse{}, nil
 	}
-	planned, err := teamkit.Plan(choice.GetTemplate(), choices(choice))
-	if err != nil {
-		return nil, teamStatus(err)
+	choice := setup.GetTeam()
+	var planned []teamkit.PlannedAgent
+	if choice != nil {
+		if planned, err = teamkit.Plan(choice.GetTemplate(), choices(choice)); err != nil {
+			return nil, teamStatus(err)
+		}
 	}
 	h, err := s.agentFor(ctx, req.GetName())
 	if err != nil {
 		return nil, err
+	}
+	// The project first (ADR 0025 §2). A clone that fails writes and pins
+	// nothing, and the setup stays for Try Again.
+	if url := setup.GetProject().GetGithubUrl(); url != "" {
+		if line, signIn := s.cloneProject(ctx, h, req.GetName(), url, planned); line != "" {
+			s.log.Info("project not brought in", "box_id", box.ID, "sign_in", signIn)
+			return &daemonv1.ApplyTeamPlanResponse{ProjectError: line, NeedsSignIn: signIn}, nil
+		}
+	}
+	out := &daemonv1.ApplyTeamPlanResponse{Applied: true}
+	if len(planned) == 0 && !setup.GetProject().GetEmpty() {
+		// A cloned project and no team: nothing more to write.
+		if err := os.Remove(filepath.Join(state, setupFile)); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return nil, err
+		}
+		s.log.Info("workspace setup applied", "box_id", box.ID)
+		return out, nil
 	}
 	w := &agentv1.WriteAgentFilesRequest{ProjectDir: projectDir(req.GetName())}
 	for _, p := range planned {
@@ -303,7 +362,6 @@ func (s *Server) ApplyTeamPlan(ctx context.Context, req *daemonv1.ApplyTeamPlanR
 	for _, a := range choice.GetAgents() {
 		approved[a.GetId()] = a.GetApprovedSha256()
 	}
-	out := &daemonv1.ApplyTeamPlanResponse{Applied: true}
 	err = s.withTeam(ctx, req.GetName(), func(src TeamSource, _ Team) error {
 		for _, p := range planned {
 			if !p.Included {
@@ -327,10 +385,49 @@ func (s *Server) ApplyTeamPlan(ctx context.Context, req *daemonv1.ApplyTeamPlanR
 	if err != nil {
 		return nil, teamStatus(err)
 	}
-	if err := os.Remove(filepath.Join(state, teamPlanFile)); err != nil && !errors.Is(err, fs.ErrNotExist) {
+	if err := os.Remove(filepath.Join(state, setupFile)); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return nil, err
 	}
 	s.log.Info("team plan applied", "box_id", box.ID, "written", len(wr.GetWritten()), "pinned", len(out.Pinned), "kept", len(wr.GetExisting()))
 	s.teamEng().limitChanged()
 	return out, nil
+}
+
+// cloneProject brings the GitHub repository in as the project, as work,
+// through the helper: GitHub's size first (a failed look leaves only the
+// check while bytes arrive), then the clone. It returns the plain line of a
+// failure, and whether it was one a sign-in would fix.
+func (s *Server) cloneProject(ctx context.Context, h agentv1.AgentServiceClient, name, url string, planned []teamkit.PlannedAgent) (string, bool) {
+	repo, err := githubrepo.Parse(url)
+	if err != nil {
+		return err.Error(), false
+	}
+	copies := int32(1)
+	for _, p := range planned {
+		if p.Included && p.OwnClone {
+			copies++
+		}
+	}
+	base := s.githubAPI
+	if base == "" {
+		base = githubrepo.API
+	}
+	sctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	est, err := githubrepo.Size(sctx, &http.Client{Timeout: 10 * time.Second}, base, repo, "")
+	cancel()
+	if err != nil {
+		est = 0
+	}
+	_, err = h.CloneProject(ctx, &agentv1.CloneProjectRequest{ProjectDir: projectDir(name), Url: repo.URL(), Copies: copies, EstimateBytes: est})
+	if err == nil {
+		return "", false
+	}
+	st, _ := status.FromError(err)
+	switch st.Code() {
+	case codes.Unauthenticated:
+		return st.Message(), true
+	case codes.ResourceExhausted, codes.FailedPrecondition:
+		return st.Message(), false
+	}
+	return "Portenv couldn\u2019t clone " + repo.String() + ". Try again.", false
 }

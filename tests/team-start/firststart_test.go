@@ -775,7 +775,7 @@ func (h *harness) newWorkspaceTeam(ctx context.Context, c daemonv1.DaemonService
 			}
 		}
 	}
-	kept, err := protojson.Marshal(choice)
+	kept, err := protojson.Marshal(&daemonv1.WorkspaceSetup{Project: &daemonv1.ProjectSource{Source: &daemonv1.ProjectSource_Empty{Empty: true}}, Team: choice})
 	if err != nil {
 		h.fatal("step 13: %v", err)
 	}
@@ -783,7 +783,7 @@ func (h *harness) newWorkspaceTeam(ctx context.Context, c daemonv1.DaemonService
 	if err := os.MkdirAll(state, 0o700); err != nil {
 		h.fatal("step 13: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(state, "team-plan.json"), kept, 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(state, "workspace-setup.json"), kept, 0o600); err != nil {
 		h.fatal("step 13: %v", err)
 	}
 	r, err := c.ApplyTeamPlan(ctx, &daemonv1.ApplyTeamPlanRequest{Name: name})

@@ -628,6 +628,25 @@ message CreateBoxRequest {
   // included agent's file as the owner approved it. CreateBox checks it
   // and keeps it for ApplyTeamPlan; it's written once the workspace runs.
   TeamPlanChoice team = 9;
+  // Where the project comes from (ADR 0025 §2); unset keeps today's
+  // behaviour, no project. Kept with the team for ApplyTeamPlan.
+  ProjectSource project = 10;
+}
+
+// New workspace's Project step (ADR 0025 §2).
+message ProjectSource {
+  oneof source {
+    // An empty project, git on main.
+    bool empty = 1;
+    // https://github.com/OWNER/REPO, cloned when the workspace first runs.
+    string github_url = 2;
+  }
+}
+
+// What CreateBox keeps for ApplyTeamPlan: the project, then the team.
+message WorkspaceSetup {
+  ProjectSource project = 1;
+  TeamPlanChoice team = 2;
 }
 
 message CreateBoxResponse {
@@ -1012,6 +1031,12 @@ message ApplyTeamPlanResponse {
   // Anything the owner should know, one plain line each: a file already
   // there (the project's wins), or one that isn't what was approved.
   repeated string lines = 3;
+  // The project couldn't be brought in (a clone that failed or was too
+  // big): one plain line. Nothing was written or pinned, and the setup is
+  // kept for the next try.
+  string project_error = 4;
+  // That failure was a repository that needs a GitHub sign-in.
+  bool needs_sign_in = 5;
 }
 
 message GetTeamSettingsRequest {}

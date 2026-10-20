@@ -257,11 +257,10 @@ func pushCall(sock string, call *agentv1.TeamCallsResponse, bundle string, size 
 		if err != nil {
 			return nil, err
 		}
-		_, err = io.Copy(conn, io.LimitReader(f, size))
+		// A refusal (not work, say) can stop the helper reading: its answer
+		// still comes, and says why.
+		_, _ = io.Copy(conn, io.LimitReader(f, size))
 		_ = f.Close()
-		if err != nil {
-			return nil, errors.New("the push’s bundle couldn’t be handed to Portenv")
-		}
 	}
 	if uc, ok := conn.(*net.UnixConn); ok {
 		_ = uc.CloseWrite()

@@ -83,19 +83,39 @@ struct WindowCloseHookTests {
         #expect(!hooked.contains { $0 === plain })
     }
 
-    /// macOS's own window tabs are off: a hooked window never joins a
-    /// native tab group, and the app turns automatic tabbing off (R-0081).
-    @Test func nativeWindowTabsAreOff() {
-        let w = window()
-        w.tabbingMode = .preferred
-        WindowCloseHook.install(on: w) { _ in true }
-        #expect(w.tabbingMode == .disallowed)
+    /// Workspace windows are macOS window tabs, in one group; any other
+    /// hooked window never becomes a tab (R-0344, R-0345; R-0081 before).
+    @Test func onlyWorkspaceWindowsAreTabs() {
+        let w = window(), other = window()
+        WindowCloseHook.install(on: w, tabs: true) { _ in true }
+        #expect(w.tabbingMode == .preferred)
+        #expect(w.tabbingIdentifier == WindowCloseHook.workspaceTabs)
+        other.tabbingMode = .preferred
+        WindowCloseHook.install(on: other) { _ in true }
+        #expect(other.tabbingMode == .disallowed)
+        // First run, then a workspace in the same window: it becomes one.
+        WindowCloseHook.install(on: other, tabs: true) { _ in true }
+        #expect(other.tabbingMode == .preferred)
 
         let before = NSWindow.allowsAutomaticWindowTabbing
         defer { NSWindow.allowsAutomaticWindowTabbing = before }
-        NSWindow.allowsAutomaticWindowTabbing = true
-        WindowCloseHook.turnOffNativeTabs()
-        #expect(!NSWindow.allowsAutomaticWindowTabbing)
+        NSWindow.allowsAutomaticWindowTabbing = false
+        WindowCloseHook.turnOnWorkspaceTabs()
+        #expect(NSWindow.allowsAutomaticWindowTabbing)
+    }
+
+    /// A tab behind another in the group isn't visible, but it's open: it
+    /// counts as a box window, so closing the tab in front just closes it.
+    @Test func aBackgroundTabCountsAsOpen() {
+        let a = window(), b = window()
+        WindowCloseHook.install(on: a, tabs: true) { _ in true }
+        WindowCloseHook.install(on: b, tabs: true) { _ in true }
+        a.orderFront(nil)
+        a.addTabbedWindow(b, ordered: .above)
+        b.makeKeyAndOrderFront(nil)
+        defer { b.orderOut(nil); a.orderOut(nil) }
+        #expect(WindowCloseHook.hookedWindows.contains { $0 === a })
+        #expect(WindowCloseHook.hookedWindows.contains { $0 === b })
     }
 
     /// A closed window's hook goes with it, the close button works again

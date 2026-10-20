@@ -24,8 +24,9 @@
 //     there; work's repository is never agent-writable: lead can't create,
 //     change or remove anything in the project or its .git, the system git
 //     config trusts nothing in the project, and the project has no
-//     core.sharedRepository; lead commits in its own clone, and work's git
-//     in the project still works;
+//     core.sharedRepository; lead commits in its own clone, as "Lead
+//     (Portenv agent) <lead@agents.portenv.invalid>" (the identity Portenv
+//     sets in the clone), and work's git in the project still works;
 //  7. approve and start builder: its start checks the project again, and
 //     whoami in builder's pane says builder; builder reads the project,
 //     has its own clone, and can't read lead's;
@@ -410,9 +411,10 @@ getfacl -cp %[1]s/.git/config %[1]s/.git/hooks 2>&1`, project))
 cd /home/lead/%s
 echo "from lead" > from-lead.txt
 git add from-lead.txt
-git -c user.name=Lead -c user.email=lead@example.invalid commit -q -m "from lead"
-git log -1 --format=%%s`, workspace))
-	if code != 0 || !strings.HasSuffix(out, "from lead") {
+git commit -q -m "from lead"
+git log -1 --format='%%an <%%ae>|%%cn <%%ce>|%%s'`, workspace))
+	// Its commit carries the identity Portenv gave its clone (R-0328).
+	if code != 0 || !strings.HasSuffix(out, "Lead (Portenv agent) <lead@agents.portenv.invalid>|Lead (Portenv agent) <lead@agents.portenv.invalid>|from lead") {
 		h.fatal("step 6: lead couldn't commit in its own clone: exit %d: %s", code, out)
 	}
 	out, code = h.box(ctx, "work", fmt.Sprintf(`set -eu
@@ -423,7 +425,7 @@ test ! -e from-lead.txt`, project))
 	if code != 0 || !strings.HasSuffix(out, "first commit") {
 		h.fatal("step 6: work's git in the project after lead's commit: exit %d: %s", code, out)
 	}
-	t.Log("step 6: lead committed in its own clone; work's project is as it was")
+	t.Log("step 6: lead committed in its own clone as Lead (Portenv agent) <lead@agents.portenv.invalid>; work's project is as it was")
 
 	// Step 7: start builder. Its start checks the project again and must
 	// succeed.

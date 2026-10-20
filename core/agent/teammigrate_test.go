@@ -132,7 +132,7 @@ func newOldTeam(t *testing.T) *oldTeam {
 			switch args[0] {
 			case "clone-own":
 				var calls []string
-				err = cloneOwn(ctx, args[1], args[2], args[3], args[4], testGit(t, home, &calls), &out)
+				err = cloneOwn(ctx, args[1], args[2], args[3], args[4], args[5], testGit(t, home, &calls), &out)
 			case "migrate-copy":
 				owns := func(full string, _ *unix.Stat_t) bool { return uidOf(full) == uid }
 				err = migrateCopy(args[1], args[2], args[3], args[4], owns, stdin, &out)
@@ -146,7 +146,7 @@ func newOldTeam(t *testing.T) *oldTeam {
 }
 
 func (o *oldTeam) prepare() ([]*typesv1.MigrationItem, error) {
-	_, items, err := o.tu.PrepareProject(context.Background(), "/home/work/shop", PrepareOptions{CloneAgents: []string{"lead", "builder"}, HomeQuota: 1 << 30})
+	_, items, err := o.tu.PrepareProject(context.Background(), "/home/work/shop", PrepareOptions{CloneAgents: []string{"lead", "builder"}, HomeQuota: 1 << 30, Names: map[string]string{"lead": "Lead", "builder": "Builder"}})
 	return items, err
 }
 
@@ -198,6 +198,9 @@ func TestTheMoveToAgentsOwnClones(t *testing.T) {
 	// Each agent's clone, with the files it made: never committed.
 	if got, err := os.ReadFile(filepath.Join(o.root, "builder", "shop", "wip.txt")); err != nil || string(got) != "builder's work in progress\n" {
 		t.Errorf("builder's clone lacks its worktree's file: %q %v", got, err)
+	}
+	if got := gitOut(t, filepath.Join(o.root, "builder"), filepath.Join(o.root, "builder", "shop"), "config", "--local", "--get", "user.name"); got != "Builder (Portenv agent)" {
+		t.Errorf("builder's clone from the move: user.name %q", got)
 	}
 	if got := gitOut(t, filepath.Join(o.root, "builder"), filepath.Join(o.root, "builder", "shop"), "symbolic-ref", "--short", "HEAD"); got != "agent/builder" {
 		t.Errorf("builder's clone is on %q, want its branch", got)

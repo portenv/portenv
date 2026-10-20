@@ -31,6 +31,9 @@ public struct Instance: Equatable, Sendable {
     public var serverKeyService: String { suffixed("dev.portenv.server-key", ".") }
     /// The owner's GitHub sign-in (ADR 0025 §6, R-0391): only the app reads it.
     public var githubService: String { suffixed("dev.portenv.github", ".") }
+    /// Smart input's hosted adapters' keys (ADR 0027, S5a): only the app
+    /// reads it, when it makes a call; portenvd and the CLI never do.
+    public var smartInputKeyService: String { suffixed("dev.portenv.smart-input-keys", ".") }
     public var folder: String { suffixed("Portenv", "-") }
     /// Set for what the app starts (the CLI, attach), so it uses the same
     /// Keychain service and folder.

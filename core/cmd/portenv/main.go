@@ -13,6 +13,10 @@
 //	portenv app ACTION BOX [TARGET]            the box's actions through portenvd
 //	portenv version
 //
+// The owner's team commands, through portenvd as the app makes them (ADR
+// 0027 §5): msg, wake, tab new, team start|stop, deploy and decision list|
+// answer; portenv help --json prints the command list (ADR 0027 §7).
+//
 // Inside a workspace, an agent's own commands go through its socket
 // ($PORTENV_SOCKET) and portenvd's grant check (ADR 0022 §4): split, tab
 // new, focus, close, msg, ask-owner, inbox, share, propose-agent-change,
@@ -33,6 +37,7 @@ import (
 	"github.com/portenv/portenv/core/internal/version"
 	"github.com/portenv/portenv/core/keys"
 	"github.com/portenv/portenv/core/local"
+	daemonv1 "github.com/portenv/portenv/proto/gen/go/portenv/daemon/v1"
 )
 
 func main() {
@@ -61,6 +66,9 @@ var commands = map[string]command{
 }
 
 func run(ctx context.Context, args []string) int {
+	if len(args) == 2 && args[0] == "help" && args[1] == "--json" {
+		return printCommandList(os.Stdout, os.Stderr)
+	}
 	if len(args) == 0 || args[0] == "help" || args[0] == "-h" || args[0] == "--help" {
 		usage()
 		return 0
@@ -68,6 +76,30 @@ func run(ctx context.Context, args []string) int {
 	if args[0] == "version" || args[0] == "--version" {
 		fmt.Println("portenv", version.String())
 		return 0
+	}
+	// The owner's team commands (ADR 0027 §5): never an agent's, whose
+	// portenv has only its grant socket (msg and tab new there are its own
+	// calls), and never in the workspace's own shell, which has no owner
+	// socket. Both are refused before anything is dialled.
+	if ownerTeamCommand(args) {
+		sock := os.Getenv("PORTENV_SOCKET")
+		switch {
+		case sharedWithAgents(args[0]) && (sock != "" || insideWorkspace()):
+			return runTeam(ctx, args, os.Getenv, os.Stdin, os.Stdout, os.Stderr)
+		case sock != "":
+			fmt.Fprintln(os.Stderr, "This is the owner's command; an agent can't run it.")
+			return 2
+		case insideWorkspace():
+			fmt.Fprintln(os.Stderr, "This is the owner's command; run it on your Mac.")
+			return 2
+		}
+		return runOwner(ctx, args, func() (daemonv1.DaemonServiceClient, func(), error) {
+			e, err := local.NewEnv()
+			if err != nil {
+				return nil, nil, err
+			}
+			return dialDaemon(e)
+		}, os.Stdout, os.Stderr)
 	}
 	// Inside a workspace only the in-box commands run. The owner's would
 	// make a Portenv folder in the home, which every save carries; portenv
@@ -147,6 +179,17 @@ Commands:
                                           close, save, point, revert, history, housekeep [--prune],
                                           move BOX this-mac|USER@HOST, …
   version
+
+Your team, on this Mac (each through portenvd, as the app does it; approvals stay in the app):
+  msg AGENT TEXT [--thread ID]            message an agent, as you
+  wake AGENT                              ask an idle agent to read its inbox (never a busy one)
+  tab new --name NAME                     open a shell tab
+  team start [AGENT...] | team stop [AGENT...]
+  deploy TARGET                           run a target of the project's deploy runbook
+  decision list [--all] [--json]          what's waiting for you
+  decision answer ID approve|decline|N    check a request; you answer it in Portenv
+  add --workspace NAME when more than one workspace is open
+  help --json                             this command list, for programs
 
 Inside a workspace, for agents (each through Portenv's grant check):
   split, tab new, focus, close, msg, ask-owner, inbox, share,

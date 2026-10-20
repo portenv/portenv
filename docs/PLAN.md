@@ -1217,7 +1217,7 @@ It comes after 1.2's blocks, wherever they land (Phase 1 if the spike succeeds, 
 - [x] ⌘W closes the focused pane first, and closes tabs only when one pane is left. Closing a pane never stops its tab.
 - [x] The slim pane header: the tab picker (the tab's name with a chevron, listing the tabs no other pane shows), the program running in it, and a close button.
 - [x] The focused pane's 1 px accent outline; keystrokes go to it. VoiceOver reads each pane as "Pane: grok tab".
-- [x] The tab bar: choosing a tab (a click, ⌘1–9, ⌃Tab, ⌘⇧]) shows it in the focused pane, or focuses the pane already showing it; the current tab is always the focused pane's. A small glyph marks the tabs in a pane, showing where.
+- [x] The tab bar: choosing a tab (a click, ⌘1–9, ⌘⇧]; ⌃Tab until it went to workspace tabs, R-0345) shows it in the focused pane, or focuses the pane already showing it; the current tab is always the focused pane's. A small glyph marks the tabs in a pane, showing where.
 - [x] Each pane asks its own tab for its own size; a tab has one size, the latest asked for.
 - [x] Works with the Team sidebar and agent columns: selecting an agent filters the tab bar and shows that agent's tab in the focused pane, so the focused pane's tab is always the bar's current tab (R-0314); the other panes stay as they are.
 - [x] Tests: `SplitControllerTests`, `SplitLayoutTests`, `SplitPanesLayoutTests` (four panes fit the window's minimum).
@@ -1265,6 +1265,11 @@ Reduced: no sign-in, Only you, Keychain keys, the recovery key; the Welcome scre
   - Nothing is saved, released or stopped. The list shows it as "Running", with Open and Close Workspace.
   - Close Workspace saves and releases it. If that fails, the app asks "acme-api couldn't be saved before closing. Its work is still on this Mac.", with Try Again, Close Anyway and Cancel. Close Anyway leaves it as Quit Anyway does (the quit marker; saved first thing on the next open).
   - A workspace still opening finishes opening first. Closing another window on the same workspace just closes that window. Closing the list or first run, when it's the last window, quits.
+- **Workspace tabs** (the owner's request R-0344, decided R-0345; [ADR 0028](adr/0028-workspace-tabs-native-window-tabs.md); GUIDELINES §3.3): each open workspace has a window of its own, with its own session (`WorkspaceSession`: its controller, tabs, team, panes and their view state), and workspace windows group as macOS window tabs; Settings, Acknowledgements and first run never become tabs. The app shows several workspaces at once, one per tab, in place of one workspace at a time.
+  - Opening a workspace that's already open brings its tab forward. A new tab (＋, File › Open Workspace… ⌘N) shows "Your workspaces". A tab dragged out becomes its own window. Closing a tab closes that window only; the workspace keeps running (ADR 0023).
+  - The tab's title: the name, where it runs and the decisions waiting for you, `acme-api · This Mac · 2`, from the team the session follows (no new portenvd call).
+  - The menu bar acts on the main window's session (`WorkspaceSessions.current`). Quit names every running workspace in one confirmation (QuitAll); wake checks every open workspace; an update's relaunch leaves each running; a Keychain prompt brings forward the tab that asked.
+  - Shortcuts: terminal tabs keep ⌘1–⌘9 and ⌘⇧[ / ⌘⇧]; ⌃⌘1–⌃⌘9 pick a workspace tab; ⌃Tab / ⌃⇧Tab go between workspace tabs (macOS's Window › Show Next Tab and Show Previous Tab). Unit tests: `WorkspaceTabsTests`, `WindowCloseHookTests`.
 - **Link GitHub** (boards `link-github` and `link-github-linked`; before launch; not a Portenv account):
   - GitHub's device flow, through `gh auth login` inside the box, with the same access as the person's own gh; any number of repositories can be cloned into the box afterwards (the owner, 2026-10-10, ADR 0018: GitHub access works as on their Mac; no Portenv GitHub App and no repository picker);
   - gh's default scopes, then `gh auth setup-git`, so plain `git clone` and `git push` work for any repository the account can reach; the token lives in the box home's gh config (`hosts.yml`), never in the image;

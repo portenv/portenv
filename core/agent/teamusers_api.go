@@ -60,7 +60,7 @@ func (s *server) PrepareTeamProject(ctx context.Context, req *agentv1.PrepareTea
 	if s.team == nil {
 		return nil, status.Error(codes.Unavailable, "agent users aren't available in this workspace")
 	}
-	fixed, items, err := s.team.PrepareProject(ctx, req.GetProjectDir(), PrepareOptions{CloneAgents: req.GetCloneAgents(), HomeQuota: req.GetHomeQuotaBytes()})
+	fixed, items, err := s.team.PrepareProject(ctx, req.GetProjectDir(), PrepareOptions{CloneAgents: req.GetCloneAgents(), HomeQuota: req.GetHomeQuotaBytes(), Names: req.GetAgentNames()})
 	if err != nil {
 		return nil, status.Error(codes.FailedPrecondition, err.Error())
 	}

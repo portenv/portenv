@@ -3,7 +3,7 @@
 import PortenvKit
 import SwiftUI
 
-/// Delete Workspace… (ADR 0029, GUIDELINES §3.3): what goes, "This can’t be
+/// Delete Workspace… (ADR 0029, GUIDELINES §3.4): what goes, "This can’t be
 /// undone.", and the name typed exactly. Cancel is the default button.
 struct DeleteWorkspaceSheet: View {
     @Bindable var flow: DeleteFlow

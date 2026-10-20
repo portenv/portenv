@@ -53,9 +53,8 @@ struct MainWindow: View {
             }
             content
         }
-            // The team while the window is open; it watches again after a
-            // restart or a move.
-            .task(id: controller.box) { await team?.follow() }
+            // The team is followed by the window's session (AppModel.open),
+            // so a tab not in front still counts what needs you (R-0344).
             // Delete Workspace… waits while an agent runs (R-0358).
             .onChange(of: team?.state.agentsRunning ?? false, initial: true) { _, on in controller.agentsRunning = on }
             .onGeometryChange(for: Bool.self) { $0.size.width < 900 } action: { narrow = $0 }

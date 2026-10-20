@@ -43,4 +43,4 @@ The tester build had no way to delete a workspace: a tester who made a throwaway
 
 ## Consequences
 
-PLAN.md's key flow 6 and Phase 1 describe what's built; GUIDELINES §3.2 adds Delete Workspace… to the Workspace menu and a section on the delete sheet. The driver interface gains `DeleteHome` (driver.proto, additive).
+PLAN.md's key flow 6 and Phase 1 describe what's built; GUIDELINES §3.2 adds Delete Workspace… to the Workspace menu, and §3.4 describes the delete sheet. The driver interface gains `DeleteHome` (driver.proto, additive).

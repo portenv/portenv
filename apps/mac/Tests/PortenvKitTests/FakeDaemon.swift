@@ -277,9 +277,12 @@ final class FakeDaemon: DaemonAPI, @unchecked Sendable {
     }
     /// What ApplyTeamPlan answers (ADR 0025); nothing kept by default.
     var applied = TeamPlanApplied(applied: false)
-    func applyTeamPlan(_ box: String) async throws -> TeamPlanApplied {
-        try await record(["app", "apply-team-plan", box])
-        return lock.withLock { applied }
+    /// Answers in turn before `applied` (a needed sign-in, a failed clone).
+    var appliedFirst: [TeamPlanApplied] = []
+    func applyTeamPlan(_ box: String, githubToken: String?) async throws -> TeamPlanApplied {
+        // The sign-in is recorded only as whether one was given.
+        try await record(["app", "apply-team-plan", box, githubToken == nil ? "no-token" : "token"])
+        return lock.withLock { appliedFirst.isEmpty ? applied : appliedFirst.removeFirst() }
     }
     /// Settings › Team › Agents allowed (R-0347).
     var allowed = 4

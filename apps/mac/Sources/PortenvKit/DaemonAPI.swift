@@ -85,7 +85,7 @@ public protocol DaemonAPI: Sendable {
     func approveAgentFile(_ box: String, id: String, sha256: String) async throws -> TeamAgent
     /// Writes and pins the team New workspace kept for this workspace,
     /// once it runs (ADR 0025); nothing when there's none.
-    func applyTeamPlan(_ box: String) async throws -> TeamPlanApplied
+    func applyTeamPlan(_ box: String, githubToken: String?) async throws -> TeamPlanApplied
     /// Settings › Team › Agents allowed (R-0347), as portenvd keeps it.
     func agentsAllowed() async throws -> Int
     /// Sets it; portenvd refuses anything outside 1 to 8. Only after the
@@ -119,7 +119,7 @@ public extension DaemonAPI {
     func stopAgent(_: String, id _: String) async throws -> TeamAgent { throw DaemonError(DaemonError.outOfDate) }
     func getAgentFile(_: String, id _: String) async throws -> AgentFileContent { throw DaemonError(DaemonError.outOfDate) }
     func approveAgentFile(_: String, id _: String, sha256 _: String) async throws -> TeamAgent { throw DaemonError(DaemonError.outOfDate) }
-    func applyTeamPlan(_: String) async throws -> TeamPlanApplied { throw DaemonError(DaemonError.outOfDate) }
+    func applyTeamPlan(_: String, githubToken _: String?) async throws -> TeamPlanApplied { throw DaemonError(DaemonError.outOfDate) }
     func agentsAllowed() async throws -> Int { throw DaemonError(DaemonError.outOfDate) }
     func setAgentsAllowed(_: Int) async throws -> Int { throw DaemonError(DaemonError.outOfDate) }
 }

@@ -90,7 +90,6 @@ struct TeamStepView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(NewTeamText.runnerOnly)
                     Text(NewTeamText.signIn)
-                    Text(NewTeamText.projectLine)
                 }
                 .font(.callout).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -176,13 +175,15 @@ struct AgentChoiceRow: View {
 /// selected in full.
 struct ReviewStepView: View {
     @Bindable var team: NewTeamFlow
+    /// The Project step's choice, summarised at the top of the list.
+    var project: ProjectChoice = .empty
 
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
             VStack(alignment: .leading, spacing: 8) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(NewTeamText.project).font(.headline)
-                    Text(NewTeamText.projectLine).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    Text(verbatim: NewTeamText.projectTitle(project)).font(.headline)
+                    Text(NewTeamText.projectSummary(project)).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(10)
                 .frame(maxWidth: .infinity, alignment: .leading)

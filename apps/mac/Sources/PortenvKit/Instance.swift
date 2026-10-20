@@ -29,6 +29,8 @@ public struct Instance: Equatable, Sendable {
     public var recoveryPoolService: String { suffixed("dev.portenv.recovery-pool", ".") }
     /// The keys Portenv makes for servers (ADR 0021): only the app reads it.
     public var serverKeyService: String { suffixed("dev.portenv.server-key", ".") }
+    /// The owner's GitHub sign-in (ADR 0025 §6, R-0391): only the app reads it.
+    public var githubService: String { suffixed("dev.portenv.github", ".") }
     public var folder: String { suffixed("Portenv", "-") }
     /// Set for what the app starts (the CLI, attach), so it uses the same
     /// Keychain service and folder.

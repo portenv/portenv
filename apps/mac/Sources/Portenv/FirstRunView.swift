@@ -111,6 +111,7 @@ struct FirstRunView: View {
         case .recoveryKey: recoveryKey
         case .storage: storage
         case .firstBox: firstBox
+        case .project: projectStep
         case .team: teamStep
         case .review: reviewStep
         case .gettingReady: gettingReady
@@ -313,9 +314,15 @@ struct FirstRunView: View {
 
     /// The step names while New workspace has a Team step (ADR 0025 §1).
     @ViewBuilder private var stepNames: some View {
-        if flow.hasTeamStep, [.firstBox, .team, .review].contains(flow.step) {
-            StepNames(steps: [("Name", flow.step == .firstBox), (NewTeamText.teamTitle, flow.step == .team),
-                              (NewTeamText.reviewTitle, flow.step == .review)])
+        if flow.hasTeamStep, [.firstBox, .project, .team, .review].contains(flow.step) {
+            StepNames(steps: [("Name", flow.step == .firstBox), (ProjectText.title, flow.step == .project),
+                              (NewTeamText.teamTitle, flow.step == .team), (NewTeamText.reviewTitle, flow.step == .review)])
+        }
+    }
+
+    private var projectStep: some View {
+        heading(ProjectText.title, ProjectText.line) {
+            ProjectStepView(flow: flow)
         }
     }
 
@@ -332,7 +339,7 @@ struct FirstRunView: View {
 
     private var reviewStep: some View {
         heading(NewTeamText.reviewTitle, "") {
-            ReviewStepView(team: flow.team)
+            ReviewStepView(team: flow.team, project: flow.project)
             Text(FirstRunText.teamStartLine).font(.callout).foregroundStyle(.secondary).padding(.top, 8)
             dockerNotice.padding(.top, 8)
         }

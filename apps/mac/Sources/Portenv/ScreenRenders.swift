@@ -93,7 +93,7 @@ enum ScreenRenders {
     private static func render(to dir: URL) async -> Int32 {
         do {
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            for step in FirstRunStep.allCases where ![.team, .review].contains(step) {
+            for step in FirstRunStep.allCases where ![.team, .review, .project].contains(step) {
                 let flow = await sampleFlow(at: step)
                 try snapshot(FirstRunView(flow: flow, opened: { _ in }, followsDocker: false),
                              name: "first-run-\(step.rawValue + 1)-\(name(step))", in: dir)
@@ -291,7 +291,7 @@ enum ScreenRenders {
             await flow.next()
             flow.boxName = "acme-api"
             return flow
-        case .team, .review:
+        case .team, .review, .project:
             return FirstRunFlow(service: Sample(), at: step)
         case .gettingReady:
             let flow = FirstRunFlow(service: Sample(), at: .storage)
@@ -311,6 +311,7 @@ enum ScreenRenders {
         case .firstBox: "first-box"
         case .gettingReady: "getting-ready"
         case .team: "team"
+        case .project: "project"
         case .review: "review"
         }
     }

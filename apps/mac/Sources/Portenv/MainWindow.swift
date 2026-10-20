@@ -53,7 +53,12 @@ struct MainWindow: View {
                             setupLines: team.setupLines)
                 Divider()
             }
-            content
+            VStack(spacing: 0) {
+                // New workspace's project, being brought in, or why it
+                // couldn't be (ADR 0025 §2).
+                if let team { SetupBanner(team: team) }
+                content
+            }
         }
             // The team while the window is open; it watches again after a
             // restart or a move.

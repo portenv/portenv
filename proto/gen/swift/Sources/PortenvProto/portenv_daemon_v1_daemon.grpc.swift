@@ -802,6 +802,32 @@ public enum Portenv_Daemon_V1_DaemonService: Sendable {
                 type: .unary
             )
         }
+        /// Namespace for "GetTeamSettings" metadata.
+        public enum GetTeamSettings: Sendable {
+            /// Request type for "GetTeamSettings".
+            public typealias Input = Portenv_Daemon_V1_GetTeamSettingsRequest
+            /// Response type for "GetTeamSettings".
+            public typealias Output = Portenv_Daemon_V1_GetTeamSettingsResponse
+            /// Descriptor for "GetTeamSettings".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "GetTeamSettings",
+                type: .unary
+            )
+        }
+        /// Namespace for "SetAgentsAllowed" metadata.
+        public enum SetAgentsAllowed: Sendable {
+            /// Request type for "SetAgentsAllowed".
+            public typealias Input = Portenv_Daemon_V1_SetAgentsAllowedRequest
+            /// Response type for "SetAgentsAllowed".
+            public typealias Output = Portenv_Daemon_V1_SetAgentsAllowedResponse
+            /// Descriptor for "SetAgentsAllowed".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "SetAgentsAllowed",
+                type: .unary
+            )
+        }
         /// Descriptors for all methods in the "portenv.daemon.v1.DaemonService" service.
         public static let descriptors: [GRPCCore.MethodDescriptor] = [
             GetVersion.descriptor,
@@ -863,7 +889,9 @@ public enum Portenv_Daemon_V1_DaemonService: Sendable {
             SetRoutinePaused.descriptor,
             WakeAgent.descriptor,
             ListDecisions.descriptor,
-            Deploy.descriptor
+            Deploy.descriptor,
+            GetTeamSettings.descriptor,
+            SetAgentsAllowed.descriptor
         ]
     }
 }
@@ -2312,6 +2340,50 @@ extension Portenv_Daemon_V1_DaemonService {
             deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_DeployResponse>,
             options: GRPCCore.CallOptions,
             onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_DeployResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "GetTeamSettings" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > The owner's team settings (R-0347): how many agents may run in one
+        /// > workspace (Settings › Team › Agents allowed). Set only by the app, in
+        /// > front of the person: from Settings, or the owner's confirmed Raise.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_GetTeamSettingsRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_GetTeamSettingsRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_GetTeamSettingsResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func getTeamSettings<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_GetTeamSettingsRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_GetTeamSettingsRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_GetTeamSettingsResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_GetTeamSettingsResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "SetAgentsAllowed" method.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_SetAgentsAllowedRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_SetAgentsAllowedRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_SetAgentsAllowedResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func setAgentsAllowed<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_SetAgentsAllowedRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_SetAgentsAllowedRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_SetAgentsAllowedResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_SetAgentsAllowedResponse>) async throws -> Result
         ) async throws -> Result where Result: Sendable
     }
 
@@ -4409,6 +4481,72 @@ extension Portenv_Daemon_V1_DaemonService {
                 onResponse: handleResponse
             )
         }
+
+        /// Call the "GetTeamSettings" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > The owner's team settings (R-0347): how many agents may run in one
+        /// > workspace (Settings › Team › Agents allowed). Set only by the app, in
+        /// > front of the person: from Settings, or the owner's confirmed Raise.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_GetTeamSettingsRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_GetTeamSettingsRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_GetTeamSettingsResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func getTeamSettings<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_GetTeamSettingsRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_GetTeamSettingsRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_GetTeamSettingsResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_GetTeamSettingsResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.GetTeamSettings.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
+
+        /// Call the "SetAgentsAllowed" method.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_SetAgentsAllowedRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_SetAgentsAllowedRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_SetAgentsAllowedResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func setAgentsAllowed<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_SetAgentsAllowedRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_SetAgentsAllowedRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_SetAgentsAllowedResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_SetAgentsAllowedResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.SetAgentsAllowed.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
     }
 }
 
@@ -6185,6 +6323,62 @@ extension Portenv_Daemon_V1_DaemonService.ClientProtocol {
             request: request,
             serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_DeployRequest>(),
             deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_DeployResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "GetTeamSettings" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > The owner's team settings (R-0347): how many agents may run in one
+    /// > workspace (Settings › Team › Agents allowed). Set only by the app, in
+    /// > front of the person: from Settings, or the owner's confirmed Raise.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_GetTeamSettingsRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func getTeamSettings<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_GetTeamSettingsRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_GetTeamSettingsResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.getTeamSettings(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_GetTeamSettingsRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_GetTeamSettingsResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "SetAgentsAllowed" method.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_SetAgentsAllowedRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func setAgentsAllowed<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_SetAgentsAllowedRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_SetAgentsAllowedResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.setAgentsAllowed(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_SetAgentsAllowedRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_SetAgentsAllowedResponse>(),
             options: options,
             onResponse: handleResponse
         )
@@ -8206,6 +8400,70 @@ extension Portenv_Daemon_V1_DaemonService.ClientProtocol {
             metadata: metadata
         )
         return try await self.deploy(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "GetTeamSettings" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > The owner's team settings (R-0347): how many agents may run in one
+    /// > workspace (Settings › Team › Agents allowed). Set only by the app, in
+    /// > front of the person: from Settings, or the owner's confirmed Raise.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func getTeamSettings<Result>(
+        _ message: Portenv_Daemon_V1_GetTeamSettingsRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_GetTeamSettingsResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_GetTeamSettingsRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.getTeamSettings(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "SetAgentsAllowed" method.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func setAgentsAllowed<Result>(
+        _ message: Portenv_Daemon_V1_SetAgentsAllowedRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_SetAgentsAllowedResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_SetAgentsAllowedRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.setAgentsAllowed(
             request: request,
             options: options,
             onResponse: handleResponse

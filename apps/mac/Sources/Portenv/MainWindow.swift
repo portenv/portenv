@@ -48,7 +48,8 @@ struct MainWindow: View {
         HStack(spacing: 0) {
             if TeamSidebarToggle.shows(choice: sidebarChoice, team: team), let team {
                 TeamSidebar(state: team.state, tabs: tabs.tabs,
-                            selection: Binding(get: { team.selection }, set: { choose($0) }), compact: narrow)
+                            selection: Binding(get: { team.selection }, set: { choose($0) }), compact: narrow,
+                            onRaise: { n in Task { await team.raiseAgentLimit(to: n) } }, error: team.limitError)
                 Divider()
             }
             content

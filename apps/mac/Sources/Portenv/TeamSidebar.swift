@@ -15,6 +15,10 @@ struct TeamSidebar: View {
     var now = Date()
     /// Below 900 pt of window width: avatars and status symbols only.
     var compact = false
+    /// The owner's confirmed Raise of Agents allowed (R-0347).
+    var onRaise: ((Int) -> Void)?
+    /// Why the last Raise was refused, if it was.
+    var error: String?
 
     static let width: CGFloat = 248
     static let compactWidth: CGFloat = 52
@@ -48,6 +52,11 @@ struct TeamSidebar: View {
                                 .selectionDisabled()
                         }
                     }
+                }
+                // The owner's agent limit (R-0347): at, near or over it.
+                if !compact, let limit = state.limit, limit.shows {
+                    TeamLimitRow(limit: limit, onRaise: onRaise, error: error)
+                        .selectionDisabled()
                 }
             }
         }
@@ -277,5 +286,47 @@ struct AgentTabRow: View {
         .padding(.leading, 24)
         .accessibilityElement(children: .combine)
         .accessibilityValue(tab.active ? "on screen" : "")
+    }
+}
+
+/// The Team section's line about the owner's agent limit (R-0347): a quiet
+/// line at or near it; over it, a warning with Raise to N…, which asks the
+/// owner before Agents allowed changes.
+struct TeamLimitRow: View {
+    let limit: TeamLimit
+    var onRaise: ((Int) -> Void)?
+    var error: String?
+    @State private var confirming = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                if limit.isWarning {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(SwiftUI.Color(nsColor: .systemOrange))
+                        .accessibilityHidden(true)
+                }
+                Text(verbatim: limit.line)
+                    .foregroundStyle(limit.isWarning ? .primary : .secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .font(.system(size: 11))
+            if let title = limit.raiseTitle, let onRaise {
+                Button(title) { confirming = true }
+                    .controlSize(.small)
+                    .accessibilityLabel("Raise Agents allowed to \(limit.raiseTo)")
+                    .alert(limit.confirmTitle, isPresented: $confirming) {
+                        Button(limit.confirmButton) { onRaise(limit.raiseTo) }
+                        Button("Cancel", role: .cancel) {}
+                    } message: {
+                        Text(limit.confirmMessage)
+                    }
+            }
+            if let error {
+                Text(verbatim: error).font(.system(size: 11)).foregroundStyle(SwiftUI.Color(nsColor: .systemRed))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(.vertical, 2)
     }
 }

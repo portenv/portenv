@@ -83,6 +83,12 @@ struct TeamColumn: View {
                         Text(verbatim: agent.shareLoginOff).font(.system(size: 11)).foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
+                    // Portenv can't recognise its runner's idle prompt, so
+                    // messages and routines wait (R-0411).
+                    if !agent.idleUnknown.isEmpty {
+                        Text(verbatim: agent.idleUnknown).font(.system(size: 11)).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
             }
             .padding(.horizontal, 14).padding(.vertical, 10)

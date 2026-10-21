@@ -671,25 +671,27 @@ func (s *apiServer) SetAgentIdleInput(id string, in idleinput.Input) error {
 
 // readyForRoutine says why the main pane can't take a routine now, or ""
 // when it can (R-0258, R-0260), from its screen, quiet time and mode
-// (routineVerdict).
-func (a *agentServer) readyForRoutine(ctx context.Context, idleInput *idleinput.Matcher) (string, error) {
+// (routineVerdict), with the verdict's kind.
+func (a *agentServer) readyForRoutine(ctx context.Context, idleInput *idleinput.Matcher) (agentv1.AgentIdleCheck, string, error) {
+	none := agentv1.AgentIdleCheck_AGENT_IDLE_CHECK_UNSPECIFIED
 	out, err := a.tmux(ctx, "display-message", "-p", "-t", a.mainPane, "#{alternate_on}\t#{window_activity}")
 	if err != nil {
-		return "", err
+		return none, "", err
 	}
 	f := strings.Split(strings.TrimSpace(out), "\t")
 	if len(f) != 2 {
-		return "", fmt.Errorf("tmux answered %q", out)
+		return none, "", fmt.Errorf("tmux answered %q", out)
 	}
 	activity, err := strconv.ParseInt(f[1], 10, 64)
 	if err != nil {
-		return "", fmt.Errorf("tmux answered %q", out)
+		return none, "", fmt.Errorf("tmux answered %q", out)
 	}
 	screen, err := a.tmux(ctx, "capture-pane", "-p", "-t", a.mainPane)
 	if err != nil {
-		return "", err
+		return none, "", err
 	}
-	return routineVerdict(a.user.ID, lastLines(screen, screenLines), time.Since(time.Unix(activity, 0)), f[0] == "1", idleInput), nil
+	check, why := routineVerdict(a.user.ID, lastLines(screen, screenLines), time.Since(time.Unix(activity, 0)), f[0] == "1", idleInput)
+	return check, why, nil
 }
 
 // routineVerdict says why a pane with these last lines can't take a
@@ -711,7 +713,10 @@ func (a *agentServer) readyForRoutine(ctx context.Context, idleInput *idleinput.
 // And whatever the four say, nothing is typed while any of the last lines
 // reads as a secret prompt (ADR 0016's rule: "Password:", a passphrase, a
 // token asked for), even when the runner's rule matches (R-0261).
-func routineVerdict(id string, lines []string, quiet time.Duration, alt bool, idleInput *idleinput.Matcher) string {
+//
+// The kind says which: idle, busy (the first three and the secret rule),
+// no prompt (4 failed, the rest passed) or no rule.
+func routineVerdict(id string, lines []string, quiet time.Duration, alt bool, idleInput *idleinput.Matcher) (agentv1.AgentIdleCheck, string) {
 	at := -1
 	if idleInput != nil {
 		at = idleInput.Find(lines)
@@ -727,22 +732,23 @@ func routineVerdict(id string, lines []string, quiet time.Duration, alt bool, id
 		ScreenPrompt: screenAsks(asked),
 		LastLines:    lines,
 	}
+	busy := agentv1.AgentIdleCheck_AGENT_IDLE_CHECK_BUSY
 	switch {
 	case sig.Secret():
 		// Never the prompt's text (ADR 0016 point 8).
-		return "busy: " + id + "'s terminal asks for a secret"
+		return busy, "busy: " + id + "'s terminal asks for a secret"
 	case sig.Waiting():
-		return "busy: " + id + " is asking something"
+		return busy, "busy: " + id + " is asking something"
 	case sig.Quiet < routineQuiet:
-		return fmt.Sprintf("busy: %s printed something in the last %s", id, routineQuiet)
+		return busy, fmt.Sprintf("busy: %s printed something in the last %s", id, routineQuiet)
 	case sig.AltScreen:
-		return "busy: " + id + " is in a full-screen program"
+		return busy, "busy: " + id + " is in a full-screen program"
 	case idleInput == nil:
-		return "busy: " + id + "'s runner has no idle-input pattern, so it never takes routines"
+		return agentv1.AgentIdleCheck_AGENT_IDLE_CHECK_NO_RULE, "busy: " + id + "'s runner has no idle-input pattern, so it never takes routines"
 	case at < 0:
-		return "busy: " + id + " isn't waiting at its input"
+		return agentv1.AgentIdleCheck_AGENT_IDLE_CHECK_NO_PROMPT, "busy: " + id + " isn't waiting at its input"
 	}
-	return ""
+	return agentv1.AgentIdleCheck_AGENT_IDLE_CHECK_IDLE, ""
 }
 
 // deliverRoutine types "[Portenv routine] <text>" and Enter into the
@@ -784,7 +790,7 @@ func (s *apiServer) typeWhenIdle(ctx context.Context, a *agentServer, line, what
 	s.agents.mu.Lock()
 	idleInput := a.idleInput
 	s.agents.mu.Unlock()
-	why, err := a.readyForRoutine(ctx, idleInput)
+	_, why, err := a.readyForRoutine(ctx, idleInput)
 	if err != nil {
 		return status.Errorf(codes.Unavailable, "%s to %s: %v", what, agentID, err)
 	}

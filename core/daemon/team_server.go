@@ -31,7 +31,7 @@ func (s *Server) teamEng() *teamEngine {
 		s.team = newTeamEngine(s.agentFor, s.loadTeam)
 		s.team.readBoard = s.readBoard
 		s.team.log = s.log
-		// Routines' timers (R-0258), while portenvd runs.
+		// Routines' timers (R-0258) and the idle checks, while portenvd runs.
 		go func() {
 			tick := time.NewTicker(30 * time.Second)
 			defer tick.Stop()
@@ -41,6 +41,8 @@ func (s *Server) teamEng() *teamEngine {
 					return
 				case <-tick.C:
 					s.team.tickRoutines(s.bgCtx)
+					// The same tick looks for a prompt it can't recognise (R-0411).
+					s.team.tickIdleChecks(s.bgCtx)
 				}
 			}
 		}()

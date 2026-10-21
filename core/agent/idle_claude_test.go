@@ -62,12 +62,12 @@ func TestRoutineVerdictOnClaudeScreens(t *testing.T) {
 		{"old bare", "Anything else?\n> \n", quiet, false, ""},
 	}
 	for _, c := range cases {
-		got := routineVerdict("writer", lastLines(c.screen, screenLines), c.quiet, c.alt, m)
+		_, got := routineVerdict("writer", lastLines(c.screen, screenLines), c.quiet, c.alt, m)
 		if c.why == "" && got != "" || c.why != "" && !strings.Contains(got, c.why) {
 			t.Errorf("%s: %q, want %q", c.name, got, c.why)
 		}
 	}
-	if got := routineVerdict("writer", lastLines(claudeScreen("⏺ Updated the handler.\n", `❯ `), screenLines), quiet, false, nil); !strings.Contains(got, "no idle-input pattern") {
+	if _, got := routineVerdict("writer", lastLines(claudeScreen("⏺ Updated the handler.\n", `❯ `), screenLines), quiet, false, nil); !strings.Contains(got, "no idle-input pattern") {
 		t.Errorf("no rule: %q", got)
 	}
 }
@@ -118,5 +118,71 @@ func TestWakeReachesAnIdleClaude2_1_304Pane(t *testing.T) {
 	}
 	if got, want := waitFile(t, filepath.Join(dir, "writer")), "[Portenv] new message from lead; run portenv inbox"; got != want {
 		t.Errorf("the writer's pane read %q, want %q", got, want)
+	}
+}
+
+// The previous Claude Code's idle screen: "> " in a box with sides, and
+// its footer under the box.
+const claudeOldScreen = "⏺ Done.\n\n" +
+	"╭──────────────────────────────────────────────────────╮\n" +
+	"│ >                                                    │\n" +
+	"╰──────────────────────────────────────────────────────╯\n" +
+	"  ? for shortcuts\n"
+
+// R-0411: CheckAgentIdle answers portenvd's question without typing
+// anything: idle at Claude Code 2.1.304's prompt and at the previous
+// version's box, no prompt for a quiet pane with text typed, busy while
+// it prints, and no rule for a runner without one.
+func TestCheckAgentIdleTypesNothing(t *testing.T) {
+	s := testAgentServers(t)
+	ctx := context.Background()
+	shortQuiet(t)
+	dir := t.TempDir()
+	draw := func(name, screen string) string {
+		path := filepath.Join(dir, name+".screen")
+		if err := os.WriteFile(path, []byte(screen), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return `cat '` + path + `'; `
+	}
+	read := `IFS= read -r line; printf '%s' "$line" > "$0"; exec sleep 100`
+	claude := idleinput.ForRunner([]string{"claude"})
+	cases := []struct {
+		id, script string
+		rule       idleinput.Input
+		want       agentv1.AgentIdleCheck
+	}{
+		{"current", draw("current", claudeScreen("⏺ Done. Want me to run the tests too?\n", `❯ Try "how do I log an error?"`)) + read, claude, agentv1.AgentIdleCheck_AGENT_IDLE_CHECK_IDLE},
+		{"previous", draw("previous", claudeOldScreen) + read, claude, agentv1.AgentIdleCheck_AGENT_IDLE_CHECK_IDLE},
+		{"typed", draw("typed", claudeScreen("⏺ Done.\n", `❯ fix the bug`)) + read, claude, agentv1.AgentIdleCheck_AGENT_IDLE_CHECK_NO_PROMPT},
+		{"prints", draw("prints", claudeScreen("⏺ Done.\n", `❯ `)) + `while :; do printf .; sleep 0.3; done`, claude, agentv1.AgentIdleCheck_AGENT_IDLE_CHECK_BUSY},
+		{"norule", draw("norule", claudeScreen("⏺ Done.\n", `❯ `)) + read, idleinput.Input{}, agentv1.AgentIdleCheck_AGENT_IDLE_CHECK_NO_RULE},
+	}
+	for _, c := range cases {
+		if _, err := s.StartAgentTerminals(ctx, testSpec(t, c.id, standIn(c.script, filepath.Join(dir, c.id))...)); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.SetAgentIdleInput(c.id, c.rule); err != nil {
+			t.Fatal(err)
+		}
+	}
+	waitQuiet()
+	for _, c := range cases {
+		r, err := s.CheckAgentIdle(ctx, &agentv1.CheckAgentIdleRequest{AgentId: c.id})
+		if err != nil {
+			t.Fatalf("%s: %v", c.id, err)
+		}
+		if r.GetCheck() != c.want {
+			t.Errorf("%s: %s, want %s", c.id, r.GetCheck(), c.want)
+		}
+	}
+	time.Sleep(300 * time.Millisecond)
+	for _, c := range cases {
+		if b, err := os.ReadFile(filepath.Join(dir, c.id)); err == nil { // #nosec G304 -- test
+			t.Errorf("%s: typed %q", c.id, b)
+		}
+	}
+	if _, err := s.CheckAgentIdle(ctx, &agentv1.CheckAgentIdleRequest{AgentId: "gone"}); status.Code(err) != codes.FailedPrecondition {
+		t.Errorf("an agent that isn't running: %v", err)
 	}
 }

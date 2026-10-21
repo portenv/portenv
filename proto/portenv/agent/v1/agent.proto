@@ -139,6 +139,10 @@ service AgentService {
   // checks. The helper writes the line itself; no message text is ever
   // typed, and from must be an agent id or "owner".
   rpc WakeAgent(WakeAgentRequest) returns (WakeAgentResponse);
+  // Says whether the agent's main pane would take a routine or a wake-up
+  // now, under exactly their checks, and types nothing: portenvd's way to
+  // notice a runner whose idle prompt it doesn't recognise (R-0411).
+  rpc CheckAgentIdle(CheckAgentIdleRequest) returns (CheckAgentIdleResponse);
 }
 
 message RunResticRequest {
@@ -947,6 +951,28 @@ message WakeAgentRequest {
 }
 
 message WakeAgentResponse {}
+
+message CheckAgentIdleRequest {
+  string agent_id = 1;
+}
+
+// What CheckAgentIdle saw in an agent's main pane.
+enum AgentIdleCheck {
+  AGENT_IDLE_CHECK_UNSPECIFIED = 0;
+  // At its empty input: a routine or a wake-up would be typed.
+  AGENT_IDLE_CHECK_IDLE = 1;
+  // Printing, asking something, a secret prompt or a full-screen program.
+  AGENT_IDLE_CHECK_BUSY = 2;
+  // Quiet and not asking, but the runner's idle rule finds no empty input:
+  // something typed, or a screen Portenv doesn't recognise.
+  AGENT_IDLE_CHECK_NO_PROMPT = 3;
+  // The runner has no idle rule.
+  AGENT_IDLE_CHECK_NO_RULE = 4;
+}
+
+message CheckAgentIdleResponse {
+  AgentIdleCheck check = 1;
+}
 
 message WriteAgentFilesRequest {
   // The project folder, /home/work/<workspace>.

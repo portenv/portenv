@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	"golang.org/x/sys/unix"
@@ -438,5 +439,34 @@ func TestTheMovesDecisionOnTheBoard(t *testing.T) {
 	}
 	if _, err := (&apiServer{}).ResolveTeamMigration(context.Background(), &agentv1.ResolveTeamMigrationRequest{}); err == nil {
 		t.Error("a server without init's relay resolved a move")
+	}
+}
+
+// Init reaps any child on SIGCHLD unless a command holds its lock. The
+// move's team-io commands (clone-own, migrate-copy) are init's children
+// too, so they run holding it: otherwise an orphan's exit, such as a
+// just-stopped agent's process, lets the reaper take their exit status
+// and the move fails with "waitid: no child processes".
+func TestTheMovesCommandsHoldInitsReaperLock(t *testing.T) {
+	var mu sync.Mutex
+	held := false
+	tu := &TeamUsers{Run: ExecRunner{Mu: &mu}, migrate: &migrateOps{
+		asAgent: func(context.Context, int, string, []string, io.Reader) ([]byte, error) {
+			if mu.TryLock() {
+				mu.Unlock()
+			} else {
+				held = true
+			}
+			return nil, nil
+		},
+	}}
+	if _, err := tu.mops().asAgent(context.Background(), 2001, "/home/lead", []string{"migrate-copy"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if !held {
+		t.Error("migrate-copy ran without init's reaper lock")
+	}
+	if !mu.TryLock() {
+		t.Error("the lock wasn't let go")
 	}
 }

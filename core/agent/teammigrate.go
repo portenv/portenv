@@ -131,11 +131,28 @@ func (o *migrateOps) gidOf(rel string, st *unix.Stat_t) int {
 	return int(st.Gid)
 }
 
+// mops are the move's calls. Their team-io commands run holding init's
+// reaper lock (ExecRunner's Mu), as init's other commands do: they're
+// init's children, and the reaper would otherwise take their exit status
+// when an orphan's SIGCHLD lands mid-command (a just-stopped agent's
+// process), failing the move with "waitid: no child processes".
 func (t *TeamUsers) mops() *migrateOps {
-	if t.migrate != nil {
-		return t.migrate
+	o := t.migrate
+	if o == nil {
+		o = defaultMigrateOps(t.Cfg)
 	}
-	return defaultMigrateOps(t.Cfg)
+	r, ok := t.Run.(ExecRunner)
+	if !ok || r.Mu == nil || o.asAgent == nil {
+		return o
+	}
+	locked := *o
+	inner := o.asAgent
+	locked.asAgent = func(ctx context.Context, uid int, home string, args []string, stdin io.Reader) ([]byte, error) {
+		r.Mu.Lock()
+		defer r.Mu.Unlock()
+		return inner(ctx, uid, home, args, stdin)
+	}
+	return &locked
 }
 
 // errAgentsRunning is the plain line while an agent process runs.

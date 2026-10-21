@@ -247,16 +247,35 @@ public struct TeamState: Equatable, Sendable {
         switch event {
         case .agent(let a):
             if let i = agents.firstIndex(where: { $0.id == a.id }) { agents[i] = a } else { agents.append(a) }
+            settleNeedsYou(a.id)
         case .removed(let id):
             agents.removeAll { $0.id == id }
         case .message(let m):
             if !messages.contains(where: { $0.id == m.id }) { messages.append(m) }
         case .decision(let d):
             if let i = decisions.firstIndex(where: { $0.id == d.id }) { decisions[i] = d } else { decisions.append(d) }
+            settleNeedsYou(d.from)
         case .limit(let l):
             limit = l
         }
         if !cursor.isEmpty { self.cursor = cursor }
+    }
+
+    /// "Needs you" is the app's (GUIDELINES §6): a running agent shows it
+    /// exactly while one of its decisions waits here, as portenvd decides
+    /// it, so answering or an expiry clears it at once, and a row portenvd
+    /// sent before the answer never brings it back. An agent's own status
+    /// line (`portenv status set`, even `--blocked`) is its words, shown as
+    /// its line: it never sets or keeps the badge.
+    private mutating func settleNeedsYou(_ id: String) {
+        guard let i = agents.firstIndex(where: { $0.id == id }) else { return }
+        let pending = decisions.count { $0.from == id && $0.answerable }
+        agents[i].pendingDecisions = pending
+        switch agents[i].status {
+        case .needsYou where pending == 0: agents[i].status = .running
+        case .running where pending > 0: agents[i].status = .needsYou
+        default: break
+        }
     }
 
     /// Whether the workspace has a team: the sidebar shows by default when

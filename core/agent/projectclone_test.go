@@ -105,14 +105,19 @@ func TestCloneFromABundle(t *testing.T) {
 	if b, _ := os.ReadFile(filepath.Join(p, "README.md")); string(b) != "hello\n" {
 		t.Fatalf("README %q", b)
 	}
-	if got := runGit(t, p, "remote", "get-url", "origin"); got != projectURL {
+	// Fetches and pushes go through Portenv (R-0391, R-0392); the GitHub
+	// address is kept beside it, for people to read.
+	if got := runGit(t, p, "remote", "get-url", "origin"); got != "portenv::github" {
 		t.Fatalf("origin %q", got)
+	}
+	if got := runGit(t, p, "config", "remote.origin.github"); got != projectURL {
+		t.Fatalf("origin's address %q", got)
 	}
 	if got := runGit(t, p, "symbolic-ref", "HEAD"); got != "refs/heads/main" {
 		t.Fatalf("HEAD %q", got)
 	}
-	if got := runGit(t, p, "config", "remote.origin.pushurl"); got != "portenv::github" {
-		t.Fatalf("pushurl %q", got)
+	if out, err := exec.Command("git", "-C", p, "config", "remote.origin.pushurl").Output(); err == nil {
+		t.Fatalf("a separate pushurl %q", out)
 	}
 	if got := runGit(t, p, "rev-parse", "--abbrev-ref", "main@{upstream}"); got != "origin/main" {
 		t.Fatalf("upstream %q", got)
@@ -186,7 +191,7 @@ func TestCloneOfAnEmptyRepository(t *testing.T) {
 		t.Fatal(err)
 	}
 	p := filepath.Join(home, "acme")
-	if runGit(t, p, "remote", "get-url", "origin") != projectURL || runGit(t, p, "symbolic-ref", "HEAD") != "refs/heads/main" {
+	if runGit(t, p, "remote", "get-url", "origin") != "portenv::github" || runGit(t, p, "symbolic-ref", "HEAD") != "refs/heads/main" {
 		t.Fatal("not an empty project with its origin")
 	}
 }

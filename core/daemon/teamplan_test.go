@@ -5,6 +5,7 @@ package daemon
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io/fs"
 	"net"
 	"os"
@@ -147,6 +148,24 @@ type fakeProjectAgent struct {
 	free uint64
 	// ReadPushBundle's bundles, by id: each read once.
 	pushBundles map[string][]byte
+	// WriteFetchBundle's bundles, in order.
+	fetchBundles [][]byte
+}
+
+func (f *fakeProjectAgent) WriteFetchBundle(stream agentv1.AgentService_WriteFetchBundleServer) error {
+	var b []byte
+	for {
+		m, err := stream.Recv()
+		if err != nil {
+			break
+		}
+		b = append(b, m.GetChunk()...)
+	}
+	f.mu.Lock()
+	f.fetchBundles = append(f.fetchBundles, b)
+	id := fmt.Sprintf("%032x", len(f.fetchBundles))
+	f.mu.Unlock()
+	return stream.SendAndClose(&agentv1.WriteFetchBundleResponse{BundleId: id})
 }
 
 func (f *fakeProjectAgent) ReadPushBundle(r *agentv1.ReadPushBundleRequest, stream agentv1.AgentService_ReadPushBundleServer) error {

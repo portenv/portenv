@@ -684,6 +684,15 @@ extension DaemonClient {
         }
     }
 
+    public func pushPermission(_ box: String) async throws -> (repo: String, allowed: Bool) {
+        let r = try await call { try await api.getPushes(.with { $0.name = box }) }
+        return (TeamText.line(r.repo, max: 140), r.allowed)
+    }
+
+    public func stopAllowingPushes(_ box: String) async throws {
+        _ = try await call { try await api.stopAllowingPushes(.with { $0.name = box }) }
+    }
+
     /// The sign-in goes only in this request, in memory (R-0391).
     public func answerPush(_ box: String, id: String, allow: Bool, githubToken: String?, signedOut: Bool) async throws {
         let req = Portenv_Daemon_V1_AnswerPushRequest.with {

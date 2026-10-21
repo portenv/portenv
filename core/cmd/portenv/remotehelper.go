@@ -79,6 +79,7 @@ func runRemoteHelper(args []string, stdin io.Reader, stdout, stderr io.Writer, e
 	in := bufio.NewReader(stdin)
 	remote := map[string]string{}
 	var batch []pushSpec
+	var wants []*agentv1.RemoteRef
 	for {
 		line, err := in.ReadString('\n')
 		if err != nil && line == "" {
@@ -87,11 +88,12 @@ func runRemoteHelper(args []string, stdin io.Reader, stdout, stderr io.Writer, e
 		line = strings.TrimSuffix(line, "\n")
 		switch {
 		case line == "capabilities":
-			_, _ = io.WriteString(stdout, "push\noption\n\n")
+			_, _ = io.WriteString(stdout, "fetch\npush\noption\n\n")
 		case strings.HasPrefix(line, "option "):
 			_, _ = io.WriteString(stdout, "unsupported\n")
 		case line == "list" || line == "list for-push":
-			reply, err := pushCall(env.socket, &agentv1.TeamCallsResponse{Op: &agentv1.TeamCallsResponse_PushList{PushList: &agentv1.PushList{}}}, "", 0)
+			forFetch := line == "list"
+			reply, err := pushCall(env.socket, &agentv1.TeamCallsResponse{Op: &agentv1.TeamCallsResponse_PushList{PushList: &agentv1.PushList{Fetch: forFetch}}}, "", 0)
 			if err != nil {
 				return fail(err.Error())
 			}
@@ -100,8 +102,20 @@ func runRemoteHelper(args []string, stdin io.Reader, stdout, stderr io.Writer, e
 				remote[r.GetName()] = r.GetSha()
 				fmt.Fprintf(&out, "%s %s\n", r.GetSha(), r.GetName())
 			}
+			if h := reply.GetPushList().GetHead(); forFetch && h != "" {
+				fmt.Fprintf(&out, "@%s HEAD\n", h)
+			}
 			out.WriteString("\n")
 			_, _ = io.WriteString(stdout, out.String())
+		case strings.HasPrefix(line, "fetch "):
+			sha, name, ok := strings.Cut(strings.TrimPrefix(line, "fetch "), " ")
+			if !ok {
+				return fail("git asked for a fetch Portenv can\u2019t read: " + line)
+			}
+			if name == "HEAD" {
+				continue // its branch is fetched too
+			}
+			wants = append(wants, &agentv1.RemoteRef{Name: name, Sha: sha})
 		case strings.HasPrefix(line, "push "):
 			spec := strings.TrimPrefix(line, "push ")
 			p := pushSpec{}
@@ -113,6 +127,12 @@ func runRemoteHelper(args []string, stdin io.Reader, stdout, stderr io.Writer, e
 				return fail("git asked for a push Portenv can’t read: " + line)
 			}
 			batch = append(batch, p)
+		case line == "" && len(wants) > 0:
+			if err := fetchBatch(wants, env); err != nil {
+				return fail(err.Error())
+			}
+			_, _ = io.WriteString(stdout, "\n")
+			wants = nil
 		case line == "":
 			if len(batch) == 0 {
 				return 0

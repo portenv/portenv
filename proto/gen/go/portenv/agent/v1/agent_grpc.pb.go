@@ -49,6 +49,7 @@ const (
 	AgentService_CloneProject_FullMethodName         = "/portenv.agent.v1.AgentService/CloneProject"
 	AgentService_GetProjectRoom_FullMethodName       = "/portenv.agent.v1.AgentService/GetProjectRoom"
 	AgentService_ReadPushBundle_FullMethodName       = "/portenv.agent.v1.AgentService/ReadPushBundle"
+	AgentService_WriteFetchBundle_FullMethodName     = "/portenv.agent.v1.AgentService/WriteFetchBundle"
 	AgentService_EnsureAgentUser_FullMethodName      = "/portenv.agent.v1.AgentService/EnsureAgentUser"
 	AgentService_RemoveAgentUser_FullMethodName      = "/portenv.agent.v1.AgentService/RemoveAgentUser"
 	AgentService_SimulatePackage_FullMethodName      = "/portenv.agent.v1.AgentService/SimulatePackage"
@@ -142,6 +143,9 @@ type AgentServiceClient interface {
 	// The bundle git-remote-portenv handed in for a push (R-0391), once:
 	// it's deleted as it's read.
 	ReadPushBundle(ctx context.Context, in *ReadPushBundleRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ReadPushBundleResponse], error)
+	// A fetch's bundle from portenvd (R-0392), kept until the helper hands it
+	// to git-remote-portenv, once.
+	WriteFetchBundle(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[WriteFetchBundleRequest, WriteFetchBundleResponse], error)
 	// Served only by init (root) on its local socket, which only the API
 	// process reaches; the channel's server answers Unimplemented. init checks
 	// every id and package name itself.
@@ -487,6 +491,19 @@ func (c *agentServiceClient) ReadPushBundle(ctx context.Context, in *ReadPushBun
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type AgentService_ReadPushBundleClient = grpc.ServerStreamingClient[ReadPushBundleResponse]
 
+func (c *agentServiceClient) WriteFetchBundle(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[WriteFetchBundleRequest, WriteFetchBundleResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &AgentService_ServiceDesc.Streams[8], AgentService_WriteFetchBundle_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[WriteFetchBundleRequest, WriteFetchBundleResponse]{ClientStream: stream}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type AgentService_WriteFetchBundleClient = grpc.ClientStreamingClient[WriteFetchBundleRequest, WriteFetchBundleResponse]
+
 func (c *agentServiceClient) EnsureAgentUser(ctx context.Context, in *EnsureAgentUserRequest, opts ...grpc.CallOption) (*EnsureAgentUserResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(EnsureAgentUserResponse)
@@ -539,7 +556,7 @@ func (c *agentServiceClient) AgentPaneAction(ctx context.Context, in *AgentPaneA
 
 func (c *agentServiceClient) ReadBoard(ctx context.Context, in *ReadBoardRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ReadBoardResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &AgentService_ServiceDesc.Streams[8], AgentService_ReadBoard_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &AgentService_ServiceDesc.Streams[9], AgentService_ReadBoard_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -704,6 +721,9 @@ type AgentServiceServer interface {
 	// The bundle git-remote-portenv handed in for a push (R-0391), once:
 	// it's deleted as it's read.
 	ReadPushBundle(*ReadPushBundleRequest, grpc.ServerStreamingServer[ReadPushBundleResponse]) error
+	// A fetch's bundle from portenvd (R-0392), kept until the helper hands it
+	// to git-remote-portenv, once.
+	WriteFetchBundle(grpc.ClientStreamingServer[WriteFetchBundleRequest, WriteFetchBundleResponse]) error
 	// Served only by init (root) on its local socket, which only the API
 	// process reaches; the channel's server answers Unimplemented. init checks
 	// every id and package name itself.
@@ -838,6 +858,9 @@ func (UnimplementedAgentServiceServer) GetProjectRoom(context.Context, *GetProje
 }
 func (UnimplementedAgentServiceServer) ReadPushBundle(*ReadPushBundleRequest, grpc.ServerStreamingServer[ReadPushBundleResponse]) error {
 	return status.Error(codes.Unimplemented, "method ReadPushBundle not implemented")
+}
+func (UnimplementedAgentServiceServer) WriteFetchBundle(grpc.ClientStreamingServer[WriteFetchBundleRequest, WriteFetchBundleResponse]) error {
+	return status.Error(codes.Unimplemented, "method WriteFetchBundle not implemented")
 }
 func (UnimplementedAgentServiceServer) EnsureAgentUser(context.Context, *EnsureAgentUserRequest) (*EnsureAgentUserResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method EnsureAgentUser not implemented")
@@ -1255,6 +1278,13 @@ func _AgentService_ReadPushBundle_Handler(srv interface{}, stream grpc.ServerStr
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type AgentService_ReadPushBundleServer = grpc.ServerStreamingServer[ReadPushBundleResponse]
 
+func _AgentService_WriteFetchBundle_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(AgentServiceServer).WriteFetchBundle(&grpc.GenericServerStream[WriteFetchBundleRequest, WriteFetchBundleResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type AgentService_WriteFetchBundleServer = grpc.ClientStreamingServer[WriteFetchBundleRequest, WriteFetchBundleResponse]
+
 func _AgentService_EnsureAgentUser_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(EnsureAgentUserRequest)
 	if err := dec(in); err != nil {
@@ -1645,6 +1675,11 @@ var AgentService_ServiceDesc = grpc.ServiceDesc{
 			StreamName:    "ReadPushBundle",
 			Handler:       _AgentService_ReadPushBundle_Handler,
 			ServerStreams: true,
+		},
+		{
+			StreamName:    "WriteFetchBundle",
+			Handler:       _AgentService_WriteFetchBundle_Handler,
+			ClientStreams: true,
 		},
 		{
 			StreamName:    "ReadBoard",

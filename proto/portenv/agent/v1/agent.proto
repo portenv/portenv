@@ -83,6 +83,9 @@ service AgentService {
   // The bundle git-remote-portenv handed in for a push (R-0391), once:
   // it's deleted as it's read.
   rpc ReadPushBundle(ReadPushBundleRequest) returns (stream ReadPushBundleResponse);
+  // A fetch's bundle from portenvd (R-0392), kept until the helper hands it
+  // to git-remote-portenv, once.
+  rpc WriteFetchBundle(stream WriteFetchBundleRequest) returns (WriteFetchBundleResponse);
   // Served only by init (root) on its local socket, which only the API
   // process reaches; the channel's server answers Unimplemented. init checks
   // every id and package name itself.
@@ -423,13 +426,43 @@ message TeamCallsResponse {
     // The owner's push (R-0391): only on work's own socket.
     PushList push_list = 18;
     PushRefs push = 19;
+    // The owner's fetch (R-0392): only on work's own socket.
+    FetchRefs fetch = 21;
   }
   // From SO_PEERCRED: the call came from work's own socket, not an agent's.
   bool owner = 20;
 }
 
-// git-remote-portenv's list for-push: the remote's branches and tags.
-message PushList {}
+// git-remote-portenv's list (for-push, or for a fetch, pull or ls-remote):
+// the remote's branches and tags.
+message PushList {
+  // A fetch's list (git's plain "list"): the remote's default branch too.
+  bool fetch = 1;
+}
+
+// git-remote-portenv's fetch: the objects git wants, and what the workspace
+// has, so the bundle holds only what it lacks.
+message FetchRefs {
+  repeated RemoteRef wants = 1;
+  // Commits the workspace has (its branches and remote-tracking refs).
+  repeated string haves = 2;
+}
+
+message FetchResult {
+  // The helper's name for the bundle portenvd handed in; the helper
+  // streams it to git-remote-portenv after this answer, then forgets it.
+  string bundle_id = 1;
+  int64 bundle_bytes = 2;
+}
+
+message WriteFetchBundleRequest {
+  // The bundle, in order.
+  bytes chunk = 1;
+}
+
+message WriteFetchBundleResponse {
+  string bundle_id = 1;
+}
 
 // git-remote-portenv's push: the updates, and the bundle the helper holds.
 message PushRefs {
@@ -497,6 +530,7 @@ message TeamCallsRequest {
     TeamStatusResult team_status = 9;
     PushListResult push_list = 10;
     PushResult push = 11;
+    FetchResult fetch = 12;
   }
 }
 

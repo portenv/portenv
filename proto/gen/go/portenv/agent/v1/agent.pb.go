@@ -4217,9 +4217,17 @@ type StartTeamAgentRequest struct {
 	// projects["<start folder>"].hasTrustDialogAccepted in the agent's
 	// ~/.claude.json, as the agent, for the one folder the runner starts in
 	// (its clone, or its home without one). Empty: nothing is written.
-	TrustSetting  string `protobuf:"bytes,11,opt,name=trust_setting,json=trustSetting,proto3" json:"trust_setting,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	TrustSetting string `protobuf:"bytes,11,opt,name=trust_setting,json=trustSetting,proto3" json:"trust_setting,omitempty"`
+	// The runner's settings from portenvd (ADR 0025 §9's settings row;
+	// Claude Code's permission rules for routine teamwork, R-0412 item 17):
+	// the helper writes them to a file in the agent's run folder, which
+	// only the helper can write, and adds runner_settings_flag and that
+	// file's path to the argv. Empty: none. At most 64 KB of JSON.
+	RunnerSettings []byte `protobuf:"bytes,12,opt,name=runner_settings,json=runnerSettings,proto3" json:"runner_settings,omitempty"`
+	// The runner's flag for a settings file, such as "--settings".
+	RunnerSettingsFlag string `protobuf:"bytes,13,opt,name=runner_settings_flag,json=runnerSettingsFlag,proto3" json:"runner_settings_flag,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *StartTeamAgentRequest) Reset() {
@@ -4325,6 +4333,20 @@ func (x *StartTeamAgentRequest) GetAgentName() string {
 func (x *StartTeamAgentRequest) GetTrustSetting() string {
 	if x != nil {
 		return x.TrustSetting
+	}
+	return ""
+}
+
+func (x *StartTeamAgentRequest) GetRunnerSettings() []byte {
+	if x != nil {
+		return x.RunnerSettings
+	}
+	return nil
+}
+
+func (x *StartTeamAgentRequest) GetRunnerSettingsFlag() string {
+	if x != nil {
+		return x.RunnerSettingsFlag
 	}
 	return ""
 }
@@ -7399,7 +7421,7 @@ const file_portenv_agent_v1_agent_proto_rawDesc = "" +
 	"\x05state\x18\x04 \x01(\x0e2\x1c.portenv.types.v1.AgentStateR\x05state\x125\n" +
 	"\x06status\x18\x05 \x01(\v2\x1d.portenv.types.v1.AgentStatusR\x06status\x12+\n" +
 	"\x11pending_decisions\x18\x06 \x01(\x05R\x10pendingDecisions\x12!\n" +
-	"\fidle_seconds\x18\a \x01(\x03R\vidleSeconds\"\xa3\x03\n" +
+	"\fidle_seconds\x18\a \x01(\x03R\vidleSeconds\"\xfe\x03\n" +
 	"\x15StartTeamAgentRequest\x12\x19\n" +
 	"\bagent_id\x18\x01 \x01(\tR\aagentId\x12\x12\n" +
 	"\x04argv\x18\x02 \x03(\tR\x04argv\x12\x1b\n" +
@@ -7414,7 +7436,9 @@ const file_portenv_agent_v1_agent_proto_rawDesc = "" +
 	"\n" +
 	"agent_name\x18\n" +
 	" \x01(\tR\tagentName\x12#\n" +
-	"\rtrust_setting\x18\v \x01(\tR\ftrustSetting\"@\n" +
+	"\rtrust_setting\x18\v \x01(\tR\ftrustSetting\x12'\n" +
+	"\x0frunner_settings\x18\f \x01(\fR\x0erunnerSettings\x120\n" +
+	"\x14runner_settings_flag\x18\r \x01(\tR\x12runnerSettingsFlag\"@\n" +
 	"\fCloneReaders\x12\x16\n" +
 	"\x06writer\x18\x01 \x01(\tR\x06writer\x12\x18\n" +
 	"\areaders\x18\x02 \x03(\tR\areaders\"C\n" +

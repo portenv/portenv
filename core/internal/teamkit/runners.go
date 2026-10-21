@@ -24,11 +24,15 @@ type Runner struct {
 	// is Claude Code's projects["<folder>"].hasTrustDialogAccepted in
 	// ~/.claude.json. Empty: Portenv writes nothing, and the runner asks.
 	TrustSetting string
+	// SettingsFlag names a settings file on the runner's command line
+	// (ADR 0025 §9's settings row): Claude Code's --settings, ranked above
+	// every settings file the agent can edit. Empty: no settings.
+	SettingsFlag string
 }
 
 // Runners is the registry, in menu order.
 var Runners = []Runner{
-	{ID: "claude", Name: "Claude Code", ModelFlag: "--model", Models: []string{"opus", "sonnet", "fable"}, Shown: true, TrustSetting: "claude"},
+	{ID: "claude", Name: "Claude Code", ModelFlag: "--model", Models: []string{"opus", "sonnet", "fable"}, Shown: true, TrustSetting: "claude", SettingsFlag: "--settings"},
 }
 
 // RunnerByID is the shown runner with that id.
@@ -47,6 +51,17 @@ func TrustSettingFor(name string) string {
 	for _, r := range Runners {
 		if r.ID == name {
 			return r.TrustSetting
+		}
+	}
+	return ""
+}
+
+// SettingsFlagFor is the settings flag of the runner whose program is
+// named name (shown or not), or "".
+func SettingsFlagFor(name string) string {
+	for _, r := range Runners {
+		if r.ID == name {
+			return r.SettingsFlag
 		}
 	}
 	return ""

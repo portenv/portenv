@@ -14,6 +14,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"golang.org/x/sys/unix"
@@ -94,7 +95,7 @@ func claudeTrust(home, folder string, _ io.Writer) error {
 	if err != nil || !changed {
 		return err
 	}
-	return replaceAt(dfd, ".claude.json", out)
+	return replaceAtMode(dfd, ".claude.json", out, 0o600)
 }
 
 // readAt reads name in the folder dfd, refusing a link and anything that
@@ -129,9 +130,9 @@ func readAt(dfd int, name string) ([]byte, error) {
 	return b, nil
 }
 
-// replaceAt writes data to a new 0600 file beside name and renames it over
-// name.
-func replaceAt(dfd int, name string, data []byte) error {
+// replaceAtMode writes data to a new file with mode beside name and
+// renames it over name.
+func replaceAtMode(dfd int, name string, data []byte, mode os.FileMode) error {
 	var r [8]byte
 	if _, err := rand.Read(r[:]); err != nil {
 		return err
@@ -147,7 +148,7 @@ func replaceAt(dfd int, name string, data []byte) error {
 		_ = unix.Unlinkat(dfd, tmp, 0)
 		return err
 	}
-	if err := f.Chmod(0o600); err != nil {
+	if err := f.Chmod(mode); err != nil {
 		return fail(err)
 	}
 	if _, err := f.Write(data); err != nil {
@@ -284,4 +285,47 @@ func encodeJSON(v any) (json.RawMessage, error) {
 		return nil, err
 	}
 	return bytes.TrimRight(buf.Bytes(), "\n"), nil
+}
+
+// maxRunnerSettings caps a runner's settings file.
+const maxRunnerSettings = 64 << 10
+
+// settingsFlagRE is a runner's settings flag: one long option, nothing
+// joined to it.
+var settingsFlagRE = regexp.MustCompile(`^--[a-z][a-z-]{0,31}$`)
+
+// checkRunnerSettings checks a start's runner settings before anything is
+// made: both or neither, a plain flag, and one JSON object.
+func checkRunnerSettings(settings []byte, flag string) error {
+	if len(settings) == 0 && flag == "" {
+		return nil
+	}
+	if !settingsFlagRE.MatchString(flag) {
+		return fmt.Errorf("%q isn't a settings flag", flag)
+	}
+	if len(settings) > maxRunnerSettings {
+		return fmt.Errorf("the runner's settings are over %d KB", maxRunnerSettings>>10)
+	}
+	if t := bytes.TrimSpace(settings); len(t) == 0 || t[0] != '{' || !json.Valid(t) {
+		return errors.New("the runner's settings aren't a JSON object")
+	}
+	return nil
+}
+
+// runnerSettingsFile is the settings file's name in the agent's run
+// folder.
+const runnerSettingsFile = "runner-settings.json"
+
+// writeRunnerSettings writes the runner's settings into dir, the agent's
+// run folder (the helper's, the agent's group, 0710: the agent can read
+// a file there by name but can't change or replace it), 0640, through a
+// new file renamed over the old one; a link there is replaced, never
+// followed.
+func writeRunnerSettings(dir string, settings []byte) error {
+	dfd, err := unix.Open(dir, dirFlags, 0)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = unix.Close(dfd) }()
+	return replaceAtMode(dfd, runnerSettingsFile, settings, 0o640)
 }

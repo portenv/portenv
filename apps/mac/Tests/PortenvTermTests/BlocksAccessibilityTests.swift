@@ -92,9 +92,10 @@ struct BlocksAccessibilityTests {
         let header = elements(window).first { $0.label.hasPrefix("npm run build") }
         #expect(header?.role == NSAccessibility.Role.button.rawValue)
         #expect(header?.label == BlockText.spoken(build, now: now))
-        let clock = ContinuousClock()
+        // The main thread's CPU time (threadCPUTime): the press's work, not
+        // the wait for a core on a busy test machine.
         var pressed: Bool?
-        let took = clock.measure { pressed = press("npm run build", in: window) }
+        let took = threadCPUTime { pressed = press("npm run build", in: window) }
         #expect(pressed == true)
         await settle()
         #expect(elements(window).contains { $0.label == BlockText.showAllOutput })
@@ -112,9 +113,8 @@ struct BlocksAccessibilityTests {
         await settle()
         #expect(press(BlockText.showAllOutput, in: window) == true)
         await settle()
-        let clock = ContinuousClock()
         var after: [(role: String, label: String, element: AnyObject)] = []
-        let walk = clock.measure { after = elements(window) }
+        let walk = threadCPUTime { after = elements(window) }
         #expect(!after.contains { $0.label == BlockText.showAllOutput })
         #expect(after.count < 400, "\(after.count) elements: the rows aren't lazy")
         #expect(walk < .milliseconds(500))

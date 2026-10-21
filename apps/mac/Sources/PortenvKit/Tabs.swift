@@ -118,6 +118,20 @@ public enum TabViewer {
     public static let app = "app"
 }
 
+/// The tab bar's own controls for what the Team sidebar selects (GUIDELINES
+/// §4.1, §6.2). In an agent's view the tab strip has no `+` button: agents
+/// open their own tabs (owner, 2026-10-21). You, All tabs, Team activity
+/// and a decision keep it. Only the button: New Tab ⌘T, the splits and
+/// closing a tab are unchanged.
+public enum TabBarControls {
+    public static func showsNewTabButton(for selection: TeamSelection) -> Bool {
+        switch selection {
+        case .agent: false
+        case .you, .allTabs, .activity, .decision: true
+        }
+    }
+}
+
 /// ⌃Tab and ⌃⇧Tab (GUIDELINES §3.3): the next and previous workspace tab,
 /// as macOS's Window › Show Next Tab and Show Previous Tab (R-0345). Next
 /// is 1, previous is -1; any other key, or Tab with ⌥ or ⌘, is not a tab
@@ -239,6 +253,9 @@ public final class TabsController {
 
     /// The tabs the tab bar shows for the selection.
     public var shownTabs: [TabInfo] { shown(for: selection) }
+
+    /// Whether the tab bar has its `+` for the selection (TabBarControls).
+    public var showsNewTabButton: Bool { TabBarControls.showsNewTabButton(for: selection) }
 
     /// The one tab the terminal (the focused pane, when split) shows and the
     /// tab bar marks current (R-0314): the current tab, only while it is in

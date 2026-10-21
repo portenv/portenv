@@ -52,7 +52,7 @@ From top to bottom, left to right:
 | --- | --- | --- |
 | Toolbar (unified, 52 pt) | sidebar toggle · title button · flexible space · open-port pills · agent avatars · inspector toggle | Title button is the workspace's document menu |
 | Sidebar (leading, 248 pt) | Needs you · Team (You, the agents, Add Agent…) | Shown by default when the workspace has a team, ⌘0 toggles it (6.2) |
-| Tab bar (30 pt) | one tab per terminal session, `+` for a new tab | Tabs replace tmux's status bar, which is always hidden |
+| Tab bar (30 pt) | one tab per terminal session, `+` for a new tab (none in an agent's view, §4.1) | Tabs replace tmux's status bar, which is always hidden |
 | Terminal | blocks, sticky header, inline answer card | Fills the remaining space |
 | Inspector (trailing, 260–400 pt, 300 by default) | Where it is · Saves · Who's here · Running now | Hidden by default, ⌥⌘I or toolbar button |
 
@@ -145,6 +145,7 @@ A sheet on the window, the only confirmation in the app that asks for typing (Pr
 - Each tab is a persistent session in the workspace, so work survives the window closing, the Mac sleeping and the workspace moving.
 - tmux is plumbing. Its status bar is always off, its prefix key never surfaces, and nothing in the UI mentions it.
 - The app, not tmux, owns tab names, order, badges and the new-tab button.
+- **In an agent's view the tab strip has no + button: agents open their own tabs (owner, 2026-10-21).** You, All tabs and Team activity keep it (§6.2).
 - **The tab bar's tabs are the workspace's terminal tabs;** macOS's own window tabs hold workspaces (§3.3).
 - **The current tab is marked by more than a shade** (§12): its name in semibold, and an accent line along its bottom edge, on top of the mockup's background. (A shade alone was too faint at the Mac, 2026-10-10.)
 - **Each viewer keeps its own current tab.** The app and each agent see the same tabs, but choosing a tab moves only that viewer's terminal: an agent switching tabs never changes the owner's.
@@ -300,7 +301,7 @@ The Team section is the workspace's sidebar when the workspace has a team (agent
   - A Start or Approve past the limit is refused by `portenvd` with one line under the button that says what to do: "Builder can't start: 4 agents are running in this workspace, and you allow 4. Stop one, or raise Agents allowed in Portenv's Settings › Team."
 
 **Selecting:**
-- **An agent:** its tabs expand beneath its row, the tab bar shows only its tabs (named "Builder · tests"), with **All tabs** at its trailing end, and its column takes the inspector's place: who it runs as, its runner and its pane grant ("Runs as user builder · Claude Code · may open 4 panes"), its messages with you, its Team section, its Agent files, and a field to message it (R-0313, R-0314).
+- **An agent:** its tabs expand beneath its row, the tab bar shows only its tabs (named "Builder · tests"), with no `+` (§4.1) and **All tabs** at its trailing end, and its column takes the inspector's place: who it runs as, its runner and its pane grant ("Runs as user builder · Claude Code · may open 4 panes"), its messages with you, its Team section, its Agent files, and a field to message it (R-0313, R-0314).
   - **Messages with you** come first: what it sent you, what you sent it, and Portenv's notices to you about it.
   - **Team · <n>**, below them, **collapsed by default**: every other message this agent sent or received, oldest first. Each entry is one line, "Lead → Builder", the time and the message's first line; clicking it shows the whole text. Portenv's own notices about the agent (a routine's note, a status request, a start that failed) are in the same list, greyed, from "Portenv".
   - **The message field** is the column's last row: "Message Builder", with Send, and "Return to send · Shift-Return for a new line" under it. Return sends, Shift-Return starts a new line. It sends exactly what you typed, as you, to this agent only, through portenvd (an idle agent wakes to read it). Plain text, at most 8 KB. A refusal shows under the field in red, as one line that says what to do ("A message can be at most 8 KB; this one is 9.2 KB. Shorten it and send again."), and keeps what you typed.

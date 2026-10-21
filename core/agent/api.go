@@ -92,6 +92,9 @@ type apiServer struct {
 	// for its home's files, a hand-off or home_seed (nil: as
 	// the agent's uid, runAsAgent).
 	runHomeIO func(ctx context.Context, uid int, groups []uint32, args []string, stdin io.Reader) ([]byte, error)
+	// dropState is a pane's state for a dropped path (ADR 0030 point 8);
+	// nil reads it from the agent's control client (tests set it).
+	dropState func(a *agentServer, pane string) dropPaneState
 	// asAgentIO runs team-io as an agent through as-agent's switch, for
 	// its clone (nil: runTeamIOAsAgent; tests replace it).
 	asAgentIO func(ctx context.Context, uid int, home string, args []string, stdin io.Reader) ([]byte, error)

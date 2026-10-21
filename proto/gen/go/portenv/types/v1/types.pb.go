@@ -742,6 +742,62 @@ func (GrantMode) EnumDescriptor() ([]byte, []int) {
 	return file_portenv_types_v1_types_proto_rawDescGZIP(), []int{11}
 }
 
+// How a dropped file's path reached the agent's pane (ADR 0030 point 8).
+type InsertHow int32
+
+const (
+	InsertHow_INSERT_HOW_UNSPECIFIED InsertHow = 0
+	// Typed at a shell prompt, quoted, with no Enter.
+	InsertHow_INSERT_HOW_TYPED InsertHow = 1
+	// Sent as one bracketed paste to the agent's runner, with no Enter.
+	InsertHow_INSERT_HOW_PASTED InsertHow = 2
+	// Nothing was typed: the path is shown for the owner to copy.
+	InsertHow_INSERT_HOW_NONE InsertHow = 3
+)
+
+// Enum value maps for InsertHow.
+var (
+	InsertHow_name = map[int32]string{
+		0: "INSERT_HOW_UNSPECIFIED",
+		1: "INSERT_HOW_TYPED",
+		2: "INSERT_HOW_PASTED",
+		3: "INSERT_HOW_NONE",
+	}
+	InsertHow_value = map[string]int32{
+		"INSERT_HOW_UNSPECIFIED": 0,
+		"INSERT_HOW_TYPED":       1,
+		"INSERT_HOW_PASTED":      2,
+		"INSERT_HOW_NONE":        3,
+	}
+)
+
+func (x InsertHow) Enum() *InsertHow {
+	p := new(InsertHow)
+	*p = x
+	return p
+}
+
+func (x InsertHow) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (InsertHow) Descriptor() protoreflect.EnumDescriptor {
+	return file_portenv_types_v1_types_proto_enumTypes[12].Descriptor()
+}
+
+func (InsertHow) Type() protoreflect.EnumType {
+	return &file_portenv_types_v1_types_proto_enumTypes[12]
+}
+
+func (x InsertHow) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use InsertHow.Descriptor instead.
+func (InsertHow) EnumDescriptor() ([]byte, []int) {
+	return file_portenv_types_v1_types_proto_rawDescGZIP(), []int{12}
+}
+
 // A box: a toolbox image plus a portable home. Only the home travels between
 // machines; the image is pulled or rebuilt on each one.
 type Box struct {
@@ -1272,7 +1328,10 @@ type BoardMessage struct {
 	Files []*HandoffFile `protobuf:"bytes,8,rep,name=files,proto3" json:"files,omitempty"`
 	// For Portenv's notices about one agent (a start that failed): its id,
 	// so the app shows the notice in that agent's column. Empty otherwise.
-	About         string `protobuf:"bytes,9,opt,name=about,proto3" json:"about,omitempty"`
+	About string `protobuf:"bytes,9,opt,name=about,proto3" json:"about,omitempty"`
+	// Files attached to it (ADR 0030): at most 5. The bytes are in this
+	// Mac's attachment store, never on the board.
+	Attachments   []*Attachment `protobuf:"bytes,10,rep,name=attachments,proto3" json:"attachments,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1370,6 +1429,13 @@ func (x *BoardMessage) GetAbout() string {
 	return ""
 }
 
+func (x *BoardMessage) GetAttachments() []*Attachment {
+	if x != nil {
+		return x.Attachments
+	}
+	return nil
+}
+
 // A request for the owner (ADR 0022 §6). Only the app answers it.
 type Decision struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -1407,8 +1473,10 @@ type Decision struct {
 	// to keep or remove, one by one. Approve keeps every item not named in
 	// AnswerDecisionRequest.remove_items.
 	MigrationItems []*MigrationItem `protobuf:"bytes,15,rep,name=migration_items,json=migrationItems,proto3" json:"migration_items,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// For DECISION_KIND_ASK_OWNER asked with --attach (ADR 0030): at most 5.
+	Attachments   []*Attachment `protobuf:"bytes,16,rep,name=attachments,proto3" json:"attachments,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Decision) Reset() {
@@ -1542,6 +1610,13 @@ func (x *Decision) GetChoice() int32 {
 func (x *Decision) GetMigrationItems() []*MigrationItem {
 	if x != nil {
 		return x.MigrationItems
+	}
+	return nil
+}
+
+func (x *Decision) GetAttachments() []*Attachment {
+	if x != nil {
+		return x.Attachments
 	}
 	return nil
 }
@@ -2108,6 +2183,119 @@ func (x *Routine) GetNextAt() *timestamppb.Timestamp {
 	return nil
 }
 
+// A file attached to a board message or decision (ADR 0030). The board
+// keeps this record; the bytes are in the Mac's attachment store, which
+// only portenvd reads.
+type Attachment struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// A ULID: the store's folder name.
+	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// The cleaned name (ADR 0030 point 3), with the extension of the type
+	// found from the content.
+	Name string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	// image/png, image/jpeg, image/gif, image/webp, application/pdf,
+	// text/markdown, text/plain, or (from the owner only)
+	// application/vnd.openxmlformats-officedocument.wordprocessingml.document.
+	MediaType string `protobuf:"bytes,3,opt,name=media_type,json=mediaType,proto3" json:"media_type,omitempty"`
+	Size      int64  `protobuf:"varint,4,opt,name=size,proto3" json:"size,omitempty"`
+	// In hex.
+	Sha256 string `protobuf:"bytes,5,opt,name=sha256,proto3" json:"sha256,omitempty"`
+	// Images only, from the header.
+	Width  int32 `protobuf:"varint,6,opt,name=width,proto3" json:"width,omitempty"`
+	Height int32 `protobuf:"varint,7,opt,name=height,proto3" json:"height,omitempty"`
+	// Where the recipient's copy landed, relative to its home
+	// (inbox/<sender>/<time>/<name>); empty for the owner.
+	InboxPath     string `protobuf:"bytes,8,opt,name=inbox_path,json=inboxPath,proto3" json:"inbox_path,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Attachment) Reset() {
+	*x = Attachment{}
+	mi := &file_portenv_types_v1_types_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Attachment) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Attachment) ProtoMessage() {}
+
+func (x *Attachment) ProtoReflect() protoreflect.Message {
+	mi := &file_portenv_types_v1_types_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Attachment.ProtoReflect.Descriptor instead.
+func (*Attachment) Descriptor() ([]byte, []int) {
+	return file_portenv_types_v1_types_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *Attachment) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *Attachment) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *Attachment) GetMediaType() string {
+	if x != nil {
+		return x.MediaType
+	}
+	return ""
+}
+
+func (x *Attachment) GetSize() int64 {
+	if x != nil {
+		return x.Size
+	}
+	return 0
+}
+
+func (x *Attachment) GetSha256() string {
+	if x != nil {
+		return x.Sha256
+	}
+	return ""
+}
+
+func (x *Attachment) GetWidth() int32 {
+	if x != nil {
+		return x.Width
+	}
+	return 0
+}
+
+func (x *Attachment) GetHeight() int32 {
+	if x != nil {
+		return x.Height
+	}
+	return 0
+}
+
+func (x *Attachment) GetInboxPath() string {
+	if x != nil {
+		return x.InboxPath
+	}
+	return ""
+}
+
 var File_portenv_types_v1_types_proto protoreflect.FileDescriptor
 
 const file_portenv_types_v1_types_proto_rawDesc = "" +
@@ -2152,7 +2340,7 @@ const file_portenv_types_v1_types_proto_rawDesc = "" +
 	"\acommand\x18\x05 \x01(\tR\acommand\x12?\n" +
 	"\rrunning_since\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\frunningSince\x12\x19\n" +
 	"\bagent_id\x18\a \x01(\tR\aagentId\x12\x19\n" +
-	"\bpane_ids\x18\b \x03(\tR\apaneIds\"\xac\x02\n" +
+	"\bpane_ids\x18\b \x03(\tR\apaneIds\"\xec\x02\n" +
 	"\fBoardMessage\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04from\x18\x02 \x01(\tR\x04from\x12\x0e\n" +
@@ -2163,7 +2351,9 @@ const file_portenv_types_v1_types_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x123\n" +
 	"\x05files\x18\b \x03(\v2\x1d.portenv.types.v1.HandoffFileR\x05files\x12\x14\n" +
-	"\x05about\x18\t \x01(\tR\x05about\"\xfe\x04\n" +
+	"\x05about\x18\t \x01(\tR\x05about\x12>\n" +
+	"\vattachments\x18\n" +
+	" \x03(\v2\x1c.portenv.types.v1.AttachmentR\vattachments\"\xbe\x05\n" +
 	"\bDecision\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04from\x18\x02 \x01(\tR\x04from\x122\n" +
@@ -2184,7 +2374,8 @@ const file_portenv_types_v1_types_proto_rawDesc = "" +
 	"\x0fstart_agent_ids\x18\f \x03(\tR\rstartAgentIds\x12\x18\n" +
 	"\achoices\x18\r \x03(\tR\achoices\x12\x16\n" +
 	"\x06choice\x18\x0e \x01(\x05R\x06choice\x12H\n" +
-	"\x0fmigration_items\x18\x0f \x03(\v2\x1f.portenv.types.v1.MigrationItemR\x0emigrationItems\"\x9d\x01\n" +
+	"\x0fmigration_items\x18\x0f \x03(\v2\x1f.portenv.types.v1.MigrationItemR\x0emigrationItems\x12>\n" +
+	"\vattachments\x18\x10 \x03(\v2\x1c.portenv.types.v1.AttachmentR\vattachments\"\x9d\x01\n" +
 	"\rMigrationItem\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04path\x18\x02 \x01(\tR\x04path\x12\x12\n" +
@@ -2230,7 +2421,19 @@ const file_portenv_types_v1_types_proto_rawDesc = "" +
 	"\revery_minutes\x18\x01 \x01(\x05R\feveryMinutes\x12\x12\n" +
 	"\x04note\x18\x02 \x01(\tR\x04note\x12\x16\n" +
 	"\x06paused\x18\x03 \x01(\bR\x06paused\x123\n" +
-	"\anext_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x06nextAt*\xb0\x01\n" +
+	"\anext_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x06nextAt\"\xc8\x01\n" +
+	"\n" +
+	"Attachment\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1d\n" +
+	"\n" +
+	"media_type\x18\x03 \x01(\tR\tmediaType\x12\x12\n" +
+	"\x04size\x18\x04 \x01(\x03R\x04size\x12\x16\n" +
+	"\x06sha256\x18\x05 \x01(\tR\x06sha256\x12\x14\n" +
+	"\x05width\x18\x06 \x01(\x05R\x05width\x12\x16\n" +
+	"\x06height\x18\a \x01(\x05R\x06height\x12\x1d\n" +
+	"\n" +
+	"inbox_path\x18\b \x01(\tR\tinboxPath*\xb0\x01\n" +
 	"\bBoxState\x12\x19\n" +
 	"\x15BOX_STATE_UNSPECIFIED\x10\x00\x12\x15\n" +
 	"\x11BOX_STATE_CREATED\x10\x01\x12\x16\n" +
@@ -2306,7 +2509,12 @@ const file_portenv_types_v1_types_proto_rawDesc = "" +
 	"\x16GRANT_MODE_UNSPECIFIED\x10\x00\x12\x12\n" +
 	"\x0eGRANT_MODE_ASK\x10\x01\x12\x14\n" +
 	"\x10GRANT_MODE_ALLOW\x10\x02\x12\x14\n" +
-	"\x10GRANT_MODE_NEVER\x10\x03B\xc6\x01\n" +
+	"\x10GRANT_MODE_NEVER\x10\x03*i\n" +
+	"\tInsertHow\x12\x1a\n" +
+	"\x16INSERT_HOW_UNSPECIFIED\x10\x00\x12\x14\n" +
+	"\x10INSERT_HOW_TYPED\x10\x01\x12\x15\n" +
+	"\x11INSERT_HOW_PASTED\x10\x02\x12\x13\n" +
+	"\x0fINSERT_HOW_NONE\x10\x03B\xc6\x01\n" +
 	"\x14com.portenv.types.v1B\n" +
 	"TypesProtoP\x01Z@github.com/portenv/portenv/proto/gen/go/portenv/types/v1;typesv1\xa2\x02\x03PTX\xaa\x02\x10Portenv.Types.V1\xca\x02\x10Portenv\\Types\\V1\xe2\x02\x1cPortenv\\Types\\V1\\GPBMetadata\xea\x02\x12Portenv::Types::V1b\x06proto3"
 
@@ -2322,8 +2530,8 @@ func file_portenv_types_v1_types_proto_rawDescGZIP() []byte {
 	return file_portenv_types_v1_types_proto_rawDescData
 }
 
-var file_portenv_types_v1_types_proto_enumTypes = make([]protoimpl.EnumInfo, 12)
-var file_portenv_types_v1_types_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
+var file_portenv_types_v1_types_proto_enumTypes = make([]protoimpl.EnumInfo, 13)
+var file_portenv_types_v1_types_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
 var file_portenv_types_v1_types_proto_goTypes = []any{
 	(BoxState)(0),                 // 0: portenv.types.v1.BoxState
 	(Architecture)(0),             // 1: portenv.types.v1.Architecture
@@ -2337,51 +2545,55 @@ var file_portenv_types_v1_types_proto_goTypes = []any{
 	(DecisionKind)(0),             // 9: portenv.types.v1.DecisionKind
 	(DecisionState)(0),            // 10: portenv.types.v1.DecisionState
 	(GrantMode)(0),                // 11: portenv.types.v1.GrantMode
-	(*Box)(nil),                   // 12: portenv.types.v1.Box
-	(*Resources)(nil),             // 13: portenv.types.v1.Resources
-	(*SnapshotRef)(nil),           // 14: portenv.types.v1.SnapshotRef
-	(*Lease)(nil),                 // 15: portenv.types.v1.Lease
-	(*BuildInfo)(nil),             // 16: portenv.types.v1.BuildInfo
-	(*Tab)(nil),                   // 17: portenv.types.v1.Tab
-	(*BoardMessage)(nil),          // 18: portenv.types.v1.BoardMessage
-	(*Decision)(nil),              // 19: portenv.types.v1.Decision
-	(*MigrationItem)(nil),         // 20: portenv.types.v1.MigrationItem
-	(*PackagePlan)(nil),           // 21: portenv.types.v1.PackagePlan
-	(*AgentGrant)(nil),            // 22: portenv.types.v1.AgentGrant
-	(*AgentFile)(nil),             // 23: portenv.types.v1.AgentFile
-	(*AgentStatus)(nil),           // 24: portenv.types.v1.AgentStatus
-	(*HandoffFile)(nil),           // 25: portenv.types.v1.HandoffFile
-	(*Routine)(nil),               // 26: portenv.types.v1.Routine
-	(*timestamppb.Timestamp)(nil), // 27: google.protobuf.Timestamp
+	(InsertHow)(0),                // 12: portenv.types.v1.InsertHow
+	(*Box)(nil),                   // 13: portenv.types.v1.Box
+	(*Resources)(nil),             // 14: portenv.types.v1.Resources
+	(*SnapshotRef)(nil),           // 15: portenv.types.v1.SnapshotRef
+	(*Lease)(nil),                 // 16: portenv.types.v1.Lease
+	(*BuildInfo)(nil),             // 17: portenv.types.v1.BuildInfo
+	(*Tab)(nil),                   // 18: portenv.types.v1.Tab
+	(*BoardMessage)(nil),          // 19: portenv.types.v1.BoardMessage
+	(*Decision)(nil),              // 20: portenv.types.v1.Decision
+	(*MigrationItem)(nil),         // 21: portenv.types.v1.MigrationItem
+	(*PackagePlan)(nil),           // 22: portenv.types.v1.PackagePlan
+	(*AgentGrant)(nil),            // 23: portenv.types.v1.AgentGrant
+	(*AgentFile)(nil),             // 24: portenv.types.v1.AgentFile
+	(*AgentStatus)(nil),           // 25: portenv.types.v1.AgentStatus
+	(*HandoffFile)(nil),           // 26: portenv.types.v1.HandoffFile
+	(*Routine)(nil),               // 27: portenv.types.v1.Routine
+	(*Attachment)(nil),            // 28: portenv.types.v1.Attachment
+	(*timestamppb.Timestamp)(nil), // 29: google.protobuf.Timestamp
 }
 var file_portenv_types_v1_types_proto_depIdxs = []int32{
-	13, // 0: portenv.types.v1.Box.resources:type_name -> portenv.types.v1.Resources
-	27, // 1: portenv.types.v1.SnapshotRef.time:type_name -> google.protobuf.Timestamp
+	14, // 0: portenv.types.v1.Box.resources:type_name -> portenv.types.v1.Resources
+	29, // 1: portenv.types.v1.SnapshotRef.time:type_name -> google.protobuf.Timestamp
 	2,  // 2: portenv.types.v1.SnapshotRef.kind:type_name -> portenv.types.v1.SnapshotKind
-	27, // 3: portenv.types.v1.Lease.since:type_name -> google.protobuf.Timestamp
-	27, // 4: portenv.types.v1.Lease.last_heartbeat:type_name -> google.protobuf.Timestamp
+	29, // 3: portenv.types.v1.Lease.since:type_name -> google.protobuf.Timestamp
+	29, // 4: portenv.types.v1.Lease.last_heartbeat:type_name -> google.protobuf.Timestamp
 	3,  // 5: portenv.types.v1.Lease.source:type_name -> portenv.types.v1.LeaseSource
-	27, // 6: portenv.types.v1.Tab.running_since:type_name -> google.protobuf.Timestamp
+	29, // 6: portenv.types.v1.Tab.running_since:type_name -> google.protobuf.Timestamp
 	8,  // 7: portenv.types.v1.BoardMessage.type:type_name -> portenv.types.v1.MessageType
-	27, // 8: portenv.types.v1.BoardMessage.created_at:type_name -> google.protobuf.Timestamp
-	25, // 9: portenv.types.v1.BoardMessage.files:type_name -> portenv.types.v1.HandoffFile
-	9,  // 10: portenv.types.v1.Decision.kind:type_name -> portenv.types.v1.DecisionKind
-	10, // 11: portenv.types.v1.Decision.state:type_name -> portenv.types.v1.DecisionState
-	27, // 12: portenv.types.v1.Decision.created_at:type_name -> google.protobuf.Timestamp
-	27, // 13: portenv.types.v1.Decision.answered_at:type_name -> google.protobuf.Timestamp
-	21, // 14: portenv.types.v1.Decision.packages:type_name -> portenv.types.v1.PackagePlan
-	27, // 15: portenv.types.v1.Decision.expires_at:type_name -> google.protobuf.Timestamp
-	20, // 16: portenv.types.v1.Decision.migration_items:type_name -> portenv.types.v1.MigrationItem
-	11, // 17: portenv.types.v1.AgentGrant.panes:type_name -> portenv.types.v1.GrantMode
-	11, // 18: portenv.types.v1.AgentGrant.packages:type_name -> portenv.types.v1.GrantMode
-	27, // 19: portenv.types.v1.AgentFile.modified:type_name -> google.protobuf.Timestamp
-	27, // 20: portenv.types.v1.AgentStatus.set_at:type_name -> google.protobuf.Timestamp
-	27, // 21: portenv.types.v1.Routine.next_at:type_name -> google.protobuf.Timestamp
-	22, // [22:22] is the sub-list for method output_type
-	22, // [22:22] is the sub-list for method input_type
-	22, // [22:22] is the sub-list for extension type_name
-	22, // [22:22] is the sub-list for extension extendee
-	0,  // [0:22] is the sub-list for field type_name
+	29, // 8: portenv.types.v1.BoardMessage.created_at:type_name -> google.protobuf.Timestamp
+	26, // 9: portenv.types.v1.BoardMessage.files:type_name -> portenv.types.v1.HandoffFile
+	28, // 10: portenv.types.v1.BoardMessage.attachments:type_name -> portenv.types.v1.Attachment
+	9,  // 11: portenv.types.v1.Decision.kind:type_name -> portenv.types.v1.DecisionKind
+	10, // 12: portenv.types.v1.Decision.state:type_name -> portenv.types.v1.DecisionState
+	29, // 13: portenv.types.v1.Decision.created_at:type_name -> google.protobuf.Timestamp
+	29, // 14: portenv.types.v1.Decision.answered_at:type_name -> google.protobuf.Timestamp
+	22, // 15: portenv.types.v1.Decision.packages:type_name -> portenv.types.v1.PackagePlan
+	29, // 16: portenv.types.v1.Decision.expires_at:type_name -> google.protobuf.Timestamp
+	21, // 17: portenv.types.v1.Decision.migration_items:type_name -> portenv.types.v1.MigrationItem
+	28, // 18: portenv.types.v1.Decision.attachments:type_name -> portenv.types.v1.Attachment
+	11, // 19: portenv.types.v1.AgentGrant.panes:type_name -> portenv.types.v1.GrantMode
+	11, // 20: portenv.types.v1.AgentGrant.packages:type_name -> portenv.types.v1.GrantMode
+	29, // 21: portenv.types.v1.AgentFile.modified:type_name -> google.protobuf.Timestamp
+	29, // 22: portenv.types.v1.AgentStatus.set_at:type_name -> google.protobuf.Timestamp
+	29, // 23: portenv.types.v1.Routine.next_at:type_name -> google.protobuf.Timestamp
+	24, // [24:24] is the sub-list for method output_type
+	24, // [24:24] is the sub-list for method input_type
+	24, // [24:24] is the sub-list for extension type_name
+	24, // [24:24] is the sub-list for extension extendee
+	0,  // [0:24] is the sub-list for field type_name
 }
 
 func init() { file_portenv_types_v1_types_proto_init() }
@@ -2394,8 +2606,8 @@ func file_portenv_types_v1_types_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_portenv_types_v1_types_proto_rawDesc), len(file_portenv_types_v1_types_proto_rawDesc)),
-			NumEnums:      12,
-			NumMessages:   15,
+			NumEnums:      13,
+			NumMessages:   16,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

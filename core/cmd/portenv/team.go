@@ -33,8 +33,8 @@ var teamUsage = map[string]string{
 	"tab":                  "tab new --name NAME -- COMMAND...",
 	"focus":                "focus PANE",
 	"close":                "close PANE",
-	"msg":                  "msg AGENT TEXT [--thread ID] [--type notice|question|answer]",
-	"ask-owner":            `ask-owner TEXT [--choice "LABEL" --choice "LABEL"...] [--thread ID]`,
+	"msg":                  "msg AGENT [TEXT] [--thread ID] [--type notice|question|answer] [--attach FILE]...",
+	"ask-owner":            `ask-owner TEXT [--choice "LABEL" --choice "LABEL"...] [--thread ID] [--attach FILE]...`,
 	"inbox":                "inbox [--wait] [--since CURSOR]",
 	"share":                "share [agent/YOUR-ID] [--text TEXT]",
 	"propose-agent-change": "propose-agent-change FILE",
@@ -170,9 +170,9 @@ func buildTeamCall(name string, args []string, getenv func(string) string) (*age
 	case "tab":
 		values = []string{"name"}
 	case "msg":
-		values = []string{"thread", "type"}
+		values = []string{"thread", "type", "attach"}
 	case "ask-owner":
-		values = []string{"thread", "choice"}
+		values = []string{"thread", "choice", "attach"}
 	case "inbox":
 		bools, values = append(bools, "wait"), []string{"since"}
 	case "share":
@@ -194,6 +194,23 @@ func buildTeamCall(name string, args []string, getenv func(string) string) (*age
 			return errors.New("wrong number of arguments")
 		}
 		return nil
+	}
+	// --attach (ADR 0030): up to 5, each an absolute, clean path, as
+	// handoff's; portenvd checks the rest.
+	attach := func() ([]string, error) {
+		files := a.lists["attach"]
+		if len(files) > teamkit.MaxAttachmentsPerMessage {
+			return nil, fmt.Errorf("attach at most %d files", teamkit.MaxAttachmentsPerMessage)
+		}
+		var out []string
+		for _, f := range files {
+			p, err := filepath.Abs(f)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, p)
+		}
+		return out, nil
 	}
 	needCommand := func() error {
 		if !a.dash || len(a.rest) == 0 {
@@ -240,6 +257,13 @@ func buildTeamCall(name string, args []string, getenv func(string) string) (*age
 			c.Op = &agentv1.TeamCallsResponse_Close{Close: ref}
 		}
 	case "msg":
+		files, err := attach()
+		if err != nil {
+			return nil, false, err
+		}
+		if len(a.pos) == 1 && len(files) > 0 {
+			a.pos = append(a.pos, "") // attachments only
+		}
 		if err := needPos(2); err != nil {
 			return nil, false, err
 		}
@@ -253,7 +277,7 @@ func buildTeamCall(name string, args []string, getenv func(string) string) (*age
 		default:
 			return nil, false, errors.New("--type is notice, question or answer")
 		}
-		c.Op = &agentv1.TeamCallsResponse_Msg{Msg: &agentv1.Msg{To: a.pos[0], Text: a.pos[1], ThreadId: a.flags["thread"], Type: t}}
+		c.Op = &agentv1.TeamCallsResponse_Msg{Msg: &agentv1.Msg{To: a.pos[0], Text: a.pos[1], ThreadId: a.flags["thread"], Type: t, AttachPaths: files}}
 	case "ask-owner":
 		if err := needPos(1); err != nil {
 			return nil, false, err
@@ -262,7 +286,11 @@ func buildTeamCall(name string, args []string, getenv func(string) string) (*age
 		if n := len(choices); n > 0 && (n < teamkit.MinChoices || n > teamkit.MaxChoices) {
 			return nil, false, fmt.Errorf("give %d to %d --choice labels, or none for a yes/no question", teamkit.MinChoices, teamkit.MaxChoices)
 		}
-		c.Op = &agentv1.TeamCallsResponse_AskOwner{AskOwner: &agentv1.AskOwner{Text: a.pos[0], ThreadId: a.flags["thread"], Choices: choices}}
+		files, err := attach()
+		if err != nil {
+			return nil, false, err
+		}
+		c.Op = &agentv1.TeamCallsResponse_AskOwner{AskOwner: &agentv1.AskOwner{Text: a.pos[0], ThreadId: a.flags["thread"], Choices: choices, AttachPaths: files}}
 	case "inbox":
 		if err := needPos(0); err != nil {
 			return nil, false, err
@@ -416,6 +444,7 @@ func printTeamReply(w io.Writer, name string, call *agentv1.TeamCallsResponse, r
 		_, _ = fmt.Fprintf(w, "Opened pane %s.\n", shownPlain(r.GetPane().GetPaneId()))
 	case "msg":
 		_, _ = fmt.Fprintf(w, "Sent to %s.\n", shownPlain(call.GetMsg().GetTo()))
+		printAttachments(w, r.GetMessage().GetAttachments())
 	case "status":
 		if call.GetSetStatus().GetClear() {
 			_, _ = fmt.Fprintln(w, "Status cleared.")
@@ -441,11 +470,13 @@ func printTeamReply(w io.Writer, name string, call *agentv1.TeamCallsResponse, r
 		}
 	case "ask-owner", "request-package", "propose-agent-change":
 		_, _ = fmt.Fprintf(w, "Asked the owner (decision %s). Wait for the answer with: portenv inbox --wait\n", shownPlain(r.GetDecision().GetId()))
+		printAttachments(w, r.GetDecision().GetAttachments())
 	case "inbox":
 		in := r.GetInbox()
 		for _, m := range in.GetMessages() {
 			_, _ = fmt.Fprintf(w, "%s  %s → %s  %s: %s\n", m.GetCreatedAt().AsTime().Format(time.DateTime), shownPlain(m.GetFrom()), shownPlain(m.GetTo()),
 				strings.ToLower(strings.TrimPrefix(m.GetType().String(), "MESSAGE_TYPE_")), shownPlain(m.GetText()))
+			printAttachments(w, m.GetAttachments())
 		}
 		for _, d := range in.GetDecisions() {
 			_, _ = fmt.Fprintf(w, "decision %s: %s\n", shownPlain(d.GetId()), decisionLine(d))
@@ -459,12 +490,28 @@ func printTeamReply(w io.Writer, name string, call *agentv1.TeamCallsResponse, r
 		if len(me.GetCommands()) > 0 {
 			_, _ = fmt.Fprintf(w, "You can use: %s\n", shownPlain(strings.Join(me.GetCommands(), ", ")))
 		}
+		if me.GetAttachmentsPerDay() > 0 {
+			_, _ = fmt.Fprintf(w, "Attachments today: %d of %d\n", me.GetAttachmentsToday(), me.GetAttachmentsPerDay())
+		}
 		if off := me.GetShareLoginOff(); off != "" {
 			_, _ = fmt.Fprintln(w, shownPlain(off))
 		}
 		_, _ = fmt.Fprintln(w, "For everything, run: portenv whoami --json")
 	default:
 		_, _ = fmt.Fprintln(w, "Done.")
+	}
+}
+
+// printAttachments lists a line's attachments: name, type and size, its
+// SHA-256, and where a copy landed in your home. Names are escaped, as
+// everything another agent wrote.
+func printAttachments(w io.Writer, as []*typesv1.Attachment) {
+	for _, a := range as {
+		where := ""
+		if p := a.GetInboxPath(); p != "" {
+			where = "  ~/" + shownPlain(p)
+		}
+		_, _ = fmt.Fprintf(w, "  attachment: %s (%s, %d bytes)  sha256 %s%s\n", shownPlain(a.GetName()), shownPlain(a.GetMediaType()), a.GetSize(), shownPlain(a.GetSha256()), where)
 	}
 }
 

@@ -9,8 +9,10 @@ import Observation
 /// the Keychain, which only the app touches, once portenvd says the saves
 /// are gone.
 
-/// portenvd's steps, in order (DeleteStep in the daemon API).
-public enum DeleteStep: Int, Equatable, Sendable { case none = 0, instance, home, saves, key, record }
+/// portenvd's steps (DeleteStep in the daemon API), by its numbers: the
+/// attachment store (ADR 0030) runs after home and before saves, but was
+/// numbered after record.
+public enum DeleteStep: Int, Equatable, Sendable { case none = 0, instance, home, saves, key, record, attachments }
 
 /// What deleting a workspace would remove, as portenvd reads it without a
 /// key (GetDeletePlan).

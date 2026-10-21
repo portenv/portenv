@@ -242,6 +242,14 @@ service DaemonService {
   // step it stopped at (ListBoxes shows it, OpenBox refuses the box) and a
   // call again continues from there.
   rpc DeleteBox(DeleteBoxRequest) returns (DeleteBoxResponse);
+  // Attachments (ADR 0030), the owner only: an agent caller is refused.
+  // ReadAttachment streams one from this Mac's store, the record first.
+  rpc ReadAttachment(ReadAttachmentRequest) returns (stream ReadAttachmentResponse);
+  // The owner's files for agents (drop or Attach…): stored once, copied
+  // into each agent's ~/inbox/owner/<time>/, one board notice per agent.
+  rpc SendAttachments(stream SendAttachmentsRequest) returns (SendAttachmentsResponse);
+  // Remove from this Mac: deletes one attachment's bytes; its records stay.
+  rpc RemoveAttachment(RemoveAttachmentRequest) returns (RemoveAttachmentResponse);
 }
 
 message GetPushesRequest {
@@ -1422,6 +1430,9 @@ enum DeleteStep {
   DELETE_STEP_KEY = 4;
   // Removing portenvd's record of the box, last.
   DELETE_STEP_RECORD = 5;
+  // Removing its attachment store on this Mac (ADR 0030 point 6), after
+  // the home storage and before the saves.
+  DELETE_STEP_ATTACHMENTS = 6;
 }
 
 message GetDeletePlanRequest {
@@ -1476,3 +1487,48 @@ message DeleteBoxResponse {
   // The step reached.
   DeleteStep step = 4;
 }
+
+message ReadAttachmentRequest {
+  // The workspace.
+  string name = 1;
+  string attachment_id = 2;
+}
+
+// The record on the first message, then the bytes in pieces.
+message ReadAttachmentResponse {
+  portenv.types.v1.Attachment attachment = 1;
+  bytes data = 2;
+}
+
+// name, to, thread_id and pane_id on the first message; then one file at a
+// time: file_name and size on its first piece, last_of_file on its last.
+message SendAttachmentsRequest {
+  string name = 1;
+  // Agent ids; each gets its own copy.
+  repeated string to = 2;
+  string thread_id = 3;
+  // The pane it was dropped on, if any (one agent only).
+  string pane_id = 4;
+  // The base name only; the Mac path never leaves the app.
+  string file_name = 5;
+  int64 size = 6;
+  bytes data = 7;
+  bool last_of_file = 8;
+}
+
+message SendAttachmentsResponse {
+  // One per agent that got its copies.
+  repeated portenv.types.v1.BoardMessage messages = 1;
+  // One plain line per agent or file that didn't.
+  repeated string refused = 2;
+  // For a drop on a pane: how the path was offered, and the path.
+  portenv.types.v1.InsertHow inserted = 3;
+  string inserted_path = 4;
+}
+
+message RemoveAttachmentRequest {
+  string name = 1;
+  string attachment_id = 2;
+}
+
+message RemoveAttachmentResponse {}

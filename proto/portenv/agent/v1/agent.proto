@@ -139,6 +139,14 @@ service AgentService {
   // checks. The helper writes the line itself; no message text is ever
   // typed, and from must be an agent id or "owner".
   rpc WakeAgent(WakeAgentRequest) returns (WakeAgentResponse);
+  // Reads one file an agent attaches (ADR 0030 point 2), as the agent: from
+  // its own home only, through descriptors, never a link, a file it owns,
+  // at most max_bytes. The size comes first, the SHA-256 last.
+  rpc ReadAttachmentSource(ReadAttachmentSourceRequest) returns (stream ReadAttachmentSourceResponse);
+  // Offers a file the owner dropped on an agent's pane (ADR 0030 point 8):
+  // typed at a shell prompt or pasted into the agent's runner, quoted and
+  // never with Enter; anywhere else nothing is typed.
+  rpc InsertDroppedPath(InsertDroppedPathRequest) returns (InsertDroppedPathResponse);
 }
 
 message RunResticRequest {
@@ -560,6 +568,9 @@ message Msg {
   string thread_id = 2;
   portenv.types.v1.MessageType type = 3;
   string text = 4;
+  // --attach (ADR 0030): at most 5 absolute box paths in the agent's own
+  // home, as the CLI resolved them.
+  repeated string attach_paths = 5;
 }
 
 message AskOwner {
@@ -568,6 +579,9 @@ message AskOwner {
   // --choice, in order: 2 to 4 labels, each 1 to 80 characters of plain
   // text (CC-0501). Empty asks a yes/no question.
   repeated string choices = 3;
+  // --attach (ADR 0030): at most 5 absolute box paths in the agent's own
+  // home, as the CLI resolved them.
+  repeated string attach_paths = 4;
 }
 
 message Inbox {
@@ -631,6 +645,9 @@ message WhoAmIResult {
   // Set when its file asks for share_login, which this build doesn't
   // support: nothing is shared, so it signs in itself (R-0323).
   string share_login_off = 17;
+  // Attachments it sent in the last 24 hours, and its limit (ADR 0030).
+  int32 attachments_today = 18;
+  int32 attachments_per_day = 19;
 }
 
 message Teammate {
@@ -818,6 +835,10 @@ message ReadBoardResponse {
     portenv.types.v1.BoardMessage message = 1;
     portenv.types.v1.Decision decision = 2;
   }
+  // Set on a last message with no line, only when every line of the board
+  // was read and none was skipped (ADR 0030 point 6): portenvd sweeps the
+  // attachment store only after such a read.
+  bool complete = 3;
 }
 
 message ReadAgentFilesRequest {
@@ -993,4 +1014,31 @@ message GetProjectRoomResponse {
   bool exists = 1;
   // Free bytes on the workspace's disk, for work.
   uint64 free_bytes = 2;
+}
+
+message ReadAttachmentSourceRequest {
+  string agent_id = 1;
+  // An absolute box path under /home/<agent_id>/.
+  string path = 2;
+  int64 max_bytes = 3;
+}
+
+// The size on the first message, the bytes in pieces of at most 256 KB,
+// the SHA-256 (hex) on the last.
+message ReadAttachmentSourceResponse {
+  int64 size = 1;
+  bytes data = 2;
+  string sha256 = 3;
+}
+
+message InsertDroppedPathRequest {
+  string agent_id = 1;
+  // One of the agent's panes.
+  string pane_id = 2;
+  // The copy's absolute box path, in the agent's ~/inbox/owner/.
+  string box_path = 3;
+}
+
+message InsertDroppedPathResponse {
+  portenv.types.v1.InsertHow how = 1;
 }

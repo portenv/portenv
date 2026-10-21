@@ -90,7 +90,7 @@ func TestTheBoardIsWrittenAndReadBack(t *testing.T) {
 	if err := s.ReadBoard(&agentv1.ReadBoardRequest{}, st); err != nil {
 		t.Fatal(err)
 	}
-	if len(st.lines) != 2 || st.lines[0].GetMessage().GetText() != "ready for review\nsee the diff" || st.lines[1].GetDecision().GetSummary() != "May I add left-pad?" ||
+	if len(st.lines) != 3 || !st.lines[2].GetComplete() || st.lines[0].GetMessage().GetText() != "ready for review\nsee the diff" || st.lines[1].GetDecision().GetSummary() != "May I add left-pad?" ||
 		st.lines[1].GetDecision().GetChoice() != 2 || strings.Join(st.lines[1].GetDecision().GetChoices(), "|") != "Option a|Option b" {
 		t.Errorf("read back: %v", st.lines)
 	}

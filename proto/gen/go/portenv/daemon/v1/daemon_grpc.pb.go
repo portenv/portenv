@@ -96,6 +96,9 @@ const (
 	DaemonService_StopAllowingPushes_FullMethodName    = "/portenv.daemon.v1.DaemonService/StopAllowingPushes"
 	DaemonService_GetDeletePlan_FullMethodName         = "/portenv.daemon.v1.DaemonService/GetDeletePlan"
 	DaemonService_DeleteBox_FullMethodName             = "/portenv.daemon.v1.DaemonService/DeleteBox"
+	DaemonService_ReadAttachment_FullMethodName        = "/portenv.daemon.v1.DaemonService/ReadAttachment"
+	DaemonService_SendAttachments_FullMethodName       = "/portenv.daemon.v1.DaemonService/SendAttachments"
+	DaemonService_RemoveAttachment_FullMethodName      = "/portenv.daemon.v1.DaemonService/RemoveAttachment"
 )
 
 // DaemonServiceClient is the client API for DaemonService service.
@@ -334,6 +337,14 @@ type DaemonServiceClient interface {
 	// step it stopped at (ListBoxes shows it, OpenBox refuses the box) and a
 	// call again continues from there.
 	DeleteBox(ctx context.Context, in *DeleteBoxRequest, opts ...grpc.CallOption) (*DeleteBoxResponse, error)
+	// Attachments (ADR 0030), the owner only: an agent caller is refused.
+	// ReadAttachment streams one from this Mac's store, the record first.
+	ReadAttachment(ctx context.Context, in *ReadAttachmentRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ReadAttachmentResponse], error)
+	// The owner's files for agents (drop or Attach…): stored once, copied
+	// into each agent's ~/inbox/owner/<time>/, one board notice per agent.
+	SendAttachments(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[SendAttachmentsRequest, SendAttachmentsResponse], error)
+	// Remove from this Mac: deletes one attachment's bytes; its records stay.
+	RemoveAttachment(ctx context.Context, in *RemoveAttachmentRequest, opts ...grpc.CallOption) (*RemoveAttachmentResponse, error)
 }
 
 type daemonServiceClient struct {
@@ -1108,6 +1119,48 @@ func (c *daemonServiceClient) DeleteBox(ctx context.Context, in *DeleteBoxReques
 	return out, nil
 }
 
+func (c *daemonServiceClient) ReadAttachment(ctx context.Context, in *ReadAttachmentRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ReadAttachmentResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &DaemonService_ServiceDesc.Streams[8], DaemonService_ReadAttachment_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[ReadAttachmentRequest, ReadAttachmentResponse]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type DaemonService_ReadAttachmentClient = grpc.ServerStreamingClient[ReadAttachmentResponse]
+
+func (c *daemonServiceClient) SendAttachments(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[SendAttachmentsRequest, SendAttachmentsResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &DaemonService_ServiceDesc.Streams[9], DaemonService_SendAttachments_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[SendAttachmentsRequest, SendAttachmentsResponse]{ClientStream: stream}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type DaemonService_SendAttachmentsClient = grpc.ClientStreamingClient[SendAttachmentsRequest, SendAttachmentsResponse]
+
+func (c *daemonServiceClient) RemoveAttachment(ctx context.Context, in *RemoveAttachmentRequest, opts ...grpc.CallOption) (*RemoveAttachmentResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RemoveAttachmentResponse)
+	err := c.cc.Invoke(ctx, DaemonService_RemoveAttachment_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DaemonServiceServer is the server API for DaemonService service.
 // All implementations must embed UnimplementedDaemonServiceServer
 // for forward compatibility.
@@ -1344,6 +1397,14 @@ type DaemonServiceServer interface {
 	// step it stopped at (ListBoxes shows it, OpenBox refuses the box) and a
 	// call again continues from there.
 	DeleteBox(context.Context, *DeleteBoxRequest) (*DeleteBoxResponse, error)
+	// Attachments (ADR 0030), the owner only: an agent caller is refused.
+	// ReadAttachment streams one from this Mac's store, the record first.
+	ReadAttachment(*ReadAttachmentRequest, grpc.ServerStreamingServer[ReadAttachmentResponse]) error
+	// The owner's files for agents (drop or Attach…): stored once, copied
+	// into each agent's ~/inbox/owner/<time>/, one board notice per agent.
+	SendAttachments(grpc.ClientStreamingServer[SendAttachmentsRequest, SendAttachmentsResponse]) error
+	// Remove from this Mac: deletes one attachment's bytes; its records stay.
+	RemoveAttachment(context.Context, *RemoveAttachmentRequest) (*RemoveAttachmentResponse, error)
 	mustEmbedUnimplementedDaemonServiceServer()
 }
 
@@ -1566,6 +1627,15 @@ func (UnimplementedDaemonServiceServer) GetDeletePlan(context.Context, *GetDelet
 }
 func (UnimplementedDaemonServiceServer) DeleteBox(context.Context, *DeleteBoxRequest) (*DeleteBoxResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeleteBox not implemented")
+}
+func (UnimplementedDaemonServiceServer) ReadAttachment(*ReadAttachmentRequest, grpc.ServerStreamingServer[ReadAttachmentResponse]) error {
+	return status.Error(codes.Unimplemented, "method ReadAttachment not implemented")
+}
+func (UnimplementedDaemonServiceServer) SendAttachments(grpc.ClientStreamingServer[SendAttachmentsRequest, SendAttachmentsResponse]) error {
+	return status.Error(codes.Unimplemented, "method SendAttachments not implemented")
+}
+func (UnimplementedDaemonServiceServer) RemoveAttachment(context.Context, *RemoveAttachmentRequest) (*RemoveAttachmentResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RemoveAttachment not implemented")
 }
 func (UnimplementedDaemonServiceServer) mustEmbedUnimplementedDaemonServiceServer() {}
 func (UnimplementedDaemonServiceServer) testEmbeddedByValue()                       {}
@@ -2798,6 +2868,42 @@ func _DaemonService_DeleteBox_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _DaemonService_ReadAttachment_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(ReadAttachmentRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(DaemonServiceServer).ReadAttachment(m, &grpc.GenericServerStream[ReadAttachmentRequest, ReadAttachmentResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type DaemonService_ReadAttachmentServer = grpc.ServerStreamingServer[ReadAttachmentResponse]
+
+func _DaemonService_SendAttachments_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(DaemonServiceServer).SendAttachments(&grpc.GenericServerStream[SendAttachmentsRequest, SendAttachmentsResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type DaemonService_SendAttachmentsServer = grpc.ClientStreamingServer[SendAttachmentsRequest, SendAttachmentsResponse]
+
+func _DaemonService_RemoveAttachment_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RemoveAttachmentRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).RemoveAttachment(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_RemoveAttachment_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).RemoveAttachment(ctx, req.(*RemoveAttachmentRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // DaemonService_ServiceDesc is the grpc.ServiceDesc for DaemonService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -3057,6 +3163,10 @@ var DaemonService_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "DeleteBox",
 			Handler:    _DaemonService_DeleteBox_Handler,
 		},
+		{
+			MethodName: "RemoveAttachment",
+			Handler:    _DaemonService_RemoveAttachment_Handler,
+		},
 	},
 	Streams: []grpc.StreamDesc{
 		{
@@ -3100,6 +3210,16 @@ var DaemonService_ServiceDesc = grpc.ServiceDesc{
 			StreamName:    "WatchPushes",
 			Handler:       _DaemonService_WatchPushes_Handler,
 			ServerStreams: true,
+		},
+		{
+			StreamName:    "ReadAttachment",
+			Handler:       _DaemonService_ReadAttachment_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "SendAttachments",
+			Handler:       _DaemonService_SendAttachments_Handler,
+			ClientStreams: true,
 		},
 	},
 	Metadata: "portenv/daemon/v1/daemon.proto",

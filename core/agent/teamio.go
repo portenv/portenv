@@ -87,6 +87,9 @@ func checkBoardLine(l *agentv1.AppendBoardRequest) (file string, err error) {
 		if t := m.GetText(); strings.TrimSpace(t) == "" || len(t) > maxBoardText || !plainText(t, true) {
 			return bad("a board message is 1 to 8 KB of plain text")
 		}
+		if err := checkAttachments(m.GetAttachments()); err != nil {
+			return "", err
+		}
 		return boardMessages, nil
 	case l.GetDecision() != nil:
 		d := l.GetDecision()
@@ -124,6 +127,9 @@ func checkBoardLine(l *agentv1.AppendBoardRequest) (file string, err error) {
 				m.GetAgent() != "" && !boardPartyRE.MatchString(m.GetAgent()), !slices.Contains([]string{"git", "repo", "worktree", "file", "setting"}, m.GetKind()):
 				return bad("a decision's migration items hold only plain paths, notes, agent ids and kinds")
 			}
+		}
+		if err := checkAttachments(d.GetAttachments()); err != nil {
+			return "", err
 		}
 		for _, p := range d.GetPackages() {
 			if !packageRE.MatchString(p.GetName()) || !plainText(p.GetVersion(), false) || !plainText(p.GetSource(), false) || len(p.GetVersion())+len(p.GetSource()) > 512 {
@@ -170,9 +176,11 @@ func (s *apiServer) ReadBoard(_ *agentv1.ReadBoardRequest, stream agentv1.AgentS
 	}
 	sc := bufio.NewScanner(bytes.NewReader(out))
 	sc.Buffer(make([]byte, 64<<10), maxBoardLine+2)
+	skipped := false
 	for sc.Scan() {
 		line := sc.Bytes()
 		if len(line) < 2 {
+			skipped = true
 			continue
 		}
 		r := &agentv1.ReadBoardResponse{}
@@ -180,23 +188,34 @@ func (s *apiServer) ReadBoard(_ *agentv1.ReadBoardRequest, stream agentv1.AgentS
 		case 'M':
 			var m typesv1.BoardMessage
 			if protojson.Unmarshal(line[2:], &m) != nil {
+				skipped = true
 				continue // a damaged line is skipped, never fatal
 			}
 			r.Line = &agentv1.ReadBoardResponse_Message{Message: &m}
 		case 'D':
 			var d typesv1.Decision
 			if protojson.Unmarshal(line[2:], &d) != nil {
+				skipped = true
 				continue
 			}
 			r.Line = &agentv1.ReadBoardResponse_Decision{Decision: &d}
 		default:
+			skipped = true
 			continue
 		}
 		if err := stream.Send(r); err != nil {
 			return err
 		}
 	}
-	return sc.Err()
+	if err := sc.Err(); err != nil {
+		return err
+	}
+	if skipped {
+		return nil
+	}
+	// Every line was read: portenvd may sweep attachments no line names
+	// (ADR 0030 point 6).
+	return stream.Send(&agentv1.ReadBoardResponse{Complete: true})
 }
 
 // ReadAgentFiles reads the project's .portenv/agents/*.md as work.
@@ -370,6 +389,9 @@ func TeamIO(args []string, stdin io.Reader, stdout io.Writer) error {
 			return errors.New("handoff-unpack HOME DEST QUOTA")
 		}
 		return handoffUnpack(dir, args[2], args[3], stdin, stdout)
+	case "attach-read":
+		// As the agent (ADR 0030 point 2): one file of its own home.
+		return attachTeamIO(args, stdout)
 	case "list-home":
 		if len(args) != 3 {
 			return errors.New("list-home HOME DIR")

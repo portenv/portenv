@@ -143,9 +143,10 @@ func newProjectTeam(t *testing.T) (*TeamUsers, *projectRunner, *[]chownCall, str
 	run.sys.members[TeamGroup] = map[string]bool{"work": true}
 	var chowns []chownCall
 	tu := &TeamUsers{
-		Cfg:   Config{User: "work", UID: 1000, HomeRoot: root},
-		Run:   run,
-		Chown: func(p string, uid, gid int) error { chowns = append(chowns, chownCall{p, uid, gid}); return nil },
+		Cfg:        Config{User: "work", UID: 1000, HomeRoot: root},
+		Run:        run,
+		Chown:      func(p string, uid, gid int) error { chowns = append(chowns, chownCall{p, uid, gid}); return nil },
+		teamDirACL: func(string, int) error { return nil },
 	}
 	// team-io open-project, as work, in this process: its JSON line.
 	run.open = func(project string) ([]byte, error) {

@@ -92,3 +92,19 @@ func TestGuideSaysShareLoginIsOff(t *testing.T) {
 		t.Error("portenv guide doesn't say share_login is off")
 	}
 }
+
+// CC-0706 item 20: the guide says how work reaches the owner: as a branch
+// the owner fetches, never as a patch, a file to apply or steps to run.
+func TestGuideSaysTheOwnersRoute(t *testing.T) {
+	text := NewGuide().Text()
+	for _, s := range []string{
+		"Your work reaches the owner only as a branch",
+		"agent/<your id>", "portenv share", "portenv app fetch-agent", "refs/remotes/agents/<id>",
+		"Never hand the owner a patch", "/home/team", "on their Mac",
+		"is ready to fetch",
+	} {
+		if !strings.Contains(text, s) {
+			t.Errorf("portenv guide doesn't say %q", s)
+		}
+	}
+}

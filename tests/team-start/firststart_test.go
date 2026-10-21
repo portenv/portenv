@@ -57,6 +57,10 @@
 //  12. a hand-off (CC-0507): lead hands a file to builder, and builder finds
 //     it in ~/inbox/lead/…, builder's, readable only by builder, its home
 //     still closed to others;
+//     CC-0706 item 19: what builder puts in /home/team, made 0600 under
+//     umask 077, renamed in from its home, or in a 0700 folder, is
+//     readable by work (even from a shell without group team) and by
+//     lead; a link builder plants there leaves its target as it was;
 //  13. New workspace's Team step (ADR 0025) on a second, fresh workspace:
 //     the plan PlanTeam shows, approved and kept, is written by
 //     ApplyTeamPlan into an empty project with git on main, as work, the
@@ -728,6 +732,7 @@ for who in lead reviewer work; do runuser -u $who -- sh -c 'cat /home/builder/in
 		h.fatal("step 12: the project file in builder's inbox: exit %d:\n%s", code, out)
 	}
 	t.Logf("step 12: a project file handed over, with the project closed to others:\n%s", out)
+	h.teamFolderIsShared(ctx)
 
 	h.newWorkspaceTeam(ctx, c)
 }
@@ -816,6 +821,63 @@ grep '^  message:' .portenv/agents/coordinator.md`)
 		h.fatal("step 13: a second ApplyTeamPlan: %v %v", again, err)
 	}
 	t.Log("step 13: three agents approved and stopped; nothing started")
+}
+
+// teamFolderIsShared is step 12's last part (CC-0706 item 19): the team
+// folder is the team's and work's to read, however an agent's file got
+// there.
+func (h *harness) teamFolderIsShared(ctx context.Context) {
+	t := h.t
+	out, code := h.box(ctx, "root", `set -eu
+echo "work's own" > /home/work/private.txt
+chown work:work /home/work/private.txt
+chmod 0600 /home/work/private.txt`)
+	if code != 0 {
+		h.fatal("step 12: work's private file: exit %d: %s", code, out)
+	}
+	out, code = h.box(ctx, "builder", `set -eu
+umask 077
+echo "a patch" > /home/team/made.patch
+t=$(mktemp ~/renamed.XXXXXX)
+echo "renamed in" > "$t"
+mv "$t" /home/team/renamed.patch
+mkdir /home/team/sub
+echo "in a folder" > /home/team/sub/inner.txt
+ln -s /home/work/private.txt /home/team/link
+stat -c '%a %n' /home/team/made.patch /home/team/renamed.patch /home/team/sub`)
+	if code != 0 {
+		h.fatal("step 12: builder's files in /home/team: exit %d: %s", code, out)
+	}
+	t.Logf("step 12: builder wrote, under umask 077:\n%s", out)
+	// work reads each, as its shell does and as one started before it
+	// joined group team (no supplementary groups) does; lead reads each.
+	check := `ok=1
+for f in /home/team/made.patch /home/team/renamed.patch /home/team/sub/inner.txt; do
+  runuser -u work -- cat "$f" >/dev/null 2>&1 || ok=0
+  setpriv --reuid=1000 --regid=1000 --clear-groups cat "$f" >/dev/null 2>&1 || ok=0
+  runuser -u lead -- cat "$f" >/dev/null 2>&1 || ok=0
+done
+echo "readable: $ok"`
+	deadline := time.Now().Add(15 * time.Second)
+	for {
+		out, _ = h.box(ctx, "root", check)
+		if strings.Contains(out, "readable: 1") {
+			break
+		}
+		if time.Now().After(deadline) {
+			acl, _ := h.box(ctx, "root", `getfacl -p /home/team /home/team/made.patch /home/team/renamed.patch /home/team/sub /home/team/sub/inner.txt 2>&1; ls -la /home/team`)
+			h.fatal("step 12: work or lead can't read what builder put in /home/team:\n%s\n%s", out, acl)
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	out, _ = h.box(ctx, "root", `runuser -u work -- cat /home/team/made.patch /home/team/renamed.patch /home/team/sub/inner.txt
+stat -c '%U:%G %a' /home/work/private.txt
+getfacl -cp /home/work/private.txt 2>/dev/null | grep -E '^(user|group):[a-z0-9]' || echo "no named entries"
+runuser -u builder -- cat /home/work/private.txt >/dev/null 2>&1; echo "builder reads work's file: $?"`)
+	if !strings.Contains(out, "a patch\nrenamed in\nin a folder") || !strings.Contains(out, "work:work 600") || !strings.Contains(out, "no named entries") || !strings.Contains(out, "builder reads work's file: 1") {
+		h.fatal("step 12: the team folder's files, or work's file behind builder's link:\n%s", out)
+	}
+	t.Logf("step 12: work and lead read what builder put in /home/team; work's file behind the link is unchanged:\n%s", out)
 }
 
 // boxIn is box for another workspace's container.

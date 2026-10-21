@@ -799,6 +799,25 @@ func TestCloneReadersAtStart(t *testing.T) {
 }
 
 // R-0260 item 2: pending pane requests count, and Approve rechecks.
+// CC-0706 item 20: every agent's AGENTS.md says how work reaches the
+// owner, an agent with its own copy and one without alike.
+func TestAgentsMDSaysTheOwnersRoute(t *testing.T) {
+	team := defaultTeam()
+	team[0].Spec.Checkout = CheckoutNone
+	for i := range team {
+		md := agentsMDBlock(&Team{Agents: team}, &team[i], "w")
+		for _, s := range []string{"Work reaches the owner only as a branch", "portenv share", "portenv app fetch-agent w <id>", "refs/remotes/agents/<id>",
+			"never hand the owner a patch, a file in /home/team to apply, or steps to run on their Mac", "is ready to fetch"} {
+			if !strings.Contains(md, s) {
+				t.Errorf("%s's AGENTS.md doesn't say %q:\n%s", team[i].ID, s, md)
+			}
+		}
+	}
+	if md := agentsMDBlock(&Team{Agents: team}, &team[1], "w"); !strings.Contains(md, "commit on agent/builder") {
+		t.Errorf("builder isn't told to commit on its branch: %s", md)
+	}
+}
+
 func TestApproveRechecksThePaneLimit(t *testing.T) {
 	team := defaultTeam()
 	team[1].Grant.MaxPanes = 1 // builder, panes: ask

@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"slices"
 	"sync"
 	"syscall"
@@ -78,6 +79,9 @@ func Init(ctx context.Context, cfg Config, log *slog.Logger) error {
 		if err := team.RestoreErr(); err != nil {
 			log.Error("agent users couldn't be restored", "err", err)
 		}
+		// What agents put in /home/team stays readable by the team and
+		// work, however it got there (CC-0706 item 19).
+		go watchTeamShare(ctx, filepath.Join(cfg.HomeRoot, TeamGroup), cfg.UID, log)
 		readiness.Ready()
 		log.Info("box ready")
 		if failed, msg := readiness.Packages(); len(failed) > 0 {

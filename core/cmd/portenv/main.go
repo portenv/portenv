@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	"golang.org/x/term"
@@ -40,6 +41,11 @@ import (
 )
 
 func main() {
+	// git runs it as git-remote-portenv for a push from the workspace
+	// (R-0391).
+	if filepath.Base(os.Args[0]) == remoteHelperName {
+		os.Exit(runRemoteHelper(os.Args[1:], os.Stdin, os.Stdout, os.Stderr, remoteHelperFromEnv()))
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	os.Exit(run(ctx, os.Args[1:]))
@@ -171,7 +177,8 @@ Commands:
   attach <box> [--session NAME]           this terminal in the box's tmux session (portenvd)
   app ACTION BOX [TARGET]                 the box's actions through portenvd: open [--take-over],
                                           close, save, point, revert, history, housekeep [--prune],
-                                          move BOX this-mac|USER@HOST, …
+                                          move BOX this-mac|USER@HOST,
+                                          delete BOX --yes-delete-everything, …
   version
 
 Your team, on this Mac (each through portenvd, as the app does it; approvals stay in the app):

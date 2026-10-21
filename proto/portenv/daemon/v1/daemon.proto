@@ -200,6 +200,48 @@ service DaemonService {
   // 0026's run-with-secret is built, refused when it has one too. Nothing
   // runs.
   rpc Deploy(DeployRequest) returns (DeployResponse);
+  // The owner's team settings (R-0347): how many agents may run in one
+  // workspace (Settings › Team › Agents allowed). Set only by the app, in
+  // front of the person: from Settings, or the owner's confirmed Raise.
+  rpc GetTeamSettings(GetTeamSettingsRequest) returns (GetTeamSettingsResponse);
+  rpc SetAgentsAllowed(SetAgentsAllowedRequest) returns (SetAgentsAllowedResponse);
+  // ADR 0025: the New-workspace Team step. The built-in team templates,
+  // each with its agents as they'd be written with no changes.
+  rpc ListTeamTemplates(ListTeamTemplatesRequest) returns (ListTeamTemplatesResponse);
+  // A template with the owner's choices, as the exact agent files that
+  // would be written, each checked as portenvd checks any agent file.
+  rpc PlanTeam(PlanTeamRequest) returns (PlanTeamResponse);
+  // Writes the team CreateBox kept for this workspace into its project
+  // (made empty, with git, if it isn't there), as work, never over a file,
+  // and pins each file the owner approved, only if it's those bytes. Only
+  // the owner's app calls it, once the workspace is open; with no team
+  // kept, it does nothing.
+  rpc ApplyTeamPlan(ApplyTeamPlanRequest) returns (ApplyTeamPlanResponse);
+  // Pushes from the workspace (R-0391) waiting for the app: each needs the
+  // owner's GitHub sign-in, and some the owner's yes (the first push from
+  // the workspace, a force, a delete). The window's app answers each with
+  // AnswerPush.
+  rpc WatchPushes(WatchPushesRequest) returns (stream WatchPushesResponse);
+  rpc AnswerPush(AnswerPushRequest) returns (AnswerPushResponse);
+  // Whether the workspace's pushes are allowed (the first push's yes, kept
+  // on the Mac), and the inspector's Stop Allowing Pushes.
+  rpc GetPushes(GetPushesRequest) returns (GetPushesResponse);
+  rpc StopAllowingPushes(StopAllowingPushesRequest) returns (StopAllowingPushesResponse);
+  // Delete Workspace… (ADR 0029): what deleting the box would remove and
+  // whether it can be deleted now, for the confirmation sheet. Read only:
+  // it needs no key and runs no restic.
+  rpc GetDeletePlan(GetDeletePlanRequest) returns (GetDeletePlanResponse);
+  // Deletes a box (ADR 0029), only for the person at this Mac (the app or
+  // the CLI; never an agent), in a fixed order, each step safe to repeat:
+  // the checks (the typed name, not open or saving here, not moving or on
+  // a server, saves elsewhere confirmed, no other machine holding the
+  // lease); the instance; the home storage; the saves on this Mac (saves
+  // elsewhere are left where they are, and so is the key); then, when the
+  // saves are gone, the app deletes the key from the Keychain and calls
+  // again with keys_deleted; last, portenvd's record. A failure records the
+  // step it stopped at (ListBoxes shows it, OpenBox refuses the box) and a
+  // call again continues from there.
+  rpc DeleteBox(DeleteBoxRequest) returns (DeleteBoxResponse);
   // Attachments (ADR 0030), the owner only: an agent caller is refused.
   // ReadAttachment streams one from this Mac's store, the record first.
   rpc ReadAttachment(ReadAttachmentRequest) returns (stream ReadAttachmentResponse);
@@ -209,6 +251,67 @@ service DaemonService {
   // Remove from this Mac: deletes one attachment's bytes; its records stay.
   rpc RemoveAttachment(RemoveAttachmentRequest) returns (RemoveAttachmentResponse);
 }
+
+message GetPushesRequest {
+  string name = 1;
+}
+
+message GetPushesResponse {
+  // github.com/OWNER/REPO, or empty when the workspace has none.
+  string repo = 1;
+  bool allowed = 2;
+}
+
+message StopAllowingPushesRequest {
+  string name = 1;
+}
+
+message StopAllowingPushesResponse {}
+
+message WatchPushesRequest {
+  string name = 1;
+}
+
+message WatchPushesResponse {
+  PushQuestion question = 1;
+}
+
+message PushQuestion {
+  string id = 1;
+  // github.com/OWNER/REPO.
+  string repo = 2;
+  // The owner must say yes in the app (first push, force or delete);
+  // otherwise the app answers with the sign-in alone.
+  bool needs_yes = 3;
+  bool first = 4;
+  repeated PushUpdateInfo updates = 5;
+  // Only the remote's refs are read (git's list for-push).
+  bool list = 6;
+  // The question was answered or gave up: the app takes it down.
+  bool gone = 7;
+  // A fetch, pull or ls-remote (R-0392): only the sign-in is asked for, and
+  // a public repository works without one.
+  bool fetch = 8;
+}
+
+message PushUpdateInfo {
+  string dst = 1;
+  string new_sha = 2;
+  bool force = 3;
+  bool delete = 4;
+}
+
+message AnswerPushRequest {
+  string name = 1;
+  string id = 2;
+  bool allow = 3;
+  // The owner's GitHub sign-in, in memory, for this push alone.
+  string github_token = 4;
+  // The app has no GitHub sign-in.
+  bool signed_out = 5;
+}
+
+message AnswerPushResponse {}
 
 message CheckBoxRequest {
   string name = 1;
@@ -343,6 +446,11 @@ message BoxStatus {
   // The box's repository also has the recovery-derived key (ADR 0019), so
   // a typed recovery key can be checked against it. Not a secret.
   bool carries_recovery_key = 4;
+  // DeleteBox started and hasn't finished (ADR 0029): the box can't open;
+  // DeleteBox again continues from delete_step.
+  bool deleting = 5;
+  // The step the deletion stopped at.
+  DeleteStep delete_step = 6;
 }
 
 message GetChannelRequest {
@@ -628,6 +736,32 @@ message CreateBoxRequest {
   // Used to add and check the recovery key, then dropped: never stored,
   // never logged. The recovery key itself never reaches portenvd.
   bytes recovery_password = 8;
+  // The team chosen in New workspace (ADR 0025), with the SHA-256 of each
+  // included agent's file as the owner approved it. CreateBox checks it
+  // and keeps it for ApplyTeamPlan; it's written once the workspace runs.
+  TeamPlanChoice team = 9;
+  // Where the project comes from (ADR 0025 §2); unset keeps today's
+  // behaviour, no project. Kept with the team for ApplyTeamPlan.
+  ProjectSource project = 10;
+}
+
+// New workspace's Project step (ADR 0025 §2).
+message ProjectSource {
+  oneof source {
+    // An empty project, git on main.
+    bool empty = 1;
+    // https://github.com/OWNER/REPO, cloned when the workspace first runs.
+    string github_url = 2;
+  }
+  // Clone with the owner's GitHub sign-in (a private repository): the app
+  // passes it to ApplyTeamPlan, in memory; it's never kept.
+  bool use_sign_in = 3;
+}
+
+// What CreateBox keeps for ApplyTeamPlan: the project, then the team.
+message WorkspaceSetup {
+  ProjectSource project = 1;
+  TeamPlanChoice team = 2;
 }
 
 message CreateBoxResponse {
@@ -897,6 +1031,153 @@ message ListAgentsRequest {
 
 message ListAgentsResponse {
   repeated AgentInfo agents = 1;
+  // The team against the owner's agent limit (R-0347).
+  TeamLimit team_limit = 2;
+}
+
+// A team against the owner's agent limit (R-0347), for the Team section.
+message TeamLimit {
+  // Settings › Team › Agents allowed: 1 to 8, 4 by default.
+  int32 agents_allowed = 1;
+  // The agent files in the team, and the agents starting or running.
+  int32 agents_in_team = 2;
+  int32 agents_running = 3;
+  // One plain line when the team is at, near or over the limit; empty
+  // otherwise.
+  string line = 4;
+  // When the team needs more than the limit allows: the number to raise
+  // it to (at most 8), offered as the owner's confirmed Raise. 0 otherwise.
+  int32 raise_to = 5;
+}
+
+message ListTeamTemplatesRequest {}
+
+message ListTeamTemplatesResponse {
+  repeated TeamTemplate templates = 1;
+}
+
+// A built-in template, as the Team step's picker shows it.
+message TeamTemplate {
+  string id = 1;
+  string name = 2;
+  // Its agents' names, those that are on.
+  string description = 3;
+  // Its agents with no changes.
+  repeated PlannedAgent agents = 4;
+}
+
+// The owner's choices for a template (ADR 0025 §3).
+message TeamPlanChoice {
+  string template = 1;
+  // Agents not named keep the template's defaults.
+  repeated TeamAgentChoice agents = 2;
+}
+
+message TeamAgentChoice {
+  string id = 1;
+  bool include = 2;
+  // Empty keeps the template's.
+  string name = 3;
+  // One of the runner's models; empty keeps the template's.
+  string model = 4;
+  // Lets the agent see the team's status (none unless ticked).
+  bool team_status = 5;
+  // The SHA-256 of the file the owner approved (CreateBox only).
+  string approved_sha256 = 6;
+}
+
+message PlanTeamRequest {
+  TeamPlanChoice choice = 1;
+}
+
+message PlanTeamResponse {
+  repeated PlannedAgent agents = 1;
+  // How many are included, and Settings › Team › Agents allowed.
+  int32 included = 2;
+  int32 agents_allowed = 3;
+  // Problems with the team as a whole, one plain line each.
+  repeated string problems = 4;
+}
+
+// One agent file as it would be written.
+message PlannedAgent {
+  string id = 1;
+  string name = 2;
+  string role = 3;
+  string avatar = 4;
+  string template_name = 5;
+  bool included = 6;
+  bool template_included = 7;
+  // Where it goes: .portenv/agents/<id>.md, or .portenv/agents/off/<id>.md
+  // for an agent left out (Portenv doesn't load off/).
+  string path = 8;
+  string content = 9;
+  string sha256 = 10;
+  // The runner's registry id and name, and the file's runner line.
+  string runner = 11;
+  string runner_name = 12;
+  string runner_line = 13;
+  // The --model value; empty for the runner's own default.
+  string model = 14;
+  string template_model = 15;
+  // The model menu; "" is the runner's default.
+  repeated string models = 16;
+  bool template_team_status = 17;
+  bool team_status = 18;
+  // Changes from the template, one plain line each.
+  repeated string changes = 19;
+  // What the file lets it do, one plain line each (ADR 0025 §4).
+  repeated string grants = 20;
+  // The file's instructions, its body after the frontmatter.
+  string instructions = 21;
+  // Why this file can't be used, one plain line each.
+  repeated string problems = 22;
+}
+
+message ApplyTeamPlanRequest {
+  string name = 1;
+  // The owner's GitHub sign-in, from the Keychain, read by the app in front
+  // of the person, only when the kept setup clones with it (needs_token).
+  // portenvd uses it on the Mac for that fetch alone: never stored, logged
+  // or sent into the workspace.
+  string github_token = 2;
+}
+
+message ApplyTeamPlanResponse {
+  // Whether a kept team was written now.
+  bool applied = 1;
+  // The agents whose files were written and pinned.
+  repeated string pinned = 2;
+  // Anything the owner should know, one plain line each: a file already
+  // there (the project's wins), or one that isn't what was approved.
+  repeated string lines = 3;
+  // The project couldn't be brought in (a clone that failed or was too
+  // big): one plain line. Nothing was written or pinned, and the setup is
+  // kept for the next try.
+  string project_error = 4;
+  // That failure was a repository that needs a GitHub sign-in.
+  bool needs_sign_in = 5;
+  // The kept setup clones with the owner's sign-in and none was given: the
+  // app reads it and calls again. Nothing was done.
+  bool needs_token = 6;
+}
+
+message GetTeamSettingsRequest {}
+
+message GetTeamSettingsResponse {
+  // 1 to max_agents_allowed; default_agents_allowed until the owner sets it.
+  int32 agents_allowed = 1;
+  int32 default_agents_allowed = 2;
+  int32 max_agents_allowed = 3;
+}
+
+message SetAgentsAllowedRequest {
+  // 1 to 8; anything else is refused.
+  int32 agents_allowed = 1;
+}
+
+message SetAgentsAllowedResponse {
+  GetTeamSettingsResponse settings = 1;
 }
 
 // One agent, as the Team sidebar shows it.
@@ -952,6 +1233,9 @@ message WatchTeamResponse {
     portenv.types.v1.BoardMessage message = 2;
     portenv.types.v1.Decision decision = 3;
     string removed_agent_id = 5;
+    // The team against the owner's agent limit (R-0347): sent after the
+    // agents, and again whenever it changes. It carries no cursor.
+    TeamLimit team_limit = 6;
   }
   string cursor = 4;
 }
@@ -1131,6 +1415,74 @@ message DeployRequest {
 message DeployResponse {
   // The decision the deploy waits on in the app, once deploys run.
   portenv.types.v1.Decision decision = 1;
+}
+
+// DeleteBox's steps, in order (ADR 0029).
+enum DeleteStep {
+  DELETE_STEP_UNSPECIFIED = 0;
+  // Stopping and removing the box's instance on this Mac.
+  DELETE_STEP_INSTANCE = 1;
+  // Removing its home storage.
+  DELETE_STEP_HOME = 2;
+  // Deleting its saves on this Mac (saves elsewhere are left).
+  DELETE_STEP_SAVES = 3;
+  // The saves are gone: the app deletes the key from the Keychain.
+  DELETE_STEP_KEY = 4;
+  // Removing portenvd's record of the box, last.
+  DELETE_STEP_RECORD = 5;
+}
+
+message GetDeletePlanRequest {
+  string name = 1;
+}
+
+message GetDeletePlanResponse {
+  string box_id = 1;
+  // How many saves the box has on this Mac and their size on disk, when
+  // its saves are on this Mac (counted without a key: one file per save).
+  int32 save_count = 2;
+  int64 saves_bytes = 3;
+  // The saves are somewhere other than this Mac (a server or a cloud
+  // bucket): DeleteBox leaves them there, and the key stays so they can
+  // still be restored. saves_place says where, as people read it.
+  bool saves_elsewhere = 4;
+  string saves_place = 5;
+  // Open here (running, or still being saved after Quit Anyway): it must
+  // be closed first, the usual way.
+  bool open_here = 6;
+  // Why it can't be deleted now, as one plain line ("" when it can, as far
+  // as portenvd knows without the key; the lease is checked by DeleteBox).
+  string refusal = 7;
+  // A deletion that stopped: DeleteBox continues from here.
+  DeleteStep stopped_at = 8;
+  // The repository also has the recovery-derived key: copies of the saves
+  // made outside Portenv (Time Machine) still open with the recovery key.
+  bool carries_recovery_key = 9;
+}
+
+message DeleteBoxRequest {
+  string name = 1;
+  // The name as the person typed it to confirm; it must equal name.
+  string confirm_name = 2;
+  // The second confirmation, for a box whose saves are elsewhere: the
+  // person read that they stay there. Refused without it.
+  bool confirm_saves_elsewhere = 3;
+  // The app deleted the key IDs the last response gave from the Keychain:
+  // portenvd removes its record and the deletion is finished.
+  bool keys_deleted = 4;
+}
+
+message DeleteBoxResponse {
+  // The record is gone: the box is deleted from this Mac.
+  bool finished = 1;
+  // Set once the saves on this Mac are gone (step KEY): the Keychain
+  // items to delete now. The app deletes them, then calls again with
+  // keys_deleted. Never set while any save remains.
+  repeated string delete_key_ids = 2;
+  // Saves left where they are, as people read the place ("" when none).
+  string saves_left_at = 3;
+  // The step reached.
+  DeleteStep step = 4;
 }
 
 message ReadAttachmentRequest {

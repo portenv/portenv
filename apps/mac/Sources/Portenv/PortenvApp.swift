@@ -56,6 +56,10 @@ struct PortenvApp: App {
             AppRoot(model: model)
                 .task {
                     delegate.sessions = model.sessions
+                    // The workspace whose tab is in front, as Notifier
+                    // reads it (R-0344).
+                    NeedsYouNotifications.shared.frontWorkspace = { Notifier.frontWorkspace() }
+                    NeedsYouNotifications.shared.show = { [model] route in model.show(route) }
                     delegate.runningNames = { [model] in model.knownRunning }
                 }
         }
@@ -77,8 +81,14 @@ struct PortenvApp: App {
             SplitCommands(split: current?.split)
             InspectorToggle(box: current?.controller?.box)
             TeamSidebarToggle(box: current?.controller?.box, team: current?.team)
-            FindCommands()
-            FeedbackCommands()
+            // A commands builder takes at most ten items: Find, Feedback and
+            // text size share one Group.
+            Group {
+                FindCommands()
+                FeedbackCommands()
+                // View › Bigger, Smaller: the terminal's text (R-0362).
+                TextSizeCommands()
+            }
             // Portenv › Settings… (⌘,): the toolbar window (R-0137).
             CommandGroup(replacing: .appSettings) {
                 Button("Settings\u{2026}") { SettingsWindow.show() }
@@ -128,6 +138,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         OnScreen.fixAll()
+        // Needs-you notifications: their delegate and Show (no permission
+        // asked here, §5).
+        NeedsYouNotifications.shared.install()
         // ⌃Tab / ⌃⇧Tab: the next and previous workspace tab (R-0345).
         controlTab = WorkspaceWindows.watchControlTab()
         // SIGTERM (Xcode's Stop, logout, kill) and SIGINT (Ctrl-C in the

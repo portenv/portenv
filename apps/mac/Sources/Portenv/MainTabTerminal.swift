@@ -13,6 +13,8 @@ import SwiftUI
 /// <tab>" with Try Again if that fails: never a blank pane (R-0384).
 struct MainTabTerminal: View {
     @State var shown: TabTerminalShown
+    /// The workspace: its terminal text size (R-0362).
+    let box: String
     /// The tab shown: the current one in the tab bar.
     let tab: String
     /// A new generation (the box opened or restarted) opens the stream again.
@@ -27,11 +29,15 @@ struct MainTabTerminal: View {
     var isActive = true
     var onFocus: () -> Void = {}
     @State private var focused = true
+    /// This pane's text size, from its workspace's (View › Bigger, Smaller).
+    @State private var textSize: TerminalTextSizeState?
 
     var body: some View {
         ZStack {
             if let source = shown.source {
                 TabTerminalPane(source: source, label: label, isFocused: $focused,
+                                textSize: textSize?.points ?? TerminalTextSize.stored(box: box),
+                                onTextSizeKey: { textSize?.apply($0) },
                                 onReset: { shown.reset($0) }, onEnded: { shown.ended($0) })
                     .padding(TerminalLayout.margin)
             }
@@ -81,10 +87,22 @@ struct MainTabTerminal: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(nsColor: .textBackgroundColor))
+        // View › Bigger and Smaller act on the focused pane (R-0362): only
+        // it publishes its size, from a view of its own so the terminal
+        // keeps its identity when the focus moves.
+        .background {
+            if isActive, let textSize {
+                Color.clear.focusedSceneValue(\.terminalTextSize, textSize)
+            }
+        }
         .onAppear {
+            if textSize?.box != box {
+                textSize = TerminalTextSizeState(box: box, announce: Announce.high)
+            }
             focused = isActive
             shown.show(tab: tab, generation: generation)
         }
+        .onChange(of: box) { textSize = TerminalTextSizeState(box: box, announce: Announce.high) }
         .onChange(of: isActive) { focused = isActive }
         .onChange(of: focused) { if focused { onFocus() } }
         .onChange(of: "\(generation)/\(tab)") { shown.show(tab: tab, generation: generation) }

@@ -802,6 +802,149 @@ public enum Portenv_Daemon_V1_DaemonService: Sendable {
                 type: .unary
             )
         }
+        /// Namespace for "GetTeamSettings" metadata.
+        public enum GetTeamSettings: Sendable {
+            /// Request type for "GetTeamSettings".
+            public typealias Input = Portenv_Daemon_V1_GetTeamSettingsRequest
+            /// Response type for "GetTeamSettings".
+            public typealias Output = Portenv_Daemon_V1_GetTeamSettingsResponse
+            /// Descriptor for "GetTeamSettings".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "GetTeamSettings",
+                type: .unary
+            )
+        }
+        /// Namespace for "SetAgentsAllowed" metadata.
+        public enum SetAgentsAllowed: Sendable {
+            /// Request type for "SetAgentsAllowed".
+            public typealias Input = Portenv_Daemon_V1_SetAgentsAllowedRequest
+            /// Response type for "SetAgentsAllowed".
+            public typealias Output = Portenv_Daemon_V1_SetAgentsAllowedResponse
+            /// Descriptor for "SetAgentsAllowed".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "SetAgentsAllowed",
+                type: .unary
+            )
+        }
+        /// Namespace for "ListTeamTemplates" metadata.
+        public enum ListTeamTemplates: Sendable {
+            /// Request type for "ListTeamTemplates".
+            public typealias Input = Portenv_Daemon_V1_ListTeamTemplatesRequest
+            /// Response type for "ListTeamTemplates".
+            public typealias Output = Portenv_Daemon_V1_ListTeamTemplatesResponse
+            /// Descriptor for "ListTeamTemplates".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "ListTeamTemplates",
+                type: .unary
+            )
+        }
+        /// Namespace for "PlanTeam" metadata.
+        public enum PlanTeam: Sendable {
+            /// Request type for "PlanTeam".
+            public typealias Input = Portenv_Daemon_V1_PlanTeamRequest
+            /// Response type for "PlanTeam".
+            public typealias Output = Portenv_Daemon_V1_PlanTeamResponse
+            /// Descriptor for "PlanTeam".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "PlanTeam",
+                type: .unary
+            )
+        }
+        /// Namespace for "ApplyTeamPlan" metadata.
+        public enum ApplyTeamPlan: Sendable {
+            /// Request type for "ApplyTeamPlan".
+            public typealias Input = Portenv_Daemon_V1_ApplyTeamPlanRequest
+            /// Response type for "ApplyTeamPlan".
+            public typealias Output = Portenv_Daemon_V1_ApplyTeamPlanResponse
+            /// Descriptor for "ApplyTeamPlan".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "ApplyTeamPlan",
+                type: .unary
+            )
+        }
+        /// Namespace for "WatchPushes" metadata.
+        public enum WatchPushes: Sendable {
+            /// Request type for "WatchPushes".
+            public typealias Input = Portenv_Daemon_V1_WatchPushesRequest
+            /// Response type for "WatchPushes".
+            public typealias Output = Portenv_Daemon_V1_WatchPushesResponse
+            /// Descriptor for "WatchPushes".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "WatchPushes",
+                type: .serverStreaming
+            )
+        }
+        /// Namespace for "AnswerPush" metadata.
+        public enum AnswerPush: Sendable {
+            /// Request type for "AnswerPush".
+            public typealias Input = Portenv_Daemon_V1_AnswerPushRequest
+            /// Response type for "AnswerPush".
+            public typealias Output = Portenv_Daemon_V1_AnswerPushResponse
+            /// Descriptor for "AnswerPush".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "AnswerPush",
+                type: .unary
+            )
+        }
+        /// Namespace for "GetPushes" metadata.
+        public enum GetPushes: Sendable {
+            /// Request type for "GetPushes".
+            public typealias Input = Portenv_Daemon_V1_GetPushesRequest
+            /// Response type for "GetPushes".
+            public typealias Output = Portenv_Daemon_V1_GetPushesResponse
+            /// Descriptor for "GetPushes".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "GetPushes",
+                type: .unary
+            )
+        }
+        /// Namespace for "StopAllowingPushes" metadata.
+        public enum StopAllowingPushes: Sendable {
+            /// Request type for "StopAllowingPushes".
+            public typealias Input = Portenv_Daemon_V1_StopAllowingPushesRequest
+            /// Response type for "StopAllowingPushes".
+            public typealias Output = Portenv_Daemon_V1_StopAllowingPushesResponse
+            /// Descriptor for "StopAllowingPushes".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "StopAllowingPushes",
+                type: .unary
+            )
+        }
+        /// Namespace for "GetDeletePlan" metadata.
+        public enum GetDeletePlan: Sendable {
+            /// Request type for "GetDeletePlan".
+            public typealias Input = Portenv_Daemon_V1_GetDeletePlanRequest
+            /// Response type for "GetDeletePlan".
+            public typealias Output = Portenv_Daemon_V1_GetDeletePlanResponse
+            /// Descriptor for "GetDeletePlan".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "GetDeletePlan",
+                type: .unary
+            )
+        }
+        /// Namespace for "DeleteBox" metadata.
+        public enum DeleteBox: Sendable {
+            /// Request type for "DeleteBox".
+            public typealias Input = Portenv_Daemon_V1_DeleteBoxRequest
+            /// Response type for "DeleteBox".
+            public typealias Output = Portenv_Daemon_V1_DeleteBoxResponse
+            /// Descriptor for "DeleteBox".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "DeleteBox",
+                type: .unary
+            )
+        }
         /// Namespace for "ReadAttachment" metadata.
         public enum ReadAttachment: Sendable {
             /// Request type for "ReadAttachment".
@@ -903,6 +1046,17 @@ public enum Portenv_Daemon_V1_DaemonService: Sendable {
             WakeAgent.descriptor,
             ListDecisions.descriptor,
             Deploy.descriptor,
+            GetTeamSettings.descriptor,
+            SetAgentsAllowed.descriptor,
+            ListTeamTemplates.descriptor,
+            PlanTeam.descriptor,
+            ApplyTeamPlan.descriptor,
+            WatchPushes.descriptor,
+            AnswerPush.descriptor,
+            GetPushes.descriptor,
+            StopAllowingPushes.descriptor,
+            GetDeletePlan.descriptor,
+            DeleteBox.descriptor,
             ReadAttachment.descriptor,
             SendAttachments.descriptor,
             RemoveAttachment.descriptor
@@ -2354,6 +2508,270 @@ extension Portenv_Daemon_V1_DaemonService {
             deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_DeployResponse>,
             options: GRPCCore.CallOptions,
             onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_DeployResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "GetTeamSettings" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > The owner's team settings (R-0347): how many agents may run in one
+        /// > workspace (Settings › Team › Agents allowed). Set only by the app, in
+        /// > front of the person: from Settings, or the owner's confirmed Raise.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_GetTeamSettingsRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_GetTeamSettingsRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_GetTeamSettingsResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func getTeamSettings<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_GetTeamSettingsRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_GetTeamSettingsRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_GetTeamSettingsResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_GetTeamSettingsResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "SetAgentsAllowed" method.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_SetAgentsAllowedRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_SetAgentsAllowedRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_SetAgentsAllowedResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func setAgentsAllowed<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_SetAgentsAllowedRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_SetAgentsAllowedRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_SetAgentsAllowedResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_SetAgentsAllowedResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "ListTeamTemplates" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > ADR 0025: the New-workspace Team step. The built-in team templates,
+        /// > each with its agents as they'd be written with no changes.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_ListTeamTemplatesRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_ListTeamTemplatesRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_ListTeamTemplatesResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func listTeamTemplates<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_ListTeamTemplatesRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_ListTeamTemplatesRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_ListTeamTemplatesResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ListTeamTemplatesResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "PlanTeam" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > A template with the owner's choices, as the exact agent files that
+        /// > would be written, each checked as portenvd checks any agent file.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_PlanTeamRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_PlanTeamRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_PlanTeamResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func planTeam<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_PlanTeamRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_PlanTeamRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_PlanTeamResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_PlanTeamResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "ApplyTeamPlan" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Writes the team CreateBox kept for this workspace into its project
+        /// > (made empty, with git, if it isn't there), as work, never over a file,
+        /// > and pins each file the owner approved, only if it's those bytes. Only
+        /// > the owner's app calls it, once the workspace is open; with no team
+        /// > kept, it does nothing.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_ApplyTeamPlanRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_ApplyTeamPlanRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_ApplyTeamPlanResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func applyTeamPlan<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_ApplyTeamPlanRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_ApplyTeamPlanRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_ApplyTeamPlanResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ApplyTeamPlanResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "WatchPushes" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Pushes from the workspace (R-0391) waiting for the app: each needs the
+        /// > owner's GitHub sign-in, and some the owner's yes (the first push from
+        /// > the workspace, a force, a delete). The window's app answers each with
+        /// > AnswerPush.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_WatchPushesRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_WatchPushesRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_WatchPushesResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func watchPushes<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_WatchPushesRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_WatchPushesRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_WatchPushesResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.StreamingClientResponse<Portenv_Daemon_V1_WatchPushesResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "AnswerPush" method.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_AnswerPushRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_AnswerPushRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_AnswerPushResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func answerPush<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_AnswerPushRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_AnswerPushRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_AnswerPushResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_AnswerPushResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "GetPushes" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Whether the workspace's pushes are allowed (the first push's yes, kept
+        /// > on the Mac), and the inspector's Stop Allowing Pushes.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_GetPushesRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_GetPushesRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_GetPushesResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func getPushes<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_GetPushesRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_GetPushesRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_GetPushesResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_GetPushesResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "StopAllowingPushes" method.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_StopAllowingPushesRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_StopAllowingPushesRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_StopAllowingPushesResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func stopAllowingPushes<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_StopAllowingPushesRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_StopAllowingPushesRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_StopAllowingPushesResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_StopAllowingPushesResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "GetDeletePlan" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Delete Workspace… (ADR 0029): what deleting the box would remove and
+        /// > whether it can be deleted now, for the confirmation sheet. Read only:
+        /// > it needs no key and runs no restic.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_GetDeletePlanRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_GetDeletePlanRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_GetDeletePlanResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func getDeletePlan<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_GetDeletePlanRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_GetDeletePlanRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_GetDeletePlanResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_GetDeletePlanResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "DeleteBox" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Deletes a box (ADR 0029), only for the person at this Mac (the app or
+        /// > the CLI; never an agent), in a fixed order, each step safe to repeat:
+        /// > the checks (the typed name, not open or saving here, not moving or on
+        /// > a server, saves elsewhere confirmed, no other machine holding the
+        /// > lease); the instance; the home storage; the saves on this Mac (saves
+        /// > elsewhere are left where they are, and so is the key); then, when the
+        /// > saves are gone, the app deletes the key from the Keychain and calls
+        /// > again with keys_deleted; last, portenvd's record. A failure records the
+        /// > step it stopped at (ListBoxes shows it, OpenBox refuses the box) and a
+        /// > call again continues from there.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_DeleteBoxRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_DeleteBoxRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_DeleteBoxResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func deleteBox<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_DeleteBoxRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_DeleteBoxRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_DeleteBoxResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_DeleteBoxResponse>) async throws -> Result
         ) async throws -> Result where Result: Sendable
 
         /// Call the "ReadAttachment" method.
@@ -4523,6 +4941,389 @@ extension Portenv_Daemon_V1_DaemonService {
             )
         }
 
+        /// Call the "GetTeamSettings" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > The owner's team settings (R-0347): how many agents may run in one
+        /// > workspace (Settings › Team › Agents allowed). Set only by the app, in
+        /// > front of the person: from Settings, or the owner's confirmed Raise.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_GetTeamSettingsRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_GetTeamSettingsRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_GetTeamSettingsResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func getTeamSettings<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_GetTeamSettingsRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_GetTeamSettingsRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_GetTeamSettingsResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_GetTeamSettingsResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.GetTeamSettings.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
+
+        /// Call the "SetAgentsAllowed" method.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_SetAgentsAllowedRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_SetAgentsAllowedRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_SetAgentsAllowedResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func setAgentsAllowed<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_SetAgentsAllowedRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_SetAgentsAllowedRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_SetAgentsAllowedResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_SetAgentsAllowedResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.SetAgentsAllowed.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
+
+        /// Call the "ListTeamTemplates" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > ADR 0025: the New-workspace Team step. The built-in team templates,
+        /// > each with its agents as they'd be written with no changes.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_ListTeamTemplatesRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_ListTeamTemplatesRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_ListTeamTemplatesResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func listTeamTemplates<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_ListTeamTemplatesRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_ListTeamTemplatesRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_ListTeamTemplatesResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ListTeamTemplatesResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.ListTeamTemplates.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
+
+        /// Call the "PlanTeam" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > A template with the owner's choices, as the exact agent files that
+        /// > would be written, each checked as portenvd checks any agent file.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_PlanTeamRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_PlanTeamRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_PlanTeamResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func planTeam<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_PlanTeamRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_PlanTeamRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_PlanTeamResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_PlanTeamResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.PlanTeam.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
+
+        /// Call the "ApplyTeamPlan" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Writes the team CreateBox kept for this workspace into its project
+        /// > (made empty, with git, if it isn't there), as work, never over a file,
+        /// > and pins each file the owner approved, only if it's those bytes. Only
+        /// > the owner's app calls it, once the workspace is open; with no team
+        /// > kept, it does nothing.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_ApplyTeamPlanRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_ApplyTeamPlanRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_ApplyTeamPlanResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func applyTeamPlan<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_ApplyTeamPlanRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_ApplyTeamPlanRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_ApplyTeamPlanResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ApplyTeamPlanResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.ApplyTeamPlan.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
+
+        /// Call the "WatchPushes" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Pushes from the workspace (R-0391) waiting for the app: each needs the
+        /// > owner's GitHub sign-in, and some the owner's yes (the first push from
+        /// > the workspace, a force, a delete). The window's app answers each with
+        /// > AnswerPush.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_WatchPushesRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_WatchPushesRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_WatchPushesResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func watchPushes<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_WatchPushesRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_WatchPushesRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_WatchPushesResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.StreamingClientResponse<Portenv_Daemon_V1_WatchPushesResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.serverStreaming(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.WatchPushes.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
+
+        /// Call the "AnswerPush" method.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_AnswerPushRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_AnswerPushRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_AnswerPushResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func answerPush<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_AnswerPushRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_AnswerPushRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_AnswerPushResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_AnswerPushResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.AnswerPush.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
+
+        /// Call the "GetPushes" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Whether the workspace's pushes are allowed (the first push's yes, kept
+        /// > on the Mac), and the inspector's Stop Allowing Pushes.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_GetPushesRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_GetPushesRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_GetPushesResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func getPushes<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_GetPushesRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_GetPushesRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_GetPushesResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_GetPushesResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.GetPushes.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
+
+        /// Call the "StopAllowingPushes" method.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_StopAllowingPushesRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_StopAllowingPushesRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_StopAllowingPushesResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func stopAllowingPushes<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_StopAllowingPushesRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_StopAllowingPushesRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_StopAllowingPushesResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_StopAllowingPushesResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.StopAllowingPushes.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
+
+        /// Call the "GetDeletePlan" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Delete Workspace… (ADR 0029): what deleting the box would remove and
+        /// > whether it can be deleted now, for the confirmation sheet. Read only:
+        /// > it needs no key and runs no restic.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_GetDeletePlanRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_GetDeletePlanRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_GetDeletePlanResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func getDeletePlan<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_GetDeletePlanRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_GetDeletePlanRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_GetDeletePlanResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_GetDeletePlanResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.GetDeletePlan.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
+
+        /// Call the "DeleteBox" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Deletes a box (ADR 0029), only for the person at this Mac (the app or
+        /// > the CLI; never an agent), in a fixed order, each step safe to repeat:
+        /// > the checks (the typed name, not open or saving here, not moving or on
+        /// > a server, saves elsewhere confirmed, no other machine holding the
+        /// > lease); the instance; the home storage; the saves on this Mac (saves
+        /// > elsewhere are left where they are, and so is the key); then, when the
+        /// > saves are gone, the app deletes the key from the Keychain and calls
+        /// > again with keys_deleted; last, portenvd's record. A failure records the
+        /// > step it stopped at (ListBoxes shows it, OpenBox refuses the box) and a
+        /// > call again continues from there.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_DeleteBoxRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_DeleteBoxRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_DeleteBoxResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func deleteBox<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_DeleteBoxRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_DeleteBoxRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_DeleteBoxResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_DeleteBoxResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.DeleteBox.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
+
         /// Call the "ReadAttachment" method.
         ///
         /// > Source IDL Documentation:
@@ -6400,6 +7201,334 @@ extension Portenv_Daemon_V1_DaemonService.ClientProtocol {
             request: request,
             serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_DeployRequest>(),
             deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_DeployResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "GetTeamSettings" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > The owner's team settings (R-0347): how many agents may run in one
+    /// > workspace (Settings › Team › Agents allowed). Set only by the app, in
+    /// > front of the person: from Settings, or the owner's confirmed Raise.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_GetTeamSettingsRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func getTeamSettings<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_GetTeamSettingsRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_GetTeamSettingsResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.getTeamSettings(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_GetTeamSettingsRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_GetTeamSettingsResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "SetAgentsAllowed" method.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_SetAgentsAllowedRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func setAgentsAllowed<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_SetAgentsAllowedRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_SetAgentsAllowedResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.setAgentsAllowed(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_SetAgentsAllowedRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_SetAgentsAllowedResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "ListTeamTemplates" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > ADR 0025: the New-workspace Team step. The built-in team templates,
+    /// > each with its agents as they'd be written with no changes.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_ListTeamTemplatesRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func listTeamTemplates<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_ListTeamTemplatesRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ListTeamTemplatesResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.listTeamTemplates(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_ListTeamTemplatesRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_ListTeamTemplatesResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "PlanTeam" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > A template with the owner's choices, as the exact agent files that
+    /// > would be written, each checked as portenvd checks any agent file.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_PlanTeamRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func planTeam<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_PlanTeamRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_PlanTeamResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.planTeam(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_PlanTeamRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_PlanTeamResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "ApplyTeamPlan" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Writes the team CreateBox kept for this workspace into its project
+    /// > (made empty, with git, if it isn't there), as work, never over a file,
+    /// > and pins each file the owner approved, only if it's those bytes. Only
+    /// > the owner's app calls it, once the workspace is open; with no team
+    /// > kept, it does nothing.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_ApplyTeamPlanRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func applyTeamPlan<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_ApplyTeamPlanRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ApplyTeamPlanResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.applyTeamPlan(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_ApplyTeamPlanRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_ApplyTeamPlanResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "WatchPushes" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Pushes from the workspace (R-0391) waiting for the app: each needs the
+    /// > owner's GitHub sign-in, and some the owner's yes (the first push from
+    /// > the workspace, a force, a delete). The window's app answers each with
+    /// > AnswerPush.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_WatchPushesRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func watchPushes<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_WatchPushesRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.StreamingClientResponse<Portenv_Daemon_V1_WatchPushesResponse>) async throws -> Result
+    ) async throws -> Result where Result: Sendable {
+        try await self.watchPushes(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_WatchPushesRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_WatchPushesResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "AnswerPush" method.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_AnswerPushRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func answerPush<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_AnswerPushRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_AnswerPushResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.answerPush(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_AnswerPushRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_AnswerPushResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "GetPushes" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Whether the workspace's pushes are allowed (the first push's yes, kept
+    /// > on the Mac), and the inspector's Stop Allowing Pushes.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_GetPushesRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func getPushes<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_GetPushesRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_GetPushesResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.getPushes(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_GetPushesRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_GetPushesResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "StopAllowingPushes" method.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_StopAllowingPushesRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func stopAllowingPushes<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_StopAllowingPushesRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_StopAllowingPushesResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.stopAllowingPushes(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_StopAllowingPushesRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_StopAllowingPushesResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "GetDeletePlan" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Delete Workspace… (ADR 0029): what deleting the box would remove and
+    /// > whether it can be deleted now, for the confirmation sheet. Read only:
+    /// > it needs no key and runs no restic.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_GetDeletePlanRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func getDeletePlan<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_GetDeletePlanRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_GetDeletePlanResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.getDeletePlan(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_GetDeletePlanRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_GetDeletePlanResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "DeleteBox" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Deletes a box (ADR 0029), only for the person at this Mac (the app or
+    /// > the CLI; never an agent), in a fixed order, each step safe to repeat:
+    /// > the checks (the typed name, not open or saving here, not moving or on
+    /// > a server, saves elsewhere confirmed, no other machine holding the
+    /// > lease); the instance; the home storage; the saves on this Mac (saves
+    /// > elsewhere are left where they are, and so is the key); then, when the
+    /// > saves are gone, the app deletes the key from the Keychain and calls
+    /// > again with keys_deleted; last, portenvd's record. A failure records the
+    /// > step it stopped at (ListBoxes shows it, OpenBox refuses the box) and a
+    /// > call again continues from there.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_DeleteBoxRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func deleteBox<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_DeleteBoxRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_DeleteBoxResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.deleteBox(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_DeleteBoxRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_DeleteBoxResponse>(),
             options: options,
             onResponse: handleResponse
         )
@@ -8508,6 +9637,378 @@ extension Portenv_Daemon_V1_DaemonService.ClientProtocol {
             metadata: metadata
         )
         return try await self.deploy(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "GetTeamSettings" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > The owner's team settings (R-0347): how many agents may run in one
+    /// > workspace (Settings › Team › Agents allowed). Set only by the app, in
+    /// > front of the person: from Settings, or the owner's confirmed Raise.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func getTeamSettings<Result>(
+        _ message: Portenv_Daemon_V1_GetTeamSettingsRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_GetTeamSettingsResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_GetTeamSettingsRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.getTeamSettings(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "SetAgentsAllowed" method.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func setAgentsAllowed<Result>(
+        _ message: Portenv_Daemon_V1_SetAgentsAllowedRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_SetAgentsAllowedResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_SetAgentsAllowedRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.setAgentsAllowed(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "ListTeamTemplates" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > ADR 0025: the New-workspace Team step. The built-in team templates,
+    /// > each with its agents as they'd be written with no changes.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func listTeamTemplates<Result>(
+        _ message: Portenv_Daemon_V1_ListTeamTemplatesRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ListTeamTemplatesResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_ListTeamTemplatesRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.listTeamTemplates(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "PlanTeam" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > A template with the owner's choices, as the exact agent files that
+    /// > would be written, each checked as portenvd checks any agent file.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func planTeam<Result>(
+        _ message: Portenv_Daemon_V1_PlanTeamRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_PlanTeamResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_PlanTeamRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.planTeam(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "ApplyTeamPlan" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Writes the team CreateBox kept for this workspace into its project
+    /// > (made empty, with git, if it isn't there), as work, never over a file,
+    /// > and pins each file the owner approved, only if it's those bytes. Only
+    /// > the owner's app calls it, once the workspace is open; with no team
+    /// > kept, it does nothing.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func applyTeamPlan<Result>(
+        _ message: Portenv_Daemon_V1_ApplyTeamPlanRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ApplyTeamPlanResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_ApplyTeamPlanRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.applyTeamPlan(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "WatchPushes" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Pushes from the workspace (R-0391) waiting for the app: each needs the
+    /// > owner's GitHub sign-in, and some the owner's yes (the first push from
+    /// > the workspace, a force, a delete). The window's app answers each with
+    /// > AnswerPush.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func watchPushes<Result>(
+        _ message: Portenv_Daemon_V1_WatchPushesRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.StreamingClientResponse<Portenv_Daemon_V1_WatchPushesResponse>) async throws -> Result
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_WatchPushesRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.watchPushes(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "AnswerPush" method.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func answerPush<Result>(
+        _ message: Portenv_Daemon_V1_AnswerPushRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_AnswerPushResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_AnswerPushRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.answerPush(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "GetPushes" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Whether the workspace's pushes are allowed (the first push's yes, kept
+    /// > on the Mac), and the inspector's Stop Allowing Pushes.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func getPushes<Result>(
+        _ message: Portenv_Daemon_V1_GetPushesRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_GetPushesResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_GetPushesRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.getPushes(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "StopAllowingPushes" method.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func stopAllowingPushes<Result>(
+        _ message: Portenv_Daemon_V1_StopAllowingPushesRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_StopAllowingPushesResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_StopAllowingPushesRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.stopAllowingPushes(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "GetDeletePlan" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Delete Workspace… (ADR 0029): what deleting the box would remove and
+    /// > whether it can be deleted now, for the confirmation sheet. Read only:
+    /// > it needs no key and runs no restic.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func getDeletePlan<Result>(
+        _ message: Portenv_Daemon_V1_GetDeletePlanRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_GetDeletePlanResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_GetDeletePlanRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.getDeletePlan(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "DeleteBox" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Deletes a box (ADR 0029), only for the person at this Mac (the app or
+    /// > the CLI; never an agent), in a fixed order, each step safe to repeat:
+    /// > the checks (the typed name, not open or saving here, not moving or on
+    /// > a server, saves elsewhere confirmed, no other machine holding the
+    /// > lease); the instance; the home storage; the saves on this Mac (saves
+    /// > elsewhere are left where they are, and so is the key); then, when the
+    /// > saves are gone, the app deletes the key from the Keychain and calls
+    /// > again with keys_deleted; last, portenvd's record. A failure records the
+    /// > step it stopped at (ListBoxes shows it, OpenBox refuses the box) and a
+    /// > call again continues from there.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func deleteBox<Result>(
+        _ message: Portenv_Daemon_V1_DeleteBoxRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_DeleteBoxResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_DeleteBoxRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.deleteBox(
             request: request,
             options: options,
             onResponse: handleResponse

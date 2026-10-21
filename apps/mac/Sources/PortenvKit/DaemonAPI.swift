@@ -83,6 +83,22 @@ public protocol DaemonAPI: Sendable {
     /// Pins the agent file whose text hashes to `sha256`; only the owner's
     /// app calls it (R-0285).
     func approveAgentFile(_ box: String, id: String, sha256: String) async throws -> TeamAgent
+    /// Writes and pins the team New workspace kept for this workspace,
+    /// once it runs (ADR 0025); nothing when there's none.
+    func applyTeamPlan(_ box: String, githubToken: String?) async throws -> TeamPlanApplied
+    /// Pushes from the workspace waiting for the app (R-0391).
+    func watchPushes(_ box: String) -> AsyncThrowingStream<PushAsk, Error>
+    /// The app's answer: the sign-in (in memory), and yes or no.
+    func answerPush(_ box: String, id: String, allow: Bool, githubToken: String?, signedOut: Bool) async throws
+    /// The workspace's repository and whether its pushes are allowed.
+    func pushPermission(_ box: String) async throws -> (repo: String, allowed: Bool)
+    /// The inspector's Stop Allowing Pushes.
+    func stopAllowingPushes(_ box: String) async throws
+    /// Settings › Team › Agents allowed (R-0347), as portenvd keeps it.
+    func agentsAllowed() async throws -> Int
+    /// Sets it; portenvd refuses anything outside 1 to 8. Only after the
+    /// owner chose it.
+    func setAgentsAllowed(_ n: Int) async throws -> Int
 }
 
 public extension DaemonAPI {
@@ -111,6 +127,17 @@ public extension DaemonAPI {
     func stopAgent(_: String, id _: String) async throws -> TeamAgent { throw DaemonError(DaemonError.outOfDate) }
     func getAgentFile(_: String, id _: String) async throws -> AgentFileContent { throw DaemonError(DaemonError.outOfDate) }
     func approveAgentFile(_: String, id _: String, sha256 _: String) async throws -> TeamAgent { throw DaemonError(DaemonError.outOfDate) }
+    func applyTeamPlan(_: String, githubToken _: String?) async throws -> TeamPlanApplied { throw DaemonError(DaemonError.outOfDate) }
+    func watchPushes(_: String) -> AsyncThrowingStream<PushAsk, Error> {
+        AsyncThrowingStream { $0.finish(throwing: DaemonError(DaemonError.outOfDate)) }
+    }
+    func answerPush(_: String, id _: String, allow _: Bool, githubToken _: String?, signedOut _: Bool) async throws {
+        throw DaemonError(DaemonError.outOfDate)
+    }
+    func pushPermission(_: String) async throws -> (repo: String, allowed: Bool) { throw DaemonError(DaemonError.outOfDate) }
+    func stopAllowingPushes(_: String) async throws { throw DaemonError(DaemonError.outOfDate) }
+    func agentsAllowed() async throws -> Int { throw DaemonError(DaemonError.outOfDate) }
+    func setAgentsAllowed(_: Int) async throws -> Int { throw DaemonError(DaemonError.outOfDate) }
 }
 
 /// A box saved in the background after Quit Anyway.

@@ -5,7 +5,12 @@
 // is generated from the limits and the proto so it can't drift (R-0247).
 package teamkit
 
-import "time"
+import (
+	"io/fs"
+	"path"
+	"strings"
+	"time"
+)
 
 // The limits (ADR 0022 §7, R-0256 to R-0258). portenvd enforces these
 // values; the guide states them.
@@ -37,3 +42,22 @@ const (
 // ShareLoginOff is the guide's rule while share_login isn't in the tester
 // build (ADR 0022 §2, R-0323, R-0324): nothing of the owner's is shared.
 const ShareLoginOff = "share_login isn't supported in this build: nothing of the owner's sign-ins is shared with you, whatever your agent file says. Sign in yourself in your own terminal, or ask the owner."
+
+// TemplateAgents is how many agents a template asks for: its agent files
+// directly in the template, which are the ones on when it's written. A
+// file in a subfolder (an agent the template ships off) isn't counted. A
+// template asking for more than the owner's limit is offered the raise
+// (R-0347); 0 for no such template.
+func TemplateAgents(name string) int {
+	entries, err := fs.ReadDir(templates, path.Join("templates", name))
+	if err != nil {
+		return 0
+	}
+	n := 0
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".md") {
+			n++
+		}
+	}
+	return n
+}

@@ -535,7 +535,7 @@ final class AppModel {
         // The Team step (ADR 0025) plans through portenvd.
         let flow = FirstRunFlow(service: service, at: step, existing: boxes, fromBoxList: fromBoxList, memory: memory,
                                 docker: nil, serviceGone: serviceGone, teamPlanner: daemon as? TeamPlanning,
-                                githubLogin: { GitHubAccount.system.login })
+                                githubLogin: { GitHubAccount.system.login }, repoAccess: GitHubRepoAccess())
         service.keychainWaiting = { [weak flow] on in Task { @MainActor in flow?.keychainWaiting = on } }
         return flow
     }

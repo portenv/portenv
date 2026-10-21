@@ -32,12 +32,65 @@ struct ProjectStepView: View {
                         .autocorrectionDisabled()
                         .accessibilityLabel(ProjectText.urlField)
                         .onSubmit { Task { await flow.next() } }
-                    GitHubAccountRow(signIn: signIn) { signingIn = true }
+                    // What GitHub says about it, asked on this Mac once the
+                    // address is valid (finding 10).
+                    RepoAccessRow(flow: flow) { signingIn = true }
+                    if !flow.accessWantsSignIn {
+                        GitHubAccountRow(signIn: signIn) { signingIn = true }
+                    }
                 }
             }
         }
+        // Asked again after a pause in typing, and when the sign-in changes.
+        .task(id: "\(flow.accessKey)\n\(signIn.state)") { await flow.checkAccess() }
+        .onChange(of: flow.accessLine) { _, line in
+            if let line, line != ProjectText.checking { Announce.high(line) }
+        }
         .sheet(isPresented: $signingIn) {
             GitHubSignInSheet(signIn: signIn) { signingIn = false }
+        }
+    }
+}
+
+/// The access check's line under the address, and Sign in with GitHub…
+/// when that would fix it.
+struct RepoAccessRow: View {
+    @Bindable var flow: FirstRunFlow
+    let signIn: () -> Void
+
+    var body: some View {
+        if let line = flow.accessLine {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                if flow.access == nil {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Image(systemName: icon).foregroundStyle(tint).accessibilityHidden(true)
+                }
+                Text(verbatim: line).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+            .font(.callout)
+            .frame(maxWidth: 460, alignment: .leading)
+            .accessibilityElement(children: .combine)
+            if flow.accessWantsSignIn {
+                Button(GitHubSignInText.button, action: signIn)
+                    .buttonStyle(.borderedProminent)
+            }
+        }
+    }
+
+    private var icon: String {
+        switch flow.access {
+        case .publicRepo?, .reachable?: "checkmark.circle"
+        case .couldNotCheck?: "questionmark.circle"
+        default: "exclamationmark.triangle"
+        }
+    }
+
+    private var tint: SwiftUI.Color {
+        switch flow.access {
+        case .publicRepo?, .reachable?: .green
+        case .couldNotCheck?: .secondary
+        default: .orange
         }
     }
 }
@@ -155,6 +208,10 @@ struct SetupBanner: View {
             .onAppear { Announce.high(problem.line) }
             .sheet(isPresented: $signingIn) {
                 GitHubSignInSheet(signIn: signIn) { signingIn = false }
+            }
+            // Signing in from the line tries the clone again at once.
+            .onChange(of: signIn.state) { _, s in
+                if case .signedIn = s { Task { await team.retrySetup() } }
             }
         } else if team.settingUp {
             HStack(spacing: 8) {

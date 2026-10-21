@@ -105,6 +105,9 @@ type Server struct {
 	githubAPI string
 	// githubGit is GitHub's git over https (tests: their own server).
 	githubGit string
+	// pushes from workspaces waiting for the app (R-0391).
+	pushOnce sync.Once
+	pushes   *pushQuestions
 }
 
 // openBox is a box this daemon opened: its session, sync engine and agent

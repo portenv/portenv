@@ -80,6 +80,9 @@ service AgentService {
   rpc CloneProject(stream CloneProjectRequest) returns (CloneProjectResponse);
   // Whether the project folder exists, and the room left for it.
   rpc GetProjectRoom(GetProjectRoomRequest) returns (GetProjectRoomResponse);
+  // The bundle git-remote-portenv handed in for a push (R-0391), once:
+  // it's deleted as it's read.
+  rpc ReadPushBundle(ReadPushBundleRequest) returns (stream ReadPushBundleResponse);
   // Served only by init (root) on its local socket, which only the API
   // process reaches; the channel's server answers Unimplemented. init checks
   // every id and package name itself.
@@ -417,7 +420,65 @@ message TeamCallsResponse {
     TeamStatus team_status = 15;
     Handoff handoff = 16;
     ProposeRoutine propose_routine = 17;
+    // The owner's push (R-0391): only on work's own socket.
+    PushList push_list = 18;
+    PushRefs push = 19;
   }
+  // From SO_PEERCRED: the call came from work's own socket, not an agent's.
+  bool owner = 20;
+}
+
+// git-remote-portenv's list for-push: the remote's branches and tags.
+message PushList {}
+
+// git-remote-portenv's push: the updates, and the bundle the helper holds.
+message PushRefs {
+  repeated PushUpdate updates = 1;
+  // The helper's name for the bundle (ReadPushBundle); empty when every
+  // update is a delete.
+  string bundle_id = 2;
+  int64 bundle_bytes = 3;
+}
+
+message PushUpdate {
+  // refs/heads/… or refs/tags/….
+  string dst = 1;
+  // The new object, 40 hex; empty to delete dst.
+  string new_sha = 2;
+  // What list for-push said dst was; empty when it didn't exist.
+  string old_sha = 3;
+  // The person asked for it (+src:dst or --force).
+  bool force = 4;
+}
+
+message RemoteRef {
+  string name = 1;
+  string sha = 2;
+}
+
+message PushListResult {
+  repeated RemoteRef refs = 1;
+  // The remote's default branch (refs/heads/…), for HEAD.
+  string head = 2;
+}
+
+message PushRefStatus {
+  string dst = 1;
+  bool ok = 2;
+  // git's words for a refusal: "non-fast-forward", "fetch first", ….
+  string reason = 3;
+}
+
+message PushResult {
+  repeated PushRefStatus statuses = 1;
+}
+
+message ReadPushBundleRequest {
+  string bundle_id = 1;
+}
+
+message ReadPushBundleResponse {
+  bytes chunk = 1;
 }
 
 // portenvd's answer to one call: the request stream of TeamCalls.
@@ -434,6 +495,8 @@ message TeamCallsRequest {
     portenv.types.v1.BoardMessage message = 7;
     WhoAmIResult whoami = 8;
     TeamStatusResult team_status = 9;
+    PushListResult push_list = 10;
+    PushResult push = 11;
   }
 }
 

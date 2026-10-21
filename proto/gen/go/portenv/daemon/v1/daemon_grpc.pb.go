@@ -90,6 +90,8 @@ const (
 	DaemonService_ListTeamTemplates_FullMethodName     = "/portenv.daemon.v1.DaemonService/ListTeamTemplates"
 	DaemonService_PlanTeam_FullMethodName              = "/portenv.daemon.v1.DaemonService/PlanTeam"
 	DaemonService_ApplyTeamPlan_FullMethodName         = "/portenv.daemon.v1.DaemonService/ApplyTeamPlan"
+	DaemonService_WatchPushes_FullMethodName           = "/portenv.daemon.v1.DaemonService/WatchPushes"
+	DaemonService_AnswerPush_FullMethodName            = "/portenv.daemon.v1.DaemonService/AnswerPush"
 )
 
 // DaemonServiceClient is the client API for DaemonService service.
@@ -303,6 +305,12 @@ type DaemonServiceClient interface {
 	// the owner's app calls it, once the workspace is open; with no team
 	// kept, it does nothing.
 	ApplyTeamPlan(ctx context.Context, in *ApplyTeamPlanRequest, opts ...grpc.CallOption) (*ApplyTeamPlanResponse, error)
+	// Pushes from the workspace (R-0391) waiting for the app: each needs the
+	// owner's GitHub sign-in, and some the owner's yes (the first push from
+	// the workspace, a force, a delete). The window's app answers each with
+	// AnswerPush.
+	WatchPushes(ctx context.Context, in *WatchPushesRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[WatchPushesResponse], error)
+	AnswerPush(ctx context.Context, in *AnswerPushRequest, opts ...grpc.CallOption) (*AnswerPushResponse, error)
 }
 
 type daemonServiceClient struct {
@@ -1008,6 +1016,35 @@ func (c *daemonServiceClient) ApplyTeamPlan(ctx context.Context, in *ApplyTeamPl
 	return out, nil
 }
 
+func (c *daemonServiceClient) WatchPushes(ctx context.Context, in *WatchPushesRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[WatchPushesResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &DaemonService_ServiceDesc.Streams[7], DaemonService_WatchPushes_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[WatchPushesRequest, WatchPushesResponse]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type DaemonService_WatchPushesClient = grpc.ServerStreamingClient[WatchPushesResponse]
+
+func (c *daemonServiceClient) AnswerPush(ctx context.Context, in *AnswerPushRequest, opts ...grpc.CallOption) (*AnswerPushResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AnswerPushResponse)
+	err := c.cc.Invoke(ctx, DaemonService_AnswerPush_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DaemonServiceServer is the server API for DaemonService service.
 // All implementations must embed UnimplementedDaemonServiceServer
 // for forward compatibility.
@@ -1219,6 +1256,12 @@ type DaemonServiceServer interface {
 	// the owner's app calls it, once the workspace is open; with no team
 	// kept, it does nothing.
 	ApplyTeamPlan(context.Context, *ApplyTeamPlanRequest) (*ApplyTeamPlanResponse, error)
+	// Pushes from the workspace (R-0391) waiting for the app: each needs the
+	// owner's GitHub sign-in, and some the owner's yes (the first push from
+	// the workspace, a force, a delete). The window's app answers each with
+	// AnswerPush.
+	WatchPushes(*WatchPushesRequest, grpc.ServerStreamingServer[WatchPushesResponse]) error
+	AnswerPush(context.Context, *AnswerPushRequest) (*AnswerPushResponse, error)
 	mustEmbedUnimplementedDaemonServiceServer()
 }
 
@@ -1423,6 +1466,12 @@ func (UnimplementedDaemonServiceServer) PlanTeam(context.Context, *PlanTeamReque
 }
 func (UnimplementedDaemonServiceServer) ApplyTeamPlan(context.Context, *ApplyTeamPlanRequest) (*ApplyTeamPlanResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ApplyTeamPlan not implemented")
+}
+func (UnimplementedDaemonServiceServer) WatchPushes(*WatchPushesRequest, grpc.ServerStreamingServer[WatchPushesResponse]) error {
+	return status.Error(codes.Unimplemented, "method WatchPushes not implemented")
+}
+func (UnimplementedDaemonServiceServer) AnswerPush(context.Context, *AnswerPushRequest) (*AnswerPushResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AnswerPush not implemented")
 }
 func (UnimplementedDaemonServiceServer) mustEmbedUnimplementedDaemonServiceServer() {}
 func (UnimplementedDaemonServiceServer) testEmbeddedByValue()                       {}
@@ -2554,6 +2603,35 @@ func _DaemonService_ApplyTeamPlan_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _DaemonService_WatchPushes_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(WatchPushesRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(DaemonServiceServer).WatchPushes(m, &grpc.GenericServerStream[WatchPushesRequest, WatchPushesResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type DaemonService_WatchPushesServer = grpc.ServerStreamingServer[WatchPushesResponse]
+
+func _DaemonService_AnswerPush_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AnswerPushRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).AnswerPush(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_AnswerPush_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).AnswerPush(ctx, req.(*AnswerPushRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // DaemonService_ServiceDesc is the grpc.ServiceDesc for DaemonService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -2793,6 +2871,10 @@ var DaemonService_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "ApplyTeamPlan",
 			Handler:    _DaemonService_ApplyTeamPlan_Handler,
 		},
+		{
+			MethodName: "AnswerPush",
+			Handler:    _DaemonService_AnswerPush_Handler,
+		},
 	},
 	Streams: []grpc.StreamDesc{
 		{
@@ -2831,6 +2913,11 @@ var DaemonService_ServiceDesc = grpc.ServiceDesc{
 			StreamName:    "AddAgentFiles",
 			Handler:       _DaemonService_AddAgentFiles_Handler,
 			ClientStreams: true,
+		},
+		{
+			StreamName:    "WatchPushes",
+			Handler:       _DaemonService_WatchPushes_Handler,
+			ServerStreams: true,
 		},
 	},
 	Metadata: "portenv/daemon/v1/daemon.proto",

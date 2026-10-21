@@ -277,19 +277,19 @@ func TestControlClientRestarts(t *testing.T) {
 	raw("set-option", "-g", "set-clipboard", "external")
 	hub, _ := s.ctlHub()
 	hub.restartAfter = 10 * time.Millisecond
-	// Kill the control client from outside.
-	pids := strings.Fields(raw("list-clients", "-F", "#{client_control_mode} #{client_pid}"))
-	killed := false
-	for i := 0; i+1 < len(pids); i += 2 {
-		if pids[i] == "1" {
-			if err := exec.Command("kill", pids[i+1]).Run(); err != nil { // #nosec G204 -- test
-				t.Fatal(err)
-			}
-			killed = true
+	// Kill the control client from outside, once it's attached: the watch's
+	// first list comes before that (it doesn't wait for the client), so on
+	// a loaded machine tmux may not list the client yet.
+	var pids []string
+	for end := time.Now().Add(5 * time.Second); len(pids) == 0; time.Sleep(10 * time.Millisecond) {
+		if pids = controlClients(raw); len(pids) == 0 && time.Now().After(end) {
+			t.Fatal("no control client attached")
 		}
 	}
-	if !killed {
-		t.Fatalf("no control client in %q", pids)
+	for _, pid := range pids {
+		if err := exec.Command("kill", pid).Run(); err != nil { // #nosec G204 -- test
+			t.Fatal(err)
+		}
 	}
 	deadline := time.Now().Add(3 * time.Second)
 	for raw("show-options", "-gv", "set-clipboard") != "off" {
@@ -300,6 +300,72 @@ func TestControlClientRestarts(t *testing.T) {
 	}
 	raw("new-window", "-d", "-t", "=main:", "-n", "after")
 	watchUntil(t, w, "a window after the restart", func(n string) bool { return n == "shell*,after" })
+}
+
+// controlClients is the pids of the control clients attached to the test
+// tmux's sessions.
+func controlClients(raw func(args ...string) string) []string {
+	var pids []string
+	f := strings.Fields(raw("list-clients", "-F", "#{client_control_mode} #{client_pid}"))
+	for i := 0; i+1 < len(f); i += 2 {
+		if f[i] == "1" {
+			pids = append(pids, f[i+1])
+		}
+	}
+	return pids
+}
+
+// ctlReady and ctlRestart come once the client is attached, not when its
+// process starts: tmux sends a client only the events after its attach, so a
+// subscriber that lists on either (the tab watch) and missed a window made in
+// between would never hear of it. The client here takes 300 ms to attach.
+func TestControlClientReadyOnceAttached(t *testing.T) {
+	tb, raw, cmdf := testTabsCmd(t)
+	ctx := context.Background()
+	if err := tb.ensure(ctx); err != nil {
+		t.Fatal(err)
+	}
+	slow := func(ctx context.Context, args ...string) *exec.Cmd {
+		c := cmdf(ctx, args...)
+		s := exec.CommandContext(ctx, "sh", append([]string{"-c", `sleep 0.3; exec "$0" "$@"`}, c.Args...)...) // #nosec G204 -- test
+		s.Env = c.Env
+		return s
+	}
+	hub := newCtlHub(tb.tmux, slow)
+	hub.restartAfter, hub.logf = 10*time.Millisecond, t.Logf
+	sub, stop, err := hub.subscribe(ctx, "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stop()
+	waitKind := func(want ctlKind) {
+		t.Helper()
+		deadline := time.After(5 * time.Second)
+		for {
+			select {
+			case <-sub.kick:
+				for _, e := range sub.take() {
+					if e.kind == want {
+						return
+					}
+				}
+			case <-deadline:
+				t.Fatalf("no event %d", want)
+			}
+		}
+	}
+	waitKind(ctlReady)
+	first := controlClients(raw)
+	if len(first) != 1 {
+		t.Fatalf("ready with control clients %q", first)
+	}
+	if err := exec.Command("kill", first[0]).Run(); err != nil { // #nosec G204 -- test
+		t.Fatal(err)
+	}
+	waitKind(ctlRestart)
+	if again := controlClients(raw); len(again) != 1 || again[0] == first[0] {
+		t.Fatalf("restarted with control clients %q (the first was %s)", again, first[0])
+	}
 }
 
 // The last watch ending stops the session's client.

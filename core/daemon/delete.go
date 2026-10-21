@@ -30,9 +30,10 @@ import (
 //     nothing open or saving here, not moving or on a server, saves
 //     elsewhere confirmed, nothing running, no other machine holding the
 //     lease;
-//  2. the instance; 3. the home storage; 4. the saves on this Mac (saves
-//     elsewhere stay, and so does the key: no box ever has saves and no
-//     key);
+//  2. the instance; 3. the home storage; 3a. the attachment store on
+//     this Mac (ADR 0030 point 6), only this box's; 4. the saves on this
+//     Mac (saves elsewhere stay, and so does the key: no box ever has
+//     saves and no key);
 //  5. the key: the app deletes it from the Keychain (only the app touches
 //     the Keychain) and calls again with keys_deleted;
 //  6. the record, last.
@@ -48,6 +49,9 @@ type boxDeleter interface {
 	RemoveInstance(ctx context.Context, c local.BoxConfig) error
 	// RemoveHome deletes its home storage.
 	RemoveHome(ctx context.Context, c local.BoxConfig) error
+	// RemoveAttachments deletes its attachment store on this Mac; a missing
+	// one is fine.
+	RemoveAttachments(ctx context.Context, c local.BoxConfig) error
 	// RemoveSaves deletes its repository on this Mac.
 	RemoveSaves(ctx context.Context, c local.BoxConfig) error
 	// RemoveRecord deletes this Mac's state for it, then its config.
@@ -62,20 +66,22 @@ func (s *Server) boxDeleter() boxDeleter {
 }
 
 var deleteStepEnum = map[string]daemonv1.DeleteStep{
-	local.DeleteStepInstance: daemonv1.DeleteStep_DELETE_STEP_INSTANCE,
-	local.DeleteStepHome:     daemonv1.DeleteStep_DELETE_STEP_HOME,
-	local.DeleteStepSaves:    daemonv1.DeleteStep_DELETE_STEP_SAVES,
-	local.DeleteStepKey:      daemonv1.DeleteStep_DELETE_STEP_KEY,
-	local.DeleteStepRecord:   daemonv1.DeleteStep_DELETE_STEP_RECORD,
+	local.DeleteStepInstance:    daemonv1.DeleteStep_DELETE_STEP_INSTANCE,
+	local.DeleteStepHome:        daemonv1.DeleteStep_DELETE_STEP_HOME,
+	local.DeleteStepAttachments: daemonv1.DeleteStep_DELETE_STEP_ATTACHMENTS,
+	local.DeleteStepSaves:       daemonv1.DeleteStep_DELETE_STEP_SAVES,
+	local.DeleteStepKey:         daemonv1.DeleteStep_DELETE_STEP_KEY,
+	local.DeleteStepRecord:      daemonv1.DeleteStep_DELETE_STEP_RECORD,
 }
 
 // deleteStepWords says a step as people read it, after "stopped while".
 var deleteStepWords = map[string]string{
-	local.DeleteStepInstance: "stopping it",
-	local.DeleteStepHome:     "removing its files on this Mac",
-	local.DeleteStepSaves:    "deleting its saves",
-	local.DeleteStepKey:      "removing its key",
-	local.DeleteStepRecord:   "removing it from your workspaces",
+	local.DeleteStepInstance:    "stopping it",
+	local.DeleteStepHome:        "removing its files on this Mac",
+	local.DeleteStepAttachments: "removing its attachments on this Mac",
+	local.DeleteStepSaves:       "deleting its saves",
+	local.DeleteStepKey:         "removing its key",
+	local.DeleteStepRecord:      "removing it from your workspaces",
 }
 
 // onlyThePerson refuses anyone but the person at this Mac: agents never
@@ -323,6 +329,10 @@ func (s *Server) runDeleteSteps(ctx context.Context, d boxDeleter, c local.BoxCo
 			}
 		case local.DeleteStepHome:
 			if err = d.RemoveHome(ctx, c); err == nil {
+				err = advance(local.DeleteStepAttachments)
+			}
+		case local.DeleteStepAttachments:
+			if err = d.RemoveAttachments(ctx, c); err == nil {
 				err = advance(local.DeleteStepSaves)
 			}
 		case local.DeleteStepSaves:
@@ -436,6 +446,10 @@ func (e engineDeleter) RemoveHome(ctx context.Context, c local.BoxConfig) error 
 	}
 	defer func() { _ = drv.Close() }()
 	return drv.DeleteHome(ctx, driver.BoxID(c.ID), driver.HomeStorage{Ref: local.HomeVolume(c.ID)})
+}
+
+func (e engineDeleter) RemoveAttachments(_ context.Context, c local.BoxConfig) error {
+	return e.env.RemoveAttachments(c)
 }
 
 func (e engineDeleter) RemoveSaves(_ context.Context, c local.BoxConfig) error {

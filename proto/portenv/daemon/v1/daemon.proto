@@ -1430,6 +1430,9 @@ enum DeleteStep {
   DELETE_STEP_KEY = 4;
   // Removing portenvd's record of the box, last.
   DELETE_STEP_RECORD = 5;
+  // Removing its attachment store on this Mac (ADR 0030 point 6), after
+  // the home storage and before the saves.
+  DELETE_STEP_ATTACHMENTS = 6;
 }
 
 message GetDeletePlanRequest {

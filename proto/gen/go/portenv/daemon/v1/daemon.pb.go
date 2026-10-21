@@ -293,6 +293,9 @@ const (
 	DeleteStep_DELETE_STEP_KEY DeleteStep = 4
 	// Removing portenvd's record of the box, last.
 	DeleteStep_DELETE_STEP_RECORD DeleteStep = 5
+	// Removing its attachment store on this Mac (ADR 0030 point 6), after
+	// the home storage and before the saves.
+	DeleteStep_DELETE_STEP_ATTACHMENTS DeleteStep = 6
 )
 
 // Enum value maps for DeleteStep.
@@ -304,6 +307,7 @@ var (
 		3: "DELETE_STEP_SAVES",
 		4: "DELETE_STEP_KEY",
 		5: "DELETE_STEP_RECORD",
+		6: "DELETE_STEP_ATTACHMENTS",
 	}
 	DeleteStep_value = map[string]int32{
 		"DELETE_STEP_UNSPECIFIED": 0,
@@ -312,6 +316,7 @@ var (
 		"DELETE_STEP_SAVES":       3,
 		"DELETE_STEP_KEY":         4,
 		"DELETE_STEP_RECORD":      5,
+		"DELETE_STEP_ATTACHMENTS": 6,
 	}
 )
 
@@ -10973,7 +10978,7 @@ const file_portenv_daemon_v1_daemon_proto_rawDesc = "" +
 	"\vANSWERS_YES\x10\x01\x12\x0e\n" +
 	"\n" +
 	"ANSWERS_NO\x10\x02\x12\x16\n" +
-	"\x12ANSWERS_CANNOT_ASK\x10\x03*\x9d\x01\n" +
+	"\x12ANSWERS_CANNOT_ASK\x10\x03*\xba\x01\n" +
 	"\n" +
 	"DeleteStep\x12\x1b\n" +
 	"\x17DELETE_STEP_UNSPECIFIED\x10\x00\x12\x18\n" +
@@ -10981,7 +10986,8 @@ const file_portenv_daemon_v1_daemon_proto_rawDesc = "" +
 	"\x10DELETE_STEP_HOME\x10\x02\x12\x15\n" +
 	"\x11DELETE_STEP_SAVES\x10\x03\x12\x13\n" +
 	"\x0fDELETE_STEP_KEY\x10\x04\x12\x16\n" +
-	"\x12DELETE_STEP_RECORD\x10\x052\xb37\n" +
+	"\x12DELETE_STEP_RECORD\x10\x05\x12\x1b\n" +
+	"\x17DELETE_STEP_ATTACHMENTS\x10\x062\xb37\n" +
 	"\rDaemonService\x12Y\n" +
 	"\n" +
 	"GetVersion\x12$.portenv.daemon.v1.GetVersionRequest\x1a%.portenv.daemon.v1.GetVersionResponse\x12V\n" +

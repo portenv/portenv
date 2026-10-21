@@ -234,4 +234,12 @@ struct WorkspaceDeletionTests {
         #expect(WorkspaceList.afterDeleting("acme-api", from: ["acme-api", "other-api"]) == ["other-api"])
         #expect(LaunchDecision.decide(requested: nil, boxes: ["other-api"], lastBox: "acme-api", firstRunDone: true) == .boxList(notice: nil))
     }
+
+    /// ADR 0030 point 6: a deletion that stopped at the attachment store
+    /// says so: portenvd's step 6 is the app's .attachments, never "not
+    /// stopped".
+    @Test func aDeletionStoppedAtTheAttachmentsIsKnown() {
+        #expect(DeleteStep(rawValue: 6) == .attachments)
+        #expect(DeleteStep(rawValue: 6) != DeleteStep.none)
+    }
 }

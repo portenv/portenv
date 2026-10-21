@@ -20,13 +20,16 @@ import (
 const (
 	DeleteStepInstance = "instance"
 	DeleteStepHome     = "home"
-	DeleteStepSaves    = "saves"
-	DeleteStepKey      = "key"
-	DeleteStepRecord   = "record"
+	// DeleteStepAttachments removes the box's attachment store on this
+	// machine (ADR 0030 point 6).
+	DeleteStepAttachments = "attachments"
+	DeleteStepSaves       = "saves"
+	DeleteStepKey         = "key"
+	DeleteStepRecord      = "record"
 )
 
 // DeleteSteps is the order of the steps.
-var DeleteSteps = []string{DeleteStepInstance, DeleteStepHome, DeleteStepSaves, DeleteStepKey, DeleteStepRecord}
+var DeleteSteps = []string{DeleteStepInstance, DeleteStepHome, DeleteStepAttachments, DeleteStepSaves, DeleteStepKey, DeleteStepRecord}
 
 // DeleteProgress is a deletion that started and hasn't finished, kept in
 // the box's config so the config, removed last, takes it with it.
@@ -41,6 +44,28 @@ type DeleteProgress struct {
 // safeIDRE is a box ID that can be one path element: no separators, never
 // "." or "..".
 var safeIDRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]*$`)
+
+// AttachmentsDir is the box's attachment store on this machine (ADR 0030
+// point 6): the support folder's Attachments/<box-id>.
+func (e *Env) AttachmentsDir(c BoxConfig) (string, bool) {
+	if !safeIDRE.MatchString(c.ID) || c.ID == "." || c.ID == ".." {
+		return "", false
+	}
+	return filepath.Join(e.Dir, "Attachments", c.ID), true
+}
+
+// RemoveAttachments removes the box's attachment store, and only that
+// box's: a missing folder is fine, so the step is safe to repeat.
+func (e *Env) RemoveAttachments(c BoxConfig) error {
+	dir, ok := e.AttachmentsDir(c)
+	if !ok {
+		return fmt.Errorf("%q isn't a box ID", c.ID)
+	}
+	if err := os.RemoveAll(dir); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	return nil
+}
 
 // ErrDeleting: the box is being deleted; it can't be opened.
 var ErrDeleting = errors.New("the workspace is being deleted")

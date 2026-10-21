@@ -276,6 +276,10 @@ public nonisolated enum Portenv_Daemon_V1_DeleteStep: SwiftProtobuf.Enum, Swift.
 
   /// Removing portenvd's record of the box, last.
   case record // = 5
+
+  /// Removing its attachment store on this Mac (ADR 0030 point 6), after
+  /// the home storage and before the saves.
+  case attachments // = 6
   case UNRECOGNIZED(Int)
 
   public init() {
@@ -290,6 +294,7 @@ public nonisolated enum Portenv_Daemon_V1_DeleteStep: SwiftProtobuf.Enum, Swift.
     case 3: self = .saves
     case 4: self = .key
     case 5: self = .record
+    case 6: self = .attachments
     default: self = .UNRECOGNIZED(rawValue)
     }
   }
@@ -302,6 +307,7 @@ public nonisolated enum Portenv_Daemon_V1_DeleteStep: SwiftProtobuf.Enum, Swift.
     case .saves: return 3
     case .key: return 4
     case .record: return 5
+    case .attachments: return 6
     case .UNRECOGNIZED(let i): return i
     }
   }
@@ -314,6 +320,7 @@ public nonisolated enum Portenv_Daemon_V1_DeleteStep: SwiftProtobuf.Enum, Swift.
     .saves,
     .key,
     .record,
+    .attachments,
   ]
 
 }
@@ -3807,7 +3814,7 @@ nonisolated extension Portenv_Daemon_V1_Answers: SwiftProtobuf._ProtoNameProvidi
 }
 
 nonisolated extension Portenv_Daemon_V1_DeleteStep: SwiftProtobuf._ProtoNameProviding {
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0DELETE_STEP_UNSPECIFIED\0\u{1}DELETE_STEP_INSTANCE\0\u{1}DELETE_STEP_HOME\0\u{1}DELETE_STEP_SAVES\0\u{1}DELETE_STEP_KEY\0\u{1}DELETE_STEP_RECORD\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0DELETE_STEP_UNSPECIFIED\0\u{1}DELETE_STEP_INSTANCE\0\u{1}DELETE_STEP_HOME\0\u{1}DELETE_STEP_SAVES\0\u{1}DELETE_STEP_KEY\0\u{1}DELETE_STEP_RECORD\0\u{1}DELETE_STEP_ATTACHMENTS\0")
 }
 
 nonisolated extension Portenv_Daemon_V1_GetPushesRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {

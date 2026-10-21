@@ -85,6 +85,13 @@ func (f *fakeDeleter) RemoveHome(_ context.Context, c local.BoxConfig) error {
 	return f.record("home", c.ID)
 }
 
+func (f *fakeDeleter) RemoveAttachments(_ context.Context, c local.BoxConfig) error {
+	if err := f.record("attachments", c.ID); err != nil {
+		return err
+	}
+	return f.env.RemoveAttachments(c)
+}
+
 func (f *fakeDeleter) RemoveSaves(_ context.Context, c local.BoxConfig) error {
 	if err := f.record("saves", c.ID); err != nil {
 		return err
@@ -127,6 +134,8 @@ func deleteServer(t *testing.T) (*Server, *fakeDeleter) {
 			writeFile(t, filepath.Join(repo, "snapshots", snap), "snapshot "+snap)
 		}
 		writeFile(t, filepath.Join(e.Dir, "state", c.ID, "state.json"), "{}")
+		// Its attachment store (ADR 0030): one attachment.
+		writeFile(t, filepath.Join(e.Dir, "Attachments", c.ID, "01JAB000000000000000000001", "data"), "png")
 		_ = e.Provided.Put(c.ID, []byte("key of "+c.ID))
 	}
 	f := &fakeDeleter{env: e, failures: map[string]int{}}
@@ -187,7 +196,7 @@ func TestDeleteRunsItsStepsInOrder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, want := f.took(), []string{"running " + delID, "lease " + delID, "instance " + delID, "home " + delID, "saves " + delID}; !slices.Equal(got, want) {
+	if got, want := f.took(), []string{"running " + delID, "lease " + delID, "instance " + delID, "home " + delID, "attachments " + delID, "saves " + delID}; !slices.Equal(got, want) {
 		t.Fatalf("steps %v, want %v", got, want)
 	}
 	if r.GetFinished() || r.GetStep() != daemonv1.DeleteStep_DELETE_STEP_KEY || !slices.Equal(r.GetDeleteKeyIds(), []string{delID}) {
@@ -262,8 +271,9 @@ func TestDeleteResumesFromTheStepThatFailed(t *testing.T) {
 		// what a retry runs, from the step that failed
 		rest []string
 	}{
-		{"instance", daemonv1.DeleteStep_DELETE_STEP_INSTANCE, []string{"instance", "home", "saves"}},
-		{"home", daemonv1.DeleteStep_DELETE_STEP_HOME, []string{"home", "saves"}},
+		{"instance", daemonv1.DeleteStep_DELETE_STEP_INSTANCE, []string{"instance", "home", "attachments", "saves"}},
+		{"home", daemonv1.DeleteStep_DELETE_STEP_HOME, []string{"home", "attachments", "saves"}},
+		{"attachments", daemonv1.DeleteStep_DELETE_STEP_ATTACHMENTS, []string{"attachments", "saves"}},
 		{"saves", daemonv1.DeleteStep_DELETE_STEP_SAVES, []string{"saves"}},
 	}
 	for _, st := range steps {
@@ -455,7 +465,8 @@ func TestDeleteSavesElsewhereNeedTheSecondConfirmation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"running " + c.ID, "lease " + c.ID, "instance " + c.ID, "home " + c.ID, "record " + c.ID}
+	// Its attachments are on this Mac whatever holds the saves: they go too.
+	want := []string{"running " + c.ID, "lease " + c.ID, "instance " + c.ID, "home " + c.ID, "attachments " + c.ID, "record " + c.ID}
 	if got := f.took(); !slices.Equal(got, want) {
 		t.Fatalf("steps %v, want %v", got, want)
 	}
@@ -603,4 +614,66 @@ func TestNoAgentCanDeleteAWorkspace(t *testing.T) {
 			t.Errorf("a grant gives an agent %q", c)
 		}
 	}
+}
+
+// ADR 0029 with ADR 0030: the workspace's attachment store on this Mac goes
+// after its home storage and before its saves, as a recorded step that's
+// safe to repeat (a missing folder is fine). Only that workspace's folder:
+// another workspace's attachments stay.
+func TestDeleteRemovesOnlyThisWorkspacesAttachments(t *testing.T) {
+	s, f := deleteServer(t)
+	mine := filepath.Join(s.env.Dir, "Attachments", delID)
+	theirs := filepath.Join(s.env.Dir, "Attachments", delOther)
+	if _, err := s.DeleteBox(asApp(), deleteReq("acme-api")); err != nil {
+		t.Fatal(err)
+	}
+	if exists(mine) {
+		t.Error("this workspace's attachments are still there")
+	}
+	if !exists(filepath.Join(theirs, "01JAB000000000000000000001", "data")) {
+		t.Error("another workspace's attachments went")
+	}
+	if got := f.took(); !slices.Equal(got[2:], []string{"instance " + delID, "home " + delID, "attachments " + delID, "saves " + delID}) {
+		t.Errorf("steps %v: the attachments go after the home and before the saves", got)
+	}
+
+	// A failure there stops it, recorded at that step, with the saves and
+	// the attachments still there; the retry runs from there.
+	s, f = deleteServer(t)
+	f.failures["attachments"] = 1
+	_, err := s.DeleteBox(asApp(), deleteReq("acme-api"))
+	if err == nil || !strings.Contains(status.Convert(err).Message(), "removing its attachments on this Mac") {
+		t.Fatalf("failure at the attachments: %v", err)
+	}
+	mine = filepath.Join(s.env.Dir, "Attachments", delID)
+	if !exists(mine) || !exists(s.repoOf(t, delID, "acme-api")) {
+		t.Fatal("the attachments or the saves went although the step failed")
+	}
+	if b := listed(t, s)["acme-api"]; b.GetDeleteStep() != daemonv1.DeleteStep_DELETE_STEP_ATTACHMENTS {
+		t.Fatalf("listed at %v", b.GetDeleteStep())
+	}
+	f.took()
+	if _, err := s.DeleteBox(asApp(), deleteReq("acme-api")); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.took(); !slices.Equal(got, []string{"attachments " + delID, "saves " + delID}) || exists(mine) {
+		t.Fatalf("retry ran %v (attachments there: %v)", got, exists(mine))
+	}
+
+	// Safe to repeat: a workspace with no attachment store deletes too.
+	s, f = deleteServer(t)
+	if err := os.RemoveAll(filepath.Join(s.env.Dir, "Attachments", delID)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.DeleteBox(asApp(), deleteReq("acme-api")); err != nil {
+		t.Fatalf("no attachment store: %v", err)
+	}
+	if !exists(filepath.Join(s.env.Dir, "Attachments", delOther)) {
+		t.Error("another workspace's attachments went")
+	}
+	// A box ID that isn't one path element never reaches the folder.
+	if err := s.env.RemoveAttachments(local.BoxConfig{ID: ".."}); err == nil {
+		t.Error("\"..\" was accepted as a box ID")
+	}
+	_ = f
 }

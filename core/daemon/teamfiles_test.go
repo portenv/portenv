@@ -973,6 +973,27 @@ func TestTheAppProductTemplate(t *testing.T) {
 	if !strings.Contains(agents["reviewer"].Spec.Instructions, "cold") {
 		t.Error("the reviewer doesn't review cold")
 	}
+	// R-0412 item 16: the reviewer reads the writer's clone (a lens on
+	// it) and fetches the writer's branch into its own; nobody else does.
+	for id, a := range agents {
+		want := []string(nil)
+		if id == "reviewer" {
+			want = []string{"writer"}
+		}
+		if got := a.Grant.GetReadClones(); !slices.Equal(got, want) {
+			t.Errorf("%s: read_clones %v, want %v", id, got, want)
+		}
+	}
+	for _, s := range []string{"portenv fetch writer", "agents/writer", "/home/writer/"} {
+		if !strings.Contains(agents["reviewer"].Spec.Instructions, s) {
+			t.Errorf("the reviewer isn't told %q", s)
+		}
+	}
+	for _, s := range []string{"Commit on your branch", "agent/writer", "before you tell"} {
+		if !strings.Contains(agents["writer"].Spec.Instructions, s) {
+			t.Errorf("the writer isn't told %q", s)
+		}
+	}
 }
 
 // R-0340: Orchestrate is how this project is run, as a template: a

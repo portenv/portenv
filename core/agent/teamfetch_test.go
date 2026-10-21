@@ -303,3 +303,123 @@ func TestFetchAgentBranchPipesTheAgentsBundleToWork(t *testing.T) {
 		t.Errorf("another project: %v", err)
 	}
 }
+
+// ADR 0022 §2a point 4 (R-0412 item 16): a lens fetches the writer's
+// branch into its own clone. The writer's half is bundle-own, as the
+// writer; the lens's half is fetch-lens, as the lens, in its own clone,
+// into refs/remotes/agents/<writer>. Nothing of the writer's tampered
+// config runs for the lens, and the bundle doesn't stay in its home.
+func TestALensFetchesIntoItsOwnClone(t *testing.T) {
+	if _, err := os.Stat(agentGitPath); err != nil {
+		t.Skip("fetch-agent runs " + agentGitPath)
+	}
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, ".portenv", "team"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".portenv", "team", "users.json"), []byte(`{"version":1,"users":[{"id":"builder","uid":2001},{"id":"reviewer","uid":2002}]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	project := filepath.Join(root, "work", "shop")
+	home, lens := filepath.Join(root, "builder"), filepath.Join(root, "reviewer")
+	if err := os.MkdirAll(project, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, d := range []string{home, lens} {
+		if err := os.Mkdir(d, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	gitOut(t, root, project, "init", "--quiet", "--initial-branch=main")
+	gitOut(t, root, project, "-c", "user.name=O", "-c", "user.email=o@example.invalid", "commit", "--quiet", "--allow-empty", "-m", "first")
+	gitOut(t, lens, lens, "clone", "--quiet", "--origin", "owner", project, filepath.Join(lens, "shop"))
+	markers := t.TempDir()
+	clone := tamperedClone(t, project, home, markers)
+	want := gitOut(t, home, clone, "rev-parse", "HEAD")
+	if err := os.RemoveAll(markers); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(markers, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	var lensArgs []string
+	s := &apiServer{
+		cfg: Config{User: "work", UID: 1000, HomeRoot: root},
+		asAgentStream: func(_ context.Context, uid int, h string, args []string) (io.ReadCloser, func() error, error) {
+			if uid != 2001 || h != home || args[0] != "bundle-own" {
+				t.Errorf("as the writer: %d %s %q", uid, h, args)
+			}
+			pr, pw := io.Pipe()
+			done := make(chan error, 1)
+			go func() {
+				err := bundleOwn(context.Background(), args[1], args[2], args[3], args[4], testStreamGit(t, home), pw)
+				_ = pw.CloseWithError(err)
+				done <- err
+			}()
+			return pr, func() error { return <-done }, nil
+		},
+		asAgentIO: func(_ context.Context, uid int, h string, args []string, stdin io.Reader) ([]byte, error) {
+			lensArgs = args
+			if uid != 2002 || h != lens || len(args) != 5 || args[0] != "fetch-lens" {
+				t.Errorf("as the lens: %d %s %q", uid, h, args)
+				return nil, errors.New("not the lens")
+			}
+			var calls []string
+			var out bytes.Buffer
+			err := fetchLens(context.Background(), args[1], args[2], args[3], args[4], testGit(t, lens, &calls), stdin, &out)
+			return out.Bytes(), err
+		},
+	}
+	r, err := s.FetchAgentBranch(context.Background(), &agentv1.FetchAgentBranchRequest{AgentId: "builder", IntoAgent: "reviewer", ProjectDir: "/home/work/shop", MaxBytes: 1 << 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.GetRef() != "refs/remotes/agents/builder" || r.GetCommit() != want {
+		t.Errorf("fetched %v, want %s", r, want)
+	}
+	if got := strings.Join(lensArgs, " "); got != "fetch-lens "+lens+" shop builder 1048576" {
+		t.Errorf("the lens's half: %q", got)
+	}
+	if got := gitOut(t, lens, filepath.Join(lens, "shop"), "log", "-1", "--format=%s", "refs/remotes/agents/builder"); got != "from builder" {
+		t.Errorf("the lens's clone has %q at refs/remotes/agents/builder", got)
+	}
+	var calls []string
+	if out, err := testGit(t, home, &calls)(context.Background(), clone, "rev-parse", "--verify", "--quiet", "refs/remotes/agents/builder^{commit}"); err == nil {
+		t.Errorf("the writer's clone changed: %s", out)
+	}
+	if left, _ := os.ReadDir(markers); len(left) != 0 {
+		t.Errorf("something of the writer's ran: %v", left)
+	}
+	if left, _ := os.ReadDir(filepath.Join(lens, handoffDir)); len(left) != 0 {
+		t.Errorf("the bundle stayed in the lens's home: %v", left)
+	}
+	// Its own clone only: a lens without one, or a writer it names as
+	// itself, is refused before anything runs.
+	lensArgs = nil
+	if _, err := s.FetchAgentBranch(context.Background(), &agentv1.FetchAgentBranchRequest{AgentId: "builder", IntoAgent: "builder", ProjectDir: "/home/work/shop", MaxBytes: 1}); status.Code(err) != codes.InvalidArgument {
+		t.Errorf("into itself: %v", err)
+	}
+	if _, err := s.FetchAgentBranch(context.Background(), &agentv1.FetchAgentBranchRequest{AgentId: "builder", IntoAgent: "ghost", ProjectDir: "/home/work/shop", MaxBytes: 1}); status.Code(err) != codes.NotFound {
+		t.Errorf("into a stranger: %v", err)
+	}
+	if lensArgs != nil {
+		t.Errorf("a refused fetch ran: %q", lensArgs)
+	}
+}
+
+// fetch-lens checks its arguments: the lens's own home and a project name.
+func TestFetchLensArguments(t *testing.T) {
+	for _, a := range [][4]string{
+		{"relative", "shop", "builder", "1"},
+		{"/home/reviewer", "../shop", "builder", "1"},
+		{"/home/reviewer", ".shop", "builder", "1"},
+		{"/home/reviewer", "shop", "Not An Id", "1"},
+	} {
+		if err := fetchLens(context.Background(), a[0], a[1], a[2], a[3], nil, strings.NewReader(""), io.Discard); err == nil {
+			t.Errorf("fetch-lens %v accepted", a)
+		}
+	}
+	if !asAgentTeamIO["fetch-lens"] {
+		t.Error("as-agent doesn't run fetch-lens")
+	}
+}

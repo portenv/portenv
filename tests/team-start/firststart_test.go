@@ -45,6 +45,14 @@
 //     builder's home, and its git in builder's clone is refused; lead,
 //     without the grant, can't read them; the grant is a named-user ACL,
 //     never group team's (ADR 0022 §2a point 4);
+//     R-0412 item 16: reviewer's runner (named claude) was given builder's
+//     clone with --add-dir; reviewer sees builder's branch (its clone's
+//     HEAD is agent/builder), and portenv fetch builder brings builder's
+//     commit into reviewer's own clone as refs/remotes/agents/builder, by
+//     the bundle, where it reads the log and diff and checks the commit
+//     out; nothing of builder's tampered config runs as reviewer, the
+//     bundle doesn't stay, builder's clone is unchanged, and lead, without
+//     the grant, is refused;
 //  11. the move (ADR 0022 §2a point 6): with every agent stopped, the
 //     workspace is put back the old way (the project group team's,
 //     setgid, g:team:rwX, core.sharedRepository, Portenv's safe.directory,
@@ -571,6 +579,7 @@ true`, workspace))
 		h.fatal("step 10: builder's home and clone must give reviewer (by name) traverse and read only:\n%s", out)
 	}
 	t.Logf("step 10: lead can't read builder's clone; the ACLs:\n%s", out)
+	h.lensReadsTheBranch(ctx, builderUID)
 
 	// Step 11: the move. Every agent stops first.
 	for _, id := range []string{"lead", "builder", "reviewer"} {
@@ -816,6 +825,59 @@ grep '^  message:' .portenv/agents/coordinator.md`)
 		h.fatal("step 13: a second ApplyTeamPlan: %v %v", again, err)
 	}
 	t.Log("step 13: three agents approved and stopped; nothing started")
+}
+
+// lensReadsTheBranch is step 10's second half (R-0412 item 16): the
+// reviewer, a lens on builder's clone, reads builder's branch, not just
+// its files, and can't write any of it.
+func (h *harness) lensReadsTheBranch(ctx context.Context, builderUID string) {
+	t := h.t
+	// The runner (the wake stand-in, named claude) was given builder's
+	// clone with Claude Code's --add-dir.
+	out, _ := h.box(ctx, "root", `ps -u reviewer -o args=`)
+	if !strings.Contains(out, wakeRunner+" --add-dir /home/builder/"+workspace) {
+		h.fatal("step 10: reviewer's runner wasn't given builder's clone with --add-dir:\n%s", out)
+	}
+	out, _ = h.box(ctx, "root", fmt.Sprintf(`id -u reviewer; runuser -u builder -- git -C /home/builder/%s rev-parse refs/heads/agent/builder`, workspace))
+	ids := strings.Fields(out)
+	if len(ids) != 2 {
+		h.fatal("step 10: reviewer's uid and builder's commit: %s", out)
+	}
+	reviewerUID, builderHead := ids[0], ids[1]
+	out, code := h.box(ctx, "reviewer", fmt.Sprintf(`set -u
+clone=/home/builder/%[1]s
+mine=/home/reviewer/%[1]s
+try() { if "$@" >/dev/null 2>&1; then echo "DID: $*"; else echo "refused: $*"; fi; }
+echo "head: $(cat $clone/.git/HEAD)"
+PORTENV_AGENT=reviewer PORTENV_SOCKET=/run/portenv-team/reviewer/portenv.sock portenv fetch builder || echo "fetch failed: $?"
+echo "fetched: $(git -C $mine log -1 --format=%%s refs/remotes/agents/builder)"
+echo "commit: $(git -C $mine rev-parse refs/remotes/agents/builder)"
+echo "diff: $(git -C $mine diff --name-only HEAD...agents/builder | tr '\n' ' ')"
+git -C $mine switch -q --detach agents/builder && echo "checked out: $(cat $mine/from-builder.txt)"
+git -C $mine switch -q agent/reviewer
+test -e ~/.portenv/team/handoff/builder.bundle && echo "DID: the bundle stayed"
+try touch $clone/from-reviewer.txt
+try git -C $clone log -1
+true`, workspace))
+	if code != 0 || !strings.Contains(out, "head: ref: refs/heads/agent/builder") || !strings.Contains(out, "Fetched builder's branch into your copy as refs/remotes/agents/builder") ||
+		!strings.Contains(out, "fetched: from builder") || !strings.Contains(out, "commit: "+builderHead) || !strings.Contains(out, "from-builder.txt") ||
+		!strings.Contains(out, "checked out: from builder") || strings.Contains(out, "DID:") || strings.Contains(out, "fetch failed") || strings.Count(out, "refused:") != 2 {
+		h.fatal("step 10: reviewer must read builder's branch, by its own fetch, and write none of builder's: exit %d:\n%s", code, out)
+	}
+	t.Logf("step 10: reviewer fetched builder's branch into its own copy:\n%s", out)
+	// Nothing of builder's tampered config ran as reviewer; builder's
+	// clone has no new ref; lead, without the grant, is refused.
+	out, _ = h.box(ctx, "root", fmt.Sprintf(`ls /tmp/portenv-markers
+echo "---"
+runuser -u builder -- git -C /home/builder/%s for-each-ref --format='%%(refname)' refs/remotes/agents | grep -c . || true`, workspace))
+	if strings.Contains(out, reviewerUID+"-") || !strings.HasSuffix(strings.TrimSpace(out), "0") {
+		h.fatal("step 10: something of builder's ran as reviewer (uid %s), or builder's clone changed:\n%s", reviewerUID, out)
+	}
+	out, code = h.box(ctx, "lead", `PORTENV_AGENT=lead PORTENV_SOCKET=/run/portenv-team/lead/portenv.sock portenv fetch builder 2>&1`)
+	if code != 1 || !strings.Contains(out, "read_clones doesn't name builder") {
+		h.fatal("step 10: lead, without the grant, fetched builder's branch: exit %d: %s", code, out)
+	}
+	t.Logf("step 10: no marker of reviewer's (uid %s; builder is %s), builder's clone unchanged, lead refused: %s", reviewerUID, builderUID, strings.TrimSpace(out))
 }
 
 // boxIn is box for another workspace's container.

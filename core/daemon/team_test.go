@@ -793,12 +793,134 @@ func TestCloneReadersAtStart(t *testing.T) {
 	if want := []string{"lead:", "builder:reviewer", "design:"}; !slices.Equal(lines, want) {
 		t.Errorf("clone readers %q, want %q", lines, want)
 	}
-	if !strings.Contains(agentsMDBlock(&Team{Agents: team}, &team[2], "w"), "read, never change, /home/builder/w") {
-		t.Errorf("reviewer's AGENTS.md doesn't say what it reads")
+	md := agentsMDBlock(&Team{Agents: team}, &team[2], "w")
+	if !strings.Contains(md, "read, never change, builder's files in /home/builder/w, on its branch agent/builder") || !strings.Contains(md, "don't run git there") {
+		t.Errorf("reviewer's AGENTS.md doesn't say what it reads: %s", md)
+	}
+	// checkout: none has no copy to fetch into: it isn't told to fetch.
+	if strings.Contains(md, "portenv fetch") {
+		t.Errorf("reviewer (checkout: none) is told to fetch: %s", md)
 	}
 }
 
 // R-0260 item 2: pending pane requests count, and Approve rechecks.
+// R-0412 item 16: on an App product team, the reviewer starts as a lens on
+// the writer's clone. Its start names it as the writer's reader, its
+// runner (Claude Code) gets the clone with --add-dir, and its AGENTS.md
+// says where the writer's files are and how to fetch the writer's branch.
+// The writer, with no read_clones, gets no --add-dir.
+func TestTheAppProductReviewerStartsWithALensOnTheWriter(t *testing.T) {
+	team := templateTeam(t, "app-product")
+	for i := range team.Agents {
+		team.Agents[i].Approved = true
+	}
+	e, h, _ := newTestEngine(t, team.Agents...)
+	ctx := context.Background()
+	_, _ = e.startAgent(ctx, "w", "lead") // asks the team's first start
+	approveTeamStart(t, e)
+	for _, id := range []string{"writer", "reviewer"} {
+		if _, err := e.startAgent(ctx, "w", id); err != nil {
+			t.Fatalf("start %s: %v", id, err)
+		}
+	}
+	got := map[string]*agentv1.StartTeamAgentRequest{}
+	for _, r := range h.started {
+		got[r.GetAgentId()] = r
+	}
+	rv, wr := got["reviewer"], got["writer"]
+	if rv == nil || wr == nil {
+		t.Fatalf("started %v", h.started)
+	}
+	if want := []string{"claude", "--model", "fable", "--disallowedTools", "Edit,Write,NotebookEdit", "--add-dir", "/home/writer/w"}; !slices.Equal(rv.GetArgv(), want) {
+		t.Errorf("reviewer's argv %q, want %q", rv.GetArgv(), want)
+	}
+	if want := []string{"claude", "--model", "opus"}; !slices.Equal(wr.GetArgv(), want) {
+		t.Errorf("writer's argv %q, want %q", wr.GetArgv(), want)
+	}
+	readers := map[string][]string{}
+	for _, cr := range rv.GetCloneReaders() {
+		readers[cr.GetWriter()] = cr.GetReaders()
+	}
+	if !slices.Equal(readers["writer"], []string{"reviewer"}) {
+		t.Errorf("the writer's clone readers at reviewer's start: %v", rv.GetCloneReaders())
+	}
+	if rv.GetCloneProjectDir() != "/home/work/w" {
+		t.Errorf("reviewer has no clone of its own to fetch into: %v", rv)
+	}
+	for _, s := range []string{"/home/writer/w", "agent/writer", "portenv fetch writer", "refs/remotes/agents/writer"} {
+		if !strings.Contains(rv.GetAgentsMd(), s) {
+			t.Errorf("reviewer's AGENTS.md doesn't say %q:\n%s", s, rv.GetAgentsMd())
+		}
+	}
+}
+
+// ADR 0025 §9: --add-dir is the registry's, for a runner that has one;
+// a runner Portenv doesn't know gets the agent file's argv unchanged.
+func TestOnlyAKnownRunnerGetsTheLensPaths(t *testing.T) {
+	a := testAgent("reviewer", grant(typesv1.GrantMode_GRANT_MODE_NEVER, 1, nil, false))
+	a.Grant.ReadClones = []string{"builder", "lead"}
+	a.Runner = []string{"/home/work/w/wake/claude", "--model", "opus"}
+	if got, want := runnerArgv(&a, "w"), []string{"/home/work/w/wake/claude", "--model", "opus", "--add-dir", "/home/builder/w", "--add-dir", "/home/lead/w"}; !slices.Equal(got, want) {
+		t.Errorf("claude: %q, want %q", got, want)
+	}
+	a.Runner = []string{"bash", "/home/work/w/run.sh"}
+	if got := runnerArgv(&a, "w"); !slices.Equal(got, a.Runner) {
+		t.Errorf("an unknown runner: %q", got)
+	}
+	b := testAgent("builder", grant(typesv1.GrantMode_GRANT_MODE_NEVER, 1, nil, false))
+	if got := runnerArgv(&b, "w"); !slices.Equal(got, []string{"claude"}) {
+		t.Errorf("no read_clones: %q", got)
+	}
+	if &runnerArgv(&a, "w")[0] == &a.Runner[0] {
+		t.Error("runnerArgv shares the agent's argv")
+	}
+}
+
+// ADR 0022 §2a point 4: a lens with its own clone fetches a writer's
+// branch it may read, into refs/remotes/agents/<writer> in its own clone,
+// by the helper's two-half fetch. Without the grant, without a clone of
+// its own, or for an agent with no clone, it's refused with a plain line.
+func TestALensFetchesTheWritersBranch(t *testing.T) {
+	team := defaultTeam()
+	team[2].Grant.ReadClones = []string{"builder"}
+	team = append(team, testAgent("design", grant(typesv1.GrantMode_GRANT_MODE_NEVER, 1, nil, false)))
+	team[3].Spec.Checkout = CheckoutNone
+	team[3].Grant.ReadClones = []string{"builder"}
+	team[0].Spec.Checkout = CheckoutNone
+	e, h, _ := newTestEngine(t, team...)
+	ctx := context.Background()
+	fetch := func(from, writer string) *agentv1.TeamCallsRequest {
+		return e.handleCall(ctx, "w", &agentv1.TeamCallsResponse{AgentId: from, Op: &agentv1.TeamCallsResponse_FetchClone{FetchClone: &agentv1.FetchClone{Agent: writer}}})
+	}
+	r := fetch("reviewer", "builder")
+	if !r.GetOk() || r.GetFetched().GetRef() != "refs/remotes/agents/builder" {
+		t.Fatalf("reviewer's fetch: %v", r)
+	}
+	if len(h.fetched) != 1 || h.fetched[0].GetAgentId() != "builder" || h.fetched[0].GetIntoAgent() != "reviewer" ||
+		h.fetched[0].GetProjectDir() != "/home/work/w" || h.fetched[0].GetMaxBytes() != defaultHomeQuota {
+		t.Fatalf("asked the helper %v", h.fetched)
+	}
+	for _, c := range []struct{ from, writer, line string }{
+		{"lead", "builder", "read_clones doesn't name builder"},
+		{"builder", "builder", "its own branch"},
+		{"reviewer", "lead", "read_clones doesn't name lead"},
+		{"reviewer", "ghost", "read_clones doesn't name ghost"},
+		{"design", "builder", "checkout: none"},
+	} {
+		if r := fetch(c.from, c.writer); r.GetOk() || !strings.Contains(r.GetLine(), c.line) {
+			t.Errorf("%s fetching %s: %v, want %q", c.from, c.writer, r, c.line)
+		}
+	}
+	// The writer without a clone of its own: nothing to fetch.
+	team[1].Spec.Checkout = CheckoutNone
+	if r := fetch("reviewer", "builder"); r.GetOk() || !strings.Contains(r.GetLine(), "no copy of the project") {
+		t.Errorf("a writer without a clone: %v", r)
+	}
+	if len(h.fetched) != 1 {
+		t.Errorf("a refused fetch reached the helper: %v", h.fetched)
+	}
+}
+
 func TestApproveRechecksThePaneLimit(t *testing.T) {
 	team := defaultTeam()
 	team[1].Grant.MaxPanes = 1 // builder, panes: ask
@@ -1537,7 +1659,11 @@ func TestTeamCallsNeverApproveAnAgentFile(t *testing.T) {
 		// by handlePush, which pushes to GitHub and approves nothing.
 		"push_list", "push",
 		// The owner's fetch (R-0392): the same, read-only.
-		"fetch"}
+		"fetch",
+		// A lens's fetch of a writer's branch into its own clone (R-0412
+		// item 16): under its read_clones, it writes only refs/remotes/
+		// agents/<writer> in the lens's own clone and approves nothing.
+		"fetch_clone"}
 	if !slices.Equal(names, want) {
 		t.Fatalf("TeamCalls ops are %v, want %v: check a new op can't approve an agent file, then add it here", names, want)
 	}
@@ -1580,6 +1706,7 @@ func TestTeamCallsNeverApproveAnAgentFile(t *testing.T) {
 		{Op: &agentv1.TeamCallsResponse_PushList{PushList: &agentv1.PushList{}}},
 		{Op: &agentv1.TeamCallsResponse_Push{Push: &agentv1.PushRefs{Updates: []*agentv1.PushUpdate{{Dst: "refs/heads/main", NewSha: sha(builderFile)[:40]}}}}},
 		{Op: &agentv1.TeamCallsResponse_Fetch{Fetch: &agentv1.FetchRefs{}}},
+		{Op: &agentv1.TeamCallsResponse_FetchClone{FetchClone: &agentv1.FetchClone{Agent: "builder"}}},
 	}
 	if len(calls) != len(want) {
 		t.Fatalf("%d calls for %d ops", len(calls), len(want))

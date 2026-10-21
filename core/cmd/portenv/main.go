@@ -193,7 +193,7 @@ Your team, on this Mac (each through portenvd, as the app does it; approvals sta
   help --json                             this command list, for programs
 
 Inside a workspace, for agents (each through Portenv's grant check):
-  split, tab new, focus, close, msg, ask-owner, inbox, share,
+  split, tab new, focus, close, msg, ask-owner, inbox, share, fetch,
   propose-agent-change, request-package, whoami     add --json for data
 `)
 }

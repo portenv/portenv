@@ -290,7 +290,8 @@ func TestTheOwnersCallsStillRunForTheOwner(t *testing.T) {
 func TestAnAgentsTeamCallsHaveNoOwnerActions(t *testing.T) {
 	want := []string{
 		// fetch is the owner's (R-0392), taken and refused as push is below.
-		"ask_owner", "close", "fetch", "focus", "handoff", "inbox", "msg", "propose", "propose_routine",
+		// fetch_clone is a lens's fetch into its own clone (R-0412 item 16).
+		"ask_owner", "close", "fetch", "fetch_clone", "focus", "handoff", "inbox", "msg", "propose", "propose_routine",
 		// push and push_list are the owner's (R-0391): the helper takes them
 		// only from work's socket (SO_PEERCRED) and refuses them on an
 		// agent's, and handleCall refuses them from an agent too.

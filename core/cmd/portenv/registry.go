@@ -205,6 +205,12 @@ var commandRegistry = []cmdSpec{
 		Args:  []cmdParam{arg("agent", "agent_id", true), arg("path", "path", true)},
 		Flags: []cmdParam{arg("note", "text", false), jsonFlag},
 	},
+	{
+		Path: []string{"fetch"}, Summary: "Fetch a teammate's branch into your own copy, if your grant reads its copy.",
+		Caller: agentOnly, Approval: "never",
+		Args:  []cmdParam{arg("agent", "agent_id", true)},
+		Flags: []cmdParam{jsonFlag},
+	},
 }
 
 // commandList is the list as JSON, with every list present (never null)

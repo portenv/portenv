@@ -79,9 +79,8 @@ func TestAPrivateFetchSignedOut(t *testing.T) {
 
 // A public repository fetches without a sign-in.
 func TestAPublicFetchNeedsNoSignIn(t *testing.T) {
-	s, fake, _ := servingProject(t)
 	gh := newFakeGitHub(t, false)
-	useFakeGitHub(s, gh)
+	s, fake, _ := servingProject(t, withGitHub(gh))
 	if err := keepGitHubRepo(filepath.Join(s.env.Dir, "state", "box-1"), "https://github.com/acme/api"); err != nil {
 		t.Fatal(err)
 	}

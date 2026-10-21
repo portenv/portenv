@@ -118,14 +118,14 @@ func emptyProject() *daemonv1.ProjectSource {
 	return &daemonv1.ProjectSource{Source: &daemonv1.ProjectSource_Empty{Empty: true}}
 }
 
-func useFakeGitHub(s *Server, gh *fakeGitHub) {
-	s.githubAPI, s.githubGit = gh.api, gh.git
+// withGitHub points the server at a fake GitHub before it serves.
+func withGitHub(gh *fakeGitHub) func(*Server) {
+	return func(s *Server) { s.githubAPI, s.githubGit = gh.api, gh.git }
 }
 
 func TestApplyClonesThenWritesTheTeam(t *testing.T) {
-	s, fake, c := servingProject(t)
 	gh := newFakeGitHub(t, false)
-	useFakeGitHub(s, gh)
+	s, fake, c := servingProject(t, withGitHub(gh))
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	if err := keepSetup(filepath.Join(s.env.Dir, "state", "box-1"), &daemonv1.WorkspaceSetup{Project: githubURL("https://github.com/acme/api.git", false), Team: approvedChoice(t, "starter")}); err != nil {
@@ -182,10 +182,10 @@ func scanFor(t *testing.T, b []byte, roots ...string) {
 // clone worked or not.
 func TestAPrivateCloneKeepsTheSignInOnTheMac(t *testing.T) {
 	var logs bytes.Buffer
-	s, fake, c := servingProject(t)
-	s.log = slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	gh := newFakeGitHub(t, true)
-	useFakeGitHub(s, gh)
+	s, fake, c := servingProject(t, withGitHub(gh), func(s *Server) {
+		s.log = slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	})
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	state := filepath.Join(s.env.Dir, "state", "box-1")
@@ -227,9 +227,8 @@ func TestAPrivateCloneKeepsTheSignInOnTheMac(t *testing.T) {
 // A failed clone: one plain line, nothing written or pinned, the setup
 // kept; Try Again goes through.
 func TestAFailedCloneKeepsTheSetup(t *testing.T) {
-	s, fake, c := servingProject(t)
 	gh := newFakeGitHub(t, false)
-	useFakeGitHub(s, gh)
+	s, fake, c := servingProject(t, withGitHub(gh))
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	state := filepath.Join(s.env.Dir, "state", "box-1")
@@ -291,8 +290,7 @@ func TestApplyEmptyWithNoTeam(t *testing.T) {
 
 // A GitHub repository with no team is cloned, and that's all.
 func TestApplyCloneWithNoTeam(t *testing.T) {
-	s, fake, c := servingProject(t)
-	useFakeGitHub(s, newFakeGitHub(t, false))
+	s, fake, c := servingProject(t, withGitHub(newFakeGitHub(t, false)))
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	if err := keepSetup(filepath.Join(s.env.Dir, "state", "box-1"), &daemonv1.WorkspaceSetup{Project: githubURL("https://github.com/acme/api", false)}); err != nil {
@@ -343,18 +341,14 @@ func TestCheckSetup(t *testing.T) {
 // GitHub's size first: a repository too big for the workspace with its
 // team is refused before any byte is fetched.
 func TestTooBigIsRefusedBeforeAnyByte(t *testing.T) {
-	s, fake, c := servingProject(t)
-	gh := newFakeGitHub(t, false)
 	gitHits := 0
 	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`{"size": 80000000}`)) // 82 GB
 	}))
 	defer api.Close()
-	s.githubAPI = api.URL
-	s.githubGit = gh.git
 	counting := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { gitHits++; http.NotFound(w, nil) }))
 	defer counting.Close()
-	s.githubGit = counting.URL
+	s, fake, c := servingProject(t, func(s *Server) { s.githubAPI, s.githubGit = api.URL, counting.URL })
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := keepSetup(filepath.Join(s.env.Dir, "state", "box-1"), &daemonv1.WorkspaceSetup{Project: githubURL("https://github.com/acme/api", false)}); err != nil {
@@ -368,9 +362,8 @@ func TestTooBigIsRefusedBeforeAnyByte(t *testing.T) {
 
 // A public repository never gets the sign-in, even when the app has one.
 func TestAPublicCloneNeverSendsTheSignIn(t *testing.T) {
-	s, _, c := servingProject(t)
 	gh := newFakeGitHub(t, false)
-	useFakeGitHub(s, gh)
+	s, _, c := servingProject(t, withGitHub(gh))
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	if err := keepSetup(filepath.Join(s.env.Dir, "state", "box-1"), &daemonv1.WorkspaceSetup{Project: githubURL("https://github.com/acme/api", false)}); err != nil {

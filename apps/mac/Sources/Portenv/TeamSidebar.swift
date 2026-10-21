@@ -19,6 +19,8 @@ struct TeamSidebar: View {
     var onRaise: ((Int) -> Void)?
     /// Why the last Raise was refused, if it was.
     var error: String?
+    /// What writing New workspace's team said (ADR 0025).
+    var setupLines: [String] = []
 
     static let width: CGFloat = 248
     static let compactWidth: CGFloat = 52
@@ -51,6 +53,17 @@ struct TeamSidebar: View {
                             AgentTabRow(tab: t)
                                 .selectionDisabled()
                         }
+                    }
+                }
+                // Writing New workspace's team (ADR 0025): a file the
+                // project already had, or one that isn't what was approved.
+                if !compact {
+                    ForEach(setupLines, id: \.self) { line in
+                        Label { Text(verbatim: line).fixedSize(horizontal: false, vertical: true) } icon: {
+                            Image(systemName: "info.circle")
+                        }
+                        .font(.system(size: 11))
+                        .selectionDisabled()
                     }
                 }
                 // The owner's agent limit (R-0347): at, near or over it.

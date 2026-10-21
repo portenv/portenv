@@ -140,6 +140,8 @@ func newChannelServer(cfg Config, keys *channelKeys) *grpc.Server {
 	s.startAgentServer, s.stopAgentServer = s.StartAgentTerminals, s.StopAgentTerminals
 	s.setAgentIdleInput = s.SetAgentIdleInput
 	s.runTeamIO = s.teamIOAs
+	// work's own socket, for pushes (R-0391), once init has made its folder.
+	go s.team.serveOwnerWhenReady(cfg.UID)
 	srv := grpc.NewServer(
 		grpc.Creds(credentials.NewTLS(keys.tlsConfig())),
 		grpc.UnaryInterceptor(func(ctx context.Context, req any, _ *grpc.UnaryServerInfo, h grpc.UnaryHandler) (any, error) {

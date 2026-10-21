@@ -62,6 +62,8 @@ public final class TabTerminalHost: NSView {
 /// - `label`: what VoiceOver reads ("Pane: grok tab, Grok Bot is typing").
 /// - `isFocused`: two-way; true makes the terminal first responder, and a
 ///   click in the terminal sets it.
+/// - `textSize`: the text's size in points (R-0362); a change reflows the
+///   grid and resizes the tab, as a window resize does.
 /// - `onReset`/`onEnded`: for the pane header ("Reconnecting…",
 ///   "Disconnected" with Reconnect).
 public struct TabTerminalPane: NSViewRepresentable {
@@ -70,13 +72,21 @@ public struct TabTerminalPane: NSViewRepresentable {
     @Binding public var isFocused: Bool
     public var onReset: (TabTerminalSize) -> Void
     public var onEnded: (TabTerminalEnd) -> Void
+    /// The text size in points (R-0362), and what ⌘= or ⌘⇧= in the
+    /// terminal asks for.
+    public var textSize: CGFloat
+    public var onTextSizeKey: (TerminalTextSize.Step) -> Void
 
     public init(source: any TabTerminalSource, label: String, isFocused: Binding<Bool>,
+                textSize: CGFloat = TerminalTextSize.defaultPoints,
+                onTextSizeKey: @escaping (TerminalTextSize.Step) -> Void = { _ in },
                 onReset: @escaping (TabTerminalSize) -> Void = { _ in },
                 onEnded: @escaping (TabTerminalEnd) -> Void = { _ in }) {
         self.source = source
         self.label = label
         _isFocused = isFocused
+        self.textSize = textSize
+        self.onTextSizeKey = onTextSizeKey
         self.onReset = onReset
         self.onEnded = onEnded
     }
@@ -94,6 +104,8 @@ public struct TabTerminalPane: NSViewRepresentable {
     private func update(_ host: TabTerminalHost) {
         host.terminal.onReset = onReset
         host.terminal.onEnded = onEnded
+        host.terminal.onTextSizeKey = onTextSizeKey
+        host.terminal.textSize = textSize
         host.terminal.setAccessibilityLabel(label)
         let binding = $isFocused
         host.onFocusChange = { focused in

@@ -116,7 +116,11 @@ func (s *Server) deleteRefusal(name string) (refusal string, open bool) {
 	s.mu.Lock()
 	ob, isOpen := s.open[name]
 	target, moving := s.moves[name]
+	gitBusy := s.gitBusy[name] > 0
 	s.mu.Unlock()
+	if gitBusy {
+		return fmt.Sprintf("%s is pushing to or fetching from GitHub right now. Delete it once that has finished.", name), false
+	}
 	if moving {
 		return fmt.Sprintf("%s is moving to %s. Delete it once the move has finished.", name, serverHost(target)), false
 	}
@@ -443,4 +447,22 @@ func (e engineDeleter) RemoveRecord(_ context.Context, c local.BoxConfig) error 
 		return err
 	}
 	return e.env.RemoveConfig(c)
+}
+
+// gitCall counts a push or fetch with GitHub in flight for the workspace
+// until the returned func runs (R-0391): Delete Workspace waits for it.
+func (s *Server) gitCall(name string) func() {
+	s.mu.Lock()
+	if s.gitBusy == nil {
+		s.gitBusy = map[string]int{}
+	}
+	s.gitBusy[name]++
+	s.mu.Unlock()
+	return func() {
+		s.mu.Lock()
+		if s.gitBusy[name]--; s.gitBusy[name] <= 0 {
+			delete(s.gitBusy, name)
+		}
+		s.mu.Unlock()
+	}
 }

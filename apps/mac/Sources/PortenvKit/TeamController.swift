@@ -35,12 +35,22 @@ public final class TeamController {
     /// Told after the team changes (from the stream, or an answer given
     /// here): the session's notifications and the Dock badge (§5).
     @ObservationIgnored public var changed: (@MainActor (TeamState) -> Void)?
+    /// A decision to select once the team has it (a notification's Show
+    /// opened this window before its team arrived).
+    @ObservationIgnored private var toShow: String?
 
-    public init(box: String, daemon: DaemonAPI, retry: Duration = .seconds(1)) {
+    public init(box: String, daemon: DaemonAPI, retry: Duration = .seconds(1), github: GitHubAccount = .system) {
         self.box = box
         self.daemon = daemon
         self.retry = retry
+        self.github = github
+        push = PushController(box: box, daemon: daemon, github: github)
     }
+
+    /// The workspace's pushes waiting for the app (R-0391).
+    public let push: PushController
+
+    private let github: GitHubAccount
 
     /// The selected agent, if one is selected and still in the team.
     public var selectedAgent: TeamAgent? {
@@ -53,11 +63,12 @@ public final class TeamController {
     /// the task is cancelled, or portenvd turns out not to know teams.
     public func follow() async {
         while !Task.isCancelled {
+            if !teamPlanChecked { await applyKeptTeam() }
             do {
                 for try await (event, cursor) in daemon.watchTeam(box, cursor: state.cursor) {
                     state.apply(event, cursor: cursor)
                     if case .removed(let id) = event, selection == .agent(id) { selection = .allTabs }
-                    changed?(state)
+                    didChange()
                 }
             } catch let e as DaemonError where e.message == DaemonError.outOfDate {
                 supported = false
@@ -66,6 +77,27 @@ public final class TeamController {
             if Task.isCancelled { return }
             try? await Task.sleep(for: retry)
         }
+    }
+
+    /// Selects a decision as its Needs-you row does, now or as soon as
+    /// the team has it; once only, so the owner's own choice afterwards
+    /// stands.
+    public func show(decision id: String) {
+        toShow = id
+        showPending()
+    }
+
+    private func showPending() {
+        guard let id = toShow, let s = NotificationRoute.selection(decision: id, in: state) else { return }
+        selection = s
+        toShow = nil
+    }
+
+    /// The team changed: a decision waiting to be shown, then whoever
+    /// listens.
+    private func didChange() {
+        showPending()
+        changed?(state)
     }
 
     /// Approve or Decline (with the owner's reason); only a pending
@@ -94,11 +126,59 @@ public final class TeamController {
 
     private func answered(_ d: TeamDecision) {
         state.apply(.decision(d))
-        changed?(state)
+        didChange()
         if selection == .decision(d.id), !d.answerable {
             let next = d.state == .approved ? d.startAgents.first { state.agent($0) != nil } : nil
             selection = next.map { .agent($0) } ?? .allTabs
         }
+    }
+
+    /// Lines from writing the team New workspace kept (ADR 0025): a file
+    /// the project already had, or one that isn't what was approved.
+    public private(set) var setupLines: [String] = []
+    private var teamPlanChecked = false
+    /// The project couldn't be brought in (a failed clone): the window's
+    /// line, with Try Again.
+    public private(set) var setupProblem: SetupProblem?
+    /// ApplyTeamPlan is working (a clone can take a while).
+    public private(set) var settingUp = false
+
+    /// Brings in the project and writes and pins the team New workspace
+    /// kept, once the workspace is open (portenvd does it; nothing when
+    /// there's none). Asked again on the next round until portenvd can
+    /// answer. A clone with the owner's sign-in reads it from the Keychain
+    /// only when portenvd asks for it, and only for that call; a failed one
+    /// waits for Try Again.
+    private func applyKeptTeam() async {
+        settingUp = true
+        defer { settingUp = false }
+        do {
+            var r = try await daemon.applyTeamPlan(box, githubToken: nil)
+            if r.needsToken {
+                guard let token = try? await github.token(), !token.isEmpty else {
+                    teamPlanChecked = true
+                    setupProblem = SetupProblem(line: ProjectText.needsSignIn, needsSignIn: true)
+                    return
+                }
+                r = try await daemon.applyTeamPlan(box, githubToken: token)
+            }
+            teamPlanChecked = true
+            if let line = r.projectError, !line.isEmpty {
+                setupProblem = SetupProblem(line: line, needsSignIn: r.needsSignIn)
+                return
+            }
+            setupProblem = nil
+            setupLines = r.lines
+        } catch let e as DaemonError where e.message == DaemonError.outOfDate {
+            teamPlanChecked = true
+        } catch {}
+    }
+
+    /// The window's Try Again: portenvd still has the choice.
+    public func retrySetup() async {
+        setupProblem = nil
+        teamPlanChecked = false
+        await applyKeptTeam()
     }
 
     /// The Team section's Raise, after the owner confirmed it (R-0347):
@@ -236,7 +316,7 @@ public final class TeamController {
     /// Tests: an event as if from the stream.
     func receive(_ event: TeamEvent) {
         state.apply(event)
-        changed?(state)
+        didChange()
     }
 
     public func dismissError() { error = nil }

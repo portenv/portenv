@@ -157,6 +157,15 @@ private struct Setup {
         #expect(try s.pool.entries() == Array(s.entries.dropFirst()))
     }
 
+    /// The team approved in New workspace goes to CreateBox with it (ADR 0025).
+    @Test func theApprovedTeamGoesToCreateBox() async throws {
+        let s = try Setup()
+        let team = TeamChoice(template: "starter", agents: [TeamAgentChoice(id: "lead", include: true, approvedSHA256: String(repeating: "a", count: 64))])
+        _ = try await s.maker.make(name: "acme-api", team: team)
+        #expect(s.creator.requests.first?.team == team)
+        _ = try await Setup().maker.make(name: "acme-api")
+    }
+
     /// An empty pool asks for the recovery key, and nothing is made.
     @Test func anEmptyPoolAsksForTheRecoveryKey() async throws {
         let s = try Setup(fill: false)

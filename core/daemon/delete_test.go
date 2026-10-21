@@ -385,6 +385,12 @@ func TestDeleteRefusedWhileOpenSavingOrElsewhere(t *testing.T) {
 			s.remote["acme-api"] = &remoteBox{host: "dev@test-server"}
 		}, "test-server"},
 		"running": {func(_ *Server, f *fakeDeleter) { f.running = true }, "still running"},
+		// A push or fetch with GitHub in flight (R-0391), from the
+		// workspace's own git: never deleted under it.
+		"pushing or fetching": {func(s *Server, _ *fakeDeleter) {
+			done := s.gitCall("acme-api")
+			t.Cleanup(done)
+		}, "pushing to or fetching from GitHub"},
 		// R-0358: an agent of its team running (in any running state).
 		"an agent running": {func(s *Server, _ *fakeDeleter) {
 			b := s.teamEng().box("acme-api")

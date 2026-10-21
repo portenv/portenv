@@ -18,6 +18,13 @@ step says what you should see. If you don't, stop there and say which step.
    each. Edit them if you like: the instructions are generic on purpose.
    The coordinator has a routine (`every 30m: …`) and
    `team_status: read`.
+   **Or, for a new workspace, choose the team while you make it** (ADR
+   0025): New Workspace… › Team › Orchestrate, adjust the agents, then read
+   and approve each file in Review and approve (tick "Let Coordinator see
+   the team's status" for its routine). The project starts empty, with
+   git; bring your repository in from the terminal (`git remote add origin
+   …`, then `git pull origin main`). The files are written and approved
+   when the workspace opens; go on at step 5.
 4. **Approve the agent files.** In the Team section, open each agent. Its
    `runner` line is shown first, then the file; choose Approve. A file you
    change later needs approving again.

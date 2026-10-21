@@ -214,7 +214,7 @@ Notification rules:
 - Answer buttons in the notification are the same two as the card, plus "Show". A decision (6.2) never has answer buttons: Show only, whatever it asks, an agent file or the team's first start included. Clicking a notification, or Show, brings its workspace forward with the question selected (a decision as its Needs-you row selects it).
 - "Window not in front" means that workspace's own window: another workspace's window in front still gets the notification. A notification is taken back once its question is answered, expired or gone.
 - A password prompt's notification says only that it asks; its text stays in the terminal.
-- **Dock badge:** the number of Needs-you decisions across every workspace a window shows, cleared at 0.
+- **Dock badge:** the number of Needs-you decisions across every workspace running on this Mac, with a window or without one (ADR 0023), cleared at 0. A workspace with no window notifies the same way; Show opens it in a new window tab (3.3).
 - One notification per question; a newer state replaces the older notification, it doesn't stack.
 - Notifications respect Focus modes and the user's per-app settings. No sound by default.
 - Dots always come with a text label for VoiceOver and a tooltip; colour is never the only signal.

@@ -194,6 +194,16 @@ Shown when a program in the visible tab is waiting for an answer that Portenv ca
 ### 4.5 Type and colour
 
 - Monospace: SF Mono (user's choice in Settings), 13 pt default.
+- **Text size** (R-0362), as in Terminal.app: only the terminal's text changes, never the sidebar, the team column, the tab bar or the rest of the window. The grid reflows and the new size reaches the tab's programs as a resize, the same path a window resize takes, so a full-screen program redraws and keeps its modes.
+
+  | Shortcut | Action | Menu |
+  | --- | --- | --- |
+  | ⌘+ (also ⌘= and ⌘⇧=, so US and AZERTY layouts both work) | One point bigger, up to 36 pt; disabled at 36 pt | View › Bigger |
+  | ⌘− | One point smaller, never below the default 13 pt; disabled at it | View › Smaller |
+
+  - There is no Default Size command (the owner, R-0362): Smaller stops at the default, and ⌘0 stays View › Show Sidebar (§6.2).
+  - It applies to the focused terminal (the focused pane, when split) and is remembered per workspace across restarts (`terminalTextSize.<workspace>` in the app's defaults, beside the inspector and sidebar state; never the Keychain). New tabs and panes in that workspace start at it.
+  - ⌘= and ⌘⇧= are taken only while the terminal has the keys; ⌘+, ⌘− and those two are the only keys text size takes from a program.
 - The terminal has an 8 pt margin on every side, in the terminal's own background colour: its text never touches the window's edge (`TerminalLayout.margin`).
 - Terminal colours match the system appearance by default (the owner, 2026-10-11): the system's text background and text colours, a light and a dark ANSI palette with every normal colour at least 4.5:1 on its background, and the accent for the caret and selection. A theme menu (View › Terminal Appearance) comes later. Portenv's own decorations (block tint, headers, card) use system semantic colours so they work in light and dark mode.
 
@@ -414,6 +424,7 @@ Type: SF Pro for UI (13 pt body, 11 pt section headings semibold secondary, 12 p
 - Everything in the palette, menus and inspector is reachable by keyboard; Full Keyboard Access works.
 - Contrast at least 4.5:1 for text, including grey details.
 - Reduce Motion: no spinning symbols, no animated progress shimmer.
+- View › Bigger and Smaller have VoiceOver labels ("Make the terminal text bigger", "Make the terminal text smaller"), and each change is announced: "Terminal text size 14 points" (R-0362, §4.5).
 - Colour never carries meaning alone: dots have labels, status has symbols and words.
 - The web terminal (PLAN.md 2.8) keeps its screen as page text (xterm.js's DOM renderer or screen-reader mode), offers larger-font and high-contrast options, and shows the state line as plain text outside the terminal, so browser agents and screen readers can read it.
 

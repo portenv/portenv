@@ -81,8 +81,14 @@ struct PortenvApp: App {
             SplitCommands(split: current?.split)
             InspectorToggle(box: current?.controller?.box)
             TeamSidebarToggle(box: current?.controller?.box, team: current?.team)
-            FindCommands()
-            FeedbackCommands()
+            // A commands builder takes at most ten items: Find, Feedback and
+            // text size share one Group.
+            Group {
+                FindCommands()
+                FeedbackCommands()
+                // View › Bigger, Smaller: the terminal's text (R-0362).
+                TextSizeCommands()
+            }
             // Portenv › Settings… (⌘,): the toolbar window (R-0137).
             CommandGroup(replacing: .appSettings) {
                 Button("Settings\u{2026}") { SettingsWindow.show() }

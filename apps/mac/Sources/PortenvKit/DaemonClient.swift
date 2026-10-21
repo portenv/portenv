@@ -786,6 +786,70 @@ extension DaemonClient {
     }
 }
 
+// MARK: Attachments (ADR 0030)
+
+extension DaemonClient {
+    public func readAttachment(_ box: String, id: String) async throws -> (TeamAttachment, Data) {
+        let req = Portenv_Daemon_V1_ReadAttachmentRequest.with { $0.name = box; $0.attachmentID = id }
+        return try await call {
+            try await api.readAttachment(req) { response in
+                var record: TeamAttachment?
+                var data = Data()
+                for try await m in response.messages {
+                    if m.hasAttachment { record = TeamAttachment(m.attachment) }
+                    data.append(m.data)
+                    if data.count > AttachmentText.maxBytes { throw DaemonError(AttachmentText.notOnThisMac) }
+                }
+                guard let record else { throw DaemonError(AttachmentText.notOnThisMac) }
+                return (record, data)
+            }
+        }
+    }
+
+    public func removeAttachment(_ box: String, id: String) async throws {
+        let req = Portenv_Daemon_V1_RemoveAttachmentRequest.with { $0.name = box; $0.attachmentID = id }
+        _ = try await call { try await api.removeAttachment(req) }
+    }
+
+    public func sendAttachments(_ box: String, to agents: [String], thread: String, pane: String, files: [OutgoingAttachment]) async throws -> SentAttachments {
+        let head = Portenv_Daemon_V1_SendAttachmentsRequest.with { $0.name = box; $0.to = agents; $0.threadID = thread; $0.paneID = pane }
+        let request = StreamingClientRequest(of: Portenv_Daemon_V1_SendAttachmentsRequest.self) { writer in
+            try await writer.write(head)
+            for f in files {
+                var rest = f.data[...]
+                var first = true
+                repeat {
+                    let piece = rest.prefix(256 * 1024)
+                    rest = rest.dropFirst(piece.count)
+                    let m = Portenv_Daemon_V1_SendAttachmentsRequest.with {
+                        if first { $0.fileName = f.name; $0.size = Int64(f.data.count) }
+                        $0.data = Data(piece)
+                        $0.lastOfFile = rest.isEmpty
+                    }
+                    first = false
+                    try await writer.write(m)
+                } while !rest.isEmpty
+            }
+        }
+        return try await call {
+            let r = try await api.sendAttachments(request: request)
+            let how: InsertHow = switch r.inserted {
+            case .typed: .typed
+            case .pasted: .pasted
+            case .none, .unspecified, .UNRECOGNIZED: .none
+            }
+            return SentAttachments(messages: r.messages.map(TeamMessage.init), refused: r.refused, inserted: how, insertedPath: r.insertedPath)
+        }
+    }
+}
+
+extension TeamAttachment {
+    init(_ a: Portenv_Types_V1_Attachment) {
+        self.init(id: a.id, name: a.name, mediaType: a.mediaType, size: a.size, sha256: a.sha256, width: Int(a.width), height: Int(a.height),
+                  inboxPath: a.inboxPath)
+    }
+}
+
 extension TeamEvent {
     init?(_ r: Portenv_Daemon_V1_WatchTeamResponse) {
         switch r.event {
@@ -857,7 +921,7 @@ extension TeamMessage {
         case .answer, .unspecified, .UNRECOGNIZED: .answer
         }
         self.init(id: m.id, from: m.from, to: m.to, threadID: m.threadID, kind: kind, text: m.text,
-                  createdAt: m.hasCreatedAt ? m.createdAt.date : nil, about: m.about)
+                  createdAt: m.hasCreatedAt ? m.createdAt.date : nil, about: m.about, attachments: m.attachments.map(TeamAttachment.init))
     }
 }
 
@@ -885,7 +949,8 @@ extension TeamDecision {
                   answerNote: d.answerNote, createdAt: d.hasCreatedAt ? d.createdAt.date : nil,
                   answeredAt: d.hasAnsweredAt ? d.answeredAt.date : nil, expiresAt: d.hasExpiresAt ? d.expiresAt.date : nil,
                   packages: d.packages.map { Package(name: $0.name, version: $0.version, source: $0.source, dependency: $0.dependency) },
-                  startAgents: d.startAgentIds, choices: d.choices, choice: Int(d.choice))
+                  startAgents: d.startAgentIds, choices: d.choices, choice: Int(d.choice),
+                  attachments: d.attachments.map(TeamAttachment.init))
     }
 }
 

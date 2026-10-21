@@ -15,6 +15,9 @@ struct TabBar: View {
     /// Split view: where a tab's pane is (0 to 1), for its glyph; nil for a
     /// tab in no pane, or with one pane.
     var paneFrame: (String) -> CGRect? = { _ in nil }
+    /// The team's controller, so an agent's tab takes dropped files
+    /// (ADR 0030 point 8); nil in renders.
+    var controller: TeamController?
     /// The tab being renamed, and the name being typed.
     @State private var renaming: String?
     @State private var draft = ""
@@ -37,6 +40,9 @@ struct TabBar: View {
                             renaming = nil
                             if commit { Task { await tabs.rename(id, to: name) } }
                         })
+                    // A file dropped on an agent's tab goes to that agent,
+                    // its path offered in the tab's pane.
+                    .attachDrop(tab.agentID.isEmpty ? nil : controller, to: [tab.agentID], pane: tab.paneIDs.first ?? "", target: "tab:" + tab.id)
                 Divider()
             }
             Button {

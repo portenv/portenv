@@ -70,6 +70,11 @@ public final class WorkspaceSession {
         controller.map { WorkspaceTabTitle.help(box: $0.box, location: $0.location, needsYou: needsYou) }
     }
 
+    /// Posts the notification for an attachment pushed to the owner (ADR
+    /// 0030 point 9a): the app sets it; the team calls it unless the agent's
+    /// attachments are muted.
+    @ObservationIgnored public var onAttachmentNotice: (@MainActor (String, AttachmentNotice) -> Void)?
+
     /// Shows a workspace in this window, with controllers of its own.
     @discardableResult
     public func show(_ box: String) -> BoxController {
@@ -79,7 +84,7 @@ public final class WorkspaceSession {
         self.controller = controller
         self.tabs = tabs
         split = SplitController(tabs: tabs)
-        team = TeamController(box: box, daemon: daemon)
+        team = TeamController(box: box, daemon: daemon) { [weak self] notice in self?.onAttachmentNotice?(box, notice) }
         newBox = nil
         screen = .workspace
         return controller

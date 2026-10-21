@@ -99,6 +99,14 @@ public protocol DaemonAPI: Sendable {
     /// Sets it; portenvd refuses anything outside 1 to 8. Only after the
     /// owner chose it.
     func setAgentsAllowed(_ n: Int) async throws -> Int
+    /// An attachment from this Mac's store (ADR 0030): its record and its
+    /// bytes. One the store doesn't hold says AttachmentText.notOnThisMac.
+    func readAttachment(_ box: String, id: String) async throws -> (TeamAttachment, Data)
+    /// Remove from this Mac: the bytes go; the board keeps the record.
+    func removeAttachment(_ box: String, id: String) async throws
+    /// The owner's files for agents: each agent gets its own copy in its
+    /// ~/inbox/owner/; with a pane, the path is offered there.
+    func sendAttachments(_ box: String, to agents: [String], thread: String, pane: String, files: [OutgoingAttachment]) async throws -> SentAttachments
 }
 
 public extension DaemonAPI {
@@ -138,6 +146,11 @@ public extension DaemonAPI {
     func stopAllowingPushes(_: String) async throws { throw DaemonError(DaemonError.outOfDate) }
     func agentsAllowed() async throws -> Int { throw DaemonError(DaemonError.outOfDate) }
     func setAgentsAllowed(_: Int) async throws -> Int { throw DaemonError(DaemonError.outOfDate) }
+    func readAttachment(_: String, id _: String) async throws -> (TeamAttachment, Data) { throw DaemonError(DaemonError.outOfDate) }
+    func removeAttachment(_: String, id _: String) async throws { throw DaemonError(DaemonError.outOfDate) }
+    func sendAttachments(_: String, to _: [String], thread _: String, pane _: String, files _: [OutgoingAttachment]) async throws -> SentAttachments {
+        throw DaemonError(DaemonError.outOfDate)
+    }
 }
 
 /// A box saved in the background after Quit Anyway.

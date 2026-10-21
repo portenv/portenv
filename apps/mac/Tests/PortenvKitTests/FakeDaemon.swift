@@ -328,4 +328,29 @@ final class FakeDaemon: DaemonAPI, @unchecked Sendable {
         lock.withLock { allowed = n }
         return n
     }
+
+    // MARK: Attachments (ADR 0030)
+
+    /// The store on this Mac: id → the record and its bytes.
+    var attachmentStore: [String: (TeamAttachment, Data)] = [:]
+    /// Each SendAttachments request as it arrived.
+    var sentFiles: [(to: [String], pane: String, files: [OutgoingAttachment])] = []
+    /// What SendAttachments answers.
+    var sendResult = SentAttachments(messages: [], refused: [], inserted: .none, insertedPath: "")
+    func readAttachment(_ box: String, id: String) async throws -> (TeamAttachment, Data) {
+        try await record(["app", "read-attachment", box, id])
+        guard let a = lock.withLock({ attachmentStore[id] }) else { throw DaemonError(AttachmentText.notOnThisMac) }
+        return a
+    }
+    func removeAttachment(_ box: String, id: String) async throws {
+        try await record(["app", "remove-attachment", box, id])
+        _ = lock.withLock { attachmentStore.removeValue(forKey: id) }
+    }
+    func sendAttachments(_ box: String, to agents: [String], thread: String, pane: String, files: [OutgoingAttachment]) async throws -> SentAttachments {
+        try await record(["app", "send-attachments", box, agents.joined(separator: ","), pane] + files.map(\.name))
+        return lock.withLock {
+            sentFiles.append((agents, pane, files))
+            return sendResult
+        }
+    }
 }

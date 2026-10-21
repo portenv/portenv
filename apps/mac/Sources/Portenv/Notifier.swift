@@ -71,6 +71,14 @@ final class Notifier: KeychainWaitNotifying, @unchecked Sendable {
         NSApplication.shared.isActive && NSApplication.shared.keyWindow != nil && frontWorkspace() == box
     }
 
+    /// An attachment pushed to the owner (ADR 0030 point 9a): on a message
+    /// to the owner or a decision, from an agent not muted. Its name only,
+    /// never its contents.
+    func attachment(box: String, notice: AttachmentNotice) async {
+        await post(NotifyText.Content(title: "\(box) \u{00B7} \(notice.title)", body: notice.body, subtitle: ""),
+                   id: "attachment-\(box)-\(notice.agent)")
+    }
+
     func savedAfterQuit(box: String, at: Date) async {
         let center = UNUserNotificationCenter.current()
         guard (try? await center.requestAuthorization(options: [.alert])) == true else { return }

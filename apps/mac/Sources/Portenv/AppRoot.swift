@@ -327,6 +327,11 @@ final class AppModel {
             let place = controller?.state?.location.map(ServerName.display)
             Task { await Notifier.shared.commandFinished(box: box, finished: f, location: place) }
         }
+        // An attachment pushed to the owner notifies, unless its agent's
+        // attachments are muted (ADR 0030 point 9a).
+        s.onAttachmentNotice = { box, notice in
+            Task { await Notifier.shared.attachment(box: box, notice: notice) }
+        }
         // This session's decisions and tab questions notify, and count in
         // the Dock badge, whether its tab is in front or not (§5, R-0384).
         let needsYou = NeedsYouNotifications.shared.center

@@ -21,6 +21,8 @@ struct TeamSidebar: View {
     var error: String?
     /// What writing New workspace's team said (ADR 0025).
     var setupLines: [String] = []
+    /// For each agent row's Mute Attachments; nil in renders.
+    var controller: TeamController?
 
     static let width: CGFloat = 248
     static let compactWidth: CGFloat = 52
@@ -48,6 +50,13 @@ struct TeamSidebar: View {
                 ForEach(state.agents) { a in
                     AgentRow(agent: a, team: state.agents, now: now, compact: compact)
                         .tag(TeamSelection.agent(a.id))
+                        .contextMenu {
+                            if let controller {
+                                Button(AttachmentText.mute(a.name, muted: controller.isMuted(a.id))) {
+                                    controller.setMuted(!controller.isMuted(a.id), agent: a.id)
+                                }
+                            }
+                        }
                     if selection == .agent(a.id), !compact {
                         ForEach(tabs.filter { $0.agentID == a.id }) { t in
                             AgentTabRow(tab: t)

@@ -80,7 +80,7 @@ struct PortenvApp: App {
             TabCommands(tabs: current?.tabs, split: current?.split)
             SplitCommands(split: current?.split)
             InspectorToggle(box: current?.controller?.box)
-            TeamSidebarToggle(box: current?.controller?.box, team: current?.team)
+            TeamViewCommands(box: current?.controller?.box, team: current?.team)
             // A commands builder takes at most ten items: Find, Feedback and
             // text size share one Group.
             Group {

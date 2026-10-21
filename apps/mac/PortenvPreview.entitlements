@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- PortenvPreview.xpc's entitlements (ADR 0030 point 5): the build's first
+     entitlement, and its reason. Every decode of an attachment an agent sent
+     (images through ImageIO, PDFs through PDFKit) runs in this service, so a
+     malformed file that exploits a decoder lands in a process that can do
+     nothing with it: the App Sandbox, and nothing beyond it. No network
+     (no com.apple.security.network.client), no user files (no
+     files.user-selected or files.downloads), no Keychain sharing, no
+     camera, microphone or Apple Events. It gets bytes over XPC and gives back
+     bounded bitmaps. Never add an entitlement here without changing ADR 0030. -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+</dict>
+</plist>

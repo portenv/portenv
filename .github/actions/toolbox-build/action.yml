@@ -1,0 +1,85 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Builds images/toolbox-node/Dockerfile with docker/build-push-action, and
+# once more a little over a minute later if that fails.
+#
+# Why: registries refuse CI now and then with "429 Too Many Requests". The
+# base images come from ECR Public (see the Dockerfile), but the Dockerfile
+# frontend is only on Docker Hub and mirror.gcr.io, and mirror.gcr.io's quota
+# is one for everyone who uses it, counted per minute ("Quota exceeded for
+# quota metric 'Requests per project in the US multi-region' ... per
+# minute"): when it runs out, every pull fails until the minute is over. So
+# the second try waits 65 seconds. A build that fails for any other reason
+# fails twice, and the job fails with the second try's error.
+#
+# Same inputs as the build-push-action steps it replaces; the digests stay
+# pinned in the Dockerfile.
+name: Build the toolbox image
+description: images/toolbox-node/Dockerfile through docker/build-push-action, tried again after a minute if it fails
+inputs:
+  target:
+    description: The stage to build (empty for the image)
+    default: ""
+  platforms:
+    description: build-push-action's platforms
+    required: true
+  tags:
+    description: build-push-action's tags
+    default: ""
+  load:
+    description: build-push-action's load
+    default: "false"
+  outputs:
+    description: build-push-action's outputs
+    default: ""
+  build-args:
+    description: build-push-action's build-args
+    default: ""
+  cache-from:
+    description: build-push-action's cache-from
+    default: ""
+  cache-to:
+    description: build-push-action's cache-to
+    default: ""
+runs:
+  using: composite
+  steps:
+    - name: Build
+      id: first
+      continue-on-error: true
+      uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+      with:
+        context: .
+        file: images/toolbox-node/Dockerfile
+        target: ${{ inputs.target }}
+        platforms: ${{ inputs.platforms }}
+        tags: ${{ inputs.tags }}
+        load: ${{ inputs.load }}
+        outputs: ${{ inputs.outputs }}
+        provenance: false
+        sbom: false
+        build-args: ${{ inputs.build-args }}
+        cache-from: ${{ inputs.cache-from }}
+        cache-to: ${{ inputs.cache-to }}
+    - name: Wait for the registry's quota minute to pass
+      if: steps.first.outcome == 'failure'
+      shell: bash
+      run: |
+        echo "::warning::The toolbox image's build failed; trying once more in 65 seconds (a registry's per-minute quota, 429 Too Many Requests, is the usual cause)."
+        sleep 65
+    - name: Build again
+      if: steps.first.outcome == 'failure'
+      uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+      with:
+        context: .
+        file: images/toolbox-node/Dockerfile
+        target: ${{ inputs.target }}
+        platforms: ${{ inputs.platforms }}
+        tags: ${{ inputs.tags }}
+        load: ${{ inputs.load }}
+        outputs: ${{ inputs.outputs }}
+        provenance: false
+        sbom: false
+        build-args: ${{ inputs.build-args }}
+        cache-from: ${{ inputs.cache-from }}
+        cache-to: ${{ inputs.cache-to }}

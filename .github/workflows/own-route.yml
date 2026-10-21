@@ -39,16 +39,14 @@ jobs:
       # workflow writes it. The restic stage and the agent stage's module
       # download are skipped when their inputs haven't changed. No provenance or SBOM here, so the loaded image
       # is the plain image it always was (publishing attests separately).
+      # Tried again after a minute if a registry refuses it
+      # (.github/actions/toolbox-build).
       - name: Build the toolbox image locally
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        uses: ./.github/actions/toolbox-build
         with:
-          context: .
-          file: images/toolbox-node/Dockerfile
           platforms: linux/amd64
           tags: toolbox-node:own-route
           load: true
-          provenance: false
-          sbom: false
           cache-from: type=gha,scope=toolbox-node-builders-amd64
       - name: Own-route journey with hosted endpoints blocked
         run: tests/e2e/own-route.sh toolbox-node:own-route

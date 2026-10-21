@@ -37,12 +37,18 @@ jobs:
       issues: write # open, comment on and close the "Nightly channel scan failed" issue
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Tried once more after a minute if it fails: a registry's per-minute
+      # quota (429 Too Many Requests) is the usual cause
+      # (.github/actions/toolbox-build).
       - name: Build the toolbox image
         run: |
-          docker build --platform linux/amd64 \
-            --build-arg VERSION="$(git describe --tags --always)" \
-            --build-arg COMMIT="$(git rev-parse --short HEAD)" \
-            -f images/toolbox-node/Dockerfile -t toolbox-node:nightly .
+          build() {
+            docker build --platform linux/amd64 \
+              --build-arg VERSION="$(git describe --tags --always)" \
+              --build-arg COMMIT="$(git rev-parse --short HEAD)" \
+              -f images/toolbox-node/Dockerfile -t toolbox-node:nightly .
+          }
+          build || { echo "::warning::The build failed; trying once more in 65 seconds."; sleep 65; build; }
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: core/go.mod

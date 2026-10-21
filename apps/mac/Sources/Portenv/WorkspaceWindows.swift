@@ -33,16 +33,46 @@ enum WorkspaceWindows {
         window.makeKeyAndOrderFront(nil)
     }
 
+    /// The workspace windows a new one may join, front to back.
+    private static func hosts(for window: NSWindow) -> [NSWindow] {
+        NSApp.orderedWindows.filter { $0 !== window && $0.isVisible && isWorkspace($0) && $0.tabbingMode == .preferred }
+    }
+
+    /// The frame of the group a new window would join, read before it
+    /// shows (so before anything resizes the group); nil for a window of
+    /// its own.
+    static func groupFrame(for window: NSWindow) -> CGRect? {
+        WorkspaceTabFrame.groupFrame(for: window, among: hosts(for: window), main: NSApp.mainWindow)
+    }
+
     /// A new window that didn't join the workspace tabs by itself (made
     /// before it said it prefers tabs) joins the frontmost group, as the
     /// tab bar's ＋ would; a tab dragged out to a window of its own is the
-    /// same window, already shown, and stays where it was dropped.
-    static func join(_ window: NSWindow) {
-        guard window.tabbingMode == .preferred, isWorkspace(window), window.tabbedWindows == nil else { return }
-        let others = NSApp.orderedWindows.filter { $0 !== window && $0.isVisible && isWorkspace($0) && $0.tabbingMode == .preferred }
-        guard let host = others.first(where: { $0 === NSApp.mainWindow }) ?? others.first else { return }
-        host.addTabbedWindow(window, ordered: .above)
-        window.makeKeyAndOrderFront(nil)
+    /// same window, already shown, and stays where it was dropped. Either
+    /// way, a new tab takes the group's frame (`groupFrame`, read before it
+    /// showed), never its own default size (GUIDELINES §3.3).
+    static func join(_ window: NSWindow, groupFrame: CGRect?) {
+        guard window.tabbingMode == .preferred, isWorkspace(window) else { return }
+        if window.tabbedWindows == nil {
+            let others = hosts(for: window)
+            guard let host = WorkspaceTabFrame.host(for: window, among: others, main: NSApp.mainWindow) else { return }
+            if let frame = WorkspaceTabFrame.joining(own: window.frame, group: groupFrame ?? host.frame,
+                                                     fullScreen: host.styleMask.contains(.fullScreen)) {
+                window.setFrame(frame, display: false)
+            }
+            host.addTabbedWindow(window, ordered: .above)
+            window.makeKeyAndOrderFront(nil)
+        }
+        adopt(window, groupFrame: groupFrame)
+    }
+
+    /// A window in a tab group of more than one, not full screen, takes the
+    /// group's frame back if its own size won (macOS joined it by itself).
+    static func adopt(_ window: NSWindow, groupFrame: CGRect?) {
+        guard (window.tabbedWindows?.count ?? 0) > 1,
+              let frame = WorkspaceTabFrame.joining(own: window.frame, group: groupFrame,
+                                                    fullScreen: window.styleMask.contains(.fullScreen)) else { return }
+        window.setFrame(frame, display: true)
     }
 
     /// ⌃Tab / ⌃⇧Tab, seen before the terminal gets the key (it would type
@@ -90,7 +120,8 @@ struct WorkspaceTabCommands: Commands {
 
 /// The window's tab, kept in step with its session whether the tab is in
 /// front or not (a background tab's view may not update): its title
-/// ("acme-api · This Mac · 2") and tooltip; and the menus' target whenever
+/// ("acme-api · This Mac · 2", or "New workspace" before it shows one)
+/// and tooltip; and the menus' target whenever
 /// the window becomes main.
 struct SessionWindow: NSViewRepresentable {
     let session: WorkspaceSession
@@ -98,16 +129,6 @@ struct SessionWindow: NSViewRepresentable {
 
     func makeNSView(context _: Context) -> Probe { Probe(session: session, sessions: sessions) }
     func updateNSView(_: Probe, context _: Context) {}
-
-    /// The tab's title for what the session shows: the workspace's, or
-    /// "Your workspaces" on the list; nil leaves the window's own title.
-    @MainActor static func title(_ s: WorkspaceSession) -> String? {
-        if let t = s.tabTitle { return t }
-        switch s.screen {
-        case .list, .workspace, .launch: return WorkspaceTabText.list
-        case .newBox: return nil
-        }
-    }
 
     final class Probe: NSView {
         let session: WorkspaceSession
@@ -135,12 +156,19 @@ struct SessionWindow: NSViewRepresentable {
                 tracking = true
                 track()
             } else {
-                window.tab.title = SessionWindow.title(session)
+                window.tab.title = session.windowTitle
             }
             if !joined {
                 joined = true
-                DispatchQueue.main.async { [weak window] in
-                    MainActor.assumeIsolated { if let window { WorkspaceWindows.join(window) } }
+                // The group's frame, before this window shows and anything
+                // resizes the group (GUIDELINES §3.3).
+                let groupFrame = WorkspaceWindows.groupFrame(for: window)
+                DispatchQueue.main.async { [weak window, weak self] in
+                    MainActor.assumeIsolated {
+                        guard let window else { return }
+                        WorkspaceWindows.join(window, groupFrame: groupFrame)
+                        if let self { window.tab.title = self.session.windowTitle }
+                    }
                 }
             }
         }
@@ -154,7 +182,7 @@ struct SessionWindow: NSViewRepresentable {
         private func track() {
             withObservationTracking {
                 let tab = window?.tab
-                tab?.title = SessionWindow.title(session)
+                tab?.title = session.windowTitle
                 tab?.toolTip = session.tabHelp
             } onChange: { [weak self] in
                 DispatchQueue.main.async { MainActor.assumeIsolated { self?.track() } }

@@ -50,7 +50,7 @@ struct FirstRunView: View {
         .background(.background)
         // The board's size, centred on the display Portenv was launched
         // from, the first time this window shows first run (R-0186).
-        .background(FirstRunWindowPlacer())
+        .background(FirstRunWindowPlacer(fromBoxList: flow.fromBoxList))
         .onChange(of: flow.made) { _, made in
             if let made { opened(made) }
         }
@@ -548,16 +548,32 @@ enum RecoveryKeyActions {
 }
 
 /// Places first run's window once: the board's size, centred on the display
-/// under the pointer when Portenv launched (WindowPlacement.firstRun).
+/// under the pointer when Portenv launched (WindowPlacement.firstRun). Only
+/// first run at launch: New Workspace… from the list, a workspace tab or a
+/// full-screen window keeps its frame (WindowPlacement.placesFirstRun).
 private struct FirstRunWindowPlacer: NSViewRepresentable {
-    func makeNSView(context _: Context) -> NSView { Placer() }
+    let fromBoxList: Bool
+
+    func makeNSView(context _: Context) -> NSView { Placer(fromBoxList: fromBoxList) }
     func updateNSView(_: NSView, context _: Context) {}
 
     final class Placer: NSView {
+        let fromBoxList: Bool
+
+        init(fromBoxList: Bool) {
+            self.fromBoxList = fromBoxList
+            super.init(frame: .zero)
+        }
+
+        required init?(coder _: NSCoder) { nil }
+
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
             guard let window, !FirstRunLaunch.placed.contains(ObjectIdentifier(window)) else { return }
             FirstRunLaunch.placed.insert(ObjectIdentifier(window))
+            guard WindowPlacement.placesFirstRun(fromBoxList: fromBoxList,
+                                                 tabbed: (window.tabbedWindows?.count ?? 0) > 1,
+                                                 fullScreen: window.styleMask.contains(.fullScreen)) else { return }
             let screens = NSScreen.screens.map(\.visibleFrame)
             guard let content = WindowPlacement.firstRun(pointer: FirstRunLaunch.pointer, screens: screens) else { return }
             let frame = window.frameRect(forContentRect: NSRect(origin: .zero, size: content.size))

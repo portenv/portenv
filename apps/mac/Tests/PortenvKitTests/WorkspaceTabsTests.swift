@@ -207,6 +207,61 @@ struct WorkspaceTabsTests {
         b.leave()
     }
 
+    /// A tab that shows no workspace yet (the list, New Workspace…, the
+    /// launch) is "New workspace", never the app's name; once a workspace
+    /// is created or opened in it, the workspace's own title (R-0344).
+    @Test func aTabWithoutAWorkspaceIsNewWorkspace() {
+        let d = FakeDaemon()
+        let s = session(d)
+        #expect(s.windowTitle == "New workspace")
+        s.screen = .newBox
+        #expect(s.windowTitle == "New workspace")
+        #expect(WorkspaceSession(daemon: d, screen: .launch).windowTitle == "New workspace")
+        // Created or opened: its name, in the workspace tab's own format.
+        s.show("acme-api")
+        #expect(s.windowTitle == "acme-api")
+        #expect(s.windowTitle == s.tabTitle)
+        s.leave()
+        #expect(s.windowTitle == "New workspace")
+    }
+
+    // MARK: Tab frame
+
+    /// A window joining a workspace tab group takes the group's frame, never
+    /// its own default, ideal or minimum size (the owner's dev-build test:
+    /// ⌘N shrank a large window to the list's 720×520). A standalone new
+    /// window keeps its own size.
+    @Test func aWindowJoiningATabGroupKeepsTheGroupsFrame() {
+        let own = CGRect(x: 100, y: 100, width: 720, height: 520)
+        let group = CGRect(x: 40, y: 60, width: 1600, height: 1000)
+        #expect(WorkspaceTabFrame.joining(own: own, group: group) == group)
+        // A smaller group too: the group's frame, not the window's minimum.
+        let small = CGRect(x: 0, y: 0, width: 660, height: 450)
+        #expect(WorkspaceTabFrame.joining(own: own, group: small) == small)
+        // Already the group's frame: nothing to change.
+        #expect(WorkspaceTabFrame.joining(own: group, group: group) == nil)
+        // No group to join (the first window): its own default size.
+        #expect(WorkspaceTabFrame.joining(own: own, group: nil) == nil)
+        // A full-screen group: macOS sizes the tab joining it.
+        #expect(WorkspaceTabFrame.joining(own: own, group: group, fullScreen: true) == nil)
+    }
+
+    /// The group's frame comes from the window the new tab joins: the main
+    /// workspace window, else the frontmost one; never the new window
+    /// itself.
+    @Test func theGroupFrameIsTheMainWorkspaceWindows() {
+        let new = window(), front = window(), main = window()
+        front.setFrame(NSRect(x: 0, y: 0, width: 900, height: 700), display: false)
+        main.setFrame(NSRect(x: 10, y: 10, width: 1500, height: 950), display: false)
+        #expect(WorkspaceTabFrame.host(for: new, among: [new, front, main], main: main) === main)
+        #expect(WorkspaceTabFrame.host(for: new, among: [new, front, main], main: nil) === front)
+        #expect(WorkspaceTabFrame.host(for: new, among: [front, main], main: new) === front)
+        #expect(WorkspaceTabFrame.host(for: new, among: [new], main: new) == nil)
+        #expect(WorkspaceTabFrame.host(for: new, among: [], main: nil) == nil)
+        #expect(WorkspaceTabFrame.groupFrame(for: new, among: [new, front, main], main: main) == main.frame)
+        #expect(WorkspaceTabFrame.groupFrame(for: new, among: [new], main: nil) == nil)
+    }
+
     // MARK: ⌃⌘1–⌃⌘9
 
     /// ⌃⌘n picks the nth tab of the frontmost tab group; past the last tab,

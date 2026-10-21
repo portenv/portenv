@@ -65,6 +65,11 @@ public final class WorkspaceSession {
         controller.map { WorkspaceTabTitle.text(box: $0.box, location: $0.location, needsYou: needsYou) }
     }
 
+    /// The window's tab title: the workspace's (`tabTitle`), or "New
+    /// workspace" while it shows none yet (the list, New Workspace…, the
+    /// launch), never the app's own name.
+    public var windowTitle: String { tabTitle ?? WorkspaceTabText.newTab }
+
     /// The tab's tooltip, spelling the count out.
     public var tabHelp: String? {
         controller.map { WorkspaceTabTitle.help(box: $0.box, location: $0.location, needsYou: needsYou) }
@@ -213,8 +218,41 @@ public enum WorkspaceTabText {
     public static let openWorkspace = "Open Workspace\u{2026}"
     /// Window › Show Workspace Tab ▸ 1–9 (⌃⌘1–⌃⌘9).
     public static let showWorkspaceTab = "Show Workspace Tab"
-    /// A tab showing the list.
-    public static let list = "Your workspaces"
+    /// A tab showing no workspace yet: the list or New Workspace….
+    public static let newTab = "New workspace"
+}
+
+/// A workspace window joining a tab group takes the group's frame (GUIDELINES
+/// §3.3): native window tabs share one frame, so a new tab's own default,
+/// ideal or minimum size would resize every tab (the owner's dev-build
+/// test: ⌘N shrank a large window to the list's 720×520). A window of its
+/// own keeps its default size.
+public enum WorkspaceTabFrame {
+    /// The frame to give a window joining a group; nil leaves it as it is
+    /// (no group to join, already the group's frame, or a full-screen group,
+    /// which macOS sizes).
+    public static func joining(own: CGRect, group: CGRect?, fullScreen: Bool = false) -> CGRect? {
+        guard !fullScreen, let group, group != own else { return nil }
+        return group
+    }
+
+    /// The window a new one joins: the main workspace window, else the
+    /// frontmost of `windows` (workspace windows, front to back); never the
+    /// new window itself.
+    @MainActor
+    public static func host(for window: NSWindow, among windows: [NSWindow], main: NSWindow?) -> NSWindow? {
+        let others = windows.filter { $0 !== window }
+        if let main, others.contains(where: { $0 === main }) { return main }
+        return others.first
+    }
+
+    /// The group's frame for a window joining it; nil when there's no group,
+    /// or it's full screen (macOS sizes a tab joining full screen).
+    @MainActor
+    public static func groupFrame(for window: NSWindow, among windows: [NSWindow], main: NSWindow?) -> CGRect? {
+        guard let host = host(for: window, among: windows, main: main), !host.styleMask.contains(.fullScreen) else { return nil }
+        return host.frame
+    }
 }
 
 /// ⌃⌘1–⌃⌘9 (R-0345): the nth workspace tab of the frontmost tab group.

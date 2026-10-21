@@ -108,10 +108,11 @@ Each open workspace has a window of its own, and workspace windows group as **ma
 - **Each window has its own session:** its workspace's tabs, team, panes, selected agent, current tab and split layout. Switching workspace tabs never changes another workspace's.
 - **Opening a workspace that's already open** brings its tab to the front; it never opens twice. A new tab that was only picking it goes.
 - **A new tab** (the tab bar's ＋, File › Open Workspace… ⌘N) shows "Your workspaces" to pick one, or New Workspace….
+- **Tabs share one frame:** a new tab, or a window joining the tabs, takes the group's size and place; nothing in it (the list, New Workspace…) resizes it. Only a window of its own starts at its default size, and only first run at launch places its window (R-0186).
 - **A tab dragged out** of the tab bar becomes a window of its own, and back in, a tab again (macOS's own Move Tab to New Window and Merge All Windows work too).
 - **Closing a tab** closes that window only; the workspace keeps running (ADR 0023). Closing the last workspace window goes back to "Your workspaces" in it.
 - **The menu bar acts on the workspace in front:** the Workspace menu, the tab, split, inspector and sidebar commands follow the main window. The title menu (⌄) stays the window's own workspace's actions.
-- **The tab's title:** the workspace's name, where it runs (This Mac, or the server's name) and, when decisions wait for you, how many: `acme-api · This Mac · 2`. Its tooltip names the count: `acme-api · This Mac · Needs you · 2`. A tab showing the list is "Your workspaces". The count comes from the team that tab's session follows, so a tab not in front stays current.
+- **The tab's title:** the workspace's name, where it runs (This Mac, or the server's name) and, when decisions wait for you, how many: `acme-api · This Mac · 2`. Its tooltip names the count: `acme-api · This Mac · Needs you · 2`. A tab showing no workspace yet (the list, New Workspace…) is "New workspace", never "Portenv"; once a workspace is created or opened in it, the workspace's title. The count comes from the team that tab's session follows, so a tab not in front stays current.
 - **A notification** about a workspace counts its window as in front only when its own tab is.
 - **Quit** names every running workspace once, in one confirmation, and closes each (ADR 0023). Waking from sleep checks every open workspace; an update's relaunch leaves every one running. A Keychain prompt brings forward the tab that asked.
 - **Shortcuts:**

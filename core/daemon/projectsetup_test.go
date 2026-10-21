@@ -197,6 +197,10 @@ func TestAPrivateCloneKeepsTheSignInOnTheMac(t *testing.T) {
 	if err != nil || !r.GetNeedsToken() || r.GetApplied() || len(gh.auths) != 0 || len(fake.clones) != 0 {
 		t.Fatalf("no token: %v %v %v", r, err, gh.auths)
 	}
+	// The window names the repository while it tries again (R-0409).
+	if r.GetProject() != "acme/api" {
+		t.Fatalf("the project isn't named: %q", r.GetProject())
+	}
 	// A sign-in GitHub refuses: the line, the setup kept.
 	r, err = c.ApplyTeamPlan(ctx, &daemonv1.ApplyTeamPlanRequest{Name: "acme-api", GithubToken: wrongToken})
 	if err != nil || r.GetApplied() || !r.GetNeedsSignIn() || !strings.HasPrefix(r.GetProjectError(), "Your GitHub sign-in in Portenv has ended") || fake.writes != 0 {
@@ -251,7 +255,7 @@ func TestAFailedCloneKeepsTheSetup(t *testing.T) {
 	} {
 		tc.set()
 		r, err := c.ApplyTeamPlan(ctx, &daemonv1.ApplyTeamPlanRequest{Name: "acme-api"})
-		if err != nil || r.GetApplied() || r.GetNeedsSignIn() != tc.signIn || !strings.HasPrefix(r.GetProjectError(), tc.wantStart) || len(r.GetPinned()) != 0 {
+		if err != nil || r.GetApplied() || r.GetNeedsSignIn() != tc.signIn || !strings.HasPrefix(r.GetProjectError(), tc.wantStart) || len(r.GetPinned()) != 0 || r.GetProject() != "acme/api" {
 			t.Fatalf("%s: %v %v", tc.name, r, err)
 		}
 		if fake.writes != 0 {

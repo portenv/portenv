@@ -191,37 +191,42 @@ struct SetupBanner: View {
     @State private var signingIn = false
 
     var body: some View {
-        if let problem = team.setupProblem {
-            HStack(spacing: 10) {
-                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange).accessibilityHidden(true)
-                Text(verbatim: problem.line).fixedSize(horizontal: false, vertical: true)
-                Spacer(minLength: 8)
-                if problem.needsSignIn {
-                    Button(GitHubSignInText.button) { signingIn = true }
+        // One container, so the sign-in sheet stays up while the line
+        // turns into the clone's progress (R-0409).
+        VStack(spacing: 0) {
+            if let problem = team.setupProblem {
+                HStack(spacing: 10) {
+                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange).accessibilityHidden(true)
+                    Text(verbatim: problem.line).fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 8)
+                    if problem.needsSignIn {
+                        Button(GitHubSignInText.button) { signingIn = true }
+                    }
+                    Button(ProjectText.tryAgain) { Task { await team.retrySetup() } }
                 }
-                Button(ProjectText.tryAgain) { Task { await team.retrySetup() } }
+                .font(.callout)
+                .padding(10)
+                .background(SwiftUI.Color.orange.opacity(0.12))
+                .accessibilityElement(children: .contain)
+                .onAppear { Announce.high(problem.line) }
+            } else if let line = team.progressLine {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text(verbatim: line).foregroundStyle(.secondary)
+                }
+                .font(.callout)
+                .padding(8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityElement(children: .combine)
+                .onAppear { Announce.high(line) }
             }
-            .font(.callout)
-            .padding(10)
-            .background(SwiftUI.Color.orange.opacity(0.12))
-            .accessibilityElement(children: .contain)
-            .onAppear { Announce.high(problem.line) }
-            .sheet(isPresented: $signingIn) {
-                GitHubSignInSheet(signIn: signIn) { signingIn = false }
-            }
-            // Signing in from the line tries the clone again at once.
-            .onChange(of: signIn.state) { _, s in
-                if case .signedIn = s { Task { await team.retrySetup() } }
-            }
-        } else if team.settingUp {
-            HStack(spacing: 8) {
-                ProgressView().controlSize(.small)
-                Text(ProjectText.settingUp).foregroundStyle(.secondary)
-            }
-            .font(.callout)
-            .padding(8)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .accessibilityElement(children: .combine)
+        }
+        .sheet(isPresented: $signingIn) {
+            GitHubSignInSheet(signIn: signIn) { signingIn = false }
+        }
+        // Signing in from the line tries the clone again at once.
+        .onChange(of: signIn.state) { _, s in
+            if case .signedIn = s { Task { await team.signedIn() } }
         }
     }
 }

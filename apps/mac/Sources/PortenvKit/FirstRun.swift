@@ -58,6 +58,8 @@ public enum ProjectText {
     public static let privateHint = "For a private repository, sign in with GitHub first."
     public static let needsSignIn = "This repository needs a sign-in. Sign in with GitHub, then try again."
     public static let settingUp = "Setting up the workspace\u{2019}s project\u{2026}"
+    /// While a kept project is cloned again (R-0409).
+    public static func cloning(_ project: String) -> String { "Cloning \(project)\u{2026}" }
     public static let tryAgain = "Try Again"
     // The access check's lines (finding 10).
     public static let checking = "Checking the repository with GitHub\u{2026}"

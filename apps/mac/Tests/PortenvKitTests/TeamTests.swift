@@ -229,6 +229,25 @@ struct TeamControllerTests {
         #expect(team.setupProblem == SetupProblem(line: "This repository needs a sign-in. Sign in with GitHub, then try again.", needsSignIn: true))
     }
 
+    /// Signed out at the first open, then signed in from the window's line:
+    /// Try Again is asked for the sign-in again (portenvd asks whenever
+    /// GitHub refuses the plain fetch), reads it now, and calls with it.
+    @Test func signingInThenTryAgainClonesWithTheSignIn() async throws {
+        let daemon = FakeDaemon()
+        daemon.appliedFirst = [TeamPlanApplied(applied: false, needsToken: true), TeamPlanApplied(applied: false, needsToken: true)]
+        daemon.applied = TeamPlanApplied(applied: true, pinned: ["lead"])
+        daemon.teamScripts = [.init(events: [], failure: nil)]
+        let store = FakeSecretStore()
+        let team = TeamController(box: "acme", daemon: daemon, retry: .milliseconds(1), github: GitHubAccount(store: store, defaults: UserDefaults(suiteName: "t-\(UUID().uuidString)")!))
+        await followBriefly(team) { team.setupProblem != nil }
+        #expect(team.setupProblem?.needsSignIn == true)
+        // The owner signs in: the token is now in the Keychain.
+        try store.add(account: GitHubAccount.keychainAccount, data: Data("gho_abc".utf8), label: "x")
+        await team.retrySetup()
+        #expect(daemon.calls.filter { $0[1] == "apply-team-plan" }.map { $0[3] } == ["no-token", "no-token", "token"])
+        #expect(team.setupProblem == nil)
+    }
+
     /// A failed clone: its line with Try Again; nothing retries on its own,
     /// and Try Again asks portenvd again, which still has the choice.
     @Test func aFailedCloneWaitsForTryAgain() async {

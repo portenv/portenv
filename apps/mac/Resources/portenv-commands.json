@@ -875,6 +875,38 @@
         }
       ],
       "since": "1.0.0"
+    },
+    {
+      "path": [
+        "fetch"
+      ],
+      "aliases": [],
+      "summary": "Fetch a teammate's branch into your own copy, if your grant reads its copy.",
+      "caller": [
+        "agent"
+      ],
+      "approval": "never",
+      "approval_note": "",
+      "args": [
+        {
+          "name": "agent",
+          "type": "agent_id",
+          "required": true,
+          "repeated": false
+        }
+      ],
+      "flags": [
+        {
+          "name": "json",
+          "type": "bool",
+          "required": false,
+          "repeated": false,
+          "caller": [
+            "agent"
+          ]
+        }
+      ],
+      "since": "1.0.0"
     }
   ]
 }

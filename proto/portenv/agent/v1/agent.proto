@@ -428,9 +428,19 @@ message TeamCallsResponse {
     PushRefs push = 19;
     // The owner's fetch (R-0392): only on work's own socket.
     FetchRefs fetch = 21;
+    // portenv fetch AGENT (ADR 0022 §2a point 4): a lens fetches a
+    // writer's branch it may read into its own clone.
+    FetchClone fetch_clone = 22;
   }
   // From SO_PEERCRED: the call came from work's own socket, not an agent's.
   bool owner = 20;
+}
+
+// portenv fetch AGENT: the writer whose agent/<id> branch the caller, a
+// lens with read_clones naming it, fetches into its own clone as
+// refs/remotes/agents/<id>.
+message FetchClone {
+  string agent = 1;
 }
 
 // git-remote-portenv's list (for-push, or for a fetch, pull or ls-remote):
@@ -531,6 +541,8 @@ message TeamCallsRequest {
     PushListResult push_list = 10;
     PushResult push = 11;
     FetchResult fetch = 12;
+    // portenv fetch AGENT's answer: the ref in the caller's clone.
+    FetchAgentBranchResponse fetched = 13;
   }
 }
 
@@ -892,6 +904,10 @@ message FetchAgentBranchRequest {
   string project_dir = 2;
   // The bundle's limit: the agent's home quota.
   int64 max_bytes = 3;
+  // A lens (ADR 0022 §2a point 4) to fetch into instead of the owner's
+  // project: the branch goes into its own clone, /home/<into_agent>/
+  // <workspace>, fetched as that agent. Empty: the owner's Fetch.
+  string into_agent = 4;
 }
 
 message FetchAgentBranchResponse {

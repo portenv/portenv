@@ -274,6 +274,11 @@ func (e *teamEngine) handleCall(ctx context.Context, name string, c *agentv1.Tea
 	if c.GetInbox().GetWait() {
 		return e.inboxWait(ctx, name, me.ID, c.GetInbox().GetSinceCursor(), id)
 	}
+	// A lens's fetch can take a while (a branch up to the writer's home
+	// limit) and touches no board state: it runs without the box's lock.
+	if fc := c.GetFetchClone(); fc != nil {
+		return e.fetchClone(ctx, name, &team, me, fc.GetAgent(), id)
+	}
 	b, err := e.lockBox(ctx, name)
 	if err != nil {
 		return refuse(id, "%v", err)
@@ -951,7 +956,7 @@ func (e *teamEngine) startAgentAs(ctx context.Context, name, agentID string, app
 		CloneProjectDir: clone,
 		AgentName:       a.Spec.Name,
 		CloneReaders:    cloneReaders(&team),
-		Argv:            a.Runner,
+		Argv:            runnerArgv(a, name),
 		AgentsMd:        agentsMDBlock(&team, a, name) + "\n" + a.Spec.Instructions,
 		HomeSeed:        a.Spec.HomeSeed,
 		ProjectDir:      projectDir(name),
@@ -1051,6 +1056,33 @@ func (e *teamEngine) fetchAgent(ctx context.Context, name, agentID string) (*age
 		b.mu.Unlock()
 	}
 	return r, nil
+}
+
+// fetchClone is portenv fetch AGENT (ADR 0022 §2a point 4, R-0412
+// item 16): a lens whose grant's read_clones names the writer fetches the
+// writer's branch into its own clone, as refs/remotes/agents/<writer>, by
+// the helper's two-half fetch: the bundle as the writer, the fetch as the
+// lens. Neither runs git in the other's clone.
+func (e *teamEngine) fetchClone(ctx context.Context, name string, team *Team, me *TeamAgent, writer, id string) *agentv1.TeamCallsRequest {
+	switch w := team.agent(writer); {
+	case writer == me.ID:
+		return refuse(id, "%s doesn't fetch its own branch; it's already in its copy of the project.", me.ID)
+	case !slices.Contains(me.Grant.GetReadClones(), writer):
+		return refuse(id, "%s may not read %s's copy (its grant's read_clones doesn't name %s).", me.ID, writer, writer)
+	case !me.OwnClone():
+		return refuse(id, "%s has no copy of the project (checkout: none) to fetch into. Read %s's files in %s instead.", me.ID, writer, lensPath(writer, name))
+	case w == nil || !w.OwnClone():
+		return refuse(id, "%s has no copy of the project (checkout: none), so it has no branch to fetch.", writer)
+	}
+	helper, err := e.helper(ctx, name)
+	if err != nil {
+		return refuse(id, "%v", err)
+	}
+	r, err := helper.FetchAgentBranch(ctx, &agentv1.FetchAgentBranchRequest{AgentId: writer, IntoAgent: me.ID, ProjectDir: "/home/work/" + name, MaxBytes: defaultHomeQuota})
+	if err != nil {
+		return refuse(id, "%s's branch couldn't be fetched: %v", writer, agentError(err))
+	}
+	return &agentv1.TeamCallsRequest{CallId: id, Ok: true, Result: &agentv1.TeamCallsRequest_Fetched{Fetched: r}}
 }
 
 // askTeamStartLocked makes the team_start decision naming the agent, or
@@ -1418,6 +1450,10 @@ func (e *teamEngine) whoamiLocked(name string, b *teamBox, team *Team, me *TeamA
 	if me.Spec != nil {
 		w.Name, w.Role = me.Spec.Name, me.Spec.Role
 	}
+	// A lens with its own clone fetches the writers it reads (R-0412 item 16).
+	if me.OwnClone() && len(me.Grant.GetReadClones()) > 0 {
+		w.Commands = append(w.Commands, "fetch")
+	}
 	w.Status = b.status[me.ID]
 	if me.Spec != nil && !me.Remote {
 		w.RoutinesOff = idleOffLine(me.Runner, len(me.Spec.Routines) > 0)
@@ -1458,12 +1494,12 @@ func agentsMDBlock(team *Team, a *TeamAgent, workspace string) string {
 		can = append(can, fmt.Sprintf("work in your own copy of the project, ~/%s, on branch %s, and say it's ready with portenv share once you've committed", workspace, agentBranch(a.ID)))
 		cant = append(cant, fmt.Sprintf("change the owner's project in /home/work/%s (you can read it, and git fetch owner brings its new commits)", workspace))
 	}
-	if rc := g.GetReadClones(); len(rc) > 0 {
-		var where []string
-		for _, w := range rc {
-			where = append(where, fmt.Sprintf("/home/%s/%s", w, workspace))
+	for _, w := range g.GetReadClones() {
+		line := fmt.Sprintf("read, never change, %s's files in %s, on its branch %s, uncommitted changes included (read the files; don't run git there or add a safe.directory for them)", w, lensPath(w, workspace), agentBranch(w))
+		if a.OwnClone() {
+			line += fmt.Sprintf("; fetch %s's commits into your own copy with portenv fetch %s, as refs/remotes/agents/%s (git log HEAD..agents/%s, git diff HEAD...agents/%s)", w, w, w, w, w)
 		}
-		can = append(can, "read, never change, "+strings.Join(where, ", ")+" (read the files; don't run git there or add a safe.directory for them)")
+		can = append(can, line)
 	}
 	cant = append(cant, "reach the owner's terminals or other agents' files", "use sudo")
 	var mates []string

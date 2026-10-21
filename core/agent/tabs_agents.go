@@ -590,7 +590,7 @@ func checkAsAgent(uid, gid int, home string) (string, error) {
 
 // asAgentTeamIO are the team-io operations as-agent runs as an agent:
 // its own clone's (ADR 0022 §2a).
-var asAgentTeamIO = map[string]bool{"clone-own": true, "bundle-own": true, "lens-grant": true, "migrate-copy": true}
+var asAgentTeamIO = map[string]bool{"clone-own": true, "bundle-own": true, "lens-grant": true, "migrate-copy": true, "fetch-lens": true}
 
 // parseAsAgent reads "UID GID HOME -- tmux -S SOCKET ARGS…" or "UID GID
 // HOME -- team-io OP ARGS…" and checks it: the switch is to an agent

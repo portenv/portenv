@@ -397,6 +397,8 @@ Agents learn what they can do from Portenv, not from guesses. Everything below c
 
 Past a limit, the call is refused with a plain line ("builder has 4 panes open, its limit. Close one first."), never queued.
 
+**Agents in a team, the owner's setting (R-0347):** Settings › Team › Agents allowed, 1 to 8, 4 by default, one value for every workspace on the Mac. `portenvd` keeps it in `team-settings.json` in the Portenv directory, reads it at every team load and enforces it: a Start past it (counting the agents running or starting, and those a pending first start names) and an Approve of one more agent than it are refused with a plain line that says how to raise it. Lowering it stops nothing: running agents keep running and the Team section says so. A team that needs more (a template that asks for more, counted as the agent files it turns on) is offered a one-click raise to that number, which the owner confirms.
+
 ### 8. `portenvd` runs the team
 
 - **Start:** the owner chooses Start on an agent (or Start Team). `portenvd` checks the file is approved and valid, then asks the helper to have init make the agent's user if it's new (section 1), seed its home and make its clone on first start (section 2a), check the project's and homes' modes (sections 2 and 2a), and start the agent's tmux server and control client. The helper runs the `runner` argv in the agent's first tab, as its user, with `PORTENV_AGENT=<id>`, `PORTENV_SOCKET=/run/portenv-team/<id>/portenv.sock` and `AGENTS.md` in its home.

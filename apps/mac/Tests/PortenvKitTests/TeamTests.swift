@@ -186,6 +186,64 @@ struct TeamControllerTests {
         #expect(team.supported)
     }
 
+    /// The team New workspace kept (ADR 0025) is written once the workspace
+    /// is open: asked until portenvd can, then never again; its lines show
+    /// in the Team section.
+    @Test func followAppliesTheKeptTeamOnce() async {
+        let daemon = FakeDaemon()
+        daemon.failingOnce["apply-team-plan"] = "acme isn't open"
+        daemon.applied = TeamPlanApplied(applied: true, pinned: ["lead"], lines: ["acme already had an agent file for builder, so Portenv kept it."])
+        daemon.teamScripts = [.init(events: [], failure: "box restarting"), .init(events: [(.agent(builder), "c1")], failure: "gone"), .init(events: [], failure: nil)]
+        let team = TeamController(box: "acme", daemon: daemon, retry: .milliseconds(1))
+        let follow = Task { await team.follow() }
+        for _ in 0 ..< 200 where team.state.cursor != "c1" { try? await Task.sleep(for: .milliseconds(5)) }
+        follow.cancel()
+        #expect(daemon.calls.filter { $0[1] == "apply-team-plan" }.count == 2)
+        #expect(team.setupLines == ["acme already had an agent file for builder, so Portenv kept it."])
+    }
+
+    /// A kept setup that clones with the owner's sign-in: the app reads it
+    /// from the Keychain only then, and calls again with it.
+    @Test func aCloneWithTheSignInReadsItOnlyWhenAsked() async throws {
+        let daemon = FakeDaemon()
+        daemon.appliedFirst = [TeamPlanApplied(applied: false, needsToken: true)]
+        daemon.applied = TeamPlanApplied(applied: true, pinned: ["lead"])
+        daemon.teamScripts = [.init(events: [(.agent(builder), "c1")], failure: nil)]
+        let store = FakeSecretStore()
+        try store.add(account: GitHubAccount.keychainAccount, data: Data("gho_abc".utf8), label: "x")
+        let team = TeamController(box: "acme", daemon: daemon, retry: .milliseconds(1), github: GitHubAccount(store: store, defaults: UserDefaults(suiteName: "t-\(UUID().uuidString)")!))
+        await followBriefly(team) { daemon.calls.filter { $0[1] == "apply-team-plan" }.count >= 2 }
+        let applies = daemon.calls.filter { $0[1] == "apply-team-plan" }
+        #expect(applies.map { $0[3] } == ["no-token", "token"])
+        #expect(store.ops == ["add github", "read github"])
+        #expect(team.setupProblem == nil)
+    }
+
+    /// Not signed in: the window says so, with Sign In and Try Again.
+    @Test func aCloneThatNeedsASignInSaysSo() async {
+        let daemon = FakeDaemon()
+        daemon.appliedFirst = [TeamPlanApplied(applied: false, needsToken: true)]
+        daemon.teamScripts = [.init(events: [], failure: nil)]
+        let team = TeamController(box: "acme", daemon: daemon, retry: .milliseconds(1), github: GitHubAccount(store: FakeSecretStore(), defaults: UserDefaults(suiteName: "t-\(UUID().uuidString)")!))
+        await followBriefly(team) { team.setupProblem != nil }
+        #expect(team.setupProblem == SetupProblem(line: "This repository needs a sign-in. Sign in with GitHub, then try again.", needsSignIn: true))
+    }
+
+    /// A failed clone: its line with Try Again; nothing retries on its own,
+    /// and Try Again asks portenvd again, which still has the choice.
+    @Test func aFailedCloneWaitsForTryAgain() async {
+        let daemon = FakeDaemon()
+        daemon.appliedFirst = [TeamPlanApplied(applied: false, projectError: "Portenv couldn\u{2019}t clone github.com/acme/api: GitHub couldn\u{2019}t be reached.")]
+        daemon.applied = TeamPlanApplied(applied: true)
+        daemon.teamScripts = [.init(events: [], failure: "gone"), .init(events: [], failure: nil)]
+        let team = TeamController(box: "acme", daemon: daemon, retry: .milliseconds(1), github: GitHubAccount(store: FakeSecretStore(), defaults: UserDefaults(suiteName: "t-\(UUID().uuidString)")!))
+        await followBriefly(team) { team.setupProblem != nil && daemon.calls.filter { $0[1] == "watch-team" }.count >= 2 }
+        #expect(daemon.calls.filter { $0[1] == "apply-team-plan" }.count == 1)
+        #expect(team.setupProblem?.line.hasPrefix("Portenv couldn\u{2019}t clone") == true && team.setupProblem?.needsSignIn == false)
+        await team.retrySetup()
+        #expect(daemon.calls.filter { $0[1] == "apply-team-plan" }.count == 2 && team.setupProblem == nil)
+    }
+
     /// An older portenvd: no team, no retrying, the sidebar stays hidden.
     @Test func anOlderPortenvdHasNoTeam() async {
         let daemon = FakeDaemon()
@@ -413,4 +471,13 @@ struct TeamAgentStatusMappingTests {
         let a = info { $0.shareLoginOff = "Sharing your sign-in (claude) isn\u{2019}t in this build, so nothing is shared.\n\u{1b}[2J" }
         #expect(a.shareLoginOff == "Sharing your sign-in (claude) isn\u{2019}t in this build, so nothing is shared. [2J")
     }
+}
+
+/// Follows the team until done says so (or a second), then stops.
+@MainActor
+func followBriefly(_ team: TeamController, until done: @escaping @MainActor () -> Bool) async {
+    let follow = Task { await team.follow() }
+    for _ in 0 ..< 200 where !done() { try? await Task.sleep(for: .milliseconds(5)) }
+    follow.cancel()
+    await follow.value
 }

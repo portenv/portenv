@@ -154,7 +154,7 @@ Each open workspace has a window of its own, and workspace windows group as **ma
     - **A link with any control or bidi character never opens,** since those could hide or reorder part of it. The state line says "Portenv won't open a link with hidden characters".
     - **A link with a user name before the address never opens** either (`https://apple.com@evil.com/` reads as apple.com). The state line names where it really goes, never the user name or password: "Portenv won't open a link with a user name before the address. It goes to evil.com."
 - **Right-click in the terminal** shows Copy (only with a selection), Paste, Select All and Find… (the same find bar as ⌘F), as in Terminal. Every item acts on the pane clicked. Paste is the only item that sends anything to the tab, and it takes the same path as ⌘V (cleaned, bracketed when the program asked); dropped text and Services stay refused (R-0167). Copy Output joins it once blocks ship.
-- **No blank terminal** (R-0384): until a tab's terminal first shows, the pane says "Opening <tab>…" with a small spinner (no spinner with Reduce Motion), or "Opening <workspace>…" while the tabs aren't known yet. If it fails before then, it says "Couldn't open <tab>", the reason, and Try Again, in place of the terminal; once a tab has shown, trouble is Reconnecting… and Disconnected as before.
+- **No blank terminal** (R-0384): until a tab's terminal first shows, the pane says "Opening <tab>…" with a small spinner (no spinner with Reduce Motion), or "Opening <workspace>…" while the tabs (or the workspace's window) aren't ready yet; first run says "Starting Portenv…" until its first step is ready. A workspace gone before it opens goes to the list, saying so. If it fails before then, or sends nothing at all for 20 s, it says "Couldn't open <tab>", the reason, and Try Again, in place of the terminal; once a tab has shown, trouble is Reconnecting… and Disconnected as before.
 - **Closing a tab that still runs a program asks first:** "Close this tab? <program> is still running.", with Close Tab and Cancel. The program is the tab's foreground process as the workspace helper reports it at that moment. A tab with only its shell closes without asking. The last tab has no close button; ⌘W closes the window instead.
 
 ### 4.2 Blocks
@@ -217,10 +217,14 @@ Shown when a program in the visible tab is waiting for an answer that Portenv ca
 | Waiting for input | orange dot on the tab | inline answer card | notification with answer buttons |
 | Agent connected or revoked | — | avatar appears or leaves | notification |
 | Move finished | — | state line | notification only if the move took longer than 10 s |
+| A new decision in Needs you (6.2) | the count in the workspace's window tab | its row in Needs you | notification with Show only |
 
 Notification rules:
 - Title: `<workspace> · <who> is asking` or `<workspace> · <event>`. Body: the question or result in one line. Subtitle line: who started it and where.
-- Answer buttons in the notification are the same two as the card, plus "Show".
+- Answer buttons in the notification are the same two as the card, plus "Show". A decision (6.2) never has answer buttons: Show only, whatever it asks, an agent file or the team's first start included. Clicking a notification, or Show, brings its workspace forward with the question selected (a decision as its Needs-you row selects it).
+- "Window not in front" means that workspace's own window: another workspace's window in front still gets the notification. A notification is taken back once its question is answered, expired or gone.
+- A password prompt's notification says only that it asks; its text stays in the terminal.
+- **Dock badge:** the number of Needs-you decisions across every workspace running on this Mac, with a window or without one (ADR 0023), cleared at 0. A workspace with no window notifies the same way; Show opens it in a new window tab (3.3).
 - One notification per question; a newer state replaces the older notification, it doesn't stack.
 - Notifications respect Focus modes and the user's per-app settings. No sound by default.
 - Dots always come with a text label for VoiceOver and a tooltip; colour is never the only signal.
@@ -275,6 +279,11 @@ The Team section is the workspace's sidebar when the workspace has a team (agent
   3. **Team:** You first ("You", with your tab count), then one row per agent in agent-file order, then files that can't start, then **Add Agent…**.
 - An agent row: avatar, name, status as a word and a symbol, and the agent's latest board line, one line, truncated. Statuses: ▶ running (accent), ◌ idle, ■ stopped, ● needs you (orange), ⚠ can't start (red, with portenvd's reason as the line), starting. Colour never carries the status alone.
 - Remote agents (ADR 0022 §10) appear only once a remote way in exists, under **Connected from outside**, as connected or disconnected. Portenv never starts them.
+- **The agent limit** (R-0347): **Settings › Team › Agents allowed** is how many agents can run at once in one workspace, 1 to 8, 4 by default, for every workspace on the Mac. `portenvd` keeps and enforces it; the app only shows it. Its line: "How many agents can run at once in one workspace, from 1 to 8. Lowering it stops no agent that's running." Below the agent rows, the Team section shows `portenvd`'s line about it:
+  - one short of the limit or at it, a quiet secondary line: "3 of 4 agents allowed in this workspace.", "4 of 4 agents allowed: the team is at your limit.";
+  - over it, a warning (orange ⚠ and primary text): "This team has 6 agents, and you allow 4 in a workspace: only 4 can run at once.", with **Raise to 6…**, which asks first: "Allow 6 agents in each workspace?", "Agents allowed in Settings › Team goes from 4 to 6, for every workspace on this Mac. You can lower it there.", **Allow 6** and Cancel. The raise is the owner's choice, never automatic;
+  - after a lower setting: "6 agents are running, and you now allow 4. They keep running; no more start until fewer than 4 run." Lowering never stops an agent.
+  - A Start or Approve past the limit is refused by `portenvd` with one line under the button that says what to do: "Builder can't start: 4 agents are running in this workspace, and you allow 4. Stop one, or raise Agents allowed in Portenv's Settings › Team."
 
 **Selecting:**
 - **An agent:** its tabs expand beneath its row, the tab bar shows only its tabs (named "Builder · tests"), with **All tabs** at its trailing end, and its column takes the inspector's place: who it runs as, its runner and its pane grant ("Runs as user builder · Claude Code · may open 4 panes"), its messages with you, its Team section, its Agent files, and a field to message it (R-0313, R-0314).
@@ -303,6 +312,48 @@ The Team section is the workspace's sidebar when the workspace has a team (agent
 **Plain text:** everything an agent writes (its latest line, messages, questions, evidence, file names, portenvd's reasons) is shown as plain text: no links, Markdown, images or actions in it. Control characters, escape sequences and bidi overrides are removed before it's shown. Controls next to it, such as "Open review-42.md", are the app's own.
 
 **VoiceOver:** each row is one element, read as its name, status and latest line ("Reviewer, needs you. Wants to merge #42"). Decision buttons say what they answer ("Approve: merge #42"). A message entry is one element, read as who to whom, the time and its first line ("Lead to Builder, 14:28: Take the retry half"); a notice starts "Notice from Portenv". The message field is read as "Message Builder".
+
+### 6.3 New workspace: Project, Team, Review and approve, Creating (ADR 0025)
+
+New workspace is one sheet with its steps named at the top: Name · Project · Team · Review and approve, then Creating. Back and Cancel on every step; Continue is the default button until Review and approve, which has none. First run's "Make your first workspace" uses the same steps. Mockup: `new-box-team` (the reviewer's four artboards, R-0322).
+
+**Words:** "starter folders" and "starter files" for what agent files call `home_seed`; "team", "agent", "runner" and "model" as here; never "template file", "manifest", "SHA" or "pin" except the one hash line on Review and approve.
+
+**Project:**
+- Four choices as a segmented control: From GitHub, From a Git URL, From a folder on this Mac, Empty.
+- From GitHub: Sign In to GitHub… until signed in; then a search field over the repositories, one row each (owner/name, Private when it is, last pushed), and a Branch menu with the default branch first. The sign-in screen (Portenv's device flow by default, or "Use My GitHub CLI Login" when gh is signed in on this Mac) says plainly: "Portenv can access your repositories; it only uses this for the repository in this workspace." Once signed in, one grey line under the list: "Signed in as <account>. Portenv can access your repositories; it only uses this for the repository in this workspace. The sign-in stays on this Mac; agents never get it."
+- From a folder on this Mac: Choose Folder…, then its size and file count, and "Leave out installed dependencies (node_modules and similar). They're rebuilt in the workspace.", ticked.
+- A size problem is said before anything is fetched, under the choice, in red with what to do: "acme-api needs about 7.4 GB with its team. This workspace has 5 GB free. Leave an agent out, or choose a smaller repository."
+- **Starter folders:** "Add Starter Folder…" below the choices, then one row per folder with its size and a remove button ("Remove brand-assets"). Starter folders go to agents' homes, never into the project; the Team step assigns them.
+
+**Team:**
+- **Pick a team** as a list of choices: None ("Just you. Add agents later."), the built-in templates with their agents named ("Orchestrate · Lead, Builder, Reviewer, Design keeper"), the owner's saved teams with when they were saved, then Import Team….
+- **Adjust**, one row per agent: include checkbox, avatar, name field (the id below it, monospace, grey), role, Runner menu, Model menu, Starter files menu. A left-out agent's row is dimmed and keeps its place. A runner or model that differs from the template says so in grey under the menu ("Changed from Sonnet").
+- The Runner menu lists only runners the build offers (MVP: Claude Code, under the heading Anthropic); the Model menu lists that runner's models (Opus, Sonnet, Fable). A runner whose idle point Portenv doesn't know says, under its name in the menu and on the agent's row: "Routines and wakes are off for <runner>."
+- Below the list: "Agents sign in themselves, in their own tabs. Templates never carry logins." and the checkbox **Start the team when it's ready**, unticked.
+
+**Review and approve** (the rules of 6.2's decisions apply):
+- A list of agents on the left, the project's summary at its top. Each agent row shows a state as a word and a symbol: Not opened (○), Opened (◐), Approved (✓, green), Changed (● orange, "changed, needs approval"). Colour never carries it alone.
+- The selected agent on the right, in this order: the runner line, full and monospace; the change from the template on its own line, when there is one ("Changed from the template: runner claude (sonnet) → claude (opus)."); the grants in plain words, one line each; the `team_status` checkbox, unticked ("Let Lead see the team's status"); starter files with sizes; the instructions in full, as plain text; "Written to .portenv/agents/reviewer.md · SHA-256 3f9a…c21e".
+- **Leave Out** and **Approve <agent>**, with no default button. Approve becomes "Approved ✓" and the next unopened agent is selected.
+- **Approve All** under the list, no default button, enabled only once every agent has been opened; until then its line says "Open every agent first (1 left)."
+- Create Workspace is disabled until every included agent is approved, and says why under it ("Approve Reviewer to create the workspace."). ADR 0022's first-start sentence sits above it: "Agents work in their own copies. Check their branches before you run them."
+
+**Creating:**
+- The steps with a check, current or pending marker: Workspace, Project ("Cloning acme-api… 58% · 1.2 of 2.1 GB, about 40 s left", a progress bar, and **Cancel**), Agent files, Agents' copies, Starter files, Ready.
+- Under them, always: "Nothing starts until you choose Start." (or, when ticked, "The team starts when it's ready.") and "Each agent signs in to its runner in its own tab the first time it starts."
+- Cancel says what it does before doing it: "Stop cloning? The new workspace is removed. Nothing else changes." with Keep Cloning and Stop.
+
+**The first push** (ADR 0025 §6): a small sheet on the workspace window, "Allow pushes to acme/acme-api from acme-api?", the line "Pushes come only from your own tabs. Agents can never push.", and Don't Allow and Allow, with no default button. The inspector's Where it is then shows "This workspace can push to acme/acme-api" with Stop Allowing Pushes. The sheet repeats the sign-in's scope line: "Portenv can access your repositories; it only uses this for the repository in this workspace." A sign-in GitHub no longer accepts asks the owner to sign in again.
+
+**Saved teams:** Save Team as Template… in the Team sidebar's menu and the Workspace menu opens a sheet: name, description, the agents (their approved files), and starter folders per agent, with "Logins and secrets are never saved." Export Team… and Import Team… use the save and open panels.
+
+**VoiceOver:**
+- each step is announced with its place ("Team, step 3 of 4");
+- an agent row on Team reads as one element with its controls after it: "Reviewer, included, Claude Code, Opus, changed from Sonnet"; the menus are labelled with the agent ("Runner for Reviewer", "Model for Reviewer");
+- an agent row on Review and approve reads its state ("Reviewer, changed, needs approval");
+- Approve All's disabled reason is its hint; Approve buttons name the agent ("Approve Reviewer");
+- the clone's progress is a progress element with its value ("Cloning acme-api, 58 percent"), announced at most every 10 %.
 
 ## 7. Command palette
 

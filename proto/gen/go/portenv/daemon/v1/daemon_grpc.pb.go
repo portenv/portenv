@@ -85,6 +85,15 @@ const (
 	DaemonService_WakeAgent_FullMethodName             = "/portenv.daemon.v1.DaemonService/WakeAgent"
 	DaemonService_ListDecisions_FullMethodName         = "/portenv.daemon.v1.DaemonService/ListDecisions"
 	DaemonService_Deploy_FullMethodName                = "/portenv.daemon.v1.DaemonService/Deploy"
+	DaemonService_GetTeamSettings_FullMethodName       = "/portenv.daemon.v1.DaemonService/GetTeamSettings"
+	DaemonService_SetAgentsAllowed_FullMethodName      = "/portenv.daemon.v1.DaemonService/SetAgentsAllowed"
+	DaemonService_ListTeamTemplates_FullMethodName     = "/portenv.daemon.v1.DaemonService/ListTeamTemplates"
+	DaemonService_PlanTeam_FullMethodName              = "/portenv.daemon.v1.DaemonService/PlanTeam"
+	DaemonService_ApplyTeamPlan_FullMethodName         = "/portenv.daemon.v1.DaemonService/ApplyTeamPlan"
+	DaemonService_WatchPushes_FullMethodName           = "/portenv.daemon.v1.DaemonService/WatchPushes"
+	DaemonService_AnswerPush_FullMethodName            = "/portenv.daemon.v1.DaemonService/AnswerPush"
+	DaemonService_GetPushes_FullMethodName             = "/portenv.daemon.v1.DaemonService/GetPushes"
+	DaemonService_StopAllowingPushes_FullMethodName    = "/portenv.daemon.v1.DaemonService/StopAllowingPushes"
 )
 
 // DaemonServiceClient is the client API for DaemonService service.
@@ -281,6 +290,33 @@ type DaemonServiceClient interface {
 	// 0026's run-with-secret is built, refused when it has one too. Nothing
 	// runs.
 	Deploy(ctx context.Context, in *DeployRequest, opts ...grpc.CallOption) (*DeployResponse, error)
+	// The owner's team settings (R-0347): how many agents may run in one
+	// workspace (Settings › Team › Agents allowed). Set only by the app, in
+	// front of the person: from Settings, or the owner's confirmed Raise.
+	GetTeamSettings(ctx context.Context, in *GetTeamSettingsRequest, opts ...grpc.CallOption) (*GetTeamSettingsResponse, error)
+	SetAgentsAllowed(ctx context.Context, in *SetAgentsAllowedRequest, opts ...grpc.CallOption) (*SetAgentsAllowedResponse, error)
+	// ADR 0025: the New-workspace Team step. The built-in team templates,
+	// each with its agents as they'd be written with no changes.
+	ListTeamTemplates(ctx context.Context, in *ListTeamTemplatesRequest, opts ...grpc.CallOption) (*ListTeamTemplatesResponse, error)
+	// A template with the owner's choices, as the exact agent files that
+	// would be written, each checked as portenvd checks any agent file.
+	PlanTeam(ctx context.Context, in *PlanTeamRequest, opts ...grpc.CallOption) (*PlanTeamResponse, error)
+	// Writes the team CreateBox kept for this workspace into its project
+	// (made empty, with git, if it isn't there), as work, never over a file,
+	// and pins each file the owner approved, only if it's those bytes. Only
+	// the owner's app calls it, once the workspace is open; with no team
+	// kept, it does nothing.
+	ApplyTeamPlan(ctx context.Context, in *ApplyTeamPlanRequest, opts ...grpc.CallOption) (*ApplyTeamPlanResponse, error)
+	// Pushes from the workspace (R-0391) waiting for the app: each needs the
+	// owner's GitHub sign-in, and some the owner's yes (the first push from
+	// the workspace, a force, a delete). The window's app answers each with
+	// AnswerPush.
+	WatchPushes(ctx context.Context, in *WatchPushesRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[WatchPushesResponse], error)
+	AnswerPush(ctx context.Context, in *AnswerPushRequest, opts ...grpc.CallOption) (*AnswerPushResponse, error)
+	// Whether the workspace's pushes are allowed (the first push's yes, kept
+	// on the Mac), and the inspector's Stop Allowing Pushes.
+	GetPushes(ctx context.Context, in *GetPushesRequest, opts ...grpc.CallOption) (*GetPushesResponse, error)
+	StopAllowingPushes(ctx context.Context, in *StopAllowingPushesRequest, opts ...grpc.CallOption) (*StopAllowingPushesResponse, error)
 }
 
 type daemonServiceClient struct {
@@ -936,6 +972,105 @@ func (c *daemonServiceClient) Deploy(ctx context.Context, in *DeployRequest, opt
 	return out, nil
 }
 
+func (c *daemonServiceClient) GetTeamSettings(ctx context.Context, in *GetTeamSettingsRequest, opts ...grpc.CallOption) (*GetTeamSettingsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetTeamSettingsResponse)
+	err := c.cc.Invoke(ctx, DaemonService_GetTeamSettings_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) SetAgentsAllowed(ctx context.Context, in *SetAgentsAllowedRequest, opts ...grpc.CallOption) (*SetAgentsAllowedResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetAgentsAllowedResponse)
+	err := c.cc.Invoke(ctx, DaemonService_SetAgentsAllowed_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) ListTeamTemplates(ctx context.Context, in *ListTeamTemplatesRequest, opts ...grpc.CallOption) (*ListTeamTemplatesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListTeamTemplatesResponse)
+	err := c.cc.Invoke(ctx, DaemonService_ListTeamTemplates_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) PlanTeam(ctx context.Context, in *PlanTeamRequest, opts ...grpc.CallOption) (*PlanTeamResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PlanTeamResponse)
+	err := c.cc.Invoke(ctx, DaemonService_PlanTeam_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) ApplyTeamPlan(ctx context.Context, in *ApplyTeamPlanRequest, opts ...grpc.CallOption) (*ApplyTeamPlanResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ApplyTeamPlanResponse)
+	err := c.cc.Invoke(ctx, DaemonService_ApplyTeamPlan_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) WatchPushes(ctx context.Context, in *WatchPushesRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[WatchPushesResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &DaemonService_ServiceDesc.Streams[7], DaemonService_WatchPushes_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[WatchPushesRequest, WatchPushesResponse]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type DaemonService_WatchPushesClient = grpc.ServerStreamingClient[WatchPushesResponse]
+
+func (c *daemonServiceClient) AnswerPush(ctx context.Context, in *AnswerPushRequest, opts ...grpc.CallOption) (*AnswerPushResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AnswerPushResponse)
+	err := c.cc.Invoke(ctx, DaemonService_AnswerPush_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) GetPushes(ctx context.Context, in *GetPushesRequest, opts ...grpc.CallOption) (*GetPushesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetPushesResponse)
+	err := c.cc.Invoke(ctx, DaemonService_GetPushes_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) StopAllowingPushes(ctx context.Context, in *StopAllowingPushesRequest, opts ...grpc.CallOption) (*StopAllowingPushesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(StopAllowingPushesResponse)
+	err := c.cc.Invoke(ctx, DaemonService_StopAllowingPushes_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DaemonServiceServer is the server API for DaemonService service.
 // All implementations must embed UnimplementedDaemonServiceServer
 // for forward compatibility.
@@ -1130,6 +1265,33 @@ type DaemonServiceServer interface {
 	// 0026's run-with-secret is built, refused when it has one too. Nothing
 	// runs.
 	Deploy(context.Context, *DeployRequest) (*DeployResponse, error)
+	// The owner's team settings (R-0347): how many agents may run in one
+	// workspace (Settings › Team › Agents allowed). Set only by the app, in
+	// front of the person: from Settings, or the owner's confirmed Raise.
+	GetTeamSettings(context.Context, *GetTeamSettingsRequest) (*GetTeamSettingsResponse, error)
+	SetAgentsAllowed(context.Context, *SetAgentsAllowedRequest) (*SetAgentsAllowedResponse, error)
+	// ADR 0025: the New-workspace Team step. The built-in team templates,
+	// each with its agents as they'd be written with no changes.
+	ListTeamTemplates(context.Context, *ListTeamTemplatesRequest) (*ListTeamTemplatesResponse, error)
+	// A template with the owner's choices, as the exact agent files that
+	// would be written, each checked as portenvd checks any agent file.
+	PlanTeam(context.Context, *PlanTeamRequest) (*PlanTeamResponse, error)
+	// Writes the team CreateBox kept for this workspace into its project
+	// (made empty, with git, if it isn't there), as work, never over a file,
+	// and pins each file the owner approved, only if it's those bytes. Only
+	// the owner's app calls it, once the workspace is open; with no team
+	// kept, it does nothing.
+	ApplyTeamPlan(context.Context, *ApplyTeamPlanRequest) (*ApplyTeamPlanResponse, error)
+	// Pushes from the workspace (R-0391) waiting for the app: each needs the
+	// owner's GitHub sign-in, and some the owner's yes (the first push from
+	// the workspace, a force, a delete). The window's app answers each with
+	// AnswerPush.
+	WatchPushes(*WatchPushesRequest, grpc.ServerStreamingServer[WatchPushesResponse]) error
+	AnswerPush(context.Context, *AnswerPushRequest) (*AnswerPushResponse, error)
+	// Whether the workspace's pushes are allowed (the first push's yes, kept
+	// on the Mac), and the inspector's Stop Allowing Pushes.
+	GetPushes(context.Context, *GetPushesRequest) (*GetPushesResponse, error)
+	StopAllowingPushes(context.Context, *StopAllowingPushesRequest) (*StopAllowingPushesResponse, error)
 	mustEmbedUnimplementedDaemonServiceServer()
 }
 
@@ -1319,6 +1481,33 @@ func (UnimplementedDaemonServiceServer) ListDecisions(context.Context, *ListDeci
 }
 func (UnimplementedDaemonServiceServer) Deploy(context.Context, *DeployRequest) (*DeployResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Deploy not implemented")
+}
+func (UnimplementedDaemonServiceServer) GetTeamSettings(context.Context, *GetTeamSettingsRequest) (*GetTeamSettingsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetTeamSettings not implemented")
+}
+func (UnimplementedDaemonServiceServer) SetAgentsAllowed(context.Context, *SetAgentsAllowedRequest) (*SetAgentsAllowedResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetAgentsAllowed not implemented")
+}
+func (UnimplementedDaemonServiceServer) ListTeamTemplates(context.Context, *ListTeamTemplatesRequest) (*ListTeamTemplatesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListTeamTemplates not implemented")
+}
+func (UnimplementedDaemonServiceServer) PlanTeam(context.Context, *PlanTeamRequest) (*PlanTeamResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method PlanTeam not implemented")
+}
+func (UnimplementedDaemonServiceServer) ApplyTeamPlan(context.Context, *ApplyTeamPlanRequest) (*ApplyTeamPlanResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ApplyTeamPlan not implemented")
+}
+func (UnimplementedDaemonServiceServer) WatchPushes(*WatchPushesRequest, grpc.ServerStreamingServer[WatchPushesResponse]) error {
+	return status.Error(codes.Unimplemented, "method WatchPushes not implemented")
+}
+func (UnimplementedDaemonServiceServer) AnswerPush(context.Context, *AnswerPushRequest) (*AnswerPushResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AnswerPush not implemented")
+}
+func (UnimplementedDaemonServiceServer) GetPushes(context.Context, *GetPushesRequest) (*GetPushesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetPushes not implemented")
+}
+func (UnimplementedDaemonServiceServer) StopAllowingPushes(context.Context, *StopAllowingPushesRequest) (*StopAllowingPushesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method StopAllowingPushes not implemented")
 }
 func (UnimplementedDaemonServiceServer) mustEmbedUnimplementedDaemonServiceServer() {}
 func (UnimplementedDaemonServiceServer) testEmbeddedByValue()                       {}
@@ -2360,6 +2549,161 @@ func _DaemonService_Deploy_Handler(srv interface{}, ctx context.Context, dec fun
 	return interceptor(ctx, in, info, handler)
 }
 
+func _DaemonService_GetTeamSettings_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetTeamSettingsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).GetTeamSettings(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_GetTeamSettings_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).GetTeamSettings(ctx, req.(*GetTeamSettingsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_SetAgentsAllowed_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetAgentsAllowedRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).SetAgentsAllowed(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_SetAgentsAllowed_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).SetAgentsAllowed(ctx, req.(*SetAgentsAllowedRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_ListTeamTemplates_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListTeamTemplatesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).ListTeamTemplates(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_ListTeamTemplates_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).ListTeamTemplates(ctx, req.(*ListTeamTemplatesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_PlanTeam_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PlanTeamRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).PlanTeam(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_PlanTeam_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).PlanTeam(ctx, req.(*PlanTeamRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_ApplyTeamPlan_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ApplyTeamPlanRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).ApplyTeamPlan(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_ApplyTeamPlan_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).ApplyTeamPlan(ctx, req.(*ApplyTeamPlanRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_WatchPushes_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(WatchPushesRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(DaemonServiceServer).WatchPushes(m, &grpc.GenericServerStream[WatchPushesRequest, WatchPushesResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type DaemonService_WatchPushesServer = grpc.ServerStreamingServer[WatchPushesResponse]
+
+func _DaemonService_AnswerPush_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AnswerPushRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).AnswerPush(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_AnswerPush_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).AnswerPush(ctx, req.(*AnswerPushRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_GetPushes_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetPushesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).GetPushes(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_GetPushes_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).GetPushes(ctx, req.(*GetPushesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_StopAllowingPushes_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StopAllowingPushesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).StopAllowingPushes(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_StopAllowingPushes_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).StopAllowingPushes(ctx, req.(*StopAllowingPushesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // DaemonService_ServiceDesc is the grpc.ServiceDesc for DaemonService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -2579,6 +2923,38 @@ var DaemonService_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "Deploy",
 			Handler:    _DaemonService_Deploy_Handler,
 		},
+		{
+			MethodName: "GetTeamSettings",
+			Handler:    _DaemonService_GetTeamSettings_Handler,
+		},
+		{
+			MethodName: "SetAgentsAllowed",
+			Handler:    _DaemonService_SetAgentsAllowed_Handler,
+		},
+		{
+			MethodName: "ListTeamTemplates",
+			Handler:    _DaemonService_ListTeamTemplates_Handler,
+		},
+		{
+			MethodName: "PlanTeam",
+			Handler:    _DaemonService_PlanTeam_Handler,
+		},
+		{
+			MethodName: "ApplyTeamPlan",
+			Handler:    _DaemonService_ApplyTeamPlan_Handler,
+		},
+		{
+			MethodName: "AnswerPush",
+			Handler:    _DaemonService_AnswerPush_Handler,
+		},
+		{
+			MethodName: "GetPushes",
+			Handler:    _DaemonService_GetPushes_Handler,
+		},
+		{
+			MethodName: "StopAllowingPushes",
+			Handler:    _DaemonService_StopAllowingPushes_Handler,
+		},
 	},
 	Streams: []grpc.StreamDesc{
 		{
@@ -2617,6 +2993,11 @@ var DaemonService_ServiceDesc = grpc.ServiceDesc{
 			StreamName:    "AddAgentFiles",
 			Handler:       _DaemonService_AddAgentFiles_Handler,
 			ClientStreams: true,
+		},
+		{
+			StreamName:    "WatchPushes",
+			Handler:       _DaemonService_WatchPushes_Handler,
+			ServerStreams: true,
 		},
 	},
 	Metadata: "portenv/daemon/v1/daemon.proto",

@@ -229,11 +229,18 @@ final class FakeDaemon: DaemonAPI, @unchecked Sendable {
     }
     /// Each watchTeam plays the next script; after the last, it waits.
     var teamScripts: [TeamScript] = []
+    /// Per workspace, played before `teamScripts` (several teams at once).
+    var teamScriptsByBox: [String: [TeamScript]] = [:]
     /// The decision answerDecision returns, keyed by id.
     var answered: [String: TeamDecision] = [:]
     func watchTeam(_ box: String, cursor: String) -> AsyncThrowingStream<(TeamEvent, String), Error> {
         let script: TeamScript? = lock.withLock {
             _calls.append(["app", "watch-team", box, cursor])
+            if var own = teamScriptsByBox[box], !own.isEmpty {
+                let first = own.removeFirst()
+                teamScriptsByBox[box] = own
+                return first
+            }
             return teamScripts.isEmpty ? nil : teamScripts.removeFirst()
         }
         return AsyncThrowingStream { continuation in
@@ -274,5 +281,51 @@ final class FakeDaemon: DaemonAPI, @unchecked Sendable {
     func approveAgentFile(_ box: String, id: String, sha256: String) async throws -> TeamAgent {
         try await record(["app", "approve-agent-file", box, id, sha256])
         return TeamAgent(id: id, name: id, status: .stopped, fileSHA256: sha256, approved: true)
+    }
+    /// What ApplyTeamPlan answers (ADR 0025); nothing kept by default.
+    var applied = TeamPlanApplied(applied: false)
+    /// Answers in turn before `applied` (a needed sign-in, a failed clone).
+    var appliedFirst: [TeamPlanApplied] = []
+    func applyTeamPlan(_ box: String, githubToken: String?) async throws -> TeamPlanApplied {
+        // The sign-in is recorded only as whether one was given.
+        try await record(["app", "apply-team-plan", box, githubToken == nil ? "no-token" : "token"])
+        return lock.withLock { appliedFirst.isEmpty ? applied : appliedFirst.removeFirst() }
+    }
+    /// The workspace's repository and whether pushes are allowed.
+    var pushes: (String, Bool) = ("", false)
+    func pushPermission(_ box: String) async throws -> (repo: String, allowed: Bool) {
+        try await record(["app", "get-pushes", box])
+        return lock.withLock { pushes }
+    }
+    func stopAllowingPushes(_ box: String) async throws {
+        try await record(["app", "stop-allowing-pushes", box])
+        lock.withLock { pushes.1 = false }
+    }
+    /// Pushes waiting for the app (R-0391), sent once by watchPushes.
+    var pushQuestions: [PushAsk] = []
+    func watchPushes(_ box: String) -> AsyncThrowingStream<PushAsk, Error> {
+        let qs: [PushAsk] = lock.withLock {
+            _calls.append(["app", "watch-pushes", box])
+            defer { pushQuestions = [] }
+            return pushQuestions
+        }
+        return AsyncThrowingStream { c in
+            for q in qs { c.yield(q) }
+        }
+    }
+    func answerPush(_ box: String, id: String, allow: Bool, githubToken: String?, signedOut: Bool) async throws {
+        // The sign-in is recorded only as whether one was given.
+        try await record(["app", "answer-push", box, id, signedOut ? "signed-out" : allow ? "allow" : "deny", githubToken == nil ? "no-token" : "token"])
+    }
+    /// Settings › Team › Agents allowed (R-0347).
+    var allowed = 4
+    func agentsAllowed() async throws -> Int {
+        try await record(["app", "agents-allowed"])
+        return lock.withLock { allowed }
+    }
+    func setAgentsAllowed(_ n: Int) async throws -> Int {
+        try await record(["app", "set-agents-allowed", String(n)])
+        lock.withLock { allowed = n }
+        return n
     }
 }

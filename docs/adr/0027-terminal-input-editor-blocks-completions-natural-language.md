@@ -71,6 +71,7 @@ Completions come from specs, generators, history, the project's scripts and the 
   - It's MIT by its repository's licence metadata (checked 2026-10-19), so it fits Apache-2.0 with its notice.
   - It's vendored at a pinned commit, converted to declarative JSON at build time, and updated only with the app.
   - Parts that need JavaScript are dropped, so no third-party code runs.
+- **Warp (R-0363):** its client is AGPL v3 (MIT only for its UI crates), so no Warp code is copied, ported or translated into Portenv, and lanes don't read its source while writing S1 or S2. Its public docs and behaviour are fine as reference; the Fig specs above stay as planned.
 - **Generators:** a fixed, reviewed list, called by ID (`RunGenerator(tab, id, prefix)` on the helper, relayed by portenvd).
   - No command text crosses from the app.
   - They're read-only and never run project code: scripts come from parsing `package.json` and the Makefile, and git runs with fsmonitor and hooks off.
@@ -164,7 +165,7 @@ Owner commands on the Mac, through portenvd, named consistently with today's:
 | `portenv tab new --name NAME [-- COMMAND…]` | new for the owner (agents have it); `NewTab` exists |
 | `portenv team start [AGENT…]`, `portenv team stop [AGENT…]` | new; `StartAgent` and `StopAgent` exist |
 | `portenv deploy TARGET` | new, once ADR 0026 (#224) is accepted. With no runbook it refuses: "This project has no deploy runbook, so Portenv won't guess how to deploy. Add DEPLOY.md (see `portenv guide`), then try again." |
-| `portenv decision list`, `portenv decision answer ID CHOICE` | new; `AnswerDecision` exists (`answer` stays PLAN's short alias) |
+| `portenv decision list` | new; lists what's waiting and points to Needs you in the app. It never answers (below) |
 | `portenv status` | exists |
 
 **The CLI gets no extra powers: portenvd decides.**
@@ -172,6 +173,7 @@ Owner commands on the Mac, through portenvd, named consistently with today's:
 - The caller is fixed when the connection is accepted: the owner on the owner-only socket, an agent by its grant.
 - Approvals appear only in the app. `deploy production` waits on the same sheet as the button.
 - No flag skips an approval.
+- **Decisions stay app-only (ADR 0022, R-0370).** No command answers a decision: the CLI points to Needs you, and there's no `decision answer` and no `answer` alias for decisions (PLAN's `portenv answer` is the tab relay, not this). Smart input may suggest "open Needs you", never an answer.
 - The workspace's shell (`work`) has no owner socket, so these commands there are refused, as they are today.
 
 **From the editor:** a `portenv` line whose verb is in this list is marked ✦ "Runs in Portenv". Return runs it through portenvd as the app's action, never in the shell. `command portenv …` reaches the shell's own.

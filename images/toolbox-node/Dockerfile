@@ -128,6 +128,9 @@ RUN chmod 0440 /etc/sudoers.d/work \
 
 COPY --from=agent /out/portenv-agent /usr/local/bin/portenv-agent
 COPY --from=agent --chown=root:root --chmod=0755 /out/portenv /usr/local/bin/portenv
+# git runs git-remote-portenv for pushes to origin (R-0391): the portenv CLI
+# under a second name.
+RUN ln -s portenv /usr/local/bin/git-remote-portenv
 
 # restic runs only as portenv-sync, a dedicated system user, with just the
 # capabilities saving and restoring every home needs. Gaining them at exec

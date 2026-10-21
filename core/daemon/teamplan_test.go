@@ -242,7 +242,10 @@ func (f *fakeProjectAgent) ReadAgentFiles(_ context.Context, r *agentv1.ReadAgen
 	return out, nil
 }
 
-func servingProject(t *testing.T) (*Server, *fakeProjectAgent, daemonv1.DaemonServiceClient) {
+// servingProject serves a closed workspace whose agent is a fake. Each
+// adjust runs before the server serves, so a test that wants its own
+// logger or GitHub sets it there, never on a server already serving.
+func servingProject(t *testing.T, adjust ...func(*Server)) (*Server, *fakeProjectAgent, daemonv1.DaemonServiceClient) {
 	t.Helper()
 	t.Setenv("PORTENV_KEYS", "file")
 	fake := &fakeProjectAgent{root: t.TempDir()}
@@ -264,6 +267,9 @@ func servingProject(t *testing.T) (*Server, *fakeProjectAgent, daemonv1.DaemonSe
 			closed: true,
 			sess:   &local.Session{Cfg: local.BoxConfig{ID: "box-1", Name: "acme-api"}},
 			agent:  agentv1.NewAgentServiceClient(conn),
+		}
+		for _, a := range adjust {
+			a(s)
 		}
 	})
 	return s, fake, c

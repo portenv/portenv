@@ -1211,6 +1211,11 @@ message AgentInfo {
   // Set when its file asks for share_login, which this build doesn't
   // support: one plain line saying nothing is shared (R-0323).
   string share_login_off = 21;
+  // "Can't tell if <name> is idle: …" when its runner has an idle rule
+  // but its pane has been quiet with no idle prompt recognised for 3
+  // minutes, so wake-ups and routines wait (R-0411). Empty again as soon
+  // as a prompt is recognised or output resumes.
+  string idle_unknown = 22;
 }
 
 message WatchTeamRequest {

@@ -63,6 +63,7 @@ const (
 	AgentService_FetchAgentBranch_FullMethodName     = "/portenv.agent.v1.AgentService/FetchAgentBranch"
 	AgentService_ResolveTeamMigration_FullMethodName = "/portenv.agent.v1.AgentService/ResolveTeamMigration"
 	AgentService_WakeAgent_FullMethodName            = "/portenv.agent.v1.AgentService/WakeAgent"
+	AgentService_CheckAgentIdle_FullMethodName       = "/portenv.agent.v1.AgentService/CheckAgentIdle"
 )
 
 // AgentServiceClient is the client API for AgentService service.
@@ -199,6 +200,10 @@ type AgentServiceClient interface {
 	// checks. The helper writes the line itself; no message text is ever
 	// typed, and from must be an agent id or "owner".
 	WakeAgent(ctx context.Context, in *WakeAgentRequest, opts ...grpc.CallOption) (*WakeAgentResponse, error)
+	// Says whether the agent's main pane would take a routine or a wake-up
+	// now, under exactly their checks, and types nothing: portenvd's way to
+	// notice a runner whose idle prompt it doesn't recognise (R-0411).
+	CheckAgentIdle(ctx context.Context, in *CheckAgentIdleRequest, opts ...grpc.CallOption) (*CheckAgentIdleResponse, error)
 }
 
 type agentServiceClient struct {
@@ -643,6 +648,16 @@ func (c *agentServiceClient) WakeAgent(ctx context.Context, in *WakeAgentRequest
 	return out, nil
 }
 
+func (c *agentServiceClient) CheckAgentIdle(ctx context.Context, in *CheckAgentIdleRequest, opts ...grpc.CallOption) (*CheckAgentIdleResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CheckAgentIdleResponse)
+	err := c.cc.Invoke(ctx, AgentService_CheckAgentIdle_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AgentServiceServer is the server API for AgentService service.
 // All implementations must embed UnimplementedAgentServiceServer
 // for forward compatibility.
@@ -777,6 +792,10 @@ type AgentServiceServer interface {
 	// checks. The helper writes the line itself; no message text is ever
 	// typed, and from must be an agent id or "owner".
 	WakeAgent(context.Context, *WakeAgentRequest) (*WakeAgentResponse, error)
+	// Says whether the agent's main pane would take a routine or a wake-up
+	// now, under exactly their checks, and types nothing: portenvd's way to
+	// notice a runner whose idle prompt it doesn't recognise (R-0411).
+	CheckAgentIdle(context.Context, *CheckAgentIdleRequest) (*CheckAgentIdleResponse, error)
 	mustEmbedUnimplementedAgentServiceServer()
 }
 
@@ -900,6 +919,9 @@ func (UnimplementedAgentServiceServer) ResolveTeamMigration(context.Context, *Re
 }
 func (UnimplementedAgentServiceServer) WakeAgent(context.Context, *WakeAgentRequest) (*WakeAgentResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method WakeAgent not implemented")
+}
+func (UnimplementedAgentServiceServer) CheckAgentIdle(context.Context, *CheckAgentIdleRequest) (*CheckAgentIdleResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CheckAgentIdle not implemented")
 }
 func (UnimplementedAgentServiceServer) mustEmbedUnimplementedAgentServiceServer() {}
 func (UnimplementedAgentServiceServer) testEmbeddedByValue()                      {}
@@ -1512,6 +1534,24 @@ func _AgentService_WakeAgent_Handler(srv interface{}, ctx context.Context, dec f
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AgentService_CheckAgentIdle_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CheckAgentIdleRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentServiceServer).CheckAgentIdle(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentService_CheckAgentIdle_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentServiceServer).CheckAgentIdle(ctx, req.(*CheckAgentIdleRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AgentService_ServiceDesc is the grpc.ServiceDesc for AgentService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1630,6 +1670,10 @@ var AgentService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "WakeAgent",
 			Handler:    _AgentService_WakeAgent_Handler,
+		},
+		{
+			MethodName: "CheckAgentIdle",
+			Handler:    _AgentService_CheckAgentIdle_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

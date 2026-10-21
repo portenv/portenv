@@ -16,6 +16,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/portenv/portenv/core/internal/idleinput"
 	agentv1 "github.com/portenv/portenv/proto/gen/go/portenv/agent/v1"
 	typesv1 "github.com/portenv/portenv/proto/gen/go/portenv/types/v1"
 )
@@ -210,26 +211,31 @@ func TestKillUIDNeverTouchesRootOrWork(t *testing.T) {
 	}
 }
 
-// R-0258: the runner's idle pattern reaches lane A's idle decision.
+// R-0258: the runner's idle-input rule, pattern and lines, reaches lane
+// A's idle decision; a bad one is refused.
 func TestStartTeamAgentSetsTheIdlePattern(t *testing.T) {
 	s, _, _, _, _ := newStartServer(t)
-	var got [2]string
-	s.setAgentIdleInput = func(id, p string) error { got = [2]string{id, p}; return nil }
-	if _, err := s.StartTeamAgent(context.Background(), &agentv1.StartTeamAgentRequest{AgentId: "builder", Argv: []string{"claude"}, IdlePattern: `^\s*>\s*$`}); err != nil {
+	var gotID string
+	var got idleinput.Input
+	s.setAgentIdleInput = func(id string, in idleinput.Input) error { gotID, got = id, in; return nil }
+	if _, err := s.StartTeamAgent(context.Background(), &agentv1.StartTeamAgentRequest{AgentId: "builder", Argv: []string{"claude"}, IdlePattern: `^\s*>\s*$`, IdleLines: 6}); err != nil {
 		t.Fatal(err)
 	}
-	if got != [2]string{"builder", `^\s*>\s*$`} {
-		t.Errorf("set %v", got)
+	if gotID != "builder" || got != (idleinput.Input{Pattern: `^\s*>\s*$`, Lines: 6}) {
+		t.Errorf("set %s %v", gotID, got)
 	}
-	for _, p := range []string{"(", strings.Repeat("a", maxIdlePattern+1)} {
-		if _, err := s.StartTeamAgent(context.Background(), &agentv1.StartTeamAgentRequest{AgentId: "builder", Argv: []string{"claude"}, IdlePattern: p}); status.Code(err) != codes.InvalidArgument {
-			t.Errorf("pattern %.10q: %v", p, err)
+	for _, c := range []struct {
+		p     string
+		lines int32
+	}{{"(", 1}, {strings.Repeat("a", idleinput.MaxPattern+1), 1}, {"x", -1}, {"x", idleinput.MaxLines + 1}} {
+		if _, err := s.StartTeamAgent(context.Background(), &agentv1.StartTeamAgentRequest{AgentId: "builder", Argv: []string{"claude"}, IdlePattern: c.p, IdleLines: c.lines}); status.Code(err) != codes.InvalidArgument {
+			t.Errorf("pattern %.10q, %d lines: %v", c.p, c.lines, err)
 		}
 	}
 }
 
-// R-0285: newChannelServer's wiring. StartTeamAgent's idle pattern lands
-// in lane A's own SetAgentIdleInput, so the routine check has it.
+// R-0285: newChannelServer's wiring. StartTeamAgent's idle-input rule
+// lands in lane A's own SetAgentIdleInput, so the routine check has it.
 func TestStartTeamAgentReachesLaneAsIdleInput(t *testing.T) {
 	s, _, _, _, _ := newStartServer(t)
 	s.setAgentIdleInput = s.SetAgentIdleInput
@@ -240,14 +246,14 @@ func TestStartTeamAgentReachesLaneAsIdleInput(t *testing.T) {
 		s.agents.mu.Unlock()
 		return nil, nil
 	}
-	if _, err := s.StartTeamAgent(context.Background(), &agentv1.StartTeamAgentRequest{AgentId: "builder", Argv: []string{"claude"}, IdlePattern: `^\s*>\s*$`}); err != nil {
+	if _, err := s.StartTeamAgent(context.Background(), &agentv1.StartTeamAgentRequest{AgentId: "builder", Argv: []string{"claude"}, IdlePattern: `^\s*>\s*$`, IdleLines: 2}); err != nil {
 		t.Fatal(err)
 	}
 	s.agents.mu.Lock()
-	re := s.agents.by["builder"].idleInput
+	m := s.agents.by["builder"].idleInput
 	s.agents.mu.Unlock()
-	if re == nil || !re.MatchString("output\n> \n") || re.MatchString("thinking…") {
-		t.Errorf("builder's idle input = %v", re)
+	if m == nil || m.Find([]string{"output", "> ", "footer"}) != 1 || m.Find([]string{"> ", "a", "b"}) != -1 || m.Find([]string{"thinking…"}) != -1 {
+		t.Errorf("builder's idle input = %v", m)
 	}
 }
 

@@ -11,7 +11,7 @@ Today a team arrives in a workspace by hand: the owner makes the workspace, runs
 What's true today, and decides the design:
 - **New workspace** (`new-box` board) asks for a name, a start (GitHub repository, folder on this Mac, empty) and a toolbox. GitHub works by ADR 0018: `gh auth login` inside the box, the token in the box home's `hosts.yml`, and agents in the box can use it. "Folder on this Mac" isn't built; PLAN's 1.7 holds the copy-in, and tonight's workaround is `docker cp`.
 - **Templates** live in `core/internal/teamkit/templates/` (`starter`: lead, builder, reviewer; `orchestrate`: lead, builder, reviewer, design). Every file says `runner: claude`, with no model.
-- **The runner table** is `core/daemon/runners.go`: an idle-input pattern keyed by the basename of the runner's first word (`claude`, `codex`), used for routines (ADR 0022 §4b) and the wake on a message (CC-0498, #195). A runner not in the table gets neither, with a plain line.
+- **The runner table** is `core/internal/idleinput`, read by `core/daemon/runners.go`: an idle-input rule (a pattern and how many of the last lines it's tried on) keyed by the basename of the runner's first word (`claude`, `codex`), used for routines (ADR 0022 §4b) and the wake on a message (CC-0498, #195). A runner not in the table gets neither, with a plain line.
 - **`home_seed` is dropped on the floor.** `portenvd` validates it and sends it in `StartTeamAgentRequest.home_seed`; the helper never reads the field, so nothing is copied.
 - **`share_login` is a no-op.** `portenvd` parses it and carries it on the agent; no decision is raised and the helper copies nothing.
 - **Approval pins a file by SHA-256** (ADR 0022 §3), after the file exists in the project; until then the team can't start.
@@ -212,7 +212,7 @@ seeds/<id>/<path>        that agent's seed files, copied into /home/<id>/<path>
 
 ### 9. The runner registry
 
-**One table in code, `core/internal/teamkit/runners.go`, replacing `core/daemon/runners.go`.** `portenvd` builds every runner's argv from it; `StartTeamAgent` passes the helper the argv and the idle pattern as today. Each entry:
+**One table in code, `core/internal/teamkit/runners.go`, replacing `core/daemon/runners.go`.** `portenvd` builds every runner's argv from it; `StartTeamAgent` passes the helper the argv and the idle-input rule (`idle_pattern` and `idle_lines`) as today. Each entry:
 
 | Field | Claude Code (shown) | Codex (registry only) | grok-build (registry only) |
 | --- | --- | --- | --- |
@@ -223,7 +223,7 @@ seeds/<id>/<path>        that agent's seed files, copied into /home/<id>/<path>
 | `fixed_args` | none | none | none |
 | `model_flag` | `--model` | `--model` | to check |
 | `models` (the runner's own aliases) | `opus`, `sonnet`, `fable` | to fill from its help | to fill from its help |
-| `idle_pattern` (RE2, last line) | today's `claude` pattern | today's `codex` pattern | none known |
+| `idle_input`: `pattern` (RE2, one whole line) and `lines` (how many of the last non-empty lines, from the bottom, 1 to 8) | `❯` or `>` (maybe inside `│` sides) followed by nothing or only the `Try "…"` placeholder, on the last 6 lines | `›` alone, on the last 8 lines | none known |
 | `read_only_args` | `--disallowedTools Edit,Write,NotebookEdit` | to check | to check |
 | `add_dir_flag` | `--add-dir` | to check | to check |
 | `login_hint` | "Claude Code prints its sign-in link in this tab. Sign in once; the login stays in <agent>'s files." | its own | its own |
@@ -232,7 +232,7 @@ seeds/<id>/<path>        that agent's seed files, copied into /home/<id>/<path>
 
 - **The argv** is `command`, then `fixed_args`, then `model_flag` and the model, then `read_only_args` for an agent with `checkout: none` (a lens: belt and braces over the OS boundary, which is the real one), then `add_dir_flag` with each `read_clones` path for a lens. Nothing in an agent file adds arguments.
 - **The command is checked by the helper before start:** a regular file, owned by root, not writable by group or others, under a root-owned path. Never resolved through `PATH`.
-- **Routines and the wake on a message** (CC-0498) use `idle_pattern`. An entry without one shows, in the runner menu and on the agent's row: "Routines and wakes are off for grok-build: Portenv doesn't know when it's idle."
+- **Routines and the wake on a message** (CC-0498) use `idle_input`: the helper takes the lowest of the last `lines` non-empty lines that the pattern matches in whole; none means the runner isn't at an empty input. A runner may draw a rule and a footer under its input (Claude Code 2.1 does), so the rule names its lines rather than reading the last line only. The screen capture has no cell attributes, so a dim placeholder is told from typed text by its form. An entry without one shows, in the runner menu and on the agent's row: "Routines and wakes are off for grok-build: Portenv doesn't know when it's idle."
 - **MVP: the menus list only `shown` entries,** so Anthropic's Claude Code with Opus, Sonnet and Fable. Enabling Codex or grok-build later is filling its entry, adding its package to the image and flipping `shown`; templates, the file format and the review screen need no change.
 
 **The agent file gains `model`** (ADR 0022 §3's keys are amended):

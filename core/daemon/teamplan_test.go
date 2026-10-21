@@ -136,6 +136,59 @@ type fakeProjectAgent struct {
 	mu     sync.Mutex
 	root   string // stands for /home/work
 	writes int
+	// Each WriteAgentFiles call's file names.
+	written [][]string
+	// Each CloneProject's start and the bundle that came with it.
+	clones  []*agentv1.CloneProjectStart
+	bundles [][]byte
+	// CloneProject fails with this, once, when set.
+	cloneErr error
+	// GetProjectRoom's free bytes (0: plenty).
+	free uint64
+}
+
+func (f *fakeProjectAgent) GetProjectRoom(_ context.Context, r *agentv1.GetProjectRoomRequest) (*agentv1.GetProjectRoomResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := &agentv1.GetProjectRoomResponse{FreeBytes: f.free}
+	if out.FreeBytes == 0 {
+		out.FreeBytes = 100 << 30
+	}
+	if _, err := os.Stat(f.dir(r.GetProjectDir())); err == nil {
+		out.Exists = true
+	}
+	return out, nil
+}
+
+func (f *fakeProjectAgent) CloneProject(stream agentv1.AgentService_CloneProjectServer) error {
+	first, err := stream.Recv()
+	if err != nil {
+		return err
+	}
+	var bundle []byte
+	for {
+		m, err := stream.Recv()
+		if err != nil {
+			break
+		}
+		bundle = append(bundle, m.GetChunk()...)
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.clones = append(f.clones, first.GetStart())
+	f.bundles = append(f.bundles, bundle)
+	if err := f.cloneErr; err != nil {
+		f.cloneErr = nil
+		return err
+	}
+	dir := f.dir(first.GetStart().GetProjectDir())
+	if err := os.MkdirAll(filepath.Join(dir, ".git"), 0o755); err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte("cloned"), 0o644); err != nil {
+		return err
+	}
+	return stream.SendAndClose(&agentv1.CloneProjectResponse{})
 }
 
 func (f *fakeProjectAgent) dir(project string) string {
@@ -146,7 +199,15 @@ func (f *fakeProjectAgent) WriteAgentFiles(_ context.Context, r *agentv1.WriteAg
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.writes++
+	var names []string
+	for _, file := range r.GetFiles() {
+		names = append(names, file.GetName())
+	}
+	f.written = append(f.written, names)
 	out := &agentv1.WriteAgentFilesResponse{}
+	if err := os.MkdirAll(f.dir(r.GetProjectDir()), 0o755); err != nil {
+		return nil, err
+	}
 	agents := filepath.Join(f.dir(r.GetProjectDir()), ".portenv", "agents")
 	for _, file := range r.GetFiles() {
 		p := filepath.Join(agents, filepath.FromSlash(file.GetName()))
@@ -303,7 +364,7 @@ func TestTheKeptTeamIsPrivate(t *testing.T) {
 	if err := keepTeamPlan(dir, approvedChoice(t, "starter")); err != nil {
 		t.Fatal(err)
 	}
-	fi, err := os.Stat(filepath.Join(dir, teamPlanFile))
+	fi, err := os.Stat(filepath.Join(dir, setupFile))
 	if err != nil || fi.Mode().Perm() != 0o600 {
 		t.Fatalf("%v %v", fi, err)
 	}
@@ -338,7 +399,7 @@ func TestCreateBoxKeepsTheApprovedTeam(t *testing.T) {
 	if err != nil || kept.GetTemplate() != "starter" {
 		t.Fatalf("%v %v", kept, err)
 	}
-	if err := os.Remove(filepath.Join(state, teamPlanFile)); err != nil {
+	if err := os.Remove(filepath.Join(state, setupFile)); err != nil {
 		t.Fatal(err)
 	}
 	if again, err := s.CreateBox(ctx, req); err != nil || !again.GetAlreadyCreated() {

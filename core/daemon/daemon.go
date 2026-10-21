@@ -100,6 +100,11 @@ type Server struct {
 	// freeBytes is the space free to this user on dir's volume (tests
 	// set it).
 	freeBytes func(dir string) (uint64, error)
+	// githubAPI is GitHub's REST API, for a repository's size before it's
+	// cloned (ADR 0025 §2); tests point it at their own server.
+	githubAPI string
+	// githubGit is GitHub's git over https (tests: their own server).
+	githubGit string
 }
 
 // openBox is a box this daemon opened: its session, sync engine and agent

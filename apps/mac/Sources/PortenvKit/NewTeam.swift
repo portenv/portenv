@@ -133,10 +133,30 @@ public struct TeamPlanApplied: Equatable, Sendable {
     public var applied: Bool
     public var pinned: [String]
     public var lines: [String]
-    public init(applied: Bool, pinned: [String] = [], lines: [String] = []) {
+    /// The project couldn't be brought in: one plain line; nothing was
+    /// written, and portenvd keeps the choice for Try Again.
+    public var projectError: String?
+    public var needsSignIn: Bool
+    /// The clone needs the owner's GitHub sign-in, which the app reads.
+    public var needsToken: Bool
+    public init(applied: Bool, pinned: [String] = [], lines: [String] = [], projectError: String? = nil, needsSignIn: Bool = false, needsToken: Bool = false) {
         self.applied = applied
         self.pinned = pinned
         self.lines = lines
+        self.projectError = projectError
+        self.needsSignIn = needsSignIn
+        self.needsToken = needsToken
+    }
+}
+
+/// The window's line when the project couldn't be brought in.
+public struct SetupProblem: Equatable, Sendable {
+    public var line: String
+    /// Sign in with GitHub would fix it.
+    public var needsSignIn: Bool
+    public init(line: String, needsSignIn: Bool) {
+        self.line = line
+        self.needsSignIn = needsSignIn
     }
 }
 
@@ -379,8 +399,22 @@ public enum NewTeamText {
     public static let itMay = "It may"
     public static let instructions = "Instructions"
     public static let changedFromTemplate = "Changed from the template:"
-    public static let project = "Empty project"
-    public static let projectLine = "A new, empty project with git, on main. Bring a repository in later from the workspace\u{2019}s terminal."
+    /// The review's project summary (ADR 0025 §4).
+    public static func projectTitle(_ p: ProjectChoice) -> String {
+        switch p {
+        case .empty: "Empty project"
+        case .github(let url, _): url.replacingOccurrences(of: "https://", with: "")
+        }
+    }
+
+    public static func projectSummary(_ p: ProjectChoice) -> String {
+        switch p {
+        case .empty: ProjectText.emptyLine
+        case .github(_, let signIn): signIn
+            ? "Cloned with your GitHub sign-in when the workspace first opens. The agents work on it, each in its own copy."
+            : "Cloned when the workspace first opens. The agents work on it, each in its own copy."
+        }
+    }
     /// "Lead, Builder and Reviewer".
     public static func join(_ names: [String]) -> String {
         guard let last = names.last else { return "" }

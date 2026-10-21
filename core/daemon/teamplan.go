@@ -7,15 +7,18 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
 
+	"github.com/portenv/portenv/core/internal/githubrepo"
 	"github.com/portenv/portenv/core/internal/teamkit"
 	agentv1 "github.com/portenv/portenv/proto/gen/go/portenv/agent/v1"
 	daemonv1 "github.com/portenv/portenv/proto/gen/go/portenv/daemon/v1"
@@ -31,7 +34,9 @@ import (
 // the ones approved. Nothing starts: the team's first start still asks
 // the owner, as ADR 0022 has it.
 
-const teamPlanFile = "team-plan.json"
+// setupFile is what CreateBox keeps for ApplyTeamPlan: the project's
+// source and the team (WorkspaceSetup).
+const setupFile = "workspace-setup.json"
 
 func choices(c *daemonv1.TeamPlanChoice) []teamkit.AgentChoice {
 	var out []teamkit.AgentChoice
@@ -204,33 +209,67 @@ func checkTeamChoice(c *daemonv1.TeamPlanChoice, allowed int) error {
 	return nil
 }
 
-// keepTeamPlan keeps the approved choice in the workspace's state folder
-// (0600), for ApplyTeamPlan.
-func keepTeamPlan(stateDir string, c *daemonv1.TeamPlanChoice) error {
+// checkSetup is CreateBox's check: the project's source (Empty, or a
+// GitHub https address), and the team, approved file by file.
+func checkSetup(st *daemonv1.WorkspaceSetup, allowed int) error {
+	if p := st.GetProject(); p != nil {
+		switch src := p.GetSource().(type) {
+		case *daemonv1.ProjectSource_Empty:
+		case *daemonv1.ProjectSource_GithubUrl:
+			if _, err := githubrepo.Parse(src.GithubUrl); err != nil {
+				return status.Error(codes.InvalidArgument, "Use a GitHub repository\u2019s https address, like https://github.com/acme/acme-api.")
+			}
+		default:
+			return status.Error(codes.InvalidArgument, "Choose where the project comes from.")
+		}
+	}
+	if t := st.GetTeam(); t != nil {
+		return checkTeamChoice(t, allowed)
+	}
+	return nil
+}
+
+// keepSetup keeps what New workspace chose in the workspace's state
+// folder (0600), for ApplyTeamPlan. It never holds a sign-in.
+func keepSetup(stateDir string, st *daemonv1.WorkspaceSetup) error {
 	if err := os.MkdirAll(stateDir, 0o700); err != nil {
 		return err
 	}
-	b, err := protojson.Marshal(c)
+	b, err := protojson.Marshal(st)
 	if err != nil {
 		return err
 	}
-	return writePrivateAtomic(filepath.Join(stateDir, teamPlanFile), append(b, '\n'))
+	return writePrivateAtomic(filepath.Join(stateDir, setupFile), append(b, '\n'))
 }
 
-// loadTeamPlan is the kept choice; nil when there is none.
-func loadTeamPlan(stateDir string) (*daemonv1.TeamPlanChoice, error) {
-	b, err := os.ReadFile(filepath.Join(stateDir, teamPlanFile)) // #nosec G304 -- portenvd's own folder for the workspace
+// keepTeamPlan keeps a team with no project source.
+func keepTeamPlan(stateDir string, c *daemonv1.TeamPlanChoice) error {
+	return keepSetup(stateDir, &daemonv1.WorkspaceSetup{Team: c})
+}
+
+// loadSetup is the kept setup; nil when there is none.
+func loadSetup(stateDir string) (*daemonv1.WorkspaceSetup, error) {
+	b, err := os.ReadFile(filepath.Join(stateDir, setupFile)) // #nosec G304 -- portenvd's own folder for the workspace
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	var c daemonv1.TeamPlanChoice
-	if err := protojson.Unmarshal(b, &c); err != nil {
-		return nil, fmt.Errorf("the team kept for this workspace can't be read: %w", err)
+	var st daemonv1.WorkspaceSetup
+	if err := protojson.Unmarshal(b, &st); err != nil {
+		return nil, fmt.Errorf("what New workspace kept for this workspace can't be read: %w", err)
 	}
-	return &c, nil
+	return &st, nil
+}
+
+// loadTeamPlan is the kept team; nil when there is none.
+func loadTeamPlan(stateDir string) (*daemonv1.TeamPlanChoice, error) {
+	st, err := loadSetup(stateDir)
+	if st == nil || err != nil {
+		return nil, err
+	}
+	return st.GetTeam(), nil
 }
 
 // teamPlanMu keeps two ApplyTeamPlans (two windows) from both writing.
@@ -271,20 +310,43 @@ func (s *Server) ApplyTeamPlan(ctx context.Context, req *daemonv1.ApplyTeamPlanR
 		return nil, teamStatus(err)
 	}
 	state := filepath.Join(s.env.Dir, "state", box.ID)
-	choice, err := loadTeamPlan(state)
+	setup, err := loadSetup(state)
 	if err != nil {
 		return nil, teamStatus(err)
 	}
-	if choice == nil {
+	if setup == nil {
 		return &daemonv1.ApplyTeamPlanResponse{}, nil
 	}
-	planned, err := teamkit.Plan(choice.GetTemplate(), choices(choice))
-	if err != nil {
-		return nil, teamStatus(err)
+	choice := setup.GetTeam()
+	var planned []teamkit.PlannedAgent
+	if choice != nil {
+		if planned, err = teamkit.Plan(choice.GetTemplate(), choices(choice)); err != nil {
+			return nil, teamStatus(err)
+		}
 	}
 	h, err := s.agentFor(ctx, req.GetName())
 	if err != nil {
 		return nil, err
+	}
+	// The project first (ADR 0025 §2). A clone that fails writes and pins
+	// nothing, and the setup stays for Try Again.
+	if setup.GetProject().GetGithubUrl() != "" {
+		if o := s.cloneProject(ctx, h, req.GetName(), setup.GetProject(), req.GetGithubToken(), planned); o != nil {
+			if o.needToken {
+				return &daemonv1.ApplyTeamPlanResponse{NeedsToken: true}, nil
+			}
+			s.log.Info("project not brought in", "box_id", box.ID, "sign_in", o.needsSignIn)
+			return &daemonv1.ApplyTeamPlanResponse{ProjectError: o.line, NeedsSignIn: o.needsSignIn}, nil
+		}
+	}
+	out := &daemonv1.ApplyTeamPlanResponse{Applied: true}
+	if len(planned) == 0 && !setup.GetProject().GetEmpty() {
+		// A cloned project and no team: nothing more to write.
+		if err := os.Remove(filepath.Join(state, setupFile)); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return nil, err
+		}
+		s.log.Info("workspace setup applied", "box_id", box.ID)
+		return out, nil
 	}
 	w := &agentv1.WriteAgentFilesRequest{ProjectDir: projectDir(req.GetName())}
 	for _, p := range planned {
@@ -303,7 +365,6 @@ func (s *Server) ApplyTeamPlan(ctx context.Context, req *daemonv1.ApplyTeamPlanR
 	for _, a := range choice.GetAgents() {
 		approved[a.GetId()] = a.GetApprovedSha256()
 	}
-	out := &daemonv1.ApplyTeamPlanResponse{Applied: true}
 	err = s.withTeam(ctx, req.GetName(), func(src TeamSource, _ Team) error {
 		for _, p := range planned {
 			if !p.Included {
@@ -327,10 +388,151 @@ func (s *Server) ApplyTeamPlan(ctx context.Context, req *daemonv1.ApplyTeamPlanR
 	if err != nil {
 		return nil, teamStatus(err)
 	}
-	if err := os.Remove(filepath.Join(state, teamPlanFile)); err != nil && !errors.Is(err, fs.ErrNotExist) {
+	if err := os.Remove(filepath.Join(state, setupFile)); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return nil, err
 	}
 	s.log.Info("team plan applied", "box_id", box.ID, "written", len(wr.GetWritten()), "pinned", len(out.Pinned), "kept", len(wr.GetExisting()))
 	s.teamEng().limitChanged()
 	return out, nil
+}
+
+// cloneMargin is the room a clone leaves free (ADR 0025 §2).
+const cloneMargin = 1_000_000_000
+
+// cloneLimit is the most a repository's pack may be, so that work's copy
+// and each coding agent's, each with its checkout (about twice the pack),
+// fit with the margin to spare; 0 when nothing fits.
+func cloneLimit(free uint64, copies int) int64 {
+	if free <= cloneMargin || copies < 1 {
+		return 0
+	}
+	return int64((free - cloneMargin) / uint64(2*copies)) // #nosec G115 -- a disk's bytes
+}
+
+// tooBigLine is ADR 0025 §2's line for a repository the workspace can't
+// hold with its team.
+func tooBigLine(name string, each int64, copies int, free uint64) string {
+	need := uint64(each)*2*uint64(copies) + cloneMargin // #nosec G115 -- positive
+	return fmt.Sprintf("%s needs about %s with its team (%d copies of %s, each with its checkout). This workspace has %s free.",
+		name, gigabytes(need), copies, gigabytes(uint64(each)), gigabytes(free)) // #nosec G115 -- positive
+}
+
+const (
+	needsSignInLine = "This repository needs a sign-in. Sign in with GitHub, then try again."
+	signInEndedLine = "Your GitHub sign-in in Portenv has ended, or doesn\u2019t reach this repository. Sign in again, then try again."
+)
+
+// cloneOutcome is a project that couldn't be brought in.
+type cloneOutcome struct {
+	line                   string
+	needsSignIn, needToken bool
+}
+
+// cloneProject brings the GitHub repository in as the project (R-0391):
+// fetched here on the Mac, with the owner's sign-in only for a repository
+// that needs it, into a 0600 bundle in portenvd's own folder, streamed to
+// the helper, which checks it and clones from it as work with no network.
+// The bundle is removed whatever happens; the sign-in is used for this
+// fetch alone and never leaves this process.
+func (s *Server) cloneProject(ctx context.Context, h agentv1.AgentServiceClient, name string, src *daemonv1.ProjectSource, token string, planned []teamkit.PlannedAgent) *cloneOutcome {
+	repo, err := githubrepo.Parse(src.GetGithubUrl())
+	if err != nil {
+		return &cloneOutcome{line: err.Error()}
+	}
+	room, err := h.GetProjectRoom(ctx, &agentv1.GetProjectRoomRequest{ProjectDir: projectDir(name)})
+	if err != nil {
+		return &cloneOutcome{line: "Portenv couldn\u2019t look at the workspace\u2019s room for " + repo.String() + ". Try again."}
+	}
+	if room.GetExists() {
+		return nil // an earlier try brought it in
+	}
+	if src.GetUseSignIn() && token == "" {
+		return &cloneOutcome{needToken: true}
+	}
+	if !src.GetUseSignIn() {
+		token = ""
+	}
+	copies := 1
+	for _, p := range planned {
+		if p.Included && p.OwnClone {
+			copies++
+		}
+	}
+	limit := cloneLimit(room.GetFreeBytes(), copies)
+	api, gitBase := s.githubAPI, s.githubGit
+	if api == "" {
+		api = githubrepo.API
+	}
+	if gitBase == "" {
+		gitBase = "https://github.com"
+	}
+	client := &http.Client{Timeout: 30 * time.Minute}
+	sctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	est, _ := githubrepo.Size(sctx, &http.Client{Timeout: 10 * time.Second}, api, repo, token)
+	cancel()
+	if est > limit {
+		return &cloneOutcome{line: tooBigLine(name, est, copies, room.GetFreeBytes())}
+	}
+	if limit <= 0 {
+		return &cloneOutcome{line: tooBigLine(name, max(est, 1), copies, room.GetFreeBytes())}
+	}
+
+	dir := filepath.Join(s.env.Dir, "clone")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return &cloneOutcome{line: "Portenv couldn\u2019t clone " + repo.String() + ". Try again."}
+	}
+	f, err := os.CreateTemp(dir, "bundle-*")
+	if err != nil {
+		return &cloneOutcome{line: "Portenv couldn\u2019t clone " + repo.String() + ". Try again."}
+	}
+	defer func() { _ = os.Remove(f.Name()) }()
+	defer func() { _ = f.Close() }()
+	if err := f.Chmod(0o600); err != nil {
+		return &cloneOutcome{line: "Portenv couldn\u2019t clone " + repo.String() + ". Try again."}
+	}
+	got, err := githubrepo.FetchBundle(ctx, client, gitBase+"/"+repo.Owner+"/"+repo.Name, token, f, limit)
+	switch {
+	case errors.Is(err, githubrepo.ErrNeedsSignIn) && token != "":
+		return &cloneOutcome{line: signInEndedLine, needsSignIn: true}
+	case errors.Is(err, githubrepo.ErrNeedsSignIn):
+		return &cloneOutcome{line: needsSignInLine, needsSignIn: true}
+	case errors.Is(err, githubrepo.ErrTooBig):
+		return &cloneOutcome{line: tooBigLine(name, limit+1, copies, room.GetFreeBytes())}
+	case err != nil:
+		return &cloneOutcome{line: "Portenv couldn\u2019t clone " + repo.String() + ": " + err.Error() + "."}
+	}
+	stream, err := h.CloneProject(ctx)
+	if err != nil {
+		return &cloneOutcome{line: "Portenv couldn\u2019t clone " + repo.String() + ". Try again."}
+	}
+	start := &agentv1.CloneProjectStart{ProjectDir: projectDir(name), Url: repo.URL(), MaxBytes: limit + 64<<20, Head: got.Head, Empty: got.Empty}
+	if err := stream.Send(&agentv1.CloneProjectRequest{Msg: &agentv1.CloneProjectRequest_Start{Start: start}}); err != nil {
+		return &cloneOutcome{line: "Portenv couldn\u2019t clone " + repo.String() + ". Try again."}
+	}
+	if !got.Empty {
+		if _, err := f.Seek(0, 0); err != nil {
+			return &cloneOutcome{line: "Portenv couldn\u2019t clone " + repo.String() + ". Try again."}
+		}
+		buf := make([]byte, 1<<20)
+		for {
+			n, rerr := f.Read(buf)
+			if n > 0 {
+				if err := stream.Send(&agentv1.CloneProjectRequest{Msg: &agentv1.CloneProjectRequest_Chunk{Chunk: buf[:n]}}); err != nil {
+					break // the answer below says why
+				}
+			}
+			if rerr != nil {
+				break
+			}
+		}
+	}
+	if _, err := stream.CloseAndRecv(); err != nil {
+		st, _ := status.FromError(err)
+		switch st.Code() {
+		case codes.ResourceExhausted, codes.FailedPrecondition:
+			return &cloneOutcome{line: st.Message()}
+		}
+		return &cloneOutcome{line: "Portenv couldn\u2019t clone " + repo.String() + ". Try again."}
+	}
+	return nil
 }

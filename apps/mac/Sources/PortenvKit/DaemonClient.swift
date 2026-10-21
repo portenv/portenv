@@ -335,6 +335,11 @@ extension DaemonClient: BoxCreating, RecoveryChecking {
         req.keys = r.keys
         req.recoveryPassword = r.recoveryPassword
         if let team = r.team { req.team = Self.choice(team) }
+        switch r.project {
+        case .empty: req.project = .with { $0.empty = true }
+        case .github(let url, let useSignIn): req.project = .with { $0.githubURL = url; $0.useSignIn = useSignIn }
+        case nil: break
+        }
         return try await creating { try await api.createBox(req).alreadyCreated }
     }
 
@@ -693,9 +698,17 @@ extension DaemonClient {
         return try await call { TeamAgent(try await api.approveAgentFile(req).agent) }
     }
 
-    public func applyTeamPlan(_ box: String) async throws -> TeamPlanApplied {
-        let r = try await call { try await api.applyTeamPlan(.with { $0.name = box }) }
-        return TeamPlanApplied(applied: r.applied, pinned: r.pinned, lines: r.lines.map { TeamText.line($0, max: 300) })
+    /// The sign-in goes only in this request, in memory (R-0391).
+    public func applyTeamPlan(_ box: String, githubToken: String?) async throws -> TeamPlanApplied {
+        let req = Portenv_Daemon_V1_ApplyTeamPlanRequest.with {
+            $0.name = box
+            $0.githubToken = githubToken ?? ""
+        }
+        // A clone can take a while: no short deadline.
+        let r = try await call { try await api.applyTeamPlan(req) }
+        return TeamPlanApplied(applied: r.applied, pinned: r.pinned, lines: r.lines.map { TeamText.line($0, max: 300) },
+                               projectError: r.projectError.isEmpty ? nil : TeamText.line(r.projectError, max: 300),
+                               needsSignIn: r.needsSignIn, needsToken: r.needsToken)
     }
 
     public func agentsAllowed() async throws -> Int {

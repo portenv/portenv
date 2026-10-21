@@ -53,6 +53,9 @@ type PlannedAgent struct {
 	Models             []string
 	TemplateTeamStatus bool
 	TeamStatus         bool
+	// OwnClone: the agent works in its own copy of the project (checkout
+	// isn't none), which the workspace has to hold.
+	OwnClone bool
 	// Changes from the template, one plain line each.
 	Changes []string
 }
@@ -183,6 +186,7 @@ func Plan(template string, choices []AgentChoice) ([]PlannedAgent, error) {
 			ID: a.id, Name: fm.get("name"), TemplateName: fm.get("name"), Role: fm.get("role"), Avatar: fm.get("avatar"),
 			Included: c.Include, TemplateIncluded: a.on, Runner: runner.ID,
 			Model: tmplModel, TemplateModel: tmplModel, TemplateTeamStatus: fm.grant("team_status") == "read",
+			OwnClone: fm.get("checkout") != "none",
 		}
 		if tmplModel == "" {
 			p.Models = append(p.Models, "")

@@ -53,7 +53,12 @@ struct MainWindow: View {
                             setupLines: team.setupLines)
                 Divider()
             }
-            content
+            VStack(spacing: 0) {
+                // New workspace's project, being brought in, or why it
+                // couldn't be (ADR 0025 §2).
+                if let team { SetupBanner(team: team) }
+                content
+            }
         }
             // The team is followed by the window's session (AppModel.open),
             // so a tab not in front still counts what needs you (R-0344).

@@ -36,11 +36,14 @@ public final class TeamController {
     /// here): the session's notifications and the Dock badge (§5).
     @ObservationIgnored public var changed: (@MainActor (TeamState) -> Void)?
 
-    public init(box: String, daemon: DaemonAPI, retry: Duration = .seconds(1)) {
+    public init(box: String, daemon: DaemonAPI, retry: Duration = .seconds(1), github: GitHubAccount = .system) {
         self.box = box
         self.daemon = daemon
         self.retry = retry
+        self.github = github
     }
+
+    private let github: GitHubAccount
 
     /// The selected agent, if one is selected and still in the team.
     public var selectedAgent: TeamAgent? {
@@ -106,18 +109,48 @@ public final class TeamController {
     /// the project already had, or one that isn't what was approved.
     public private(set) var setupLines: [String] = []
     private var teamPlanChecked = false
+    /// The project couldn't be brought in (a failed clone): the window's
+    /// line, with Try Again.
+    public private(set) var setupProblem: SetupProblem?
+    /// ApplyTeamPlan is working (a clone can take a while).
+    public private(set) var settingUp = false
 
-    /// Writes and pins the team New workspace kept, once the workspace is
-    /// open (portenvd does it; nothing when there's none). Asked again on
-    /// the next round until portenvd can answer.
+    /// Brings in the project and writes and pins the team New workspace
+    /// kept, once the workspace is open (portenvd does it; nothing when
+    /// there's none). Asked again on the next round until portenvd can
+    /// answer. A clone with the owner's sign-in reads it from the Keychain
+    /// only when portenvd asks for it, and only for that call; a failed one
+    /// waits for Try Again.
     private func applyKeptTeam() async {
+        settingUp = true
+        defer { settingUp = false }
         do {
-            let r = try await daemon.applyTeamPlan(box)
+            var r = try await daemon.applyTeamPlan(box, githubToken: nil)
+            if r.needsToken {
+                guard let token = try? await github.token(), !token.isEmpty else {
+                    teamPlanChecked = true
+                    setupProblem = SetupProblem(line: ProjectText.needsSignIn, needsSignIn: true)
+                    return
+                }
+                r = try await daemon.applyTeamPlan(box, githubToken: token)
+            }
             teamPlanChecked = true
+            if let line = r.projectError, !line.isEmpty {
+                setupProblem = SetupProblem(line: line, needsSignIn: r.needsSignIn)
+                return
+            }
+            setupProblem = nil
             setupLines = r.lines
         } catch let e as DaemonError where e.message == DaemonError.outOfDate {
             teamPlanChecked = true
         } catch {}
+    }
+
+    /// The window's Try Again: portenvd still has the choice.
+    public func retrySetup() async {
+        setupProblem = nil
+        teamPlanChecked = false
+        await applyKeptTeam()
     }
 
     /// The Team section's Raise, after the owner confirmed it (R-0347):

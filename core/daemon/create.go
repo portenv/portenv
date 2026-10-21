@@ -60,8 +60,9 @@ func (s *Server) CreateBox(ctx context.Context, req *daemonv1.CreateBoxRequest) 
 	}
 	// The team chosen in New workspace (ADR 0025): approved, file by
 	// file, within the owner's limit, or nothing is made.
-	if t := req.GetTeam(); t != nil {
-		if err := checkTeamChoice(t, readAgentsAllowed(s.env.Dir)); err != nil {
+	setup := &daemonv1.WorkspaceSetup{Project: req.GetProject(), Team: req.GetTeam()}
+	if setup.Project != nil || setup.Team != nil {
+		if err := checkSetup(setup, readAgentsAllowed(s.env.Dir)); err != nil {
 			s.log.Info("box not created", "box", req.GetName(), "id", req.GetBoxId(), "code", status.Code(err).String())
 			return nil, err
 		}
@@ -73,10 +74,11 @@ func (s *Server) CreateBox(ctx context.Context, req *daemonv1.CreateBoxRequest) 
 		s.log.Info("box not created", "box", req.GetName(), "id", req.GetBoxId(), "code", status.Code(st).String())
 		return nil, st
 	}
-	if t := req.GetTeam(); t != nil {
-		// Kept for ApplyTeamPlan, which writes it once the workspace runs.
-		// A retry (already created) keeps it again.
-		if err := keepTeamPlan(filepath.Join(s.env.Dir, "state", req.GetBoxId()), t); err != nil {
+	if setup.Project != nil || setup.Team != nil {
+		// Kept for ApplyTeamPlan, which brings the project in and writes
+		// the team once the workspace runs. A retry (already created) keeps
+		// it again.
+		if err := keepSetup(filepath.Join(s.env.Dir, "state", req.GetBoxId()), setup); err != nil {
 			return nil, status.Error(codes.Internal, "Portenv couldn\u2019t keep the workspace\u2019s team. Try again.")
 		}
 	}

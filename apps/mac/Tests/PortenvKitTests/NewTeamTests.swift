@@ -199,15 +199,15 @@ struct NewTeamTests {
     }
 }
 
-/// New workspace with the Team step (ADR 0025 §1): Name, Team, Review and
-/// approve, then Creating.
+/// New workspace with the Team step (ADR 0025 §1): Name, Project, Team,
+/// Review and approve, then Creating.
 @MainActor
 struct NewWorkspaceTeamStepTests {
     @Test func theStepsWithATeamPlanner() {
         let flow = FirstRunFlow(service: FakeFirstRunService(), at: .firstBox, fromBoxList: true, teamPlanner: FakeTeamPlanner())
-        #expect(flow.steps == [.firstBox, .team, .review, .gettingReady])
+        #expect(flow.steps == [.firstBox, .project, .team, .review, .gettingReady])
         let first = FirstRunFlow(service: FakeFirstRunService(), teamPlanner: FakeTeamPlanner())
-        #expect(first.steps == [.welcome, .recoveryKey, .storage, .firstBox, .team, .review, .gettingReady])
+        #expect(first.steps == [.welcome, .recoveryKey, .storage, .firstBox, .project, .team, .review, .gettingReady])
         let without = FirstRunFlow(service: FakeFirstRunService(), at: .firstBox)
         #expect(without.steps == [.firstBox, .gettingReady])
     }
@@ -218,11 +218,13 @@ struct NewWorkspaceTeamStepTests {
         let flow = FirstRunFlow(service: service, at: .firstBox, fromBoxList: true, teamPlanner: FakeTeamPlanner())
         flow.boxName = "acme-api"
         await flow.next()
+        await flow.next() // Project: Empty
         #expect(flow.step == .team && service.created.isEmpty)
         await flow.team.load()
         #expect(flow.primaryButton == "Create Workspace")
         await flow.next()
         #expect(flow.step == .gettingReady && service.created.count == 1 && service.created[0].team == nil)
+        #expect(service.created[0].project == .empty)
     }
 
     /// With a team: Review, then Create Workspace only once every file is
@@ -232,6 +234,7 @@ struct NewWorkspaceTeamStepTests {
         let flow = FirstRunFlow(service: service, at: .firstBox, fromBoxList: true, teamPlanner: FakeTeamPlanner())
         flow.boxName = "acme-api"
         await flow.next()
+        await flow.next() // Project: Empty
         await flow.team.load()
         await flow.team.choose("starter")
         #expect(flow.primaryButton == "Continue")
@@ -253,6 +256,7 @@ struct NewWorkspaceTeamStepTests {
         let flow = FirstRunFlow(service: FakeFirstRunService(), at: .firstBox, fromBoxList: true, teamPlanner: FakeTeamPlanner())
         flow.boxName = "acme-api"
         await flow.next()
+        await flow.next() // Project: Empty
         await flow.team.load()
         await flow.team.choose("orchestrate")
         await flow.next()
@@ -263,10 +267,66 @@ struct NewWorkspaceTeamStepTests {
         let flow = FirstRunFlow(service: FakeFirstRunService(), at: .firstBox, fromBoxList: true, teamPlanner: FakeTeamPlanner())
         flow.boxName = "acme-api"
         await flow.next()
+        await flow.next() // Project: Empty
         await flow.team.load()
         await flow.team.choose("starter")
         await flow.next()
         flow.back()
         #expect(flow.step == .team && flow.team.template == "starter")
+    }
+}
+
+/// The Project step (ADR 0025 §2, R-0390): Empty, or a GitHub repository,
+/// cloned when the workspace first runs; with the owner's GitHub sign-in
+/// when there is one.
+@MainActor
+struct ProjectStepTests {
+    func atProject(signedIn: String? = nil) async -> (FirstRunFlow, FakeFirstRunService) {
+        let service = FakeFirstRunService()
+        let flow = FirstRunFlow(service: service, at: .firstBox, fromBoxList: true, teamPlanner: FakeTeamPlanner(), githubLogin: { signedIn })
+        flow.boxName = "acme-api"
+        await flow.next()
+        return (flow, service)
+    }
+
+    @Test func emptyByDefault() async {
+        let (flow, _) = await atProject()
+        #expect(flow.step == .project && flow.projectKind == .empty && flow.canContinue)
+        #expect(ProjectText.emptyLine == "A new, empty project with git, on main.")
+    }
+
+    @Test func fromGitHubTakesOnlyAGitHubAddress() async {
+        let (flow, _) = await atProject()
+        flow.projectKind = .github
+        #expect(!flow.canContinue && flow.whyNot == ProjectText.typeURL)
+        for bad in ["http://github.com/acme/api", "git@github.com:acme/api.git", "https://gitlab.com/acme/api", "https://u:p@github.com/acme/api", "https://github.com/acme"] {
+            flow.githubURL = bad
+            #expect(!flow.canContinue && flow.whyNot == ProjectText.notAGitHubURL, "\(bad)")
+        }
+        flow.githubURL = " https://github.com/acme/api.git "
+        #expect(flow.canContinue)
+        #expect(flow.project == .github(url: "https://github.com/acme/api", useSignIn: false))
+    }
+
+    /// Signed in: the clone uses the sign-in, so a private repository works.
+    @Test func signedInClonesWithTheSignIn() async {
+        let (flow, service) = await atProject(signedIn: "acme-dev")
+        flow.projectKind = .github
+        flow.githubURL = "https://github.com/acme/private"
+        await flow.next()
+        #expect(flow.step == .team)
+        await flow.team.load()
+        await flow.next() // None: create
+        #expect(service.created.first?.project == .github(url: "https://github.com/acme/private", useSignIn: true))
+    }
+
+    /// Back from Team keeps the project's choice.
+    @Test func backKeepsTheProject() async {
+        let (flow, _) = await atProject()
+        flow.projectKind = .github
+        flow.githubURL = "https://github.com/acme/api"
+        await flow.next()
+        flow.back()
+        #expect(flow.step == .project && flow.githubURL == "https://github.com/acme/api")
     }
 }

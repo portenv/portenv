@@ -38,6 +38,19 @@ final class AppModel {
 
     private let daemon = SharedDaemon.client
     private let defaults = UserDefaults.standard
+    /// The teams of workspaces running with no window: they still notify
+    /// and count in the Dock badge (ADR 0023, R-0388).
+    @ObservationIgnored private(set) lazy var windowless: WindowlessTeams = {
+        let teams = WindowlessTeams(daemon: daemon, center: NeedsYouNotifications.shared.center)
+        teams.shown = { [weak self] in Set(self?.sessions.all.compactMap(\.box) ?? []) }
+        return teams
+    }()
+    /// Reads which workspaces run, now and then, for `windowless`.
+    @ObservationIgnored private var runningWatch: Task<Void, Never>?
+    static let runningEvery: Duration = .seconds(15)
+    /// Show on a workspace with no window: opened in the next new window
+    /// tab, with the decision selected.
+    @ObservationIgnored private var pendingShow: (box: String, decision: String)?
 
     /// A new window's session. Its controller brings this window (its tab)
     /// forward before a read that may raise a Keychain prompt (R-0214).
@@ -61,6 +74,14 @@ final class AppModel {
     /// the launch and starts it.
     func attach(_ session: WorkspaceSession) {
         sessions.add(session)
+        if launchClaimed, let (box, decision) = pendingShow {
+            // The tab Show opened for a workspace with no window.
+            pendingShow = nil
+            Task {
+                await open(box, in: session)
+                session.team?.show(decision: decision)
+            }
+        }
         guard !launchClaimed else { return }
         // A notification is for a workspace whose tab isn't in front.
         Notifier.frontWorkspace = { [sessions] in
@@ -76,8 +97,11 @@ final class AppModel {
     /// A window closed: its session ends; the workspace keeps running
     /// (ADR 0023).
     func detach(_ session: WorkspaceSession) {
-        if let box = session.box { NeedsYouNotifications.shared.center.closed(box: box) }
+        let box = session.box
+        if let box { NeedsYouNotifications.shared.center.closed(box: box) }
         sessions.remove(session)
+        // Still running: followed in the background again (R-0388).
+        if let box { windowless.windowClosed(box, running: running.contains(box)) }
     }
 
     static let lastBoxKey = "lastBox"
@@ -93,6 +117,14 @@ final class AppModel {
     /// boxes, and decide.
     func start() async {
         problem = nil
+        if runningWatch == nil {
+            runningWatch = Task { [weak self] in
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: Self.runningEvery)
+                    await self?.refreshRunning()
+                }
+            }
+        }
         await LaunchOrder.begin(
             offersMove: MoveToApplications.shouldOffer,
             register: { _ = await LoginItem.ensureRegistered() },
@@ -270,6 +302,8 @@ final class AppModel {
         }
         if s.screen == .launch { firstRun = nil }
         let controller = s.show(box)
+        // This window follows the team now, not the background.
+        windowless.windowOpened(box)
         guard let tabs = s.tabs else { return }
         // A long command finishing in a tab, when the window isn't in
         // front (§5).
@@ -361,7 +395,13 @@ final class AppModel {
     /// Portenv forward.
     func show(_ route: NotificationRoute) {
         guard let s = sessions.showing(route.box) else {
-            (NSApp.mainWindow ?? NSApp.windows.first { $0.isVisible })?.makeKeyAndOrderFront(nil)
+            // Running with no window: Show opens it in a new window tab.
+            if case .decision(let box, let id) = route, windowless.following.contains(box), let open = WorkspaceWindows.open {
+                pendingShow = (box, id)
+                open()
+            } else {
+                (NSApp.mainWindow ?? NSApp.windows.first { $0.isVisible })?.makeKeyAndOrderFront(nil)
+            }
             return
         }
         s.bringForward()
@@ -378,15 +418,19 @@ final class AppModel {
 
     /// Reads which workspaces run on this Mac.
     func refreshRunning() async {
-        running = Set(await RunningWorkspaces.here(daemon))
+        let now = Set(await RunningWorkspaces.here(daemon))
+        if now != running { running = now }
+        windowless.update(running: now)
     }
 
     /// Back to "Your workspaces"; the workspace shown may still be running.
     private func showList(_ s: WorkspaceSession) async {
         // The window no longer follows it: out of the badge, its
         // notifications taken back (it keeps running, ADR 0023).
-        if let box = s.box { NeedsYouNotifications.shared.center.closed(box: box) }
+        let box = s.box
+        if let box { NeedsYouNotifications.shared.center.closed(box: box) }
         s.leave()
+        if let box { windowless.windowClosed(box, running: running.contains(box)) }
         if s === launchSession { launch = .boxList(notice: nil) }
         if let listed = try? await daemon.boxes() { boxes = listed }
         await refreshRunning()

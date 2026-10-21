@@ -73,6 +73,18 @@ struct WindowPlacementTests {
         #expect(WindowPlacement.firstRun(pointer: .zero, screens: []) == nil)
     }
 
+    /// Only first run at launch places its window (R-0186). New Workspace…
+    /// from the list keeps the window as it is: in a workspace tab it once
+    /// resized the whole tab group to the board's 720×520 (the owner's
+    /// dev-build test). Never a tab, never full screen.
+    @Test func onlyFirstRunAtLaunchPlacesItsWindow() {
+        #expect(WindowPlacement.placesFirstRun(fromBoxList: false, tabbed: false, fullScreen: false))
+        #expect(!WindowPlacement.placesFirstRun(fromBoxList: true, tabbed: false, fullScreen: false))
+        #expect(!WindowPlacement.placesFirstRun(fromBoxList: true, tabbed: true, fullScreen: false))
+        #expect(!WindowPlacement.placesFirstRun(fromBoxList: false, tabbed: true, fullScreen: false))
+        #expect(!WindowPlacement.placesFirstRun(fromBoxList: false, tabbed: false, fullScreen: true))
+    }
+
     /// CC-0500: a window full screen on the external display fills it
     /// (2560 x 1440 at y -484), so its title strip (y 928 to 956) is above
     /// that display's visible frame (it ends at 926, under its menu bar).

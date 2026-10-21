@@ -41,6 +41,15 @@ public enum WindowPlacement {
     /// main screen first, which is used when the pointer is on none.
     public static let firstRunSize = CGSize(width: 720, height: 520)
 
+    /// Whether first run places its window (the board's size, centred):
+    /// only at launch, in a window of its own. New Workspace… from the list
+    /// (`fromBoxList`) keeps the window's size; a window in a tab group
+    /// keeps the group's frame (GUIDELINES §3.3), and a full-screen one is
+    /// macOS's to place (CC-0500).
+    public static func placesFirstRun(fromBoxList: Bool, tabbed: Bool, fullScreen: Bool) -> Bool {
+        !fromBoxList && !tabbed && !fullScreen
+    }
+
     public static func firstRun(pointer: CGPoint, screens: [CGRect], size: CGSize = firstRunSize) -> CGRect? {
         guard let screen = screens.first(where: { $0.contains(pointer) }) ?? screens.first else { return nil }
         let width = min(size.width, screen.width)

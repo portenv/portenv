@@ -147,7 +147,8 @@ A box is a toolbox image plus a home. The image is rebuilt or pulled on each mac
 
 - Base: Ubuntu 24.04, multi-arch (arm64 and amd64).
 - Toolchain: Node 22, PostgreSQL client, git, tmux, ripgrep, jq, build-essential, Python 3. `gh` joins it for Link GitHub, in its own PR: from GitHub's signed apt repository, with the key's fingerprint checked.
-- Claude Code from Anthropic's signed apt repository (stable channel); updated by rebuilding the image, never into home.
+- Claude Code from Anthropic's signed apt repository (stable channel), pinned by version in the Dockerfile; updated by raising the pin and rebuilding the image, never into home.
+- Chrome for Testing (stable, pinned by version and checksum per architecture) with Playwright's system libraries, for browser checks; `CHROME_PATH` points to it. Under Docker it needs `--no-sandbox` per run, never set globally (`images/toolbox-node/README.md`).
 - `portenv-agent` as the container's init process (it reaps children and supervises the agent's services).
 - Images are versioned (`toolbox-node:v12`) and published to a registry by CI. A machine without network access to the registry builds from the Dockerfile.
 - VM-ready: nothing in the image may assume Docker-only features.

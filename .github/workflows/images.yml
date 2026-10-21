@@ -110,6 +110,16 @@ jobs:
             VERSION=${{ steps.version.outputs.version }}
             COMMIT=${{ steps.version.outputs.commit }}
           cache-from: type=gha,scope=toolbox-node-builders-${{ matrix.arch }}
+      # The image's size, uncompressed as loaded, so a change's growth shows
+      # in its run (and in the job summary).
+      - name: Image size
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          bytes=$(docker image inspect -f '{{.Size}}' toolbox-node:test)
+          line=$(printf 'toolbox-node (%s): %s bytes (%s MB)' "$ARCH" "$bytes" "$((bytes / 1000000))")
+          echo "$line"
+          echo "$line" >> "$GITHUB_STEP_SUMMARY"
       - name: Test
         run: images/toolbox-node/test.sh toolbox-node:test
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0

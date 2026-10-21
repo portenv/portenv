@@ -188,6 +188,9 @@ final class AppModel {
             },
             report: { [weak self] report in self?.waiting(report) },
             sleep: { try? await Task.sleep(for: $0) },
+            // Once per wait, silently, before any line shows (R-0401):
+            // what fixed a rebuilt app's refused portenvd by hand.
+            reRegister: { await LoginItemRestarter().hard() },
             boxes: { [daemon] in
                 // After an in-place update the running portenvd is still the
                 // old one: restart it here, saying so, rather than "out of

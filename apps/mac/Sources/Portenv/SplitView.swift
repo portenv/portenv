@@ -77,8 +77,8 @@ private struct PaneView: View {
             if split.isSplit {
                 PaneHeaderBar(split: split, pane: pane, tab: info)
             }
-            MainTabTerminal(shown: TabTerminalShown(provider: provider), tab: tab, generation: generation,
-                            label: label, serviceComing: serviceComing,
+            MainTabTerminal(shown: TabTerminalShown(provider: provider), box: box, tab: tab, generation: generation,
+                            label: label, tabName: name, serviceComing: serviceComing,
                             isActive: focused, onFocus: { split.focus(pane) })
         }
         // The focused pane's 1 px accent outline (only when split: one pane

@@ -38,6 +38,19 @@ final class AppModel {
 
     private let daemon = SharedDaemon.client
     private let defaults = UserDefaults.standard
+    /// The teams of workspaces running with no window: they still notify
+    /// and count in the Dock badge (ADR 0023, R-0388).
+    @ObservationIgnored private(set) lazy var windowless: WindowlessTeams = {
+        let teams = WindowlessTeams(daemon: daemon, center: NeedsYouNotifications.shared.center)
+        teams.shown = { [weak self] in Set(self?.sessions.all.compactMap(\.box) ?? []) }
+        return teams
+    }()
+    /// Reads which workspaces run, now and then, for `windowless`.
+    @ObservationIgnored private var runningWatch: Task<Void, Never>?
+    static let runningEvery: Duration = .seconds(15)
+    /// Show on a workspace with no window: opened in the next new window
+    /// tab, with the decision selected.
+    @ObservationIgnored private var pendingShow: (box: String, decision: String)?
 
     /// A new window's session. Its controller brings this window (its tab)
     /// forward before a read that may raise a Keychain prompt (R-0214).
@@ -61,6 +74,14 @@ final class AppModel {
     /// the launch and starts it.
     func attach(_ session: WorkspaceSession) {
         sessions.add(session)
+        if launchClaimed, let (box, decision) = pendingShow {
+            // The tab Show opened for a workspace with no window.
+            pendingShow = nil
+            Task {
+                await open(box, in: session)
+                session.team?.show(decision: decision)
+            }
+        }
         guard !launchClaimed else { return }
         // A notification is for a workspace whose tab isn't in front.
         Notifier.frontWorkspace = { [sessions] in
@@ -76,7 +97,11 @@ final class AppModel {
     /// A window closed: its session ends; the workspace keeps running
     /// (ADR 0023).
     func detach(_ session: WorkspaceSession) {
+        let box = session.box
+        if let box { NeedsYouNotifications.shared.center.closed(box: box) }
         sessions.remove(session)
+        // Still running: followed in the background again (R-0388).
+        if let box { windowless.windowClosed(box, running: running.contains(box)) }
     }
 
     static let lastBoxKey = "lastBox"
@@ -92,6 +117,14 @@ final class AppModel {
     /// boxes, and decide.
     func start() async {
         problem = nil
+        if runningWatch == nil {
+            runningWatch = Task { [weak self] in
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: Self.runningEvery)
+                    await self?.refreshRunning()
+                }
+            }
+        }
         await LaunchOrder.begin(
             offersMove: MoveToApplications.shouldOffer,
             register: { _ = await LoginItem.ensureRegistered() },
@@ -254,7 +287,11 @@ final class AppModel {
         // Never in a window that has closed meanwhile.
         guard sessions.all.contains(where: { $0 === s }) else { return }
         let flow = s.screen == .launch ? firstRun : s.newBox
-        guard boxes.contains(box) || flow?.made == box else { return }
+        guard boxes.contains(box) || flow?.made == box else {
+            // Never "Opening…" for ever (R-0386): the list, saying so.
+            if s === launchSession, launch == .open(box), s.controller == nil { launch = LaunchGap.boxGone(box) }
+            return
+        }
         if flow?.made == box { defaults.set(true, forKey: Self.firstRunDoneKey) }
         if case let .focus(other) = sessions.choose(box, for: s) {
             other.bringForward()
@@ -265,12 +302,28 @@ final class AppModel {
         }
         if s.screen == .launch { firstRun = nil }
         let controller = s.show(box)
+        // This window follows the team now, not the background.
+        windowless.windowOpened(box)
         guard let tabs = s.tabs else { return }
         // A long command finishing in a tab, when the window isn't in
         // front (§5).
         tabs.commandFinished = { [weak controller] f in
             let place = controller?.state?.location.map(ServerName.display)
             Task { await Notifier.shared.commandFinished(box: box, finished: f, location: place) }
+        }
+        // This session's decisions and tab questions notify, and count in
+        // the Dock badge, whether its tab is in front or not (§5, R-0384).
+        let needsYou = NeedsYouNotifications.shared.center
+        let team = s.team
+        // Only while this window still shows it: nothing late after it left.
+        team?.changed = { [weak controller, weak s] state in
+            guard s?.box == box else { return }
+            needsYou.team(box: box, state: state, location: controller?.state?.location.map(ServerName.display))
+        }
+        tabs.changed = { [weak controller, weak team, weak s] ts in
+            guard s?.box == box else { return }
+            needsYou.tabs(box: box, tabs: ts, team: team?.state.agents ?? [],
+                          location: controller?.state?.location.map(ServerName.display))
         }
         if s === launchSession { launch = .open(box) }
         defaults.set(box, forKey: Self.lastBoxKey)
@@ -336,14 +389,48 @@ final class AppModel {
         await refreshRunning()
     }
 
+    /// A notification's click (§5): the workspace's window in front, with
+    /// the decision selected as its Needs-you row selects it, or the
+    /// asking tab shown. A workspace no window shows any more just brings
+    /// Portenv forward.
+    func show(_ route: NotificationRoute) {
+        guard let s = sessions.showing(route.box) else {
+            // Running with no window: Show opens it in a new window tab.
+            if case .decision(let box, let id) = route, windowless.following.contains(box), let open = WorkspaceWindows.open {
+                pendingShow = (box, id)
+                open()
+            } else {
+                (NSApp.mainWindow ?? NSApp.windows.first { $0.isVisible })?.makeKeyAndOrderFront(nil)
+            }
+            return
+        }
+        s.bringForward()
+        switch route {
+        case .decision(_, let id):
+            if let team = s.team, let selection = NotificationRoute.selection(decision: id, in: team.state) {
+                team.selection = selection
+            }
+        case .tab(_, let id):
+            s.team?.selection = .allTabs
+            Task { await s.tabs?.select(id) }
+        }
+    }
+
     /// Reads which workspaces run on this Mac.
     func refreshRunning() async {
-        running = Set(await RunningWorkspaces.here(daemon))
+        let now = Set(await RunningWorkspaces.here(daemon))
+        if now != running { running = now }
+        windowless.update(running: now)
     }
 
     /// Back to "Your workspaces"; the workspace shown may still be running.
     private func showList(_ s: WorkspaceSession) async {
+        // The window no longer follows it: out of the badge, its
+        // notifications taken back (it keeps running, ADR 0023).
+        let box = s.box
+        if let box { NeedsYouNotifications.shared.center.closed(box: box) }
         s.leave()
+        if let box { windowless.windowClosed(box, running: running.contains(box)) }
         if s === launchSession { launch = .boxList(notice: nil) }
         if let listed = try? await daemon.boxes() { boxes = listed }
         await refreshRunning()
@@ -365,8 +452,10 @@ final class AppModel {
                                 docker: nil, serviceGone: serviceGone)
         }
         let service = KeyedFirstRunService(maker: BoxMaker(daemon: creating))
+        // The Team step (ADR 0025) plans through portenvd.
         let flow = FirstRunFlow(service: service, at: step, existing: boxes, fromBoxList: fromBoxList, memory: memory,
-                                docker: nil, serviceGone: serviceGone)
+                                docker: nil, serviceGone: serviceGone, teamPlanner: daemon as? TeamPlanning,
+                                githubLogin: { GitHubAccount.system.login })
         service.keychainWaiting = { [weak flow] on in Task { @MainActor in flow?.keychainWaiting = on } }
         return flow
     }
@@ -383,6 +472,12 @@ final class AppModel {
             s.newBox = flow
             s.screen = .newBox
         }
+    }
+
+    /// First run with no flow (R-0386): makes the one it should have.
+    func ensureFirstRunFlow(at step: FirstRunStep) {
+        guard firstRun == nil, launch == .firstRun(step) else { return }
+        firstRun = makeFlow(at: step, fromBoxList: false, memory: DefaultsFirstRunMemory())
     }
 
     /// Cancel, ⎋ or "Your boxes" from New Box…: back to the list.
@@ -466,6 +561,9 @@ struct AppRoot: View {
                     if let flow = session.newBox {
                         FirstRunView(flow: flow, opened: { box in Task { await model.open(box, in: session) } },
                                      cancel: { model.cancelNewBox(in: session) }, refill: model.refill)
+                    } else {
+                        // Never a bare background (R-0386).
+                        list(notice: nil)
                     }
                 case .list, .workspace:
                     if model.launch == nil {
@@ -516,17 +614,28 @@ struct AppRoot: View {
         switch model.launch {
         case nil:
             starting
-        case .firstRun:
+        case let .firstRun(step):
             if let flow = model.firstRun {
                 FirstRunView(flow: flow, opened: { box in Task { await model.open(box, in: session) } },
                              cancel: flow.fromBoxList ? { model.cancelNewBox(in: session) } : nil, refill: model.refill)
+            } else {
+                // Never a bare background (R-0386): the flow is made, and
+                // says so meanwhile.
+                TerminalOpening(line: launchGap)
+                    .onAppear { model.ensureFirstRunFlow(at: step) }
             }
         case let .boxList(notice):
             list(notice: notice)
         case .open:
-            // Opening: the workspace shows once its session has it.
-            starting
+            // Opening: the workspace shows once its session has it, saying
+            // so meanwhile (R-0386).
+            TerminalOpening(line: launchGap)
         }
+    }
+
+    /// What the launch window says while it catches up (R-0386).
+    private var launchGap: String {
+        LaunchGap.line(model.launch, hasController: false, hasFirstRunFlow: model.firstRun != nil) ?? LaunchWait.starting
     }
 
     private func list(notice: String?) -> some View {

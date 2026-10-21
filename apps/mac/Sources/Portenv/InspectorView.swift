@@ -26,6 +26,10 @@ struct InspectorView: View {
     /// Off only for offscreen renders (ImageRenderer draws nothing inside a
     /// ScrollView).
     var scrolls = true
+    /// "This workspace can push to acme/api" while pushes are allowed, with
+    /// Stop Allowing Pushes (ADR 0025 §6).
+    var canPush: String?
+    var stopAllowingPushes: () -> Void = {}
 
     var body: some View {
         // One container VoiceOver names "Inspector" (R-0027).
@@ -39,6 +43,13 @@ struct InspectorView: View {
     private var sections: some View {
         VStack(alignment: .leading, spacing: 24) {
             whereItIs
+            if let canPush {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(verbatim: canPush).font(.system(size: 12))
+                    Button(PushText.stopAllowing, action: stopAllowingPushes)
+                        .controlSize(.small)
+                }
+            }
             saves
             if !hasTeam { whosHere }
             runningNow

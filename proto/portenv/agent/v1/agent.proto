@@ -63,6 +63,29 @@ service AgentService {
   rpc ListHomeFiles(ListHomeFilesRequest) returns (ListHomeFilesResponse);
   rpc ReadHomeFile(ReadHomeFileRequest) returns (stream ReadHomeFileResponse);
   rpc WriteHomeFiles(stream WriteHomeFilesRequest) returns (WriteHomeFilesResponse);
+  // The New-workspace team's agent files (ADR 0025 §5), written as work
+  // into the project's .portenv/agents/, never over a file and never
+  // through a link. A missing project folder is made empty, with git, on
+  // main. Runs nothing from the files.
+  rpc WriteAgentFiles(WriteAgentFilesRequest) returns (WriteAgentFilesResponse);
+  // New workspace's From GitHub (ADR 0025 §2, R-0391). portenvd fetches
+  // on the Mac, with any sign-in, and streams a whole git bundle here: the
+  // sign-in never reaches the workspace. The helper checks the bundle (its
+  // size, a v2 header with no prerequisites, refs only under refs/heads and
+  // refs/tags, git bundle verify), then clones from that file as work with
+  // no network, no config but the project's, no template and no hooks, and
+  // sets origin to the plain https address. A project already there is
+  // left as it is. Refusals: ResourceExhausted (too big) or
+  // FailedPrecondition, each with one plain line.
+  rpc CloneProject(stream CloneProjectRequest) returns (CloneProjectResponse);
+  // Whether the project folder exists, and the room left for it.
+  rpc GetProjectRoom(GetProjectRoomRequest) returns (GetProjectRoomResponse);
+  // The bundle git-remote-portenv handed in for a push (R-0391), once:
+  // it's deleted as it's read.
+  rpc ReadPushBundle(ReadPushBundleRequest) returns (stream ReadPushBundleResponse);
+  // A fetch's bundle from portenvd (R-0392), kept until the helper hands it
+  // to git-remote-portenv, once.
+  rpc WriteFetchBundle(stream WriteFetchBundleRequest) returns (WriteFetchBundleResponse);
   // Served only by init (root) on its local socket, which only the API
   // process reaches; the channel's server answers Unimplemented. init checks
   // every id and package name itself.
@@ -400,7 +423,95 @@ message TeamCallsResponse {
     TeamStatus team_status = 15;
     Handoff handoff = 16;
     ProposeRoutine propose_routine = 17;
+    // The owner's push (R-0391): only on work's own socket.
+    PushList push_list = 18;
+    PushRefs push = 19;
+    // The owner's fetch (R-0392): only on work's own socket.
+    FetchRefs fetch = 21;
   }
+  // From SO_PEERCRED: the call came from work's own socket, not an agent's.
+  bool owner = 20;
+}
+
+// git-remote-portenv's list (for-push, or for a fetch, pull or ls-remote):
+// the remote's branches and tags.
+message PushList {
+  // A fetch's list (git's plain "list"): the remote's default branch too.
+  bool fetch = 1;
+}
+
+// git-remote-portenv's fetch: the objects git wants, and what the workspace
+// has, so the bundle holds only what it lacks.
+message FetchRefs {
+  repeated RemoteRef wants = 1;
+  // Commits the workspace has (its branches and remote-tracking refs).
+  repeated string haves = 2;
+}
+
+message FetchResult {
+  // The helper's name for the bundle portenvd handed in; the helper
+  // streams it to git-remote-portenv after this answer, then forgets it.
+  string bundle_id = 1;
+  int64 bundle_bytes = 2;
+}
+
+message WriteFetchBundleRequest {
+  // The bundle, in order.
+  bytes chunk = 1;
+}
+
+message WriteFetchBundleResponse {
+  string bundle_id = 1;
+}
+
+// git-remote-portenv's push: the updates, and the bundle the helper holds.
+message PushRefs {
+  repeated PushUpdate updates = 1;
+  // The helper's name for the bundle (ReadPushBundle); empty when every
+  // update is a delete.
+  string bundle_id = 2;
+  int64 bundle_bytes = 3;
+}
+
+message PushUpdate {
+  // refs/heads/… or refs/tags/….
+  string dst = 1;
+  // The new object, 40 hex; empty to delete dst.
+  string new_sha = 2;
+  // What list for-push said dst was; empty when it didn't exist.
+  string old_sha = 3;
+  // The person asked for it (+src:dst or --force).
+  bool force = 4;
+}
+
+message RemoteRef {
+  string name = 1;
+  string sha = 2;
+}
+
+message PushListResult {
+  repeated RemoteRef refs = 1;
+  // The remote's default branch (refs/heads/…), for HEAD.
+  string head = 2;
+}
+
+message PushRefStatus {
+  string dst = 1;
+  bool ok = 2;
+  // git's words for a refusal: "non-fast-forward", "fetch first", ….
+  string reason = 3;
+}
+
+message PushResult {
+  repeated PushRefStatus statuses = 1;
+}
+
+message ReadPushBundleRequest {
+  string bundle_id = 1;
+}
+
+message ReadPushBundleResponse {
+  bytes chunk = 1;
 }
 
 // portenvd's answer to one call: the request stream of TeamCalls.
@@ -417,6 +528,9 @@ message TeamCallsRequest {
     portenv.types.v1.BoardMessage message = 7;
     WhoAmIResult whoami = 8;
     TeamStatusResult team_status = 9;
+    PushListResult push_list = 10;
+    PushResult push = 11;
+    FetchResult fetch = 12;
   }
 }
 
@@ -827,3 +941,56 @@ message WakeAgentRequest {
 }
 
 message WakeAgentResponse {}
+
+message WriteAgentFilesRequest {
+  // The project folder, /home/work/<workspace>.
+  string project_dir = 1;
+  // Each path is <id>.md or off/<id>.md, relative to .portenv/agents/.
+  repeated AgentFileContent files = 2;
+}
+
+message WriteAgentFilesResponse {
+  // The paths written, and those already there (left as they are).
+  repeated string written = 1;
+  repeated string existing = 2;
+  // Whether the project folder was made.
+  bool made_project = 3;
+}
+
+message CloneProjectRequest {
+  oneof msg {
+    // The first message.
+    CloneProjectStart start = 1;
+    // Then the bundle, in order.
+    bytes chunk = 2;
+  }
+}
+
+message CloneProjectStart {
+  // The project folder, /home/work/<workspace>.
+  string project_dir = 1;
+  // https://github.com/OWNER/REPO, set as origin.
+  string url = 2;
+  // The bundle's limit.
+  int64 max_bytes = 3;
+  // The default branch (refs/heads/…), checked out; empty for none.
+  string head = 4;
+  // The repository has no branches or tags: an empty project, origin set,
+  // and no bundle follows.
+  bool empty = 5;
+}
+
+message CloneProjectResponse {
+  // The project was already there, so nothing was cloned.
+  bool existed = 1;
+}
+
+message GetProjectRoomRequest {
+  string project_dir = 1;
+}
+
+message GetProjectRoomResponse {
+  bool exists = 1;
+  // Free bytes on the workspace's disk, for work.
+  uint64 free_bytes = 2;
+}

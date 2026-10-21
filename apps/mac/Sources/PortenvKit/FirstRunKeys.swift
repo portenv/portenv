@@ -93,6 +93,6 @@ public final class KeyedFirstRunService: FirstRunService, @unchecked Sendable {
     }
 
     public func createBox(_ box: NewBox) async throws {
-        _ = try await maker.make(name: box.name)
+        _ = try await maker.make(name: box.name, team: box.team, project: box.project)
     }
 }

@@ -303,6 +303,48 @@ The Team section is the workspace's sidebar when the workspace has a team (agent
 
 **VoiceOver:** each row is one element, read as its name, status and latest line ("Reviewer, needs you. Wants to merge #42"). Decision buttons say what they answer ("Approve: merge #42"). A message entry is one element, read as who to whom, the time and its first line ("Lead to Builder, 14:28: Take the retry half"); a notice starts "Notice from Portenv". The message field is read as "Message Builder".
 
+### 6.3 New workspace: Project, Team, Review and approve, Creating (ADR 0025)
+
+New workspace is one sheet with its steps named at the top: Name · Project · Team · Review and approve, then Creating. Back and Cancel on every step; Continue is the default button until Review and approve, which has none. First run's "Make your first workspace" uses the same steps. Mockup: `new-box-team` (the reviewer's four artboards, R-0322).
+
+**Words:** "starter folders" and "starter files" for what agent files call `home_seed`; "team", "agent", "runner" and "model" as here; never "template file", "manifest", "SHA" or "pin" except the one hash line on Review and approve.
+
+**Project:**
+- Four choices as a segmented control: From GitHub, From a Git URL, From a folder on this Mac, Empty.
+- From GitHub: Sign In to GitHub… until signed in; then a search field over the repositories, one row each (owner/name, Private when it is, last pushed), and a Branch menu with the default branch first. The sign-in screen (Portenv's device flow by default, or "Use My GitHub CLI Login" when gh is signed in on this Mac) says plainly: "Portenv can access your repositories; it only uses this for the repository in this workspace." Once signed in, one grey line under the list: "Signed in as <account>. Portenv can access your repositories; it only uses this for the repository in this workspace. The sign-in stays on this Mac; agents never get it."
+- From a folder on this Mac: Choose Folder…, then its size and file count, and "Leave out installed dependencies (node_modules and similar). They're rebuilt in the workspace.", ticked.
+- A size problem is said before anything is fetched, under the choice, in red with what to do: "acme-api needs about 7.4 GB with its team. This workspace has 5 GB free. Leave an agent out, or choose a smaller repository."
+- **Starter folders:** "Add Starter Folder…" below the choices, then one row per folder with its size and a remove button ("Remove brand-assets"). Starter folders go to agents' homes, never into the project; the Team step assigns them.
+
+**Team:**
+- **Pick a team** as a list of choices: None ("Just you. Add agents later."), the built-in templates with their agents named ("Orchestrate · Lead, Builder, Reviewer, Design keeper"), the owner's saved teams with when they were saved, then Import Team….
+- **Adjust**, one row per agent: include checkbox, avatar, name field (the id below it, monospace, grey), role, Runner menu, Model menu, Starter files menu. A left-out agent's row is dimmed and keeps its place. A runner or model that differs from the template says so in grey under the menu ("Changed from Sonnet").
+- The Runner menu lists only runners the build offers (MVP: Claude Code, under the heading Anthropic); the Model menu lists that runner's models (Opus, Sonnet, Fable). A runner whose idle point Portenv doesn't know says, under its name in the menu and on the agent's row: "Routines and wakes are off for <runner>."
+- Below the list: "Agents sign in themselves, in their own tabs. Templates never carry logins." and the checkbox **Start the team when it's ready**, unticked.
+
+**Review and approve** (the rules of 6.2's decisions apply):
+- A list of agents on the left, the project's summary at its top. Each agent row shows a state as a word and a symbol: Not opened (○), Opened (◐), Approved (✓, green), Changed (● orange, "changed, needs approval"). Colour never carries it alone.
+- The selected agent on the right, in this order: the runner line, full and monospace; the change from the template on its own line, when there is one ("Changed from the template: runner claude (sonnet) → claude (opus)."); the grants in plain words, one line each; the `team_status` checkbox, unticked ("Let Lead see the team's status"); starter files with sizes; the instructions in full, as plain text; "Written to .portenv/agents/reviewer.md · SHA-256 3f9a…c21e".
+- **Leave Out** and **Approve <agent>**, with no default button. Approve becomes "Approved ✓" and the next unopened agent is selected.
+- **Approve All** under the list, no default button, enabled only once every agent has been opened; until then its line says "Open every agent first (1 left)."
+- Create Workspace is disabled until every included agent is approved, and says why under it ("Approve Reviewer to create the workspace."). ADR 0022's first-start sentence sits above it: "Agents work in their own copies. Check their branches before you run them."
+
+**Creating:**
+- The steps with a check, current or pending marker: Workspace, Project ("Cloning acme-api… 58% · 1.2 of 2.1 GB, about 40 s left", a progress bar, and **Cancel**), Agent files, Agents' copies, Starter files, Ready.
+- Under them, always: "Nothing starts until you choose Start." (or, when ticked, "The team starts when it's ready.") and "Each agent signs in to its runner in its own tab the first time it starts."
+- Cancel says what it does before doing it: "Stop cloning? The new workspace is removed. Nothing else changes." with Keep Cloning and Stop.
+
+**The first push** (ADR 0025 §6): a small sheet on the workspace window, "Allow pushes to acme/acme-api from acme-api?", the line "Pushes come only from your own tabs. Agents can never push.", and Don't Allow and Allow, with no default button. The inspector's Where it is then shows "This workspace can push to acme/acme-api" with Stop Allowing Pushes. The sheet repeats the sign-in's scope line: "Portenv can access your repositories; it only uses this for the repository in this workspace." A sign-in GitHub no longer accepts asks the owner to sign in again.
+
+**Saved teams:** Save Team as Template… in the Team sidebar's menu and the Workspace menu opens a sheet: name, description, the agents (their approved files), and starter folders per agent, with "Logins and secrets are never saved." Export Team… and Import Team… use the save and open panels.
+
+**VoiceOver:**
+- each step is announced with its place ("Team, step 3 of 4");
+- an agent row on Team reads as one element with its controls after it: "Reviewer, included, Claude Code, Opus, changed from Sonnet"; the menus are labelled with the agent ("Runner for Reviewer", "Model for Reviewer");
+- an agent row on Review and approve reads its state ("Reviewer, changed, needs approval");
+- Approve All's disabled reason is its hint; Approve buttons name the agent ("Approve Reviewer");
+- the clone's progress is a progress element with its value ("Cloning acme-api, 58 percent"), announced at most every 10 %.
+
 ## 7. Command palette
 
 - ⌘K anywhere in the window. Escape closes it. Arrow keys move, Return runs.

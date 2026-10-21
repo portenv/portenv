@@ -911,7 +911,7 @@ Budgets changed on 2026-10-08: they now measure what the user waits for (a ready
 
 ### Phase 1: Native Mac app, local boxes
 
-Milestones: 1.0 walking skeleton · 1.1 `portenvd` with the local gRPC API · 1.2 main window with a terminal view (evaluate SwiftTerm, MIT-licensed) and tmux-backed tabs · 1.2b split view (after 1.2's blocks, before the launch demo) · 1.3 `apple` driver shim, `docker` as fallback (the box agent drops the forbidden capabilities from every process it starts, since a VM's root holds them by default) · 1.4 autosave, sync symbol, Changes, Browse Saves · 1.5 first run (reduced, no sign-in; see Desktop app UX), Keychain keys, recovery key · 1.6 port relay · 1.7 shared folder (only if cheap; the File Provider moves to just after launch) · 1.8 signing, notarization, Sparkle updates.
+Milestones: 1.0 walking skeleton · 1.1 `portenvd` with the local gRPC API · 1.2 main window with a terminal view (evaluate SwiftTerm, MIT-licensed) and tmux-backed tabs · 1.2b split view (after 1.2's blocks, before the launch demo) · 1.3 `apple` driver shim, `docker` as fallback (the box agent drops the forbidden capabilities from every process it starts, since a VM's root holds them by default) · 1.4 autosave, sync symbol, Changes, Browse Saves · 1.5 first run (reduced, no sign-in; see Desktop app UX), Keychain keys, recovery key · 1.6 port relay · 1.7 shared folder (only if cheap; the File Provider moves to just after launch) · 1.8 signing, notarization, Sparkle updates · 1.9 New workspace with a project, a team and review in one flow, saved teams, the runner registry, and GitHub clone and push from the Mac's sign-in (ADR 0025; built after #198's clone code).
 
 **For the launch** (Phases 1 and 2 ship together, decided 2026-10-09):
 - 1.2's spike moves to right after the tab bar, with a fallback waiting-for-input detector (output stops and a known prompt pattern appears) if the spike fails.
@@ -1287,7 +1287,7 @@ Reduced: no sign-in, Only you, Keychain keys, the recovery key; the Welcome scre
   - The tab's title: the name, where it runs and the decisions waiting for you, `acme-api · This Mac · 2`, from the team the session follows (no new portenvd call).
   - The menu bar acts on the main window's session (`WorkspaceSessions.current`). Quit names every running workspace in one confirmation (QuitAll); wake checks every open workspace; an update's relaunch leaves each running; a Keychain prompt brings forward the tab that asked.
   - Shortcuts: terminal tabs keep ⌘1–⌘9 and ⌘⇧[ / ⌘⇧]; ⌃⌘1–⌃⌘9 pick a workspace tab; ⌃Tab / ⌃⇧Tab go between workspace tabs (macOS's Window › Show Next Tab and Show Previous Tab). Unit tests: `WorkspaceTabsTests`, `WindowCloseHookTests`.
-- **Link GitHub** (boards `link-github` and `link-github-linked`; before launch; not a Portenv account):
+- **Link GitHub** (boards `link-github` and `link-github-linked`; before launch; not a Portenv account). **Changed by ADR 0025 (proposed, R-0320, R-0321, R-0326) when 1.9 lands:** the sign-in (Portenv's OAuth device flow, or the owner's gh login) moves to the Mac's Keychain, used for clone and push through `portenv-git-credential` for `work` only, and agents lose the owner's GitHub access; the bullets below are ADR 0018's design as built for 1.5:
   - GitHub's device flow, through `gh auth login` inside the box, with the same access as the person's own gh; any number of repositories can be cloned into the box afterwards (the owner, 2026-10-10, ADR 0018: GitHub access works as on their Mac; no Portenv GitHub App and no repository picker);
   - gh's default scopes, then `gh auth setup-git`, so plain `git clone` and `git push` work for any repository the account can reach; the token lives in the box home's gh config (`hosts.yml`), never in the image;
   - the login is kept in the box's encrypted home and moves with it; Portenv never sees or keeps it;
@@ -1320,7 +1320,7 @@ A dev server on the box's localhost opens in Safari. Port pills in the toolbar.
 
 **9. 1.7: shared folder, then the File Provider**
 
-Show in Finder (⌥⌘R) stops being disabled here.
+Show in Finder (⌥⌘R) stops being disabled here. **The copy-in from a folder on this Mac moves up into 1.9** (ADR 0025 §2, R-0320): New workspace's "From a folder on this Mac" copies it in as `work`, and replaces the `docker cp` workaround. 1.7 keeps the shared folder and the File Provider.
 
 **10. 1.8: releases**
 
@@ -1399,6 +1399,21 @@ Developer ID signing, notarisation and Sparkle, with the key backups. Signed pub
        - first run shows "Count me in usage numbers", with the link to the field list, unticked (opt-in, R-0126), before the first update check is sent; hidden until counting exists;
        - the runner's installer prints its opt-out flag before its first check.
   - **Release checklist:** run the CNIL's self-assessment tool for audience measurement against the final implementation, and keep the filled copy in `docs/` (not on the website). Never describe the counting as "CNIL certified" or "validated": the CNIL forbids that wording.
+
+**11. 1.9: New workspace with a project, a team and review in one flow (ADR 0025)**
+
+Build after #198's clone code (ADR 0022 §2a): Creating makes each agent's clone. The owner's request (R-0318) with R-0319 to R-0322; the reviewer's four artboards (Project, Team, Review and approve, Creating) and `docs/mockups/new-box-team`.
+- **GitHub sign-in (the owner, R-0326):** no GitHub App for the tester build. Portenv's own OAuth app with the device flow by default (a public client ID, no secret), the owner's gh login as an alternative; the token's account-wide `repo` scope is stated on the sign-in screen and kept only in the Keychain, and Portenv routes it narrowly (ADR 0025 §6). **The owner's step first:** registering Portenv's OAuth app on GitHub (publishing). A GitHub App is a later option.
+- **Order:** the runner registry (`core/internal/teamkit/runners.go`, replacing `core/daemon/runners.go`) and the agent file's `model`; the helper's `home_seed` copy as the agent (today's ignored field); `PlanTeam` with section 7's caps; the extended `CreateBox` (project source, team plan, start_team) with `CloneProject` and `CopyProject`; the GitHub sign-in and `portenv-git-credential`; saved teams and the `.portenvteam` reader; the app's steps last, to the mockup. Data-loss and security paths: tests first.
+
+- [ ] New workspace's steps (Name, Project, Team, Review and approve, Creating) as `new-box-team` draws them, with VoiceOver labels and both appearances (GUIDELINES §6.3)
+- [ ] From GitHub (searchable repositories, branch), from a public Git URL, from a folder on this Mac (no link followed, `.git/hooks` left out, `.git/config` reduced, dependencies left out by default), and Empty; a repository too big for the workspace is refused before any byte, and Cancel leaves no workspace
+- [ ] Team: None, Starter, Orchestrate, a saved team or an imported one; include, rename, runner and model per agent (MVP menus: Claude Code with Opus, Sonnet, Fable); starter folders per agent
+- [ ] Review and approve: each file opened before Approve All, no default button, Create disabled until all are approved; the pin holds only for the bytes shown; a runner or model change shows as a change and needs approval
+- [ ] Creating writes the approved files, makes the agents' users and clones, copies starter files as each agent (and `home_seed` from the project), and starts nothing unless "Start the team when it's ready" is ticked
+- [ ] Section 7's caps and refusals hold for an imported template, each with its test and a mutation that makes it fail
+- [ ] `work` pushes through `portenv-git-credential` after the app's first-push question; an agent's attempt is refused at the socket; no token in any process's arguments or environment, on disk, the board or logs; Sign Out refuses the next push
+- [ ] Save Team as Template…, Export Team… and Import Team… round-trip a team with starter files, under `~/Library/Application Support/Portenv/Teams/`, keeping 10 revisions
 
 **Standing items**
 
@@ -1700,6 +1715,13 @@ These need an owner decision; Claude Code should add new ones here instead of gu
 - [ ] ADR 0027 §5's owner `tab new --name NAME [-- COMMAND…]`: the app's New Tab opens a shell, so S3's owner `tab new` does too and refuses a command ("type the command in it"). Add running a command in a new owner tab (a helper change), or keep it out?
 - [ ] The owner's `portenv wake` with nothing unread is refused, because the only line Portenv types says there's a new message. Should it type a different fixed line ("the owner asks you to check in") instead?
 - [ ] Anthropic's terms for agents driving Claude Code with a subscription login versus a Console API key.
+- [ ] Team templates (ADR 0025): sharing templates between owners. A `.portenvteam` file can be sent today and is checked as untrusted on import; is there a shared place (a repository folder, a gallery), and who can publish to it?
+- [ ] Team templates (ADR 0025): signing templates. Should a template carry a signature (the owner's key, or Portenv's for built-ins), and does the review screen show who signed it? A signature wouldn't replace the review.
+- [ ] Team templates (ADR 0025): where starter files (seeds) live. Saved teams keep them under `~/Library/Application Support/Portenv/Teams/`, protected only by FileVault and file modes; encrypt them with a key in the Keychain like the workspaces' repositories, or keep them in a workspace?
+- [ ] Runners (ADR 0025): how a runner's login could be offered per runner later (today each agent signs in in its own tab, and `share_login` is a no-op): a per-runner "Use your sign-in" decision copying only the registry's `login_files`, a token broker like the git helper, or never.
+- [ ] GitHub (ADR 0025 §6): a GitHub App for repository-scoped, short-lived access (teams, organizations), deferred by the owner for the tester build (R-0326; ADR 0018's choice stands for now). If it comes: device flow and PKCE with no client secret anywhere, and refresh only by the owner signing in again, never with a stored secret (R-0324). When, and for whom?
+- [ ] New workspace (ADR 0025 §2): private Git URLs from other hosts (GitLab, Bitbucket, a company server): their own sign-ins through the same helper, or SSH keys made for the workspace?
+- [ ] New workspace (ADR 0025 §2): Git LFS and submodules, unsupported in 1.9; fetch them through the same credential path, and count LFS objects in the size check.
 - [ ] Open-source boundary in detail: this repository is Apache-2.0 and `portenv/cloud` is private (decided), but confirm before going public whether the Mac app, the File Provider and the iPhone companion stay in the public repository or move to a private one.
 - [ ] Phase 3 control-plane milestones now live in `portenv/cloud`: how its CI pins and tests against `proto/gen/go` versions from this repository (tags, or a pseudo-version per merge).
 - [ ] Scope of the iPhone companion: approvals only, or also status and a read-only terminal?

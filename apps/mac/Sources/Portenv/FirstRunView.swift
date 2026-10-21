@@ -45,7 +45,8 @@ struct FirstRunView: View {
         }
         .padding(.horizontal, 64)
         .padding(.vertical, 48)
-        .frame(minWidth: 720, minHeight: 520)
+        // The Team and Review steps need more room (the new-box-team board).
+        .frame(minWidth: [.team, .review].contains(flow.step) ? 880 : 720, minHeight: [.team, .review].contains(flow.step) ? 660 : 520)
         .background(.background)
         // The board's size, centred on the display Portenv was launched
         // from, the first time this window shows first run (R-0186).
@@ -110,6 +111,9 @@ struct FirstRunView: View {
         case .recoveryKey: recoveryKey
         case .storage: storage
         case .firstBox: firstBox
+        case .project: projectStep
+        case .team: teamStep
+        case .review: reviewStep
         case .gettingReady: gettingReady
         }
     }
@@ -297,6 +301,47 @@ struct FirstRunView: View {
                 Text("Making \(flow.boxName)…")
             }
             .accessibilityElement(children: .combine)
+            // With a team (ADR 0025 §5): nothing starts by itself.
+            if !flow.team.included.isEmpty, flow.team.template != nil {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(FirstRunText.nothingStarts).fontWeight(.semibold)
+                    Text(FirstRunText.signsIn).foregroundStyle(.secondary)
+                }
+                .padding(.top, 16)
+            }
+        }
+    }
+
+    /// The step names while New workspace has a Team step (ADR 0025 §1).
+    @ViewBuilder private var stepNames: some View {
+        if flow.hasTeamStep, [.firstBox, .project, .team, .review].contains(flow.step) {
+            StepNames(steps: [("Name", flow.step == .firstBox), (ProjectText.title, flow.step == .project),
+                              (NewTeamText.teamTitle, flow.step == .team), (NewTeamText.reviewTitle, flow.step == .review)])
+        }
+    }
+
+    private var projectStep: some View {
+        heading(ProjectText.title, ProjectText.line) {
+            ProjectStepView(flow: flow)
+        }
+    }
+
+    private var teamStep: some View {
+        heading(NewTeamText.teamTitle, NewTeamText.teamLine) {
+            TeamStepView(team: flow.team)
+            dockerNotice.padding(.top, 8)
+        }
+        .task {
+            guard followsDocker else { return }
+            await flow.followDocker(check: { await DockerDesktop.status() })
+        }
+    }
+
+    private var reviewStep: some View {
+        heading(NewTeamText.reviewTitle, "") {
+            ReviewStepView(team: flow.team, project: flow.project)
+            Text(FirstRunText.teamStartLine).font(.callout).foregroundStyle(.secondary).padding(.top, 8)
+            dockerNotice.padding(.top, 8)
         }
     }
 
@@ -304,6 +349,7 @@ struct FirstRunView: View {
 
     private func heading<Content: View>(_ title: String, _ line: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 12) {
+            stepNames
             Text(title).font(.system(size: 26, weight: .bold))
                 .accessibilityAddTraits(.isHeader)
             if !line.isEmpty {
@@ -325,6 +371,13 @@ struct FirstRunView: View {
             }
             Spacer()
             if flow.step != .gettingReady {
+                // New workspace's later steps have Back as well as Cancel
+                // (ADR 0025 §1).
+                if cancel != nil, flow.canGoBack {
+                    Button("Back") { flow.back() }
+                        .controlSize(.large)
+                        .reportsFrame(ControlFrames.back)
+                }
                 if let cancel {
                     Button("Cancel", action: cancel)
                         .controlSize(.large)
@@ -346,7 +399,8 @@ struct FirstRunView: View {
                     .buttonStyle(.borderedProminent)
                     .tint(flow.primaryProminent ? Color.accentColor : Color.secondary.opacity(0.35))
                     .controlSize(.large)
-                    .keyboardShortcut(.defaultAction)
+                    // Review and approve has no default button (ADR 0025 §4).
+                    .keyboardShortcut(flow.step == .review ? nil : KeyboardShortcut.defaultAction)
                     .disabled(flow.busy || flow.keychainWaiting)
                     .accessibilityHint(flow.whyNot ?? "")
                     .reportsFrame(ControlFrames.continue)

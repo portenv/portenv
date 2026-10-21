@@ -41,6 +41,43 @@ enum ScreenRenders {
         func createBox(_: NewBox) async throws {}
     }
 
+    /// Starter, as portenvd plans it, for the Team and Review renders.
+    struct SampleTeams: TeamPlanning {
+        static let agents: [(id: String, name: String, role: String, avatar: String, body: String)] = [
+            ("lead", "Lead", "Plans the work and hands it out", "indigo", "You lead this project's agent team. Read the owner's request, split it\ninto small tasks, and hand each to the builder with `portenv msg builder`.\n"),
+            ("builder", "Builder", "Writes the code the lead asks for", "teal", "You build what the lead asks for, in small steps, with tests.\n"),
+            ("reviewer", "Reviewer", "Reviews the builder's changes", "purple", "You review what the builder shares: read the diff, run the tests, and\nreply to the builder with what to fix, or tell the lead it's ready.\n"),
+        ]
+
+        func teamTemplates() async throws -> [TeamTemplateInfo] {
+            let plan = try await planTeam(TeamChoice(template: "starter", agents: []))
+            return [TeamTemplateInfo(id: "starter", name: "Starter", description: "Lead, Builder, Reviewer", agents: plan.agents),
+                    TeamTemplateInfo(id: "app-product", name: "App product", description: "Engineering Lead, Code Writer, Code Reviewer, Product Designer, Design System Keeper, Trust & Safety and Support, App Store Release Manager, DevOps", agents: []),
+                    TeamTemplateInfo(id: "orchestrate", name: "Orchestrate", description: "Coordinator, Reviewer, Builder A, Builder B, Builder C, DevOps", agents: [])]
+        }
+
+        func planTeam(_ choice: TeamChoice) async throws -> TeamPlan {
+            let agents = Self.agents.map { a -> PlannedAgentFile in
+                let c = choice.agents.first { $0.id == a.id }
+                let model = c?.model ?? ""
+                let runner = "claude" + (model.isEmpty ? "" : " --model " + model)
+                let content = "---\nid: \(a.id)\nname: \(a.name)\nrole: \(a.role)\nrunner: \(runner)\n---\n\(a.body)"
+                return PlannedAgentFile(id: a.id, name: a.name, role: a.role, avatar: a.avatar, templateName: a.name, included: c?.include ?? true,
+                                        templateIncluded: true, path: ".portenv/agents/\(a.id).md", content: content, sha256: SHA256Text.of(content),
+                                        runner: "claude", runnerName: "Claude Code", runnerLine: runner, model: model, templateModel: "",
+                                        models: ["", "opus", "sonnet", "fable"], templateTeamStatus: false, teamStatus: false,
+                                        changes: model.isEmpty ? [] : ["runner claude (default) \u{2192} claude (\(model))"],
+                                        grants: ["May open up to 2 panes; you approve each.", "May message Lead and Builder.", "May ask you.",
+                                                 "May request system packages; you approve each."],
+                                        instructions: a.body, problems: [])
+            }
+            return TeamPlan(agents: agents, included: agents.filter(\.included).count, allowed: 4, problems: [])
+        }
+
+        func agentsAllowed() async throws -> Int { 4 }
+        func setAgentsAllowed(_ n: Int) async throws -> Int { n }
+    }
+
     static func write(to dir: String) -> Int32 {
         _ = NSApplication.shared
         var code: Int32 = 1
@@ -56,7 +93,7 @@ enum ScreenRenders {
     private static func render(to dir: URL) async -> Int32 {
         do {
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            for step in FirstRunStep.allCases {
+            for step in FirstRunStep.allCases where ![.team, .review, .project].contains(step) {
                 let flow = await sampleFlow(at: step)
                 try snapshot(FirstRunView(flow: flow, opened: { _ in }, followsDocker: false),
                              name: "first-run-\(step.rawValue + 1)-\(name(step))", in: dir)
@@ -212,6 +249,24 @@ enum ScreenRenders {
                     try snapshotOne(view, name: String(name.dropLast(suffix.count + 1)), suffix: suffix, size: size, appearance: appearance, in: dir)
                 }
             }
+            // New workspace's Team and Review and approve (ADR 0025).
+            let team = FirstRunFlow(service: Sample(), at: .firstBox, fromBoxList: true, teamPlanner: SampleTeams())
+            team.boxName = "acme-api"
+            await team.next()
+            team.projectKind = .github
+            team.githubURL = "https://github.com/acme/acme-api"
+            try snapshot(FirstRunView(flow: team, opened: { _ in }, cancel: {}, followsDocker: false), name: "new-workspace-project", size: NSSize(width: 880, height: 660), in: dir)
+            await team.next()
+            await team.team.load()
+            await team.team.choose("starter")
+            await team.team.setModel("reviewer", "opus")
+            try snapshot(FirstRunView(flow: team, opened: { _ in }, cancel: {}, followsDocker: false), name: "new-workspace-team", size: NSSize(width: 880, height: 660), in: dir)
+            await team.next()
+            team.team.opened("lead")
+            team.team.approve("lead")
+            team.team.opened("builder")
+            team.team.reviewing = "reviewer"
+            try snapshot(FirstRunView(flow: team, opened: { _ in }, cancel: {}, followsDocker: false), name: "new-workspace-review", size: NSSize(width: 880, height: 660), in: dir)
             // Portenv › Settings…, each pane (R-0137).
             try await SettingsRender.render(to: dir)
             return 0
@@ -240,6 +295,8 @@ enum ScreenRenders {
             await flow.next()
             flow.boxName = "acme-api"
             return flow
+        case .team, .review, .project:
+            return FirstRunFlow(service: Sample(), at: step)
         case .gettingReady:
             let flow = FirstRunFlow(service: Sample(), at: .storage)
             flow.storage = .thisMac
@@ -257,6 +314,9 @@ enum ScreenRenders {
         case .storage: "storage"
         case .firstBox: "first-box"
         case .gettingReady: "getting-ready"
+        case .team: "team"
+        case .project: "project"
+        case .review: "review"
         }
     }
 

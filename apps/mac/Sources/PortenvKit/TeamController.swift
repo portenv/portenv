@@ -39,11 +39,18 @@ public final class TeamController {
     /// opened this window before its team arrived).
     @ObservationIgnored private var toShow: String?
 
-    public init(box: String, daemon: DaemonAPI, retry: Duration = .seconds(1)) {
+    public init(box: String, daemon: DaemonAPI, retry: Duration = .seconds(1), github: GitHubAccount = .system) {
         self.box = box
         self.daemon = daemon
         self.retry = retry
+        self.github = github
+        push = PushController(box: box, daemon: daemon, github: github)
     }
+
+    /// The workspace's pushes waiting for the app (R-0391).
+    public let push: PushController
+
+    private let github: GitHubAccount
 
     /// The selected agent, if one is selected and still in the team.
     public var selectedAgent: TeamAgent? {
@@ -56,6 +63,7 @@ public final class TeamController {
     /// the task is cancelled, or portenvd turns out not to know teams.
     public func follow() async {
         while !Task.isCancelled {
+            if !teamPlanChecked { await applyKeptTeam() }
             do {
                 for try await (event, cursor) in daemon.watchTeam(box, cursor: state.cursor) {
                     state.apply(event, cursor: cursor)
@@ -124,6 +132,71 @@ public final class TeamController {
             selection = next.map { .agent($0) } ?? .allTabs
         }
     }
+
+    /// Lines from writing the team New workspace kept (ADR 0025): a file
+    /// the project already had, or one that isn't what was approved.
+    public private(set) var setupLines: [String] = []
+    private var teamPlanChecked = false
+    /// The project couldn't be brought in (a failed clone): the window's
+    /// line, with Try Again.
+    public private(set) var setupProblem: SetupProblem?
+    /// ApplyTeamPlan is working (a clone can take a while).
+    public private(set) var settingUp = false
+
+    /// Brings in the project and writes and pins the team New workspace
+    /// kept, once the workspace is open (portenvd does it; nothing when
+    /// there's none). Asked again on the next round until portenvd can
+    /// answer. A clone with the owner's sign-in reads it from the Keychain
+    /// only when portenvd asks for it, and only for that call; a failed one
+    /// waits for Try Again.
+    private func applyKeptTeam() async {
+        settingUp = true
+        defer { settingUp = false }
+        do {
+            var r = try await daemon.applyTeamPlan(box, githubToken: nil)
+            if r.needsToken {
+                guard let token = try? await github.token(), !token.isEmpty else {
+                    teamPlanChecked = true
+                    setupProblem = SetupProblem(line: ProjectText.needsSignIn, needsSignIn: true)
+                    return
+                }
+                r = try await daemon.applyTeamPlan(box, githubToken: token)
+            }
+            teamPlanChecked = true
+            if let line = r.projectError, !line.isEmpty {
+                setupProblem = SetupProblem(line: line, needsSignIn: r.needsSignIn)
+                return
+            }
+            setupProblem = nil
+            setupLines = r.lines
+        } catch let e as DaemonError where e.message == DaemonError.outOfDate {
+            teamPlanChecked = true
+        } catch {}
+    }
+
+    /// The window's Try Again: portenvd still has the choice.
+    public func retrySetup() async {
+        setupProblem = nil
+        teamPlanChecked = false
+        await applyKeptTeam()
+    }
+
+    /// The Team section's Raise, after the owner confirmed it (R-0347):
+    /// Agents allowed goes to `n` through portenvd, which then sends the
+    /// new limit in WatchTeam. A refusal is the section's error line.
+    public func raiseAgentLimit(to n: Int) async {
+        do {
+            _ = try await AgentsAllowed.set(n, daemon: daemon)
+            limitError = nil
+        } catch let e as DaemonError {
+            limitError = e.message
+        } catch {
+            limitError = error.localizedDescription
+        }
+    }
+
+    /// Why the last Raise was refused; shown under the limit's line.
+    public private(set) var limitError: String?
 
     /// The owner's message to an agent. Nothing is sent when it's empty.
     public func send(_ text: String, to agent: String, thread: String = "") async {

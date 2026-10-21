@@ -287,7 +287,11 @@ final class AppModel {
         // Never in a window that has closed meanwhile.
         guard sessions.all.contains(where: { $0 === s }) else { return }
         let flow = s.screen == .launch ? firstRun : s.newBox
-        guard boxes.contains(box) || flow?.made == box else { return }
+        guard boxes.contains(box) || flow?.made == box else {
+            // Never "Opening…" for ever (R-0386): the list, saying so.
+            if s === launchSession, launch == .open(box), s.controller == nil { launch = LaunchGap.boxGone(box) }
+            return
+        }
         if flow?.made == box { defaults.set(true, forKey: Self.firstRunDoneKey) }
         if case let .focus(other) = sessions.choose(box, for: s) {
             other.bringForward()
@@ -448,8 +452,10 @@ final class AppModel {
                                 docker: nil, serviceGone: serviceGone)
         }
         let service = KeyedFirstRunService(maker: BoxMaker(daemon: creating))
+        // The Team step (ADR 0025) plans through portenvd.
         let flow = FirstRunFlow(service: service, at: step, existing: boxes, fromBoxList: fromBoxList, memory: memory,
-                                docker: nil, serviceGone: serviceGone)
+                                docker: nil, serviceGone: serviceGone, teamPlanner: daemon as? TeamPlanning,
+                                githubLogin: { GitHubAccount.system.login })
         service.keychainWaiting = { [weak flow] on in Task { @MainActor in flow?.keychainWaiting = on } }
         return flow
     }
@@ -466,6 +472,12 @@ final class AppModel {
             s.newBox = flow
             s.screen = .newBox
         }
+    }
+
+    /// First run with no flow (R-0386): makes the one it should have.
+    func ensureFirstRunFlow(at step: FirstRunStep) {
+        guard firstRun == nil, launch == .firstRun(step) else { return }
+        firstRun = makeFlow(at: step, fromBoxList: false, memory: DefaultsFirstRunMemory())
     }
 
     /// Cancel, ⎋ or "Your boxes" from New Box…: back to the list.
@@ -549,6 +561,9 @@ struct AppRoot: View {
                     if let flow = session.newBox {
                         FirstRunView(flow: flow, opened: { box in Task { await model.open(box, in: session) } },
                                      cancel: { model.cancelNewBox(in: session) }, refill: model.refill)
+                    } else {
+                        // Never a bare background (R-0386).
+                        list(notice: nil)
                     }
                 case .list, .workspace:
                     if model.launch == nil {
@@ -599,17 +614,28 @@ struct AppRoot: View {
         switch model.launch {
         case nil:
             starting
-        case .firstRun:
+        case let .firstRun(step):
             if let flow = model.firstRun {
                 FirstRunView(flow: flow, opened: { box in Task { await model.open(box, in: session) } },
                              cancel: flow.fromBoxList ? { model.cancelNewBox(in: session) } : nil, refill: model.refill)
+            } else {
+                // Never a bare background (R-0386): the flow is made, and
+                // says so meanwhile.
+                TerminalOpening(line: launchGap)
+                    .onAppear { model.ensureFirstRunFlow(at: step) }
             }
         case let .boxList(notice):
             list(notice: notice)
         case .open:
-            // Opening: the workspace shows once its session has it.
-            starting
+            // Opening: the workspace shows once its session has it, saying
+            // so meanwhile (R-0386).
+            TerminalOpening(line: launchGap)
         }
+    }
+
+    /// What the launch window says while it catches up (R-0386).
+    private var launchGap: String {
+        LaunchGap.line(model.launch, hasController: false, hasFirstRunFlow: model.firstRun != nil) ?? LaunchWait.starting
     }
 
     private func list(notice: String?) -> some View {

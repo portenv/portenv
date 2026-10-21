@@ -48,13 +48,25 @@ struct MainWindow: View {
         HStack(spacing: 0) {
             if TeamSidebarToggle.shows(choice: sidebarChoice, team: team), let team {
                 TeamSidebar(state: team.state, tabs: tabs.tabs,
-                            selection: Binding(get: { team.selection }, set: { choose($0) }), compact: narrow)
+                            selection: Binding(get: { team.selection }, set: { choose($0) }), compact: narrow,
+                            onRaise: { n in Task { await team.raiseAgentLimit(to: n) } }, error: team.limitError,
+                            setupLines: team.setupLines)
                 Divider()
             }
-            content
+            VStack(spacing: 0) {
+                // New workspace's project, being brought in, or why it
+                // couldn't be (ADR 0025 §2).
+                if let team { SetupBanner(team: team) }
+                content
+            }
         }
             // The team is followed by the window's session (AppModel.open),
             // so a tab not in front still counts what needs you (R-0344).
+            // Pushes from the workspace waiting for the app (R-0391).
+            .task(id: controller.box) { await team?.push.follow() }
+            .sheet(item: Binding(get: { team?.push.asking }, set: { _ in })) { ask in
+                if let push = team?.push { PushSheet(ask: ask, workspace: controller.box, push: push) }
+            }
             .onGeometryChange(for: Bool.self) { $0.size.width < 900 } action: { narrow = $0 }
             // The terminal side and the inspector share the window's width;
             // only the window has a minimum width (R-0073, R-0075).
@@ -175,8 +187,11 @@ struct MainWindow: View {
                     run: { action in Task { await controller.run(action) } },
                     retryPackages: { Task { await controller.retryPackages() } },
                     revert: { Task { await controller.revertToLastSavePoint() } },
-                    retrySaves: { Task { await controller.refreshSaves() } }
+                    retrySaves: { Task { await controller.refreshSaves() } },
+                    canPush: team?.push.canPushLine,
+                    stopAllowingPushes: { Task { await team?.push.stopAllowing() } }
                 )
+                .task(id: controller.box) { await team?.push.refreshPermission() }
                 // Read the saves while open and wherever the box runs,
                 // quietly trying again if that fails. A new save reads them
                 // again from the controller (savedAtChanged).

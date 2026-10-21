@@ -282,4 +282,50 @@ final class FakeDaemon: DaemonAPI, @unchecked Sendable {
         try await record(["app", "approve-agent-file", box, id, sha256])
         return TeamAgent(id: id, name: id, status: .stopped, fileSHA256: sha256, approved: true)
     }
+    /// What ApplyTeamPlan answers (ADR 0025); nothing kept by default.
+    var applied = TeamPlanApplied(applied: false)
+    /// Answers in turn before `applied` (a needed sign-in, a failed clone).
+    var appliedFirst: [TeamPlanApplied] = []
+    func applyTeamPlan(_ box: String, githubToken: String?) async throws -> TeamPlanApplied {
+        // The sign-in is recorded only as whether one was given.
+        try await record(["app", "apply-team-plan", box, githubToken == nil ? "no-token" : "token"])
+        return lock.withLock { appliedFirst.isEmpty ? applied : appliedFirst.removeFirst() }
+    }
+    /// The workspace's repository and whether pushes are allowed.
+    var pushes: (String, Bool) = ("", false)
+    func pushPermission(_ box: String) async throws -> (repo: String, allowed: Bool) {
+        try await record(["app", "get-pushes", box])
+        return lock.withLock { pushes }
+    }
+    func stopAllowingPushes(_ box: String) async throws {
+        try await record(["app", "stop-allowing-pushes", box])
+        lock.withLock { pushes.1 = false }
+    }
+    /// Pushes waiting for the app (R-0391), sent once by watchPushes.
+    var pushQuestions: [PushAsk] = []
+    func watchPushes(_ box: String) -> AsyncThrowingStream<PushAsk, Error> {
+        let qs: [PushAsk] = lock.withLock {
+            _calls.append(["app", "watch-pushes", box])
+            defer { pushQuestions = [] }
+            return pushQuestions
+        }
+        return AsyncThrowingStream { c in
+            for q in qs { c.yield(q) }
+        }
+    }
+    func answerPush(_ box: String, id: String, allow: Bool, githubToken: String?, signedOut: Bool) async throws {
+        // The sign-in is recorded only as whether one was given.
+        try await record(["app", "answer-push", box, id, signedOut ? "signed-out" : allow ? "allow" : "deny", githubToken == nil ? "no-token" : "token"])
+    }
+    /// Settings › Team › Agents allowed (R-0347).
+    var allowed = 4
+    func agentsAllowed() async throws -> Int {
+        try await record(["app", "agents-allowed"])
+        return lock.withLock { allowed }
+    }
+    func setAgentsAllowed(_ n: Int) async throws -> Int {
+        try await record(["app", "set-agents-allowed", String(n)])
+        lock.withLock { allowed = n }
+        return n
+    }
 }

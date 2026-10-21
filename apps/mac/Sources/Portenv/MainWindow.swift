@@ -62,6 +62,11 @@ struct MainWindow: View {
         }
             // The team is followed by the window's session (AppModel.open),
             // so a tab not in front still counts what needs you (R-0344).
+            // Pushes from the workspace waiting for the app (R-0391).
+            .task(id: controller.box) { await team?.push.follow() }
+            .sheet(item: Binding(get: { team?.push.asking }, set: { _ in })) { ask in
+                if let push = team?.push { PushSheet(ask: ask, workspace: controller.box, push: push) }
+            }
             .onGeometryChange(for: Bool.self) { $0.size.width < 900 } action: { narrow = $0 }
             // The terminal side and the inspector share the window's width;
             // only the window has a minimum width (R-0073, R-0075).

@@ -278,6 +278,373 @@ func (Answers) EnumDescriptor() ([]byte, []int) {
 	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{3}
 }
 
+type WatchPushesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WatchPushesRequest) Reset() {
+	*x = WatchPushesRequest{}
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WatchPushesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WatchPushesRequest) ProtoMessage() {}
+
+func (x *WatchPushesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WatchPushesRequest.ProtoReflect.Descriptor instead.
+func (*WatchPushesRequest) Descriptor() ([]byte, []int) {
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *WatchPushesRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+type WatchPushesResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Question      *PushQuestion          `protobuf:"bytes,1,opt,name=question,proto3" json:"question,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WatchPushesResponse) Reset() {
+	*x = WatchPushesResponse{}
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WatchPushesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WatchPushesResponse) ProtoMessage() {}
+
+func (x *WatchPushesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WatchPushesResponse.ProtoReflect.Descriptor instead.
+func (*WatchPushesResponse) Descriptor() ([]byte, []int) {
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *WatchPushesResponse) GetQuestion() *PushQuestion {
+	if x != nil {
+		return x.Question
+	}
+	return nil
+}
+
+type PushQuestion struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// github.com/OWNER/REPO.
+	Repo string `protobuf:"bytes,2,opt,name=repo,proto3" json:"repo,omitempty"`
+	// The owner must say yes in the app (first push, force or delete);
+	// otherwise the app answers with the sign-in alone.
+	NeedsYes bool              `protobuf:"varint,3,opt,name=needs_yes,json=needsYes,proto3" json:"needs_yes,omitempty"`
+	First    bool              `protobuf:"varint,4,opt,name=first,proto3" json:"first,omitempty"`
+	Updates  []*PushUpdateInfo `protobuf:"bytes,5,rep,name=updates,proto3" json:"updates,omitempty"`
+	// Only the remote's refs are read (git's list for-push).
+	List bool `protobuf:"varint,6,opt,name=list,proto3" json:"list,omitempty"`
+	// The question was answered or gave up: the app takes it down.
+	Gone          bool `protobuf:"varint,7,opt,name=gone,proto3" json:"gone,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PushQuestion) Reset() {
+	*x = PushQuestion{}
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PushQuestion) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PushQuestion) ProtoMessage() {}
+
+func (x *PushQuestion) ProtoReflect() protoreflect.Message {
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PushQuestion.ProtoReflect.Descriptor instead.
+func (*PushQuestion) Descriptor() ([]byte, []int) {
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *PushQuestion) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *PushQuestion) GetRepo() string {
+	if x != nil {
+		return x.Repo
+	}
+	return ""
+}
+
+func (x *PushQuestion) GetNeedsYes() bool {
+	if x != nil {
+		return x.NeedsYes
+	}
+	return false
+}
+
+func (x *PushQuestion) GetFirst() bool {
+	if x != nil {
+		return x.First
+	}
+	return false
+}
+
+func (x *PushQuestion) GetUpdates() []*PushUpdateInfo {
+	if x != nil {
+		return x.Updates
+	}
+	return nil
+}
+
+func (x *PushQuestion) GetList() bool {
+	if x != nil {
+		return x.List
+	}
+	return false
+}
+
+func (x *PushQuestion) GetGone() bool {
+	if x != nil {
+		return x.Gone
+	}
+	return false
+}
+
+type PushUpdateInfo struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Dst           string                 `protobuf:"bytes,1,opt,name=dst,proto3" json:"dst,omitempty"`
+	NewSha        string                 `protobuf:"bytes,2,opt,name=new_sha,json=newSha,proto3" json:"new_sha,omitempty"`
+	Force         bool                   `protobuf:"varint,3,opt,name=force,proto3" json:"force,omitempty"`
+	Delete        bool                   `protobuf:"varint,4,opt,name=delete,proto3" json:"delete,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PushUpdateInfo) Reset() {
+	*x = PushUpdateInfo{}
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PushUpdateInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PushUpdateInfo) ProtoMessage() {}
+
+func (x *PushUpdateInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PushUpdateInfo.ProtoReflect.Descriptor instead.
+func (*PushUpdateInfo) Descriptor() ([]byte, []int) {
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *PushUpdateInfo) GetDst() string {
+	if x != nil {
+		return x.Dst
+	}
+	return ""
+}
+
+func (x *PushUpdateInfo) GetNewSha() string {
+	if x != nil {
+		return x.NewSha
+	}
+	return ""
+}
+
+func (x *PushUpdateInfo) GetForce() bool {
+	if x != nil {
+		return x.Force
+	}
+	return false
+}
+
+func (x *PushUpdateInfo) GetDelete() bool {
+	if x != nil {
+		return x.Delete
+	}
+	return false
+}
+
+type AnswerPushRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Id    string                 `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
+	Allow bool                   `protobuf:"varint,3,opt,name=allow,proto3" json:"allow,omitempty"`
+	// The owner's GitHub sign-in, in memory, for this push alone.
+	GithubToken string `protobuf:"bytes,4,opt,name=github_token,json=githubToken,proto3" json:"github_token,omitempty"`
+	// The app has no GitHub sign-in.
+	SignedOut     bool `protobuf:"varint,5,opt,name=signed_out,json=signedOut,proto3" json:"signed_out,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AnswerPushRequest) Reset() {
+	*x = AnswerPushRequest{}
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AnswerPushRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AnswerPushRequest) ProtoMessage() {}
+
+func (x *AnswerPushRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AnswerPushRequest.ProtoReflect.Descriptor instead.
+func (*AnswerPushRequest) Descriptor() ([]byte, []int) {
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *AnswerPushRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *AnswerPushRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *AnswerPushRequest) GetAllow() bool {
+	if x != nil {
+		return x.Allow
+	}
+	return false
+}
+
+func (x *AnswerPushRequest) GetGithubToken() string {
+	if x != nil {
+		return x.GithubToken
+	}
+	return ""
+}
+
+func (x *AnswerPushRequest) GetSignedOut() bool {
+	if x != nil {
+		return x.SignedOut
+	}
+	return false
+}
+
+type AnswerPushResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AnswerPushResponse) Reset() {
+	*x = AnswerPushResponse{}
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AnswerPushResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AnswerPushResponse) ProtoMessage() {}
+
+func (x *AnswerPushResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AnswerPushResponse.ProtoReflect.Descriptor instead.
+func (*AnswerPushResponse) Descriptor() ([]byte, []int) {
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{5}
+}
+
 type CheckBoxRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
@@ -287,7 +654,7 @@ type CheckBoxRequest struct {
 
 func (x *CheckBoxRequest) Reset() {
 	*x = CheckBoxRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[0]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -299,7 +666,7 @@ func (x *CheckBoxRequest) String() string {
 func (*CheckBoxRequest) ProtoMessage() {}
 
 func (x *CheckBoxRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[0]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -312,7 +679,7 @@ func (x *CheckBoxRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CheckBoxRequest.ProtoReflect.Descriptor instead.
 func (*CheckBoxRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{0}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *CheckBoxRequest) GetName() string {
@@ -333,7 +700,7 @@ type CheckBoxResponse struct {
 
 func (x *CheckBoxResponse) Reset() {
 	*x = CheckBoxResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[1]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -345,7 +712,7 @@ func (x *CheckBoxResponse) String() string {
 func (*CheckBoxResponse) ProtoMessage() {}
 
 func (x *CheckBoxResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[1]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -358,7 +725,7 @@ func (x *CheckBoxResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CheckBoxResponse.ProtoReflect.Descriptor instead.
 func (*CheckBoxResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{1}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *CheckBoxResponse) GetAgentAvailable() bool {
@@ -384,7 +751,7 @@ type RestartBoxRequest struct {
 
 func (x *RestartBoxRequest) Reset() {
 	*x = RestartBoxRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[2]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -396,7 +763,7 @@ func (x *RestartBoxRequest) String() string {
 func (*RestartBoxRequest) ProtoMessage() {}
 
 func (x *RestartBoxRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[2]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -409,7 +776,7 @@ func (x *RestartBoxRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RestartBoxRequest.ProtoReflect.Descriptor instead.
 func (*RestartBoxRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{2}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *RestartBoxRequest) GetName() string {
@@ -429,7 +796,7 @@ type RestartBoxResponse struct {
 
 func (x *RestartBoxResponse) Reset() {
 	*x = RestartBoxResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[3]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -441,7 +808,7 @@ func (x *RestartBoxResponse) String() string {
 func (*RestartBoxResponse) ProtoMessage() {}
 
 func (x *RestartBoxResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[3]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -454,7 +821,7 @@ func (x *RestartBoxResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RestartBoxResponse.ProtoReflect.Descriptor instead.
 func (*RestartBoxResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{3}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *RestartBoxResponse) GetSummary() string {
@@ -488,7 +855,7 @@ type OpenBoxRequest struct {
 
 func (x *OpenBoxRequest) Reset() {
 	*x = OpenBoxRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[4]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -500,7 +867,7 @@ func (x *OpenBoxRequest) String() string {
 func (*OpenBoxRequest) ProtoMessage() {}
 
 func (x *OpenBoxRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[4]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -513,7 +880,7 @@ func (x *OpenBoxRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OpenBoxRequest.ProtoReflect.Descriptor instead.
 func (*OpenBoxRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{4}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *OpenBoxRequest) GetName() string {
@@ -551,7 +918,7 @@ type OpenBoxResponse struct {
 
 func (x *OpenBoxResponse) Reset() {
 	*x = OpenBoxResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[5]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -563,7 +930,7 @@ func (x *OpenBoxResponse) String() string {
 func (*OpenBoxResponse) ProtoMessage() {}
 
 func (x *OpenBoxResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[5]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -576,7 +943,7 @@ func (x *OpenBoxResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OpenBoxResponse.ProtoReflect.Descriptor instead.
 func (*OpenBoxResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{5}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *OpenBoxResponse) GetSummary() string {
@@ -609,7 +976,7 @@ type CloseBoxRequest struct {
 
 func (x *CloseBoxRequest) Reset() {
 	*x = CloseBoxRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[6]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -621,7 +988,7 @@ func (x *CloseBoxRequest) String() string {
 func (*CloseBoxRequest) ProtoMessage() {}
 
 func (x *CloseBoxRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[6]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -634,7 +1001,7 @@ func (x *CloseBoxRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CloseBoxRequest.ProtoReflect.Descriptor instead.
 func (*CloseBoxRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{6}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *CloseBoxRequest) GetName() string {
@@ -652,7 +1019,7 @@ type CloseBoxResponse struct {
 
 func (x *CloseBoxResponse) Reset() {
 	*x = CloseBoxResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[7]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -664,7 +1031,7 @@ func (x *CloseBoxResponse) String() string {
 func (*CloseBoxResponse) ProtoMessage() {}
 
 func (x *CloseBoxResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[7]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -677,7 +1044,7 @@ func (x *CloseBoxResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CloseBoxResponse.ProtoReflect.Descriptor instead.
 func (*CloseBoxResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{7}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{13}
 }
 
 type MakeSavePointRequest struct {
@@ -689,7 +1056,7 @@ type MakeSavePointRequest struct {
 
 func (x *MakeSavePointRequest) Reset() {
 	*x = MakeSavePointRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[8]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -701,7 +1068,7 @@ func (x *MakeSavePointRequest) String() string {
 func (*MakeSavePointRequest) ProtoMessage() {}
 
 func (x *MakeSavePointRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[8]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -714,7 +1081,7 @@ func (x *MakeSavePointRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MakeSavePointRequest.ProtoReflect.Descriptor instead.
 func (*MakeSavePointRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{8}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *MakeSavePointRequest) GetName() string {
@@ -733,7 +1100,7 @@ type MakeSavePointResponse struct {
 
 func (x *MakeSavePointResponse) Reset() {
 	*x = MakeSavePointResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[9]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -745,7 +1112,7 @@ func (x *MakeSavePointResponse) String() string {
 func (*MakeSavePointResponse) ProtoMessage() {}
 
 func (x *MakeSavePointResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[9]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -758,7 +1125,7 @@ func (x *MakeSavePointResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MakeSavePointResponse.ProtoReflect.Descriptor instead.
 func (*MakeSavePointResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{9}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *MakeSavePointResponse) GetSnapshot() *v1.SnapshotRef {
@@ -777,7 +1144,7 @@ type RevertToLastSavePointRequest struct {
 
 func (x *RevertToLastSavePointRequest) Reset() {
 	*x = RevertToLastSavePointRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[10]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -789,7 +1156,7 @@ func (x *RevertToLastSavePointRequest) String() string {
 func (*RevertToLastSavePointRequest) ProtoMessage() {}
 
 func (x *RevertToLastSavePointRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[10]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -802,7 +1169,7 @@ func (x *RevertToLastSavePointRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevertToLastSavePointRequest.ProtoReflect.Descriptor instead.
 func (*RevertToLastSavePointRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{10}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *RevertToLastSavePointRequest) GetName() string {
@@ -824,7 +1191,7 @@ type RevertToLastSavePointResponse struct {
 
 func (x *RevertToLastSavePointResponse) Reset() {
 	*x = RevertToLastSavePointResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[11]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -836,7 +1203,7 @@ func (x *RevertToLastSavePointResponse) String() string {
 func (*RevertToLastSavePointResponse) ProtoMessage() {}
 
 func (x *RevertToLastSavePointResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[11]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -849,7 +1216,7 @@ func (x *RevertToLastSavePointResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevertToLastSavePointResponse.ProtoReflect.Descriptor instead.
 func (*RevertToLastSavePointResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{11}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *RevertToLastSavePointResponse) GetRestored() *v1.SnapshotRef {
@@ -877,7 +1244,7 @@ type MoveBoxRequest struct {
 
 func (x *MoveBoxRequest) Reset() {
 	*x = MoveBoxRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[12]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -889,7 +1256,7 @@ func (x *MoveBoxRequest) String() string {
 func (*MoveBoxRequest) ProtoMessage() {}
 
 func (x *MoveBoxRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[12]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -902,7 +1269,7 @@ func (x *MoveBoxRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MoveBoxRequest.ProtoReflect.Descriptor instead.
 func (*MoveBoxRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{12}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *MoveBoxRequest) GetName() string {
@@ -928,7 +1295,7 @@ type MoveBoxResponse struct {
 
 func (x *MoveBoxResponse) Reset() {
 	*x = MoveBoxResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[13]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -940,7 +1307,7 @@ func (x *MoveBoxResponse) String() string {
 func (*MoveBoxResponse) ProtoMessage() {}
 
 func (x *MoveBoxResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[13]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -953,7 +1320,7 @@ func (x *MoveBoxResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MoveBoxResponse.ProtoReflect.Descriptor instead.
 func (*MoveBoxResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{13}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *MoveBoxResponse) GetSummary() string {
@@ -977,7 +1344,7 @@ type TerminalRequest struct {
 
 func (x *TerminalRequest) Reset() {
 	*x = TerminalRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[14]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -989,7 +1356,7 @@ func (x *TerminalRequest) String() string {
 func (*TerminalRequest) ProtoMessage() {}
 
 func (x *TerminalRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[14]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1002,7 +1369,7 @@ func (x *TerminalRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TerminalRequest.ProtoReflect.Descriptor instead.
 func (*TerminalRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{14}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *TerminalRequest) GetMsg() isTerminalRequest_Msg {
@@ -1081,7 +1448,7 @@ type TerminalOpen struct {
 
 func (x *TerminalOpen) Reset() {
 	*x = TerminalOpen{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[15]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1093,7 +1460,7 @@ func (x *TerminalOpen) String() string {
 func (*TerminalOpen) ProtoMessage() {}
 
 func (x *TerminalOpen) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[15]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1106,7 +1473,7 @@ func (x *TerminalOpen) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TerminalOpen.ProtoReflect.Descriptor instead.
 func (*TerminalOpen) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{15}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *TerminalOpen) GetBox() string {
@@ -1154,7 +1521,7 @@ type TerminalSize struct {
 
 func (x *TerminalSize) Reset() {
 	*x = TerminalSize{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[16]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1166,7 +1533,7 @@ func (x *TerminalSize) String() string {
 func (*TerminalSize) ProtoMessage() {}
 
 func (x *TerminalSize) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[16]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1179,7 +1546,7 @@ func (x *TerminalSize) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TerminalSize.ProtoReflect.Descriptor instead.
 func (*TerminalSize) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{16}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *TerminalSize) GetCols() uint32 {
@@ -1209,7 +1576,7 @@ type TerminalResponse struct {
 
 func (x *TerminalResponse) Reset() {
 	*x = TerminalResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[17]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1221,7 +1588,7 @@ func (x *TerminalResponse) String() string {
 func (*TerminalResponse) ProtoMessage() {}
 
 func (x *TerminalResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[17]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1234,7 +1601,7 @@ func (x *TerminalResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TerminalResponse.ProtoReflect.Descriptor instead.
 func (*TerminalResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{17}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *TerminalResponse) GetMsg() isTerminalResponse_Msg {
@@ -1286,7 +1653,7 @@ type GetVersionRequest struct {
 
 func (x *GetVersionRequest) Reset() {
 	*x = GetVersionRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[18]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1298,7 +1665,7 @@ func (x *GetVersionRequest) String() string {
 func (*GetVersionRequest) ProtoMessage() {}
 
 func (x *GetVersionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[18]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1311,7 +1678,7 @@ func (x *GetVersionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetVersionRequest.ProtoReflect.Descriptor instead.
 func (*GetVersionRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{18}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{24}
 }
 
 type GetVersionResponse struct {
@@ -1323,7 +1690,7 @@ type GetVersionResponse struct {
 
 func (x *GetVersionResponse) Reset() {
 	*x = GetVersionResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[19]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1335,7 +1702,7 @@ func (x *GetVersionResponse) String() string {
 func (*GetVersionResponse) ProtoMessage() {}
 
 func (x *GetVersionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[19]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1348,7 +1715,7 @@ func (x *GetVersionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetVersionResponse.ProtoReflect.Descriptor instead.
 func (*GetVersionResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{19}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *GetVersionResponse) GetBuild() *v1.BuildInfo {
@@ -1366,7 +1733,7 @@ type ListBoxesRequest struct {
 
 func (x *ListBoxesRequest) Reset() {
 	*x = ListBoxesRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[20]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1378,7 +1745,7 @@ func (x *ListBoxesRequest) String() string {
 func (*ListBoxesRequest) ProtoMessage() {}
 
 func (x *ListBoxesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[20]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1391,7 +1758,7 @@ func (x *ListBoxesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListBoxesRequest.ProtoReflect.Descriptor instead.
 func (*ListBoxesRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{20}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{26}
 }
 
 type ListBoxesResponse struct {
@@ -1403,7 +1770,7 @@ type ListBoxesResponse struct {
 
 func (x *ListBoxesResponse) Reset() {
 	*x = ListBoxesResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[21]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1415,7 +1782,7 @@ func (x *ListBoxesResponse) String() string {
 func (*ListBoxesResponse) ProtoMessage() {}
 
 func (x *ListBoxesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[21]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1428,7 +1795,7 @@ func (x *ListBoxesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListBoxesResponse.ProtoReflect.Descriptor instead.
 func (*ListBoxesResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{21}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *ListBoxesResponse) GetBoxes() []*BoxStatus {
@@ -1456,7 +1823,7 @@ type BoxStatus struct {
 
 func (x *BoxStatus) Reset() {
 	*x = BoxStatus{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[22]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1468,7 +1835,7 @@ func (x *BoxStatus) String() string {
 func (*BoxStatus) ProtoMessage() {}
 
 func (x *BoxStatus) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[22]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1481,7 +1848,7 @@ func (x *BoxStatus) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BoxStatus.ProtoReflect.Descriptor instead.
 func (*BoxStatus) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{22}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *BoxStatus) GetBox() *v1.Box {
@@ -1521,7 +1888,7 @@ type GetChannelRequest struct {
 
 func (x *GetChannelRequest) Reset() {
 	*x = GetChannelRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[23]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1533,7 +1900,7 @@ func (x *GetChannelRequest) String() string {
 func (*GetChannelRequest) ProtoMessage() {}
 
 func (x *GetChannelRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[23]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1546,7 +1913,7 @@ func (x *GetChannelRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetChannelRequest.ProtoReflect.Descriptor instead.
 func (*GetChannelRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{23}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *GetChannelRequest) GetName() string {
@@ -1568,7 +1935,7 @@ type GetChannelResponse struct {
 
 func (x *GetChannelResponse) Reset() {
 	*x = GetChannelResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[24]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1580,7 +1947,7 @@ func (x *GetChannelResponse) String() string {
 func (*GetChannelResponse) ProtoMessage() {}
 
 func (x *GetChannelResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[24]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1593,7 +1960,7 @@ func (x *GetChannelResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetChannelResponse.ProtoReflect.Descriptor instead.
 func (*GetChannelResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{24}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *GetChannelResponse) GetAddress() string {
@@ -1626,7 +1993,7 @@ type GetBoxStateRequest struct {
 
 func (x *GetBoxStateRequest) Reset() {
 	*x = GetBoxStateRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[25]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1638,7 +2005,7 @@ func (x *GetBoxStateRequest) String() string {
 func (*GetBoxStateRequest) ProtoMessage() {}
 
 func (x *GetBoxStateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[25]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1651,7 +2018,7 @@ func (x *GetBoxStateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetBoxStateRequest.ProtoReflect.Descriptor instead.
 func (*GetBoxStateRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{25}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *GetBoxStateRequest) GetName() string {
@@ -1695,7 +2062,7 @@ type GetBoxStateResponse struct {
 
 func (x *GetBoxStateResponse) Reset() {
 	*x = GetBoxStateResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[26]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1707,7 +2074,7 @@ func (x *GetBoxStateResponse) String() string {
 func (*GetBoxStateResponse) ProtoMessage() {}
 
 func (x *GetBoxStateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[26]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1720,7 +2087,7 @@ func (x *GetBoxStateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetBoxStateResponse.ProtoReflect.Descriptor instead.
 func (*GetBoxStateResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{26}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *GetBoxStateResponse) GetState() SaveState {
@@ -1805,7 +2172,7 @@ type SetNetworkPathRequest struct {
 
 func (x *SetNetworkPathRequest) Reset() {
 	*x = SetNetworkPathRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[27]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1817,7 +2184,7 @@ func (x *SetNetworkPathRequest) String() string {
 func (*SetNetworkPathRequest) ProtoMessage() {}
 
 func (x *SetNetworkPathRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[27]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1830,7 +2197,7 @@ func (x *SetNetworkPathRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetNetworkPathRequest.ProtoReflect.Descriptor instead.
 func (*SetNetworkPathRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{27}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *SetNetworkPathRequest) GetPath() NetworkPath {
@@ -1855,7 +2222,7 @@ type SetNetworkPathResponse struct {
 
 func (x *SetNetworkPathResponse) Reset() {
 	*x = SetNetworkPathResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[28]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1867,7 +2234,7 @@ func (x *SetNetworkPathResponse) String() string {
 func (*SetNetworkPathResponse) ProtoMessage() {}
 
 func (x *SetNetworkPathResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[28]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1880,7 +2247,7 @@ func (x *SetNetworkPathResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetNetworkPathResponse.ProtoReflect.Descriptor instead.
 func (*SetNetworkPathResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{28}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{34}
 }
 
 type WokeRequest struct {
@@ -1891,7 +2258,7 @@ type WokeRequest struct {
 
 func (x *WokeRequest) Reset() {
 	*x = WokeRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[29]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1903,7 +2270,7 @@ func (x *WokeRequest) String() string {
 func (*WokeRequest) ProtoMessage() {}
 
 func (x *WokeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[29]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1916,7 +2283,7 @@ func (x *WokeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WokeRequest.ProtoReflect.Descriptor instead.
 func (*WokeRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{29}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{35}
 }
 
 type WokeResponse struct {
@@ -1928,7 +2295,7 @@ type WokeResponse struct {
 
 func (x *WokeResponse) Reset() {
 	*x = WokeResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[30]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1940,7 +2307,7 @@ func (x *WokeResponse) String() string {
 func (*WokeResponse) ProtoMessage() {}
 
 func (x *WokeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[30]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1953,7 +2320,7 @@ func (x *WokeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WokeResponse.ProtoReflect.Descriptor instead.
 func (*WokeResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{30}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *WokeResponse) GetBoxes() []*WokeBox {
@@ -1979,7 +2346,7 @@ type WokeBox struct {
 
 func (x *WokeBox) Reset() {
 	*x = WokeBox{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[31]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1991,7 +2358,7 @@ func (x *WokeBox) String() string {
 func (*WokeBox) ProtoMessage() {}
 
 func (x *WokeBox) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[31]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2004,7 +2371,7 @@ func (x *WokeBox) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WokeBox.ProtoReflect.Descriptor instead.
 func (*WokeBox) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{31}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *WokeBox) GetName() string {
@@ -2044,7 +2411,7 @@ type RetryPackagesRequest struct {
 
 func (x *RetryPackagesRequest) Reset() {
 	*x = RetryPackagesRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[32]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2056,7 +2423,7 @@ func (x *RetryPackagesRequest) String() string {
 func (*RetryPackagesRequest) ProtoMessage() {}
 
 func (x *RetryPackagesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[32]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2069,7 +2436,7 @@ func (x *RetryPackagesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RetryPackagesRequest.ProtoReflect.Descriptor instead.
 func (*RetryPackagesRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{32}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *RetryPackagesRequest) GetName() string {
@@ -2087,7 +2454,7 @@ type RetryPackagesResponse struct {
 
 func (x *RetryPackagesResponse) Reset() {
 	*x = RetryPackagesResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[33]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2099,7 +2466,7 @@ func (x *RetryPackagesResponse) String() string {
 func (*RetryPackagesResponse) ProtoMessage() {}
 
 func (x *RetryPackagesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[33]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2112,7 +2479,7 @@ func (x *RetryPackagesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RetryPackagesResponse.ProtoReflect.Descriptor instead.
 func (*RetryPackagesResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{33}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{39}
 }
 
 type ProvideKeysRequest struct {
@@ -2126,7 +2493,7 @@ type ProvideKeysRequest struct {
 
 func (x *ProvideKeysRequest) Reset() {
 	*x = ProvideKeysRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[34]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2138,7 +2505,7 @@ func (x *ProvideKeysRequest) String() string {
 func (*ProvideKeysRequest) ProtoMessage() {}
 
 func (x *ProvideKeysRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[34]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2151,7 +2518,7 @@ func (x *ProvideKeysRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProvideKeysRequest.ProtoReflect.Descriptor instead.
 func (*ProvideKeysRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{34}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *ProvideKeysRequest) GetName() string {
@@ -2176,7 +2543,7 @@ type ProvideKeysResponse struct {
 
 func (x *ProvideKeysResponse) Reset() {
 	*x = ProvideKeysResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[35]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2188,7 +2555,7 @@ func (x *ProvideKeysResponse) String() string {
 func (*ProvideKeysResponse) ProtoMessage() {}
 
 func (x *ProvideKeysResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[35]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2201,7 +2568,7 @@ func (x *ProvideKeysResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProvideKeysResponse.ProtoReflect.Descriptor instead.
 func (*ProvideKeysResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{35}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{41}
 }
 
 type RelaunchRequest struct {
@@ -2212,7 +2579,7 @@ type RelaunchRequest struct {
 
 func (x *RelaunchRequest) Reset() {
 	*x = RelaunchRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[36]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2224,7 +2591,7 @@ func (x *RelaunchRequest) String() string {
 func (*RelaunchRequest) ProtoMessage() {}
 
 func (x *RelaunchRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[36]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2237,7 +2604,7 @@ func (x *RelaunchRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RelaunchRequest.ProtoReflect.Descriptor instead.
 func (*RelaunchRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{36}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{42}
 }
 
 type RelaunchResponse struct {
@@ -2248,7 +2615,7 @@ type RelaunchResponse struct {
 
 func (x *RelaunchResponse) Reset() {
 	*x = RelaunchResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[37]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2260,7 +2627,7 @@ func (x *RelaunchResponse) String() string {
 func (*RelaunchResponse) ProtoMessage() {}
 
 func (x *RelaunchResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[37]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2273,7 +2640,7 @@ func (x *RelaunchResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RelaunchResponse.ProtoReflect.Descriptor instead.
 func (*RelaunchResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{37}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{43}
 }
 
 type WatchBoxStateRequest struct {
@@ -2285,7 +2652,7 @@ type WatchBoxStateRequest struct {
 
 func (x *WatchBoxStateRequest) Reset() {
 	*x = WatchBoxStateRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[38]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2297,7 +2664,7 @@ func (x *WatchBoxStateRequest) String() string {
 func (*WatchBoxStateRequest) ProtoMessage() {}
 
 func (x *WatchBoxStateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[38]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2310,7 +2677,7 @@ func (x *WatchBoxStateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchBoxStateRequest.ProtoReflect.Descriptor instead.
 func (*WatchBoxStateRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{38}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *WatchBoxStateRequest) GetName() string {
@@ -2329,7 +2696,7 @@ type WatchBoxStateResponse struct {
 
 func (x *WatchBoxStateResponse) Reset() {
 	*x = WatchBoxStateResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[39]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2341,7 +2708,7 @@ func (x *WatchBoxStateResponse) String() string {
 func (*WatchBoxStateResponse) ProtoMessage() {}
 
 func (x *WatchBoxStateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[39]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2354,7 +2721,7 @@ func (x *WatchBoxStateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchBoxStateResponse.ProtoReflect.Descriptor instead.
 func (*WatchBoxStateResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{39}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *WatchBoxStateResponse) GetState() *GetBoxStateResponse {
@@ -2372,7 +2739,7 @@ type ListServersRequest struct {
 
 func (x *ListServersRequest) Reset() {
 	*x = ListServersRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[40]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2384,7 +2751,7 @@ func (x *ListServersRequest) String() string {
 func (*ListServersRequest) ProtoMessage() {}
 
 func (x *ListServersRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[40]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2397,7 +2764,7 @@ func (x *ListServersRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListServersRequest.ProtoReflect.Descriptor instead.
 func (*ListServersRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{40}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{46}
 }
 
 type ListServersResponse struct {
@@ -2412,7 +2779,7 @@ type ListServersResponse struct {
 
 func (x *ListServersResponse) Reset() {
 	*x = ListServersResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[41]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2424,7 +2791,7 @@ func (x *ListServersResponse) String() string {
 func (*ListServersResponse) ProtoMessage() {}
 
 func (x *ListServersResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[41]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2437,7 +2804,7 @@ func (x *ListServersResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListServersResponse.ProtoReflect.Descriptor instead.
 func (*ListServersResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{41}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *ListServersResponse) GetServers() []string {
@@ -2463,7 +2830,7 @@ type GetKeyIDsRequest struct {
 
 func (x *GetKeyIDsRequest) Reset() {
 	*x = GetKeyIDsRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[42]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2475,7 +2842,7 @@ func (x *GetKeyIDsRequest) String() string {
 func (*GetKeyIDsRequest) ProtoMessage() {}
 
 func (x *GetKeyIDsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[42]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2488,7 +2855,7 @@ func (x *GetKeyIDsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetKeyIDsRequest.ProtoReflect.Descriptor instead.
 func (*GetKeyIDsRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{42}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *GetKeyIDsRequest) GetName() string {
@@ -2507,7 +2874,7 @@ type GetKeyIDsResponse struct {
 
 func (x *GetKeyIDsResponse) Reset() {
 	*x = GetKeyIDsResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[43]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2519,7 +2886,7 @@ func (x *GetKeyIDsResponse) String() string {
 func (*GetKeyIDsResponse) ProtoMessage() {}
 
 func (x *GetKeyIDsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[43]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2532,7 +2899,7 @@ func (x *GetKeyIDsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetKeyIDsResponse.ProtoReflect.Descriptor instead.
 func (*GetKeyIDsResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{43}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *GetKeyIDsResponse) GetKeyIds() []string {
@@ -2551,7 +2918,7 @@ type SaveNowRequest struct {
 
 func (x *SaveNowRequest) Reset() {
 	*x = SaveNowRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[44]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2563,7 +2930,7 @@ func (x *SaveNowRequest) String() string {
 func (*SaveNowRequest) ProtoMessage() {}
 
 func (x *SaveNowRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[44]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2576,7 +2943,7 @@ func (x *SaveNowRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SaveNowRequest.ProtoReflect.Descriptor instead.
 func (*SaveNowRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{44}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *SaveNowRequest) GetName() string {
@@ -2595,7 +2962,7 @@ type SaveNowResponse struct {
 
 func (x *SaveNowResponse) Reset() {
 	*x = SaveNowResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[45]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2607,7 +2974,7 @@ func (x *SaveNowResponse) String() string {
 func (*SaveNowResponse) ProtoMessage() {}
 
 func (x *SaveNowResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[45]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2620,7 +2987,7 @@ func (x *SaveNowResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SaveNowResponse.ProtoReflect.Descriptor instead.
 func (*SaveNowResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{45}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *SaveNowResponse) GetSnapshot() *v1.SnapshotRef {
@@ -2639,7 +3006,7 @@ type ListSavesRequest struct {
 
 func (x *ListSavesRequest) Reset() {
 	*x = ListSavesRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[46]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2651,7 +3018,7 @@ func (x *ListSavesRequest) String() string {
 func (*ListSavesRequest) ProtoMessage() {}
 
 func (x *ListSavesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[46]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2664,7 +3031,7 @@ func (x *ListSavesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSavesRequest.ProtoReflect.Descriptor instead.
 func (*ListSavesRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{46}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *ListSavesRequest) GetName() string {
@@ -2683,7 +3050,7 @@ type ListSavesResponse struct {
 
 func (x *ListSavesResponse) Reset() {
 	*x = ListSavesResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[47]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2695,7 +3062,7 @@ func (x *ListSavesResponse) String() string {
 func (*ListSavesResponse) ProtoMessage() {}
 
 func (x *ListSavesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[47]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2708,7 +3075,7 @@ func (x *ListSavesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSavesResponse.ProtoReflect.Descriptor instead.
 func (*ListSavesResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{47}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *ListSavesResponse) GetSaves() []*SaveEntry {
@@ -2735,7 +3102,7 @@ type SaveEntry struct {
 
 func (x *SaveEntry) Reset() {
 	*x = SaveEntry{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[48]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2747,7 +3114,7 @@ func (x *SaveEntry) String() string {
 func (*SaveEntry) ProtoMessage() {}
 
 func (x *SaveEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[48]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2760,7 +3127,7 @@ func (x *SaveEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SaveEntry.ProtoReflect.Descriptor instead.
 func (*SaveEntry) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{48}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *SaveEntry) GetId() string {
@@ -2808,7 +3175,7 @@ type HousekeepRequest struct {
 
 func (x *HousekeepRequest) Reset() {
 	*x = HousekeepRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[49]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2820,7 +3187,7 @@ func (x *HousekeepRequest) String() string {
 func (*HousekeepRequest) ProtoMessage() {}
 
 func (x *HousekeepRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[49]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2833,7 +3200,7 @@ func (x *HousekeepRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HousekeepRequest.ProtoReflect.Descriptor instead.
 func (*HousekeepRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{49}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *HousekeepRequest) GetName() string {
@@ -2858,7 +3225,7 @@ type HousekeepResponse struct {
 
 func (x *HousekeepResponse) Reset() {
 	*x = HousekeepResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[50]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2870,7 +3237,7 @@ func (x *HousekeepResponse) String() string {
 func (*HousekeepResponse) ProtoMessage() {}
 
 func (x *HousekeepResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[50]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2883,7 +3250,7 @@ func (x *HousekeepResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HousekeepResponse.ProtoReflect.Descriptor instead.
 func (*HousekeepResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{50}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{56}
 }
 
 type LeaveUnsavedRequest struct {
@@ -2895,7 +3262,7 @@ type LeaveUnsavedRequest struct {
 
 func (x *LeaveUnsavedRequest) Reset() {
 	*x = LeaveUnsavedRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[51]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2907,7 +3274,7 @@ func (x *LeaveUnsavedRequest) String() string {
 func (*LeaveUnsavedRequest) ProtoMessage() {}
 
 func (x *LeaveUnsavedRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[51]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2920,7 +3287,7 @@ func (x *LeaveUnsavedRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LeaveUnsavedRequest.ProtoReflect.Descriptor instead.
 func (*LeaveUnsavedRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{51}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{57}
 }
 
 func (x *LeaveUnsavedRequest) GetName() string {
@@ -2938,7 +3305,7 @@ type LeaveUnsavedResponse struct {
 
 func (x *LeaveUnsavedResponse) Reset() {
 	*x = LeaveUnsavedResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[52]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[58]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2950,7 +3317,7 @@ func (x *LeaveUnsavedResponse) String() string {
 func (*LeaveUnsavedResponse) ProtoMessage() {}
 
 func (x *LeaveUnsavedResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[52]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[58]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2963,7 +3330,7 @@ func (x *LeaveUnsavedResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LeaveUnsavedResponse.ProtoReflect.Descriptor instead.
 func (*LeaveUnsavedResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{52}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{58}
 }
 
 type TakeSavedAfterQuitRequest struct {
@@ -2974,7 +3341,7 @@ type TakeSavedAfterQuitRequest struct {
 
 func (x *TakeSavedAfterQuitRequest) Reset() {
 	*x = TakeSavedAfterQuitRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[53]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[59]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2986,7 +3353,7 @@ func (x *TakeSavedAfterQuitRequest) String() string {
 func (*TakeSavedAfterQuitRequest) ProtoMessage() {}
 
 func (x *TakeSavedAfterQuitRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[53]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[59]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2999,7 +3366,7 @@ func (x *TakeSavedAfterQuitRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TakeSavedAfterQuitRequest.ProtoReflect.Descriptor instead.
 func (*TakeSavedAfterQuitRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{53}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{59}
 }
 
 type TakeSavedAfterQuitResponse struct {
@@ -3011,7 +3378,7 @@ type TakeSavedAfterQuitResponse struct {
 
 func (x *TakeSavedAfterQuitResponse) Reset() {
 	*x = TakeSavedAfterQuitResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[54]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[60]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3023,7 +3390,7 @@ func (x *TakeSavedAfterQuitResponse) String() string {
 func (*TakeSavedAfterQuitResponse) ProtoMessage() {}
 
 func (x *TakeSavedAfterQuitResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[54]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[60]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3036,7 +3403,7 @@ func (x *TakeSavedAfterQuitResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TakeSavedAfterQuitResponse.ProtoReflect.Descriptor instead.
 func (*TakeSavedAfterQuitResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{54}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{60}
 }
 
 func (x *TakeSavedAfterQuitResponse) GetSaved() []*SavedAfterQuit {
@@ -3057,7 +3424,7 @@ type SavedAfterQuit struct {
 
 func (x *SavedAfterQuit) Reset() {
 	*x = SavedAfterQuit{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[55]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[61]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3069,7 +3436,7 @@ func (x *SavedAfterQuit) String() string {
 func (*SavedAfterQuit) ProtoMessage() {}
 
 func (x *SavedAfterQuit) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[55]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[61]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3082,7 +3449,7 @@ func (x *SavedAfterQuit) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SavedAfterQuit.ProtoReflect.Descriptor instead.
 func (*SavedAfterQuit) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{55}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{61}
 }
 
 func (x *SavedAfterQuit) GetName() string {
@@ -3113,7 +3480,7 @@ type ListTabsRequest struct {
 
 func (x *ListTabsRequest) Reset() {
 	*x = ListTabsRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[56]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[62]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3125,7 +3492,7 @@ func (x *ListTabsRequest) String() string {
 func (*ListTabsRequest) ProtoMessage() {}
 
 func (x *ListTabsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[56]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[62]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3138,7 +3505,7 @@ func (x *ListTabsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTabsRequest.ProtoReflect.Descriptor instead.
 func (*ListTabsRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{56}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{62}
 }
 
 func (x *ListTabsRequest) GetBox() string {
@@ -3171,7 +3538,7 @@ type ListTabsResponse struct {
 
 func (x *ListTabsResponse) Reset() {
 	*x = ListTabsResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[57]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[63]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3183,7 +3550,7 @@ func (x *ListTabsResponse) String() string {
 func (*ListTabsResponse) ProtoMessage() {}
 
 func (x *ListTabsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[57]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[63]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3196,7 +3563,7 @@ func (x *ListTabsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTabsResponse.ProtoReflect.Descriptor instead.
 func (*ListTabsResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{57}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{63}
 }
 
 func (x *ListTabsResponse) GetTabs() []*v1.Tab {
@@ -3218,7 +3585,7 @@ type NewTabRequest struct {
 
 func (x *NewTabRequest) Reset() {
 	*x = NewTabRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[58]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[64]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3230,7 +3597,7 @@ func (x *NewTabRequest) String() string {
 func (*NewTabRequest) ProtoMessage() {}
 
 func (x *NewTabRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[58]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[64]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3243,7 +3610,7 @@ func (x *NewTabRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NewTabRequest.ProtoReflect.Descriptor instead.
 func (*NewTabRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{58}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{64}
 }
 
 func (x *NewTabRequest) GetBox() string {
@@ -3283,7 +3650,7 @@ type NewTabResponse struct {
 
 func (x *NewTabResponse) Reset() {
 	*x = NewTabResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[59]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[65]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3295,7 +3662,7 @@ func (x *NewTabResponse) String() string {
 func (*NewTabResponse) ProtoMessage() {}
 
 func (x *NewTabResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[59]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[65]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3308,7 +3675,7 @@ func (x *NewTabResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NewTabResponse.ProtoReflect.Descriptor instead.
 func (*NewTabResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{59}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{65}
 }
 
 func (x *NewTabResponse) GetTab() *v1.Tab {
@@ -3330,7 +3697,7 @@ type CloseTabRequest struct {
 
 func (x *CloseTabRequest) Reset() {
 	*x = CloseTabRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[60]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[66]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3342,7 +3709,7 @@ func (x *CloseTabRequest) String() string {
 func (*CloseTabRequest) ProtoMessage() {}
 
 func (x *CloseTabRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[60]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[66]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3355,7 +3722,7 @@ func (x *CloseTabRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CloseTabRequest.ProtoReflect.Descriptor instead.
 func (*CloseTabRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{60}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{66}
 }
 
 func (x *CloseTabRequest) GetBox() string {
@@ -3394,7 +3761,7 @@ type CloseTabResponse struct {
 
 func (x *CloseTabResponse) Reset() {
 	*x = CloseTabResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[61]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[67]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3406,7 +3773,7 @@ func (x *CloseTabResponse) String() string {
 func (*CloseTabResponse) ProtoMessage() {}
 
 func (x *CloseTabResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[61]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[67]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3419,7 +3786,7 @@ func (x *CloseTabResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CloseTabResponse.ProtoReflect.Descriptor instead.
 func (*CloseTabResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{61}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{67}
 }
 
 type RenameTabRequest struct {
@@ -3435,7 +3802,7 @@ type RenameTabRequest struct {
 
 func (x *RenameTabRequest) Reset() {
 	*x = RenameTabRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[62]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[68]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3447,7 +3814,7 @@ func (x *RenameTabRequest) String() string {
 func (*RenameTabRequest) ProtoMessage() {}
 
 func (x *RenameTabRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[62]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[68]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3460,7 +3827,7 @@ func (x *RenameTabRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RenameTabRequest.ProtoReflect.Descriptor instead.
 func (*RenameTabRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{62}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{68}
 }
 
 func (x *RenameTabRequest) GetBox() string {
@@ -3506,7 +3873,7 @@ type RenameTabResponse struct {
 
 func (x *RenameTabResponse) Reset() {
 	*x = RenameTabResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[63]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[69]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3518,7 +3885,7 @@ func (x *RenameTabResponse) String() string {
 func (*RenameTabResponse) ProtoMessage() {}
 
 func (x *RenameTabResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[63]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[69]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3531,7 +3898,7 @@ func (x *RenameTabResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RenameTabResponse.ProtoReflect.Descriptor instead.
 func (*RenameTabResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{63}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{69}
 }
 
 type SelectTabRequest struct {
@@ -3546,7 +3913,7 @@ type SelectTabRequest struct {
 
 func (x *SelectTabRequest) Reset() {
 	*x = SelectTabRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[64]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[70]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3558,7 +3925,7 @@ func (x *SelectTabRequest) String() string {
 func (*SelectTabRequest) ProtoMessage() {}
 
 func (x *SelectTabRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[64]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[70]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3571,7 +3938,7 @@ func (x *SelectTabRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SelectTabRequest.ProtoReflect.Descriptor instead.
 func (*SelectTabRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{64}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{70}
 }
 
 func (x *SelectTabRequest) GetBox() string {
@@ -3610,7 +3977,7 @@ type SelectTabResponse struct {
 
 func (x *SelectTabResponse) Reset() {
 	*x = SelectTabResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[65]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[71]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3622,7 +3989,7 @@ func (x *SelectTabResponse) String() string {
 func (*SelectTabResponse) ProtoMessage() {}
 
 func (x *SelectTabResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[65]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[71]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3635,7 +4002,7 @@ func (x *SelectTabResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SelectTabResponse.ProtoReflect.Descriptor instead.
 func (*SelectTabResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{65}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{71}
 }
 
 type WatchTabsRequest struct {
@@ -3649,7 +4016,7 @@ type WatchTabsRequest struct {
 
 func (x *WatchTabsRequest) Reset() {
 	*x = WatchTabsRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[66]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[72]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3661,7 +4028,7 @@ func (x *WatchTabsRequest) String() string {
 func (*WatchTabsRequest) ProtoMessage() {}
 
 func (x *WatchTabsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[66]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[72]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3674,7 +4041,7 @@ func (x *WatchTabsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchTabsRequest.ProtoReflect.Descriptor instead.
 func (*WatchTabsRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{66}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{72}
 }
 
 func (x *WatchTabsRequest) GetBox() string {
@@ -3707,7 +4074,7 @@ type WatchTabsResponse struct {
 
 func (x *WatchTabsResponse) Reset() {
 	*x = WatchTabsResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[67]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[73]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3719,7 +4086,7 @@ func (x *WatchTabsResponse) String() string {
 func (*WatchTabsResponse) ProtoMessage() {}
 
 func (x *WatchTabsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[67]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[73]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3732,7 +4099,7 @@ func (x *WatchTabsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchTabsResponse.ProtoReflect.Descriptor instead.
 func (*WatchTabsResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{67}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{73}
 }
 
 func (x *WatchTabsResponse) GetTabs() []*v1.Tab {
@@ -3775,7 +4142,7 @@ type CreateBoxRequest struct {
 
 func (x *CreateBoxRequest) Reset() {
 	*x = CreateBoxRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[68]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[74]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3787,7 +4154,7 @@ func (x *CreateBoxRequest) String() string {
 func (*CreateBoxRequest) ProtoMessage() {}
 
 func (x *CreateBoxRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[68]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[74]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3800,7 +4167,7 @@ func (x *CreateBoxRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateBoxRequest.ProtoReflect.Descriptor instead.
 func (*CreateBoxRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{68}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{74}
 }
 
 func (x *CreateBoxRequest) GetName() string {
@@ -3890,7 +4257,7 @@ type ProjectSource struct {
 
 func (x *ProjectSource) Reset() {
 	*x = ProjectSource{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[69]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[75]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3902,7 +4269,7 @@ func (x *ProjectSource) String() string {
 func (*ProjectSource) ProtoMessage() {}
 
 func (x *ProjectSource) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[69]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[75]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3915,7 +4282,7 @@ func (x *ProjectSource) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProjectSource.ProtoReflect.Descriptor instead.
 func (*ProjectSource) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{69}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{75}
 }
 
 func (x *ProjectSource) GetSource() isProjectSource_Source {
@@ -3979,7 +4346,7 @@ type WorkspaceSetup struct {
 
 func (x *WorkspaceSetup) Reset() {
 	*x = WorkspaceSetup{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[70]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[76]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3991,7 +4358,7 @@ func (x *WorkspaceSetup) String() string {
 func (*WorkspaceSetup) ProtoMessage() {}
 
 func (x *WorkspaceSetup) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[70]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[76]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4004,7 +4371,7 @@ func (x *WorkspaceSetup) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorkspaceSetup.ProtoReflect.Descriptor instead.
 func (*WorkspaceSetup) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{70}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{76}
 }
 
 func (x *WorkspaceSetup) GetProject() *ProjectSource {
@@ -4032,7 +4399,7 @@ type CreateBoxResponse struct {
 
 func (x *CreateBoxResponse) Reset() {
 	*x = CreateBoxResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[71]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[77]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4044,7 +4411,7 @@ func (x *CreateBoxResponse) String() string {
 func (*CreateBoxResponse) ProtoMessage() {}
 
 func (x *CreateBoxResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[71]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[77]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4057,7 +4424,7 @@ func (x *CreateBoxResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateBoxResponse.ProtoReflect.Descriptor instead.
 func (*CreateBoxResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{71}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{77}
 }
 
 func (x *CreateBoxResponse) GetBoxId() string {
@@ -4083,7 +4450,7 @@ type DiscardCreationRequest struct {
 
 func (x *DiscardCreationRequest) Reset() {
 	*x = DiscardCreationRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[72]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[78]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4095,7 +4462,7 @@ func (x *DiscardCreationRequest) String() string {
 func (*DiscardCreationRequest) ProtoMessage() {}
 
 func (x *DiscardCreationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[72]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[78]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4108,7 +4475,7 @@ func (x *DiscardCreationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DiscardCreationRequest.ProtoReflect.Descriptor instead.
 func (*DiscardCreationRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{72}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{78}
 }
 
 func (x *DiscardCreationRequest) GetBoxId() string {
@@ -4126,7 +4493,7 @@ type DiscardCreationResponse struct {
 
 func (x *DiscardCreationResponse) Reset() {
 	*x = DiscardCreationResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[73]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[79]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4138,7 +4505,7 @@ func (x *DiscardCreationResponse) String() string {
 func (*DiscardCreationResponse) ProtoMessage() {}
 
 func (x *DiscardCreationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[73]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[79]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4151,7 +4518,7 @@ func (x *DiscardCreationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DiscardCreationResponse.ProtoReflect.Descriptor instead.
 func (*DiscardCreationResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{73}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{79}
 }
 
 type RecoverBoxRequest struct {
@@ -4178,7 +4545,7 @@ type RecoverBoxRequest struct {
 
 func (x *RecoverBoxRequest) Reset() {
 	*x = RecoverBoxRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[74]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[80]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4190,7 +4557,7 @@ func (x *RecoverBoxRequest) String() string {
 func (*RecoverBoxRequest) ProtoMessage() {}
 
 func (x *RecoverBoxRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[74]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[80]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4203,7 +4570,7 @@ func (x *RecoverBoxRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RecoverBoxRequest.ProtoReflect.Descriptor instead.
 func (*RecoverBoxRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{74}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{80}
 }
 
 func (x *RecoverBoxRequest) GetName() string {
@@ -4273,7 +4640,7 @@ type RecoverBoxResponse struct {
 
 func (x *RecoverBoxResponse) Reset() {
 	*x = RecoverBoxResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[75]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[81]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4285,7 +4652,7 @@ func (x *RecoverBoxResponse) String() string {
 func (*RecoverBoxResponse) ProtoMessage() {}
 
 func (x *RecoverBoxResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[75]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[81]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4298,7 +4665,7 @@ func (x *RecoverBoxResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RecoverBoxResponse.ProtoReflect.Descriptor instead.
 func (*RecoverBoxResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{75}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{81}
 }
 
 func (x *RecoverBoxResponse) GetBoxId() string {
@@ -4327,7 +4694,7 @@ type CheckRecoveryKeyRequest struct {
 
 func (x *CheckRecoveryKeyRequest) Reset() {
 	*x = CheckRecoveryKeyRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[76]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[82]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4339,7 +4706,7 @@ func (x *CheckRecoveryKeyRequest) String() string {
 func (*CheckRecoveryKeyRequest) ProtoMessage() {}
 
 func (x *CheckRecoveryKeyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[76]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[82]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4352,7 +4719,7 @@ func (x *CheckRecoveryKeyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CheckRecoveryKeyRequest.ProtoReflect.Descriptor instead.
 func (*CheckRecoveryKeyRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{76}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{82}
 }
 
 func (x *CheckRecoveryKeyRequest) GetRecoveryPasswords() map[string][]byte {
@@ -4374,7 +4741,7 @@ type CheckRecoveryKeyResponse struct {
 
 func (x *CheckRecoveryKeyResponse) Reset() {
 	*x = CheckRecoveryKeyResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[77]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[83]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4386,7 +4753,7 @@ func (x *CheckRecoveryKeyResponse) String() string {
 func (*CheckRecoveryKeyResponse) ProtoMessage() {}
 
 func (x *CheckRecoveryKeyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[77]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[83]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4399,7 +4766,7 @@ func (x *CheckRecoveryKeyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CheckRecoveryKeyResponse.ProtoReflect.Descriptor instead.
 func (*CheckRecoveryKeyResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{77}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{83}
 }
 
 func (x *CheckRecoveryKeyResponse) GetChecked() int32 {
@@ -4429,7 +4796,7 @@ type GetPlacementRequest struct {
 
 func (x *GetPlacementRequest) Reset() {
 	*x = GetPlacementRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[78]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[84]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4441,7 +4808,7 @@ func (x *GetPlacementRequest) String() string {
 func (*GetPlacementRequest) ProtoMessage() {}
 
 func (x *GetPlacementRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[78]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[84]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4454,7 +4821,7 @@ func (x *GetPlacementRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetPlacementRequest.ProtoReflect.Descriptor instead.
 func (*GetPlacementRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{78}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{84}
 }
 
 func (x *GetPlacementRequest) GetName() string {
@@ -4489,7 +4856,7 @@ type GetPlacementResponse struct {
 
 func (x *GetPlacementResponse) Reset() {
 	*x = GetPlacementResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[79]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[85]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4501,7 +4868,7 @@ func (x *GetPlacementResponse) String() string {
 func (*GetPlacementResponse) ProtoMessage() {}
 
 func (x *GetPlacementResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[79]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[85]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4514,7 +4881,7 @@ func (x *GetPlacementResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetPlacementResponse.ProtoReflect.Descriptor instead.
 func (*GetPlacementResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{79}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{85}
 }
 
 func (x *GetPlacementResponse) GetHolder() Holder {
@@ -4573,7 +4940,7 @@ type TabTerminalRequest struct {
 
 func (x *TabTerminalRequest) Reset() {
 	*x = TabTerminalRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[80]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[86]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4585,7 +4952,7 @@ func (x *TabTerminalRequest) String() string {
 func (*TabTerminalRequest) ProtoMessage() {}
 
 func (x *TabTerminalRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[80]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[86]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4598,7 +4965,7 @@ func (x *TabTerminalRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TabTerminalRequest.ProtoReflect.Descriptor instead.
 func (*TabTerminalRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{80}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{86}
 }
 
 func (x *TabTerminalRequest) GetMsg() isTabTerminalRequest_Msg {
@@ -4674,7 +5041,7 @@ type TabTerminalOpen struct {
 
 func (x *TabTerminalOpen) Reset() {
 	*x = TabTerminalOpen{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[81]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[87]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4686,7 +5053,7 @@ func (x *TabTerminalOpen) String() string {
 func (*TabTerminalOpen) ProtoMessage() {}
 
 func (x *TabTerminalOpen) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[81]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[87]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4699,7 +5066,7 @@ func (x *TabTerminalOpen) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TabTerminalOpen.ProtoReflect.Descriptor instead.
 func (*TabTerminalOpen) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{81}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{87}
 }
 
 func (x *TabTerminalOpen) GetSession() string {
@@ -4746,7 +5113,7 @@ type TabTerminalResponse struct {
 
 func (x *TabTerminalResponse) Reset() {
 	*x = TabTerminalResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[82]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[88]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4758,7 +5125,7 @@ func (x *TabTerminalResponse) String() string {
 func (*TabTerminalResponse) ProtoMessage() {}
 
 func (x *TabTerminalResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[82]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[88]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4771,7 +5138,7 @@ func (x *TabTerminalResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TabTerminalResponse.ProtoReflect.Descriptor instead.
 func (*TabTerminalResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{82}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{88}
 }
 
 func (x *TabTerminalResponse) GetMsg() isTabTerminalResponse_Msg {
@@ -4884,7 +5251,7 @@ type TabTerminalReset struct {
 
 func (x *TabTerminalReset) Reset() {
 	*x = TabTerminalReset{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[83]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[89]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4896,7 +5263,7 @@ func (x *TabTerminalReset) String() string {
 func (*TabTerminalReset) ProtoMessage() {}
 
 func (x *TabTerminalReset) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[83]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[89]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4909,7 +5276,7 @@ func (x *TabTerminalReset) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TabTerminalReset.ProtoReflect.Descriptor instead.
 func (*TabTerminalReset) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{83}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{89}
 }
 
 func (x *TabTerminalReset) GetSize() *TerminalSize {
@@ -4963,7 +5330,7 @@ type CommandAuthor struct {
 
 func (x *CommandAuthor) Reset() {
 	*x = CommandAuthor{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[84]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[90]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4975,7 +5342,7 @@ func (x *CommandAuthor) String() string {
 func (*CommandAuthor) ProtoMessage() {}
 
 func (x *CommandAuthor) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[84]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[90]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4988,7 +5355,7 @@ func (x *CommandAuthor) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CommandAuthor.ProtoReflect.Descriptor instead.
 func (*CommandAuthor) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{84}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{90}
 }
 
 func (x *CommandAuthor) GetLine() uint64 {
@@ -5041,7 +5408,7 @@ type ServerInfo struct {
 
 func (x *ServerInfo) Reset() {
 	*x = ServerInfo{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[85]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[91]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5053,7 +5420,7 @@ func (x *ServerInfo) String() string {
 func (*ServerInfo) ProtoMessage() {}
 
 func (x *ServerInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[85]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[91]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5066,7 +5433,7 @@ func (x *ServerInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServerInfo.ProtoReflect.Descriptor instead.
 func (*ServerInfo) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{85}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{91}
 }
 
 func (x *ServerInfo) GetId() string {
@@ -5127,7 +5494,7 @@ type ScanServerKeyRequest struct {
 
 func (x *ScanServerKeyRequest) Reset() {
 	*x = ScanServerKeyRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[86]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[92]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5139,7 +5506,7 @@ func (x *ScanServerKeyRequest) String() string {
 func (*ScanServerKeyRequest) ProtoMessage() {}
 
 func (x *ScanServerKeyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[86]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[92]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5152,7 +5519,7 @@ func (x *ScanServerKeyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScanServerKeyRequest.ProtoReflect.Descriptor instead.
 func (*ScanServerKeyRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{86}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{92}
 }
 
 func (x *ScanServerKeyRequest) GetServerId() string {
@@ -5173,7 +5540,7 @@ type ScanServerKeyResponse struct {
 
 func (x *ScanServerKeyResponse) Reset() {
 	*x = ScanServerKeyResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[87]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[93]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5185,7 +5552,7 @@ func (x *ScanServerKeyResponse) String() string {
 func (*ScanServerKeyResponse) ProtoMessage() {}
 
 func (x *ScanServerKeyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[87]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[93]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5198,7 +5565,7 @@ func (x *ScanServerKeyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScanServerKeyResponse.ProtoReflect.Descriptor instead.
 func (*ScanServerKeyResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{87}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{93}
 }
 
 func (x *ScanServerKeyResponse) GetInfo() *ServerInfo {
@@ -5225,7 +5592,7 @@ type TrustServerKeyRequest struct {
 
 func (x *TrustServerKeyRequest) Reset() {
 	*x = TrustServerKeyRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[88]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[94]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5237,7 +5604,7 @@ func (x *TrustServerKeyRequest) String() string {
 func (*TrustServerKeyRequest) ProtoMessage() {}
 
 func (x *TrustServerKeyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[88]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[94]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5250,7 +5617,7 @@ func (x *TrustServerKeyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TrustServerKeyRequest.ProtoReflect.Descriptor instead.
 func (*TrustServerKeyRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{88}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{94}
 }
 
 func (x *TrustServerKeyRequest) GetServerId() string {
@@ -5276,7 +5643,7 @@ type TrustServerKeyResponse struct {
 
 func (x *TrustServerKeyResponse) Reset() {
 	*x = TrustServerKeyResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[89]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[95]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5288,7 +5655,7 @@ func (x *TrustServerKeyResponse) String() string {
 func (*TrustServerKeyResponse) ProtoMessage() {}
 
 func (x *TrustServerKeyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[89]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[95]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5301,7 +5668,7 @@ func (x *TrustServerKeyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TrustServerKeyResponse.ProtoReflect.Descriptor instead.
 func (*TrustServerKeyResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{89}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{95}
 }
 
 func (x *TrustServerKeyResponse) GetInfo() *ServerInfo {
@@ -5320,7 +5687,7 @@ type ForgetServerKeyRequest struct {
 
 func (x *ForgetServerKeyRequest) Reset() {
 	*x = ForgetServerKeyRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[90]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[96]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5332,7 +5699,7 @@ func (x *ForgetServerKeyRequest) String() string {
 func (*ForgetServerKeyRequest) ProtoMessage() {}
 
 func (x *ForgetServerKeyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[90]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[96]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5345,7 +5712,7 @@ func (x *ForgetServerKeyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ForgetServerKeyRequest.ProtoReflect.Descriptor instead.
 func (*ForgetServerKeyRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{90}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{96}
 }
 
 func (x *ForgetServerKeyRequest) GetServerId() string {
@@ -5364,7 +5731,7 @@ type ForgetServerKeyResponse struct {
 
 func (x *ForgetServerKeyResponse) Reset() {
 	*x = ForgetServerKeyResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[91]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[97]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5376,7 +5743,7 @@ func (x *ForgetServerKeyResponse) String() string {
 func (*ForgetServerKeyResponse) ProtoMessage() {}
 
 func (x *ForgetServerKeyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[91]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[97]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5389,7 +5756,7 @@ func (x *ForgetServerKeyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ForgetServerKeyResponse.ProtoReflect.Descriptor instead.
 func (*ForgetServerKeyResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{91}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{97}
 }
 
 func (x *ForgetServerKeyResponse) GetInfo() *ServerInfo {
@@ -5410,7 +5777,7 @@ type ProvideServerKeyRequest struct {
 
 func (x *ProvideServerKeyRequest) Reset() {
 	*x = ProvideServerKeyRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[92]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[98]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5422,7 +5789,7 @@ func (x *ProvideServerKeyRequest) String() string {
 func (*ProvideServerKeyRequest) ProtoMessage() {}
 
 func (x *ProvideServerKeyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[92]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[98]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5435,7 +5802,7 @@ func (x *ProvideServerKeyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProvideServerKeyRequest.ProtoReflect.Descriptor instead.
 func (*ProvideServerKeyRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{92}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{98}
 }
 
 func (x *ProvideServerKeyRequest) GetServerId() string {
@@ -5460,7 +5827,7 @@ type ProvideServerKeyResponse struct {
 
 func (x *ProvideServerKeyResponse) Reset() {
 	*x = ProvideServerKeyResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[93]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[99]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5472,7 +5839,7 @@ func (x *ProvideServerKeyResponse) String() string {
 func (*ProvideServerKeyResponse) ProtoMessage() {}
 
 func (x *ProvideServerKeyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[93]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[99]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5485,7 +5852,7 @@ func (x *ProvideServerKeyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProvideServerKeyResponse.ProtoReflect.Descriptor instead.
 func (*ProvideServerKeyResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{93}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{99}
 }
 
 type CheckServerRequest struct {
@@ -5497,7 +5864,7 @@ type CheckServerRequest struct {
 
 func (x *CheckServerRequest) Reset() {
 	*x = CheckServerRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[94]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[100]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5509,7 +5876,7 @@ func (x *CheckServerRequest) String() string {
 func (*CheckServerRequest) ProtoMessage() {}
 
 func (x *CheckServerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[94]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[100]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5522,7 +5889,7 @@ func (x *CheckServerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CheckServerRequest.ProtoReflect.Descriptor instead.
 func (*CheckServerRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{94}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{100}
 }
 
 func (x *CheckServerRequest) GetServerId() string {
@@ -5547,7 +5914,7 @@ type CheckLine struct {
 
 func (x *CheckLine) Reset() {
 	*x = CheckLine{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[95]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[101]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5559,7 +5926,7 @@ func (x *CheckLine) String() string {
 func (*CheckLine) ProtoMessage() {}
 
 func (x *CheckLine) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[95]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[101]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5572,7 +5939,7 @@ func (x *CheckLine) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CheckLine.ProtoReflect.Descriptor instead.
 func (*CheckLine) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{95}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{101}
 }
 
 func (x *CheckLine) GetId() string {
@@ -5621,7 +5988,7 @@ type CheckServerResponse struct {
 
 func (x *CheckServerResponse) Reset() {
 	*x = CheckServerResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[96]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[102]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5633,7 +6000,7 @@ func (x *CheckServerResponse) String() string {
 func (*CheckServerResponse) ProtoMessage() {}
 
 func (x *CheckServerResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[96]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[102]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5646,7 +6013,7 @@ func (x *CheckServerResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CheckServerResponse.ProtoReflect.Descriptor instead.
 func (*CheckServerResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{96}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{102}
 }
 
 func (x *CheckServerResponse) GetLines() []*CheckLine {
@@ -5671,7 +6038,7 @@ type GetEngineRequest struct {
 
 func (x *GetEngineRequest) Reset() {
 	*x = GetEngineRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[97]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[103]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5683,7 +6050,7 @@ func (x *GetEngineRequest) String() string {
 func (*GetEngineRequest) ProtoMessage() {}
 
 func (x *GetEngineRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[97]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[103]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5696,7 +6063,7 @@ func (x *GetEngineRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetEngineRequest.ProtoReflect.Descriptor instead.
 func (*GetEngineRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{97}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{103}
 }
 
 type GetEngineResponse struct {
@@ -5709,7 +6076,7 @@ type GetEngineResponse struct {
 
 func (x *GetEngineResponse) Reset() {
 	*x = GetEngineResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[98]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[104]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5721,7 +6088,7 @@ func (x *GetEngineResponse) String() string {
 func (*GetEngineResponse) ProtoMessage() {}
 
 func (x *GetEngineResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[98]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[104]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5734,7 +6101,7 @@ func (x *GetEngineResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetEngineResponse.ProtoReflect.Descriptor instead.
 func (*GetEngineResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{98}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{104}
 }
 
 func (x *GetEngineResponse) GetRunning() bool {
@@ -5756,7 +6123,7 @@ type ImagePull struct {
 
 func (x *ImagePull) Reset() {
 	*x = ImagePull{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[99]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[105]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5768,7 +6135,7 @@ func (x *ImagePull) String() string {
 func (*ImagePull) ProtoMessage() {}
 
 func (x *ImagePull) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[99]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[105]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5781,7 +6148,7 @@ func (x *ImagePull) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImagePull.ProtoReflect.Descriptor instead.
 func (*ImagePull) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{99}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{105}
 }
 
 func (x *ImagePull) GetDoneBytes() int64 {
@@ -5808,7 +6175,7 @@ type ListAgentsRequest struct {
 
 func (x *ListAgentsRequest) Reset() {
 	*x = ListAgentsRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[100]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[106]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5820,7 +6187,7 @@ func (x *ListAgentsRequest) String() string {
 func (*ListAgentsRequest) ProtoMessage() {}
 
 func (x *ListAgentsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[100]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[106]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5833,7 +6200,7 @@ func (x *ListAgentsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAgentsRequest.ProtoReflect.Descriptor instead.
 func (*ListAgentsRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{100}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{106}
 }
 
 func (x *ListAgentsRequest) GetName() string {
@@ -5854,7 +6221,7 @@ type ListAgentsResponse struct {
 
 func (x *ListAgentsResponse) Reset() {
 	*x = ListAgentsResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[101]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[107]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5866,7 +6233,7 @@ func (x *ListAgentsResponse) String() string {
 func (*ListAgentsResponse) ProtoMessage() {}
 
 func (x *ListAgentsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[101]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[107]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5879,7 +6246,7 @@ func (x *ListAgentsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAgentsResponse.ProtoReflect.Descriptor instead.
 func (*ListAgentsResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{101}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{107}
 }
 
 func (x *ListAgentsResponse) GetAgents() []*AgentInfo {
@@ -5916,7 +6283,7 @@ type TeamLimit struct {
 
 func (x *TeamLimit) Reset() {
 	*x = TeamLimit{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[102]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[108]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5928,7 +6295,7 @@ func (x *TeamLimit) String() string {
 func (*TeamLimit) ProtoMessage() {}
 
 func (x *TeamLimit) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[102]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[108]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5941,7 +6308,7 @@ func (x *TeamLimit) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TeamLimit.ProtoReflect.Descriptor instead.
 func (*TeamLimit) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{102}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{108}
 }
 
 func (x *TeamLimit) GetAgentsAllowed() int32 {
@@ -5987,7 +6354,7 @@ type ListTeamTemplatesRequest struct {
 
 func (x *ListTeamTemplatesRequest) Reset() {
 	*x = ListTeamTemplatesRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[103]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[109]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5999,7 +6366,7 @@ func (x *ListTeamTemplatesRequest) String() string {
 func (*ListTeamTemplatesRequest) ProtoMessage() {}
 
 func (x *ListTeamTemplatesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[103]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[109]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6012,7 +6379,7 @@ func (x *ListTeamTemplatesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTeamTemplatesRequest.ProtoReflect.Descriptor instead.
 func (*ListTeamTemplatesRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{103}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{109}
 }
 
 type ListTeamTemplatesResponse struct {
@@ -6024,7 +6391,7 @@ type ListTeamTemplatesResponse struct {
 
 func (x *ListTeamTemplatesResponse) Reset() {
 	*x = ListTeamTemplatesResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[104]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[110]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6036,7 +6403,7 @@ func (x *ListTeamTemplatesResponse) String() string {
 func (*ListTeamTemplatesResponse) ProtoMessage() {}
 
 func (x *ListTeamTemplatesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[104]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[110]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6049,7 +6416,7 @@ func (x *ListTeamTemplatesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTeamTemplatesResponse.ProtoReflect.Descriptor instead.
 func (*ListTeamTemplatesResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{104}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{110}
 }
 
 func (x *ListTeamTemplatesResponse) GetTemplates() []*TeamTemplate {
@@ -6074,7 +6441,7 @@ type TeamTemplate struct {
 
 func (x *TeamTemplate) Reset() {
 	*x = TeamTemplate{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[105]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[111]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6086,7 +6453,7 @@ func (x *TeamTemplate) String() string {
 func (*TeamTemplate) ProtoMessage() {}
 
 func (x *TeamTemplate) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[105]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[111]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6099,7 +6466,7 @@ func (x *TeamTemplate) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TeamTemplate.ProtoReflect.Descriptor instead.
 func (*TeamTemplate) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{105}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{111}
 }
 
 func (x *TeamTemplate) GetId() string {
@@ -6142,7 +6509,7 @@ type TeamPlanChoice struct {
 
 func (x *TeamPlanChoice) Reset() {
 	*x = TeamPlanChoice{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[106]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[112]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6154,7 +6521,7 @@ func (x *TeamPlanChoice) String() string {
 func (*TeamPlanChoice) ProtoMessage() {}
 
 func (x *TeamPlanChoice) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[106]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[112]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6167,7 +6534,7 @@ func (x *TeamPlanChoice) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TeamPlanChoice.ProtoReflect.Descriptor instead.
 func (*TeamPlanChoice) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{106}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{112}
 }
 
 func (x *TeamPlanChoice) GetTemplate() string {
@@ -6202,7 +6569,7 @@ type TeamAgentChoice struct {
 
 func (x *TeamAgentChoice) Reset() {
 	*x = TeamAgentChoice{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[107]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[113]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6214,7 +6581,7 @@ func (x *TeamAgentChoice) String() string {
 func (*TeamAgentChoice) ProtoMessage() {}
 
 func (x *TeamAgentChoice) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[107]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[113]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6227,7 +6594,7 @@ func (x *TeamAgentChoice) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TeamAgentChoice.ProtoReflect.Descriptor instead.
 func (*TeamAgentChoice) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{107}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{113}
 }
 
 func (x *TeamAgentChoice) GetId() string {
@@ -6281,7 +6648,7 @@ type PlanTeamRequest struct {
 
 func (x *PlanTeamRequest) Reset() {
 	*x = PlanTeamRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[108]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[114]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6293,7 +6660,7 @@ func (x *PlanTeamRequest) String() string {
 func (*PlanTeamRequest) ProtoMessage() {}
 
 func (x *PlanTeamRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[108]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[114]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6306,7 +6673,7 @@ func (x *PlanTeamRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PlanTeamRequest.ProtoReflect.Descriptor instead.
 func (*PlanTeamRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{108}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{114}
 }
 
 func (x *PlanTeamRequest) GetChoice() *TeamPlanChoice {
@@ -6330,7 +6697,7 @@ type PlanTeamResponse struct {
 
 func (x *PlanTeamResponse) Reset() {
 	*x = PlanTeamResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[109]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[115]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6342,7 +6709,7 @@ func (x *PlanTeamResponse) String() string {
 func (*PlanTeamResponse) ProtoMessage() {}
 
 func (x *PlanTeamResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[109]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[115]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6355,7 +6722,7 @@ func (x *PlanTeamResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PlanTeamResponse.ProtoReflect.Descriptor instead.
 func (*PlanTeamResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{109}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{115}
 }
 
 func (x *PlanTeamResponse) GetAgents() []*PlannedAgent {
@@ -6426,7 +6793,7 @@ type PlannedAgent struct {
 
 func (x *PlannedAgent) Reset() {
 	*x = PlannedAgent{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[110]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[116]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6438,7 +6805,7 @@ func (x *PlannedAgent) String() string {
 func (*PlannedAgent) ProtoMessage() {}
 
 func (x *PlannedAgent) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[110]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[116]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6451,7 +6818,7 @@ func (x *PlannedAgent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PlannedAgent.ProtoReflect.Descriptor instead.
 func (*PlannedAgent) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{110}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{116}
 }
 
 func (x *PlannedAgent) GetId() string {
@@ -6622,7 +6989,7 @@ type ApplyTeamPlanRequest struct {
 
 func (x *ApplyTeamPlanRequest) Reset() {
 	*x = ApplyTeamPlanRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[111]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[117]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6634,7 +7001,7 @@ func (x *ApplyTeamPlanRequest) String() string {
 func (*ApplyTeamPlanRequest) ProtoMessage() {}
 
 func (x *ApplyTeamPlanRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[111]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[117]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6647,7 +7014,7 @@ func (x *ApplyTeamPlanRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApplyTeamPlanRequest.ProtoReflect.Descriptor instead.
 func (*ApplyTeamPlanRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{111}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{117}
 }
 
 func (x *ApplyTeamPlanRequest) GetName() string {
@@ -6688,7 +7055,7 @@ type ApplyTeamPlanResponse struct {
 
 func (x *ApplyTeamPlanResponse) Reset() {
 	*x = ApplyTeamPlanResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[112]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[118]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6700,7 +7067,7 @@ func (x *ApplyTeamPlanResponse) String() string {
 func (*ApplyTeamPlanResponse) ProtoMessage() {}
 
 func (x *ApplyTeamPlanResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[112]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[118]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6713,7 +7080,7 @@ func (x *ApplyTeamPlanResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApplyTeamPlanResponse.ProtoReflect.Descriptor instead.
 func (*ApplyTeamPlanResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{112}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{118}
 }
 
 func (x *ApplyTeamPlanResponse) GetApplied() bool {
@@ -6766,7 +7133,7 @@ type GetTeamSettingsRequest struct {
 
 func (x *GetTeamSettingsRequest) Reset() {
 	*x = GetTeamSettingsRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[113]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[119]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6778,7 +7145,7 @@ func (x *GetTeamSettingsRequest) String() string {
 func (*GetTeamSettingsRequest) ProtoMessage() {}
 
 func (x *GetTeamSettingsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[113]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[119]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6791,7 +7158,7 @@ func (x *GetTeamSettingsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTeamSettingsRequest.ProtoReflect.Descriptor instead.
 func (*GetTeamSettingsRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{113}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{119}
 }
 
 type GetTeamSettingsResponse struct {
@@ -6806,7 +7173,7 @@ type GetTeamSettingsResponse struct {
 
 func (x *GetTeamSettingsResponse) Reset() {
 	*x = GetTeamSettingsResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[114]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[120]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6818,7 +7185,7 @@ func (x *GetTeamSettingsResponse) String() string {
 func (*GetTeamSettingsResponse) ProtoMessage() {}
 
 func (x *GetTeamSettingsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[114]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[120]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6831,7 +7198,7 @@ func (x *GetTeamSettingsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTeamSettingsResponse.ProtoReflect.Descriptor instead.
 func (*GetTeamSettingsResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{114}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{120}
 }
 
 func (x *GetTeamSettingsResponse) GetAgentsAllowed() int32 {
@@ -6865,7 +7232,7 @@ type SetAgentsAllowedRequest struct {
 
 func (x *SetAgentsAllowedRequest) Reset() {
 	*x = SetAgentsAllowedRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[115]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[121]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6877,7 +7244,7 @@ func (x *SetAgentsAllowedRequest) String() string {
 func (*SetAgentsAllowedRequest) ProtoMessage() {}
 
 func (x *SetAgentsAllowedRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[115]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[121]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6890,7 +7257,7 @@ func (x *SetAgentsAllowedRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetAgentsAllowedRequest.ProtoReflect.Descriptor instead.
 func (*SetAgentsAllowedRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{115}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{121}
 }
 
 func (x *SetAgentsAllowedRequest) GetAgentsAllowed() int32 {
@@ -6909,7 +7276,7 @@ type SetAgentsAllowedResponse struct {
 
 func (x *SetAgentsAllowedResponse) Reset() {
 	*x = SetAgentsAllowedResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[116]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[122]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6921,7 +7288,7 @@ func (x *SetAgentsAllowedResponse) String() string {
 func (*SetAgentsAllowedResponse) ProtoMessage() {}
 
 func (x *SetAgentsAllowedResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[116]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[122]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6934,7 +7301,7 @@ func (x *SetAgentsAllowedResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetAgentsAllowedResponse.ProtoReflect.Descriptor instead.
 func (*SetAgentsAllowedResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{116}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{122}
 }
 
 func (x *SetAgentsAllowedResponse) GetSettings() *GetTeamSettingsResponse {
@@ -6990,7 +7357,7 @@ type AgentInfo struct {
 
 func (x *AgentInfo) Reset() {
 	*x = AgentInfo{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[117]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[123]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7002,7 +7369,7 @@ func (x *AgentInfo) String() string {
 func (*AgentInfo) ProtoMessage() {}
 
 func (x *AgentInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[117]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[123]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7015,7 +7382,7 @@ func (x *AgentInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentInfo.ProtoReflect.Descriptor instead.
 func (*AgentInfo) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{117}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{123}
 }
 
 func (x *AgentInfo) GetId() string {
@@ -7176,7 +7543,7 @@ type WatchTeamRequest struct {
 
 func (x *WatchTeamRequest) Reset() {
 	*x = WatchTeamRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[118]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[124]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7188,7 +7555,7 @@ func (x *WatchTeamRequest) String() string {
 func (*WatchTeamRequest) ProtoMessage() {}
 
 func (x *WatchTeamRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[118]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[124]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7201,7 +7568,7 @@ func (x *WatchTeamRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchTeamRequest.ProtoReflect.Descriptor instead.
 func (*WatchTeamRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{118}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{124}
 }
 
 func (x *WatchTeamRequest) GetName() string {
@@ -7235,7 +7602,7 @@ type WatchTeamResponse struct {
 
 func (x *WatchTeamResponse) Reset() {
 	*x = WatchTeamResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[119]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[125]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7247,7 +7614,7 @@ func (x *WatchTeamResponse) String() string {
 func (*WatchTeamResponse) ProtoMessage() {}
 
 func (x *WatchTeamResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[119]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[125]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7260,7 +7627,7 @@ func (x *WatchTeamResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchTeamResponse.ProtoReflect.Descriptor instead.
 func (*WatchTeamResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{119}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{125}
 }
 
 func (x *WatchTeamResponse) GetEvent() isWatchTeamResponse_Event {
@@ -7368,7 +7735,7 @@ type FetchAgentBranchRequest struct {
 
 func (x *FetchAgentBranchRequest) Reset() {
 	*x = FetchAgentBranchRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[120]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[126]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7380,7 +7747,7 @@ func (x *FetchAgentBranchRequest) String() string {
 func (*FetchAgentBranchRequest) ProtoMessage() {}
 
 func (x *FetchAgentBranchRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[120]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[126]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7393,7 +7760,7 @@ func (x *FetchAgentBranchRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FetchAgentBranchRequest.ProtoReflect.Descriptor instead.
 func (*FetchAgentBranchRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{120}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{126}
 }
 
 func (x *FetchAgentBranchRequest) GetName() string {
@@ -7421,7 +7788,7 @@ type FetchAgentBranchResponse struct {
 
 func (x *FetchAgentBranchResponse) Reset() {
 	*x = FetchAgentBranchResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[121]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[127]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7433,7 +7800,7 @@ func (x *FetchAgentBranchResponse) String() string {
 func (*FetchAgentBranchResponse) ProtoMessage() {}
 
 func (x *FetchAgentBranchResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[121]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[127]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7446,7 +7813,7 @@ func (x *FetchAgentBranchResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FetchAgentBranchResponse.ProtoReflect.Descriptor instead.
 func (*FetchAgentBranchResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{121}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{127}
 }
 
 func (x *FetchAgentBranchResponse) GetRef() string {
@@ -7473,7 +7840,7 @@ type StartAgentRequest struct {
 
 func (x *StartAgentRequest) Reset() {
 	*x = StartAgentRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[122]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[128]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7485,7 +7852,7 @@ func (x *StartAgentRequest) String() string {
 func (*StartAgentRequest) ProtoMessage() {}
 
 func (x *StartAgentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[122]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[128]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7498,7 +7865,7 @@ func (x *StartAgentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartAgentRequest.ProtoReflect.Descriptor instead.
 func (*StartAgentRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{122}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{128}
 }
 
 func (x *StartAgentRequest) GetName() string {
@@ -7524,7 +7891,7 @@ type StartAgentResponse struct {
 
 func (x *StartAgentResponse) Reset() {
 	*x = StartAgentResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[123]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[129]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7536,7 +7903,7 @@ func (x *StartAgentResponse) String() string {
 func (*StartAgentResponse) ProtoMessage() {}
 
 func (x *StartAgentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[123]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[129]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7549,7 +7916,7 @@ func (x *StartAgentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartAgentResponse.ProtoReflect.Descriptor instead.
 func (*StartAgentResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{123}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{129}
 }
 
 func (x *StartAgentResponse) GetAgent() *AgentInfo {
@@ -7569,7 +7936,7 @@ type StopAgentRequest struct {
 
 func (x *StopAgentRequest) Reset() {
 	*x = StopAgentRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[124]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[130]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7581,7 +7948,7 @@ func (x *StopAgentRequest) String() string {
 func (*StopAgentRequest) ProtoMessage() {}
 
 func (x *StopAgentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[124]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[130]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7594,7 +7961,7 @@ func (x *StopAgentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StopAgentRequest.ProtoReflect.Descriptor instead.
 func (*StopAgentRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{124}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{130}
 }
 
 func (x *StopAgentRequest) GetName() string {
@@ -7620,7 +7987,7 @@ type StopAgentResponse struct {
 
 func (x *StopAgentResponse) Reset() {
 	*x = StopAgentResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[125]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[131]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7632,7 +7999,7 @@ func (x *StopAgentResponse) String() string {
 func (*StopAgentResponse) ProtoMessage() {}
 
 func (x *StopAgentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[125]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[131]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7645,7 +8012,7 @@ func (x *StopAgentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StopAgentResponse.ProtoReflect.Descriptor instead.
 func (*StopAgentResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{125}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{131}
 }
 
 func (x *StopAgentResponse) GetAgent() *AgentInfo {
@@ -7676,7 +8043,7 @@ type AnswerDecisionRequest struct {
 
 func (x *AnswerDecisionRequest) Reset() {
 	*x = AnswerDecisionRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[126]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[132]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7688,7 +8055,7 @@ func (x *AnswerDecisionRequest) String() string {
 func (*AnswerDecisionRequest) ProtoMessage() {}
 
 func (x *AnswerDecisionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[126]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[132]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7701,7 +8068,7 @@ func (x *AnswerDecisionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AnswerDecisionRequest.ProtoReflect.Descriptor instead.
 func (*AnswerDecisionRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{126}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{132}
 }
 
 func (x *AnswerDecisionRequest) GetName() string {
@@ -7762,7 +8129,7 @@ type AnswerDecisionResponse struct {
 
 func (x *AnswerDecisionResponse) Reset() {
 	*x = AnswerDecisionResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[127]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[133]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7774,7 +8141,7 @@ func (x *AnswerDecisionResponse) String() string {
 func (*AnswerDecisionResponse) ProtoMessage() {}
 
 func (x *AnswerDecisionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[127]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[133]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7787,7 +8154,7 @@ func (x *AnswerDecisionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AnswerDecisionResponse.ProtoReflect.Descriptor instead.
 func (*AnswerDecisionResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{127}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{133}
 }
 
 func (x *AnswerDecisionResponse) GetDecision() *v1.Decision {
@@ -7807,7 +8174,7 @@ type GetAgentFileRequest struct {
 
 func (x *GetAgentFileRequest) Reset() {
 	*x = GetAgentFileRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[128]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[134]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7819,7 +8186,7 @@ func (x *GetAgentFileRequest) String() string {
 func (*GetAgentFileRequest) ProtoMessage() {}
 
 func (x *GetAgentFileRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[128]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[134]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7832,7 +8199,7 @@ func (x *GetAgentFileRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetAgentFileRequest.ProtoReflect.Descriptor instead.
 func (*GetAgentFileRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{128}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{134}
 }
 
 func (x *GetAgentFileRequest) GetName() string {
@@ -7863,7 +8230,7 @@ type GetAgentFileResponse struct {
 
 func (x *GetAgentFileResponse) Reset() {
 	*x = GetAgentFileResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[129]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[135]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7875,7 +8242,7 @@ func (x *GetAgentFileResponse) String() string {
 func (*GetAgentFileResponse) ProtoMessage() {}
 
 func (x *GetAgentFileResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[129]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[135]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7888,7 +8255,7 @@ func (x *GetAgentFileResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetAgentFileResponse.ProtoReflect.Descriptor instead.
 func (*GetAgentFileResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{129}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{135}
 }
 
 func (x *GetAgentFileResponse) GetContent() string {
@@ -7931,7 +8298,7 @@ type ApproveAgentFileRequest struct {
 
 func (x *ApproveAgentFileRequest) Reset() {
 	*x = ApproveAgentFileRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[130]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[136]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7943,7 +8310,7 @@ func (x *ApproveAgentFileRequest) String() string {
 func (*ApproveAgentFileRequest) ProtoMessage() {}
 
 func (x *ApproveAgentFileRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[130]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[136]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7956,7 +8323,7 @@ func (x *ApproveAgentFileRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApproveAgentFileRequest.ProtoReflect.Descriptor instead.
 func (*ApproveAgentFileRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{130}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{136}
 }
 
 func (x *ApproveAgentFileRequest) GetName() string {
@@ -7989,7 +8356,7 @@ type ApproveAgentFileResponse struct {
 
 func (x *ApproveAgentFileResponse) Reset() {
 	*x = ApproveAgentFileResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[131]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[137]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8001,7 +8368,7 @@ func (x *ApproveAgentFileResponse) String() string {
 func (*ApproveAgentFileResponse) ProtoMessage() {}
 
 func (x *ApproveAgentFileResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[131]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[137]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8014,7 +8381,7 @@ func (x *ApproveAgentFileResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApproveAgentFileResponse.ProtoReflect.Descriptor instead.
 func (*ApproveAgentFileResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{131}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{137}
 }
 
 func (x *ApproveAgentFileResponse) GetAgent() *AgentInfo {
@@ -8039,7 +8406,7 @@ type SendMessageRequest struct {
 
 func (x *SendMessageRequest) Reset() {
 	*x = SendMessageRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[132]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[138]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8051,7 +8418,7 @@ func (x *SendMessageRequest) String() string {
 func (*SendMessageRequest) ProtoMessage() {}
 
 func (x *SendMessageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[132]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[138]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8064,7 +8431,7 @@ func (x *SendMessageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendMessageRequest.ProtoReflect.Descriptor instead.
 func (*SendMessageRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{132}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{138}
 }
 
 func (x *SendMessageRequest) GetName() string {
@@ -8111,7 +8478,7 @@ type SendMessageResponse struct {
 
 func (x *SendMessageResponse) Reset() {
 	*x = SendMessageResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[133]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[139]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8123,7 +8490,7 @@ func (x *SendMessageResponse) String() string {
 func (*SendMessageResponse) ProtoMessage() {}
 
 func (x *SendMessageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[133]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[139]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8136,7 +8503,7 @@ func (x *SendMessageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendMessageResponse.ProtoReflect.Descriptor instead.
 func (*SendMessageResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{133}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{139}
 }
 
 func (x *SendMessageResponse) GetMessage() *v1.BoardMessage {
@@ -8156,7 +8523,7 @@ type RemoveAgentRequest struct {
 
 func (x *RemoveAgentRequest) Reset() {
 	*x = RemoveAgentRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[134]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[140]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8168,7 +8535,7 @@ func (x *RemoveAgentRequest) String() string {
 func (*RemoveAgentRequest) ProtoMessage() {}
 
 func (x *RemoveAgentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[134]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[140]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8181,7 +8548,7 @@ func (x *RemoveAgentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveAgentRequest.ProtoReflect.Descriptor instead.
 func (*RemoveAgentRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{134}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{140}
 }
 
 func (x *RemoveAgentRequest) GetName() string {
@@ -8208,7 +8575,7 @@ type RemoveAgentResponse struct {
 
 func (x *RemoveAgentResponse) Reset() {
 	*x = RemoveAgentResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[135]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[141]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8220,7 +8587,7 @@ func (x *RemoveAgentResponse) String() string {
 func (*RemoveAgentResponse) ProtoMessage() {}
 
 func (x *RemoveAgentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[135]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[141]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8233,7 +8600,7 @@ func (x *RemoveAgentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveAgentResponse.ProtoReflect.Descriptor instead.
 func (*RemoveAgentResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{135}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{141}
 }
 
 func (x *RemoveAgentResponse) GetDeleteFiles() *v1.Decision {
@@ -8255,7 +8622,7 @@ type ListAgentFilesRequest struct {
 
 func (x *ListAgentFilesRequest) Reset() {
 	*x = ListAgentFilesRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[136]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[142]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8267,7 +8634,7 @@ func (x *ListAgentFilesRequest) String() string {
 func (*ListAgentFilesRequest) ProtoMessage() {}
 
 func (x *ListAgentFilesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[136]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[142]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8280,7 +8647,7 @@ func (x *ListAgentFilesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAgentFilesRequest.ProtoReflect.Descriptor instead.
 func (*ListAgentFilesRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{136}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{142}
 }
 
 func (x *ListAgentFilesRequest) GetName() string {
@@ -8315,7 +8682,7 @@ type ListAgentFilesResponse struct {
 
 func (x *ListAgentFilesResponse) Reset() {
 	*x = ListAgentFilesResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[137]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[143]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8327,7 +8694,7 @@ func (x *ListAgentFilesResponse) String() string {
 func (*ListAgentFilesResponse) ProtoMessage() {}
 
 func (x *ListAgentFilesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[137]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[143]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8340,7 +8707,7 @@ func (x *ListAgentFilesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAgentFilesResponse.ProtoReflect.Descriptor instead.
 func (*ListAgentFilesResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{137}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{143}
 }
 
 func (x *ListAgentFilesResponse) GetFiles() []*v1.AgentFile {
@@ -8375,7 +8742,7 @@ type ReadAgentFileRequest struct {
 
 func (x *ReadAgentFileRequest) Reset() {
 	*x = ReadAgentFileRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[138]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[144]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8387,7 +8754,7 @@ func (x *ReadAgentFileRequest) String() string {
 func (*ReadAgentFileRequest) ProtoMessage() {}
 
 func (x *ReadAgentFileRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[138]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[144]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8400,7 +8767,7 @@ func (x *ReadAgentFileRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReadAgentFileRequest.ProtoReflect.Descriptor instead.
 func (*ReadAgentFileRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{138}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{144}
 }
 
 func (x *ReadAgentFileRequest) GetName() string {
@@ -8434,7 +8801,7 @@ type ReadAgentFileResponse struct {
 
 func (x *ReadAgentFileResponse) Reset() {
 	*x = ReadAgentFileResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[139]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[145]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8446,7 +8813,7 @@ func (x *ReadAgentFileResponse) String() string {
 func (*ReadAgentFileResponse) ProtoMessage() {}
 
 func (x *ReadAgentFileResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[139]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[145]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8459,7 +8826,7 @@ func (x *ReadAgentFileResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReadAgentFileResponse.ProtoReflect.Descriptor instead.
 func (*ReadAgentFileResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{139}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{145}
 }
 
 func (x *ReadAgentFileResponse) GetData() []byte {
@@ -8485,7 +8852,7 @@ type AddAgentFilesRequest struct {
 
 func (x *AddAgentFilesRequest) Reset() {
 	*x = AddAgentFilesRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[140]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[146]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8497,7 +8864,7 @@ func (x *AddAgentFilesRequest) String() string {
 func (*AddAgentFilesRequest) ProtoMessage() {}
 
 func (x *AddAgentFilesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[140]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[146]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8510,7 +8877,7 @@ func (x *AddAgentFilesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddAgentFilesRequest.ProtoReflect.Descriptor instead.
 func (*AddAgentFilesRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{140}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{146}
 }
 
 func (x *AddAgentFilesRequest) GetName() string {
@@ -8557,7 +8924,7 @@ type AddAgentFilesResponse struct {
 
 func (x *AddAgentFilesResponse) Reset() {
 	*x = AddAgentFilesResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[141]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[147]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8569,7 +8936,7 @@ func (x *AddAgentFilesResponse) String() string {
 func (*AddAgentFilesResponse) ProtoMessage() {}
 
 func (x *AddAgentFilesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[141]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[147]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8582,7 +8949,7 @@ func (x *AddAgentFilesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddAgentFilesResponse.ProtoReflect.Descriptor instead.
 func (*AddAgentFilesResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{141}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{147}
 }
 
 func (x *AddAgentFilesResponse) GetAdded() []*v1.AgentFile {
@@ -8605,7 +8972,7 @@ type SetRoutinePausedRequest struct {
 
 func (x *SetRoutinePausedRequest) Reset() {
 	*x = SetRoutinePausedRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[142]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[148]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8617,7 +8984,7 @@ func (x *SetRoutinePausedRequest) String() string {
 func (*SetRoutinePausedRequest) ProtoMessage() {}
 
 func (x *SetRoutinePausedRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[142]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[148]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8630,7 +8997,7 @@ func (x *SetRoutinePausedRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetRoutinePausedRequest.ProtoReflect.Descriptor instead.
 func (*SetRoutinePausedRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{142}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{148}
 }
 
 func (x *SetRoutinePausedRequest) GetName() string {
@@ -8670,7 +9037,7 @@ type SetRoutinePausedResponse struct {
 
 func (x *SetRoutinePausedResponse) Reset() {
 	*x = SetRoutinePausedResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[143]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[149]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8682,7 +9049,7 @@ func (x *SetRoutinePausedResponse) String() string {
 func (*SetRoutinePausedResponse) ProtoMessage() {}
 
 func (x *SetRoutinePausedResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[143]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[149]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8695,7 +9062,7 @@ func (x *SetRoutinePausedResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetRoutinePausedResponse.ProtoReflect.Descriptor instead.
 func (*SetRoutinePausedResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{143}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{149}
 }
 
 func (x *SetRoutinePausedResponse) GetAgent() *AgentInfo {
@@ -8715,7 +9082,7 @@ type WakeAgentRequest struct {
 
 func (x *WakeAgentRequest) Reset() {
 	*x = WakeAgentRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[144]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[150]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8727,7 +9094,7 @@ func (x *WakeAgentRequest) String() string {
 func (*WakeAgentRequest) ProtoMessage() {}
 
 func (x *WakeAgentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[144]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[150]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8740,7 +9107,7 @@ func (x *WakeAgentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WakeAgentRequest.ProtoReflect.Descriptor instead.
 func (*WakeAgentRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{144}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{150}
 }
 
 func (x *WakeAgentRequest) GetName() string {
@@ -8765,7 +9132,7 @@ type WakeAgentResponse struct {
 
 func (x *WakeAgentResponse) Reset() {
 	*x = WakeAgentResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[145]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[151]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8777,7 +9144,7 @@ func (x *WakeAgentResponse) String() string {
 func (*WakeAgentResponse) ProtoMessage() {}
 
 func (x *WakeAgentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[145]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[151]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8790,7 +9157,7 @@ func (x *WakeAgentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WakeAgentResponse.ProtoReflect.Descriptor instead.
 func (*WakeAgentResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{145}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{151}
 }
 
 type ListDecisionsRequest struct {
@@ -8804,7 +9171,7 @@ type ListDecisionsRequest struct {
 
 func (x *ListDecisionsRequest) Reset() {
 	*x = ListDecisionsRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[146]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[152]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8816,7 +9183,7 @@ func (x *ListDecisionsRequest) String() string {
 func (*ListDecisionsRequest) ProtoMessage() {}
 
 func (x *ListDecisionsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[146]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[152]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8829,7 +9196,7 @@ func (x *ListDecisionsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListDecisionsRequest.ProtoReflect.Descriptor instead.
 func (*ListDecisionsRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{146}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{152}
 }
 
 func (x *ListDecisionsRequest) GetName() string {
@@ -8855,7 +9222,7 @@ type ListDecisionsResponse struct {
 
 func (x *ListDecisionsResponse) Reset() {
 	*x = ListDecisionsResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[147]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[153]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8867,7 +9234,7 @@ func (x *ListDecisionsResponse) String() string {
 func (*ListDecisionsResponse) ProtoMessage() {}
 
 func (x *ListDecisionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[147]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[153]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8880,7 +9247,7 @@ func (x *ListDecisionsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListDecisionsResponse.ProtoReflect.Descriptor instead.
 func (*ListDecisionsResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{147}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{153}
 }
 
 func (x *ListDecisionsResponse) GetDecisions() []*v1.Decision {
@@ -8901,7 +9268,7 @@ type DeployRequest struct {
 
 func (x *DeployRequest) Reset() {
 	*x = DeployRequest{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[148]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[154]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8913,7 +9280,7 @@ func (x *DeployRequest) String() string {
 func (*DeployRequest) ProtoMessage() {}
 
 func (x *DeployRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[148]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[154]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8926,7 +9293,7 @@ func (x *DeployRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeployRequest.ProtoReflect.Descriptor instead.
 func (*DeployRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{148}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{154}
 }
 
 func (x *DeployRequest) GetName() string {
@@ -8953,7 +9320,7 @@ type DeployResponse struct {
 
 func (x *DeployResponse) Reset() {
 	*x = DeployResponse{}
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[149]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[155]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8965,7 +9332,7 @@ func (x *DeployResponse) String() string {
 func (*DeployResponse) ProtoMessage() {}
 
 func (x *DeployResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[149]
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[155]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8978,7 +9345,7 @@ func (x *DeployResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeployResponse.ProtoReflect.Descriptor instead.
 func (*DeployResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{149}
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{155}
 }
 
 func (x *DeployResponse) GetDecision() *v1.Decision {
@@ -8992,7 +9359,32 @@ var File_portenv_daemon_v1_daemon_proto protoreflect.FileDescriptor
 
 const file_portenv_daemon_v1_daemon_proto_rawDesc = "" +
 	"\n" +
-	"\x1eportenv/daemon/v1/daemon.proto\x12\x11portenv.daemon.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1cportenv/types/v1/types.proto\"%\n" +
+	"\x1eportenv/daemon/v1/daemon.proto\x12\x11portenv.daemon.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1cportenv/types/v1/types.proto\"(\n" +
+	"\x12WatchPushesRequest\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\"R\n" +
+	"\x13WatchPushesResponse\x12;\n" +
+	"\bquestion\x18\x01 \x01(\v2\x1f.portenv.daemon.v1.PushQuestionR\bquestion\"\xca\x01\n" +
+	"\fPushQuestion\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
+	"\x04repo\x18\x02 \x01(\tR\x04repo\x12\x1b\n" +
+	"\tneeds_yes\x18\x03 \x01(\bR\bneedsYes\x12\x14\n" +
+	"\x05first\x18\x04 \x01(\bR\x05first\x12;\n" +
+	"\aupdates\x18\x05 \x03(\v2!.portenv.daemon.v1.PushUpdateInfoR\aupdates\x12\x12\n" +
+	"\x04list\x18\x06 \x01(\bR\x04list\x12\x12\n" +
+	"\x04gone\x18\a \x01(\bR\x04gone\"i\n" +
+	"\x0ePushUpdateInfo\x12\x10\n" +
+	"\x03dst\x18\x01 \x01(\tR\x03dst\x12\x17\n" +
+	"\anew_sha\x18\x02 \x01(\tR\x06newSha\x12\x14\n" +
+	"\x05force\x18\x03 \x01(\bR\x05force\x12\x16\n" +
+	"\x06delete\x18\x04 \x01(\bR\x06delete\"\x8f\x01\n" +
+	"\x11AnswerPushRequest\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x0e\n" +
+	"\x02id\x18\x02 \x01(\tR\x02id\x12\x14\n" +
+	"\x05allow\x18\x03 \x01(\bR\x05allow\x12!\n" +
+	"\fgithub_token\x18\x04 \x01(\tR\vgithubToken\x12\x1d\n" +
+	"\n" +
+	"signed_out\x18\x05 \x01(\bR\tsignedOut\"\x14\n" +
+	"\x12AnswerPushResponse\"%\n" +
 	"\x0fCheckBoxRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\"S\n" +
 	"\x10CheckBoxResponse\x12'\n" +
@@ -9565,7 +9957,7 @@ const file_portenv_daemon_v1_daemon_proto_rawDesc = "" +
 	"\vANSWERS_YES\x10\x01\x12\x0e\n" +
 	"\n" +
 	"ANSWERS_NO\x10\x02\x12\x16\n" +
-	"\x12ANSWERS_CANNOT_ASK\x10\x032\xaf0\n" +
+	"\x12ANSWERS_CANNOT_ASK\x10\x032\xea1\n" +
 	"\rDaemonService\x12Y\n" +
 	"\n" +
 	"GetVersion\x12$.portenv.daemon.v1.GetVersionRequest\x1a%.portenv.daemon.v1.GetVersionResponse\x12V\n" +
@@ -9637,7 +10029,10 @@ const file_portenv_daemon_v1_daemon_proto_rawDesc = "" +
 	"\x10SetAgentsAllowed\x12*.portenv.daemon.v1.SetAgentsAllowedRequest\x1a+.portenv.daemon.v1.SetAgentsAllowedResponse\x12n\n" +
 	"\x11ListTeamTemplates\x12+.portenv.daemon.v1.ListTeamTemplatesRequest\x1a,.portenv.daemon.v1.ListTeamTemplatesResponse\x12S\n" +
 	"\bPlanTeam\x12\".portenv.daemon.v1.PlanTeamRequest\x1a#.portenv.daemon.v1.PlanTeamResponse\x12b\n" +
-	"\rApplyTeamPlan\x12'.portenv.daemon.v1.ApplyTeamPlanRequest\x1a(.portenv.daemon.v1.ApplyTeamPlanResponseB\xce\x01\n" +
+	"\rApplyTeamPlan\x12'.portenv.daemon.v1.ApplyTeamPlanRequest\x1a(.portenv.daemon.v1.ApplyTeamPlanResponse\x12^\n" +
+	"\vWatchPushes\x12%.portenv.daemon.v1.WatchPushesRequest\x1a&.portenv.daemon.v1.WatchPushesResponse0\x01\x12Y\n" +
+	"\n" +
+	"AnswerPush\x12$.portenv.daemon.v1.AnswerPushRequest\x1a%.portenv.daemon.v1.AnswerPushResponseB\xce\x01\n" +
 	"\x15com.portenv.daemon.v1B\vDaemonProtoP\x01ZBgithub.com/portenv/portenv/proto/gen/go/portenv/daemon/v1;daemonv1\xa2\x02\x03PDX\xaa\x02\x11Portenv.Daemon.V1\xca\x02\x11Portenv\\Daemon\\V1\xe2\x02\x1dPortenv\\Daemon\\V1\\GPBMetadata\xea\x02\x13Portenv::Daemon::V1b\x06proto3"
 
 var (
@@ -9653,400 +10048,412 @@ func file_portenv_daemon_v1_daemon_proto_rawDescGZIP() []byte {
 }
 
 var file_portenv_daemon_v1_daemon_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_portenv_daemon_v1_daemon_proto_msgTypes = make([]protoimpl.MessageInfo, 154)
+var file_portenv_daemon_v1_daemon_proto_msgTypes = make([]protoimpl.MessageInfo, 160)
 var file_portenv_daemon_v1_daemon_proto_goTypes = []any{
 	(SaveState)(0),                        // 0: portenv.daemon.v1.SaveState
 	(NetworkPath)(0),                      // 1: portenv.daemon.v1.NetworkPath
 	(Holder)(0),                           // 2: portenv.daemon.v1.Holder
 	(Answers)(0),                          // 3: portenv.daemon.v1.Answers
-	(*CheckBoxRequest)(nil),               // 4: portenv.daemon.v1.CheckBoxRequest
-	(*CheckBoxResponse)(nil),              // 5: portenv.daemon.v1.CheckBoxResponse
-	(*RestartBoxRequest)(nil),             // 6: portenv.daemon.v1.RestartBoxRequest
-	(*RestartBoxResponse)(nil),            // 7: portenv.daemon.v1.RestartBoxResponse
-	(*OpenBoxRequest)(nil),                // 8: portenv.daemon.v1.OpenBoxRequest
-	(*OpenBoxResponse)(nil),               // 9: portenv.daemon.v1.OpenBoxResponse
-	(*CloseBoxRequest)(nil),               // 10: portenv.daemon.v1.CloseBoxRequest
-	(*CloseBoxResponse)(nil),              // 11: portenv.daemon.v1.CloseBoxResponse
-	(*MakeSavePointRequest)(nil),          // 12: portenv.daemon.v1.MakeSavePointRequest
-	(*MakeSavePointResponse)(nil),         // 13: portenv.daemon.v1.MakeSavePointResponse
-	(*RevertToLastSavePointRequest)(nil),  // 14: portenv.daemon.v1.RevertToLastSavePointRequest
-	(*RevertToLastSavePointResponse)(nil), // 15: portenv.daemon.v1.RevertToLastSavePointResponse
-	(*MoveBoxRequest)(nil),                // 16: portenv.daemon.v1.MoveBoxRequest
-	(*MoveBoxResponse)(nil),               // 17: portenv.daemon.v1.MoveBoxResponse
-	(*TerminalRequest)(nil),               // 18: portenv.daemon.v1.TerminalRequest
-	(*TerminalOpen)(nil),                  // 19: portenv.daemon.v1.TerminalOpen
-	(*TerminalSize)(nil),                  // 20: portenv.daemon.v1.TerminalSize
-	(*TerminalResponse)(nil),              // 21: portenv.daemon.v1.TerminalResponse
-	(*GetVersionRequest)(nil),             // 22: portenv.daemon.v1.GetVersionRequest
-	(*GetVersionResponse)(nil),            // 23: portenv.daemon.v1.GetVersionResponse
-	(*ListBoxesRequest)(nil),              // 24: portenv.daemon.v1.ListBoxesRequest
-	(*ListBoxesResponse)(nil),             // 25: portenv.daemon.v1.ListBoxesResponse
-	(*BoxStatus)(nil),                     // 26: portenv.daemon.v1.BoxStatus
-	(*GetChannelRequest)(nil),             // 27: portenv.daemon.v1.GetChannelRequest
-	(*GetChannelResponse)(nil),            // 28: portenv.daemon.v1.GetChannelResponse
-	(*GetBoxStateRequest)(nil),            // 29: portenv.daemon.v1.GetBoxStateRequest
-	(*GetBoxStateResponse)(nil),           // 30: portenv.daemon.v1.GetBoxStateResponse
-	(*SetNetworkPathRequest)(nil),         // 31: portenv.daemon.v1.SetNetworkPathRequest
-	(*SetNetworkPathResponse)(nil),        // 32: portenv.daemon.v1.SetNetworkPathResponse
-	(*WokeRequest)(nil),                   // 33: portenv.daemon.v1.WokeRequest
-	(*WokeResponse)(nil),                  // 34: portenv.daemon.v1.WokeResponse
-	(*WokeBox)(nil),                       // 35: portenv.daemon.v1.WokeBox
-	(*RetryPackagesRequest)(nil),          // 36: portenv.daemon.v1.RetryPackagesRequest
-	(*RetryPackagesResponse)(nil),         // 37: portenv.daemon.v1.RetryPackagesResponse
-	(*ProvideKeysRequest)(nil),            // 38: portenv.daemon.v1.ProvideKeysRequest
-	(*ProvideKeysResponse)(nil),           // 39: portenv.daemon.v1.ProvideKeysResponse
-	(*RelaunchRequest)(nil),               // 40: portenv.daemon.v1.RelaunchRequest
-	(*RelaunchResponse)(nil),              // 41: portenv.daemon.v1.RelaunchResponse
-	(*WatchBoxStateRequest)(nil),          // 42: portenv.daemon.v1.WatchBoxStateRequest
-	(*WatchBoxStateResponse)(nil),         // 43: portenv.daemon.v1.WatchBoxStateResponse
-	(*ListServersRequest)(nil),            // 44: portenv.daemon.v1.ListServersRequest
-	(*ListServersResponse)(nil),           // 45: portenv.daemon.v1.ListServersResponse
-	(*GetKeyIDsRequest)(nil),              // 46: portenv.daemon.v1.GetKeyIDsRequest
-	(*GetKeyIDsResponse)(nil),             // 47: portenv.daemon.v1.GetKeyIDsResponse
-	(*SaveNowRequest)(nil),                // 48: portenv.daemon.v1.SaveNowRequest
-	(*SaveNowResponse)(nil),               // 49: portenv.daemon.v1.SaveNowResponse
-	(*ListSavesRequest)(nil),              // 50: portenv.daemon.v1.ListSavesRequest
-	(*ListSavesResponse)(nil),             // 51: portenv.daemon.v1.ListSavesResponse
-	(*SaveEntry)(nil),                     // 52: portenv.daemon.v1.SaveEntry
-	(*HousekeepRequest)(nil),              // 53: portenv.daemon.v1.HousekeepRequest
-	(*HousekeepResponse)(nil),             // 54: portenv.daemon.v1.HousekeepResponse
-	(*LeaveUnsavedRequest)(nil),           // 55: portenv.daemon.v1.LeaveUnsavedRequest
-	(*LeaveUnsavedResponse)(nil),          // 56: portenv.daemon.v1.LeaveUnsavedResponse
-	(*TakeSavedAfterQuitRequest)(nil),     // 57: portenv.daemon.v1.TakeSavedAfterQuitRequest
-	(*TakeSavedAfterQuitResponse)(nil),    // 58: portenv.daemon.v1.TakeSavedAfterQuitResponse
-	(*SavedAfterQuit)(nil),                // 59: portenv.daemon.v1.SavedAfterQuit
-	(*ListTabsRequest)(nil),               // 60: portenv.daemon.v1.ListTabsRequest
-	(*ListTabsResponse)(nil),              // 61: portenv.daemon.v1.ListTabsResponse
-	(*NewTabRequest)(nil),                 // 62: portenv.daemon.v1.NewTabRequest
-	(*NewTabResponse)(nil),                // 63: portenv.daemon.v1.NewTabResponse
-	(*CloseTabRequest)(nil),               // 64: portenv.daemon.v1.CloseTabRequest
-	(*CloseTabResponse)(nil),              // 65: portenv.daemon.v1.CloseTabResponse
-	(*RenameTabRequest)(nil),              // 66: portenv.daemon.v1.RenameTabRequest
-	(*RenameTabResponse)(nil),             // 67: portenv.daemon.v1.RenameTabResponse
-	(*SelectTabRequest)(nil),              // 68: portenv.daemon.v1.SelectTabRequest
-	(*SelectTabResponse)(nil),             // 69: portenv.daemon.v1.SelectTabResponse
-	(*WatchTabsRequest)(nil),              // 70: portenv.daemon.v1.WatchTabsRequest
-	(*WatchTabsResponse)(nil),             // 71: portenv.daemon.v1.WatchTabsResponse
-	(*CreateBoxRequest)(nil),              // 72: portenv.daemon.v1.CreateBoxRequest
-	(*ProjectSource)(nil),                 // 73: portenv.daemon.v1.ProjectSource
-	(*WorkspaceSetup)(nil),                // 74: portenv.daemon.v1.WorkspaceSetup
-	(*CreateBoxResponse)(nil),             // 75: portenv.daemon.v1.CreateBoxResponse
-	(*DiscardCreationRequest)(nil),        // 76: portenv.daemon.v1.DiscardCreationRequest
-	(*DiscardCreationResponse)(nil),       // 77: portenv.daemon.v1.DiscardCreationResponse
-	(*RecoverBoxRequest)(nil),             // 78: portenv.daemon.v1.RecoverBoxRequest
-	(*RecoverBoxResponse)(nil),            // 79: portenv.daemon.v1.RecoverBoxResponse
-	(*CheckRecoveryKeyRequest)(nil),       // 80: portenv.daemon.v1.CheckRecoveryKeyRequest
-	(*CheckRecoveryKeyResponse)(nil),      // 81: portenv.daemon.v1.CheckRecoveryKeyResponse
-	(*GetPlacementRequest)(nil),           // 82: portenv.daemon.v1.GetPlacementRequest
-	(*GetPlacementResponse)(nil),          // 83: portenv.daemon.v1.GetPlacementResponse
-	(*TabTerminalRequest)(nil),            // 84: portenv.daemon.v1.TabTerminalRequest
-	(*TabTerminalOpen)(nil),               // 85: portenv.daemon.v1.TabTerminalOpen
-	(*TabTerminalResponse)(nil),           // 86: portenv.daemon.v1.TabTerminalResponse
-	(*TabTerminalReset)(nil),              // 87: portenv.daemon.v1.TabTerminalReset
-	(*CommandAuthor)(nil),                 // 88: portenv.daemon.v1.CommandAuthor
-	(*ServerInfo)(nil),                    // 89: portenv.daemon.v1.ServerInfo
-	(*ScanServerKeyRequest)(nil),          // 90: portenv.daemon.v1.ScanServerKeyRequest
-	(*ScanServerKeyResponse)(nil),         // 91: portenv.daemon.v1.ScanServerKeyResponse
-	(*TrustServerKeyRequest)(nil),         // 92: portenv.daemon.v1.TrustServerKeyRequest
-	(*TrustServerKeyResponse)(nil),        // 93: portenv.daemon.v1.TrustServerKeyResponse
-	(*ForgetServerKeyRequest)(nil),        // 94: portenv.daemon.v1.ForgetServerKeyRequest
-	(*ForgetServerKeyResponse)(nil),       // 95: portenv.daemon.v1.ForgetServerKeyResponse
-	(*ProvideServerKeyRequest)(nil),       // 96: portenv.daemon.v1.ProvideServerKeyRequest
-	(*ProvideServerKeyResponse)(nil),      // 97: portenv.daemon.v1.ProvideServerKeyResponse
-	(*CheckServerRequest)(nil),            // 98: portenv.daemon.v1.CheckServerRequest
-	(*CheckLine)(nil),                     // 99: portenv.daemon.v1.CheckLine
-	(*CheckServerResponse)(nil),           // 100: portenv.daemon.v1.CheckServerResponse
-	(*GetEngineRequest)(nil),              // 101: portenv.daemon.v1.GetEngineRequest
-	(*GetEngineResponse)(nil),             // 102: portenv.daemon.v1.GetEngineResponse
-	(*ImagePull)(nil),                     // 103: portenv.daemon.v1.ImagePull
-	(*ListAgentsRequest)(nil),             // 104: portenv.daemon.v1.ListAgentsRequest
-	(*ListAgentsResponse)(nil),            // 105: portenv.daemon.v1.ListAgentsResponse
-	(*TeamLimit)(nil),                     // 106: portenv.daemon.v1.TeamLimit
-	(*ListTeamTemplatesRequest)(nil),      // 107: portenv.daemon.v1.ListTeamTemplatesRequest
-	(*ListTeamTemplatesResponse)(nil),     // 108: portenv.daemon.v1.ListTeamTemplatesResponse
-	(*TeamTemplate)(nil),                  // 109: portenv.daemon.v1.TeamTemplate
-	(*TeamPlanChoice)(nil),                // 110: portenv.daemon.v1.TeamPlanChoice
-	(*TeamAgentChoice)(nil),               // 111: portenv.daemon.v1.TeamAgentChoice
-	(*PlanTeamRequest)(nil),               // 112: portenv.daemon.v1.PlanTeamRequest
-	(*PlanTeamResponse)(nil),              // 113: portenv.daemon.v1.PlanTeamResponse
-	(*PlannedAgent)(nil),                  // 114: portenv.daemon.v1.PlannedAgent
-	(*ApplyTeamPlanRequest)(nil),          // 115: portenv.daemon.v1.ApplyTeamPlanRequest
-	(*ApplyTeamPlanResponse)(nil),         // 116: portenv.daemon.v1.ApplyTeamPlanResponse
-	(*GetTeamSettingsRequest)(nil),        // 117: portenv.daemon.v1.GetTeamSettingsRequest
-	(*GetTeamSettingsResponse)(nil),       // 118: portenv.daemon.v1.GetTeamSettingsResponse
-	(*SetAgentsAllowedRequest)(nil),       // 119: portenv.daemon.v1.SetAgentsAllowedRequest
-	(*SetAgentsAllowedResponse)(nil),      // 120: portenv.daemon.v1.SetAgentsAllowedResponse
-	(*AgentInfo)(nil),                     // 121: portenv.daemon.v1.AgentInfo
-	(*WatchTeamRequest)(nil),              // 122: portenv.daemon.v1.WatchTeamRequest
-	(*WatchTeamResponse)(nil),             // 123: portenv.daemon.v1.WatchTeamResponse
-	(*FetchAgentBranchRequest)(nil),       // 124: portenv.daemon.v1.FetchAgentBranchRequest
-	(*FetchAgentBranchResponse)(nil),      // 125: portenv.daemon.v1.FetchAgentBranchResponse
-	(*StartAgentRequest)(nil),             // 126: portenv.daemon.v1.StartAgentRequest
-	(*StartAgentResponse)(nil),            // 127: portenv.daemon.v1.StartAgentResponse
-	(*StopAgentRequest)(nil),              // 128: portenv.daemon.v1.StopAgentRequest
-	(*StopAgentResponse)(nil),             // 129: portenv.daemon.v1.StopAgentResponse
-	(*AnswerDecisionRequest)(nil),         // 130: portenv.daemon.v1.AnswerDecisionRequest
-	(*AnswerDecisionResponse)(nil),        // 131: portenv.daemon.v1.AnswerDecisionResponse
-	(*GetAgentFileRequest)(nil),           // 132: portenv.daemon.v1.GetAgentFileRequest
-	(*GetAgentFileResponse)(nil),          // 133: portenv.daemon.v1.GetAgentFileResponse
-	(*ApproveAgentFileRequest)(nil),       // 134: portenv.daemon.v1.ApproveAgentFileRequest
-	(*ApproveAgentFileResponse)(nil),      // 135: portenv.daemon.v1.ApproveAgentFileResponse
-	(*SendMessageRequest)(nil),            // 136: portenv.daemon.v1.SendMessageRequest
-	(*SendMessageResponse)(nil),           // 137: portenv.daemon.v1.SendMessageResponse
-	(*RemoveAgentRequest)(nil),            // 138: portenv.daemon.v1.RemoveAgentRequest
-	(*RemoveAgentResponse)(nil),           // 139: portenv.daemon.v1.RemoveAgentResponse
-	(*ListAgentFilesRequest)(nil),         // 140: portenv.daemon.v1.ListAgentFilesRequest
-	(*ListAgentFilesResponse)(nil),        // 141: portenv.daemon.v1.ListAgentFilesResponse
-	(*ReadAgentFileRequest)(nil),          // 142: portenv.daemon.v1.ReadAgentFileRequest
-	(*ReadAgentFileResponse)(nil),         // 143: portenv.daemon.v1.ReadAgentFileResponse
-	(*AddAgentFilesRequest)(nil),          // 144: portenv.daemon.v1.AddAgentFilesRequest
-	(*AddAgentFilesResponse)(nil),         // 145: portenv.daemon.v1.AddAgentFilesResponse
-	(*SetRoutinePausedRequest)(nil),       // 146: portenv.daemon.v1.SetRoutinePausedRequest
-	(*SetRoutinePausedResponse)(nil),      // 147: portenv.daemon.v1.SetRoutinePausedResponse
-	(*WakeAgentRequest)(nil),              // 148: portenv.daemon.v1.WakeAgentRequest
-	(*WakeAgentResponse)(nil),             // 149: portenv.daemon.v1.WakeAgentResponse
-	(*ListDecisionsRequest)(nil),          // 150: portenv.daemon.v1.ListDecisionsRequest
-	(*ListDecisionsResponse)(nil),         // 151: portenv.daemon.v1.ListDecisionsResponse
-	(*DeployRequest)(nil),                 // 152: portenv.daemon.v1.DeployRequest
-	(*DeployResponse)(nil),                // 153: portenv.daemon.v1.DeployResponse
-	nil,                                   // 154: portenv.daemon.v1.ProvideKeysRequest.KeysEntry
-	nil,                                   // 155: portenv.daemon.v1.CreateBoxRequest.KeysEntry
-	nil,                                   // 156: portenv.daemon.v1.RecoverBoxRequest.KeysEntry
-	nil,                                   // 157: portenv.daemon.v1.CheckRecoveryKeyRequest.RecoveryPasswordsEntry
-	(*v1.SnapshotRef)(nil),                // 158: portenv.types.v1.SnapshotRef
-	(*v1.BuildInfo)(nil),                  // 159: portenv.types.v1.BuildInfo
-	(*v1.Box)(nil),                        // 160: portenv.types.v1.Box
-	(v1.BoxState)(0),                      // 161: portenv.types.v1.BoxState
-	(*timestamppb.Timestamp)(nil),         // 162: google.protobuf.Timestamp
-	(*v1.Tab)(nil),                        // 163: portenv.types.v1.Tab
-	(v1.TabTerminalEnd)(0),                // 164: portenv.types.v1.TabTerminalEnd
-	(v1.ServerKeyState)(0),                // 165: portenv.types.v1.ServerKeyState
-	(v1.CheckState)(0),                    // 166: portenv.types.v1.CheckState
-	(v1.AgentState)(0),                    // 167: portenv.types.v1.AgentState
-	(*v1.AgentGrant)(nil),                 // 168: portenv.types.v1.AgentGrant
-	(*v1.AgentStatus)(nil),                // 169: portenv.types.v1.AgentStatus
-	(*v1.Routine)(nil),                    // 170: portenv.types.v1.Routine
-	(*v1.BoardMessage)(nil),               // 171: portenv.types.v1.BoardMessage
-	(*v1.Decision)(nil),                   // 172: portenv.types.v1.Decision
-	(v1.MessageType)(0),                   // 173: portenv.types.v1.MessageType
-	(*v1.AgentFile)(nil),                  // 174: portenv.types.v1.AgentFile
+	(*WatchPushesRequest)(nil),            // 4: portenv.daemon.v1.WatchPushesRequest
+	(*WatchPushesResponse)(nil),           // 5: portenv.daemon.v1.WatchPushesResponse
+	(*PushQuestion)(nil),                  // 6: portenv.daemon.v1.PushQuestion
+	(*PushUpdateInfo)(nil),                // 7: portenv.daemon.v1.PushUpdateInfo
+	(*AnswerPushRequest)(nil),             // 8: portenv.daemon.v1.AnswerPushRequest
+	(*AnswerPushResponse)(nil),            // 9: portenv.daemon.v1.AnswerPushResponse
+	(*CheckBoxRequest)(nil),               // 10: portenv.daemon.v1.CheckBoxRequest
+	(*CheckBoxResponse)(nil),              // 11: portenv.daemon.v1.CheckBoxResponse
+	(*RestartBoxRequest)(nil),             // 12: portenv.daemon.v1.RestartBoxRequest
+	(*RestartBoxResponse)(nil),            // 13: portenv.daemon.v1.RestartBoxResponse
+	(*OpenBoxRequest)(nil),                // 14: portenv.daemon.v1.OpenBoxRequest
+	(*OpenBoxResponse)(nil),               // 15: portenv.daemon.v1.OpenBoxResponse
+	(*CloseBoxRequest)(nil),               // 16: portenv.daemon.v1.CloseBoxRequest
+	(*CloseBoxResponse)(nil),              // 17: portenv.daemon.v1.CloseBoxResponse
+	(*MakeSavePointRequest)(nil),          // 18: portenv.daemon.v1.MakeSavePointRequest
+	(*MakeSavePointResponse)(nil),         // 19: portenv.daemon.v1.MakeSavePointResponse
+	(*RevertToLastSavePointRequest)(nil),  // 20: portenv.daemon.v1.RevertToLastSavePointRequest
+	(*RevertToLastSavePointResponse)(nil), // 21: portenv.daemon.v1.RevertToLastSavePointResponse
+	(*MoveBoxRequest)(nil),                // 22: portenv.daemon.v1.MoveBoxRequest
+	(*MoveBoxResponse)(nil),               // 23: portenv.daemon.v1.MoveBoxResponse
+	(*TerminalRequest)(nil),               // 24: portenv.daemon.v1.TerminalRequest
+	(*TerminalOpen)(nil),                  // 25: portenv.daemon.v1.TerminalOpen
+	(*TerminalSize)(nil),                  // 26: portenv.daemon.v1.TerminalSize
+	(*TerminalResponse)(nil),              // 27: portenv.daemon.v1.TerminalResponse
+	(*GetVersionRequest)(nil),             // 28: portenv.daemon.v1.GetVersionRequest
+	(*GetVersionResponse)(nil),            // 29: portenv.daemon.v1.GetVersionResponse
+	(*ListBoxesRequest)(nil),              // 30: portenv.daemon.v1.ListBoxesRequest
+	(*ListBoxesResponse)(nil),             // 31: portenv.daemon.v1.ListBoxesResponse
+	(*BoxStatus)(nil),                     // 32: portenv.daemon.v1.BoxStatus
+	(*GetChannelRequest)(nil),             // 33: portenv.daemon.v1.GetChannelRequest
+	(*GetChannelResponse)(nil),            // 34: portenv.daemon.v1.GetChannelResponse
+	(*GetBoxStateRequest)(nil),            // 35: portenv.daemon.v1.GetBoxStateRequest
+	(*GetBoxStateResponse)(nil),           // 36: portenv.daemon.v1.GetBoxStateResponse
+	(*SetNetworkPathRequest)(nil),         // 37: portenv.daemon.v1.SetNetworkPathRequest
+	(*SetNetworkPathResponse)(nil),        // 38: portenv.daemon.v1.SetNetworkPathResponse
+	(*WokeRequest)(nil),                   // 39: portenv.daemon.v1.WokeRequest
+	(*WokeResponse)(nil),                  // 40: portenv.daemon.v1.WokeResponse
+	(*WokeBox)(nil),                       // 41: portenv.daemon.v1.WokeBox
+	(*RetryPackagesRequest)(nil),          // 42: portenv.daemon.v1.RetryPackagesRequest
+	(*RetryPackagesResponse)(nil),         // 43: portenv.daemon.v1.RetryPackagesResponse
+	(*ProvideKeysRequest)(nil),            // 44: portenv.daemon.v1.ProvideKeysRequest
+	(*ProvideKeysResponse)(nil),           // 45: portenv.daemon.v1.ProvideKeysResponse
+	(*RelaunchRequest)(nil),               // 46: portenv.daemon.v1.RelaunchRequest
+	(*RelaunchResponse)(nil),              // 47: portenv.daemon.v1.RelaunchResponse
+	(*WatchBoxStateRequest)(nil),          // 48: portenv.daemon.v1.WatchBoxStateRequest
+	(*WatchBoxStateResponse)(nil),         // 49: portenv.daemon.v1.WatchBoxStateResponse
+	(*ListServersRequest)(nil),            // 50: portenv.daemon.v1.ListServersRequest
+	(*ListServersResponse)(nil),           // 51: portenv.daemon.v1.ListServersResponse
+	(*GetKeyIDsRequest)(nil),              // 52: portenv.daemon.v1.GetKeyIDsRequest
+	(*GetKeyIDsResponse)(nil),             // 53: portenv.daemon.v1.GetKeyIDsResponse
+	(*SaveNowRequest)(nil),                // 54: portenv.daemon.v1.SaveNowRequest
+	(*SaveNowResponse)(nil),               // 55: portenv.daemon.v1.SaveNowResponse
+	(*ListSavesRequest)(nil),              // 56: portenv.daemon.v1.ListSavesRequest
+	(*ListSavesResponse)(nil),             // 57: portenv.daemon.v1.ListSavesResponse
+	(*SaveEntry)(nil),                     // 58: portenv.daemon.v1.SaveEntry
+	(*HousekeepRequest)(nil),              // 59: portenv.daemon.v1.HousekeepRequest
+	(*HousekeepResponse)(nil),             // 60: portenv.daemon.v1.HousekeepResponse
+	(*LeaveUnsavedRequest)(nil),           // 61: portenv.daemon.v1.LeaveUnsavedRequest
+	(*LeaveUnsavedResponse)(nil),          // 62: portenv.daemon.v1.LeaveUnsavedResponse
+	(*TakeSavedAfterQuitRequest)(nil),     // 63: portenv.daemon.v1.TakeSavedAfterQuitRequest
+	(*TakeSavedAfterQuitResponse)(nil),    // 64: portenv.daemon.v1.TakeSavedAfterQuitResponse
+	(*SavedAfterQuit)(nil),                // 65: portenv.daemon.v1.SavedAfterQuit
+	(*ListTabsRequest)(nil),               // 66: portenv.daemon.v1.ListTabsRequest
+	(*ListTabsResponse)(nil),              // 67: portenv.daemon.v1.ListTabsResponse
+	(*NewTabRequest)(nil),                 // 68: portenv.daemon.v1.NewTabRequest
+	(*NewTabResponse)(nil),                // 69: portenv.daemon.v1.NewTabResponse
+	(*CloseTabRequest)(nil),               // 70: portenv.daemon.v1.CloseTabRequest
+	(*CloseTabResponse)(nil),              // 71: portenv.daemon.v1.CloseTabResponse
+	(*RenameTabRequest)(nil),              // 72: portenv.daemon.v1.RenameTabRequest
+	(*RenameTabResponse)(nil),             // 73: portenv.daemon.v1.RenameTabResponse
+	(*SelectTabRequest)(nil),              // 74: portenv.daemon.v1.SelectTabRequest
+	(*SelectTabResponse)(nil),             // 75: portenv.daemon.v1.SelectTabResponse
+	(*WatchTabsRequest)(nil),              // 76: portenv.daemon.v1.WatchTabsRequest
+	(*WatchTabsResponse)(nil),             // 77: portenv.daemon.v1.WatchTabsResponse
+	(*CreateBoxRequest)(nil),              // 78: portenv.daemon.v1.CreateBoxRequest
+	(*ProjectSource)(nil),                 // 79: portenv.daemon.v1.ProjectSource
+	(*WorkspaceSetup)(nil),                // 80: portenv.daemon.v1.WorkspaceSetup
+	(*CreateBoxResponse)(nil),             // 81: portenv.daemon.v1.CreateBoxResponse
+	(*DiscardCreationRequest)(nil),        // 82: portenv.daemon.v1.DiscardCreationRequest
+	(*DiscardCreationResponse)(nil),       // 83: portenv.daemon.v1.DiscardCreationResponse
+	(*RecoverBoxRequest)(nil),             // 84: portenv.daemon.v1.RecoverBoxRequest
+	(*RecoverBoxResponse)(nil),            // 85: portenv.daemon.v1.RecoverBoxResponse
+	(*CheckRecoveryKeyRequest)(nil),       // 86: portenv.daemon.v1.CheckRecoveryKeyRequest
+	(*CheckRecoveryKeyResponse)(nil),      // 87: portenv.daemon.v1.CheckRecoveryKeyResponse
+	(*GetPlacementRequest)(nil),           // 88: portenv.daemon.v1.GetPlacementRequest
+	(*GetPlacementResponse)(nil),          // 89: portenv.daemon.v1.GetPlacementResponse
+	(*TabTerminalRequest)(nil),            // 90: portenv.daemon.v1.TabTerminalRequest
+	(*TabTerminalOpen)(nil),               // 91: portenv.daemon.v1.TabTerminalOpen
+	(*TabTerminalResponse)(nil),           // 92: portenv.daemon.v1.TabTerminalResponse
+	(*TabTerminalReset)(nil),              // 93: portenv.daemon.v1.TabTerminalReset
+	(*CommandAuthor)(nil),                 // 94: portenv.daemon.v1.CommandAuthor
+	(*ServerInfo)(nil),                    // 95: portenv.daemon.v1.ServerInfo
+	(*ScanServerKeyRequest)(nil),          // 96: portenv.daemon.v1.ScanServerKeyRequest
+	(*ScanServerKeyResponse)(nil),         // 97: portenv.daemon.v1.ScanServerKeyResponse
+	(*TrustServerKeyRequest)(nil),         // 98: portenv.daemon.v1.TrustServerKeyRequest
+	(*TrustServerKeyResponse)(nil),        // 99: portenv.daemon.v1.TrustServerKeyResponse
+	(*ForgetServerKeyRequest)(nil),        // 100: portenv.daemon.v1.ForgetServerKeyRequest
+	(*ForgetServerKeyResponse)(nil),       // 101: portenv.daemon.v1.ForgetServerKeyResponse
+	(*ProvideServerKeyRequest)(nil),       // 102: portenv.daemon.v1.ProvideServerKeyRequest
+	(*ProvideServerKeyResponse)(nil),      // 103: portenv.daemon.v1.ProvideServerKeyResponse
+	(*CheckServerRequest)(nil),            // 104: portenv.daemon.v1.CheckServerRequest
+	(*CheckLine)(nil),                     // 105: portenv.daemon.v1.CheckLine
+	(*CheckServerResponse)(nil),           // 106: portenv.daemon.v1.CheckServerResponse
+	(*GetEngineRequest)(nil),              // 107: portenv.daemon.v1.GetEngineRequest
+	(*GetEngineResponse)(nil),             // 108: portenv.daemon.v1.GetEngineResponse
+	(*ImagePull)(nil),                     // 109: portenv.daemon.v1.ImagePull
+	(*ListAgentsRequest)(nil),             // 110: portenv.daemon.v1.ListAgentsRequest
+	(*ListAgentsResponse)(nil),            // 111: portenv.daemon.v1.ListAgentsResponse
+	(*TeamLimit)(nil),                     // 112: portenv.daemon.v1.TeamLimit
+	(*ListTeamTemplatesRequest)(nil),      // 113: portenv.daemon.v1.ListTeamTemplatesRequest
+	(*ListTeamTemplatesResponse)(nil),     // 114: portenv.daemon.v1.ListTeamTemplatesResponse
+	(*TeamTemplate)(nil),                  // 115: portenv.daemon.v1.TeamTemplate
+	(*TeamPlanChoice)(nil),                // 116: portenv.daemon.v1.TeamPlanChoice
+	(*TeamAgentChoice)(nil),               // 117: portenv.daemon.v1.TeamAgentChoice
+	(*PlanTeamRequest)(nil),               // 118: portenv.daemon.v1.PlanTeamRequest
+	(*PlanTeamResponse)(nil),              // 119: portenv.daemon.v1.PlanTeamResponse
+	(*PlannedAgent)(nil),                  // 120: portenv.daemon.v1.PlannedAgent
+	(*ApplyTeamPlanRequest)(nil),          // 121: portenv.daemon.v1.ApplyTeamPlanRequest
+	(*ApplyTeamPlanResponse)(nil),         // 122: portenv.daemon.v1.ApplyTeamPlanResponse
+	(*GetTeamSettingsRequest)(nil),        // 123: portenv.daemon.v1.GetTeamSettingsRequest
+	(*GetTeamSettingsResponse)(nil),       // 124: portenv.daemon.v1.GetTeamSettingsResponse
+	(*SetAgentsAllowedRequest)(nil),       // 125: portenv.daemon.v1.SetAgentsAllowedRequest
+	(*SetAgentsAllowedResponse)(nil),      // 126: portenv.daemon.v1.SetAgentsAllowedResponse
+	(*AgentInfo)(nil),                     // 127: portenv.daemon.v1.AgentInfo
+	(*WatchTeamRequest)(nil),              // 128: portenv.daemon.v1.WatchTeamRequest
+	(*WatchTeamResponse)(nil),             // 129: portenv.daemon.v1.WatchTeamResponse
+	(*FetchAgentBranchRequest)(nil),       // 130: portenv.daemon.v1.FetchAgentBranchRequest
+	(*FetchAgentBranchResponse)(nil),      // 131: portenv.daemon.v1.FetchAgentBranchResponse
+	(*StartAgentRequest)(nil),             // 132: portenv.daemon.v1.StartAgentRequest
+	(*StartAgentResponse)(nil),            // 133: portenv.daemon.v1.StartAgentResponse
+	(*StopAgentRequest)(nil),              // 134: portenv.daemon.v1.StopAgentRequest
+	(*StopAgentResponse)(nil),             // 135: portenv.daemon.v1.StopAgentResponse
+	(*AnswerDecisionRequest)(nil),         // 136: portenv.daemon.v1.AnswerDecisionRequest
+	(*AnswerDecisionResponse)(nil),        // 137: portenv.daemon.v1.AnswerDecisionResponse
+	(*GetAgentFileRequest)(nil),           // 138: portenv.daemon.v1.GetAgentFileRequest
+	(*GetAgentFileResponse)(nil),          // 139: portenv.daemon.v1.GetAgentFileResponse
+	(*ApproveAgentFileRequest)(nil),       // 140: portenv.daemon.v1.ApproveAgentFileRequest
+	(*ApproveAgentFileResponse)(nil),      // 141: portenv.daemon.v1.ApproveAgentFileResponse
+	(*SendMessageRequest)(nil),            // 142: portenv.daemon.v1.SendMessageRequest
+	(*SendMessageResponse)(nil),           // 143: portenv.daemon.v1.SendMessageResponse
+	(*RemoveAgentRequest)(nil),            // 144: portenv.daemon.v1.RemoveAgentRequest
+	(*RemoveAgentResponse)(nil),           // 145: portenv.daemon.v1.RemoveAgentResponse
+	(*ListAgentFilesRequest)(nil),         // 146: portenv.daemon.v1.ListAgentFilesRequest
+	(*ListAgentFilesResponse)(nil),        // 147: portenv.daemon.v1.ListAgentFilesResponse
+	(*ReadAgentFileRequest)(nil),          // 148: portenv.daemon.v1.ReadAgentFileRequest
+	(*ReadAgentFileResponse)(nil),         // 149: portenv.daemon.v1.ReadAgentFileResponse
+	(*AddAgentFilesRequest)(nil),          // 150: portenv.daemon.v1.AddAgentFilesRequest
+	(*AddAgentFilesResponse)(nil),         // 151: portenv.daemon.v1.AddAgentFilesResponse
+	(*SetRoutinePausedRequest)(nil),       // 152: portenv.daemon.v1.SetRoutinePausedRequest
+	(*SetRoutinePausedResponse)(nil),      // 153: portenv.daemon.v1.SetRoutinePausedResponse
+	(*WakeAgentRequest)(nil),              // 154: portenv.daemon.v1.WakeAgentRequest
+	(*WakeAgentResponse)(nil),             // 155: portenv.daemon.v1.WakeAgentResponse
+	(*ListDecisionsRequest)(nil),          // 156: portenv.daemon.v1.ListDecisionsRequest
+	(*ListDecisionsResponse)(nil),         // 157: portenv.daemon.v1.ListDecisionsResponse
+	(*DeployRequest)(nil),                 // 158: portenv.daemon.v1.DeployRequest
+	(*DeployResponse)(nil),                // 159: portenv.daemon.v1.DeployResponse
+	nil,                                   // 160: portenv.daemon.v1.ProvideKeysRequest.KeysEntry
+	nil,                                   // 161: portenv.daemon.v1.CreateBoxRequest.KeysEntry
+	nil,                                   // 162: portenv.daemon.v1.RecoverBoxRequest.KeysEntry
+	nil,                                   // 163: portenv.daemon.v1.CheckRecoveryKeyRequest.RecoveryPasswordsEntry
+	(*v1.SnapshotRef)(nil),                // 164: portenv.types.v1.SnapshotRef
+	(*v1.BuildInfo)(nil),                  // 165: portenv.types.v1.BuildInfo
+	(*v1.Box)(nil),                        // 166: portenv.types.v1.Box
+	(v1.BoxState)(0),                      // 167: portenv.types.v1.BoxState
+	(*timestamppb.Timestamp)(nil),         // 168: google.protobuf.Timestamp
+	(*v1.Tab)(nil),                        // 169: portenv.types.v1.Tab
+	(v1.TabTerminalEnd)(0),                // 170: portenv.types.v1.TabTerminalEnd
+	(v1.ServerKeyState)(0),                // 171: portenv.types.v1.ServerKeyState
+	(v1.CheckState)(0),                    // 172: portenv.types.v1.CheckState
+	(v1.AgentState)(0),                    // 173: portenv.types.v1.AgentState
+	(*v1.AgentGrant)(nil),                 // 174: portenv.types.v1.AgentGrant
+	(*v1.AgentStatus)(nil),                // 175: portenv.types.v1.AgentStatus
+	(*v1.Routine)(nil),                    // 176: portenv.types.v1.Routine
+	(*v1.BoardMessage)(nil),               // 177: portenv.types.v1.BoardMessage
+	(*v1.Decision)(nil),                   // 178: portenv.types.v1.Decision
+	(v1.MessageType)(0),                   // 179: portenv.types.v1.MessageType
+	(*v1.AgentFile)(nil),                  // 180: portenv.types.v1.AgentFile
 }
 var file_portenv_daemon_v1_daemon_proto_depIdxs = []int32{
-	158, // 0: portenv.daemon.v1.MakeSavePointResponse.snapshot:type_name -> portenv.types.v1.SnapshotRef
-	158, // 1: portenv.daemon.v1.RevertToLastSavePointResponse.restored:type_name -> portenv.types.v1.SnapshotRef
-	158, // 2: portenv.daemon.v1.RevertToLastSavePointResponse.saved_before:type_name -> portenv.types.v1.SnapshotRef
-	19,  // 3: portenv.daemon.v1.TerminalRequest.open:type_name -> portenv.daemon.v1.TerminalOpen
-	20,  // 4: portenv.daemon.v1.TerminalRequest.resize:type_name -> portenv.daemon.v1.TerminalSize
-	20,  // 5: portenv.daemon.v1.TerminalOpen.size:type_name -> portenv.daemon.v1.TerminalSize
-	159, // 6: portenv.daemon.v1.GetVersionResponse.build:type_name -> portenv.types.v1.BuildInfo
-	26,  // 7: portenv.daemon.v1.ListBoxesResponse.boxes:type_name -> portenv.daemon.v1.BoxStatus
-	160, // 8: portenv.daemon.v1.BoxStatus.box:type_name -> portenv.types.v1.Box
-	161, // 9: portenv.daemon.v1.BoxStatus.state:type_name -> portenv.types.v1.BoxState
-	0,   // 10: portenv.daemon.v1.GetBoxStateResponse.state:type_name -> portenv.daemon.v1.SaveState
-	162, // 11: portenv.daemon.v1.GetBoxStateResponse.saved_at:type_name -> google.protobuf.Timestamp
-	162, // 12: portenv.daemon.v1.GetBoxStateResponse.opened_at:type_name -> google.protobuf.Timestamp
-	103, // 13: portenv.daemon.v1.GetBoxStateResponse.image_pull:type_name -> portenv.daemon.v1.ImagePull
-	1,   // 14: portenv.daemon.v1.SetNetworkPathRequest.path:type_name -> portenv.daemon.v1.NetworkPath
-	35,  // 15: portenv.daemon.v1.WokeResponse.boxes:type_name -> portenv.daemon.v1.WokeBox
-	154, // 16: portenv.daemon.v1.ProvideKeysRequest.keys:type_name -> portenv.daemon.v1.ProvideKeysRequest.KeysEntry
-	30,  // 17: portenv.daemon.v1.WatchBoxStateResponse.state:type_name -> portenv.daemon.v1.GetBoxStateResponse
-	89,  // 18: portenv.daemon.v1.ListServersResponse.infos:type_name -> portenv.daemon.v1.ServerInfo
-	158, // 19: portenv.daemon.v1.SaveNowResponse.snapshot:type_name -> portenv.types.v1.SnapshotRef
-	52,  // 20: portenv.daemon.v1.ListSavesResponse.saves:type_name -> portenv.daemon.v1.SaveEntry
-	162, // 21: portenv.daemon.v1.SaveEntry.time:type_name -> google.protobuf.Timestamp
-	59,  // 22: portenv.daemon.v1.TakeSavedAfterQuitResponse.saved:type_name -> portenv.daemon.v1.SavedAfterQuit
-	162, // 23: portenv.daemon.v1.SavedAfterQuit.saved_at:type_name -> google.protobuf.Timestamp
-	163, // 24: portenv.daemon.v1.ListTabsResponse.tabs:type_name -> portenv.types.v1.Tab
-	163, // 25: portenv.daemon.v1.NewTabResponse.tab:type_name -> portenv.types.v1.Tab
-	163, // 26: portenv.daemon.v1.WatchTabsResponse.tabs:type_name -> portenv.types.v1.Tab
-	155, // 27: portenv.daemon.v1.CreateBoxRequest.keys:type_name -> portenv.daemon.v1.CreateBoxRequest.KeysEntry
-	110, // 28: portenv.daemon.v1.CreateBoxRequest.team:type_name -> portenv.daemon.v1.TeamPlanChoice
-	73,  // 29: portenv.daemon.v1.CreateBoxRequest.project:type_name -> portenv.daemon.v1.ProjectSource
-	73,  // 30: portenv.daemon.v1.WorkspaceSetup.project:type_name -> portenv.daemon.v1.ProjectSource
-	110, // 31: portenv.daemon.v1.WorkspaceSetup.team:type_name -> portenv.daemon.v1.TeamPlanChoice
-	156, // 32: portenv.daemon.v1.RecoverBoxRequest.keys:type_name -> portenv.daemon.v1.RecoverBoxRequest.KeysEntry
-	157, // 33: portenv.daemon.v1.CheckRecoveryKeyRequest.recovery_passwords:type_name -> portenv.daemon.v1.CheckRecoveryKeyRequest.RecoveryPasswordsEntry
-	2,   // 34: portenv.daemon.v1.GetPlacementResponse.holder:type_name -> portenv.daemon.v1.Holder
-	162, // 35: portenv.daemon.v1.GetPlacementResponse.newest_save_at:type_name -> google.protobuf.Timestamp
-	3,   // 36: portenv.daemon.v1.GetPlacementResponse.answers:type_name -> portenv.daemon.v1.Answers
-	85,  // 37: portenv.daemon.v1.TabTerminalRequest.open:type_name -> portenv.daemon.v1.TabTerminalOpen
-	20,  // 38: portenv.daemon.v1.TabTerminalRequest.resize:type_name -> portenv.daemon.v1.TerminalSize
-	20,  // 39: portenv.daemon.v1.TabTerminalOpen.size:type_name -> portenv.daemon.v1.TerminalSize
-	87,  // 40: portenv.daemon.v1.TabTerminalResponse.reset:type_name -> portenv.daemon.v1.TabTerminalReset
-	20,  // 41: portenv.daemon.v1.TabTerminalResponse.resized:type_name -> portenv.daemon.v1.TerminalSize
-	164, // 42: portenv.daemon.v1.TabTerminalResponse.end:type_name -> portenv.types.v1.TabTerminalEnd
-	88,  // 43: portenv.daemon.v1.TabTerminalResponse.author:type_name -> portenv.daemon.v1.CommandAuthor
-	20,  // 44: portenv.daemon.v1.TabTerminalReset.size:type_name -> portenv.daemon.v1.TerminalSize
-	88,  // 45: portenv.daemon.v1.TabTerminalReset.authors:type_name -> portenv.daemon.v1.CommandAuthor
-	165, // 46: portenv.daemon.v1.ServerInfo.state:type_name -> portenv.types.v1.ServerKeyState
-	89,  // 47: portenv.daemon.v1.ScanServerKeyResponse.info:type_name -> portenv.daemon.v1.ServerInfo
-	89,  // 48: portenv.daemon.v1.TrustServerKeyResponse.info:type_name -> portenv.daemon.v1.ServerInfo
-	89,  // 49: portenv.daemon.v1.ForgetServerKeyResponse.info:type_name -> portenv.daemon.v1.ServerInfo
-	166, // 50: portenv.daemon.v1.CheckLine.state:type_name -> portenv.types.v1.CheckState
-	99,  // 51: portenv.daemon.v1.CheckServerResponse.lines:type_name -> portenv.daemon.v1.CheckLine
-	121, // 52: portenv.daemon.v1.ListAgentsResponse.agents:type_name -> portenv.daemon.v1.AgentInfo
-	106, // 53: portenv.daemon.v1.ListAgentsResponse.team_limit:type_name -> portenv.daemon.v1.TeamLimit
-	109, // 54: portenv.daemon.v1.ListTeamTemplatesResponse.templates:type_name -> portenv.daemon.v1.TeamTemplate
-	114, // 55: portenv.daemon.v1.TeamTemplate.agents:type_name -> portenv.daemon.v1.PlannedAgent
-	111, // 56: portenv.daemon.v1.TeamPlanChoice.agents:type_name -> portenv.daemon.v1.TeamAgentChoice
-	110, // 57: portenv.daemon.v1.PlanTeamRequest.choice:type_name -> portenv.daemon.v1.TeamPlanChoice
-	114, // 58: portenv.daemon.v1.PlanTeamResponse.agents:type_name -> portenv.daemon.v1.PlannedAgent
-	118, // 59: portenv.daemon.v1.SetAgentsAllowedResponse.settings:type_name -> portenv.daemon.v1.GetTeamSettingsResponse
-	167, // 60: portenv.daemon.v1.AgentInfo.state:type_name -> portenv.types.v1.AgentState
-	168, // 61: portenv.daemon.v1.AgentInfo.grant:type_name -> portenv.types.v1.AgentGrant
-	169, // 62: portenv.daemon.v1.AgentInfo.status:type_name -> portenv.types.v1.AgentStatus
-	170, // 63: portenv.daemon.v1.AgentInfo.routines:type_name -> portenv.types.v1.Routine
-	121, // 64: portenv.daemon.v1.WatchTeamResponse.agent:type_name -> portenv.daemon.v1.AgentInfo
-	171, // 65: portenv.daemon.v1.WatchTeamResponse.message:type_name -> portenv.types.v1.BoardMessage
-	172, // 66: portenv.daemon.v1.WatchTeamResponse.decision:type_name -> portenv.types.v1.Decision
-	106, // 67: portenv.daemon.v1.WatchTeamResponse.team_limit:type_name -> portenv.daemon.v1.TeamLimit
-	121, // 68: portenv.daemon.v1.StartAgentResponse.agent:type_name -> portenv.daemon.v1.AgentInfo
-	121, // 69: portenv.daemon.v1.StopAgentResponse.agent:type_name -> portenv.daemon.v1.AgentInfo
-	172, // 70: portenv.daemon.v1.AnswerDecisionResponse.decision:type_name -> portenv.types.v1.Decision
-	121, // 71: portenv.daemon.v1.ApproveAgentFileResponse.agent:type_name -> portenv.daemon.v1.AgentInfo
-	173, // 72: portenv.daemon.v1.SendMessageRequest.type:type_name -> portenv.types.v1.MessageType
-	171, // 73: portenv.daemon.v1.SendMessageResponse.message:type_name -> portenv.types.v1.BoardMessage
-	172, // 74: portenv.daemon.v1.RemoveAgentResponse.delete_files:type_name -> portenv.types.v1.Decision
-	174, // 75: portenv.daemon.v1.ListAgentFilesResponse.files:type_name -> portenv.types.v1.AgentFile
-	174, // 76: portenv.daemon.v1.AddAgentFilesResponse.added:type_name -> portenv.types.v1.AgentFile
-	121, // 77: portenv.daemon.v1.SetRoutinePausedResponse.agent:type_name -> portenv.daemon.v1.AgentInfo
-	172, // 78: portenv.daemon.v1.ListDecisionsResponse.decisions:type_name -> portenv.types.v1.Decision
-	172, // 79: portenv.daemon.v1.DeployResponse.decision:type_name -> portenv.types.v1.Decision
-	22,  // 80: portenv.daemon.v1.DaemonService.GetVersion:input_type -> portenv.daemon.v1.GetVersionRequest
-	24,  // 81: portenv.daemon.v1.DaemonService.ListBoxes:input_type -> portenv.daemon.v1.ListBoxesRequest
-	8,   // 82: portenv.daemon.v1.DaemonService.OpenBox:input_type -> portenv.daemon.v1.OpenBoxRequest
-	10,  // 83: portenv.daemon.v1.DaemonService.CloseBox:input_type -> portenv.daemon.v1.CloseBoxRequest
-	12,  // 84: portenv.daemon.v1.DaemonService.MakeSavePoint:input_type -> portenv.daemon.v1.MakeSavePointRequest
-	14,  // 85: portenv.daemon.v1.DaemonService.RevertToLastSavePoint:input_type -> portenv.daemon.v1.RevertToLastSavePointRequest
-	16,  // 86: portenv.daemon.v1.DaemonService.MoveBox:input_type -> portenv.daemon.v1.MoveBoxRequest
-	18,  // 87: portenv.daemon.v1.DaemonService.Terminal:input_type -> portenv.daemon.v1.TerminalRequest
-	4,   // 88: portenv.daemon.v1.DaemonService.CheckBox:input_type -> portenv.daemon.v1.CheckBoxRequest
-	6,   // 89: portenv.daemon.v1.DaemonService.RestartBox:input_type -> portenv.daemon.v1.RestartBoxRequest
-	27,  // 90: portenv.daemon.v1.DaemonService.GetChannel:input_type -> portenv.daemon.v1.GetChannelRequest
-	29,  // 91: portenv.daemon.v1.DaemonService.GetBoxState:input_type -> portenv.daemon.v1.GetBoxStateRequest
-	42,  // 92: portenv.daemon.v1.DaemonService.WatchBoxState:input_type -> portenv.daemon.v1.WatchBoxStateRequest
-	31,  // 93: portenv.daemon.v1.DaemonService.SetNetworkPath:input_type -> portenv.daemon.v1.SetNetworkPathRequest
-	33,  // 94: portenv.daemon.v1.DaemonService.Woke:input_type -> portenv.daemon.v1.WokeRequest
-	36,  // 95: portenv.daemon.v1.DaemonService.RetryPackages:input_type -> portenv.daemon.v1.RetryPackagesRequest
-	38,  // 96: portenv.daemon.v1.DaemonService.ProvideKeys:input_type -> portenv.daemon.v1.ProvideKeysRequest
-	40,  // 97: portenv.daemon.v1.DaemonService.Relaunch:input_type -> portenv.daemon.v1.RelaunchRequest
-	44,  // 98: portenv.daemon.v1.DaemonService.ListServers:input_type -> portenv.daemon.v1.ListServersRequest
-	46,  // 99: portenv.daemon.v1.DaemonService.GetKeyIDs:input_type -> portenv.daemon.v1.GetKeyIDsRequest
-	48,  // 100: portenv.daemon.v1.DaemonService.SaveNow:input_type -> portenv.daemon.v1.SaveNowRequest
-	50,  // 101: portenv.daemon.v1.DaemonService.ListSaves:input_type -> portenv.daemon.v1.ListSavesRequest
-	53,  // 102: portenv.daemon.v1.DaemonService.Housekeep:input_type -> portenv.daemon.v1.HousekeepRequest
-	55,  // 103: portenv.daemon.v1.DaemonService.LeaveUnsaved:input_type -> portenv.daemon.v1.LeaveUnsavedRequest
-	57,  // 104: portenv.daemon.v1.DaemonService.TakeSavedAfterQuit:input_type -> portenv.daemon.v1.TakeSavedAfterQuitRequest
-	60,  // 105: portenv.daemon.v1.DaemonService.ListTabs:input_type -> portenv.daemon.v1.ListTabsRequest
-	62,  // 106: portenv.daemon.v1.DaemonService.NewTab:input_type -> portenv.daemon.v1.NewTabRequest
-	64,  // 107: portenv.daemon.v1.DaemonService.CloseTab:input_type -> portenv.daemon.v1.CloseTabRequest
-	66,  // 108: portenv.daemon.v1.DaemonService.RenameTab:input_type -> portenv.daemon.v1.RenameTabRequest
-	68,  // 109: portenv.daemon.v1.DaemonService.SelectTab:input_type -> portenv.daemon.v1.SelectTabRequest
-	70,  // 110: portenv.daemon.v1.DaemonService.WatchTabs:input_type -> portenv.daemon.v1.WatchTabsRequest
-	72,  // 111: portenv.daemon.v1.DaemonService.CreateBox:input_type -> portenv.daemon.v1.CreateBoxRequest
-	76,  // 112: portenv.daemon.v1.DaemonService.DiscardCreation:input_type -> portenv.daemon.v1.DiscardCreationRequest
-	78,  // 113: portenv.daemon.v1.DaemonService.RecoverBox:input_type -> portenv.daemon.v1.RecoverBoxRequest
-	80,  // 114: portenv.daemon.v1.DaemonService.CheckRecoveryKey:input_type -> portenv.daemon.v1.CheckRecoveryKeyRequest
-	82,  // 115: portenv.daemon.v1.DaemonService.GetPlacement:input_type -> portenv.daemon.v1.GetPlacementRequest
-	84,  // 116: portenv.daemon.v1.DaemonService.TabTerminal:input_type -> portenv.daemon.v1.TabTerminalRequest
-	90,  // 117: portenv.daemon.v1.DaemonService.ScanServerKey:input_type -> portenv.daemon.v1.ScanServerKeyRequest
-	92,  // 118: portenv.daemon.v1.DaemonService.TrustServerKey:input_type -> portenv.daemon.v1.TrustServerKeyRequest
-	94,  // 119: portenv.daemon.v1.DaemonService.ForgetServerKey:input_type -> portenv.daemon.v1.ForgetServerKeyRequest
-	96,  // 120: portenv.daemon.v1.DaemonService.ProvideServerKey:input_type -> portenv.daemon.v1.ProvideServerKeyRequest
-	98,  // 121: portenv.daemon.v1.DaemonService.CheckServer:input_type -> portenv.daemon.v1.CheckServerRequest
-	101, // 122: portenv.daemon.v1.DaemonService.GetEngine:input_type -> portenv.daemon.v1.GetEngineRequest
-	104, // 123: portenv.daemon.v1.DaemonService.ListAgents:input_type -> portenv.daemon.v1.ListAgentsRequest
-	122, // 124: portenv.daemon.v1.DaemonService.WatchTeam:input_type -> portenv.daemon.v1.WatchTeamRequest
-	126, // 125: portenv.daemon.v1.DaemonService.StartAgent:input_type -> portenv.daemon.v1.StartAgentRequest
-	128, // 126: portenv.daemon.v1.DaemonService.StopAgent:input_type -> portenv.daemon.v1.StopAgentRequest
-	124, // 127: portenv.daemon.v1.DaemonService.FetchAgentBranch:input_type -> portenv.daemon.v1.FetchAgentBranchRequest
-	130, // 128: portenv.daemon.v1.DaemonService.AnswerDecision:input_type -> portenv.daemon.v1.AnswerDecisionRequest
-	132, // 129: portenv.daemon.v1.DaemonService.GetAgentFile:input_type -> portenv.daemon.v1.GetAgentFileRequest
-	134, // 130: portenv.daemon.v1.DaemonService.ApproveAgentFile:input_type -> portenv.daemon.v1.ApproveAgentFileRequest
-	136, // 131: portenv.daemon.v1.DaemonService.SendMessage:input_type -> portenv.daemon.v1.SendMessageRequest
-	138, // 132: portenv.daemon.v1.DaemonService.RemoveAgent:input_type -> portenv.daemon.v1.RemoveAgentRequest
-	140, // 133: portenv.daemon.v1.DaemonService.ListAgentFiles:input_type -> portenv.daemon.v1.ListAgentFilesRequest
-	142, // 134: portenv.daemon.v1.DaemonService.ReadAgentFile:input_type -> portenv.daemon.v1.ReadAgentFileRequest
-	144, // 135: portenv.daemon.v1.DaemonService.AddAgentFiles:input_type -> portenv.daemon.v1.AddAgentFilesRequest
-	146, // 136: portenv.daemon.v1.DaemonService.SetRoutinePaused:input_type -> portenv.daemon.v1.SetRoutinePausedRequest
-	148, // 137: portenv.daemon.v1.DaemonService.WakeAgent:input_type -> portenv.daemon.v1.WakeAgentRequest
-	150, // 138: portenv.daemon.v1.DaemonService.ListDecisions:input_type -> portenv.daemon.v1.ListDecisionsRequest
-	152, // 139: portenv.daemon.v1.DaemonService.Deploy:input_type -> portenv.daemon.v1.DeployRequest
-	117, // 140: portenv.daemon.v1.DaemonService.GetTeamSettings:input_type -> portenv.daemon.v1.GetTeamSettingsRequest
-	119, // 141: portenv.daemon.v1.DaemonService.SetAgentsAllowed:input_type -> portenv.daemon.v1.SetAgentsAllowedRequest
-	107, // 142: portenv.daemon.v1.DaemonService.ListTeamTemplates:input_type -> portenv.daemon.v1.ListTeamTemplatesRequest
-	112, // 143: portenv.daemon.v1.DaemonService.PlanTeam:input_type -> portenv.daemon.v1.PlanTeamRequest
-	115, // 144: portenv.daemon.v1.DaemonService.ApplyTeamPlan:input_type -> portenv.daemon.v1.ApplyTeamPlanRequest
-	23,  // 145: portenv.daemon.v1.DaemonService.GetVersion:output_type -> portenv.daemon.v1.GetVersionResponse
-	25,  // 146: portenv.daemon.v1.DaemonService.ListBoxes:output_type -> portenv.daemon.v1.ListBoxesResponse
-	9,   // 147: portenv.daemon.v1.DaemonService.OpenBox:output_type -> portenv.daemon.v1.OpenBoxResponse
-	11,  // 148: portenv.daemon.v1.DaemonService.CloseBox:output_type -> portenv.daemon.v1.CloseBoxResponse
-	13,  // 149: portenv.daemon.v1.DaemonService.MakeSavePoint:output_type -> portenv.daemon.v1.MakeSavePointResponse
-	15,  // 150: portenv.daemon.v1.DaemonService.RevertToLastSavePoint:output_type -> portenv.daemon.v1.RevertToLastSavePointResponse
-	17,  // 151: portenv.daemon.v1.DaemonService.MoveBox:output_type -> portenv.daemon.v1.MoveBoxResponse
-	21,  // 152: portenv.daemon.v1.DaemonService.Terminal:output_type -> portenv.daemon.v1.TerminalResponse
-	5,   // 153: portenv.daemon.v1.DaemonService.CheckBox:output_type -> portenv.daemon.v1.CheckBoxResponse
-	7,   // 154: portenv.daemon.v1.DaemonService.RestartBox:output_type -> portenv.daemon.v1.RestartBoxResponse
-	28,  // 155: portenv.daemon.v1.DaemonService.GetChannel:output_type -> portenv.daemon.v1.GetChannelResponse
-	30,  // 156: portenv.daemon.v1.DaemonService.GetBoxState:output_type -> portenv.daemon.v1.GetBoxStateResponse
-	43,  // 157: portenv.daemon.v1.DaemonService.WatchBoxState:output_type -> portenv.daemon.v1.WatchBoxStateResponse
-	32,  // 158: portenv.daemon.v1.DaemonService.SetNetworkPath:output_type -> portenv.daemon.v1.SetNetworkPathResponse
-	34,  // 159: portenv.daemon.v1.DaemonService.Woke:output_type -> portenv.daemon.v1.WokeResponse
-	37,  // 160: portenv.daemon.v1.DaemonService.RetryPackages:output_type -> portenv.daemon.v1.RetryPackagesResponse
-	39,  // 161: portenv.daemon.v1.DaemonService.ProvideKeys:output_type -> portenv.daemon.v1.ProvideKeysResponse
-	41,  // 162: portenv.daemon.v1.DaemonService.Relaunch:output_type -> portenv.daemon.v1.RelaunchResponse
-	45,  // 163: portenv.daemon.v1.DaemonService.ListServers:output_type -> portenv.daemon.v1.ListServersResponse
-	47,  // 164: portenv.daemon.v1.DaemonService.GetKeyIDs:output_type -> portenv.daemon.v1.GetKeyIDsResponse
-	49,  // 165: portenv.daemon.v1.DaemonService.SaveNow:output_type -> portenv.daemon.v1.SaveNowResponse
-	51,  // 166: portenv.daemon.v1.DaemonService.ListSaves:output_type -> portenv.daemon.v1.ListSavesResponse
-	54,  // 167: portenv.daemon.v1.DaemonService.Housekeep:output_type -> portenv.daemon.v1.HousekeepResponse
-	56,  // 168: portenv.daemon.v1.DaemonService.LeaveUnsaved:output_type -> portenv.daemon.v1.LeaveUnsavedResponse
-	58,  // 169: portenv.daemon.v1.DaemonService.TakeSavedAfterQuit:output_type -> portenv.daemon.v1.TakeSavedAfterQuitResponse
-	61,  // 170: portenv.daemon.v1.DaemonService.ListTabs:output_type -> portenv.daemon.v1.ListTabsResponse
-	63,  // 171: portenv.daemon.v1.DaemonService.NewTab:output_type -> portenv.daemon.v1.NewTabResponse
-	65,  // 172: portenv.daemon.v1.DaemonService.CloseTab:output_type -> portenv.daemon.v1.CloseTabResponse
-	67,  // 173: portenv.daemon.v1.DaemonService.RenameTab:output_type -> portenv.daemon.v1.RenameTabResponse
-	69,  // 174: portenv.daemon.v1.DaemonService.SelectTab:output_type -> portenv.daemon.v1.SelectTabResponse
-	71,  // 175: portenv.daemon.v1.DaemonService.WatchTabs:output_type -> portenv.daemon.v1.WatchTabsResponse
-	75,  // 176: portenv.daemon.v1.DaemonService.CreateBox:output_type -> portenv.daemon.v1.CreateBoxResponse
-	77,  // 177: portenv.daemon.v1.DaemonService.DiscardCreation:output_type -> portenv.daemon.v1.DiscardCreationResponse
-	79,  // 178: portenv.daemon.v1.DaemonService.RecoverBox:output_type -> portenv.daemon.v1.RecoverBoxResponse
-	81,  // 179: portenv.daemon.v1.DaemonService.CheckRecoveryKey:output_type -> portenv.daemon.v1.CheckRecoveryKeyResponse
-	83,  // 180: portenv.daemon.v1.DaemonService.GetPlacement:output_type -> portenv.daemon.v1.GetPlacementResponse
-	86,  // 181: portenv.daemon.v1.DaemonService.TabTerminal:output_type -> portenv.daemon.v1.TabTerminalResponse
-	91,  // 182: portenv.daemon.v1.DaemonService.ScanServerKey:output_type -> portenv.daemon.v1.ScanServerKeyResponse
-	93,  // 183: portenv.daemon.v1.DaemonService.TrustServerKey:output_type -> portenv.daemon.v1.TrustServerKeyResponse
-	95,  // 184: portenv.daemon.v1.DaemonService.ForgetServerKey:output_type -> portenv.daemon.v1.ForgetServerKeyResponse
-	97,  // 185: portenv.daemon.v1.DaemonService.ProvideServerKey:output_type -> portenv.daemon.v1.ProvideServerKeyResponse
-	100, // 186: portenv.daemon.v1.DaemonService.CheckServer:output_type -> portenv.daemon.v1.CheckServerResponse
-	102, // 187: portenv.daemon.v1.DaemonService.GetEngine:output_type -> portenv.daemon.v1.GetEngineResponse
-	105, // 188: portenv.daemon.v1.DaemonService.ListAgents:output_type -> portenv.daemon.v1.ListAgentsResponse
-	123, // 189: portenv.daemon.v1.DaemonService.WatchTeam:output_type -> portenv.daemon.v1.WatchTeamResponse
-	127, // 190: portenv.daemon.v1.DaemonService.StartAgent:output_type -> portenv.daemon.v1.StartAgentResponse
-	129, // 191: portenv.daemon.v1.DaemonService.StopAgent:output_type -> portenv.daemon.v1.StopAgentResponse
-	125, // 192: portenv.daemon.v1.DaemonService.FetchAgentBranch:output_type -> portenv.daemon.v1.FetchAgentBranchResponse
-	131, // 193: portenv.daemon.v1.DaemonService.AnswerDecision:output_type -> portenv.daemon.v1.AnswerDecisionResponse
-	133, // 194: portenv.daemon.v1.DaemonService.GetAgentFile:output_type -> portenv.daemon.v1.GetAgentFileResponse
-	135, // 195: portenv.daemon.v1.DaemonService.ApproveAgentFile:output_type -> portenv.daemon.v1.ApproveAgentFileResponse
-	137, // 196: portenv.daemon.v1.DaemonService.SendMessage:output_type -> portenv.daemon.v1.SendMessageResponse
-	139, // 197: portenv.daemon.v1.DaemonService.RemoveAgent:output_type -> portenv.daemon.v1.RemoveAgentResponse
-	141, // 198: portenv.daemon.v1.DaemonService.ListAgentFiles:output_type -> portenv.daemon.v1.ListAgentFilesResponse
-	143, // 199: portenv.daemon.v1.DaemonService.ReadAgentFile:output_type -> portenv.daemon.v1.ReadAgentFileResponse
-	145, // 200: portenv.daemon.v1.DaemonService.AddAgentFiles:output_type -> portenv.daemon.v1.AddAgentFilesResponse
-	147, // 201: portenv.daemon.v1.DaemonService.SetRoutinePaused:output_type -> portenv.daemon.v1.SetRoutinePausedResponse
-	149, // 202: portenv.daemon.v1.DaemonService.WakeAgent:output_type -> portenv.daemon.v1.WakeAgentResponse
-	151, // 203: portenv.daemon.v1.DaemonService.ListDecisions:output_type -> portenv.daemon.v1.ListDecisionsResponse
-	153, // 204: portenv.daemon.v1.DaemonService.Deploy:output_type -> portenv.daemon.v1.DeployResponse
-	118, // 205: portenv.daemon.v1.DaemonService.GetTeamSettings:output_type -> portenv.daemon.v1.GetTeamSettingsResponse
-	120, // 206: portenv.daemon.v1.DaemonService.SetAgentsAllowed:output_type -> portenv.daemon.v1.SetAgentsAllowedResponse
-	108, // 207: portenv.daemon.v1.DaemonService.ListTeamTemplates:output_type -> portenv.daemon.v1.ListTeamTemplatesResponse
-	113, // 208: portenv.daemon.v1.DaemonService.PlanTeam:output_type -> portenv.daemon.v1.PlanTeamResponse
-	116, // 209: portenv.daemon.v1.DaemonService.ApplyTeamPlan:output_type -> portenv.daemon.v1.ApplyTeamPlanResponse
-	145, // [145:210] is the sub-list for method output_type
-	80,  // [80:145] is the sub-list for method input_type
-	80,  // [80:80] is the sub-list for extension type_name
-	80,  // [80:80] is the sub-list for extension extendee
-	0,   // [0:80] is the sub-list for field type_name
+	6,   // 0: portenv.daemon.v1.WatchPushesResponse.question:type_name -> portenv.daemon.v1.PushQuestion
+	7,   // 1: portenv.daemon.v1.PushQuestion.updates:type_name -> portenv.daemon.v1.PushUpdateInfo
+	164, // 2: portenv.daemon.v1.MakeSavePointResponse.snapshot:type_name -> portenv.types.v1.SnapshotRef
+	164, // 3: portenv.daemon.v1.RevertToLastSavePointResponse.restored:type_name -> portenv.types.v1.SnapshotRef
+	164, // 4: portenv.daemon.v1.RevertToLastSavePointResponse.saved_before:type_name -> portenv.types.v1.SnapshotRef
+	25,  // 5: portenv.daemon.v1.TerminalRequest.open:type_name -> portenv.daemon.v1.TerminalOpen
+	26,  // 6: portenv.daemon.v1.TerminalRequest.resize:type_name -> portenv.daemon.v1.TerminalSize
+	26,  // 7: portenv.daemon.v1.TerminalOpen.size:type_name -> portenv.daemon.v1.TerminalSize
+	165, // 8: portenv.daemon.v1.GetVersionResponse.build:type_name -> portenv.types.v1.BuildInfo
+	32,  // 9: portenv.daemon.v1.ListBoxesResponse.boxes:type_name -> portenv.daemon.v1.BoxStatus
+	166, // 10: portenv.daemon.v1.BoxStatus.box:type_name -> portenv.types.v1.Box
+	167, // 11: portenv.daemon.v1.BoxStatus.state:type_name -> portenv.types.v1.BoxState
+	0,   // 12: portenv.daemon.v1.GetBoxStateResponse.state:type_name -> portenv.daemon.v1.SaveState
+	168, // 13: portenv.daemon.v1.GetBoxStateResponse.saved_at:type_name -> google.protobuf.Timestamp
+	168, // 14: portenv.daemon.v1.GetBoxStateResponse.opened_at:type_name -> google.protobuf.Timestamp
+	109, // 15: portenv.daemon.v1.GetBoxStateResponse.image_pull:type_name -> portenv.daemon.v1.ImagePull
+	1,   // 16: portenv.daemon.v1.SetNetworkPathRequest.path:type_name -> portenv.daemon.v1.NetworkPath
+	41,  // 17: portenv.daemon.v1.WokeResponse.boxes:type_name -> portenv.daemon.v1.WokeBox
+	160, // 18: portenv.daemon.v1.ProvideKeysRequest.keys:type_name -> portenv.daemon.v1.ProvideKeysRequest.KeysEntry
+	36,  // 19: portenv.daemon.v1.WatchBoxStateResponse.state:type_name -> portenv.daemon.v1.GetBoxStateResponse
+	95,  // 20: portenv.daemon.v1.ListServersResponse.infos:type_name -> portenv.daemon.v1.ServerInfo
+	164, // 21: portenv.daemon.v1.SaveNowResponse.snapshot:type_name -> portenv.types.v1.SnapshotRef
+	58,  // 22: portenv.daemon.v1.ListSavesResponse.saves:type_name -> portenv.daemon.v1.SaveEntry
+	168, // 23: portenv.daemon.v1.SaveEntry.time:type_name -> google.protobuf.Timestamp
+	65,  // 24: portenv.daemon.v1.TakeSavedAfterQuitResponse.saved:type_name -> portenv.daemon.v1.SavedAfterQuit
+	168, // 25: portenv.daemon.v1.SavedAfterQuit.saved_at:type_name -> google.protobuf.Timestamp
+	169, // 26: portenv.daemon.v1.ListTabsResponse.tabs:type_name -> portenv.types.v1.Tab
+	169, // 27: portenv.daemon.v1.NewTabResponse.tab:type_name -> portenv.types.v1.Tab
+	169, // 28: portenv.daemon.v1.WatchTabsResponse.tabs:type_name -> portenv.types.v1.Tab
+	161, // 29: portenv.daemon.v1.CreateBoxRequest.keys:type_name -> portenv.daemon.v1.CreateBoxRequest.KeysEntry
+	116, // 30: portenv.daemon.v1.CreateBoxRequest.team:type_name -> portenv.daemon.v1.TeamPlanChoice
+	79,  // 31: portenv.daemon.v1.CreateBoxRequest.project:type_name -> portenv.daemon.v1.ProjectSource
+	79,  // 32: portenv.daemon.v1.WorkspaceSetup.project:type_name -> portenv.daemon.v1.ProjectSource
+	116, // 33: portenv.daemon.v1.WorkspaceSetup.team:type_name -> portenv.daemon.v1.TeamPlanChoice
+	162, // 34: portenv.daemon.v1.RecoverBoxRequest.keys:type_name -> portenv.daemon.v1.RecoverBoxRequest.KeysEntry
+	163, // 35: portenv.daemon.v1.CheckRecoveryKeyRequest.recovery_passwords:type_name -> portenv.daemon.v1.CheckRecoveryKeyRequest.RecoveryPasswordsEntry
+	2,   // 36: portenv.daemon.v1.GetPlacementResponse.holder:type_name -> portenv.daemon.v1.Holder
+	168, // 37: portenv.daemon.v1.GetPlacementResponse.newest_save_at:type_name -> google.protobuf.Timestamp
+	3,   // 38: portenv.daemon.v1.GetPlacementResponse.answers:type_name -> portenv.daemon.v1.Answers
+	91,  // 39: portenv.daemon.v1.TabTerminalRequest.open:type_name -> portenv.daemon.v1.TabTerminalOpen
+	26,  // 40: portenv.daemon.v1.TabTerminalRequest.resize:type_name -> portenv.daemon.v1.TerminalSize
+	26,  // 41: portenv.daemon.v1.TabTerminalOpen.size:type_name -> portenv.daemon.v1.TerminalSize
+	93,  // 42: portenv.daemon.v1.TabTerminalResponse.reset:type_name -> portenv.daemon.v1.TabTerminalReset
+	26,  // 43: portenv.daemon.v1.TabTerminalResponse.resized:type_name -> portenv.daemon.v1.TerminalSize
+	170, // 44: portenv.daemon.v1.TabTerminalResponse.end:type_name -> portenv.types.v1.TabTerminalEnd
+	94,  // 45: portenv.daemon.v1.TabTerminalResponse.author:type_name -> portenv.daemon.v1.CommandAuthor
+	26,  // 46: portenv.daemon.v1.TabTerminalReset.size:type_name -> portenv.daemon.v1.TerminalSize
+	94,  // 47: portenv.daemon.v1.TabTerminalReset.authors:type_name -> portenv.daemon.v1.CommandAuthor
+	171, // 48: portenv.daemon.v1.ServerInfo.state:type_name -> portenv.types.v1.ServerKeyState
+	95,  // 49: portenv.daemon.v1.ScanServerKeyResponse.info:type_name -> portenv.daemon.v1.ServerInfo
+	95,  // 50: portenv.daemon.v1.TrustServerKeyResponse.info:type_name -> portenv.daemon.v1.ServerInfo
+	95,  // 51: portenv.daemon.v1.ForgetServerKeyResponse.info:type_name -> portenv.daemon.v1.ServerInfo
+	172, // 52: portenv.daemon.v1.CheckLine.state:type_name -> portenv.types.v1.CheckState
+	105, // 53: portenv.daemon.v1.CheckServerResponse.lines:type_name -> portenv.daemon.v1.CheckLine
+	127, // 54: portenv.daemon.v1.ListAgentsResponse.agents:type_name -> portenv.daemon.v1.AgentInfo
+	112, // 55: portenv.daemon.v1.ListAgentsResponse.team_limit:type_name -> portenv.daemon.v1.TeamLimit
+	115, // 56: portenv.daemon.v1.ListTeamTemplatesResponse.templates:type_name -> portenv.daemon.v1.TeamTemplate
+	120, // 57: portenv.daemon.v1.TeamTemplate.agents:type_name -> portenv.daemon.v1.PlannedAgent
+	117, // 58: portenv.daemon.v1.TeamPlanChoice.agents:type_name -> portenv.daemon.v1.TeamAgentChoice
+	116, // 59: portenv.daemon.v1.PlanTeamRequest.choice:type_name -> portenv.daemon.v1.TeamPlanChoice
+	120, // 60: portenv.daemon.v1.PlanTeamResponse.agents:type_name -> portenv.daemon.v1.PlannedAgent
+	124, // 61: portenv.daemon.v1.SetAgentsAllowedResponse.settings:type_name -> portenv.daemon.v1.GetTeamSettingsResponse
+	173, // 62: portenv.daemon.v1.AgentInfo.state:type_name -> portenv.types.v1.AgentState
+	174, // 63: portenv.daemon.v1.AgentInfo.grant:type_name -> portenv.types.v1.AgentGrant
+	175, // 64: portenv.daemon.v1.AgentInfo.status:type_name -> portenv.types.v1.AgentStatus
+	176, // 65: portenv.daemon.v1.AgentInfo.routines:type_name -> portenv.types.v1.Routine
+	127, // 66: portenv.daemon.v1.WatchTeamResponse.agent:type_name -> portenv.daemon.v1.AgentInfo
+	177, // 67: portenv.daemon.v1.WatchTeamResponse.message:type_name -> portenv.types.v1.BoardMessage
+	178, // 68: portenv.daemon.v1.WatchTeamResponse.decision:type_name -> portenv.types.v1.Decision
+	112, // 69: portenv.daemon.v1.WatchTeamResponse.team_limit:type_name -> portenv.daemon.v1.TeamLimit
+	127, // 70: portenv.daemon.v1.StartAgentResponse.agent:type_name -> portenv.daemon.v1.AgentInfo
+	127, // 71: portenv.daemon.v1.StopAgentResponse.agent:type_name -> portenv.daemon.v1.AgentInfo
+	178, // 72: portenv.daemon.v1.AnswerDecisionResponse.decision:type_name -> portenv.types.v1.Decision
+	127, // 73: portenv.daemon.v1.ApproveAgentFileResponse.agent:type_name -> portenv.daemon.v1.AgentInfo
+	179, // 74: portenv.daemon.v1.SendMessageRequest.type:type_name -> portenv.types.v1.MessageType
+	177, // 75: portenv.daemon.v1.SendMessageResponse.message:type_name -> portenv.types.v1.BoardMessage
+	178, // 76: portenv.daemon.v1.RemoveAgentResponse.delete_files:type_name -> portenv.types.v1.Decision
+	180, // 77: portenv.daemon.v1.ListAgentFilesResponse.files:type_name -> portenv.types.v1.AgentFile
+	180, // 78: portenv.daemon.v1.AddAgentFilesResponse.added:type_name -> portenv.types.v1.AgentFile
+	127, // 79: portenv.daemon.v1.SetRoutinePausedResponse.agent:type_name -> portenv.daemon.v1.AgentInfo
+	178, // 80: portenv.daemon.v1.ListDecisionsResponse.decisions:type_name -> portenv.types.v1.Decision
+	178, // 81: portenv.daemon.v1.DeployResponse.decision:type_name -> portenv.types.v1.Decision
+	28,  // 82: portenv.daemon.v1.DaemonService.GetVersion:input_type -> portenv.daemon.v1.GetVersionRequest
+	30,  // 83: portenv.daemon.v1.DaemonService.ListBoxes:input_type -> portenv.daemon.v1.ListBoxesRequest
+	14,  // 84: portenv.daemon.v1.DaemonService.OpenBox:input_type -> portenv.daemon.v1.OpenBoxRequest
+	16,  // 85: portenv.daemon.v1.DaemonService.CloseBox:input_type -> portenv.daemon.v1.CloseBoxRequest
+	18,  // 86: portenv.daemon.v1.DaemonService.MakeSavePoint:input_type -> portenv.daemon.v1.MakeSavePointRequest
+	20,  // 87: portenv.daemon.v1.DaemonService.RevertToLastSavePoint:input_type -> portenv.daemon.v1.RevertToLastSavePointRequest
+	22,  // 88: portenv.daemon.v1.DaemonService.MoveBox:input_type -> portenv.daemon.v1.MoveBoxRequest
+	24,  // 89: portenv.daemon.v1.DaemonService.Terminal:input_type -> portenv.daemon.v1.TerminalRequest
+	10,  // 90: portenv.daemon.v1.DaemonService.CheckBox:input_type -> portenv.daemon.v1.CheckBoxRequest
+	12,  // 91: portenv.daemon.v1.DaemonService.RestartBox:input_type -> portenv.daemon.v1.RestartBoxRequest
+	33,  // 92: portenv.daemon.v1.DaemonService.GetChannel:input_type -> portenv.daemon.v1.GetChannelRequest
+	35,  // 93: portenv.daemon.v1.DaemonService.GetBoxState:input_type -> portenv.daemon.v1.GetBoxStateRequest
+	48,  // 94: portenv.daemon.v1.DaemonService.WatchBoxState:input_type -> portenv.daemon.v1.WatchBoxStateRequest
+	37,  // 95: portenv.daemon.v1.DaemonService.SetNetworkPath:input_type -> portenv.daemon.v1.SetNetworkPathRequest
+	39,  // 96: portenv.daemon.v1.DaemonService.Woke:input_type -> portenv.daemon.v1.WokeRequest
+	42,  // 97: portenv.daemon.v1.DaemonService.RetryPackages:input_type -> portenv.daemon.v1.RetryPackagesRequest
+	44,  // 98: portenv.daemon.v1.DaemonService.ProvideKeys:input_type -> portenv.daemon.v1.ProvideKeysRequest
+	46,  // 99: portenv.daemon.v1.DaemonService.Relaunch:input_type -> portenv.daemon.v1.RelaunchRequest
+	50,  // 100: portenv.daemon.v1.DaemonService.ListServers:input_type -> portenv.daemon.v1.ListServersRequest
+	52,  // 101: portenv.daemon.v1.DaemonService.GetKeyIDs:input_type -> portenv.daemon.v1.GetKeyIDsRequest
+	54,  // 102: portenv.daemon.v1.DaemonService.SaveNow:input_type -> portenv.daemon.v1.SaveNowRequest
+	56,  // 103: portenv.daemon.v1.DaemonService.ListSaves:input_type -> portenv.daemon.v1.ListSavesRequest
+	59,  // 104: portenv.daemon.v1.DaemonService.Housekeep:input_type -> portenv.daemon.v1.HousekeepRequest
+	61,  // 105: portenv.daemon.v1.DaemonService.LeaveUnsaved:input_type -> portenv.daemon.v1.LeaveUnsavedRequest
+	63,  // 106: portenv.daemon.v1.DaemonService.TakeSavedAfterQuit:input_type -> portenv.daemon.v1.TakeSavedAfterQuitRequest
+	66,  // 107: portenv.daemon.v1.DaemonService.ListTabs:input_type -> portenv.daemon.v1.ListTabsRequest
+	68,  // 108: portenv.daemon.v1.DaemonService.NewTab:input_type -> portenv.daemon.v1.NewTabRequest
+	70,  // 109: portenv.daemon.v1.DaemonService.CloseTab:input_type -> portenv.daemon.v1.CloseTabRequest
+	72,  // 110: portenv.daemon.v1.DaemonService.RenameTab:input_type -> portenv.daemon.v1.RenameTabRequest
+	74,  // 111: portenv.daemon.v1.DaemonService.SelectTab:input_type -> portenv.daemon.v1.SelectTabRequest
+	76,  // 112: portenv.daemon.v1.DaemonService.WatchTabs:input_type -> portenv.daemon.v1.WatchTabsRequest
+	78,  // 113: portenv.daemon.v1.DaemonService.CreateBox:input_type -> portenv.daemon.v1.CreateBoxRequest
+	82,  // 114: portenv.daemon.v1.DaemonService.DiscardCreation:input_type -> portenv.daemon.v1.DiscardCreationRequest
+	84,  // 115: portenv.daemon.v1.DaemonService.RecoverBox:input_type -> portenv.daemon.v1.RecoverBoxRequest
+	86,  // 116: portenv.daemon.v1.DaemonService.CheckRecoveryKey:input_type -> portenv.daemon.v1.CheckRecoveryKeyRequest
+	88,  // 117: portenv.daemon.v1.DaemonService.GetPlacement:input_type -> portenv.daemon.v1.GetPlacementRequest
+	90,  // 118: portenv.daemon.v1.DaemonService.TabTerminal:input_type -> portenv.daemon.v1.TabTerminalRequest
+	96,  // 119: portenv.daemon.v1.DaemonService.ScanServerKey:input_type -> portenv.daemon.v1.ScanServerKeyRequest
+	98,  // 120: portenv.daemon.v1.DaemonService.TrustServerKey:input_type -> portenv.daemon.v1.TrustServerKeyRequest
+	100, // 121: portenv.daemon.v1.DaemonService.ForgetServerKey:input_type -> portenv.daemon.v1.ForgetServerKeyRequest
+	102, // 122: portenv.daemon.v1.DaemonService.ProvideServerKey:input_type -> portenv.daemon.v1.ProvideServerKeyRequest
+	104, // 123: portenv.daemon.v1.DaemonService.CheckServer:input_type -> portenv.daemon.v1.CheckServerRequest
+	107, // 124: portenv.daemon.v1.DaemonService.GetEngine:input_type -> portenv.daemon.v1.GetEngineRequest
+	110, // 125: portenv.daemon.v1.DaemonService.ListAgents:input_type -> portenv.daemon.v1.ListAgentsRequest
+	128, // 126: portenv.daemon.v1.DaemonService.WatchTeam:input_type -> portenv.daemon.v1.WatchTeamRequest
+	132, // 127: portenv.daemon.v1.DaemonService.StartAgent:input_type -> portenv.daemon.v1.StartAgentRequest
+	134, // 128: portenv.daemon.v1.DaemonService.StopAgent:input_type -> portenv.daemon.v1.StopAgentRequest
+	130, // 129: portenv.daemon.v1.DaemonService.FetchAgentBranch:input_type -> portenv.daemon.v1.FetchAgentBranchRequest
+	136, // 130: portenv.daemon.v1.DaemonService.AnswerDecision:input_type -> portenv.daemon.v1.AnswerDecisionRequest
+	138, // 131: portenv.daemon.v1.DaemonService.GetAgentFile:input_type -> portenv.daemon.v1.GetAgentFileRequest
+	140, // 132: portenv.daemon.v1.DaemonService.ApproveAgentFile:input_type -> portenv.daemon.v1.ApproveAgentFileRequest
+	142, // 133: portenv.daemon.v1.DaemonService.SendMessage:input_type -> portenv.daemon.v1.SendMessageRequest
+	144, // 134: portenv.daemon.v1.DaemonService.RemoveAgent:input_type -> portenv.daemon.v1.RemoveAgentRequest
+	146, // 135: portenv.daemon.v1.DaemonService.ListAgentFiles:input_type -> portenv.daemon.v1.ListAgentFilesRequest
+	148, // 136: portenv.daemon.v1.DaemonService.ReadAgentFile:input_type -> portenv.daemon.v1.ReadAgentFileRequest
+	150, // 137: portenv.daemon.v1.DaemonService.AddAgentFiles:input_type -> portenv.daemon.v1.AddAgentFilesRequest
+	152, // 138: portenv.daemon.v1.DaemonService.SetRoutinePaused:input_type -> portenv.daemon.v1.SetRoutinePausedRequest
+	154, // 139: portenv.daemon.v1.DaemonService.WakeAgent:input_type -> portenv.daemon.v1.WakeAgentRequest
+	156, // 140: portenv.daemon.v1.DaemonService.ListDecisions:input_type -> portenv.daemon.v1.ListDecisionsRequest
+	158, // 141: portenv.daemon.v1.DaemonService.Deploy:input_type -> portenv.daemon.v1.DeployRequest
+	123, // 142: portenv.daemon.v1.DaemonService.GetTeamSettings:input_type -> portenv.daemon.v1.GetTeamSettingsRequest
+	125, // 143: portenv.daemon.v1.DaemonService.SetAgentsAllowed:input_type -> portenv.daemon.v1.SetAgentsAllowedRequest
+	113, // 144: portenv.daemon.v1.DaemonService.ListTeamTemplates:input_type -> portenv.daemon.v1.ListTeamTemplatesRequest
+	118, // 145: portenv.daemon.v1.DaemonService.PlanTeam:input_type -> portenv.daemon.v1.PlanTeamRequest
+	121, // 146: portenv.daemon.v1.DaemonService.ApplyTeamPlan:input_type -> portenv.daemon.v1.ApplyTeamPlanRequest
+	4,   // 147: portenv.daemon.v1.DaemonService.WatchPushes:input_type -> portenv.daemon.v1.WatchPushesRequest
+	8,   // 148: portenv.daemon.v1.DaemonService.AnswerPush:input_type -> portenv.daemon.v1.AnswerPushRequest
+	29,  // 149: portenv.daemon.v1.DaemonService.GetVersion:output_type -> portenv.daemon.v1.GetVersionResponse
+	31,  // 150: portenv.daemon.v1.DaemonService.ListBoxes:output_type -> portenv.daemon.v1.ListBoxesResponse
+	15,  // 151: portenv.daemon.v1.DaemonService.OpenBox:output_type -> portenv.daemon.v1.OpenBoxResponse
+	17,  // 152: portenv.daemon.v1.DaemonService.CloseBox:output_type -> portenv.daemon.v1.CloseBoxResponse
+	19,  // 153: portenv.daemon.v1.DaemonService.MakeSavePoint:output_type -> portenv.daemon.v1.MakeSavePointResponse
+	21,  // 154: portenv.daemon.v1.DaemonService.RevertToLastSavePoint:output_type -> portenv.daemon.v1.RevertToLastSavePointResponse
+	23,  // 155: portenv.daemon.v1.DaemonService.MoveBox:output_type -> portenv.daemon.v1.MoveBoxResponse
+	27,  // 156: portenv.daemon.v1.DaemonService.Terminal:output_type -> portenv.daemon.v1.TerminalResponse
+	11,  // 157: portenv.daemon.v1.DaemonService.CheckBox:output_type -> portenv.daemon.v1.CheckBoxResponse
+	13,  // 158: portenv.daemon.v1.DaemonService.RestartBox:output_type -> portenv.daemon.v1.RestartBoxResponse
+	34,  // 159: portenv.daemon.v1.DaemonService.GetChannel:output_type -> portenv.daemon.v1.GetChannelResponse
+	36,  // 160: portenv.daemon.v1.DaemonService.GetBoxState:output_type -> portenv.daemon.v1.GetBoxStateResponse
+	49,  // 161: portenv.daemon.v1.DaemonService.WatchBoxState:output_type -> portenv.daemon.v1.WatchBoxStateResponse
+	38,  // 162: portenv.daemon.v1.DaemonService.SetNetworkPath:output_type -> portenv.daemon.v1.SetNetworkPathResponse
+	40,  // 163: portenv.daemon.v1.DaemonService.Woke:output_type -> portenv.daemon.v1.WokeResponse
+	43,  // 164: portenv.daemon.v1.DaemonService.RetryPackages:output_type -> portenv.daemon.v1.RetryPackagesResponse
+	45,  // 165: portenv.daemon.v1.DaemonService.ProvideKeys:output_type -> portenv.daemon.v1.ProvideKeysResponse
+	47,  // 166: portenv.daemon.v1.DaemonService.Relaunch:output_type -> portenv.daemon.v1.RelaunchResponse
+	51,  // 167: portenv.daemon.v1.DaemonService.ListServers:output_type -> portenv.daemon.v1.ListServersResponse
+	53,  // 168: portenv.daemon.v1.DaemonService.GetKeyIDs:output_type -> portenv.daemon.v1.GetKeyIDsResponse
+	55,  // 169: portenv.daemon.v1.DaemonService.SaveNow:output_type -> portenv.daemon.v1.SaveNowResponse
+	57,  // 170: portenv.daemon.v1.DaemonService.ListSaves:output_type -> portenv.daemon.v1.ListSavesResponse
+	60,  // 171: portenv.daemon.v1.DaemonService.Housekeep:output_type -> portenv.daemon.v1.HousekeepResponse
+	62,  // 172: portenv.daemon.v1.DaemonService.LeaveUnsaved:output_type -> portenv.daemon.v1.LeaveUnsavedResponse
+	64,  // 173: portenv.daemon.v1.DaemonService.TakeSavedAfterQuit:output_type -> portenv.daemon.v1.TakeSavedAfterQuitResponse
+	67,  // 174: portenv.daemon.v1.DaemonService.ListTabs:output_type -> portenv.daemon.v1.ListTabsResponse
+	69,  // 175: portenv.daemon.v1.DaemonService.NewTab:output_type -> portenv.daemon.v1.NewTabResponse
+	71,  // 176: portenv.daemon.v1.DaemonService.CloseTab:output_type -> portenv.daemon.v1.CloseTabResponse
+	73,  // 177: portenv.daemon.v1.DaemonService.RenameTab:output_type -> portenv.daemon.v1.RenameTabResponse
+	75,  // 178: portenv.daemon.v1.DaemonService.SelectTab:output_type -> portenv.daemon.v1.SelectTabResponse
+	77,  // 179: portenv.daemon.v1.DaemonService.WatchTabs:output_type -> portenv.daemon.v1.WatchTabsResponse
+	81,  // 180: portenv.daemon.v1.DaemonService.CreateBox:output_type -> portenv.daemon.v1.CreateBoxResponse
+	83,  // 181: portenv.daemon.v1.DaemonService.DiscardCreation:output_type -> portenv.daemon.v1.DiscardCreationResponse
+	85,  // 182: portenv.daemon.v1.DaemonService.RecoverBox:output_type -> portenv.daemon.v1.RecoverBoxResponse
+	87,  // 183: portenv.daemon.v1.DaemonService.CheckRecoveryKey:output_type -> portenv.daemon.v1.CheckRecoveryKeyResponse
+	89,  // 184: portenv.daemon.v1.DaemonService.GetPlacement:output_type -> portenv.daemon.v1.GetPlacementResponse
+	92,  // 185: portenv.daemon.v1.DaemonService.TabTerminal:output_type -> portenv.daemon.v1.TabTerminalResponse
+	97,  // 186: portenv.daemon.v1.DaemonService.ScanServerKey:output_type -> portenv.daemon.v1.ScanServerKeyResponse
+	99,  // 187: portenv.daemon.v1.DaemonService.TrustServerKey:output_type -> portenv.daemon.v1.TrustServerKeyResponse
+	101, // 188: portenv.daemon.v1.DaemonService.ForgetServerKey:output_type -> portenv.daemon.v1.ForgetServerKeyResponse
+	103, // 189: portenv.daemon.v1.DaemonService.ProvideServerKey:output_type -> portenv.daemon.v1.ProvideServerKeyResponse
+	106, // 190: portenv.daemon.v1.DaemonService.CheckServer:output_type -> portenv.daemon.v1.CheckServerResponse
+	108, // 191: portenv.daemon.v1.DaemonService.GetEngine:output_type -> portenv.daemon.v1.GetEngineResponse
+	111, // 192: portenv.daemon.v1.DaemonService.ListAgents:output_type -> portenv.daemon.v1.ListAgentsResponse
+	129, // 193: portenv.daemon.v1.DaemonService.WatchTeam:output_type -> portenv.daemon.v1.WatchTeamResponse
+	133, // 194: portenv.daemon.v1.DaemonService.StartAgent:output_type -> portenv.daemon.v1.StartAgentResponse
+	135, // 195: portenv.daemon.v1.DaemonService.StopAgent:output_type -> portenv.daemon.v1.StopAgentResponse
+	131, // 196: portenv.daemon.v1.DaemonService.FetchAgentBranch:output_type -> portenv.daemon.v1.FetchAgentBranchResponse
+	137, // 197: portenv.daemon.v1.DaemonService.AnswerDecision:output_type -> portenv.daemon.v1.AnswerDecisionResponse
+	139, // 198: portenv.daemon.v1.DaemonService.GetAgentFile:output_type -> portenv.daemon.v1.GetAgentFileResponse
+	141, // 199: portenv.daemon.v1.DaemonService.ApproveAgentFile:output_type -> portenv.daemon.v1.ApproveAgentFileResponse
+	143, // 200: portenv.daemon.v1.DaemonService.SendMessage:output_type -> portenv.daemon.v1.SendMessageResponse
+	145, // 201: portenv.daemon.v1.DaemonService.RemoveAgent:output_type -> portenv.daemon.v1.RemoveAgentResponse
+	147, // 202: portenv.daemon.v1.DaemonService.ListAgentFiles:output_type -> portenv.daemon.v1.ListAgentFilesResponse
+	149, // 203: portenv.daemon.v1.DaemonService.ReadAgentFile:output_type -> portenv.daemon.v1.ReadAgentFileResponse
+	151, // 204: portenv.daemon.v1.DaemonService.AddAgentFiles:output_type -> portenv.daemon.v1.AddAgentFilesResponse
+	153, // 205: portenv.daemon.v1.DaemonService.SetRoutinePaused:output_type -> portenv.daemon.v1.SetRoutinePausedResponse
+	155, // 206: portenv.daemon.v1.DaemonService.WakeAgent:output_type -> portenv.daemon.v1.WakeAgentResponse
+	157, // 207: portenv.daemon.v1.DaemonService.ListDecisions:output_type -> portenv.daemon.v1.ListDecisionsResponse
+	159, // 208: portenv.daemon.v1.DaemonService.Deploy:output_type -> portenv.daemon.v1.DeployResponse
+	124, // 209: portenv.daemon.v1.DaemonService.GetTeamSettings:output_type -> portenv.daemon.v1.GetTeamSettingsResponse
+	126, // 210: portenv.daemon.v1.DaemonService.SetAgentsAllowed:output_type -> portenv.daemon.v1.SetAgentsAllowedResponse
+	114, // 211: portenv.daemon.v1.DaemonService.ListTeamTemplates:output_type -> portenv.daemon.v1.ListTeamTemplatesResponse
+	119, // 212: portenv.daemon.v1.DaemonService.PlanTeam:output_type -> portenv.daemon.v1.PlanTeamResponse
+	122, // 213: portenv.daemon.v1.DaemonService.ApplyTeamPlan:output_type -> portenv.daemon.v1.ApplyTeamPlanResponse
+	5,   // 214: portenv.daemon.v1.DaemonService.WatchPushes:output_type -> portenv.daemon.v1.WatchPushesResponse
+	9,   // 215: portenv.daemon.v1.DaemonService.AnswerPush:output_type -> portenv.daemon.v1.AnswerPushResponse
+	149, // [149:216] is the sub-list for method output_type
+	82,  // [82:149] is the sub-list for method input_type
+	82,  // [82:82] is the sub-list for extension type_name
+	82,  // [82:82] is the sub-list for extension extendee
+	0,   // [0:82] is the sub-list for field type_name
 }
 
 func init() { file_portenv_daemon_v1_daemon_proto_init() }
@@ -10054,32 +10461,32 @@ func file_portenv_daemon_v1_daemon_proto_init() {
 	if File_portenv_daemon_v1_daemon_proto != nil {
 		return
 	}
-	file_portenv_daemon_v1_daemon_proto_msgTypes[14].OneofWrappers = []any{
+	file_portenv_daemon_v1_daemon_proto_msgTypes[20].OneofWrappers = []any{
 		(*TerminalRequest_Open)(nil),
 		(*TerminalRequest_Input)(nil),
 		(*TerminalRequest_Resize)(nil),
 	}
-	file_portenv_daemon_v1_daemon_proto_msgTypes[17].OneofWrappers = []any{
+	file_portenv_daemon_v1_daemon_proto_msgTypes[23].OneofWrappers = []any{
 		(*TerminalResponse_Output)(nil),
 		(*TerminalResponse_ExitCode)(nil),
 	}
-	file_portenv_daemon_v1_daemon_proto_msgTypes[69].OneofWrappers = []any{
+	file_portenv_daemon_v1_daemon_proto_msgTypes[75].OneofWrappers = []any{
 		(*ProjectSource_Empty)(nil),
 		(*ProjectSource_GithubUrl)(nil),
 	}
-	file_portenv_daemon_v1_daemon_proto_msgTypes[80].OneofWrappers = []any{
+	file_portenv_daemon_v1_daemon_proto_msgTypes[86].OneofWrappers = []any{
 		(*TabTerminalRequest_Open)(nil),
 		(*TabTerminalRequest_Input)(nil),
 		(*TabTerminalRequest_Resize)(nil),
 	}
-	file_portenv_daemon_v1_daemon_proto_msgTypes[82].OneofWrappers = []any{
+	file_portenv_daemon_v1_daemon_proto_msgTypes[88].OneofWrappers = []any{
 		(*TabTerminalResponse_Reset_)(nil),
 		(*TabTerminalResponse_Output)(nil),
 		(*TabTerminalResponse_Resized)(nil),
 		(*TabTerminalResponse_End)(nil),
 		(*TabTerminalResponse_Author)(nil),
 	}
-	file_portenv_daemon_v1_daemon_proto_msgTypes[119].OneofWrappers = []any{
+	file_portenv_daemon_v1_daemon_proto_msgTypes[125].OneofWrappers = []any{
 		(*WatchTeamResponse_Agent)(nil),
 		(*WatchTeamResponse_Message)(nil),
 		(*WatchTeamResponse_Decision)(nil),
@@ -10092,7 +10499,7 @@ func file_portenv_daemon_v1_daemon_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_portenv_daemon_v1_daemon_proto_rawDesc), len(file_portenv_daemon_v1_daemon_proto_rawDesc)),
 			NumEnums:      4,
-			NumMessages:   154,
+			NumMessages:   160,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

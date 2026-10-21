@@ -1532,7 +1532,10 @@ func TestTeamCallsNeverApproveAnAgentFile(t *testing.T) {
 		names = append(names, string(ops.Get(i).Name()))
 	}
 	want := []string{"split", "tab", "focus", "close", "msg", "ask_owner", "inbox", "share", "propose", "request_package", "whoami",
-		"set_status", "team_status", "handoff", "propose_routine"}
+		"set_status", "team_status", "handoff", "propose_routine",
+		// The owner's push (R-0391): taken only from work's socket, answered
+		// by handlePush, which pushes to GitHub and approves nothing.
+		"push_list", "push"}
 	if !slices.Equal(names, want) {
 		t.Fatalf("TeamCalls ops are %v, want %v: check a new op can't approve an agent file, then add it here", names, want)
 	}
@@ -1572,6 +1575,8 @@ func TestTeamCallsNeverApproveAnAgentFile(t *testing.T) {
 		{Op: &agentv1.TeamCallsResponse_TeamStatus{TeamStatus: &agentv1.TeamStatus{}}},
 		{Op: &agentv1.TeamCallsResponse_Handoff{Handoff: &agentv1.Handoff{To: "owner", Path: "/home/lead/builder.md", Note: claim}}},
 		{Op: &agentv1.TeamCallsResponse_ProposeRoutine{ProposeRoutine: &agentv1.ProposeRoutine{EveryMinutes: 5, Note: claim}}},
+		{Op: &agentv1.TeamCallsResponse_PushList{PushList: &agentv1.PushList{}}},
+		{Op: &agentv1.TeamCallsResponse_Push{Push: &agentv1.PushRefs{Updates: []*agentv1.PushUpdate{{Dst: "refs/heads/main", NewSha: sha(builderFile)[:40]}}}}},
 	}
 	if len(calls) != len(want) {
 		t.Fatalf("%d calls for %d ops", len(calls), len(want))

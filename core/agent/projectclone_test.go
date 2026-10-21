@@ -111,6 +111,9 @@ func TestCloneFromABundle(t *testing.T) {
 	if got := runGit(t, p, "symbolic-ref", "HEAD"); got != "refs/heads/main" {
 		t.Fatalf("HEAD %q", got)
 	}
+	if got := runGit(t, p, "config", "remote.origin.pushurl"); got != "portenv::github" {
+		t.Fatalf("pushurl %q", got)
+	}
 	if got := runGit(t, p, "rev-parse", "--abbrev-ref", "main@{upstream}"); got != "origin/main" {
 		t.Fatalf("upstream %q", got)
 	}

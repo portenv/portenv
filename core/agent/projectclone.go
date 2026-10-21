@@ -41,6 +41,9 @@ import (
 // cloneDir is where clone-bundle keeps the bundle while it clones.
 const cloneDir = ".portenv/clone"
 
+// pushURL is origin's push address: git runs git-remote-portenv for it.
+const pushURL = "portenv::github"
+
 // maxBundleHeader caps the bundle's ref list.
 const maxBundleHeader = 16 << 20
 
@@ -203,6 +206,11 @@ func cloneFromBundle(ctx context.Context, req cloneBundleRequest, r io.Reader, r
 	}()
 	if out, err := git(tmp, "remote", "add", "origin", repo.URL()); err != nil {
 		return res, cmdError("set the project's origin", out, err)
+	}
+	// Pushes go through Portenv (R-0391): git-remote-portenv, then portenvd
+	// on the Mac with the owner's sign-in. Fetches use the address.
+	if out, err := git(tmp, "config", "remote.origin.pushurl", pushURL); err != nil {
+		return res, cmdError("set the project's push address", out, err)
 	}
 	if req.Empty {
 		if err := os.Rename(tmp, req.Project); err != nil {

@@ -145,6 +145,26 @@ type fakeProjectAgent struct {
 	cloneErr error
 	// GetProjectRoom's free bytes (0: plenty).
 	free uint64
+	// ReadPushBundle's bundles, by id: each read once.
+	pushBundles map[string][]byte
+}
+
+func (f *fakeProjectAgent) ReadPushBundle(r *agentv1.ReadPushBundleRequest, stream agentv1.AgentService_ReadPushBundleServer) error {
+	f.mu.Lock()
+	b, ok := f.pushBundles[r.GetBundleId()]
+	delete(f.pushBundles, r.GetBundleId())
+	f.mu.Unlock()
+	if !ok {
+		return status.Error(codes.NotFound, "no such push")
+	}
+	for len(b) > 0 {
+		n := min(len(b), 1000)
+		if err := stream.Send(&agentv1.ReadPushBundleResponse{Chunk: b[:n]}); err != nil {
+			return err
+		}
+		b = b[n:]
+	}
+	return nil
 }
 
 func (f *fakeProjectAgent) GetProjectRoom(_ context.Context, r *agentv1.GetProjectRoomRequest) (*agentv1.GetProjectRoomResponse, error) {

@@ -41,7 +41,11 @@ public final class TeamController {
         self.daemon = daemon
         self.retry = retry
         self.github = github
+        push = PushController(box: box, daemon: daemon, github: github)
     }
+
+    /// The workspace's pushes waiting for the app (R-0391).
+    public let push: PushController
 
     private let github: GitHubAccount
 

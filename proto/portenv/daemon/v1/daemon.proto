@@ -217,7 +217,55 @@ service DaemonService {
   // the owner's app calls it, once the workspace is open; with no team
   // kept, it does nothing.
   rpc ApplyTeamPlan(ApplyTeamPlanRequest) returns (ApplyTeamPlanResponse);
+  // Pushes from the workspace (R-0391) waiting for the app: each needs the
+  // owner's GitHub sign-in, and some the owner's yes (the first push from
+  // the workspace, a force, a delete). The window's app answers each with
+  // AnswerPush.
+  rpc WatchPushes(WatchPushesRequest) returns (stream WatchPushesResponse);
+  rpc AnswerPush(AnswerPushRequest) returns (AnswerPushResponse);
 }
+
+message WatchPushesRequest {
+  string name = 1;
+}
+
+message WatchPushesResponse {
+  PushQuestion question = 1;
+}
+
+message PushQuestion {
+  string id = 1;
+  // github.com/OWNER/REPO.
+  string repo = 2;
+  // The owner must say yes in the app (first push, force or delete);
+  // otherwise the app answers with the sign-in alone.
+  bool needs_yes = 3;
+  bool first = 4;
+  repeated PushUpdateInfo updates = 5;
+  // Only the remote's refs are read (git's list for-push).
+  bool list = 6;
+  // The question was answered or gave up: the app takes it down.
+  bool gone = 7;
+}
+
+message PushUpdateInfo {
+  string dst = 1;
+  string new_sha = 2;
+  bool force = 3;
+  bool delete = 4;
+}
+
+message AnswerPushRequest {
+  string name = 1;
+  string id = 2;
+  bool allow = 3;
+  // The owner's GitHub sign-in, in memory, for this push alone.
+  string github_token = 4;
+  // The app has no GitHub sign-in.
+  bool signed_out = 5;
+}
+
+message AnswerPushResponse {}
 
 message CheckBoxRequest {
   string name = 1;

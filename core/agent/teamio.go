@@ -386,6 +386,12 @@ func TeamIO(args []string, stdin io.Reader, stdout io.Writer) error {
 			return errors.New("seed-home PROJECT HOME QUOTA PATH…")
 		}
 		return seedHome(dir, args[2], args[3], args[4:], stdout)
+	case "write-agent-files":
+		// As work (ADR 0025 §5): the New-workspace team's files.
+		if len(args) != 2 {
+			return errors.New("write-agent-files PROJECT")
+		}
+		return teamIOWriteAgentFiles(dir, stdin, stdout)
 	case "write-home":
 		if len(args) != 4 {
 			return errors.New("write-home HOME PATH QUOTA")

@@ -408,8 +408,9 @@ final class AppModel {
                                 docker: nil, serviceGone: serviceGone)
         }
         let service = KeyedFirstRunService(maker: BoxMaker(daemon: creating))
+        // The Team step (ADR 0025) plans through portenvd.
         let flow = FirstRunFlow(service: service, at: step, existing: boxes, fromBoxList: fromBoxList, memory: memory,
-                                docker: nil, serviceGone: serviceGone)
+                                docker: nil, serviceGone: serviceGone, teamPlanner: daemon as? TeamPlanning)
         service.keychainWaiting = { [weak flow] on in Task { @MainActor in flow?.keychainWaiting = on } }
         return flow
     }

@@ -1420,9 +1420,23 @@ public nonisolated struct Portenv_Daemon_V1_CreateBoxRequest: Sendable {
   /// never logged. The recovery key itself never reaches portenvd.
   public var recoveryPassword: Data = Data()
 
+  /// The team chosen in New workspace (ADR 0025), with the SHA-256 of each
+  /// included agent's file as the owner approved it. CreateBox checks it
+  /// and keeps it for ApplyTeamPlan; it's written once the workspace runs.
+  public var team: Portenv_Daemon_V1_TeamPlanChoice {
+    get {_team ?? Portenv_Daemon_V1_TeamPlanChoice()}
+    set {_team = newValue}
+  }
+  /// Returns true if `team` has been explicitly set.
+  public var hasTeam: Bool {self._team != nil}
+  /// Clears the value of `team`. Subsequent reads from it will return its default value.
+  public mutating func clearTeam() {self._team = nil}
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
+
+  fileprivate var _team: Portenv_Daemon_V1_TeamPlanChoice? = nil
 }
 
 public nonisolated struct Portenv_Daemon_V1_CreateBoxResponse: Sendable {
@@ -2113,6 +2127,296 @@ public nonisolated struct Portenv_Daemon_V1_TeamLimit: Sendable {
   /// When the team needs more than the limit allows: the number to raise
   /// it to (at most 8), offered as the owner's confirmed Raise. 0 otherwise.
   public var raiseTo: Int32 = 0
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Portenv_Daemon_V1_ListTeamTemplatesRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Portenv_Daemon_V1_ListTeamTemplatesResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var templates: [Portenv_Daemon_V1_TeamTemplate] = []
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+/// A built-in template, as the Team step's picker shows it.
+public nonisolated struct Portenv_Daemon_V1_TeamTemplate: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var id: String = String()
+
+  public var name: String = String()
+
+  /// Its agents' names, those that are on.
+  public var description_p: String = String()
+
+  /// Its agents with no changes.
+  public var agents: [Portenv_Daemon_V1_PlannedAgent] = []
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+/// The owner's choices for a template (ADR 0025 §3).
+public nonisolated struct Portenv_Daemon_V1_TeamPlanChoice: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var template: String = String()
+
+  /// Agents not named keep the template's defaults.
+  public var agents: [Portenv_Daemon_V1_TeamAgentChoice] = []
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Portenv_Daemon_V1_TeamAgentChoice: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var id: String = String()
+
+  public var include: Bool = false
+
+  /// Empty keeps the template's.
+  public var name: String = String()
+
+  /// One of the runner's models; empty keeps the template's.
+  public var model: String = String()
+
+  /// Lets the agent see the team's status (none unless ticked).
+  public var teamStatus: Bool = false
+
+  /// The SHA-256 of the file the owner approved (CreateBox only).
+  public var approvedSha256: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Portenv_Daemon_V1_PlanTeamRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var choice: Portenv_Daemon_V1_TeamPlanChoice {
+    get {_choice ?? Portenv_Daemon_V1_TeamPlanChoice()}
+    set {_choice = newValue}
+  }
+  /// Returns true if `choice` has been explicitly set.
+  public var hasChoice: Bool {self._choice != nil}
+  /// Clears the value of `choice`. Subsequent reads from it will return its default value.
+  public mutating func clearChoice() {self._choice = nil}
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _choice: Portenv_Daemon_V1_TeamPlanChoice? = nil
+}
+
+public nonisolated struct Portenv_Daemon_V1_PlanTeamResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var agents: [Portenv_Daemon_V1_PlannedAgent] = []
+
+  /// How many are included, and Settings › Team › Agents allowed.
+  public var included: Int32 = 0
+
+  public var agentsAllowed: Int32 = 0
+
+  /// Problems with the team as a whole, one plain line each.
+  public var problems: [String] = []
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+/// One agent file as it would be written.
+public nonisolated struct Portenv_Daemon_V1_PlannedAgent: @unchecked Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var id: String {
+    get {_storage._id}
+    set {_uniqueStorage()._id = newValue}
+  }
+
+  public var name: String {
+    get {_storage._name}
+    set {_uniqueStorage()._name = newValue}
+  }
+
+  public var role: String {
+    get {_storage._role}
+    set {_uniqueStorage()._role = newValue}
+  }
+
+  public var avatar: String {
+    get {_storage._avatar}
+    set {_uniqueStorage()._avatar = newValue}
+  }
+
+  public var templateName: String {
+    get {_storage._templateName}
+    set {_uniqueStorage()._templateName = newValue}
+  }
+
+  public var included: Bool {
+    get {_storage._included}
+    set {_uniqueStorage()._included = newValue}
+  }
+
+  public var templateIncluded: Bool {
+    get {_storage._templateIncluded}
+    set {_uniqueStorage()._templateIncluded = newValue}
+  }
+
+  /// Where it goes: .portenv/agents/<id>.md, or .portenv/agents/off/<id>.md
+  /// for an agent left out (Portenv doesn't load off/).
+  public var path: String {
+    get {_storage._path}
+    set {_uniqueStorage()._path = newValue}
+  }
+
+  public var content: String {
+    get {_storage._content}
+    set {_uniqueStorage()._content = newValue}
+  }
+
+  public var sha256: String {
+    get {_storage._sha256}
+    set {_uniqueStorage()._sha256 = newValue}
+  }
+
+  /// The runner's registry id and name, and the file's runner line.
+  public var runner: String {
+    get {_storage._runner}
+    set {_uniqueStorage()._runner = newValue}
+  }
+
+  public var runnerName: String {
+    get {_storage._runnerName}
+    set {_uniqueStorage()._runnerName = newValue}
+  }
+
+  public var runnerLine: String {
+    get {_storage._runnerLine}
+    set {_uniqueStorage()._runnerLine = newValue}
+  }
+
+  /// The --model value; empty for the runner's own default.
+  public var model: String {
+    get {_storage._model}
+    set {_uniqueStorage()._model = newValue}
+  }
+
+  public var templateModel: String {
+    get {_storage._templateModel}
+    set {_uniqueStorage()._templateModel = newValue}
+  }
+
+  /// The model menu; "" is the runner's default.
+  public var models: [String] {
+    get {_storage._models}
+    set {_uniqueStorage()._models = newValue}
+  }
+
+  public var templateTeamStatus: Bool {
+    get {_storage._templateTeamStatus}
+    set {_uniqueStorage()._templateTeamStatus = newValue}
+  }
+
+  public var teamStatus: Bool {
+    get {_storage._teamStatus}
+    set {_uniqueStorage()._teamStatus = newValue}
+  }
+
+  /// Changes from the template, one plain line each.
+  public var changes: [String] {
+    get {_storage._changes}
+    set {_uniqueStorage()._changes = newValue}
+  }
+
+  /// What the file lets it do, one plain line each (ADR 0025 §4).
+  public var grants: [String] {
+    get {_storage._grants}
+    set {_uniqueStorage()._grants = newValue}
+  }
+
+  /// The file's instructions, its body after the frontmatter.
+  public var instructions: String {
+    get {_storage._instructions}
+    set {_uniqueStorage()._instructions = newValue}
+  }
+
+  /// Why this file can't be used, one plain line each.
+  public var problems: [String] {
+    get {_storage._problems}
+    set {_uniqueStorage()._problems = newValue}
+  }
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _storage = _StorageClass.defaultInstance
+}
+
+public nonisolated struct Portenv_Daemon_V1_ApplyTeamPlanRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var name: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Portenv_Daemon_V1_ApplyTeamPlanResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// Whether a kept team was written now.
+  public var applied: Bool = false
+
+  /// The agents whose files were written and pinned.
+  public var pinned: [String] = []
+
+  /// Anything the owner should know, one plain line each: a file already
+  /// there (the project's wins), or one that isn't what was approved.
+  public var lines: [String] = []
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -5216,7 +5520,7 @@ nonisolated extension Portenv_Daemon_V1_WatchTabsResponse: SwiftProtobuf.Message
 
 nonisolated extension Portenv_Daemon_V1_CreateBoxRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".CreateBoxRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{3}box_id\0\u{1}image\0\u{1}storage\0\u{3}storage_host_key\0\u{3}storage_rest\0\u{1}keys\0\u{3}recovery_password\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{3}box_id\0\u{1}image\0\u{1}storage\0\u{3}storage_host_key\0\u{3}storage_rest\0\u{1}keys\0\u{3}recovery_password\0\u{1}team\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -5232,12 +5536,17 @@ nonisolated extension Portenv_Daemon_V1_CreateBoxRequest: SwiftProtobuf.Message,
       case 6: try { try decoder.decodeSingularStringField(value: &self.storageRest) }()
       case 7: try { try decoder.decodeMapField(fieldType: SwiftProtobuf._ProtobufMap<SwiftProtobuf.ProtobufString,SwiftProtobuf.ProtobufBytes>.self, value: &self.keys) }()
       case 8: try { try decoder.decodeSingularBytesField(value: &self.recoveryPassword) }()
+      case 9: try { try decoder.decodeSingularMessageField(value: &self._team) }()
       default: break
       }
     }
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
     if !self.name.isEmpty {
       try visitor.visitSingularStringField(value: self.name, fieldNumber: 1)
     }
@@ -5262,6 +5571,9 @@ nonisolated extension Portenv_Daemon_V1_CreateBoxRequest: SwiftProtobuf.Message,
     if !self.recoveryPassword.isEmpty {
       try visitor.visitSingularBytesField(value: self.recoveryPassword, fieldNumber: 8)
     }
+    try { if let v = self._team {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 9)
+    } }()
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -5274,6 +5586,7 @@ nonisolated extension Portenv_Daemon_V1_CreateBoxRequest: SwiftProtobuf.Message,
     if lhs.storageRest != rhs.storageRest {return false}
     if lhs.keys != rhs.keys {return false}
     if lhs.recoveryPassword != rhs.recoveryPassword {return false}
+    if lhs._team != rhs._team {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -6581,6 +6894,552 @@ nonisolated extension Portenv_Daemon_V1_TeamLimit: SwiftProtobuf.Message, SwiftP
     if lhs.agentsRunning != rhs.agentsRunning {return false}
     if lhs.line != rhs.line {return false}
     if lhs.raiseTo != rhs.raiseTo {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Portenv_Daemon_V1_ListTeamTemplatesRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ListTeamTemplatesRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Portenv_Daemon_V1_ListTeamTemplatesRequest, rhs: Portenv_Daemon_V1_ListTeamTemplatesRequest) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Portenv_Daemon_V1_ListTeamTemplatesResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ListTeamTemplatesResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}templates\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeRepeatedMessageField(value: &self.templates) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.templates.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.templates, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Portenv_Daemon_V1_ListTeamTemplatesResponse, rhs: Portenv_Daemon_V1_ListTeamTemplatesResponse) -> Bool {
+    if lhs.templates != rhs.templates {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Portenv_Daemon_V1_TeamTemplate: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".TeamTemplate"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}name\0\u{1}description\0\u{1}agents\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.id) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.name) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.description_p) }()
+      case 4: try { try decoder.decodeRepeatedMessageField(value: &self.agents) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.id.isEmpty {
+      try visitor.visitSingularStringField(value: self.id, fieldNumber: 1)
+    }
+    if !self.name.isEmpty {
+      try visitor.visitSingularStringField(value: self.name, fieldNumber: 2)
+    }
+    if !self.description_p.isEmpty {
+      try visitor.visitSingularStringField(value: self.description_p, fieldNumber: 3)
+    }
+    if !self.agents.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.agents, fieldNumber: 4)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Portenv_Daemon_V1_TeamTemplate, rhs: Portenv_Daemon_V1_TeamTemplate) -> Bool {
+    if lhs.id != rhs.id {return false}
+    if lhs.name != rhs.name {return false}
+    if lhs.description_p != rhs.description_p {return false}
+    if lhs.agents != rhs.agents {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Portenv_Daemon_V1_TeamPlanChoice: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".TeamPlanChoice"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}template\0\u{1}agents\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.template) }()
+      case 2: try { try decoder.decodeRepeatedMessageField(value: &self.agents) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.template.isEmpty {
+      try visitor.visitSingularStringField(value: self.template, fieldNumber: 1)
+    }
+    if !self.agents.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.agents, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Portenv_Daemon_V1_TeamPlanChoice, rhs: Portenv_Daemon_V1_TeamPlanChoice) -> Bool {
+    if lhs.template != rhs.template {return false}
+    if lhs.agents != rhs.agents {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Portenv_Daemon_V1_TeamAgentChoice: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".TeamAgentChoice"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}include\0\u{1}name\0\u{1}model\0\u{3}team_status\0\u{3}approved_sha256\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.id) }()
+      case 2: try { try decoder.decodeSingularBoolField(value: &self.include) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.name) }()
+      case 4: try { try decoder.decodeSingularStringField(value: &self.model) }()
+      case 5: try { try decoder.decodeSingularBoolField(value: &self.teamStatus) }()
+      case 6: try { try decoder.decodeSingularStringField(value: &self.approvedSha256) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.id.isEmpty {
+      try visitor.visitSingularStringField(value: self.id, fieldNumber: 1)
+    }
+    if self.include != false {
+      try visitor.visitSingularBoolField(value: self.include, fieldNumber: 2)
+    }
+    if !self.name.isEmpty {
+      try visitor.visitSingularStringField(value: self.name, fieldNumber: 3)
+    }
+    if !self.model.isEmpty {
+      try visitor.visitSingularStringField(value: self.model, fieldNumber: 4)
+    }
+    if self.teamStatus != false {
+      try visitor.visitSingularBoolField(value: self.teamStatus, fieldNumber: 5)
+    }
+    if !self.approvedSha256.isEmpty {
+      try visitor.visitSingularStringField(value: self.approvedSha256, fieldNumber: 6)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Portenv_Daemon_V1_TeamAgentChoice, rhs: Portenv_Daemon_V1_TeamAgentChoice) -> Bool {
+    if lhs.id != rhs.id {return false}
+    if lhs.include != rhs.include {return false}
+    if lhs.name != rhs.name {return false}
+    if lhs.model != rhs.model {return false}
+    if lhs.teamStatus != rhs.teamStatus {return false}
+    if lhs.approvedSha256 != rhs.approvedSha256 {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Portenv_Daemon_V1_PlanTeamRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".PlanTeamRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}choice\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularMessageField(value: &self._choice) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._choice {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Portenv_Daemon_V1_PlanTeamRequest, rhs: Portenv_Daemon_V1_PlanTeamRequest) -> Bool {
+    if lhs._choice != rhs._choice {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Portenv_Daemon_V1_PlanTeamResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".PlanTeamResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}agents\0\u{1}included\0\u{3}agents_allowed\0\u{1}problems\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeRepeatedMessageField(value: &self.agents) }()
+      case 2: try { try decoder.decodeSingularInt32Field(value: &self.included) }()
+      case 3: try { try decoder.decodeSingularInt32Field(value: &self.agentsAllowed) }()
+      case 4: try { try decoder.decodeRepeatedStringField(value: &self.problems) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.agents.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.agents, fieldNumber: 1)
+    }
+    if self.included != 0 {
+      try visitor.visitSingularInt32Field(value: self.included, fieldNumber: 2)
+    }
+    if self.agentsAllowed != 0 {
+      try visitor.visitSingularInt32Field(value: self.agentsAllowed, fieldNumber: 3)
+    }
+    if !self.problems.isEmpty {
+      try visitor.visitRepeatedStringField(value: self.problems, fieldNumber: 4)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Portenv_Daemon_V1_PlanTeamResponse, rhs: Portenv_Daemon_V1_PlanTeamResponse) -> Bool {
+    if lhs.agents != rhs.agents {return false}
+    if lhs.included != rhs.included {return false}
+    if lhs.agentsAllowed != rhs.agentsAllowed {return false}
+    if lhs.problems != rhs.problems {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Portenv_Daemon_V1_PlannedAgent: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".PlannedAgent"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}name\0\u{1}role\0\u{1}avatar\0\u{3}template_name\0\u{1}included\0\u{3}template_included\0\u{1}path\0\u{1}content\0\u{1}sha256\0\u{1}runner\0\u{3}runner_name\0\u{3}runner_line\0\u{1}model\0\u{3}template_model\0\u{1}models\0\u{3}template_team_status\0\u{3}team_status\0\u{1}changes\0\u{1}grants\0\u{1}instructions\0\u{1}problems\0")
+
+  fileprivate class _StorageClass {
+    var _id: String = String()
+    var _name: String = String()
+    var _role: String = String()
+    var _avatar: String = String()
+    var _templateName: String = String()
+    var _included: Bool = false
+    var _templateIncluded: Bool = false
+    var _path: String = String()
+    var _content: String = String()
+    var _sha256: String = String()
+    var _runner: String = String()
+    var _runnerName: String = String()
+    var _runnerLine: String = String()
+    var _model: String = String()
+    var _templateModel: String = String()
+    var _models: [String] = []
+    var _templateTeamStatus: Bool = false
+    var _teamStatus: Bool = false
+    var _changes: [String] = []
+    var _grants: [String] = []
+    var _instructions: String = String()
+    var _problems: [String] = []
+
+      // This property is used as the initial default value for new instances of the type.
+      // The type itself is protecting the reference to its storage via CoW semantics.
+      // This will force a copy to be made of this reference when the first mutation occurs;
+      // hence, it is safe to mark this as `nonisolated(unsafe)`.
+      static nonisolated(unsafe) let defaultInstance = _StorageClass()
+
+    private init() {}
+
+    init(copying source: _StorageClass) {
+      _id = source._id
+      _name = source._name
+      _role = source._role
+      _avatar = source._avatar
+      _templateName = source._templateName
+      _included = source._included
+      _templateIncluded = source._templateIncluded
+      _path = source._path
+      _content = source._content
+      _sha256 = source._sha256
+      _runner = source._runner
+      _runnerName = source._runnerName
+      _runnerLine = source._runnerLine
+      _model = source._model
+      _templateModel = source._templateModel
+      _models = source._models
+      _templateTeamStatus = source._templateTeamStatus
+      _teamStatus = source._teamStatus
+      _changes = source._changes
+      _grants = source._grants
+      _instructions = source._instructions
+      _problems = source._problems
+    }
+  }
+
+  fileprivate mutating func _uniqueStorage() -> _StorageClass {
+    if !isKnownUniquelyReferenced(&_storage) {
+      _storage = _StorageClass(copying: _storage)
+    }
+    return _storage
+  }
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    _ = _uniqueStorage()
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      while let fieldNumber = try decoder.nextFieldNumber() {
+        // The use of inline closures is to circumvent an issue where the compiler
+        // allocates stack space for every case branch when no optimizations are
+        // enabled. https://github.com/apple/swift-protobuf/issues/1034
+        switch fieldNumber {
+        case 1: try { try decoder.decodeSingularStringField(value: &_storage._id) }()
+        case 2: try { try decoder.decodeSingularStringField(value: &_storage._name) }()
+        case 3: try { try decoder.decodeSingularStringField(value: &_storage._role) }()
+        case 4: try { try decoder.decodeSingularStringField(value: &_storage._avatar) }()
+        case 5: try { try decoder.decodeSingularStringField(value: &_storage._templateName) }()
+        case 6: try { try decoder.decodeSingularBoolField(value: &_storage._included) }()
+        case 7: try { try decoder.decodeSingularBoolField(value: &_storage._templateIncluded) }()
+        case 8: try { try decoder.decodeSingularStringField(value: &_storage._path) }()
+        case 9: try { try decoder.decodeSingularStringField(value: &_storage._content) }()
+        case 10: try { try decoder.decodeSingularStringField(value: &_storage._sha256) }()
+        case 11: try { try decoder.decodeSingularStringField(value: &_storage._runner) }()
+        case 12: try { try decoder.decodeSingularStringField(value: &_storage._runnerName) }()
+        case 13: try { try decoder.decodeSingularStringField(value: &_storage._runnerLine) }()
+        case 14: try { try decoder.decodeSingularStringField(value: &_storage._model) }()
+        case 15: try { try decoder.decodeSingularStringField(value: &_storage._templateModel) }()
+        case 16: try { try decoder.decodeRepeatedStringField(value: &_storage._models) }()
+        case 17: try { try decoder.decodeSingularBoolField(value: &_storage._templateTeamStatus) }()
+        case 18: try { try decoder.decodeSingularBoolField(value: &_storage._teamStatus) }()
+        case 19: try { try decoder.decodeRepeatedStringField(value: &_storage._changes) }()
+        case 20: try { try decoder.decodeRepeatedStringField(value: &_storage._grants) }()
+        case 21: try { try decoder.decodeSingularStringField(value: &_storage._instructions) }()
+        case 22: try { try decoder.decodeRepeatedStringField(value: &_storage._problems) }()
+        default: break
+        }
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      if !_storage._id.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._id, fieldNumber: 1)
+      }
+      if !_storage._name.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._name, fieldNumber: 2)
+      }
+      if !_storage._role.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._role, fieldNumber: 3)
+      }
+      if !_storage._avatar.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._avatar, fieldNumber: 4)
+      }
+      if !_storage._templateName.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._templateName, fieldNumber: 5)
+      }
+      if _storage._included != false {
+        try visitor.visitSingularBoolField(value: _storage._included, fieldNumber: 6)
+      }
+      if _storage._templateIncluded != false {
+        try visitor.visitSingularBoolField(value: _storage._templateIncluded, fieldNumber: 7)
+      }
+      if !_storage._path.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._path, fieldNumber: 8)
+      }
+      if !_storage._content.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._content, fieldNumber: 9)
+      }
+      if !_storage._sha256.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._sha256, fieldNumber: 10)
+      }
+      if !_storage._runner.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._runner, fieldNumber: 11)
+      }
+      if !_storage._runnerName.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._runnerName, fieldNumber: 12)
+      }
+      if !_storage._runnerLine.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._runnerLine, fieldNumber: 13)
+      }
+      if !_storage._model.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._model, fieldNumber: 14)
+      }
+      if !_storage._templateModel.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._templateModel, fieldNumber: 15)
+      }
+      if !_storage._models.isEmpty {
+        try visitor.visitRepeatedStringField(value: _storage._models, fieldNumber: 16)
+      }
+      if _storage._templateTeamStatus != false {
+        try visitor.visitSingularBoolField(value: _storage._templateTeamStatus, fieldNumber: 17)
+      }
+      if _storage._teamStatus != false {
+        try visitor.visitSingularBoolField(value: _storage._teamStatus, fieldNumber: 18)
+      }
+      if !_storage._changes.isEmpty {
+        try visitor.visitRepeatedStringField(value: _storage._changes, fieldNumber: 19)
+      }
+      if !_storage._grants.isEmpty {
+        try visitor.visitRepeatedStringField(value: _storage._grants, fieldNumber: 20)
+      }
+      if !_storage._instructions.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._instructions, fieldNumber: 21)
+      }
+      if !_storage._problems.isEmpty {
+        try visitor.visitRepeatedStringField(value: _storage._problems, fieldNumber: 22)
+      }
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Portenv_Daemon_V1_PlannedAgent, rhs: Portenv_Daemon_V1_PlannedAgent) -> Bool {
+    if lhs._storage !== rhs._storage {
+      let storagesAreEqual: Bool = withExtendedLifetime((lhs._storage, rhs._storage)) { (_args: (_StorageClass, _StorageClass)) in
+        let _storage = _args.0
+        let rhs_storage = _args.1
+        if _storage._id != rhs_storage._id {return false}
+        if _storage._name != rhs_storage._name {return false}
+        if _storage._role != rhs_storage._role {return false}
+        if _storage._avatar != rhs_storage._avatar {return false}
+        if _storage._templateName != rhs_storage._templateName {return false}
+        if _storage._included != rhs_storage._included {return false}
+        if _storage._templateIncluded != rhs_storage._templateIncluded {return false}
+        if _storage._path != rhs_storage._path {return false}
+        if _storage._content != rhs_storage._content {return false}
+        if _storage._sha256 != rhs_storage._sha256 {return false}
+        if _storage._runner != rhs_storage._runner {return false}
+        if _storage._runnerName != rhs_storage._runnerName {return false}
+        if _storage._runnerLine != rhs_storage._runnerLine {return false}
+        if _storage._model != rhs_storage._model {return false}
+        if _storage._templateModel != rhs_storage._templateModel {return false}
+        if _storage._models != rhs_storage._models {return false}
+        if _storage._templateTeamStatus != rhs_storage._templateTeamStatus {return false}
+        if _storage._teamStatus != rhs_storage._teamStatus {return false}
+        if _storage._changes != rhs_storage._changes {return false}
+        if _storage._grants != rhs_storage._grants {return false}
+        if _storage._instructions != rhs_storage._instructions {return false}
+        if _storage._problems != rhs_storage._problems {return false}
+        return true
+      }
+      if !storagesAreEqual {return false}
+    }
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Portenv_Daemon_V1_ApplyTeamPlanRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ApplyTeamPlanRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.name) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.name.isEmpty {
+      try visitor.visitSingularStringField(value: self.name, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Portenv_Daemon_V1_ApplyTeamPlanRequest, rhs: Portenv_Daemon_V1_ApplyTeamPlanRequest) -> Bool {
+    if lhs.name != rhs.name {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Portenv_Daemon_V1_ApplyTeamPlanResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ApplyTeamPlanResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}applied\0\u{1}pinned\0\u{1}lines\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularBoolField(value: &self.applied) }()
+      case 2: try { try decoder.decodeRepeatedStringField(value: &self.pinned) }()
+      case 3: try { try decoder.decodeRepeatedStringField(value: &self.lines) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.applied != false {
+      try visitor.visitSingularBoolField(value: self.applied, fieldNumber: 1)
+    }
+    if !self.pinned.isEmpty {
+      try visitor.visitRepeatedStringField(value: self.pinned, fieldNumber: 2)
+    }
+    if !self.lines.isEmpty {
+      try visitor.visitRepeatedStringField(value: self.lines, fieldNumber: 3)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Portenv_Daemon_V1_ApplyTeamPlanResponse, rhs: Portenv_Daemon_V1_ApplyTeamPlanResponse) -> Bool {
+    if lhs.applied != rhs.applied {return false}
+    if lhs.pinned != rhs.pinned {return false}
+    if lhs.lines != rhs.lines {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

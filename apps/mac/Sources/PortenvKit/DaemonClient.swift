@@ -334,6 +334,7 @@ extension DaemonClient: BoxCreating, RecoveryChecking {
         req.storage = r.storage
         req.keys = r.keys
         req.recoveryPassword = r.recoveryPassword
+        if let team = r.team { req.team = Self.choice(team) }
         return try await creating { try await api.createBox(req).alreadyCreated }
     }
 
@@ -692,6 +693,11 @@ extension DaemonClient {
         return try await call { TeamAgent(try await api.approveAgentFile(req).agent) }
     }
 
+    public func applyTeamPlan(_ box: String) async throws -> TeamPlanApplied {
+        let r = try await call { try await api.applyTeamPlan(.with { $0.name = box }) }
+        return TeamPlanApplied(applied: r.applied, pinned: r.pinned, lines: r.lines.map { TeamText.line($0, max: 300) })
+    }
+
     public func agentsAllowed() async throws -> Int {
         try await call { Int(try await api.getTeamSettings(.init()).agentsAllowed) }
     }
@@ -802,5 +808,49 @@ extension TeamDecision {
                   answeredAt: d.hasAnsweredAt ? d.answeredAt.date : nil, expiresAt: d.hasExpiresAt ? d.expiresAt.date : nil,
                   packages: d.packages.map { Package(name: $0.name, version: $0.version, source: $0.source, dependency: $0.dependency) },
                   startAgents: d.startAgentIds, choices: d.choices, choice: Int(d.choice))
+    }
+}
+
+// New workspace's Team step (ADR 0025).
+extension DaemonClient: TeamPlanning {
+    static func choice(_ c: TeamChoice) -> Portenv_Daemon_V1_TeamPlanChoice {
+        .with { p in
+            p.template = c.template
+            p.agents = c.agents.map { a in
+                .with {
+                    $0.id = a.id
+                    $0.include = a.include
+                    $0.name = a.name
+                    $0.model = a.model
+                    $0.teamStatus = a.teamStatus
+                    $0.approvedSha256 = a.approvedSHA256
+                }
+            }
+        }
+    }
+
+    static func planned(_ a: Portenv_Daemon_V1_PlannedAgent) -> PlannedAgentFile {
+        PlannedAgentFile(id: a.id, name: TeamText.line(a.name, max: 40), role: TeamText.line(a.role, max: 120), avatar: a.avatar,
+                         templateName: TeamText.line(a.templateName, max: 40), included: a.included, templateIncluded: a.templateIncluded,
+                         path: TeamText.line(a.path, max: 200), content: a.content, sha256: a.sha256, runner: a.runner,
+                         runnerName: TeamText.line(a.runnerName, max: 60), runnerLine: TeamText.line(a.runnerLine, max: 300),
+                         model: a.model, templateModel: a.templateModel, models: a.models, templateTeamStatus: a.templateTeamStatus,
+                         teamStatus: a.teamStatus, changes: a.changes.map { TeamText.line($0, max: 300) },
+                         grants: a.grants.map { TeamText.line($0, max: 300) }, instructions: a.instructions,
+                         problems: a.problems.map { TeamText.line($0, max: 300) })
+    }
+
+    public func teamTemplates() async throws -> [TeamTemplateInfo] {
+        let r = try await call { try await api.listTeamTemplates(.init()) }
+        return r.templates.map {
+            TeamTemplateInfo(id: $0.id, name: TeamText.line($0.name, max: 40), description: TeamText.line($0.description_p, max: 300),
+                             agents: $0.agents.map(Self.planned))
+        }
+    }
+
+    public func planTeam(_ choice: TeamChoice) async throws -> TeamPlan {
+        let r = try await call { try await api.planTeam(.with { $0.choice = Self.choice(choice) }) }
+        return TeamPlan(agents: r.agents.map(Self.planned), included: Int(r.included), allowed: Int(r.agentsAllowed),
+                        problems: r.problems.map { TeamText.line($0, max: 300) })
     }
 }

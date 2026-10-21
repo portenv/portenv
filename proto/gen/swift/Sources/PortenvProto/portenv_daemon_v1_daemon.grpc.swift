@@ -828,6 +828,45 @@ public enum Portenv_Daemon_V1_DaemonService: Sendable {
                 type: .unary
             )
         }
+        /// Namespace for "ListTeamTemplates" metadata.
+        public enum ListTeamTemplates: Sendable {
+            /// Request type for "ListTeamTemplates".
+            public typealias Input = Portenv_Daemon_V1_ListTeamTemplatesRequest
+            /// Response type for "ListTeamTemplates".
+            public typealias Output = Portenv_Daemon_V1_ListTeamTemplatesResponse
+            /// Descriptor for "ListTeamTemplates".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "ListTeamTemplates",
+                type: .unary
+            )
+        }
+        /// Namespace for "PlanTeam" metadata.
+        public enum PlanTeam: Sendable {
+            /// Request type for "PlanTeam".
+            public typealias Input = Portenv_Daemon_V1_PlanTeamRequest
+            /// Response type for "PlanTeam".
+            public typealias Output = Portenv_Daemon_V1_PlanTeamResponse
+            /// Descriptor for "PlanTeam".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "PlanTeam",
+                type: .unary
+            )
+        }
+        /// Namespace for "ApplyTeamPlan" metadata.
+        public enum ApplyTeamPlan: Sendable {
+            /// Request type for "ApplyTeamPlan".
+            public typealias Input = Portenv_Daemon_V1_ApplyTeamPlanRequest
+            /// Response type for "ApplyTeamPlan".
+            public typealias Output = Portenv_Daemon_V1_ApplyTeamPlanResponse
+            /// Descriptor for "ApplyTeamPlan".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "ApplyTeamPlan",
+                type: .unary
+            )
+        }
         /// Descriptors for all methods in the "portenv.daemon.v1.DaemonService" service.
         public static let descriptors: [GRPCCore.MethodDescriptor] = [
             GetVersion.descriptor,
@@ -891,7 +930,10 @@ public enum Portenv_Daemon_V1_DaemonService: Sendable {
             ListDecisions.descriptor,
             Deploy.descriptor,
             GetTeamSettings.descriptor,
-            SetAgentsAllowed.descriptor
+            SetAgentsAllowed.descriptor,
+            ListTeamTemplates.descriptor,
+            PlanTeam.descriptor,
+            ApplyTeamPlan.descriptor
         ]
     }
 }
@@ -2384,6 +2426,81 @@ extension Portenv_Daemon_V1_DaemonService {
             deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_SetAgentsAllowedResponse>,
             options: GRPCCore.CallOptions,
             onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_SetAgentsAllowedResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "ListTeamTemplates" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > ADR 0025: the New-workspace Team step. The built-in team templates,
+        /// > each with its agents as they'd be written with no changes.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_ListTeamTemplatesRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_ListTeamTemplatesRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_ListTeamTemplatesResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func listTeamTemplates<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_ListTeamTemplatesRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_ListTeamTemplatesRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_ListTeamTemplatesResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ListTeamTemplatesResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "PlanTeam" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > A template with the owner's choices, as the exact agent files that
+        /// > would be written, each checked as portenvd checks any agent file.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_PlanTeamRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_PlanTeamRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_PlanTeamResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func planTeam<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_PlanTeamRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_PlanTeamRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_PlanTeamResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_PlanTeamResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "ApplyTeamPlan" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Writes the team CreateBox kept for this workspace into its project
+        /// > (made empty, with git, if it isn't there), as work, never over a file,
+        /// > and pins each file the owner approved, only if it's those bytes. Only
+        /// > the owner's app calls it, once the workspace is open; with no team
+        /// > kept, it does nothing.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_ApplyTeamPlanRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_ApplyTeamPlanRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_ApplyTeamPlanResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func applyTeamPlan<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_ApplyTeamPlanRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_ApplyTeamPlanRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_ApplyTeamPlanResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ApplyTeamPlanResponse>) async throws -> Result
         ) async throws -> Result where Result: Sendable
     }
 
@@ -4547,6 +4664,114 @@ extension Portenv_Daemon_V1_DaemonService {
                 onResponse: handleResponse
             )
         }
+
+        /// Call the "ListTeamTemplates" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > ADR 0025: the New-workspace Team step. The built-in team templates,
+        /// > each with its agents as they'd be written with no changes.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_ListTeamTemplatesRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_ListTeamTemplatesRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_ListTeamTemplatesResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func listTeamTemplates<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_ListTeamTemplatesRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_ListTeamTemplatesRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_ListTeamTemplatesResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ListTeamTemplatesResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.ListTeamTemplates.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
+
+        /// Call the "PlanTeam" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > A template with the owner's choices, as the exact agent files that
+        /// > would be written, each checked as portenvd checks any agent file.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_PlanTeamRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_PlanTeamRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_PlanTeamResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func planTeam<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_PlanTeamRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_PlanTeamRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_PlanTeamResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_PlanTeamResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.PlanTeam.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
+
+        /// Call the "ApplyTeamPlan" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Writes the team CreateBox kept for this workspace into its project
+        /// > (made empty, with git, if it isn't there), as work, never over a file,
+        /// > and pins each file the owner approved, only if it's those bytes. Only
+        /// > the owner's app calls it, once the workspace is open; with no team
+        /// > kept, it does nothing.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_ApplyTeamPlanRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_ApplyTeamPlanRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_ApplyTeamPlanResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func applyTeamPlan<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_ApplyTeamPlanRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_ApplyTeamPlanRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_ApplyTeamPlanResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ApplyTeamPlanResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.ApplyTeamPlan.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
     }
 }
 
@@ -6379,6 +6604,99 @@ extension Portenv_Daemon_V1_DaemonService.ClientProtocol {
             request: request,
             serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_SetAgentsAllowedRequest>(),
             deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_SetAgentsAllowedResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "ListTeamTemplates" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > ADR 0025: the New-workspace Team step. The built-in team templates,
+    /// > each with its agents as they'd be written with no changes.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_ListTeamTemplatesRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func listTeamTemplates<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_ListTeamTemplatesRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ListTeamTemplatesResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.listTeamTemplates(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_ListTeamTemplatesRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_ListTeamTemplatesResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "PlanTeam" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > A template with the owner's choices, as the exact agent files that
+    /// > would be written, each checked as portenvd checks any agent file.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_PlanTeamRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func planTeam<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_PlanTeamRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_PlanTeamResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.planTeam(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_PlanTeamRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_PlanTeamResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "ApplyTeamPlan" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Writes the team CreateBox kept for this workspace into its project
+    /// > (made empty, with git, if it isn't there), as work, never over a file,
+    /// > and pins each file the owner approved, only if it's those bytes. Only
+    /// > the owner's app calls it, once the workspace is open; with no team
+    /// > kept, it does nothing.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_ApplyTeamPlanRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func applyTeamPlan<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_ApplyTeamPlanRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ApplyTeamPlanResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.applyTeamPlan(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_ApplyTeamPlanRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_ApplyTeamPlanResponse>(),
             options: options,
             onResponse: handleResponse
         )
@@ -8464,6 +8782,111 @@ extension Portenv_Daemon_V1_DaemonService.ClientProtocol {
             metadata: metadata
         )
         return try await self.setAgentsAllowed(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "ListTeamTemplates" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > ADR 0025: the New-workspace Team step. The built-in team templates,
+    /// > each with its agents as they'd be written with no changes.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func listTeamTemplates<Result>(
+        _ message: Portenv_Daemon_V1_ListTeamTemplatesRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ListTeamTemplatesResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_ListTeamTemplatesRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.listTeamTemplates(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "PlanTeam" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > A template with the owner's choices, as the exact agent files that
+    /// > would be written, each checked as portenvd checks any agent file.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func planTeam<Result>(
+        _ message: Portenv_Daemon_V1_PlanTeamRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_PlanTeamResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_PlanTeamRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.planTeam(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "ApplyTeamPlan" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Writes the team CreateBox kept for this workspace into its project
+    /// > (made empty, with git, if it isn't there), as work, never over a file,
+    /// > and pins each file the owner approved, only if it's those bytes. Only
+    /// > the owner's app calls it, once the workspace is open; with no team
+    /// > kept, it does nothing.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func applyTeamPlan<Result>(
+        _ message: Portenv_Daemon_V1_ApplyTeamPlanRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_ApplyTeamPlanResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_ApplyTeamPlanRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.applyTeamPlan(
             request: request,
             options: options,
             onResponse: handleResponse

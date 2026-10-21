@@ -53,6 +53,7 @@ public final class TeamController {
     /// the task is cancelled, or portenvd turns out not to know teams.
     public func follow() async {
         while !Task.isCancelled {
+            if !teamPlanChecked { await applyKeptTeam() }
             do {
                 for try await (event, cursor) in daemon.watchTeam(box, cursor: state.cursor) {
                     state.apply(event, cursor: cursor)
@@ -99,6 +100,24 @@ public final class TeamController {
             let next = d.state == .approved ? d.startAgents.first { state.agent($0) != nil } : nil
             selection = next.map { .agent($0) } ?? .allTabs
         }
+    }
+
+    /// Lines from writing the team New workspace kept (ADR 0025): a file
+    /// the project already had, or one that isn't what was approved.
+    public private(set) var setupLines: [String] = []
+    private var teamPlanChecked = false
+
+    /// Writes and pins the team New workspace kept, once the workspace is
+    /// open (portenvd does it; nothing when there's none). Asked again on
+    /// the next round until portenvd can answer.
+    private func applyKeptTeam() async {
+        do {
+            let r = try await daemon.applyTeamPlan(box)
+            teamPlanChecked = true
+            setupLines = r.lines
+        } catch let e as DaemonError where e.message == DaemonError.outOfDate {
+            teamPlanChecked = true
+        } catch {}
     }
 
     /// The Team section's Raise, after the owner confirmed it (R-0347):

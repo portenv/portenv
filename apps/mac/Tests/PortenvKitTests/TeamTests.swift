@@ -186,6 +186,22 @@ struct TeamControllerTests {
         #expect(team.supported)
     }
 
+    /// The team New workspace kept (ADR 0025) is written once the workspace
+    /// is open: asked until portenvd can, then never again; its lines show
+    /// in the Team section.
+    @Test func followAppliesTheKeptTeamOnce() async {
+        let daemon = FakeDaemon()
+        daemon.failingOnce["apply-team-plan"] = "acme isn't open"
+        daemon.applied = TeamPlanApplied(applied: true, pinned: ["lead"], lines: ["acme already had an agent file for builder, so Portenv kept it."])
+        daemon.teamScripts = [.init(events: [], failure: "box restarting"), .init(events: [(.agent(builder), "c1")], failure: "gone"), .init(events: [], failure: nil)]
+        let team = TeamController(box: "acme", daemon: daemon, retry: .milliseconds(1))
+        let follow = Task { await team.follow() }
+        for _ in 0 ..< 200 where team.state.cursor != "c1" { try? await Task.sleep(for: .milliseconds(5)) }
+        follow.cancel()
+        #expect(daemon.calls.filter { $0[1] == "apply-team-plan" }.count == 2)
+        #expect(team.setupLines == ["acme already had an agent file for builder, so Portenv kept it."])
+    }
+
     /// An older portenvd: no team, no retrying, the sidebar stays hidden.
     @Test func anOlderPortenvdHasNoTeam() async {
         let daemon = FakeDaemon()

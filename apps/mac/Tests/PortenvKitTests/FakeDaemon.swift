@@ -275,6 +275,12 @@ final class FakeDaemon: DaemonAPI, @unchecked Sendable {
         try await record(["app", "approve-agent-file", box, id, sha256])
         return TeamAgent(id: id, name: id, status: .stopped, fileSHA256: sha256, approved: true)
     }
+    /// What ApplyTeamPlan answers (ADR 0025); nothing kept by default.
+    var applied = TeamPlanApplied(applied: false)
+    func applyTeamPlan(_ box: String) async throws -> TeamPlanApplied {
+        try await record(["app", "apply-team-plan", box])
+        return lock.withLock { applied }
+    }
     /// Settings › Team › Agents allowed (R-0347).
     var allowed = 4
     func agentsAllowed() async throws -> Int {

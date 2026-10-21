@@ -98,6 +98,7 @@ func NewGuide() Guide {
 			"Never put a secret on a command line: other users in the workspace can read command lines.",
 			"Only the owner answers decisions, in Portenv. A decision you asked for is pending until then.",
 			"You reach only your own terminals and files. Opening a pane in the owner's window goes through portenv split or portenv tab new, and your grant.",
+			"Your work reaches the owner only as a branch: commit on agent/<your id> in your own copy of the project and run portenv share. The owner fetches it on their Mac with portenv app fetch-agent <workspace> <id>, which gives them refs/remotes/agents/<id>. Never hand the owner a patch, a file in /home/team to apply, or shell steps to run on their Mac. A lead tells the owner \"agent/<id> is ready to fetch\".",
 			"Run portenv whoami for what you can do now.",
 			ShareLoginOff,
 		},

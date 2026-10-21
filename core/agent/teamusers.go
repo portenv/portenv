@@ -96,6 +96,9 @@ type TeamUsers struct {
 	migrate *migrateOps
 	// onMove sees what started a move (tests).
 	onMove func(ProjectFindings)
+	// teamDirACL sets /home/team's default ACL (nil: setTeamDirACL; a
+	// recorder in tests).
+	teamDirACL func(dir string, workUID int) error
 }
 
 type agentUserRecord struct {
@@ -505,7 +508,8 @@ func (t *TeamUsers) ensureHome(rec agentUserRecord) error {
 	return os.Chmod(home, 0o700) // #nosec G302 -- a directory: owner-only
 }
 
-// ensureTeamDir makes /home/team: work's, group team, setgid, 0770.
+// ensureTeamDir makes /home/team: work's, group team, setgid, 0770, with
+// a default ACL giving the team and work read and write.
 func (t *TeamUsers) ensureTeamDir() error {
 	dir := filepath.Join(t.Cfg.HomeRoot, TeamGroup)
 	info, err := os.Lstat(dir)
@@ -522,7 +526,17 @@ func (t *TeamUsers) ensureTeamDir() error {
 	if err := t.Chown(dir, t.Cfg.UID, TeamGID); err != nil {
 		return fmt.Errorf("set %s's owner: %w", dir, err)
 	}
-	return os.Chmod(dir, os.ModeSetgid|0o770) // #nosec G302 -- the team's shared folder
+	if err := os.Chmod(dir, os.ModeSetgid|0o770); err != nil { // #nosec G302 -- the team's shared folder
+		return err
+	}
+	// Its default ACL (ADR 0022 §2), which it never had (CC-0706 item 19):
+	// what's made in it is the team's and work's, whatever the umask.
+	// init's watcher shares what a default ACL can't reach (teamshare.go).
+	set := t.teamDirACL
+	if set == nil {
+		set = setTeamDirACL
+	}
+	return set(dir, t.Cfg.UID)
 }
 
 // deleteHome deletes exactly HomeRoot/id, never through a symlink.

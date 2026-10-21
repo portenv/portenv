@@ -93,6 +93,7 @@ check "python 3" as_work 'python3 --version'
 check "shell integration (OSC 133) in login shells" as_work 'bash -lic "declare -F __portenv_osc133_precmd"'
 check "skeleton .zshrc sources the zsh integration" in_box grep -q osc133.zsh /home/work/.zshrc
 check "claude code" as_work 'claude --version'
+check "claude code's update check off in login shells" as_work 'test "$DISABLE_AUTOUPDATER" = 1'
 # The portenv CLI, for agents' own commands inside the workspace (ADR 0022 §4).
 check "portenv on PATH at /usr/local/bin, root's, 755" in_box sh -c 'test "$(command -v portenv)" = /usr/local/bin/portenv && test "$(stat -c %U:%G:%a /usr/local/bin/portenv)" = root:root:755'
 check "portenv whoami in a plain shell exits 2 and says why" as_work \

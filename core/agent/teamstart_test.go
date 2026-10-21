@@ -105,6 +105,8 @@ func TestStartTeamAgentMakesTheUserThenItsServer(t *testing.T) {
 		"HOME=/home/builder", "USER=builder", "PORTENV_AGENT=builder",
 		"PORTENV_SOCKET=" + s.team.dir + "/builder/portenv.sock",
 		"TMPDIR=" + s.team.dir + "/builder/tmp",
+		// The image pins the runner: no update nudges in an agent's tab.
+		"DISABLE_AUTOUPDATER=1",
 	} {
 		if !slices.Contains(sp.Env, want) {
 			t.Errorf("env lacks %q: %v", want, sp.Env)

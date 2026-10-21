@@ -65,13 +65,36 @@ ARG NODE_VERSION=22.23.3
 ARG NODE_SHA256_arm64=a44aeb94849a299b22df10b9e622ec2f605c2183501bc40590705131de7c740f
 ARG NODE_SHA256_amd64=df450af89261115ef9f9e3830c3eeb2cc9213b63c720b1af623cb5dcbe2e02de
 
+# Chrome for Testing (Google's build of Chromium for automation), stable
+# channel, pinned by version and checksum per architecture, from
+# https://googlechromelabs.github.io/chrome-for-testing/. It is the one
+# Chromium for both architectures that runs here: Ubuntu 24.04's chromium
+# package only installs the snap, which a container cannot run, and Google
+# Chrome has no Linux arm64 build. Playwright uses the same builds.
+ARG CHROME_VERSION=156.0.8078.47
+ARG CHROME_SHA256_arm64=9e37000e3ee2731e45e475a6a2eac587d3c0ee5f8aef7cab5211ecd52cf3fb7b
+ARG CHROME_SHA256_amd64=e6c94490f0b6b337225aeb2d2a5034858516b7017356980ba94f5176d8774a50
+
+# Claude Code, pinned by version; apt checks the package against the signed
+# repository index, and the build fails if claude --version is anything
+# else. test.sh reads this line.
+ARG CLAUDE_CODE_VERSION=2.1.304
 # Anthropic's Claude Code release signing key fingerprint (public, not a
 # secret; the build check above is skipped for it), as published at
 # https://code.claude.com/docs/en/setup (Install with Linux package managers).
 ARG CLAUDE_KEY_FINGERPRINT=31DDDE24DDFAB679F42D7BD2BAA929FF1A7ECACE
 
+# Browser tools (Puppeteer, Lighthouse, axe and pa11y runners, the
+# Playwright MCP server) find the browser through these. Playwright itself
+# takes it as launchOptions.executablePath; it reads no variable for it.
+# The browser's own sandbox needs user namespaces, which a box under Docker
+# doesn't get (no CAP_SYS_ADMIN, ADR 0005), so there it runs only with
+# --no-sandbox. The image never sets that globally (README.md).
 ENV DEBIAN_FRONTEND=noninteractive \
-    LANG=C.UTF-8
+    LANG=C.UTF-8 \
+    CHROME_PATH=/opt/chrome/chrome \
+    PUPPETEER_EXECUTABLE_PATH=/opt/chrome/chrome \
+    PLAYWRIGHT_MCP_EXECUTABLE_PATH=/opt/chrome/chrome
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
@@ -100,8 +123,43 @@ RUN case "$TARGETARCH" in \
  && rm "/tmp/$tarball" \
  && node --version | grep -q "^v${NODE_VERSION}$"
 
-# Claude Code from Anthropic's signed apt repository, stable channel. The key
-# is rejected unless its primary fingerprint matches the published one.
+# The browser's system libraries and fonts: the same packages as
+# "playwright install-deps chromium" on Ubuntu 24.04 (Playwright 1.64's
+# list: its tools, then chromium's), so a project's own Playwright runs
+# without root. Playwright's browser downloads go to the home (portenv.sh).
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      xvfb fonts-noto-color-emoji fonts-unifont libfontconfig1 libfreetype6 \
+      xfonts-cyrillic xfonts-scalable fonts-liberation fonts-ipafont-gothic \
+      fonts-wqy-zenhei fonts-tlwg-loma-otf fonts-freefont-ttf \
+      libasound2t64 libatk-bridge2.0-0t64 libatk1.0-0t64 libatspi2.0-0t64 \
+      libcairo2 libcups2t64 libdbus-1-3 libdrm2 libgbm1 libglib2.0-0t64 \
+      libnspr4 libnss3 libpango-1.0-0 libx11-6 libxcb1 libxcomposite1 \
+      libxdamage1 libxext6 libxfixes3 libxkbcommon0 libxrandr2 \
+ && rm -rf /var/lib/apt/lists/*
+
+# Chrome for Testing in /opt/chrome, also on PATH as chromium. Its setuid
+# sandbox helper is left out: the image adds no setuid-root binaries.
+RUN case "$TARGETARCH" in \
+      arm64) plat=linux-arm64; sum="$CHROME_SHA256_arm64" ;; \
+      amd64) plat=linux64;     sum="$CHROME_SHA256_amd64" ;; \
+      *) echo "unsupported architecture: $TARGETARCH" >&2; exit 1 ;; \
+    esac \
+ && curl -fsSLo /tmp/chrome.zip "https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VERSION}/${plat}/chrome-${plat}.zip" \
+ && echo "$sum  /tmp/chrome.zip" | sha256sum -c - \
+ && unzip -q /tmp/chrome.zip -d /tmp/chrome \
+ && mv "/tmp/chrome/chrome-${plat}" /opt/chrome \
+ && rm -rf /tmp/chrome /tmp/chrome.zip /opt/chrome/chrome_sandbox \
+ && chown -R root:root /opt/chrome \
+ && chmod -R go-w /opt/chrome \
+ && ln -s /opt/chrome/chrome /usr/local/bin/chromium \
+ && missing="$(ldd /opt/chrome/chrome | grep 'not found' || true)" \
+ && if [ -n "$missing" ]; then echo "chrome is missing libraries: $missing" >&2; exit 1; fi \
+ && /opt/chrome/chrome --version | grep -qF " ${CHROME_VERSION}"
+
+# Claude Code from Anthropic's signed apt repository, stable channel, at the
+# pinned version. The key is rejected unless its primary fingerprint matches
+# the published one.
 RUN install -d -m 0755 /etc/apt/keyrings \
  && curl -fsSLo /etc/apt/keyrings/claude-code.asc https://downloads.claude.ai/keys/claude-code.asc \
  && fpr="$(gpg --show-keys --with-colons /etc/apt/keyrings/claude-code.asc | awk -F: '$1 == "fpr" { print $10; exit }')" \
@@ -111,9 +169,10 @@ RUN install -d -m 0755 /etc/apt/keyrings \
  && echo "deb [signed-by=/etc/apt/keyrings/claude-code.asc] https://downloads.claude.ai/claude-code/apt/stable stable main" \
       > /etc/apt/sources.list.d/claude-code.list \
  && apt-get update \
- && apt-get install -y --no-install-recommends claude-code \
+ && apt-get install -y --no-install-recommends "claude-code=${CLAUDE_CODE_VERSION}-*" \
  && rm -rf /var/lib/apt/lists/* \
- && claude --version
+ && claude --version \
+ && test "$(claude --version)" = "${CLAUDE_CODE_VERSION} (Claude Code)"
 
 # The main user. Its home is not created here: it lives on the box's home
 # storage, and portenv-agent creates it from the skeleton only for a new box.
@@ -166,7 +225,7 @@ RUN groupadd --system --gid 991 portenv-agent \
  && install -d -o portenv-agent -g portenv-agent -m 0711 /run/portenv-sftp
 
 LABEL org.opencontainers.image.title="toolbox-node" \
-      org.opencontainers.image.description="Portenv toolbox: Ubuntu 24.04, Node 22, Claude Code, portenv-agent" \
+      org.opencontainers.image.description="Portenv toolbox: Ubuntu 24.04, Node 22, Claude Code, Chrome for Testing, portenv-agent" \
       org.opencontainers.image.source="https://github.com/portenv/portenv"
 
 # Docker-specific, ignored by other engines; they ask the agent directly.

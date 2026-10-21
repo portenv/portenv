@@ -15,6 +15,15 @@ new=$id-new
 missing=$id-missing
 failures=0
 
+# The pins the image must carry, read from its Dockerfile.
+dockerfile=$(dirname "$0")/Dockerfile
+pin() { sed -n "s/^ARG $1=//p" "$dockerfile"; }
+claude_pin=$(pin CLAUDE_CODE_VERSION)
+chrome_pin=$(pin CHROME_VERSION)
+if [[ -z $claude_pin || -z $chrome_pin ]]; then
+	echo "no CLAUDE_CODE_VERSION or CHROME_VERSION in $dockerfile" >&2; exit 1
+fi
+
 cleanup() {
 	docker rm -f "$new" "$missing" >/dev/null 2>&1 || true
 	docker volume rm -f "$new" "$missing" >/dev/null 2>&1 || true
@@ -92,7 +101,27 @@ check "build-essential" as_work 'gcc --version && make --version'
 check "python 3" as_work 'python3 --version'
 check "shell integration (OSC 133) in login shells" as_work 'bash -lic "declare -F __portenv_osc133_precmd"'
 check "skeleton .zshrc sources the zsh integration" in_box grep -q osc133.zsh /home/work/.zshrc
-check "claude code" as_work 'claude --version'
+check "claude --version is the pin, $claude_pin" as_work "test \"\$(claude --version)\" = '$claude_pin (Claude Code)'"
+# Chrome for Testing for browser checks (R-0411), run as work, never root.
+check "CHROME_PATH and PUPPETEER_EXECUTABLE_PATH are the browser, root's, 755" as_work \
+	'test "$CHROME_PATH" = /opt/chrome/chrome && test "$PUPPETEER_EXECUTABLE_PATH" = "$CHROME_PATH" &&
+	test "$(stat -c %U:%a "$CHROME_PATH")" = root:755 && test "$(readlink -f "$(command -v chromium)")" = "$CHROME_PATH"'
+check "no setuid sandbox helper in the browser's folder" in_box sh -c 'test -z "$(find /opt/chrome -perm -4000)"'
+check "chromium --version is the pin, $chrome_pin" as_work "\"\$CHROME_PATH\" --version | grep -qF ' $chrome_pin'"
+# A throwaway profile, so the run leaves nothing in the home. The sandbox
+# needs user namespaces, which a container without CAP_SYS_ADMIN lacks:
+# --no-sandbox here, and the sandbox's own result is reported, not judged.
+headless() { # headless [FLAG...]: render a page as work, print its DOM
+	as_work "p=\$(mktemp -d) && timeout 60 \"\$CHROME_PATH\" --headless --disable-gpu --disable-dev-shm-usage \
+		--user-data-dir=\"\$p\" $* --dump-dom 'data:text/html,<p>portenv-headless-ok</p>' 2>&1; rc=\$?; rm -rf \"\$p\"; exit \$rc"
+}
+renders_unsandboxed() { local out; out=$(headless --no-sandbox) && grep -q portenv-headless-ok <<<"$out"; }
+check "chromium renders a page headless as work (--no-sandbox)" renders_unsandboxed
+if out=$(headless) && grep -q portenv-headless-ok <<<"$out"; then
+	printf 'info  chromium sandbox: works without --no-sandbox\n'
+else
+	printf 'info  chromium sandbox: needs --no-sandbox here (%s)\n' "$(grep -m1 -iE 'sandbox|namespace|error' <<<"$out" || echo 'no message')"
+fi
 # The portenv CLI, for agents' own commands inside the workspace (ADR 0022 §4).
 check "portenv on PATH at /usr/local/bin, root's, 755" in_box sh -c 'test "$(command -v portenv)" = /usr/local/bin/portenv && test "$(stat -c %U:%G:%a /usr/local/bin/portenv)" = root:root:755'
 check "portenv whoami in a plain shell exits 2 and says why" as_work \

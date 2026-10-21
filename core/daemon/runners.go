@@ -5,9 +5,11 @@ package daemon
 import (
 	"path"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/portenv/portenv/core/internal/teamkit"
+	agentv1 "github.com/portenv/portenv/proto/gen/go/portenv/agent/v1"
 )
 
 // runnerIdlePatterns is the runner table's idle-input line for each known
@@ -44,6 +46,36 @@ func runnerTrustSetting(argv []string) string {
 		return ""
 	}
 	return teamkit.TrustSettingFor(path.Base(argv[0]))
+}
+
+// runnerSettings is the settings file and its flag for an agent's runner
+// (R-0412 item 17): for Claude Code, permission rules for routine
+// teamwork, with the clones the agent may read. A runner without a
+// settings flag, or settings that can't be made, gets none.
+func runnerSettings(argv []string, agentID string, readers []*agentv1.CloneReaders, workspace string) ([]byte, string, error) {
+	if len(argv) == 0 {
+		return nil, "", nil
+	}
+	flag := teamkit.SettingsFlagFor(path.Base(argv[0]))
+	if flag == "" {
+		return nil, "", nil
+	}
+	b, err := teamkit.ClaudeSettings("/home/"+agentID, lensPaths(readers, agentID, workspace))
+	if err != nil {
+		return nil, "", err
+	}
+	return b, flag, nil
+}
+
+// lensPaths are the clones agentID's grant lets it read.
+func lensPaths(readers []*agentv1.CloneReaders, agentID, workspace string) []string {
+	var out []string
+	for _, cr := range readers {
+		if slices.Contains(cr.GetReaders(), agentID) {
+			out = append(out, "/home/"+cr.GetWriter()+"/"+workspace)
+		}
+	}
+	return out
 }
 
 // routinesOffLine says why an agent's routines are off.

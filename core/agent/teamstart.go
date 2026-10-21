@@ -10,6 +10,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -99,6 +100,9 @@ func (s *apiServer) StartTeamAgent(ctx context.Context, req *agentv1.StartTeamAg
 	if ts := req.GetTrustSetting(); ts != "" && ts != trustClaude {
 		return nil, status.Errorf(codes.InvalidArgument, "%s: %q isn't a trust setting this helper knows", id, ts)
 	}
+	if err := checkRunnerSettings(req.GetRunnerSettings(), req.GetRunnerSettingsFlag()); err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "%s: %v", id, err)
+	}
 	if len(req.GetAgentsMd()) > maxAgentsMD {
 		return nil, status.Errorf(codes.InvalidArgument, "%s's AGENTS.md is over %d KB", id, maxAgentsMD>>10)
 	}
@@ -148,6 +152,14 @@ func (s *apiServer) StartTeamAgent(ctx context.Context, req *agentv1.StartTeamAg
 	// starts in (R-0411): only an approved team's agents reach here.
 	if req.GetTrustSetting() == trustClaude {
 		s.writeClaudeTrust(ctx, id, u.UID, u.Home, runnerStartFolder(u.Home, workDir))
+	}
+	// The runner's settings (R-0412 item 17): a file only the helper can
+	// write, named on the runner's command line.
+	if len(req.GetRunnerSettings()) > 0 {
+		if err := writeRunnerSettings(base, req.GetRunnerSettings()); err != nil {
+			return nil, fail(codes.Internal, "write %s's runner settings: %v", id, err)
+		}
+		argv = append(slices.Clone(argv), req.GetRunnerSettingsFlag(), filepath.Join(base, runnerSettingsFile))
 	}
 	spec := AgentServerSpec{
 		ID: id, UID: u.UID, GID: u.UID, Home: u.Home,

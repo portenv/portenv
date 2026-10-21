@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"maps"
 	"path"
 	"regexp"
@@ -946,18 +947,25 @@ func (e *teamEngine) startAgentAs(ctx context.Context, name, agentID string, app
 	if a.OwnClone() {
 		clone = "/home/work/" + name
 	}
+	readers := cloneReaders(&team)
+	settings, settingsFlag, err := runnerSettings(a.Runner, agentID, readers, name)
+	if err != nil {
+		slog.Warn("the agent's runner settings couldn't be made; it starts without them", "agent", agentID, "err", err)
+	}
 	r, err := h.StartTeamAgent(ctx, &agentv1.StartTeamAgentRequest{
-		AgentId:         agentID,
-		CloneProjectDir: clone,
-		AgentName:       a.Spec.Name,
-		CloneReaders:    cloneReaders(&team),
-		Argv:            a.Runner,
-		AgentsMd:        agentsMDBlock(&team, a, name) + "\n" + a.Spec.Instructions,
-		HomeSeed:        a.Spec.HomeSeed,
-		ProjectDir:      projectDir(name),
-		HomeQuotaBytes:  defaultHomeQuota,
-		IdlePattern:     runnerIdlePattern(a.Runner),
-		TrustSetting:    runnerTrustSetting(a.Runner),
+		AgentId:            agentID,
+		CloneProjectDir:    clone,
+		AgentName:          a.Spec.Name,
+		CloneReaders:       readers,
+		Argv:               a.Runner,
+		AgentsMd:           agentsMDBlock(&team, a, name) + "\n" + a.Spec.Instructions,
+		HomeSeed:           a.Spec.HomeSeed,
+		ProjectDir:         projectDir(name),
+		HomeQuotaBytes:     defaultHomeQuota,
+		IdlePattern:        runnerIdlePattern(a.Runner),
+		TrustSetting:       runnerTrustSetting(a.Runner),
+		RunnerSettings:     settings,
+		RunnerSettingsFlag: settingsFlag,
 	})
 	if err != nil {
 		b.states[agentID] = typesv1.AgentState_AGENT_STATE_STOPPED

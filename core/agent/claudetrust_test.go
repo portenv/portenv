@@ -319,3 +319,88 @@ func TestRunnerStartFolder(t *testing.T) {
 		t.Errorf("without: %q", got)
 	}
 }
+
+// The runner's settings go to a file in the agent's run folder, which only
+// the helper writes, and the runner gets that file with the flag.
+func TestStartTeamAgentRunnerSettings(t *testing.T) {
+	s, _, _, started, _ := newStartServer(t)
+	settings := []byte(`{"permissions":{"allow":["Bash(portenv msg:*)"]}}`)
+	if _, err := s.StartTeamAgent(context.Background(), &agentv1.StartTeamAgentRequest{
+		AgentId: "builder", Argv: []string{"claude", "--model", "opus"}, AgentsMd: "x\n", HomeQuotaBytes: 2 << 30,
+		RunnerSettings: settings, RunnerSettingsFlag: "--settings",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(s.team.dir, "builder", "runner-settings.json")
+	want := []string{"claude", "--model", "opus", "--settings", file}
+	if len(*started) != 1 || !slices.Equal((*started)[0].Argv, want) {
+		t.Fatalf("argv %v, want %v", (*started)[0].Argv, want)
+	}
+	b, err := os.ReadFile(file)
+	if err != nil || string(b) != string(settings) {
+		t.Fatalf("file %q, %v", b, err)
+	}
+	if fi, _ := os.Lstat(file); fi.Mode().Perm() != 0o640 || !fi.Mode().IsRegular() {
+		t.Fatalf("mode %v", fi.Mode())
+	}
+	// Again at the next start: replaced, not appended to, and a link
+	// planted in its place isn't followed.
+	victim := filepath.Join(t.TempDir(), "victim")
+	if err := os.WriteFile(victim, []byte("keep"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(file); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(victim, file); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeRunnerSettings(filepath.Dir(file), settings); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(victim); string(b) != "keep" {
+		t.Fatalf("followed the link: %s", b)
+	}
+	if fi, _ := os.Lstat(file); !fi.Mode().IsRegular() {
+		t.Fatal("the link is still there")
+	}
+}
+
+// Without settings, the argv is the runner's own; bad settings or a bad
+// flag are refused before anything is made.
+func TestStartTeamAgentRunnerSettingsChecks(t *testing.T) {
+	s, _, _, started, _ := newStartServer(t)
+	if _, err := s.StartTeamAgent(context.Background(), &agentv1.StartTeamAgentRequest{
+		AgentId: "builder", Argv: []string{"claude"}, AgentsMd: "x\n", HomeQuotaBytes: 2 << 30,
+	}); err != nil || !slices.Equal((*started)[0].Argv, []string{"claude"}) {
+		t.Fatalf("argv %v, %v", (*started)[0].Argv, err)
+	}
+	for _, c := range []struct {
+		settings, flag string
+	}{
+		{`{"a":`, "--settings"},
+		{`[]`, "--settings"},
+		{`{"a":1}`, ""},
+		{`{"a":1}`, "-c"},
+		{`{"a":1}`, "--settings=x"},
+		{`{"a":1}`, "--settings x"},
+		{"", "--settings"},
+		{`{"a":"` + strings.Repeat("x", 64<<10) + `"}`, "--settings"},
+	} {
+		s, users, _, _, _ := newStartServer(t)
+		_, err := s.StartTeamAgent(context.Background(), &agentv1.StartTeamAgentRequest{
+			AgentId: "builder", Argv: []string{"claude"}, AgentsMd: "x\n", HomeQuotaBytes: 2 << 30,
+			RunnerSettings: []byte(c.settings), RunnerSettingsFlag: c.flag,
+		})
+		if c.settings == "" && c.flag != "" {
+			// A flag with no settings is refused too.
+			if err == nil {
+				t.Errorf("flag without settings accepted")
+			}
+			continue
+		}
+		if err == nil || len(users.got) != 0 {
+			t.Errorf("%.20q %q: %v (users %v)", c.settings, c.flag, err, users.got)
+		}
+	}
+}

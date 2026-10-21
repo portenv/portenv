@@ -4211,7 +4211,13 @@ type StartTeamAgentRequest struct {
 	ProjectDir string `protobuf:"bytes,9,opt,name=project_dir,json=projectDir,proto3" json:"project_dir,omitempty"`
 	// The agent's display name, for its clone's git identity
 	// ("<name> (Portenv agent)", set when the clone is made).
-	AgentName     string `protobuf:"bytes,10,opt,name=agent_name,json=agentName,proto3" json:"agent_name,omitempty"`
+	AgentName string `protobuf:"bytes,10,opt,name=agent_name,json=agentName,proto3" json:"agent_name,omitempty"`
+	// The runner's folder-trust setting, from portenvd's runner registry
+	// (ADR 0025 §9's trust_setting): "claude" sets Claude Code's
+	// projects["<start folder>"].hasTrustDialogAccepted in the agent's
+	// ~/.claude.json, as the agent, for the one folder the runner starts in
+	// (its clone, or its home without one). Empty: nothing is written.
+	TrustSetting  string `protobuf:"bytes,11,opt,name=trust_setting,json=trustSetting,proto3" json:"trust_setting,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4312,6 +4318,13 @@ func (x *StartTeamAgentRequest) GetProjectDir() string {
 func (x *StartTeamAgentRequest) GetAgentName() string {
 	if x != nil {
 		return x.AgentName
+	}
+	return ""
+}
+
+func (x *StartTeamAgentRequest) GetTrustSetting() string {
+	if x != nil {
+		return x.TrustSetting
 	}
 	return ""
 }
@@ -7386,7 +7399,7 @@ const file_portenv_agent_v1_agent_proto_rawDesc = "" +
 	"\x05state\x18\x04 \x01(\x0e2\x1c.portenv.types.v1.AgentStateR\x05state\x125\n" +
 	"\x06status\x18\x05 \x01(\v2\x1d.portenv.types.v1.AgentStatusR\x06status\x12+\n" +
 	"\x11pending_decisions\x18\x06 \x01(\x05R\x10pendingDecisions\x12!\n" +
-	"\fidle_seconds\x18\a \x01(\x03R\vidleSeconds\"\xfe\x02\n" +
+	"\fidle_seconds\x18\a \x01(\x03R\vidleSeconds\"\xa3\x03\n" +
 	"\x15StartTeamAgentRequest\x12\x19\n" +
 	"\bagent_id\x18\x01 \x01(\tR\aagentId\x12\x12\n" +
 	"\x04argv\x18\x02 \x03(\tR\x04argv\x12\x1b\n" +
@@ -7400,7 +7413,8 @@ const file_portenv_agent_v1_agent_proto_rawDesc = "" +
 	"projectDir\x12\x1d\n" +
 	"\n" +
 	"agent_name\x18\n" +
-	" \x01(\tR\tagentName\"@\n" +
+	" \x01(\tR\tagentName\x12#\n" +
+	"\rtrust_setting\x18\v \x01(\tR\ftrustSetting\"@\n" +
 	"\fCloneReaders\x12\x16\n" +
 	"\x06writer\x18\x01 \x01(\tR\x06writer\x12\x18\n" +
 	"\areaders\x18\x02 \x03(\tR\areaders\"C\n" +

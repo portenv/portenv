@@ -6,6 +6,8 @@ import (
 	"path"
 	"regexp"
 	"strings"
+
+	"github.com/portenv/portenv/core/internal/teamkit"
 )
 
 // runnerIdlePatterns is the runner table's idle-input line for each known
@@ -33,6 +35,15 @@ func runnerIdlePattern(argv []string) string {
 		return ""
 	}
 	return p
+}
+
+// runnerTrustSetting is the registry's folder-trust setting for a
+// runner's argv, by its program's name (R-0411), or "".
+func runnerTrustSetting(argv []string) string {
+	if len(argv) == 0 {
+		return ""
+	}
+	return teamkit.TrustSettingFor(path.Base(argv[0]))
 }
 
 // routinesOffLine says why an agent's routines are off.

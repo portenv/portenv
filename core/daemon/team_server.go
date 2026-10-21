@@ -30,6 +30,7 @@ func (s *Server) teamEng() *teamEngine {
 	s.teamOnce.Do(func() {
 		s.team = newTeamEngine(s.agentFor, s.loadTeam)
 		s.team.readBoard = s.readBoard
+		s.team.log = s.log
 		// Routines' timers (R-0258), while portenvd runs.
 		go func() {
 			tick := time.NewTicker(30 * time.Second)

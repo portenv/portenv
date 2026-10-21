@@ -4187,10 +4187,12 @@ type StartTeamAgentRequest struct {
 	// at most 100 MB together, new files only; ~/.portenv-seeded records it.
 	HomeSeed       []string `protobuf:"bytes,4,rep,name=home_seed,json=homeSeed,proto3" json:"home_seed,omitempty"`
 	HomeQuotaBytes int64    `protobuf:"varint,5,opt,name=home_quota_bytes,json=homeQuotaBytes,proto3" json:"home_quota_bytes,omitempty"`
-	// The runner's idle-input pattern (RE2, matched against the main pane's
-	// last line) from portenvd's runner table: DeliverRoutine types only
-	// when it matches, with no question on screen, 5 s of quiet and not the
-	// alternate screen. Empty: routines are off for this runner (R-0258).
+	// The runner's idle-input pattern from portenvd's runner table: RE2,
+	// matched against one whole line of the main pane, on each of its last
+	// idle_lines non-empty lines. DeliverRoutine and WakeAgent type only
+	// when it finds the runner's empty input there, with no question on
+	// screen under it, 5 s of quiet and not the alternate screen. Empty:
+	// routines and wake-ups are off for this runner (R-0258, CC-0498).
 	IdlePattern string `protobuf:"bytes,6,opt,name=idle_pattern,json=idlePattern,proto3" json:"idle_pattern,omitempty"`
 	// The owner's project, /home/work/<workspace>, for an agent with
 	// checkout: own (ADR 0022 §2a): the helper makes the agent's own clone
@@ -4211,7 +4213,11 @@ type StartTeamAgentRequest struct {
 	ProjectDir string `protobuf:"bytes,9,opt,name=project_dir,json=projectDir,proto3" json:"project_dir,omitempty"`
 	// The agent's display name, for its clone's git identity
 	// ("<name> (Portenv agent)", set when the clone is made).
-	AgentName     string `protobuf:"bytes,10,opt,name=agent_name,json=agentName,proto3" json:"agent_name,omitempty"`
+	AgentName string `protobuf:"bytes,10,opt,name=agent_name,json=agentName,proto3" json:"agent_name,omitempty"`
+	// How many of the main pane's last non-empty lines idle_pattern is
+	// tried on, 1 to 8, from the bottom: a runner may draw a rule and a
+	// status footer under its input. 0 means 1, the last line.
+	IdleLines     int32 `protobuf:"varint,11,opt,name=idle_lines,json=idleLines,proto3" json:"idle_lines,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4314,6 +4320,13 @@ func (x *StartTeamAgentRequest) GetAgentName() string {
 		return x.AgentName
 	}
 	return ""
+}
+
+func (x *StartTeamAgentRequest) GetIdleLines() int32 {
+	if x != nil {
+		return x.IdleLines
+	}
+	return 0
 }
 
 // One writer's clone and the lenses that may read it.
@@ -7386,7 +7399,7 @@ const file_portenv_agent_v1_agent_proto_rawDesc = "" +
 	"\x05state\x18\x04 \x01(\x0e2\x1c.portenv.types.v1.AgentStateR\x05state\x125\n" +
 	"\x06status\x18\x05 \x01(\v2\x1d.portenv.types.v1.AgentStatusR\x06status\x12+\n" +
 	"\x11pending_decisions\x18\x06 \x01(\x05R\x10pendingDecisions\x12!\n" +
-	"\fidle_seconds\x18\a \x01(\x03R\vidleSeconds\"\xfe\x02\n" +
+	"\fidle_seconds\x18\a \x01(\x03R\vidleSeconds\"\x9d\x03\n" +
 	"\x15StartTeamAgentRequest\x12\x19\n" +
 	"\bagent_id\x18\x01 \x01(\tR\aagentId\x12\x12\n" +
 	"\x04argv\x18\x02 \x03(\tR\x04argv\x12\x1b\n" +
@@ -7400,7 +7413,9 @@ const file_portenv_agent_v1_agent_proto_rawDesc = "" +
 	"projectDir\x12\x1d\n" +
 	"\n" +
 	"agent_name\x18\n" +
-	" \x01(\tR\tagentName\"@\n" +
+	" \x01(\tR\tagentName\x12\x1d\n" +
+	"\n" +
+	"idle_lines\x18\v \x01(\x05R\tidleLines\"@\n" +
 	"\fCloneReaders\x12\x16\n" +
 	"\x06writer\x18\x01 \x01(\tR\x06writer\x12\x18\n" +
 	"\areaders\x18\x02 \x03(\tR\areaders\"C\n" +

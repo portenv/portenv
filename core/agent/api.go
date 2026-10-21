@@ -20,6 +20,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
+	"github.com/portenv/portenv/core/internal/idleinput"
 	agentv1 "github.com/portenv/portenv/proto/gen/go/portenv/agent/v1"
 	typesv1 "github.com/portenv/portenv/proto/gen/go/portenv/types/v1"
 )
@@ -99,8 +100,8 @@ type apiServer struct {
 	// reader, for its branch's bundle (nil: streamTeamIOAsAgent).
 	asAgentStream func(ctx context.Context, uid int, home string, args []string) (io.ReadCloser, func() error, error)
 	// setAgentIdleInput gives lane A's idle decision a running agent's
-	// idle-input pattern (SetAgentIdleInput; nil in tests).
-	setAgentIdleInput func(id, pattern string) error
+	// idle-input rule (SetAgentIdleInput; nil in tests).
+	setAgentIdleInput func(id string, in idleinput.Input) error
 	// prepareProject asks init to open the project to the team.
 	prepareProject func(ctx context.Context, req *agentv1.PrepareTeamProjectRequest) (*agentv1.PrepareTeamProjectResponse, error)
 	// resolveMigration asks init to carry out the owner's answer to the

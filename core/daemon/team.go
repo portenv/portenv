@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"maps"
 	"path"
 	"regexp"
@@ -77,6 +78,12 @@ type teamEngine struct {
 	// starts is the agent starts an approved team_start set going, so
 	// tests can wait for them.
 	starts sync.WaitGroup
+
+	// log is portenvd's log (nil: none, in tests); notTyped is when each
+	// "<box>/<agent>/<path>" last logged a wake-up or routine not typed.
+	log      *slog.Logger
+	logMu    sync.Mutex
+	notTyped map[string]time.Time
 }
 
 func newTeamEngine(helper func(context.Context, string) (agentv1.AgentServiceClient, error), loadTeam func(context.Context, string) (Team, error)) *teamEngine {
@@ -956,7 +963,8 @@ func (e *teamEngine) startAgentAs(ctx context.Context, name, agentID string, app
 		HomeSeed:        a.Spec.HomeSeed,
 		ProjectDir:      projectDir(name),
 		HomeQuotaBytes:  defaultHomeQuota,
-		IdlePattern:     runnerIdlePattern(a.Runner),
+		IdlePattern:     runnerIdle(a.Runner).Pattern,
+		IdleLines:       int32(runnerIdle(a.Runner).Lines), // #nosec G115 -- at most idleinput.MaxLines
 	})
 	if err != nil {
 		b.states[agentID] = typesv1.AgentState_AGENT_STATE_STOPPED
@@ -1623,7 +1631,9 @@ func (e *teamEngine) tickRoutines(ctx context.Context) {
 				if err != nil {
 					continue
 				}
-				if _, err := h.DeliverRoutine(ctx, &agentv1.DeliverRoutineRequest{AgentId: agent, Text: text}); err == nil {
+				_, err = h.DeliverRoutine(ctx, &agentv1.DeliverRoutineRequest{AgentId: agent, Text: text})
+				e.logNotTyped(name, agent, "routine not typed", err)
+				if err == nil {
 					r.missed = 0
 				}
 			}

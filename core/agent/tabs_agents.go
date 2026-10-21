@@ -21,6 +21,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/portenv/portenv/core/internal/idleinput"
 	agentv1 "github.com/portenv/portenv/proto/gen/go/portenv/agent/v1"
 	typesv1 "github.com/portenv/portenv/proto/gen/go/portenv/types/v1"
 )
@@ -44,9 +45,9 @@ type agentServer struct {
 	// mainPane is the runner's pane, the first in its main session: the
 	// only pane a routine is typed into.
 	mainPane string
-	// idleInput matches the runner's screen when it waits at an empty
-	// input (SetAgentIdleInput); nil refuses every routine.
-	idleInput *regexp.Regexp
+	// idleInput finds the runner's empty input on screen
+	// (SetAgentIdleInput); nil refuses every routine and wake-up.
+	idleInput *idleinput.Matcher
 }
 
 // agentServers are the running agents' servers, by id.
@@ -644,23 +645,18 @@ const maxRoutine = 4096
 // before a routine is typed (tmux counts activity in whole seconds).
 var routineQuiet = 5 * time.Second
 
-// maxIdleInput is the longest idle-input pattern.
-const maxIdleInput = 512
-
-// SetAgentIdleInput sets the pattern that says a running agent's runner
-// waits at an empty input: a regular expression (RE2, so its matching
-// time is linear), matched against the main pane's last lines, one per
-// line ((?m)). The kit supplies it per runner (lane C); a runner without
-// one gets no routines.
-func (s *apiServer) SetAgentIdleInput(id, pattern string) error {
-	if len(pattern) > maxIdleInput {
-		return status.Errorf(codes.InvalidArgument, "an idle-input pattern is at most %d bytes", maxIdleInput)
-	}
-	var re *regexp.Regexp
-	if pattern != "" {
+// SetAgentIdleInput sets the rule that says a running agent's runner
+// waits at an empty input (idleinput.Input): a regular expression (RE2,
+// so its matching time is linear) matched against one whole line, on each
+// of the main pane's last in.Lines non-empty lines. The runner table
+// supplies it per runner; a runner without one (an empty pattern) gets no
+// routines and no wake-ups.
+func (s *apiServer) SetAgentIdleInput(id string, in idleinput.Input) error {
+	var m *idleinput.Matcher
+	if in.Pattern != "" {
 		var err error
-		if re, err = regexp.Compile("(?m)" + pattern); err != nil {
-			return status.Errorf(codes.InvalidArgument, "the idle-input pattern: %v", err)
+		if m, err = idleinput.Compile(in); err != nil {
+			return status.Error(codes.InvalidArgument, err.Error())
 		}
 	}
 	s.agents.mu.Lock()
@@ -669,25 +665,14 @@ func (s *apiServer) SetAgentIdleInput(id, pattern string) error {
 	if !ok {
 		return status.Errorf(codes.FailedPrecondition, "%s isn't running", id)
 	}
-	a.idleInput = re
+	a.idleInput = m
 	return nil
 }
 
 // readyForRoutine says why the main pane can't take a routine now, or ""
-// when it can (R-0258, R-0260). The helper can't read an agent's /proc or
-// terminal modes (another user), so the waiting detector's verdict rests
-// on the screen and the quiet time here.
-//
-//  1. It isn't asking something (the detector's Waiting): a routine typed
-//     there would answer the question.
-//  2. The window has printed nothing for routineQuiet.
-//  3. It isn't a full-screen program (the alternate screen).
-//  4. The runner's idle-input pattern matches: it waits at an empty input.
-//
-// And whatever the four say, nothing is typed while any of the last lines
-// reads as a secret prompt (ADR 0016's rule: "Password:", a passphrase, a
-// token asked for), even when the runner's pattern matches (R-0261).
-func (a *agentServer) readyForRoutine(ctx context.Context, idleInput *regexp.Regexp) (string, error) {
+// when it can (R-0258, R-0260), from its screen, quiet time and mode
+// (routineVerdict).
+func (a *agentServer) readyForRoutine(ctx context.Context, idleInput *idleinput.Matcher) (string, error) {
 	out, err := a.tmux(ctx, "display-message", "-p", "-t", a.mainPane, "#{alternate_on}\t#{window_activity}")
 	if err != nil {
 		return "", err
@@ -704,30 +689,60 @@ func (a *agentServer) readyForRoutine(ctx context.Context, idleInput *regexp.Reg
 	if err != nil {
 		return "", err
 	}
-	lines := lastLines(screen, screenLines)
+	return routineVerdict(a.user.ID, lastLines(screen, screenLines), time.Since(time.Unix(activity, 0)), f[0] == "1", idleInput), nil
+}
+
+// routineVerdict says why a pane with these last lines can't take a
+// routine or a wake-up now, or "" when it can. The helper can't read an
+// agent's /proc or terminal modes (another user), so the waiting
+// detector's verdict rests on the screen and the quiet time here.
+//
+//  1. It isn't asking something (the detector's Waiting): a line typed
+//     there would answer the question. When the runner's empty input is
+//     on screen, only its line and the lines under it are read for a
+//     question: what's
+//     above it is the runner's transcript (a reply ending "…tests too?"
+//     or "Here's what changed:"), and the runner asks its own questions
+//     in place of the input, never above it.
+//  2. The window has printed nothing for routineQuiet.
+//  3. It isn't a full-screen program (the alternate screen).
+//  4. The runner's idle-input rule finds its empty input: nothing typed.
+//
+// And whatever the four say, nothing is typed while any of the last lines
+// reads as a secret prompt (ADR 0016's rule: "Password:", a passphrase, a
+// token asked for), even when the runner's rule matches (R-0261).
+func routineVerdict(id string, lines []string, quiet time.Duration, alt bool, idleInput *idleinput.Matcher) string {
+	at := -1
+	if idleInput != nil {
+		at = idleInput.Find(lines)
+	}
+	asked := lines
+	if at >= 0 {
+		asked = lines[at:]
+	}
 	sig := waitSignals{
 		Shell:        shellUnknown,
-		Quiet:        time.Since(time.Unix(activity, 0)),
-		AltScreen:    f[0] == "1",
-		ScreenPrompt: screenAsks(lines),
+		Quiet:        quiet,
+		AltScreen:    alt,
+		ScreenPrompt: screenAsks(asked),
 		LastLines:    lines,
 	}
 	switch {
 	case sig.Secret():
 		// Never the prompt's text (ADR 0016 point 8).
-		return "busy: " + a.user.ID + "'s terminal asks for a secret", nil
+		return "busy: " + id + "'s terminal asks for a secret"
 	case sig.Waiting():
-		return "busy: " + a.user.ID + " is asking something", nil
+		return "busy: " + id + " is asking something"
 	case sig.Quiet < routineQuiet:
-		return fmt.Sprintf("busy: %s printed something in the last %s", a.user.ID, routineQuiet), nil
+		return fmt.Sprintf("busy: %s printed something in the last %s", id, routineQuiet)
 	case sig.AltScreen:
-		return "busy: " + a.user.ID + " is in a full-screen program", nil
+		return "busy: " + id + " is in a full-screen program"
 	case idleInput == nil:
-		return "busy: " + a.user.ID + "'s runner has no idle-input pattern, so it never takes routines", nil
-	case !idleInput.MatchString(strings.Join(lines, "\n")):
-		return "busy: " + a.user.ID + " isn't waiting at its input", nil
+		return "busy: " + id + "'s runner has no idle-input pattern, so it never takes routines"
+	case at < 0:
+		return "busy: " + id + " isn't waiting at its input"
 	}
-	return "", nil
+	return ""
 }
 
 // deliverRoutine types "[Portenv routine] <text>" and Enter into the

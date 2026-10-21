@@ -700,19 +700,23 @@ func (s *sendAttachmentsStream) Recv() (*daemonv1.SendAttachmentsRequest, error)
 }
 
 // Only the person at this Mac reads, sends or removes attachments: an
-// agent caller, or a call with no caller, is refused before anything.
+// identified agent is refused with PermissionDenied, and a call with no
+// caller with Unauthenticated, before anything is looked at.
 func TestTheAppsAttachmentCallsAreTheOwnersOnly(t *testing.T) {
 	s := &Server{}
 	agent := callerCtx(caller{kind: callerAgent, id: "builder", name: "Builder", box: "w"})
-	for name, ctx := range map[string]context.Context{"an agent": agent, "no caller": context.Background()} {
-		if _, err := s.RemoveAttachment(ctx, &daemonv1.RemoveAttachmentRequest{Name: "w", AttachmentId: "01JAB000000000000000000000"}); status.Code(err) != codes.PermissionDenied && status.Code(err) != codes.Unauthenticated {
-			t.Errorf("%s: RemoveAttachment: %v", name, err)
+	for name, c := range map[string]struct {
+		ctx  context.Context
+		want codes.Code
+	}{"an agent": {agent, codes.PermissionDenied}, "no caller": {context.Background(), codes.Unauthenticated}} {
+		if _, err := s.RemoveAttachment(c.ctx, &daemonv1.RemoveAttachmentRequest{Name: "w", AttachmentId: "01JAB000000000000000000000"}); status.Code(err) != c.want {
+			t.Errorf("%s: RemoveAttachment: %v, want %v", name, err, c.want)
 		}
-		if err := s.ReadAttachment(&daemonv1.ReadAttachmentRequest{Name: "w", AttachmentId: "01JAB000000000000000000000"}, &readAttachmentStream{ctx: ctx}); status.Code(err) != codes.PermissionDenied && status.Code(err) != codes.Unauthenticated {
-			t.Errorf("%s: ReadAttachment: %v", name, err)
+		if err := s.ReadAttachment(&daemonv1.ReadAttachmentRequest{Name: "w", AttachmentId: "01JAB000000000000000000000"}, &readAttachmentStream{ctx: c.ctx}); status.Code(err) != c.want {
+			t.Errorf("%s: ReadAttachment: %v, want %v", name, err, c.want)
 		}
-		if err := s.SendAttachments(&sendAttachmentsStream{ctx: ctx}); status.Code(err) != codes.PermissionDenied && status.Code(err) != codes.Unauthenticated {
-			t.Errorf("%s: SendAttachments: %v", name, err)
+		if err := s.SendAttachments(&sendAttachmentsStream{ctx: c.ctx}); status.Code(err) != c.want {
+			t.Errorf("%s: SendAttachments: %v, want %v", name, err, c.want)
 		}
 	}
 }

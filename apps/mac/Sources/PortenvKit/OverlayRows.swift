@@ -93,6 +93,69 @@ public struct OverlayRows: Sendable {
         }
     }
 
+    /// A finished command's status, on its own prompt's row.
+    public struct Status: Equatable, Sendable {
+        /// The prompt's row: scroll-invariant from `statuses()`, on screen
+        /// from `visibleStatuses`.
+        public let row: Int
+        public let exit: Int?
+
+        public init(row: Int, exit: Int?) {
+            self.row = row
+            self.exit = exit
+        }
+    }
+
+    /// Each finished command's status, on the row of the prompt it was
+    /// typed at (finding 23). The shell sends a command's D;<exit> when the
+    /// next prompt starts, so the end mark sits on the next prompt's row:
+    /// drawn there, every status read as the next command's. A D closes the
+    /// command started since the last prompt; one with no command, or whose
+    /// command's prompt isn't in the buffer, shows nothing rather than a
+    /// status on the wrong row.
+    public func statuses() -> [Status] {
+        // On one row, in the order the shell sends them: a command with no
+        // output starts and ends on the next prompt's row (C, D, A).
+        func rank(_ k: Kind) -> Int {
+            switch k {
+            case .commandStart: 0
+            case .commandEnd: 1
+            case .prompt: 2
+            }
+        }
+        let ordered = marks.enumerated().sorted { a, b in
+            (a.element.row, rank(a.element.kind), a.offset) < (b.element.row, rank(b.element.kind), b.offset)
+        }.map(\.element)
+        var out: [Status] = []
+        var prompt: Int?
+        // The running command's prompt row (nil inside: it had none); nil
+        // when no command runs.
+        var running: Int??
+        for m in ordered {
+            switch m.kind {
+            case .prompt:
+                prompt = m.row
+                running = nil
+            case .commandStart:
+                running = .some(prompt)
+                prompt = nil
+            case let .commandEnd(exit):
+                if case let .some(.some(row)) = running { out.append(Status(row: row, exit: exit)) }
+                running = nil
+            }
+        }
+        return out
+    }
+
+    /// The statuses on screen, with their screen rows, given the
+    /// scroll-invariant row of the top visible line and the rows shown.
+    public func visibleStatuses(top: Int, rows: Int) -> [Status] {
+        statuses().compactMap { s in
+            let r = s.row - top
+            return (0 ..< rows).contains(r) ? Status(row: r, exit: s.exit) : nil
+        }
+    }
+
     /// The top of a screen row, in points from the top of the terminal.
     public static func y(screenRow: Int, cellHeight: CGFloat) -> CGFloat {
         CGFloat(screenRow) * cellHeight

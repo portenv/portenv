@@ -80,12 +80,7 @@ public final class DaemonClient: DaemonAPI, Sendable {
         do {
             return try await body()
         } catch let e as RPCError {
-            if e.metadata[stringValues: "portenv-refusal"].contains("open-elsewhere") {
-                throw DaemonError(e.message, openElsewhere: true)
-            }
-            if e.metadata[stringValues: "portenv-refusal"].contains("moving") {
-                var refused = DaemonError(e.message)
-                refused.moving = true
+            if let refused = DaemonError.refusal(Array(e.metadata[stringValues: "portenv-refusal"]), message: e.message) {
                 throw refused
             }
             throw DaemonError.fromRPC(message: DaemonErrorText.plain(code: e.code, message: e.message), unimplemented: e.code == .unimplemented,

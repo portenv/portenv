@@ -114,10 +114,6 @@ public extension TeamText {
     /// name.
     static let approveTeamStartAbove = "Approve the team\u{2019}s first start above."
     static let approveTeamStartInNeedsYou = "Approve the team\u{2019}s first start in Needs you."
-    /// portenvd's refusal of a Start while the team's first start waits
-    /// (core/daemon/team.go), written for the CLI, which shows it as it is
-    /// (core/cmd/portenv/owner.go). The app shows its hint instead.
-    static let teamStartWaitingRefusal = "approve the team's first start in Portenv first"
     static let fileNotShownExactly = "Portenv couldn\u{2019}t show this file exactly as it is, so it can\u{2019}t be approved. Try again."
 
     static func approveFirst(_ name: String) -> String { "Approve \(name)\u{2019}s file first." }

@@ -128,7 +128,7 @@ struct TeamApprovalTests {
         var approved = lead
         approved.approved = true
         let team = await controller(daemon, agents: [approved])
-        daemon.failingOnce["start-agent"] = Self.waitingRefusal
+        daemon.teamStartPendingOnce = ["start-agent"]
         await team.start("lead")
         // portenvd's refusal (written for the CLI) is never shown: Start
         // waits, with the calm hint, and no error.
@@ -158,7 +158,7 @@ struct TeamApprovalTests {
         var approved = lead
         approved.approved = true
         let team = await controller(daemon, agents: [approved])
-        daemon.failingOnce["start-agent"] = Self.waitingRefusal
+        daemon.teamStartPendingOnce = ["start-agent"]
         await team.start("lead")
         #expect(team.error == nil)
         let ask = TeamDecision(id: "d-start", from: "portenv", kind: .teamStart, summary: "Start this workspace's agent team?", startAgents: ["lead"])
@@ -173,10 +173,6 @@ struct TeamApprovalTests {
         #expect(team.canStart(approved))
         #expect(team.startHint(approved) == nil)
     }
-
-    /// portenvd's refusal while the team's first start waits, as it sends
-    /// it: written for the CLI, never shown in the app.
-    static let waitingRefusal = "approve the team's first start in Portenv first"
 
     /// While the team's first start waits for the owner's Approve, every
     /// agent's Start is off, with a calm hint where the card is; pressing
@@ -229,7 +225,7 @@ struct TeamApprovalTests {
         let team = await controller(daemon, agents: [approved])
         #expect(team.canStart(approved))
         #expect(team.startHint(approved) == nil)
-        daemon.failingOnce["start-agent"] = Self.waitingRefusal
+        daemon.teamStartPendingOnce = ["start-agent"]
         await team.start("lead")
         #expect(team.error == nil)
         #expect(team.teamStartPending)
@@ -244,10 +240,26 @@ struct TeamApprovalTests {
         team.receive(.decision(yes))
         #expect(!team.teamStartPending)
         #expect(team.startHint(approved) == nil)
-        // Any other refusal is still its own line.
+        // Any other refusal is still its own line, even with portenvd's
+        // first-start words: the app goes by the trailer, never the words.
         daemon.failingOnce["start-agent"] = "Lead can\u{2019}t start: 4 agents are running in this workspace, and you allow 4."
         await team.start("lead")
         #expect(team.error?.hasPrefix("Lead can") == true)
+        daemon.failingOnce["start-agent"] = "approve the team\u{2019}s first start in Portenv first"
+        await team.start("lead")
+        #expect(!team.teamStartPending)
+        #expect(team.error == "approve the team\u{2019}s first start in Portenv first")
+    }
+
+    /// portenvd's trailer portenv-refusal, as the client maps it: the
+    /// team-start-pending reason, not the words, marks the refusal.
+    @Test func theTrailerMarksTheTeamStartRefusal() {
+        let pending = DaemonError.refusal(["team-start-pending"], message: "anything")
+        #expect(pending?.teamStartPending == true)
+        #expect(pending?.moving == false && pending?.openElsewhere == false)
+        #expect(DaemonError.refusal(["moving"], message: "m")?.teamStartPending == false)
+        #expect(DaemonError.refusal(["open-elsewhere"], message: "o")?.openElsewhere == true)
+        #expect(DaemonError.refusal([], message: "approve the team's first start in Portenv first") == nil)
     }
 
     /// R-0296: after a relaunch the app has no memory of the Start click;

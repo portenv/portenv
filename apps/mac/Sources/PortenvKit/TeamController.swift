@@ -302,7 +302,7 @@ public final class TeamController {
         await perform {
             do {
                 self.state.apply(.agent(try await self.daemon.startAgent(self.box, id: agent)))
-            } catch let e as DaemonError where e.message == TeamText.teamStartWaitingRefusal {
+            } catch let e as DaemonError where e.teamStartPending {
                 self.refusedForTeamStart.insert(agent)
             }
         }

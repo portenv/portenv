@@ -59,7 +59,7 @@ func (e *Env) AttachmentsDir(c BoxConfig) (string, bool) {
 func (e *Env) RemoveAttachments(c BoxConfig) error {
 	dir, ok := e.AttachmentsDir(c)
 	if !ok {
-		return fmt.Errorf("%q isn't a box ID", c.ID)
+		return fmt.Errorf("%q isn't a workspace ID", c.ID)
 	}
 	if err := os.RemoveAll(dir); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err

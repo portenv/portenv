@@ -1711,7 +1711,9 @@ public nonisolated struct Portenv_Daemon_V1_ProjectSource: Sendable {
   }
 
   /// Clone with the owner's GitHub sign-in (a private repository): the app
-  /// passes it to ApplyTeamPlan, in memory; it's never kept.
+  /// passes it to ApplyTeamPlan, in memory; it's never kept. False means
+  /// "fetch plain first; use the sign-in only if GitHub refuses" (R-0413):
+  /// portenvd then asks for it (needs_token) whatever was chosen at Create.
   public var useSignIn: Bool = false
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()

@@ -73,3 +73,20 @@ struct PushControllerTests {
         #expect(daemon.calls.last == ["app", "answer-push", "acme", "q3", "signed-out", "no-token"])
     }
 }
+
+/// The inspector's "This workspace can push to …" and Stop Allowing Pushes
+/// (ADR 0025 §6, CC-0645).
+@MainActor
+struct PushPermissionTests {
+    @Test func stopAllowingPushes() async {
+        let daemon = FakeDaemon()
+        daemon.pushes = ("github.com/acme/api", true)
+        let push = PushController(box: "acme", daemon: daemon, github: GitHubAccount(store: FakeSecretStore(), defaults: UserDefaults(suiteName: "pp-\(UUID().uuidString)")!))
+        await push.refreshPermission()
+        #expect(push.canPushLine == "This workspace can push to acme/api")
+        await push.stopAllowing()
+        #expect(daemon.calls.contains(["app", "stop-allowing-pushes", "acme"]))
+        #expect(push.canPushLine == nil)
+        #expect(PushText.stopAllowing == "Stop Allowing Pushes")
+    }
+}

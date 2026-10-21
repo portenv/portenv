@@ -166,8 +166,8 @@ func (h *teamHub) handleOwner(conn *net.UnixConn) {
 		refuse("Portenv couldn’t read the request: " + err.Error())
 		return
 	}
-	if c.GetPushList() == nil && c.GetPush() == nil {
-		refuse("Only pushes are taken here.")
+	if c.GetPushList() == nil && c.GetPush() == nil && c.GetFetch() == nil {
+		refuse("Only pushes and fetches are taken here.")
 		return
 	}
 	c.CallId, c.AgentId, c.Owner = newCallID(), "", true
@@ -188,7 +188,79 @@ func (h *teamHub) handleOwner(conn *net.UnixConn) {
 		}
 	}
 	_ = conn.CloseRead()
-	reply(h.relayWait(&c, ownerCallWait))
+	r := h.relayWait(&c, ownerCallWait)
+	// A fetch's bundle follows its answer, once (R-0392).
+	if id := r.GetFetch().GetBundleId(); c.GetFetch() != nil && id != "" {
+		path := filepath.Join(h.pushDir(), id)
+		f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW, 0) // #nosec G304 -- a checked name in the API process's own folder
+		if !pushBundleIDRE.MatchString(id) || err != nil {
+			refuse("Portenv lost the fetch\u2019s bundle. Fetch again.")
+			return
+		}
+		_ = os.Remove(path)
+		defer func() { _ = f.Close() }()
+		r.GetFetch().BundleId = ""
+		reply(r)
+		_ = conn.SetWriteDeadline(time.Time{})
+		_, _ = io.Copy(idleWriter{conn}, f)
+		return
+	}
+	reply(r)
+}
+
+// idleWriter writes conn with a deadline per write: each waits at most
+// ownerIdle for git-remote-portenv to take the bytes.
+type idleWriter struct{ conn *net.UnixConn }
+
+func (w idleWriter) Write(p []byte) (int, error) {
+	_ = w.conn.SetWriteDeadline(time.Now().Add(ownerIdle))
+	return w.conn.Write(p)
+}
+
+// WriteFetchBundle keeps the bundle portenvd fetched on the Mac until the
+// owner's socket hands it to git-remote-portenv.
+func (s *apiServer) WriteFetchBundle(stream agentv1.AgentService_WriteFetchBundleServer) error {
+	dir := s.team.pushDir()
+	if dir == "" {
+		return status.Error(codes.Internal, "no folder for the fetch")
+	}
+	var raw [16]byte
+	if _, err := rand.Read(raw[:]); err != nil {
+		return err
+	}
+	id := hex.EncodeToString(raw[:])
+	path := filepath.Join(dir, id)
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL|syscall.O_NOFOLLOW, 0o600) // #nosec G304 -- a fresh name in the API process's own folder
+	if err != nil {
+		return status.Errorf(codes.Internal, "keep the fetch: %v", err)
+	}
+	fail := func(err error) error {
+		_ = f.Close()
+		_ = os.Remove(path)
+		return err
+	}
+	var n int64
+	for {
+		m, err := stream.Recv()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return fail(err)
+		}
+		n += int64(len(m.GetChunk()))
+		if n > maxPushBundle {
+			return fail(status.Errorf(codes.ResourceExhausted, "the fetch is over %s", humanBytes(maxPushBundle)))
+		}
+		if _, err := f.Write(m.GetChunk()); err != nil {
+			return fail(err)
+		}
+	}
+	if err := f.Close(); err != nil {
+		_ = os.Remove(path)
+		return err
+	}
+	return stream.SendAndClose(&agentv1.WriteFetchBundleResponse{BundleId: id})
 }
 
 // keepBundle writes exactly n bytes from r to a new 0600 file in pushDir.

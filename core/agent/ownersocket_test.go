@@ -264,3 +264,117 @@ func TestABundleStreamsAsLongAsBytesKeepComing(t *testing.T) {
 		t.Fatalf("a stalled stream went through: %v", r)
 	}
 }
+
+// A fetch (R-0392): the owner's call reaches portenvd, which hands the
+// bundle in (WriteFetchBundle); the helper streams it after the answer,
+// once, and forgets it.
+func TestAFetchsBundleFollowsTheAnswer(t *testing.T) {
+	uid := 1000
+	h := newTestHub(t, &uid)
+	addTestOwner(t, h, 1000)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	pd := attachFake(t, ctx, h)
+	s := &apiServer{team: h}
+	bundle := bytes.Repeat([]byte("f"), 70_000)
+	go func() {
+		c := <-pd.calls
+		if !c.GetOwner() || c.GetFetch() == nil {
+			pd.replies <- &agentv1.TeamCallsRequest{CallId: c.GetCallId(), Line: "wrong call"}
+			return
+		}
+		st := &writeFetchStream{ctx: ctx, chunks: [][]byte{bundle[:30_000], bundle[30_000:]}}
+		if err := s.WriteFetchBundle(st); err != nil {
+			pd.replies <- &agentv1.TeamCallsRequest{CallId: c.GetCallId(), Line: err.Error()}
+			return
+		}
+		pd.replies <- &agentv1.TeamCallsRequest{CallId: c.GetCallId(), Ok: true,
+			Result: &agentv1.TeamCallsRequest_Fetch{Fetch: &agentv1.FetchResult{BundleId: st.resp.GetBundleId(), BundleBytes: int64(len(bundle))}}}
+	}()
+	conn, err := net.Dial("unix", filepath.Join(h.dir, "work", "portenv.sock"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = conn.Close() }()
+	_ = conn.SetDeadline(time.Now().Add(10 * time.Second))
+	_, _ = io.WriteString(conn, `{"fetch":{"wants":[{"name":"refs/heads/main","sha":"`+strings.Repeat("a", 40)+`"}]}}`+"\n")
+	_ = conn.(*net.UnixConn).CloseWrite()
+	br := bufio.NewReader(conn)
+	line, _ := br.ReadString('\n')
+	var r agentv1.TeamCallsRequest
+	if err := protojson.Unmarshal([]byte(line), &r); err != nil || !r.GetOk() {
+		t.Fatalf("%q %v", line, err)
+	}
+	got, _ := io.ReadAll(br)
+	if !bytes.Equal(got, bundle) {
+		t.Fatalf("got %d bytes", len(got))
+	}
+	if ents, _ := os.ReadDir(h.pushDir()); len(ents) != 0 {
+		t.Fatalf("left behind: %v", ents)
+	}
+}
+
+// Over the cap, portenvd's bundle isn't kept.
+func TestAFetchsBundleIsCapped(t *testing.T) {
+	uid := 1000
+	h := newTestHub(t, &uid)
+	s := &apiServer{team: h}
+	old := maxPushBundle
+	maxPushBundle = 10
+	defer func() { maxPushBundle = old }()
+	if err := s.WriteFetchBundle(&writeFetchStream{ctx: context.Background(), chunks: [][]byte{bytes.Repeat([]byte("f"), 11)}}); err == nil {
+		t.Fatal("over the cap: kept")
+	}
+	if ents, _ := os.ReadDir(h.pushDir()); len(ents) != 0 {
+		t.Fatalf("left behind: %v", ents)
+	}
+}
+
+// An agent's fetch is refused on its own socket.
+func TestAnAgentCantFetchThroughPortenv(t *testing.T) {
+	agentUID := 2001
+	h := newTestHub(t, &agentUID)
+	if err := addTestAgent(t, h, "builder", 2001); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	attachFake(t, ctx, h)
+	if r := teamCall(t, h, "builder", `{"fetch":{}}`); r.GetOk() || !strings.Contains(r.GetLine(), "Only you") {
+		t.Fatalf("%v", r)
+	}
+	// And on work's socket, an agent's uid is refused (the uid gate).
+	h2 := newTestHub(t, &agentUID)
+	addTestOwner(t, h2, 1000)
+	attachFake(t, ctx, h2)
+	if r := ownerCall(t, h2, `{"fetch":{}}`, nil); r.GetOk() || r.GetLine() != notTheOwner {
+		t.Fatalf("%v", r)
+	}
+}
+
+// writeFetchStream is WriteFetchBundle's stream: chunks in, the answer
+// kept.
+type writeFetchStream struct {
+	ctx    context.Context
+	chunks [][]byte
+	resp   *agentv1.WriteFetchBundleResponse
+}
+
+func (w *writeFetchStream) Recv() (*agentv1.WriteFetchBundleRequest, error) {
+	if len(w.chunks) == 0 {
+		return nil, io.EOF
+	}
+	c := w.chunks[0]
+	w.chunks = w.chunks[1:]
+	return &agentv1.WriteFetchBundleRequest{Chunk: c}, nil
+}
+func (w *writeFetchStream) SendAndClose(r *agentv1.WriteFetchBundleResponse) error {
+	w.resp = r
+	return nil
+}
+func (w *writeFetchStream) Context() context.Context     { return w.ctx }
+func (w *writeFetchStream) SetHeader(metadata.MD) error  { return nil }
+func (w *writeFetchStream) SendHeader(metadata.MD) error { return nil }
+func (w *writeFetchStream) SetTrailer(metadata.MD)       {}
+func (w *writeFetchStream) SendMsg(any) error            { return nil }
+func (w *writeFetchStream) RecvMsg(any) error            { return nil }

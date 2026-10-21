@@ -1535,7 +1535,9 @@ func TestTeamCallsNeverApproveAnAgentFile(t *testing.T) {
 		"set_status", "team_status", "handoff", "propose_routine",
 		// The owner's push (R-0391): taken only from work's socket, answered
 		// by handlePush, which pushes to GitHub and approves nothing.
-		"push_list", "push"}
+		"push_list", "push",
+		// The owner's fetch (R-0392): the same, read-only.
+		"fetch"}
 	if !slices.Equal(names, want) {
 		t.Fatalf("TeamCalls ops are %v, want %v: check a new op can't approve an agent file, then add it here", names, want)
 	}
@@ -1577,6 +1579,7 @@ func TestTeamCallsNeverApproveAnAgentFile(t *testing.T) {
 		{Op: &agentv1.TeamCallsResponse_ProposeRoutine{ProposeRoutine: &agentv1.ProposeRoutine{EveryMinutes: 5, Note: claim}}},
 		{Op: &agentv1.TeamCallsResponse_PushList{PushList: &agentv1.PushList{}}},
 		{Op: &agentv1.TeamCallsResponse_Push{Push: &agentv1.PushRefs{Updates: []*agentv1.PushUpdate{{Dst: "refs/heads/main", NewSha: sha(builderFile)[:40]}}}}},
+		{Op: &agentv1.TeamCallsResponse_Fetch{Fetch: &agentv1.FetchRefs{}}},
 	}
 	if len(calls) != len(want) {
 		t.Fatalf("%d calls for %d ops", len(calls), len(want))

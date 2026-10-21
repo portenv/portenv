@@ -131,7 +131,7 @@ func localRepo(t *testing.T) (string, string) {
 func TestRemoteHelperSaysWhatItCanDo(t *testing.T) {
 	repo, _ := localRepo(t)
 	out, code := talk(t, repo, (&fakeWorkSocket{}).serve(t), "capabilities\n\n")
-	if code != 0 || out != "push\noption\n\n" {
+	if code != 0 || out != "fetch\npush\noption\n\n" {
 		t.Fatalf("%d %q", code, out)
 	}
 }

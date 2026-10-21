@@ -284,6 +284,16 @@ final class FakeDaemon: DaemonAPI, @unchecked Sendable {
         try await record(["app", "apply-team-plan", box, githubToken == nil ? "no-token" : "token"])
         return lock.withLock { appliedFirst.isEmpty ? applied : appliedFirst.removeFirst() }
     }
+    /// The workspace's repository and whether pushes are allowed.
+    var pushes: (String, Bool) = ("", false)
+    func pushPermission(_ box: String) async throws -> (repo: String, allowed: Bool) {
+        try await record(["app", "get-pushes", box])
+        return lock.withLock { pushes }
+    }
+    func stopAllowingPushes(_ box: String) async throws {
+        try await record(["app", "stop-allowing-pushes", box])
+        lock.withLock { pushes.1 = false }
+    }
     /// Pushes waiting for the app (R-0391), sent once by watchPushes.
     var pushQuestions: [PushAsk] = []
     func watchPushes(_ box: String) -> AsyncThrowingStream<PushAsk, Error> {

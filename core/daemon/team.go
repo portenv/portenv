@@ -247,7 +247,7 @@ func refuse(callID, format string, a ...any) *agentv1.TeamCallsRequest {
 func (e *teamEngine) handleCall(ctx context.Context, name string, c *agentv1.TeamCallsResponse) *agentv1.TeamCallsRequest {
 	id := c.GetCallId()
 	// Pushes are the owner's alone, from work's own socket (R-0391).
-	if c.GetPushList() != nil || c.GetPush() != nil {
+	if c.GetPushList() != nil || c.GetPush() != nil || c.GetFetch() != nil {
 		return refuse(id, "Only you can push from this workspace. Agents can’t push.")
 	}
 	team, err := e.loadTeam(ctx, name)

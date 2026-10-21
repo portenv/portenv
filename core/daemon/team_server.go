@@ -16,6 +16,7 @@ import (
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 
 	agentv1 "github.com/portenv/portenv/proto/gen/go/portenv/agent/v1"
 	daemonv1 "github.com/portenv/portenv/proto/gen/go/portenv/daemon/v1"
@@ -118,7 +119,8 @@ func (s *Server) withTeam(ctx context.Context, name string, fn func(src TeamSour
 	}
 	state := filepath.Join(s.env.Dir, "state", c.ID)
 	return withTeamFiles(state, files, func(dir string) error {
-		src := TeamSource{ProjectDir: dir, OverridesDir: filepath.Join(s.env.Dir, "agents.local"), WorkspaceID: c.ID, StateDir: state}
+		src := TeamSource{ProjectDir: dir, OverridesDir: filepath.Join(s.env.Dir, "agents.local"), WorkspaceID: c.ID, StateDir: state,
+			Limits: TeamLimits{MaxAgents: readAgentsAllowed(s.env.Dir)}}
 		team, err := LoadTeam(src)
 		if err != nil {
 			return err
@@ -211,7 +213,13 @@ func (s *Server) pumpTeamCalls(ctx context.Context, name string) error {
 			return err
 		}
 		go func() {
-			r := eng.handleCall(ctx, name, c)
+			var r *agentv1.TeamCallsRequest
+			if c.GetOwner() || c.GetPushList() != nil || c.GetPush() != nil || c.GetFetch() != nil {
+				// The owner's push, from work's own socket (R-0391).
+				r = s.handlePush(ctx, name, c)
+			} else {
+				r = eng.handleCall(ctx, name, c)
+			}
 			r.CallId = c.GetCallId()
 			sendMu.Lock()
 			defer sendMu.Unlock()
@@ -239,7 +247,7 @@ func (s *Server) ListAgents(ctx context.Context, req *daemonv1.ListAgentsRequest
 		return nil, teamStatus(err)
 	}
 	defer b.mu.Unlock()
-	out := &daemonv1.ListAgentsResponse{}
+	out := &daemonv1.ListAgentsResponse{TeamLimit: eng.teamLimitLocked(b, &team)}
 	for i := range team.Agents {
 		out.Agents = append(out.Agents, eng.infoLocked(b, &team.Agents[i]))
 	}
@@ -274,6 +282,13 @@ func (s *Server) WatchTeam(req *daemonv1.WatchTeamRequest, stream daemonv1.Daemo
 			return err
 		}
 	}
+	// The limit (R-0347): after the agents, then whenever it changes.
+	lastLimit := list.GetTeamLimit()
+	if lastLimit != nil {
+		if err := stream.Send(&daemonv1.WatchTeamResponse{Event: &daemonv1.WatchTeamResponse_TeamLimit{TeamLimit: lastLimit}}); err != nil {
+			return err
+		}
+	}
 	for {
 		b, err := eng.lockBox(ctx, name)
 		if err != nil {
@@ -297,6 +312,12 @@ func (s *Server) WatchTeam(req *daemonv1.WatchTeamRequest, stream daemonv1.Daemo
 				r.Event = &daemonv1.WatchTeamResponse_RemovedAgentId{RemovedAgentId: ev.removed}
 			}
 			if err := stream.Send(r); err != nil {
+				return err
+			}
+		}
+		if l := eng.teamLimit(ctx, name); l != nil && !proto.Equal(l, lastLimit) {
+			lastLimit = l
+			if err := stream.Send(&daemonv1.WatchTeamResponse{Event: &daemonv1.WatchTeamResponse_TeamLimit{TeamLimit: l}}); err != nil {
 				return err
 			}
 		}
@@ -370,7 +391,10 @@ func (s *Server) GetAgentFile(ctx context.Context, req *daemonv1.GetAgentFileReq
 }
 
 func (s *Server) ApproveAgentFile(ctx context.Context, req *daemonv1.ApproveAgentFileRequest) (*daemonv1.ApproveAgentFileResponse, error) {
-	err := s.withTeam(ctx, req.GetName(), func(src TeamSource, _ Team) error {
+	err := s.withTeam(ctx, req.GetName(), func(src TeamSource, team Team) error {
+		if err := team.approveLimit(req.GetAgentId()); err != nil {
+			return err
+		}
 		return ApproveAgentFile(src, req.GetAgentId(), req.GetFileSha256())
 	})
 	if err != nil {

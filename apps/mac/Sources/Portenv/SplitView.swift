@@ -77,7 +77,7 @@ private struct PaneView: View {
             if split.isSplit {
                 PaneHeaderBar(split: split, pane: pane, tab: info)
             }
-            MainTabTerminal(shown: TabTerminalShown(provider: provider), tab: tab, generation: generation,
+            MainTabTerminal(shown: TabTerminalShown(provider: provider), box: box, tab: tab, generation: generation,
                             label: label, tabName: name, serviceComing: serviceComing,
                             isActive: focused, onFocus: { split.focus(pane) })
         }

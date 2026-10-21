@@ -111,7 +111,7 @@ struct BoxMenuOrderTests {
     @Test func theGuidelineOrder() {
         let items = BoxMenuModel.items(open: true, busy: false, agentUnavailable: false, optionHeld: false,
                                        location: "this-mac", servers: ["portenv@52.47.207.191"])
-        #expect(titles(items) == ["Rename…", "Move To", "—", "Revert To", "Make a Save Point", "—", "Show in Finder"])
+        #expect(titles(items) == ["Rename…", "Move To", "—", "Revert To", "Make a Save Point", "—", "Show in Finder", "—", "Delete Workspace…"])
         let move = items[1].submenu
         #expect(titles(move) == ["This Mac", "—", "52.47.207.191", "—", "Add a Server…"])
         #expect(move[0].checked && !move[2].checked)
@@ -125,7 +125,7 @@ struct BoxMenuOrderTests {
         let normal = BoxMenuModel.items(open: true, busy: false, agentUnavailable: false, optionHeld: false, location: "this-mac", servers: [])
         #expect(!titles(normal).contains("Restart Workspace"))
         let down = BoxMenuModel.items(open: true, busy: false, agentUnavailable: true, optionHeld: false, location: "this-mac", servers: [])
-        #expect(titles(down) == ["Rename…", "Move To", "—", "Revert To", "Make a Save Point", "—", "Restart Workspace", "Show in Finder"])
+        #expect(titles(down) == ["Rename…", "Move To", "—", "Revert To", "Make a Save Point", "—", "Restart Workspace", "Show in Finder", "—", "Delete Workspace…"])
         let option = BoxMenuModel.items(open: true, busy: false, agentUnavailable: false, optionHeld: true, location: "this-mac", servers: [])
         #expect(titles(option).contains("Restart Workspace"))
     }

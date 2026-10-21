@@ -153,6 +153,10 @@ type Driver interface {
 	Stop(ctx context.Context, id BoxID, timeout time.Duration) (State, error)
 	// Destroy removes the box's instance. It never deletes home storage.
 	Destroy(ctx context.Context, id BoxID) error
+	// DeleteHome deletes the box's home storage, for Delete Workspace only
+	// (ADR 0029). It refuses while the box's instance exists, never touches
+	// another box's storage, and succeeds when the storage is already gone.
+	DeleteHome(ctx context.Context, id BoxID, home HomeStorage) error
 	// Logs yields the box's console output. A non-nil error ends the
 	// sequence.
 	Logs(ctx context.Context, id BoxID, opts LogOptions) iter.Seq2[LogChunk, error]

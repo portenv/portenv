@@ -259,6 +259,10 @@ func (t *TeamUsers) restore(ctx context.Context) error {
 		if err := t.ensureRunRoot(); err != nil {
 			return err
 		}
+		// work's own socket's folder, for pushes (R-0391), team or not.
+		if _, err := t.ensureOwnerRunDir(t.Cfg.UID); err != nil {
+			return err
+		}
 	}
 	// A workspace without a team gets nothing in /home: no team folder
 	// until its first agent.

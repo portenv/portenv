@@ -79,6 +79,9 @@ public struct QuitAll: Sendable {
 public enum BoxListText {
     public static let running = "Running"
     public static let closeWorkspace = "Close Workspace"
+    /// Delete Workspace… (ADR 0029), and a deletion that stopped part-way.
+    public static let deleteWorkspace = "Delete Workspace…"
+    public static let deletionStopped = "Deleting didn’t finish"
     public static func label(_ box: String, running: Bool) -> String {
         running ? "Workspace \(box), running" : "Workspace \(box)"
     }

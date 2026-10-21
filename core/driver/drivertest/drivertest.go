@@ -60,6 +60,7 @@ func Run(t *testing.T, env Env) {
 	t.Run("Lifecycle", func(t *testing.T) { lifecycle(t, env) })
 	t.Run("HomeSurvivesRestartAndDestroy", func(t *testing.T) { homeSurvives(t, env) })
 	t.Run("MissingHomeIsReported", func(t *testing.T) { missingHome(t, env) })
+	t.Run("DeleteHomeAfterDestroy", func(t *testing.T) { deleteHome(t, env) })
 	t.Run("AgentChannel", func(t *testing.T) { agentChannel(t, env) })
 	t.Run("TakeOverWithoutRestart", func(t *testing.T) { takeOver(t, env) })
 }
@@ -218,6 +219,39 @@ func homeSurvives(t *testing.T, env Env) {
 	b.waitReady("READY")
 	if out, _ := b.exec("cat", "/home/work/marker"); strings.TrimSpace(out) != "kept" {
 		t.Fatalf("Destroy lost the home: %q", out)
+	}
+}
+
+// deleteHome (ADR 0029): DeleteHome is refused while the instance exists;
+// after Destroy it deletes the home, a repeat succeeds, and a new box on the
+// same reference finds no home (it fails as missing storage would).
+func deleteHome(t *testing.T, env Env) {
+	b := newBox(t, env)
+	b.create(true)
+	b.start()
+	b.waitReady("READY")
+	if _, code := b.exec("sh", "-c", "echo kept > /home/work/marker"); code != 0 {
+		t.Fatal("write marker")
+	}
+	ctx := context.Background()
+	if _, err := env.Driver.Stop(ctx, b.id, 5*time.Second); err != nil {
+		t.Fatal(err)
+	}
+	if err := env.Driver.DeleteHome(ctx, b.id, driver.HomeStorage{Ref: b.ref}); err == nil {
+		t.Fatal("DeleteHome deleted the home of a box whose instance exists")
+	}
+	if err := env.Driver.Destroy(ctx, b.id); err != nil {
+		t.Fatal(err)
+	}
+	for range 2 {
+		if err := env.Driver.DeleteHome(ctx, b.id, driver.HomeStorage{Ref: b.ref}); err != nil {
+			t.Fatalf("DeleteHome: %v", err)
+		}
+	}
+	b.create(false)
+	b.start()
+	if out := b.waitReady("FAILED"); !strings.Contains(out, "home storage is not attached") {
+		t.Fatalf("the home survived DeleteHome: %q", out)
 	}
 }
 

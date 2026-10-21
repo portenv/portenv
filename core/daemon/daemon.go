@@ -83,6 +83,8 @@ type Server struct {
 	// elsewhere: the lease another machine held on a box when OpenBox was
 	// last refused (GetPlacement).
 	elsewhere map[string]boxsync.Lease
+	// deleting: boxes a DeleteBox call is deleting now (ADR 0029).
+	deleting map[string]bool
 	// gen counts each box's moves, closes and restarts by this daemon, so
 	// a terminal that ends because of one is not reported as a failure.
 	gen map[string]uint64
@@ -100,6 +102,20 @@ type Server struct {
 	// freeBytes is the space free to this user on dir's volume (tests
 	// set it).
 	freeBytes func(dir string) (uint64, error)
+	// githubAPI is GitHub's REST API, for a repository's size before it's
+	// cloned (ADR 0025 §2); tests point it at their own server.
+	githubAPI string
+	// githubGit is GitHub's git over https (tests: their own server).
+	githubGit string
+	// pushes from workspaces waiting for the app (R-0391).
+	pushOnce sync.Once
+	pushes   *pushQuestions
+	// gitBusy counts each workspace's pushes and fetches with GitHub in
+	// flight (R-0391): Delete Workspace waits for them (ADR 0029).
+	gitBusy map[string]int
+	// deleter deletes boxes (ADR 0029; nil: this Mac's engine and folder,
+	// tests set a fake).
+	deleter boxDeleter
 }
 
 // openBox is a box this daemon opened: its session, sync engine and agent
@@ -292,8 +308,12 @@ func (s *Server) ListBoxes(context.Context, *daemonv1.ListBoxesRequest) (*daemon
 			state = typesv1.BoxState_BOX_STATE_RUNNING
 		}
 		s.mu.Unlock()
-		resp.Boxes = append(resp.Boxes, &daemonv1.BoxStatus{Box: &typesv1.Box{Id: c.ID, Name: c.Name, ToolboxImage: c.Image}, State: state,
-			CarriesRecoveryKey: c.Recovery})
+		st := &daemonv1.BoxStatus{Box: &typesv1.Box{Id: c.ID, Name: c.Name, ToolboxImage: c.Image}, State: state,
+			CarriesRecoveryKey: c.Recovery}
+		if c.Deleting != nil {
+			st.Deleting, st.DeleteStep = true, deleteStepEnum[c.Deleting.Step]
+		}
+		resp.Boxes = append(resp.Boxes, st)
 	}
 	// Boxes CreateBox hasn't finished: shown, never opened (ADR 0019).
 	creating, err := s.env.Creations()
@@ -327,6 +347,11 @@ func (s *Server) OpenBox(ctx context.Context, req *daemonv1.OpenBoxRequest) (_ *
 	}()
 	if req.GetConnectThere() {
 		return s.connectThere(ctx, req.GetName())
+	}
+	// Being deleted, or its deletion stopped part-way: its home or saves
+	// may be gone, so it never starts (ADR 0029).
+	if s.beingDeleted(req.GetName()) {
+		return nil, status.Errorf(codes.FailedPrecondition, "Deleting %s stopped before it finished, so it can't open. Choose Delete Workspace… again to finish.", req.GetName())
 	}
 	// A box this Mac moved to a server stays there until Move To brings it
 	// back: show it where it runs.

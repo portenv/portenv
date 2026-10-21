@@ -60,6 +60,11 @@ type teamHub struct {
 	byUID     map[int]string
 	stream    *teamStream
 	streamSet chan struct{} // closed and replaced whenever stream changes
+
+	// work's own socket, for pushes (R-0391), and where their bundles wait.
+	owner    net.Listener
+	ownerUID int
+	pushRoot string
 }
 
 type teamAgent struct {
@@ -161,6 +166,12 @@ func (h *teamHub) close() {
 	for _, id := range ids {
 		h.removeAgent(id)
 	}
+	h.mu.Lock()
+	if h.owner != nil {
+		_ = h.owner.Close()
+		h.owner = nil
+	}
+	h.mu.Unlock()
 }
 
 func (h *teamHub) serve(a *teamAgent) {
@@ -231,12 +242,21 @@ func (h *teamHub) handle(a *teamAgent, conn *net.UnixConn) {
 		refuse("The request names no command.")
 		return
 	}
+	if c.GetPushList() != nil || c.GetPush() != nil || c.GetFetch() != nil {
+		refuse(notTheOwner)
+		return
+	}
 	c.CallId, c.AgentId = newCallID(), a.id
 	reply(h.relay(&c))
 }
 
 // relay sends a call up the attached stream and waits for its answer.
 func (h *teamHub) relay(c *agentv1.TeamCallsResponse) *agentv1.TeamCallsRequest {
+	return h.relayWait(c, teamCallWait)
+}
+
+// relayWait is relay, waiting up to wait for the answer.
+func (h *teamHub) relayWait(c *agentv1.TeamCallsResponse, wait time.Duration) *agentv1.TeamCallsRequest {
 	s := h.waitStream(teamAttachWait)
 	if s == nil {
 		return &agentv1.TeamCallsRequest{CallId: c.GetCallId(), Line: "Portenv isn't connected to this workspace right now. Try again in a moment."}
@@ -262,7 +282,7 @@ func (h *teamHub) relay(c *agentv1.TeamCallsResponse) *agentv1.TeamCallsRequest 
 		return r
 	case <-s.done:
 		return lost
-	case <-time.After(teamCallWait):
+	case <-time.After(wait):
 		return &agentv1.TeamCallsRequest{CallId: c.GetCallId(), Line: "Portenv didn't answer in time. Try again."}
 	}
 }

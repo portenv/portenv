@@ -408,6 +408,19 @@ func TeamIO(args []string, stdin io.Reader, stdout io.Writer) error {
 			return errors.New("seed-home PROJECT HOME QUOTA PATH…")
 		}
 		return seedHome(dir, args[2], args[3], args[4:], stdout)
+	case "clone-bundle":
+		// As work (ADR 0025 §2, R-0391): New workspace's From GitHub, from
+		// the bundle portenvd fetched on the Mac, on stdin.
+		if len(args) != 5 && len(args) != 6 {
+			return errors.New("clone-bundle PROJECT URL MAXBYTES HEAD|- [empty]")
+		}
+		return teamIOCloneBundle(args[1:], stdin, stdout)
+	case "write-agent-files":
+		// As work (ADR 0025 §5): the New-workspace team's files.
+		if len(args) != 2 {
+			return errors.New("write-agent-files PROJECT")
+		}
+		return teamIOWriteAgentFiles(dir, stdin, stdout)
 	case "write-home":
 		if len(args) != 4 {
 			return errors.New("write-home HOME PATH QUOTA")

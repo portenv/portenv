@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<title>New workspace: project, team, review and approve, creating</title>
+<style>
+:root{--win:#1E1E20;--bar:#2B2B2E;--text:#F5F5F7;--sec:#A1A1A6;--ter:#8E8E93;--sep:#3A3A3D;--field:#2A2A2D;--fieldb:#48484B;
+--fill:rgba(255,255,255,.07);--fill2:rgba(255,255,255,.035);--sel:#0A64D6;--accent:#0A84FF;--orange:#FF9F0A;--green:#30D158;--red:#FF6961;
+--card:#262628;--menu:#2C2C2E;--btn:#3A3A3D;--btnp:#0A6EDB;--ground:#0E0E10;--seg:#48484B}
+body.light{--win:#FFFFFF;--bar:#F3F3F3;--text:#1D1D1F;--sec:#6E6E73;--ter:#6E6E73;--sep:#D1D1D6;--field:#FFFFFF;--fieldb:#C8C8CC;
+--fill:rgba(0,0,0,.06);--fill2:rgba(0,0,0,.035);--sel:#0064E1;--accent:#007AFF;--orange:#B25000;--green:#248A3D;--red:#D70015;
+--card:#F5F5F7;--menu:#FFFFFF;--btn:#E5E5EA;--btnp:#007AFF;--ground:#DCDCE0;--seg:#FFFFFF}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Helvetica Neue',system-ui,sans-serif;font-size:13px;color:var(--text)}
+.mono{font-family:'SF Mono',ui-monospace,Menlo,monospace}
+.board{padding:24px;width:1600px}
+.board h1{font-size:18px;margin:0 0 4px}.board .lead{color:var(--sec);margin:0 0 18px;max-width:1500px;line-height:1.5}
+.grid{display:grid;grid-template-columns:760px 760px;gap:24px}
+.cap{font-size:12px;color:var(--sec);font-weight:600;margin:0 0 8px}
+.win{width:760px;height:640px;display:flex;flex-direction:column;background:var(--win);border:1px solid var(--sep);border-radius:12px;overflow:hidden;position:relative}
+.top{display:flex;align-items:center;gap:8px;padding:14px 16px 8px}
+.tl{width:12px;height:12px;border-radius:50%}
+.steps{display:flex;align-items:center;gap:6px;margin-left:18px;font-size:12px;color:var(--sec)}
+.steps .on{color:var(--text);font-weight:600}.steps .done{color:var(--sec)}
+.steps .sep{color:var(--ter)}
+.content{flex:1;display:flex;flex-direction:column;gap:12px;padding:4px 40px 0;min-height:0}
+h2{margin:0;font-size:22px;font-weight:700}
+.sub{color:var(--sec);margin-top:-6px;line-height:1.4}
+.segc{display:flex;padding:2px;background:var(--field);border:1px solid var(--fieldb);border-radius:8px}
+.segc span{flex:1;text-align:center;line-height:26px;border-radius:6px;white-space:nowrap}
+.segc .on{background:var(--seg);box-shadow:0 0 0 .5px var(--fieldb)}
+.field{height:28px;border:1px solid var(--fieldb);border-radius:7px;background:var(--field);display:flex;align-items:center;gap:6px;padding:0 9px;color:var(--text)}
+.field.ph{color:var(--ter)}
+.list{border:1px solid var(--sep);border-radius:9px;overflow:hidden;background:var(--card)}
+.lr{display:flex;align-items:center;gap:10px;padding:7px 12px;border-bottom:1px solid var(--sep)}
+.lr:last-child{border-bottom:none}
+.lr.sel{background:var(--sel);color:#fff}.lr.sel .s{color:rgba(255,255,255,.85)}
+.s{color:var(--sec);font-size:12px}
+.tag{font-size:10.5px;font-weight:600;border:1px solid var(--sep);border-radius:4px;padding:0 4px;color:var(--sec)}
+.lr.sel .tag{color:#fff;border-color:rgba(255,255,255,.5)}
+.row{display:flex;align-items:center;gap:10px}
+.grow{flex:1}
+.pop{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 8px;border-radius:6px;background:var(--btn);font-size:12.5px;white-space:nowrap}
+.pop:after{content:"";width:6px;height:6px;border-right:1.5px solid var(--sec);border-bottom:1.5px solid var(--sec);transform:rotate(45deg) translate(-2px,-2px);margin-left:2px}
+.btn{display:inline-flex;align-items:center;justify-content:center;min-height:28px;padding:0 14px;border-radius:7px;background:var(--btn);color:var(--text);white-space:nowrap}
+.btn.p{background:var(--btnp);color:#fff;font-weight:600}
+.btn.dis{opacity:.45}
+.btn.sm{min-height:24px;padding:0 10px;font-size:12.5px}
+.foot{display:flex;align-items:center;gap:10px;padding:12px 40px 18px}
+.note{font-size:12px;color:var(--sec);line-height:1.45}
+.lnk{color:var(--accent)}
+.cb{width:14px;height:14px;border-radius:4px;border:1px solid var(--fieldb);background:var(--field);display:inline-flex;align-items:center;justify-content:center;flex:none}
+.cb.on{background:var(--accent);border-color:var(--accent)}
+.av{display:inline-flex;align-items:center;justify-content:center;border-radius:50%;color:#fff;font-weight:600;width:22px;height:22px;font-size:11px;flex:none}
+.c-blue{background:#0A84FF}.c-green{background:#28A745}.c-orange{background:#E07B00}.c-purple{background:#AF52DE}
+.cards{display:flex;gap:8px}
+.tcard{flex:1;border:1px solid var(--sep);border-radius:9px;padding:8px 10px;background:var(--card);min-width:0}
+.tcard.on{border:2px solid var(--accent);padding:7px 9px}
+.tcard b{display:block;font-size:12.5px}.tcard .s{font-size:11px;line-height:1.35;margin-top:2px}
+.tbl{border:1px solid var(--sep);border-radius:9px;background:var(--card)}
+.th,.tr{display:grid;grid-template-columns:22px 190px 128px 110px 1fr;align-items:center;gap:10px;padding:7px 12px}
+.th{font-size:11px;font-weight:600;color:var(--sec);border-bottom:1px solid var(--sep);padding-top:6px;padding-bottom:6px}
+.tr{border-bottom:1px solid var(--sep)}.tr:last-child{border-bottom:none}
+.tr.off{opacity:.45}
+.nm{display:flex;align-items:center;gap:8px;min-width:0}
+.nm .f{height:22px;border:1px solid var(--fieldb);border-radius:5px;background:var(--field);padding:0 6px;display:flex;align-items:center;font-size:12.5px;width:120px}
+.nm .id{font-size:10.5px;color:var(--ter)}
+.chg{font-size:10.5px;color:var(--orange);margin-top:2px}
+.menu{position:absolute;background:var(--menu);border:1px solid var(--sep);border-radius:8px;box-shadow:0 10px 28px rgba(0,0,0,.35);padding:5px;font-size:12.5px;min-width:150px;z-index:2}
+.menu .h{font-size:11px;font-weight:600;color:var(--sec);padding:3px 10px}
+.menu .i{padding:4px 10px 4px 24px;border-radius:5px;position:relative}
+.menu .i.sel{background:var(--sel);color:#fff}
+.menu .i .ck{position:absolute;left:8px}
+.menu .i .s{font-size:11px}
+.menu .i.sel .s{color:rgba(255,255,255,.85)}
+.split{flex:1;display:flex;gap:14px;min-height:0}
+.left{width:230px;flex:none;display:flex;flex-direction:column;gap:8px}
+.right{flex:1;min-width:0;border:1px solid var(--sep);border-radius:10px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:9px;overflow:hidden}
+.ar{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:7px}
+.ar.sel{background:var(--sel);color:#fff}.ar.sel .s{color:rgba(255,255,255,.88)!important}
+.st{font-size:11px;display:flex;align-items:center;gap:4px}
+.ok{color:var(--green)}.chgc{color:var(--orange)}
+.runner{font-size:12px;background:var(--fill2);border:1px solid var(--sep);border-radius:6px;padding:6px 8px}
+.lbl{font-size:11px;font-weight:600;color:var(--sec)}
+.chgline{border:1.5px solid var(--orange);border-radius:7px;padding:6px 9px;font-size:12.5px;line-height:1.4}
+.gl{font-size:12.5px;line-height:1.55}
+.gl div:before{content:"·";color:var(--sec);margin-right:6px}
+.instr{font-size:11.5px;line-height:1.5;background:var(--fill2);border-radius:6px;padding:6px 8px;white-space:pre-wrap;flex:1;overflow:hidden}
+.sumc{border:1px solid var(--sep);border-radius:8px;padding:8px 9px;background:var(--card);font-size:12px;line-height:1.45}
+.prog{height:6px;border-radius:3px;background:var(--fill);overflow:hidden;margin:6px 0 4px}.prog i{display:block;height:100%;width:58%;background:var(--accent)}
+.stp{display:flex;gap:10px;padding:7px 0}
+.mk{width:18px;height:18px;flex:none;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;font-size:11px}
+.mk.done{background:var(--green);color:#fff}.mk.cur{border:2px solid var(--accent)}.mk.pend{border:1.5px solid var(--fieldb)}
+.stp .t{font-weight:600}.stp.pend .t{color:var(--sec);font-weight:400}
+.panel{width:460px;background:var(--win);border:1px solid var(--sep);border-radius:12px;padding:18px 20px}
+.panel h3{margin:6px 0 6px;font-size:14px}
+.notes{color:var(--sec);font-size:12.5px;line-height:1.6;margin-top:18px;max-width:1550px}.notes b{color:var(--text)}
+</style>
+</head>
+<body>
+<script>if(location.hash==='#light')document.body.classList.add('light')</script>
+<div class="board">
+<h1>New workspace · Project, Team, Review and approve, Creating (ADR 0025)</h1>
+<p class="lead">The reviewer’s four artboards (R-0322), drawn from its description: one sheet, Name first as today, then these four. Continue is the default button until Review and approve, which has none. Starter folders are what agent files call <span class="mono">home_seed</span>. The MVP runner menu lists Anthropic’s Claude Code only; the registry holds others (ADR 0025 §9).</p>
+<div class="grid">
+
+<!-- 1. Project -->
+<div><div class="cap">1 · Project: From GitHub, signed in, a repository and a branch, two starter folders</div>
+<div class="win" role="dialog" aria-label="New workspace, Project, step 2 of 4">
+<div class="top"><span class="tl" style="background:#FF5F57" aria-hidden="true"></span><span class="tl" style="background:#FEBC2E" aria-hidden="true"></span><span class="tl" style="background:#28C840" aria-hidden="true"></span>
+<div class="steps" aria-hidden="true"><span class="done">Name ✓</span><span class="sep">·</span><span class="on">Project</span><span class="sep">·</span><span>Team</span><span class="sep">·</span><span>Review and approve</span></div></div>
+<div class="content">
+<h2>Project</h2>
+<div class="segc" role="radiogroup" aria-label="Start from"><span class="on" role="radio" aria-checked="true">From GitHub</span><span role="radio" aria-checked="false">From a Git URL</span><span role="radio" aria-checked="false">From a folder on this Mac</span><span role="radio" aria-checked="false">Empty</span></div>
+<div class="field" role="searchbox" aria-label="Find a repository"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" style="color:var(--sec)"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4-4"></path></svg>acme-a</div>
+<div class="list" role="listbox" aria-label="Repositories">
+<div class="lr sel" role="option" aria-selected="true" aria-label="acme/acme-api, private, pushed 2 hours ago"><span class="grow">acme/acme-api</span><span class="tag">PRIVATE</span><span class="s">pushed 2 h ago</span></div>
+<div class="lr" role="option" aria-selected="false" aria-label="acme/acme-admin, private, pushed yesterday"><span class="grow">acme/acme-admin</span><span class="tag">PRIVATE</span><span class="s">pushed yesterday</span></div>
+<div class="lr" role="option" aria-selected="false" aria-label="acme/acme-app-docs, pushed on 9 Oct"><span class="grow">acme/acme-app-docs</span><span class="s">pushed on 9 Oct</span></div>
+</div>
+<div class="row"><span class="s" style="width:52px">Branch</span><span class="pop" role="button" aria-label="Branch, main">main</span><span class="s">2.1 GB · with a team of 3, about 7.4 GB of 40 GB free</span></div>
+<div class="note">Signed in as acme-dev. Portenv can access your repositories; it only uses this for the repository in this workspace. The sign-in stays on this Mac; agents never get it. <span class="lnk" role="button">Sign Out…</span></div>
+<div style="border-top:1px solid var(--sep);padding-top:10px">
+<div class="lbl" style="margin-bottom:6px">Starter folders for agents</div>
+<div class="list">
+<div class="lr"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M3 7.5a2 2 0 012-2h4l2 2h8a2 2 0 012 2V17a2 2 0 01-2 2H5a2 2 0 01-2-2z"></path></svg><span class="grow">brand-assets</span><span class="s">38 MB · 212 files</span><span class="s" role="button" aria-label="Remove brand-assets">✕</span></div>
+<div class="lr"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M3 7.5a2 2 0 012-2h4l2 2h8a2 2 0 012 2V17a2 2 0 01-2 2H5a2 2 0 01-2-2z"></path></svg><span class="grow">prompts</span><span class="s">120 KB · 9 files</span><span class="s" role="button" aria-label="Remove prompts">✕</span></div>
+</div>
+<div class="row" style="margin-top:6px"><span class="lnk" role="button">Add Starter Folder…</span><span class="s">They go to agents’ homes, never into the project.</span></div>
+</div>
+</div>
+<div class="foot"><span class="btn">Back</span><span class="grow"></span><span class="btn">Cancel</span><span class="btn p">Continue</span></div>
+</div></div>
+
+<!-- 2. Team -->
+<div><div class="cap">2 · Team: Orchestrate, Design keeper left out, Reviewer’s model changed (its Model menu open)</div>
+<div class="win" role="dialog" aria-label="New workspace, Team, step 3 of 4">
+<div class="top"><span class="tl" style="background:#FF5F57" aria-hidden="true"></span><span class="tl" style="background:#FEBC2E" aria-hidden="true"></span><span class="tl" style="background:#28C840" aria-hidden="true"></span>
+<div class="steps" aria-hidden="true"><span class="done">Name ✓</span><span class="sep">·</span><span class="done">Project ✓</span><span class="sep">·</span><span class="on">Team</span><span class="sep">·</span><span>Review and approve</span></div></div>
+<div class="content">
+<h2>Team</h2>
+<div class="cards" role="radiogroup" aria-label="Pick a team">
+<div class="tcard" role="radio" aria-checked="false"><b>None</b><div class="s">Just you. Add agents later.</div></div>
+<div class="tcard" role="radio" aria-checked="false"><b>Starter</b><div class="s">Lead, Builder, Reviewer</div></div>
+<div class="tcard on" role="radio" aria-checked="true"><b>Orchestrate</b><div class="s">Lead, Builder, Reviewer, Design keeper</div></div>
+<div class="tcard" role="radio" aria-checked="false"><b>API crew</b><div class="s">Yours · saved on 12 Oct</div></div>
+</div>
+<div class="row" style="margin-top:-4px"><span class="lnk" role="button">Import Team…</span></div>
+<div class="tbl" role="table" aria-label="Agents">
+<div class="th" role="row"><span></span><span>Agent</span><span>Runner</span><span>Model</span><span>Starter files</span></div>
+<div class="tr" role="row" aria-label="Lead, included, Claude Code, Opus, no starter files"><span class="cb on" aria-hidden="true"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg></span><span class="nm"><span class="av c-blue" aria-hidden="true">L</span><span><span class="f">Lead</span><span class="id mono">lead</span></span></span><span class="pop" aria-label="Runner for Lead, Claude Code">Claude Code</span><span class="pop" aria-label="Model for Lead, Opus">Opus</span><span class="pop" aria-label="Starter files for Lead, none">None</span></div>
+<div class="tr" role="row" aria-label="Builder, included, Claude Code, Opus, starter files prompts"><span class="cb on" aria-hidden="true"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg></span><span class="nm"><span class="av c-green" aria-hidden="true">B</span><span><span class="f">Builder</span><span class="id mono">builder</span></span></span><span class="pop" aria-label="Runner for Builder, Claude Code">Claude Code</span><span class="pop" aria-label="Model for Builder, Opus">Opus</span><span class="pop" aria-label="Starter files for Builder, prompts">prompts</span></div>
+<div class="tr" role="row" aria-label="Reviewer, included, Claude Code, Opus, changed from Sonnet, no starter files"><span class="cb on" aria-hidden="true"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg></span><span class="nm"><span class="av c-orange" aria-hidden="true">R</span><span><span class="f">Reviewer</span><span class="id mono">reviewer</span></span></span><span class="pop" aria-label="Runner for Reviewer, Claude Code">Claude Code</span><span><span class="pop" aria-label="Model for Reviewer, Opus" style="outline:2px solid var(--accent)">Opus</span><div class="chg">Changed from Sonnet</div></span><span class="pop" aria-label="Starter files for Reviewer, none">None</span></div>
+<div class="tr off" role="row" aria-label="Design keeper, left out"><span class="cb" aria-hidden="true"></span><span class="nm"><span class="av c-purple" aria-hidden="true">D</span><span><span class="f">Design keeper</span><span class="id mono">design</span></span></span><span class="pop">Claude Code</span><span class="pop">Sonnet</span><span class="pop">brand-assets</span></div>
+</div>
+<div class="menu" role="menu" aria-label="Model for Reviewer" style="left:420px;top:346px"><div class="h">Claude Code</div><div class="i sel" role="menuitemradio" aria-checked="true"><span class="ck">✓</span>Opus</div><div class="i" role="menuitemradio" aria-checked="false">Sonnet <span class="s">· the template’s</span></div><div class="i" role="menuitemradio" aria-checked="false">Fable</div></div>
+<div class="note">The runner menu lists Anthropic · Claude Code for now. Leaving Design keeper out also takes it out of the others’ message lists.<br>Agents sign in themselves, in their own tabs. Templates never carry logins.</div>
+<label class="row" style="gap:8px"><span class="cb" role="checkbox" aria-checked="false" aria-label="Start the team when it’s ready"></span><span>Start the team when it’s ready</span></label>
+</div>
+<div class="foot"><span class="btn">Back</span><span class="grow"></span><span class="btn">Cancel</span><span class="btn p">Continue</span></div>
+</div></div>
+
+<!-- 3. Review and approve -->
+<div><div class="cap">3 · Review and approve: Lead approved, Builder opened, Reviewer changed and being read; Approve All and Create still off</div>
+<div class="win" role="dialog" aria-label="New workspace, Review and approve, step 4 of 4">
+<div class="top"><span class="tl" style="background:#FF5F57" aria-hidden="true"></span><span class="tl" style="background:#FEBC2E" aria-hidden="true"></span><span class="tl" style="background:#28C840" aria-hidden="true"></span>
+<div class="steps" aria-hidden="true"><span class="done">Name ✓</span><span class="sep">·</span><span class="done">Project ✓</span><span class="sep">·</span><span class="done">Team ✓</span><span class="sep">·</span><span class="on">Review and approve</span></div></div>
+<div class="content">
+<h2>Review and approve</h2>
+<div class="split">
+<div class="left">
+<div class="sumc" role="group" aria-label="Project: acme/acme-api on github.com, branch main, 2.1 gigabytes, private. Starter folders: brand-assets, prompts"><b>acme/acme-api</b><div class="s">github.com · main · 2.1 GB, private</div><div class="s">Starter folders: prompts (Builder)</div></div>
+<div class="ar" role="button" aria-label="Lead, approved"><span class="av c-blue" aria-hidden="true">L</span><span class="grow">Lead</span><span class="st ok">✓ Approved</span></div>
+<div class="ar" role="button" aria-label="Builder, opened, not approved"><span class="av c-green" aria-hidden="true">B</span><span class="grow">Builder</span><span class="st s">◐ Opened</span></div>
+<div class="ar sel" role="button" aria-label="Reviewer, changed, needs approval"><span class="av c-orange" aria-hidden="true">R</span><span class="grow">Reviewer</span><span class="st s">● Changed</span></div>
+<div style="margin-top:auto"><span class="btn dis" role="button" aria-disabled="true" aria-label="Approve All" aria-describedby="aa-why" style="width:100%">Approve All</span><div id="aa-why" class="note" style="margin-top:4px">Open every agent first (1 left).</div></div>
+</div>
+<div class="right" role="group" aria-label="Reviewer’s agent file">
+<div class="row"><span class="av c-orange" aria-hidden="true">R</span><b>Reviewer</b><span class="s">Reviews the builder’s changes</span></div>
+<div><div class="lbl">Runs</div><div class="runner mono">/usr/bin/claude --model opus</div></div>
+<div class="chgline" role="note"><b class="chgc">Changed from the template:</b> runner <span class="mono">claude (sonnet)</span> → <span class="mono">claude (opus)</span>. Approve Reviewer again.</div>
+<div><div class="lbl">It may</div><div class="gl"><div>open up to 2 panes; you approve each</div><div>message Lead and Builder</div><div>ask you</div><div>request system packages; you approve each</div></div></div>
+<label class="row" style="gap:8px;font-size:12.5px"><span class="cb" role="checkbox" aria-checked="false" aria-label="Let Reviewer see the team’s status"></span>Let Reviewer see the team’s status</label>
+<div><div class="lbl">Instructions</div></div>
+<div class="instr">You review what the builder shares.
+- Read the diff, run the tests and checks of the parts it touches, and try the change if you can.
+- Reply in the builder’s thread with what to fix, or tell the lead it’s ready. You don’t change the code yourself.
+- Keep your status current: portenv status set "…".</div>
+<div class="s mono" style="font-size:11px">Written to .portenv/agents/reviewer.md · SHA-256 3f9a…c21e</div>
+<div class="row"><span class="grow"></span><span class="btn sm">Leave Out</span><span class="btn sm" aria-label="Approve Reviewer">Approve Reviewer</span></div>
+</div>
+</div>
+</div>
+<div class="foot" style="flex-direction:column;align-items:stretch;gap:6px"><div class="note">Agents work in their own copies. Check their branches before you run them.</div>
+<div class="row"><span class="btn">Back</span><span class="grow"></span><span class="note" id="cw-why">Approve Builder and Reviewer to create the workspace.</span><span class="btn">Cancel</span><span class="btn dis" aria-disabled="true" aria-describedby="cw-why">Create Workspace</span></div></div>
+</div></div>
+
+<!-- 4. Creating -->
+<div><div class="cap">4 · Creating: cloning at 58%, with Cancel; nothing starts by itself; logins in each agent’s tab</div>
+<div class="win" role="dialog" aria-label="New workspace, creating acme-api">
+<div class="top"><span class="tl" style="background:#FF5F57" aria-hidden="true"></span><span class="tl" style="background:#FEBC2E" aria-hidden="true"></span><span class="tl" style="background:#28C840" aria-hidden="true"></span></div>
+<div class="content">
+<h2>Creating acme-api</h2>
+<div>
+<div class="stp"><span class="mk done" aria-hidden="true">✓</span><div><div class="t">Workspace</div><div class="s">Encrypted home and toolbox, on This Mac</div></div></div>
+<div class="stp"><span class="mk cur" aria-hidden="true"></span><div class="grow"><div class="t">Project</div><div class="s">Cloning acme-api… 58% · 1.2 of 2.1 GB, about 40 s left</div><div class="prog" role="progressbar" aria-label="Cloning acme-api" aria-valuenow="58" aria-valuemin="0" aria-valuemax="100"><i></i></div></div><span class="btn sm" style="align-self:center">Cancel</span></div>
+<div class="stp pend"><span class="mk pend" aria-hidden="true"></span><div><div class="t">Agent files</div><div class="s">3 approved files into .portenv/agents</div></div></div>
+<div class="stp pend"><span class="mk pend" aria-hidden="true"></span><div><div class="t">Agents’ copies</div><div class="s">Lead, Builder and Reviewer, each its own copy of the project</div></div></div>
+<div class="stp pend"><span class="mk pend" aria-hidden="true"></span><div><div class="t">Starter files</div><div class="s">prompts into Builder’s home, copied as Builder</div></div></div>
+<div class="stp pend"><span class="mk pend" aria-hidden="true"></span><div><div class="t">Ready</div></div></div>
+</div>
+<div class="sumc" style="margin-top:4px"><div><b>Nothing starts until you choose Start.</b></div><div class="s" style="margin-top:2px">Each agent signs in to its runner in its own tab the first time it starts. Claude Code prints its sign-in link there.</div></div>
+<div class="list">
+<div class="lr"><span class="av c-blue" aria-hidden="true">L</span><span class="grow">Lead</span><span class="s">Claude Code · Opus · signs in in its tab</span></div>
+<div class="lr"><span class="av c-green" aria-hidden="true">B</span><span class="grow">Builder</span><span class="s">Claude Code · Opus · signs in in its tab</span></div>
+<div class="lr"><span class="av c-orange" aria-hidden="true">R</span><span class="grow">Reviewer</span><span class="s">Claude Code · Opus · signs in in its tab</span></div>
+</div>
+</div>
+<div class="foot"><span class="grow"></span><span class="note">The window opens when it’s ready.</span></div>
+</div></div>
+
+<!-- 5. First push -->
+<div><div class="cap">The first push from a workspace (ADR 0025 §6): a small sheet on the workspace window</div>
+<div class="panel" role="alertdialog" aria-label="Allow pushes to acme/acme-api from acme-api?">
+<svg width="28" height="28" viewBox="0 0 24 24" fill="var(--text)" aria-hidden="true"><path d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.89 1.53 2.34 1.09 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.56-1.11-4.56-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.02a9.6 9.6 0 0 1 5 0c1.91-1.29 2.75-1.02 2.75-1.02.55 1.38.2 2.4.1 2.65.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.69-4.57 4.93.36.31.68.92.68 1.85v2.74c0 .27.18.58.69.48A10 10 0 0 0 12 2z"></path></svg>
+<h3>Allow pushes to acme/acme-api from acme-api?</h3>
+<div class="note" style="font-size:12.5px">Portenv can access your repositories; it only uses this for the repository in this workspace. Pushes come only from your own tabs. Agents can never push.</div>
+<div class="row" style="margin-top:14px"><span class="grow"></span><span class="btn">Don’t Allow</span><span class="btn">Allow</span></div>
+</div>
+<p class="notes" style="margin-top:14px"><b>Remembered per workspace.</b> The inspector’s Where it is then shows “This workspace can push to acme/acme-api” with Stop Allowing Pushes. Signing out of GitHub in Portenv refuses the next push.</p>
+</div>
+
+</div>
+<p class="notes"><b>Project</b>: From GitHub (searchable repositories, branch), From a Git URL (public https), From a folder on this Mac (copied as you; dependencies left out by default; links never followed), Empty. A repository too big for the workspace with its team is refused before anything is fetched. <b>Team</b>: None, the built-ins, your saved teams, Import Team…; per agent include, name, runner, model and starter files. A changed runner or model changes the agent file, so it needs approval again. <b>Review and approve</b>: the runner line first, the change from the template, the grants in plain words, team status unticked, the instructions as plain text, and where the file goes with its SHA-256; Leave Out and Approve with no default button; Approve All only after every agent is opened; Create Workspace disabled until all are approved. <b>Creating</b>: the clone with its progress and Cancel (which removes the new workspace), the files, the agents’ copies and starter files; nothing starts by itself. <b>VoiceOver</b>: each step is announced with its place; every menu names its agent (“Model for Reviewer”); disabled buttons carry their reason.</p>
+</div>
+</body>
+</html>

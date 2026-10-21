@@ -6,8 +6,59 @@ import Observation
 /// First run's steps (PLAN.md, "First run in Phases 1 and 2"), reduced: no
 /// sign-in, no Portenv storage, and no Protection step, whose one choice
 /// ("Only you") is now a sentence on the recovery key (R-0126, R-0129).
+///
+/// New workspace's Team and Review and approve (ADR 0025) come after the
+/// name, when portenvd can plan a team; they're last here only so the
+/// older steps keep their numbers.
 public enum FirstRunStep: Int, CaseIterable, Sendable {
-    case welcome, recoveryKey, storage, firstBox, gettingReady
+    case welcome, recoveryKey, storage, firstBox, gettingReady, team, review, project
+}
+
+/// Where New workspace's project comes from (ADR 0025 §2).
+public enum ProjectChoice: Equatable, Sendable {
+    /// An empty project, git on main.
+    case empty
+    /// A GitHub repository (https://github.com/OWNER/REPO), cloned when the
+    /// workspace first runs; with the owner's GitHub sign-in when there is
+    /// one, so a private repository works.
+    case github(url: String, useSignIn: Bool)
+}
+
+/// The Project step's choice, before its address is checked.
+public enum ProjectKind: Equatable, Sendable {
+    case empty, github
+}
+
+/// New workspace's GitHub addresses, as portenvd takes them
+/// (core/internal/githubrepo): https://github.com/OWNER/REPO, with or
+/// without .git or a trailing slash, nothing else.
+public enum GitHubRepoURL {
+    public static func canonical(_ s: String) -> String? {
+        let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let m = t.wholeMatch(of: /https:\/\/github\.com\/([A-Za-z0-9][A-Za-z0-9-]{0,38})\/([A-Za-z0-9._-]{1,100})\/?/) else { return nil }
+        var name = String(m.2)
+        if name.hasSuffix(".git") { name.removeLast(4) }
+        guard !name.isEmpty, name != ".", name != ".." else { return nil }
+        return "https://github.com/\(m.1)/\(name)"
+    }
+}
+
+/// The Project step's words (GUIDELINES §10).
+public enum ProjectText {
+    public static let title = "Project"
+    public static let line = "Start empty, or bring a repository in from GitHub."
+    public static let empty = "Empty"
+    public static let emptyLine = "A new, empty project with git, on main."
+    public static let github = "From GitHub"
+    public static let githubLine = "Cloned into the workspace when it first opens, with all its branches and tags. Your GitHub sign-in stays on this Mac."
+    public static let urlField = "Repository address"
+    public static let urlPlaceholder = "https://github.com/acme/acme-api"
+    public static let typeURL = "Type the repository\u{2019}s address, like https://github.com/acme/acme-api."
+    public static let notAGitHubURL = "Use a GitHub repository\u{2019}s https address, like https://github.com/acme/acme-api."
+    public static let privateHint = "For a private repository, sign in with GitHub first."
+    public static let needsSignIn = "This repository needs a sign-in. Sign in with GitHub, then try again."
+    public static let settingUp = "Setting up the workspace\u{2019}s project\u{2026}"
+    public static let tryAgain = "Try Again"
 }
 
 /// Usage counting (1.8) needs the update check, which tester builds don't
@@ -78,11 +129,18 @@ public struct NewBox: Equatable, Sendable {
     public let storage: StorageChoice
     public let serverAddress: String
     public let bucketURL: String
-    public init(name: String, storage: StorageChoice, serverAddress: String, bucketURL: String) {
+    /// The team chosen and approved in New workspace (ADR 0025); nil for
+    /// none.
+    public let team: TeamChoice?
+    /// The Project step's choice; nil without it.
+    public let project: ProjectChoice?
+    public init(name: String, storage: StorageChoice, serverAddress: String, bucketURL: String, team: TeamChoice? = nil, project: ProjectChoice? = nil) {
         self.name = name
         self.storage = storage
         self.serverAddress = serverAddress
         self.bucketURL = bucketURL
+        self.team = team
+        self.project = project
     }
 }
 
@@ -189,6 +247,16 @@ public final class FirstRunFlow {
     /// first run: the one shown now replaces it (R-0132).
     public let keyShownBefore: Bool
 
+    /// The Team and Review steps (ADR 0025), when portenvd can plan a
+    /// team; otherwise New workspace is the name alone, as before.
+    public let team: NewTeamFlow
+    public let hasTeamStep: Bool
+    /// The Project step (ADR 0025 §2): Empty unless the owner picks GitHub.
+    public var projectKind: ProjectKind = .empty
+    public var githubURL = ""
+    /// The owner's GitHub login when signed in (the Keychain isn't read).
+    private let githubLogin: @Sendable () -> String?
+
     private let service: FirstRunService
     private let existing: Set<String>
     private let memory: FirstRunMemory
@@ -204,7 +272,11 @@ public final class FirstRunFlow {
     public init(service: FirstRunService, at start: FirstRunStep = .welcome, existing: [String] = [], fromBoxList: Bool = false,
                 memory: FirstRunMemory = NoFirstRunMemory(), retryEvery: Duration = .seconds(1), retryFor: Duration = .seconds(10),
                 docker: DockerStatus? = .running, serviceGone: Bool = false,
-                awake: @escaping @Sendable () -> SuspendingClock.Instant = { .now }) {
+                awake: @escaping @Sendable () -> SuspendingClock.Instant = { .now }, teamPlanner: TeamPlanning? = nil,
+                githubLogin: @escaping @Sendable () -> String? = { nil }) {
+        self.githubLogin = githubLogin
+        team = NewTeamFlow(planner: teamPlanner ?? NoTeamPlanner())
+        hasTeamStep = teamPlanner != nil
         self.retryEvery = retryEvery
         self.retryFor = retryFor
         self.awake = awake
@@ -218,7 +290,9 @@ public final class FirstRunFlow {
         self.memory = memory
         keyShownBefore = start == .welcome && memory.keyShown
         step = start
-        steps = start == .firstBox ? [.firstBox, .gettingReady] : FirstRunStep.allCases
+        var steps: [FirstRunStep] = start == .firstBox ? [.firstBox, .gettingReady] : [.welcome, .recoveryKey, .storage, .firstBox, .gettingReady]
+        if teamPlanner != nil { steps.insert(contentsOf: [.project, .team, .review], at: steps.firstIndex(of: .gettingReady)!) }
+        self.steps = steps
     }
 
     public var canGoBack: Bool {
@@ -239,8 +313,38 @@ public final class FirstRunFlow {
         case .firstBox:
             // Docker Desktop ready before making the first workspace (R-0211).
             return docker == .running && !boxName.isEmpty && nameProblem == nil
+        case .project:
+            return projectProblem == nil
+        case .team:
+            return team.canContinue && (!createsHere || docker == .running)
+        case .review:
+            return team.canCreate && docker == .running
         case .gettingReady:
             return false
+        }
+    }
+
+    /// What's wrong with the Project step's choice, or nil.
+    public var projectProblem: String? {
+        guard projectKind == .github else { return nil }
+        if githubURL.trimmingCharacters(in: .whitespaces).isEmpty { return ProjectText.typeURL }
+        return GitHubRepoURL.canonical(githubURL) == nil ? ProjectText.notAGitHubURL : nil
+    }
+
+    /// The project CreateBox gets.
+    public var project: ProjectChoice {
+        guard projectKind == .github, let url = GitHubRepoURL.canonical(githubURL) else { return .empty }
+        return .github(url: url, useSignIn: githubLogin() != nil)
+    }
+
+    /// Whether leaving this step makes the workspace: the name's step
+    /// without the Team step, the Team step with None, or the review.
+    public var createsHere: Bool {
+        switch step {
+        case .firstBox: !hasTeamStep
+        case .team: team.template == nil
+        case .review: true
+        default: false
         }
     }
 
@@ -260,6 +364,14 @@ public final class FirstRunFlow {
         case .firstBox:
             if docker != .running { return docker?.card?.title ?? DockerText.checkingFirst }
             return nameProblem ?? FirstRunText.typeName
+        case .project:
+            return projectProblem
+        case .team:
+            if let why = team.whyNotContinue { return why }
+            return docker?.card?.title ?? DockerText.checkingFirst
+        case .review:
+            if let why = team.whyNotCreate { return why }
+            return docker?.card?.title ?? DockerText.checkingFirst
         }
     }
 
@@ -290,7 +402,10 @@ public final class FirstRunFlow {
     public var primaryProminent: Bool { canContinue }
 
     public var firstBoxTitle: String { fromBoxList ? FirstRunText.newBoxTitle : FirstRunText.firstBoxTitle }
-    public var primaryButton: String { fromBoxList && step == .firstBox ? FirstRunText.createBox : "Continue" }
+    public var primaryButton: String {
+        if hasTeamStep { return createsHere ? FirstRunText.createBox : "Continue" }
+        return fromBoxList && step == .firstBox ? FirstRunText.createBox : "Continue"
+    }
     public var showsStepDots: Bool { !fromBoxList }
 
     public func back() {
@@ -306,7 +421,7 @@ public final class FirstRunFlow {
     /// press either moves on or says why it can't (R-0126): a failure stays
     /// on the step with its line, and so does a step that isn't complete.
     public func next() async {
-        guard let i = steps.firstIndex(of: step), i + 1 < steps.count else { return }
+        guard var i = steps.firstIndex(of: step), i + 1 < steps.count else { return }
         guard canContinue else {
             // Busy: the press before is still working, and shows it. Else
             // the reason is already on screen; the press is counted, so it's
@@ -317,9 +432,12 @@ public final class FirstRunFlow {
         busy = true
         defer { busy = false }
         do {
+            let creates = createsHere
             try await whileServiceStarts { try await self.runStep() }
             error = nil
             notice = nil
+            // With None, there's nothing to review: on to Creating.
+            if creates, let ready = steps.firstIndex(of: .gettingReady) { i = ready - 1 }
             step = steps[i + 1]
         } catch let failure as FirstRunError where failure.notBuilt {
             refuse(notice: failure.message)
@@ -340,7 +458,7 @@ public final class FirstRunFlow {
     public func followDocker(every interval: Duration = DockerText.interval,
                              check: @escaping @MainActor () async -> DockerStatus?,
                              sleep: @escaping @MainActor (Duration) async -> Void = { try? await Task.sleep(for: $0) }) async {
-        let checked: Set<FirstRunStep> = [.welcome, .firstBox] // R-0098, R-0211
+        let checked: Set<FirstRunStep> = [.welcome, .firstBox, .project, .team, .review] // R-0098, R-0211
         while checked.contains(step) && !Task.isCancelled {
             await checkDocker(check)
             if docker == .running || !checked.contains(step) { return }
@@ -405,12 +523,15 @@ public final class FirstRunFlow {
                 memory.keyShown = true
             case .recoveryKey:
                 try await service.recoveryKeySaved()
-            case .firstBox:
+            case .firstBox, .team, .review:
+                guard createsHere else { break }
                 try await service.createBox(NewBox(
                     name: boxName,
                     storage: storage ?? .thisMac,
                     serverAddress: "",
-                    bucketURL: ""
+                    bucketURL: "",
+                    team: team.choice,
+                    project: hasTeamStep ? project : nil
                 ))
                 made = boxName
                 memory.keyShown = false
@@ -504,6 +625,12 @@ public enum FirstRunText {
     }
 
     public static let gettingReadyTitle = "Getting ready"
+    /// ADR 0022's team_start sentence, shown once above Create Workspace
+    /// (ADR 0025 §4); the first Start still asks.
+    public static let teamStartLine = "Agents work in their own copies. Check their branches before you run them."
+    /// On Creating, with a team (ADR 0025 §5).
+    public static let nothingStarts = "Nothing starts until you choose Start."
+    public static let signsIn = "Each agent signs in to its runner in its own tab the first time it starts."
 
     /// Usage counting (1.8), shown before any update check.
     public static let countMeIn = "Count me in usage numbers (no ID, nothing about your work)"
@@ -517,4 +644,14 @@ public enum FirstRunText {
     public static let neverCounted = "Never sent: any ID, your name or email, workspace names, file names or anything in your workspaces. Your IP address is seen in transit but never kept."
     public static let whatsCounted = "What’s counted"
     public static let turnOff = "You can turn this off at any time in Settings › Privacy. The update check itself stays, for security updates."
+}
+
+/// No team planning (renders, tests, an older portenvd): New workspace is
+/// the name alone.
+public struct NoTeamPlanner: TeamPlanning {
+    public init() {}
+    public func teamTemplates() async throws -> [TeamTemplateInfo] { [] }
+    public func planTeam(_: TeamChoice) async throws -> TeamPlan { throw DaemonError(DaemonError.outOfDate) }
+    public func agentsAllowed() async throws -> Int { AgentsAllowed.defaultValue }
+    public func setAgentsAllowed(_: Int) async throws -> Int { throw DaemonError(DaemonError.outOfDate) }
 }

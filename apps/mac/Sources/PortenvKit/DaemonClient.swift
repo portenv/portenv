@@ -323,7 +323,8 @@ public final class DaemonClient: DaemonAPI, Sendable {
 extension DaemonClient: BoxCreating, RecoveryChecking {
     public func listings() async throws -> [BoxListing] {
         try await call {
-            try await api.listBoxes(.init()).boxes.map { BoxListing(name: $0.box.name, id: $0.box.id, creating: $0.creating, hasRecoveryKey: $0.carriesRecoveryKey) }
+            try await api.listBoxes(.init()).boxes.map { BoxListing(name: $0.box.name, id: $0.box.id, creating: $0.creating, hasRecoveryKey: $0.carriesRecoveryKey,
+                                                         deleting: $0.deleting) }
         }
     }
 
@@ -334,6 +335,12 @@ extension DaemonClient: BoxCreating, RecoveryChecking {
         req.storage = r.storage
         req.keys = r.keys
         req.recoveryPassword = r.recoveryPassword
+        if let team = r.team { req.team = Self.choice(team) }
+        switch r.project {
+        case .empty: req.project = .with { $0.empty = true }
+        case .github(let url, let useSignIn): req.project = .with { $0.githubURL = url; $0.useSignIn = useSignIn }
+        case nil: break
+        }
         return try await creating { try await api.createBox(req).alreadyCreated }
     }
 
@@ -372,6 +379,27 @@ extension DaemonClient: BoxCreating, RecoveryChecking {
         case .unavailable: 14
         default: 13
         }
+    }
+}
+
+/// Delete Workspace… (ADR 0029). keyIDs and provideKeys are DaemonAPI's.
+extension DaemonClient: WorkspaceDeleting {
+    public func deletePlan(_ box: String) async throws -> DeletePlan {
+        let r = try await call { try await api.getDeletePlan(.with { $0.name = box }) }
+        return DeletePlan(boxID: r.boxID, saveCount: Int(r.saveCount), savesBytes: r.savesBytes, savesElsewhere: r.savesElsewhere,
+                          savesPlace: r.savesPlace, openHere: r.openHere, refusal: r.refusal,
+                          stoppedAt: DeleteStep(rawValue: r.stoppedAt.rawValue) ?? .none, carriesRecoveryKey: r.carriesRecoveryKey)
+    }
+
+    public func deleteBox(_ box: String, confirmName: String, savesElsewhereConfirmed: Bool, keysDeleted: Bool) async throws -> DeleteOutcome {
+        var req = Portenv_Daemon_V1_DeleteBoxRequest()
+        req.name = box
+        req.confirmName = confirmName
+        req.confirmSavesElsewhere = savesElsewhereConfirmed
+        req.keysDeleted = keysDeleted
+        let r = try await call { try await api.deleteBox(req) }
+        return DeleteOutcome(finished: r.finished, deleteKeyIDs: r.deleteKeyIds, savesLeftAt: r.savesLeftAt,
+                             step: DeleteStep(rawValue: r.step.rawValue) ?? .none)
     }
 }
 
@@ -652,6 +680,49 @@ extension DaemonClient {
         }
     }
 
+    public func watchPushes(_ box: String) -> AsyncThrowingStream<PushAsk, Error> {
+        let api = self.api
+        let req = Portenv_Daemon_V1_WatchPushesRequest.with { $0.name = box }
+        return AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    try await api.watchPushes(req) { response in
+                        for try await message in response.messages {
+                            let q = message.question
+                            continuation.yield(PushAsk(
+                                id: q.id, repo: TeamText.line(q.repo, max: 140), needsYes: q.needsYes, first: q.first, list: q.list,
+                                updates: q.updates.map { PushAsk.Update(dst: TeamText.line($0.dst, max: 255), newSHA: TeamText.line($0.newSha, max: 40), force: $0.force, delete: $0.delete) },
+                                gone: q.gone))
+                        }
+                    }
+                    continuation.finish()
+                } catch let e as RPCError {
+                    continuation.finish(throwing: DaemonError.fromRPC(message: e.message, unimplemented: e.code == .unimplemented, unavailable: e.code == .unavailable))
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
+    public func pushPermission(_ box: String) async throws -> (repo: String, allowed: Bool) {
+        let r = try await call { try await api.getPushes(.with { $0.name = box }) }
+        return (TeamText.line(r.repo, max: 140), r.allowed)
+    }
+
+    public func stopAllowingPushes(_ box: String) async throws {
+        _ = try await call { try await api.stopAllowingPushes(.with { $0.name = box }) }
+    }
+
+    /// The sign-in goes only in this request, in memory (R-0391).
+    public func answerPush(_ box: String, id: String, allow: Bool, githubToken: String?, signedOut: Bool) async throws {
+        let req = Portenv_Daemon_V1_AnswerPushRequest.with {
+            $0.name = box; $0.id = id; $0.allow = allow; $0.githubToken = githubToken ?? ""; $0.signedOut = signedOut
+        }
+        _ = try await call { try await api.answerPush(req) }
+    }
+
     public func answerDecision(_ box: String, id: String, approve: Bool, note: String) async throws -> TeamDecision {
         let req = Portenv_Daemon_V1_AnswerDecisionRequest.with { $0.name = box; $0.decisionID = id; $0.approve = approve; $0.note = note }
         return try await call { TeamDecision(try await api.answerDecision(req).decision) }
@@ -690,6 +761,28 @@ extension DaemonClient {
     public func approveAgentFile(_ box: String, id: String, sha256: String) async throws -> TeamAgent {
         let req = Portenv_Daemon_V1_ApproveAgentFileRequest.with { $0.name = box; $0.agentID = id; $0.fileSha256 = sha256 }
         return try await call { TeamAgent(try await api.approveAgentFile(req).agent) }
+    }
+
+    /// The sign-in goes only in this request, in memory (R-0391).
+    public func applyTeamPlan(_ box: String, githubToken: String?) async throws -> TeamPlanApplied {
+        let req = Portenv_Daemon_V1_ApplyTeamPlanRequest.with {
+            $0.name = box
+            $0.githubToken = githubToken ?? ""
+        }
+        // A clone can take a while: no short deadline.
+        let r = try await call { try await api.applyTeamPlan(req) }
+        return TeamPlanApplied(applied: r.applied, pinned: r.pinned, lines: r.lines.map { TeamText.line($0, max: 300) },
+                               projectError: r.projectError.isEmpty ? nil : TeamText.line(r.projectError, max: 300),
+                               needsSignIn: r.needsSignIn, needsToken: r.needsToken)
+    }
+
+    public func agentsAllowed() async throws -> Int {
+        try await call { Int(try await api.getTeamSettings(.init()).agentsAllowed) }
+    }
+
+    public func setAgentsAllowed(_ n: Int) async throws -> Int {
+        let req = Portenv_Daemon_V1_SetAgentsAllowedRequest.with { $0.agentsAllowed = Int32(clamping: n) }
+        return try await call { Int(try await api.setAgentsAllowed(req).settings.agentsAllowed) }
     }
 }
 
@@ -764,6 +857,9 @@ extension TeamEvent {
         case .message(let m)?: self = .message(TeamMessage(m))
         case .decision(let d)?: self = .decision(TeamDecision(d))
         case .removedAgentID(let id)?: self = .removed(id)
+        case .teamLimit(let l)?:
+            self = .limit(TeamLimit(allowed: Int(l.agentsAllowed), inTeam: Int(l.agentsInTeam), running: Int(l.agentsRunning),
+                                    line: l.line, raiseTo: Int(l.raiseTo)))
         case nil: return nil
         }
     }
@@ -855,5 +951,49 @@ extension TeamDecision {
                   packages: d.packages.map { Package(name: $0.name, version: $0.version, source: $0.source, dependency: $0.dependency) },
                   startAgents: d.startAgentIds, choices: d.choices, choice: Int(d.choice),
                   attachments: d.attachments.map(TeamAttachment.init))
+    }
+}
+
+// New workspace's Team step (ADR 0025).
+extension DaemonClient: TeamPlanning {
+    static func choice(_ c: TeamChoice) -> Portenv_Daemon_V1_TeamPlanChoice {
+        .with { p in
+            p.template = c.template
+            p.agents = c.agents.map { a in
+                .with {
+                    $0.id = a.id
+                    $0.include = a.include
+                    $0.name = a.name
+                    $0.model = a.model
+                    $0.teamStatus = a.teamStatus
+                    $0.approvedSha256 = a.approvedSHA256
+                }
+            }
+        }
+    }
+
+    static func planned(_ a: Portenv_Daemon_V1_PlannedAgent) -> PlannedAgentFile {
+        PlannedAgentFile(id: a.id, name: TeamText.line(a.name, max: 40), role: TeamText.line(a.role, max: 120), avatar: a.avatar,
+                         templateName: TeamText.line(a.templateName, max: 40), included: a.included, templateIncluded: a.templateIncluded,
+                         path: TeamText.line(a.path, max: 200), content: a.content, sha256: a.sha256, runner: a.runner,
+                         runnerName: TeamText.line(a.runnerName, max: 60), runnerLine: TeamText.line(a.runnerLine, max: 300),
+                         model: a.model, templateModel: a.templateModel, models: a.models, templateTeamStatus: a.templateTeamStatus,
+                         teamStatus: a.teamStatus, changes: a.changes.map { TeamText.line($0, max: 300) },
+                         grants: a.grants.map { TeamText.line($0, max: 300) }, instructions: a.instructions,
+                         problems: a.problems.map { TeamText.line($0, max: 300) })
+    }
+
+    public func teamTemplates() async throws -> [TeamTemplateInfo] {
+        let r = try await call { try await api.listTeamTemplates(.init()) }
+        return r.templates.map {
+            TeamTemplateInfo(id: $0.id, name: TeamText.line($0.name, max: 40), description: TeamText.line($0.description_p, max: 300),
+                             agents: $0.agents.map(Self.planned))
+        }
+    }
+
+    public func planTeam(_ choice: TeamChoice) async throws -> TeamPlan {
+        let r = try await call { try await api.planTeam(.with { $0.choice = Self.choice(choice) }) }
+        return TeamPlan(agents: r.agents.map(Self.planned), included: Int(r.included), allowed: Int(r.agentsAllowed),
+                        problems: r.problems.map { TeamText.line($0, max: 300) })
     }
 }

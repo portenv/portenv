@@ -91,15 +91,8 @@ struct MainWindow: View {
             }
             .navigationTitle(controller.box)
             // Keep Waiting's way out (R-0178), next to "Waiting for …".
-            // Split Right and Split Down, in the title bar (the board),
-            // while the workspace's terminal shows.
-            .toolbar {
-                if let split, splitShows {
-                    ToolbarItemGroup(placement: .primaryAction) {
-                        SplitToolbarButtons(split: split)
-                    }
-                }
-            }
+            // Split Right and Split Down are in the tab bar, You's alone
+            // (R-0410), never in the toolbar.
             .toolbar {
                 if let place = controller.waitingFor {
                     ToolbarItem(placement: .primaryAction) {
@@ -254,7 +247,8 @@ struct MainWindow: View {
             VStack(spacing: 0) {
                 HStack(spacing: 0) {
                     TabBar(tabs: tabs, team: team?.state.agents ?? [],
-                           paneFrame: { split?.paneFrame(forTab: $0) })
+                           paneFrame: { split?.paneFrame(forTab: $0) },
+                           split: splitShows ? split : nil)
                     // An agent's tabs only: All tabs at the trailing end
                     // brings back every tab (R-0241).
                     if team != nil, tabs.selection != .allTabs {

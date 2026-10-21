@@ -119,6 +119,7 @@ Each open workspace has a window of its own, and workspace windows group as **ma
   | Shortcut | Action | Menu |
   | --- | --- | --- |
   | ⌘N | "Your workspaces" in a new tab | File › Open Workspace… |
+  | ⇧⌘N | The New Workspace flow, as the list's New Workspace… button: in the window in front when it shows the list (the launch window when none is in front); a window showing a workspace keeps it and the flow opens in a new tab; a window already making one comes forward (R-0404) | File › New Workspace… |
   | ⌃⌘1–⌃⌘9 | Show the workspace tab at that position in the window's tab group; past the last, nothing | Window › Show Workspace Tab ▸ |
   | ⌃Tab / ⌃⇧Tab | Show the next / previous workspace tab, wrapping around | Window › Show Next Tab, Show Previous Tab (macOS's own) |
 

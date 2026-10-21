@@ -96,6 +96,9 @@ func (s *apiServer) StartTeamAgent(ctx context.Context, req *agentv1.StartTeamAg
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "%s: %v", id, err)
 	}
+	if ts := req.GetTrustSetting(); ts != "" && ts != trustClaude {
+		return nil, status.Errorf(codes.InvalidArgument, "%s: %q isn't a trust setting this helper knows", id, ts)
+	}
 	if len(req.GetAgentsMd()) > maxAgentsMD {
 		return nil, status.Errorf(codes.InvalidArgument, "%s's AGENTS.md is over %d KB", id, maxAgentsMD>>10)
 	}
@@ -140,6 +143,11 @@ func (s *apiServer) StartTeamAgent(ctx context.Context, req *agentv1.StartTeamAg
 			s.team.removeAgent(id)
 			return nil, err
 		}
+	}
+	// Claude Code's folder trust, for exactly the folder its runner
+	// starts in (R-0411): only an approved team's agents reach here.
+	if req.GetTrustSetting() == trustClaude {
+		s.writeClaudeTrust(ctx, id, u.UID, u.Home, runnerStartFolder(u.Home, workDir))
 	}
 	spec := AgentServerSpec{
 		ID: id, UID: u.UID, GID: u.UID, Home: u.Home,

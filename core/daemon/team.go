@@ -957,6 +957,7 @@ func (e *teamEngine) startAgentAs(ctx context.Context, name, agentID string, app
 		ProjectDir:      projectDir(name),
 		HomeQuotaBytes:  defaultHomeQuota,
 		IdlePattern:     runnerIdlePattern(a.Runner),
+		TrustSetting:    runnerTrustSetting(a.Runner),
 	})
 	if err != nil {
 		b.states[agentID] = typesv1.AgentState_AGENT_STATE_STOPPED

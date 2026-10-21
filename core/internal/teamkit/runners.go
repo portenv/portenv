@@ -19,11 +19,16 @@ type Runner struct {
 	// Models are the runner's own aliases, in menu order.
 	Models []string
 	Shown  bool
+	// TrustSetting is how the helper pre-answers the runner's folder-trust
+	// question for the folder it starts in (ADR 0025 §9, R-0411): "claude"
+	// is Claude Code's projects["<folder>"].hasTrustDialogAccepted in
+	// ~/.claude.json. Empty: Portenv writes nothing, and the runner asks.
+	TrustSetting string
 }
 
 // Runners is the registry, in menu order.
 var Runners = []Runner{
-	{ID: "claude", Name: "Claude Code", ModelFlag: "--model", Models: []string{"opus", "sonnet", "fable"}, Shown: true},
+	{ID: "claude", Name: "Claude Code", ModelFlag: "--model", Models: []string{"opus", "sonnet", "fable"}, Shown: true, TrustSetting: "claude"},
 }
 
 // RunnerByID is the shown runner with that id.
@@ -34,4 +39,15 @@ func RunnerByID(id string) (Runner, bool) {
 		}
 	}
 	return Runner{}, false
+}
+
+// TrustSettingFor is the trust setting of the runner whose program is
+// named name (shown or not), or "" for one Portenv doesn't know.
+func TrustSettingFor(name string) string {
+	for _, r := range Runners {
+		if r.ID == name {
+			return r.TrustSetting
+		}
+	}
+	return ""
 }

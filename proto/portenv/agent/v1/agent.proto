@@ -682,6 +682,12 @@ message StartTeamAgentRequest {
   // The agent's display name, for its clone's git identity
   // ("<name> (Portenv agent)", set when the clone is made).
   string agent_name = 10;
+  // The runner's folder-trust setting, from portenvd's runner registry
+  // (ADR 0025 §9's trust_setting): "claude" sets Claude Code's
+  // projects["<start folder>"].hasTrustDialogAccepted in the agent's
+  // ~/.claude.json, as the agent, for the one folder the runner starts in
+  // (its clone, or its home without one). Empty: nothing is written.
+  string trust_setting = 11;
 }
 
 // One writer's clone and the lenses that may read it.

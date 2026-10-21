@@ -399,6 +399,13 @@ func TeamIO(args []string, stdin io.Reader, stdout io.Writer) error {
 			return errors.New("write-agent-files PROJECT")
 		}
 		return teamIOWriteAgentFiles(dir, stdin, stdout)
+	case "claude-trust":
+		// As the agent, at its start (R-0411): Claude Code's folder trust
+		// for the folder its runner starts in.
+		if len(args) != 3 {
+			return errors.New("claude-trust HOME FOLDER")
+		}
+		return claudeTrust(dir, args[2], stdout)
 	case "write-home":
 		if len(args) != 4 {
 			return errors.New("write-home HOME PATH QUOTA")

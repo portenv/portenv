@@ -20,6 +20,8 @@ struct MainWindow: View {
     @AppStorage private var sidebarChoice: String
     /// Below 900 pt the sidebar is compact (GUIDELINES 6.2).
     @State private var narrow = false
+    /// The sidebar's selection changes, counted, for the terminal's landing.
+    @State private var selectionChanges = 0
     /// Renders only (ScreenRenders): a sample terminal in place of
     /// `portenv attach`.
     private let renderTerminal: (() -> NSView)?
@@ -275,6 +277,8 @@ struct MainWindow: View {
                     .onChange(of: team?.selection, initial: true) {
                         tabs.view(team?.selection ?? .allTabs)
                         split?.tabsChanged()
+                        // The tab on screen lands at its prompt (GUIDELINES §4.1).
+                        selectionChanges += 1
                     }
                     // The tab bar widened the selection itself (a new tab, a
                     // pane showing another agent's tab): the sidebar follows.
@@ -299,7 +303,8 @@ struct MainWindow: View {
                         MainTabTerminal(shown: TabTerminalShown(provider: provider), box: controller.box, tab: tab.id,
                                         generation: controller.terminalGeneration, label: terminalLabel,
                                         tabName: TerminalLabel.title(tab, team: team?.state.agents ?? []),
-                                        serviceComing: controller.reconnectingToService)
+                                        serviceComing: controller.reconnectingToService,
+                                        selectionChanges: selectionChanges)
                     } else if !AppTerminal.attached, controller.tabTerminals != nil {
                         // The tabs aren't known yet: "Opening <workspace>…",
                         // never a bare background (R-0384).

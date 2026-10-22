@@ -83,8 +83,11 @@ func ClaudeSettings(home string, lenses []string) ([]byte, error) {
 		Permissions struct {
 			Allow []string `json:"allow"`
 		} `json:"permissions"`
+		// The permission prompt as a Needs-you item (claudehooks.go).
+		Hooks map[string][]claudeHookGroup `json:"hooks"`
 	}
 	s.Permissions.Allow = allow
+	s.Hooks = claudePermissionHooks()
 	return json.MarshalIndent(s, "", "  ")
 }
 

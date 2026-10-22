@@ -15,6 +15,8 @@ func settingsAllow(t *testing.T, b []byte) []string {
 		Permissions struct {
 			Allow []string `json:"allow"`
 		} `json:"permissions"`
+		// Checked by claudehooks_test.go.
+		Hooks json.RawMessage `json:"hooks"`
 	}
 	dec := json.NewDecoder(strings.NewReader(string(b)))
 	dec.DisallowUnknownFields()

@@ -1537,7 +1537,10 @@ func TestTeamCallsNeverApproveAnAgentFile(t *testing.T) {
 		// by handlePush, which pushes to GitHub and approves nothing.
 		"push_list", "push",
 		// The owner's fetch (R-0392): the same, read-only.
-		"fetch"}
+		"fetch",
+		// A runner's permission prompt shows or ended (R-0412 item 18):
+		// permissionLocked records the caller's own wait, nothing else.
+		"permission"}
 	if !slices.Equal(names, want) {
 		t.Fatalf("TeamCalls ops are %v, want %v: check a new op can't approve an agent file, then add it here", names, want)
 	}
@@ -1580,6 +1583,7 @@ func TestTeamCallsNeverApproveAnAgentFile(t *testing.T) {
 		{Op: &agentv1.TeamCallsResponse_PushList{PushList: &agentv1.PushList{}}},
 		{Op: &agentv1.TeamCallsResponse_Push{Push: &agentv1.PushRefs{Updates: []*agentv1.PushUpdate{{Dst: "refs/heads/main", NewSha: sha(builderFile)[:40]}}}}},
 		{Op: &agentv1.TeamCallsResponse_Fetch{Fetch: &agentv1.FetchRefs{}}},
+		{Op: &agentv1.TeamCallsResponse_Permission{Permission: &agentv1.PermissionWait{Waiting: true, Summary: claim}}},
 	}
 	if len(calls) != len(want) {
 		t.Fatalf("%d calls for %d ops", len(calls), len(want))

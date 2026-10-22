@@ -169,7 +169,18 @@ struct MainWindow: View {
     private func choose(_ s: TeamSelection) {
         team?.selection = s
         tabs.view(s)
+        if showPrompt(s) { team?.requestTerminalFocus() }
         split?.tabsChanged()
+    }
+
+    /// An agent waiting at its runner's permission prompt (R-0412 item
+    /// 18): choosing it shows its runner's tab, to answer it there. True
+    /// when it did.
+    @discardableResult
+    private func showPrompt(_ s: TeamSelection) -> Bool {
+        guard case .agent(let id) = s, let tab = PermissionShow.tab(for: team?.state.agent(id), in: tabs.tabs) else { return false }
+        tabs.choose(tab)
+        return true
     }
 
     /// The terminal's VoiceOver name: whose tab it shows (R-0314).
@@ -274,6 +285,7 @@ struct MainWindow: View {
                     // the team, a decision was answered): the same switch.
                     .onChange(of: team?.selection, initial: true) {
                         tabs.view(team?.selection ?? .allTabs)
+                        showPrompt(team?.selection ?? .allTabs)
                         split?.tabsChanged()
                     }
                     // The tab bar widened the selection itself (a new tab, a
@@ -299,7 +311,8 @@ struct MainWindow: View {
                         MainTabTerminal(shown: TabTerminalShown(provider: provider), box: controller.box, tab: tab.id,
                                         generation: controller.terminalGeneration, label: terminalLabel,
                                         tabName: TerminalLabel.title(tab, team: team?.state.agents ?? []),
-                                        serviceComing: controller.reconnectingToService)
+                                        serviceComing: controller.reconnectingToService,
+                                        focusRequests: team?.terminalFocusRequests ?? 0)
                     } else if !AppTerminal.attached, controller.tabTerminals != nil {
                         // The tabs aren't known yet: "Opening <workspace>…",
                         // never a bare background (R-0384).

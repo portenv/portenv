@@ -16,10 +16,13 @@ public enum NotificationAction: String, CaseIterable, Sendable {
 public enum NotificationRoute: Equatable, Sendable {
     case decision(box: String, id: String)
     case tab(box: String, id: String)
+    /// An agent waiting at its runner's permission prompt (R-0412 item
+    /// 18): its column, and its runner's tab with the terminal focused.
+    case agent(box: String, id: String)
 
     public var box: String {
         switch self {
-        case .decision(let box, _), .tab(let box, _): box
+        case .decision(let box, _), .tab(let box, _), .agent(let box, _): box
         }
     }
 
@@ -28,6 +31,7 @@ public enum NotificationRoute: Equatable, Sendable {
         switch self {
         case .decision(let box, let id): ["kind": "decision", "workspace": box, "id": id]
         case .tab(let box, let id): ["kind": "tab", "workspace": box, "id": id]
+        case .agent(let box, let id): ["kind": "agent", "workspace": box, "id": id]
         }
     }
 
@@ -38,6 +42,7 @@ public enum NotificationRoute: Equatable, Sendable {
         switch kind {
         case "decision": self = .decision(box: box, id: id)
         case "tab": self = .tab(box: box, id: id)
+        case "agent": self = .agent(box: box, id: id)
         default: return nil
         }
     }
@@ -100,6 +105,22 @@ public struct NeedsYouNotice: Equatable, Sendable {
             actions: [.show])
     }
 
+    /// An agent waiting at its runner's permission prompt (R-0412 item
+    /// 18); nil when it isn't. Only the one-line summary, never the
+    /// command's whole text. Show only: the owner answers in the terminal.
+    public static func permission(_ a: TeamAgent, box: String, location: String?) -> NeedsYouNotice? {
+        guard a.permission != nil else { return nil }
+        let who = a.name.isEmpty ? TeamText.line(a.id, max: 64) : a.name
+        return NeedsYouNotice(
+            id: "permission-\(box)-\(a.id)",
+            content: NotifyText.Content(title: "\(box) \u{00B7} \(who) is asking",
+                                        body: TeamText.waitingForPermission(a),
+                                        subtitle: "\(who) \u{00B7} \(location ?? NotifyText.thisMac)"),
+            route: .agent(box: box, id: a.id),
+            category: waitingCategory,
+            actions: [.show])
+    }
+
     private static func asker(_ id: String, team: [TeamAgent]) -> String {
         if id == TeamText.portenv { return "Portenv" }
         return team.first { $0.id == id }?.name ?? TeamText.line(id, max: 64)
@@ -141,6 +162,8 @@ public final class NeedsYouCenter {
     private var seen: [String: Set<String>] = [:]
     private var posted: [String: Set<String>] = [:]
     private var questions: [String: [String: TabQuestion]] = [:]
+    /// Per workspace: each waiting agent's prompt as last notified.
+    private var waits: [String: [String: PermissionPrompt]] = [:]
     private var counts: [String: Int] = [:]
     private var badge: String?
 
@@ -182,8 +205,25 @@ public final class NeedsYouCenter {
         out.subtract(withdraw)
         seen[box] = known.intersection(ids)
         posted[box] = out
-        counts[box] = pending.count
+        permissions(box: box, state: state, front: front, location: location)
+        counts[box] = state.needsYouCount
         updateBadge()
+    }
+
+    /// Permission prompts (R-0412 item 18): a new or different one
+    /// notifies, replacing the agent's last; one that's over is taken back.
+    private func permissions(box: String, state: TeamState, front: Bool, location: String?) {
+        var last = waits[box] ?? [:]
+        let now = Dictionary(uniqueKeysWithValues: state.permissionWaits.compactMap { a in a.permission.map { (a.id, $0) } })
+        let over = last.keys.filter { now[$0] == nil }.sorted()
+        for id in over { last[id] = nil }
+        if !over.isEmpty { poster.withdraw(over.map { "permission-\(box)-\($0)" }) }
+        for a in state.permissionWaits {
+            guard let p = a.permission, last[a.id] != p else { continue }
+            last[a.id] = p
+            if !front, let n = NeedsYouNotice.permission(a, box: box, location: location) { poster.post(n) }
+        }
+        waits[box] = last
     }
 
     /// A session's tabs changed: a question that's new or different
@@ -211,11 +251,13 @@ public final class NeedsYouCenter {
     /// are taken back. The workspace keeps running (ADR 0023).
     public func closed(box: String) {
         let ids = (posted[box] ?? []).sorted() + (questions[box] ?? [:]).keys.map { "waiting-\(box)-\($0)" }.sorted()
+            + (waits[box] ?? [:]).keys.map { "permission-\(box)-\($0)" }.sorted()
         if !ids.isEmpty { poster.withdraw(ids) }
         since[box] = nil
         seen[box] = nil
         posted[box] = nil
         questions[box] = nil
+        waits[box] = nil
         counts[box] = nil
         updateBadge()
     }

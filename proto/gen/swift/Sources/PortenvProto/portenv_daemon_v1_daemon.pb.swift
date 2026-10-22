@@ -2957,11 +2957,51 @@ public nonisolated struct Portenv_Daemon_V1_AgentInfo: @unchecked Sendable {
     set {_uniqueStorage()._shareLoginOff = newValue}
   }
 
+  /// Its runner's permission prompt is showing in its terminal (R-0412 item
+  /// 18): a Needs-you item until it's answered there, the agent goes idle
+  /// or it stops. Unset otherwise. (22 is kept for idle_unknown, #269.)
+  public var permission: Portenv_Daemon_V1_PermissionPrompt {
+    get {_storage._permission ?? Portenv_Daemon_V1_PermissionPrompt()}
+    set {_uniqueStorage()._permission = newValue}
+  }
+  /// Returns true if `permission` has been explicitly set.
+  public var hasPermission: Bool {_storage._permission != nil}
+  /// Clears the value of `permission`. Subsequent reads from it will return its default value.
+  public mutating func clearPermission() {_uniqueStorage()._permission = nil}
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
 
   fileprivate var _storage = _StorageClass.defaultInstance
+}
+
+/// A runner waiting at its permission prompt (R-0412 item 18).
+public nonisolated struct Portenv_Daemon_V1_PermissionPrompt: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// One plain line, at most 80 characters: what it asks to run or touch.
+  public var summary: String = String()
+
+  public var since: SwiftProtobuf.Google_Protobuf_Timestamp {
+    get {_since ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
+    set {_since = newValue}
+  }
+  /// Returns true if `since` has been explicitly set.
+  public var hasSince: Bool {self._since != nil}
+  /// Clears the value of `since`. Subsequent reads from it will return its default value.
+  public mutating func clearSince() {self._since = nil}
+
+  /// The agent's tab its runner runs in, for Show.
+  public var tabID: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _since: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
 }
 
 public nonisolated struct Portenv_Daemon_V1_WatchTeamRequest: Sendable {
@@ -8504,7 +8544,7 @@ nonisolated extension Portenv_Daemon_V1_SetAgentsAllowedResponse: SwiftProtobuf.
 
 nonisolated extension Portenv_Daemon_V1_AgentInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".AgentInfo"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}name\0\u{1}role\0\u{1}avatar\0\u{1}remote\0\u{1}via\0\u{1}state\0\u{1}problem\0\u{3}file_sha256\0\u{1}approved\0\u{3}tab_ids\0\u{3}last_line\0\u{3}pending_decisions\0\u{3}home_bytes\0\u{3}home_quota_bytes\0\u{1}runner\0\u{1}grant\0\u{1}status\0\u{1}routines\0\u{3}routines_off\0\u{3}share_login_off\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}name\0\u{1}role\0\u{1}avatar\0\u{1}remote\0\u{1}via\0\u{1}state\0\u{1}problem\0\u{3}file_sha256\0\u{1}approved\0\u{3}tab_ids\0\u{3}last_line\0\u{3}pending_decisions\0\u{3}home_bytes\0\u{3}home_quota_bytes\0\u{1}runner\0\u{1}grant\0\u{1}status\0\u{1}routines\0\u{3}routines_off\0\u{3}share_login_off\0\u{2}\u{2}permission\0")
 
   fileprivate class _StorageClass {
     var _id: String = String()
@@ -8528,6 +8568,7 @@ nonisolated extension Portenv_Daemon_V1_AgentInfo: SwiftProtobuf.Message, SwiftP
     var _routines: [Portenv_Types_V1_Routine] = []
     var _routinesOff: String = String()
     var _shareLoginOff: String = String()
+    var _permission: Portenv_Daemon_V1_PermissionPrompt? = nil
 
       // This property is used as the initial default value for new instances of the type.
       // The type itself is protecting the reference to its storage via CoW semantics.
@@ -8559,6 +8600,7 @@ nonisolated extension Portenv_Daemon_V1_AgentInfo: SwiftProtobuf.Message, SwiftP
       _routines = source._routines
       _routinesOff = source._routinesOff
       _shareLoginOff = source._shareLoginOff
+      _permission = source._permission
     }
   }
 
@@ -8598,6 +8640,7 @@ nonisolated extension Portenv_Daemon_V1_AgentInfo: SwiftProtobuf.Message, SwiftP
         case 19: try { try decoder.decodeRepeatedMessageField(value: &_storage._routines) }()
         case 20: try { try decoder.decodeSingularStringField(value: &_storage._routinesOff) }()
         case 21: try { try decoder.decodeSingularStringField(value: &_storage._shareLoginOff) }()
+        case 23: try { try decoder.decodeSingularMessageField(value: &_storage._permission) }()
         default: break
         }
       }
@@ -8673,6 +8716,9 @@ nonisolated extension Portenv_Daemon_V1_AgentInfo: SwiftProtobuf.Message, SwiftP
       if !_storage._shareLoginOff.isEmpty {
         try visitor.visitSingularStringField(value: _storage._shareLoginOff, fieldNumber: 21)
       }
+      try { if let v = _storage._permission {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 23)
+      } }()
     }
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -8703,10 +8749,55 @@ nonisolated extension Portenv_Daemon_V1_AgentInfo: SwiftProtobuf.Message, SwiftP
         if _storage._routines != rhs_storage._routines {return false}
         if _storage._routinesOff != rhs_storage._routinesOff {return false}
         if _storage._shareLoginOff != rhs_storage._shareLoginOff {return false}
+        if _storage._permission != rhs_storage._permission {return false}
         return true
       }
       if !storagesAreEqual {return false}
     }
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Portenv_Daemon_V1_PermissionPrompt: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".PermissionPrompt"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}summary\0\u{1}since\0\u{3}tab_id\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.summary) }()
+      case 2: try { try decoder.decodeSingularMessageField(value: &self._since) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.tabID) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    if !self.summary.isEmpty {
+      try visitor.visitSingularStringField(value: self.summary, fieldNumber: 1)
+    }
+    try { if let v = self._since {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
+    } }()
+    if !self.tabID.isEmpty {
+      try visitor.visitSingularStringField(value: self.tabID, fieldNumber: 3)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Portenv_Daemon_V1_PermissionPrompt, rhs: Portenv_Daemon_V1_PermissionPrompt) -> Bool {
+    if lhs.summary != rhs.summary {return false}
+    if lhs._since != rhs._since {return false}
+    if lhs.tabID != rhs.tabID {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

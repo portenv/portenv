@@ -1211,6 +1211,19 @@ message AgentInfo {
   // Set when its file asks for share_login, which this build doesn't
   // support: one plain line saying nothing is shared (R-0323).
   string share_login_off = 21;
+  // Its runner's permission prompt is showing in its terminal (R-0412 item
+  // 18): a Needs-you item until it's answered there, the agent goes idle
+  // or it stops. Unset otherwise. (22 is kept for idle_unknown, #269.)
+  PermissionPrompt permission = 23;
+}
+
+// A runner waiting at its permission prompt (R-0412 item 18).
+message PermissionPrompt {
+  // One plain line, at most 80 characters: what it asks to run or touch.
+  string summary = 1;
+  google.protobuf.Timestamp since = 2;
+  // The agent's tab its runner runs in, for Show.
+  string tab_id = 3;
 }
 
 message WatchTeamRequest {

@@ -44,6 +44,7 @@ var teamUsage = map[string]string{
 	"team":                 "team status | team init [--template starter|orchestrate|app-product] [--dir PROJECT]",
 	"guide":                "guide [--json]",
 	"handoff":              "handoff AGENT PATH [--note TEXT]",
+	"notify-permission":    "notify-permission   (run by Claude Code's hooks, with the hook's JSON on stdin)",
 }
 
 // maxProposedFile is an agent file's limit (ADR 0022 §3).
@@ -70,7 +71,7 @@ func isAgentCommand(name string, getenv func(string) string) bool {
 
 // runTeam runs one in-box command and returns its exit status: 0 done,
 // 1 refused (the plain line on stderr), 2 a usage mistake.
-func runTeam(ctx context.Context, args []string, getenv func(string) string, _ io.Reader, stdout, stderr io.Writer) int {
+func runTeam(ctx context.Context, args []string, getenv func(string) string, stdin io.Reader, stdout, stderr io.Writer) int {
 	name := args[0]
 	usageFail := func(msg string) int {
 		if msg != "" {
@@ -86,6 +87,10 @@ func runTeam(ctx context.Context, args []string, getenv func(string) string, _ i
 	}
 	if name == "team" && len(args) > 1 && args[1] == "init" {
 		return runTeamInit(args[2:], stdout, stderr)
+	}
+	if name == "notify-permission" {
+		notifyPermission(ctx, getenv, stdin)
+		return 0
 	}
 	sock := getenv("PORTENV_SOCKET")
 	if sock == "" {
@@ -359,8 +364,13 @@ func sendTeamCall(ctx context.Context, sock string, call *agentv1.TeamCallsRespo
 		return nil, fmt.Errorf("can't reach Portenv in this workspace: %w", err)
 	}
 	defer func() { _ = conn.Close() }()
-	// inbox --wait waits up to a minute; the helper gives up at 90 s.
-	_ = conn.SetDeadline(time.Now().Add(2 * time.Minute))
+	// inbox --wait waits up to a minute; the helper gives up at 90 s. A
+	// caller's shorter deadline (a hook's) holds.
+	deadline := time.Now().Add(2 * time.Minute)
+	if d, ok := ctx.Deadline(); ok && d.Before(deadline) {
+		deadline = d
+	}
+	_ = conn.SetDeadline(deadline)
 	b, err := protojson.Marshal(call)
 	if err != nil {
 		return nil, err

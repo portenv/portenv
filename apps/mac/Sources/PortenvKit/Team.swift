@@ -69,13 +69,15 @@ public struct TeamAgent: Equatable, Sendable, Identifiable {
     /// Set when its file asks for share_login, which this build doesn't
     /// support: nothing is shared (R-0323).
     public var shareLoginOff: String
+    /// Its runner's permission prompt, while it shows (R-0412 item 18).
+    public var permission: PermissionPrompt?
 
     public init(id: String, name: String, role: String = "", avatar: String = "", remote: Bool = false, via: String = "",
                 status: AgentStatus, problem: String = "", fileSHA256: String = "", approved: Bool = true,
                 tabIDs: [String] = [], lastLine: String = "", pendingDecisions: Int = 0,
                 homeBytes: Int64 = 0, homeQuotaBytes: Int64 = 0, runner: String = "", grant: TeamGrant = TeamGrant(),
                 workStatus: AgentWorkStatus? = nil, routines: [AgentRoutine] = [], routinesOff: String = "",
-                shareLoginOff: String = "") {
+                shareLoginOff: String = "", permission: PermissionPrompt? = nil) {
         self.id = id
         self.name = TeamText.line(name, max: 64)
         self.role = TeamText.line(role, max: 120)
@@ -97,6 +99,35 @@ public struct TeamAgent: Equatable, Sendable, Identifiable {
         self.routines = routines
         self.routinesOff = TeamText.line(routinesOff, max: 300)
         self.shareLoginOff = TeamText.line(shareLoginOff, max: 300)
+        self.permission = permission
+    }
+}
+
+/// An agent's runner waiting at its permission prompt ("Do you want to
+/// proceed?", R-0412 item 18), told by its hook. The owner answers it in
+/// the agent's terminal; Needs you shows it with Show.
+public struct PermissionPrompt: Equatable, Sendable {
+    /// One plain line, at most 80 characters: what it asks to run or touch.
+    public var summary: String
+    public var since: Date?
+    /// The agent's tab its runner runs in.
+    public var tabID: String
+
+    public init(summary: String, since: Date?, tabID: String) {
+        self.summary = TeamText.line(summary, max: 80)
+        self.since = since
+        self.tabID = tabID
+    }
+}
+
+/// Where Show takes the owner for a permission prompt.
+public enum PermissionShow {
+    /// The agent's runner tab, while the agent waits and that tab is still
+    /// one of its own; nil otherwise.
+    public static func tab(for agent: TeamAgent?, in tabs: [TabInfo]) -> String? {
+        guard let agent, let p = agent.permission,
+              tabs.contains(where: { $0.id == p.tabID && $0.agentID == agent.id }) else { return nil }
+        return p.tabID
     }
 }
 
@@ -271,6 +302,16 @@ public struct TeamState: Equatable, Sendable {
         decisions.filter(\.answerable).sorted { ($0.createdAt ?? .distantPast) < ($1.createdAt ?? .distantPast) }
     }
 
+    /// The agents waiting at their runner's permission prompt (R-0412
+    /// item 18), longest-waiting first: Needs you's other rows.
+    public var permissionWaits: [TeamAgent] {
+        agents.filter { $0.permission != nil }
+            .sorted { ($0.permission?.since ?? .distantPast) < ($1.permission?.since ?? .distantPast) }
+    }
+
+    /// Everything in Needs you: decisions and permission prompts.
+    public var needsYouCount: Int { needsYou.count + permissionWaits.count }
+
     /// An agent's conversation with the owner: what it sent the owner, what
     /// the owner sent it, and Portenv's notices to the owner about it.
     public func conversation(with id: String) -> [TeamMessage] {
@@ -365,6 +406,16 @@ public enum TeamText {
         let line = rowLine(a, now: now).text
         return line.isEmpty ? "\(a.name), \(word(a.status))" : "\(a.name), \(word(a.status)). \(line)"
     }
+
+    /// A permission prompt's row and notification: "Builder is waiting for
+    /// your permission: npm install left-pad".
+    public static func waitingForPermission(_ a: TeamAgent) -> String {
+        "\(a.name.isEmpty ? a.id : a.name) is waiting for your permission: \(a.permission?.summary ?? "")"
+    }
+
+    /// A permission prompt's row: choosing it shows the agent's tab.
+    public static let showPrompt = "Show"
+    public static let showPromptHint = "Opens the agent\u{2019}s tab to answer it in the terminal"
 
     /// "Needs you · 1".
     public static func needsYouHeading(_ n: Int) -> String { "Needs you \u{00B7} \(n)" }

@@ -28,6 +28,9 @@ struct MainTabTerminal: View {
     /// the keys; and what to do when a click in the terminal focuses it.
     var isActive = true
     var onFocus: () -> Void = {}
+    /// A new count takes the keys: Show on a permission prompt (R-0412
+    /// item 18).
+    var focusRequests = 0
     @State private var focused = true
     /// This pane's text size, from its workspace's (View › Bigger, Smaller).
     @State private var textSize: TerminalTextSizeState?
@@ -104,6 +107,7 @@ struct MainTabTerminal: View {
         }
         .onChange(of: box) { textSize = TerminalTextSizeState(box: box, announce: Announce.high) }
         .onChange(of: isActive) { focused = isActive }
+        .onChange(of: focusRequests) { focused = true }
         .onChange(of: focused) { if focused { onFocus() } }
         .onChange(of: "\(generation)/\(tab)") { shown.show(tab: tab, generation: generation) }
         .onDisappear { shown.stop() }

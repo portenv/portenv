@@ -429,6 +429,10 @@ final class AppModel {
         case .tab(_, let id):
             s.team?.selection = .allTabs
             Task { await s.tabs?.select(id) }
+        case .agent(_, let id):
+            // A permission prompt (R-0412 item 18): the agent's column; the
+            // window then shows its runner's tab, with the terminal focused.
+            s.team?.showPermission(agent: id)
         }
     }
 

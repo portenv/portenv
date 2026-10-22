@@ -428,6 +428,9 @@ message TeamCallsResponse {
     PushRefs push = 19;
     // The owner's fetch (R-0392): only on work's own socket.
     FetchRefs fetch = 21;
+    // portenv notify-permission, from the runner's hooks (R-0412 item
+    // 18): its permission prompt shows, or no longer does.
+    PermissionWait permission = 22;
   }
   // From SO_PEERCRED: the call came from work's own socket, not an agent's.
   bool owner = 20;
@@ -857,6 +860,19 @@ message SetStatus {
   int32 progress_total = 3;
   string blocked = 4;
   bool clear = 5;
+}
+
+// portenv notify-permission (R-0412 item 18): Claude Code's permission
+// prompt ("Do you want to proceed?") is showing in the agent's terminal,
+// or no longer is. Only a one-line summary is sent, never the command's
+// whole text; portenvd checks it again. The owner answers in the terminal.
+message PermissionWait {
+  // Waiting at the prompt; false: not any more.
+  bool waiting = 1;
+  // One plain line, at most 80 characters: the command's start, or the
+  // tool and its file or address, or the tool's name. Empty when not
+  // waiting.
+  string summary = 2;
 }
 
 // portenv team status (R-0257 item 1); needs team_status: read.

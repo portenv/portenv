@@ -313,6 +313,20 @@ public final class TeamController {
 
     public func closeFile() { review = nil }
 
+    /// Asks the terminal to take the keys: Show on a permission prompt
+    /// (R-0412 item 18). The window's terminal watches the count.
+    public private(set) var terminalFocusRequests = 0
+
+    public func requestTerminalFocus() { terminalFocusRequests += 1 }
+
+    /// Show on a permission prompt's row or notification: the agent's
+    /// column, whose tab the window then shows (PermissionShow), with the
+    /// terminal taking the keys, so the owner can answer it there.
+    public func showPermission(agent id: String) {
+        selection = .agent(id)
+        requestTerminalFocus()
+    }
+
     /// Tests: an event as if from the stream.
     func receive(_ event: TeamEvent) {
         state.apply(event)

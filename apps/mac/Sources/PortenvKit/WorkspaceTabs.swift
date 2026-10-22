@@ -56,9 +56,9 @@ public final class WorkspaceSession {
     /// The workspace this window shows, if any.
     public var box: String? { controller?.box }
 
-    /// Decisions waiting for you in this workspace, from the team this
-    /// session watches (the sidebar's Needs you).
-    public var needsYou: Int { team?.state.needsYou.count ?? 0 }
+    /// Decisions and permission prompts waiting for you in this workspace,
+    /// from the team this session watches (the sidebar's Needs you).
+    public var needsYou: Int { team?.state.needsYouCount ?? 0 }
 
     /// The window tab's title; nil while no workspace shows.
     public var tabTitle: String? {

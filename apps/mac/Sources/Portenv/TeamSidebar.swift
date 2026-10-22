@@ -31,13 +31,20 @@ struct TeamSidebar: View {
             Section {
                 TeamActivityRow(compact: compact).tag(TeamSelection.activity)
             }
-            if !state.needsYou.isEmpty {
-                Section(compact ? "" : TeamText.needsYouHeading(state.needsYou.count)) {
+            if state.needsYouCount > 0 {
+                Section(compact ? "" : TeamText.needsYouHeading(state.needsYouCount)) {
                     ForEach(state.needsYou) { d in
                         NeedsYouRow(decision: d, asker: state.agent(d.from), now: now, compact: compact)
                             // An agent's question opens its column; one
                             // Portenv asks (the first start) opens on its own.
                             .tag(state.agent(d.from) == nil ? TeamSelection.decision(d.id) : TeamSelection.agent(d.from))
+                    }
+                    // A runner waiting at its permission prompt (R-0412 item
+                    // 18): Show is choosing it, which opens the agent's
+                    // tab with the terminal focused, to answer there.
+                    ForEach(state.permissionWaits) { a in
+                        PermissionRow(agent: a, now: now, compact: compact)
+                            .tag(TeamSelection.agent(a.id))
                     }
                 }
             }
@@ -277,6 +284,42 @@ struct NeedsYouRow: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(["Needs you: \(who) asks, \(decision.summary)", waited].compactMap { $0 }.joined(separator: ". "))
+        .accessibilityAddTraits(.isButton)
+    }
+}
+
+/// A permission prompt in Needs you (R-0412 item 18): "Builder is waiting
+/// for your permission: npm install left-pad", how long, and Show.
+struct PermissionRow: View {
+    let agent: TeamAgent
+    let now: Date
+    var compact = false
+
+    var body: some View {
+        let line = TeamText.waitingForPermission(agent)
+        let waited = TeamText.waiting(since: agent.permission?.since, now: now)
+        Group {
+            if compact {
+                Image(systemName: "circle.fill")
+                    .foregroundStyle(attention)
+                    .help(line)
+            } else {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(verbatim: line).fontWeight(.semibold).lineLimit(2)
+                    HStack(spacing: 6) {
+                        if let waited { Text(waited).font(.system(size: 11)).foregroundStyle(.secondary) }
+                        Spacer(minLength: 4)
+                        Text(TeamText.showPrompt).font(.system(size: 11)).foregroundStyle(attention)
+                    }
+                }
+                .padding(.vertical, 4).padding(.horizontal, 6)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(attention, lineWidth: 1.5))
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(["Needs you: \(line)", waited].compactMap { $0 }.joined(separator: ". "))
+        .accessibilityHint(TeamText.showPromptHint)
         .accessibilityAddTraits(.isButton)
     }
 }

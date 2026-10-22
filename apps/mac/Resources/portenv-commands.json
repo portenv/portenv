@@ -752,6 +752,21 @@
     },
     {
       "path": [
+        "notify-permission"
+      ],
+      "aliases": [],
+      "summary": "Tell Portenv a permission prompt shows or ended (run by Claude Code's hooks, reading the hook's JSON on stdin).",
+      "caller": [
+        "agent"
+      ],
+      "approval": "never",
+      "approval_note": "",
+      "args": [],
+      "flags": [],
+      "since": "1.0.0"
+    },
+    {
+      "path": [
         "team",
         "status"
       ],

@@ -103,6 +103,7 @@ type teamBox struct {
 	listed      map[string]string                          // agent → its files as syncAgents last saw them
 	wakes       map[string]*wakeState                      // agent → its unread batch (CC-0498)
 	wakeable    map[string]bool                            // agent → its runner has an idle pattern
+	permission  map[string]*permissionWait                 // agent → its runner's permission prompt, while it shows (R-0412 item 18)
 	changed     chan struct{}
 }
 
@@ -132,6 +133,7 @@ func (e *teamEngine) box(name string) *teamBox {
 			routines:    map[string][]*routineState{},
 			routinesOff: map[string]string{},
 			startErr:    map[string]string{},
+			permission:  map[string]*permissionWait{},
 			changed:     make(chan struct{}),
 		}
 		e.boxes[name] = b
@@ -341,6 +343,8 @@ func (e *teamEngine) handleCall(ctx context.Context, name string, c *agentv1.Tea
 		return last
 	case *agentv1.TeamCallsResponse_SetStatus:
 		return e.statusLocked(b, &team, me, op.SetStatus, id)
+	case *agentv1.TeamCallsResponse_Permission:
+		return e.permissionLocked(b, me, op.Permission, id)
 	case *agentv1.TeamCallsResponse_TeamStatus:
 		if !g.GetTeamStatus() {
 			return refuse(id, "%s may not see the team's status (its grant has no team_status: read).", me.ID)
@@ -943,6 +947,7 @@ func (e *teamEngine) startAgentAs(ctx context.Context, name, agentID string, app
 		e.noticeLocked(ctx, name, b, boardOwner, "", "Portenv made these private in your home, since agents can pass through it: "+strings.Join(fixed, "; ")+".")
 	}
 	b.states[agentID] = typesv1.AgentState_AGENT_STATE_STARTING
+	delete(b.permission, agentID) // a prompt from before the start is gone
 	clone := ""
 	if a.OwnClone() {
 		clone = "/home/work/" + name
@@ -1021,6 +1026,7 @@ func (e *teamEngine) stopAgent(ctx context.Context, name, agentID string) (*daem
 	defer b.mu.Unlock()
 	b.states[agentID] = typesv1.AgentState_AGENT_STATE_STOPPED
 	delete(b.routines, agentID)
+	delete(b.permission, agentID)
 	b.tabs[agentID], b.panes[agentID] = nil, nil
 	info := e.infoLocked(b, a)
 	b.events = append(b.events, teamEvent{agent: info})
@@ -1119,6 +1125,7 @@ func (e *teamEngine) startApprovedLocked(ctx context.Context, name string, b *te
 		}
 		active++
 		b.states[id] = typesv1.AgentState_AGENT_STATE_STARTING
+		delete(b.permission, id)
 		b.events = append(b.events, teamEvent{agent: e.infoLocked(b, a)})
 		starting = append(starting, id)
 	}
@@ -1199,11 +1206,21 @@ func (e *teamEngine) infoLocked(b *teamBox, a *TeamAgent) *daemonv1.AgentInfo {
 	if pending > 0 && state == typesv1.AgentState_AGENT_STATE_RUNNING {
 		state = typesv1.AgentState_AGENT_STATE_NEEDS_YOU
 	}
+	// Its runner's permission prompt, while it runs (R-0412 item 18).
+	var permission *daemonv1.PermissionPrompt
+	if w := b.permission[a.ID]; w != nil && (state == typesv1.AgentState_AGENT_STATE_RUNNING || state == typesv1.AgentState_AGENT_STATE_NEEDS_YOU) {
+		state = typesv1.AgentState_AGENT_STATE_NEEDS_YOU
+		permission = &daemonv1.PermissionPrompt{Summary: w.summary, Since: timestamppb.New(w.since)}
+		if tabs := b.tabs[a.ID]; len(tabs) > 0 {
+			permission.TabId = tabs[0]
+		}
+	}
 	info := &daemonv1.AgentInfo{
 		Id: a.ID, Avatar: a.Avatar, Remote: a.Remote, Via: a.Via, State: state,
 		FileSha256: a.SHA256, Approved: a.Approved, TabIds: b.tabs[a.ID],
 		PendingDecisions: int32(min(pending, 1<<20)), // #nosec G115 -- bounded
 		HomeQuotaBytes:   defaultHomeQuota, Runner: a.RunnerLine, Grant: a.Grant,
+		Permission: permission,
 	}
 	if a.Spec != nil {
 		info.Name, info.Role = a.Spec.Name, a.Spec.Role

@@ -187,6 +187,10 @@ var commandRegistry = []cmdSpec{
 		Caller: agentOnly, Approval: "never", Flags: []cmdParam{jsonFlag},
 	},
 	{
+		Path: []string{"notify-permission"}, Summary: "Tell Portenv a permission prompt shows or ended (run by Claude Code's hooks, reading the hook's JSON on stdin).",
+		Caller: agentOnly, Approval: "never",
+	},
+	{
 		Path: []string{"team", "status"}, Summary: "Show the teammates' state, if the agent's grant allows it.",
 		Caller: agentOnly, Approval: "never", Flags: []cmdParam{jsonFlag},
 	},

@@ -7621,6 +7621,9 @@ type AgentInfo struct {
 	// Set when its file asks for share_login, which this build doesn't
 	// support: one plain line saying nothing is shared (R-0323).
 	ShareLoginOff string `protobuf:"bytes,21,opt,name=share_login_off,json=shareLoginOff,proto3" json:"share_login_off,omitempty"`
+	// It works in its own copy of the project (checkout: own), so it has a
+	// branch, agent/<id>, the owner can fetch (ADR 0022 §2a).
+	OwnClone      bool `protobuf:"varint,22,opt,name=own_clone,json=ownClone,proto3" json:"own_clone,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -7800,6 +7803,13 @@ func (x *AgentInfo) GetShareLoginOff() string {
 		return x.ShareLoginOff
 	}
 	return ""
+}
+
+func (x *AgentInfo) GetOwnClone() bool {
+	if x != nil {
+		return x.OwnClone
+	}
+	return false
 }
 
 type WatchTeamRequest struct {
@@ -10387,7 +10397,7 @@ const file_portenv_daemon_v1_daemon_proto_rawDesc = "" +
 	"\x17SetAgentsAllowedRequest\x12%\n" +
 	"\x0eagents_allowed\x18\x01 \x01(\x05R\ragentsAllowed\"b\n" +
 	"\x18SetAgentsAllowedResponse\x12F\n" +
-	"\bsettings\x18\x01 \x01(\v2*.portenv.daemon.v1.GetTeamSettingsResponseR\bsettings\"\xc1\x05\n" +
+	"\bsettings\x18\x01 \x01(\v2*.portenv.daemon.v1.GetTeamSettingsResponseR\bsettings\"\xde\x05\n" +
 	"\tAgentInfo\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
@@ -10412,7 +10422,8 @@ const file_portenv_daemon_v1_daemon_proto_rawDesc = "" +
 	"\x06status\x18\x12 \x01(\v2\x1d.portenv.types.v1.AgentStatusR\x06status\x125\n" +
 	"\broutines\x18\x13 \x03(\v2\x19.portenv.types.v1.RoutineR\broutines\x12!\n" +
 	"\froutines_off\x18\x14 \x01(\tR\vroutinesOff\x12&\n" +
-	"\x0fshare_login_off\x18\x15 \x01(\tR\rshareLoginOff\">\n" +
+	"\x0fshare_login_off\x18\x15 \x01(\tR\rshareLoginOff\x12\x1b\n" +
+	"\town_clone\x18\x16 \x01(\bR\bownClone\">\n" +
 	"\x10WatchTeamRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x16\n" +
 	"\x06cursor\x18\x02 \x01(\tR\x06cursor\"\xcb\x02\n" +

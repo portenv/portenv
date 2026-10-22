@@ -78,6 +78,9 @@ public protocol DaemonAPI: Sendable {
     func sendMessage(_ box: String, to agent: String, thread: String, text: String) async throws -> TeamMessage
     func startAgent(_ box: String, id: String) async throws -> TeamAgent
     func stopAgent(_ box: String, id: String) async throws -> TeamAgent
+    /// The owner's Fetch (ADR 0022 §2a): the agent's branch into the
+    /// owner's project as refs/remotes/agents/<id>, by portenvd's safe fetch.
+    func fetchAgentBranch(_ box: String, id: String) async throws -> FetchedBranch
     /// An agent file as portenvd has it, for Approve.
     func getAgentFile(_ box: String, id: String) async throws -> AgentFileContent
     /// Pins the agent file whose text hashes to `sha256`; only the owner's
@@ -125,6 +128,7 @@ public extension DaemonAPI {
     }
     func startAgent(_: String, id _: String) async throws -> TeamAgent { throw DaemonError(DaemonError.outOfDate) }
     func stopAgent(_: String, id _: String) async throws -> TeamAgent { throw DaemonError(DaemonError.outOfDate) }
+    func fetchAgentBranch(_: String, id _: String) async throws -> FetchedBranch { throw DaemonError(DaemonError.outOfDate) }
     func getAgentFile(_: String, id _: String) async throws -> AgentFileContent { throw DaemonError(DaemonError.outOfDate) }
     func approveAgentFile(_: String, id _: String, sha256 _: String) async throws -> TeamAgent { throw DaemonError(DaemonError.outOfDate) }
     func applyTeamPlan(_: String, githubToken _: String?) async throws -> TeamPlanApplied { throw DaemonError(DaemonError.outOfDate) }

@@ -331,7 +331,8 @@ func (e *teamEngine) handleCall(ctx context.Context, name string, c *agentv1.Tea
 			if to == me.ID || (to != boardOwner && !slices.Contains(g.GetMessage(), to)) {
 				continue
 			}
-			r := e.msgLocked(ctx, name, b, &team, me, &agentv1.Msg{To: to, Text: text, Type: typesv1.MessageType_MESSAGE_TYPE_NOTICE}, id)
+			r := e.msgLocked(ctx, name, b, &team, me, &agentv1.Msg{To: to, Text: text, Type: typesv1.MessageType_MESSAGE_TYPE_NOTICE}, id,
+				func(m *typesv1.BoardMessage) { m.SharedBranch = branch })
 			if !r.GetOk() {
 				return r
 			}
@@ -355,7 +356,9 @@ func (e *teamEngine) handleCall(ctx context.Context, name string, c *agentv1.Tea
 	return refuse(id, "Portenv doesn't know that command.")
 }
 
-func (e *teamEngine) msgLocked(ctx context.Context, name string, b *teamBox, team *Team, me *TeamAgent, m *agentv1.Msg, id string) *agentv1.TeamCallsRequest {
+// msgLocked posts an agent's message; set (if given) fills in what only
+// portenvd may say about it (a share's branch).
+func (e *teamEngine) msgLocked(ctx context.Context, name string, b *teamBox, team *Team, me *TeamAgent, m *agentv1.Msg, id string, set ...func(*typesv1.BoardMessage)) *agentv1.TeamCallsRequest {
 	to := m.GetTo()
 	if to != boardOwner && (team.agent(to) == nil || !slices.Contains(me.Grant.GetMessage(), to)) {
 		return refuse(id, "%s may not message %s (its grant's message list doesn't name it).", me.ID, to)
@@ -385,6 +388,9 @@ func (e *teamEngine) msgLocked(ctx context.Context, name string, b *teamBox, tea
 	msg := &typesv1.BoardMessage{Id: newULID(now), From: me.ID, To: to, ThreadId: m.GetThreadId(), Type: typ, Text: text, CreatedAt: timestamppb.New(now)}
 	if msg.ThreadId == "" {
 		msg.ThreadId = msg.Id
+	}
+	for _, f := range set {
+		f(msg)
 	}
 	if err := e.appendLocked(ctx, name, b, &agentv1.AppendBoardRequest{Line: &agentv1.AppendBoardRequest_Message{Message: msg}}); err != nil {
 		return refuse(id, "%v", err)
@@ -1207,6 +1213,7 @@ func (e *teamEngine) infoLocked(b *teamBox, a *TeamAgent) *daemonv1.AgentInfo {
 	info.Status = b.status[a.ID]
 	info.RoutinesOff = b.routinesOff[a.ID]
 	info.ShareLoginOff = shareLoginOffLine(a)
+	info.OwnClone = a.Spec != nil && a.OwnClone()
 	if info.RoutinesOff == "" && a.Spec != nil && !a.Remote {
 		info.RoutinesOff = idleOffLine(a.Runner, len(a.Spec.Routines) > 0)
 	}
@@ -1455,7 +1462,7 @@ func agentsMDBlock(team *Team, a *TeamAgent, workspace string) string {
 		cant = append(cant, "ask the owner for decisions")
 	}
 	if a.OwnClone() {
-		can = append(can, fmt.Sprintf("work in your own copy of the project, ~/%s, on branch %s, and say it's ready with portenv share once you've committed", workspace, agentBranch(a.ID)))
+		can = append(can, fmt.Sprintf("work in your own copy of the project, ~/%[1]s, on branch %[2]s, and say it's ready with portenv share once you've committed; the owner chooses Fetch in Portenv (or runs portenv app fetch-agent %[1]s %[3]s) to bring it into the project as agents/%[3]s", workspace, agentBranch(a.ID), a.ID))
 		cant = append(cant, fmt.Sprintf("change the owner's project in /home/work/%s (you can read it, and git fetch owner brings its new commits)", workspace))
 	}
 	if rc := g.GetReadClones(); len(rc) > 0 {

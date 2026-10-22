@@ -186,25 +186,32 @@ func TestAPrivateCloneKeepsTheSignInOnTheMac(t *testing.T) {
 	s, fake, c := servingProject(t, withGitHub(gh), func(s *Server) {
 		s.log = slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	})
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-	defer cancel()
+	// Each call has its own 20 s, so the scan in between doesn't count
+	// against the next call: it reads all of the temporary folder, which
+	// other tests and builds share, and took 26 to 31 s on a loaded Mac
+	// while each call took under 0.1 s.
+	call := func() context.Context {
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		t.Cleanup(cancel)
+		return ctx
+	}
 	state := filepath.Join(s.env.Dir, "state", "box-1")
 	if err := keepSetup(state, &daemonv1.WorkspaceSetup{Project: githubURL("https://github.com/acme/api", true), Team: approvedChoice(t, "starter")}); err != nil {
 		t.Fatal(err)
 	}
 	// No sign-in given: asked for, nothing done.
-	r, err := c.ApplyTeamPlan(ctx, &daemonv1.ApplyTeamPlanRequest{Name: "acme-api"})
+	r, err := c.ApplyTeamPlan(call(), &daemonv1.ApplyTeamPlanRequest{Name: "acme-api"})
 	if err != nil || !r.GetNeedsToken() || r.GetApplied() || len(gh.auths) != 0 || len(fake.clones) != 0 {
 		t.Fatalf("no token: %v %v %v", r, err, gh.auths)
 	}
 	// A sign-in GitHub refuses: the line, the setup kept.
-	r, err = c.ApplyTeamPlan(ctx, &daemonv1.ApplyTeamPlanRequest{Name: "acme-api", GithubToken: wrongToken})
+	r, err = c.ApplyTeamPlan(call(), &daemonv1.ApplyTeamPlanRequest{Name: "acme-api", GithubToken: wrongToken})
 	if err != nil || r.GetApplied() || !r.GetNeedsSignIn() || !strings.HasPrefix(r.GetProjectError(), "Your GitHub sign-in in Portenv has ended") || fake.writes != 0 {
 		t.Fatalf("a refused sign-in: %v %v", r, err)
 	}
 	scanFor(t, []byte(wrongToken), s.env.Dir, fake.root, os.TempDir())
 	// The right one.
-	r, err = c.ApplyTeamPlan(ctx, &daemonv1.ApplyTeamPlanRequest{Name: "acme-api", GithubToken: testToken})
+	r, err = c.ApplyTeamPlan(call(), &daemonv1.ApplyTeamPlanRequest{Name: "acme-api", GithubToken: testToken})
 	if err != nil || !r.GetApplied() || len(r.GetPinned()) != 3 {
 		t.Fatalf("with the sign-in: %v %v", r, err)
 	}

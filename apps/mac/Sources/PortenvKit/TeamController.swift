@@ -330,6 +330,36 @@ public final class TeamController {
         await perform { self.state.apply(.agent(try await self.daemon.stopAgent(self.box, id: agent))) }
     }
 
+    /// The last Fetch's line in each agent's column, by agent id.
+    public private(set) var fetchLines: [String: FetchLine] = [:]
+    private var fetching: Set<String> = []
+
+    public func fetchLine(for agent: String) -> FetchLine? { fetchLines[agent] }
+    public func isFetching(_ agent: String) -> Bool { fetching.contains(agent) }
+
+    /// Whether the agent's column offers Fetch (TeamFetch.canFetch).
+    public func canFetch(_ agent: TeamAgent) -> Bool {
+        TeamFetch.canFetch(agent, messages: state.conversation(with: agent.id))
+    }
+
+    /// The owner's Fetch (ADR 0022 §2a): the agent's branch into the
+    /// project as agents/<id>, by portenvd's FetchAgentBranch. Its line, or
+    /// portenvd's refusal, shows in the agent's column. One at a time per
+    /// agent.
+    public func fetch(_ agent: String) async {
+        guard !fetching.contains(agent) else { return }
+        fetching.insert(agent)
+        defer { fetching.remove(agent) }
+        do {
+            let r = try await daemon.fetchAgentBranch(box, id: agent)
+            fetchLines[agent] = FetchLine(text: TeamFetch.fetched(id: agent, commit: r.commit), failed: false)
+        } catch let e as DaemonError {
+            fetchLines[agent] = FetchLine(text: e.message, failed: true)
+        } catch {
+            fetchLines[agent] = FetchLine(text: error.localizedDescription, failed: true)
+        }
+    }
+
     /// The decisions shown in an agent's column: what it asks, and the
     /// team's first start while it names this agent.
     public func decisions(for agent: String) -> [TeamDecision] {

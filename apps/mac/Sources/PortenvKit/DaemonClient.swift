@@ -745,6 +745,14 @@ extension DaemonClient {
         return try await call { TeamAgent(try await api.stopAgent(req).agent) }
     }
 
+    public func fetchAgentBranch(_ box: String, id: String) async throws -> FetchedBranch {
+        let req = Portenv_Daemon_V1_FetchAgentBranchRequest.with { $0.name = box; $0.agentID = id }
+        return try await call {
+            let r = try await api.fetchAgentBranch(req)
+            return FetchedBranch(ref: r.ref, commit: r.commit)
+        }
+    }
+
     public func getAgentFile(_ box: String, id: String) async throws -> AgentFileContent {
         let req = Portenv_Daemon_V1_GetAgentFileRequest.with { $0.name = box; $0.agentID = id }
         return try await call {
@@ -815,7 +823,7 @@ extension TeamAgent {
                   runner: a.runner, grant: TeamGrant(a.grant),
                   workStatus: a.hasStatus ? AgentWorkStatus(a.status) : nil,
                   routines: a.routines.map { AgentRoutine(every: TimeInterval($0.everyMinutes) * 60, note: $0.note, paused: $0.paused) },
-                  routinesOff: a.routinesOff, shareLoginOff: a.shareLoginOff)
+                  routinesOff: a.routinesOff, shareLoginOff: a.shareLoginOff, ownClone: a.ownClone)
     }
 }
 
@@ -853,7 +861,7 @@ extension TeamMessage {
         case .answer, .unspecified, .UNRECOGNIZED: .answer
         }
         self.init(id: m.id, from: m.from, to: m.to, threadID: m.threadID, kind: kind, text: m.text,
-                  createdAt: m.hasCreatedAt ? m.createdAt.date : nil, about: m.about)
+                  createdAt: m.hasCreatedAt ? m.createdAt.date : nil, about: m.about, sharedBranch: m.sharedBranch)
     }
 }
 

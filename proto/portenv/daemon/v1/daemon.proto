@@ -1216,6 +1216,9 @@ message AgentInfo {
   // Set when its file asks for share_login, which this build doesn't
   // support: one plain line saying nothing is shared (R-0323).
   string share_login_off = 21;
+  // It works in its own copy of the project (checkout: own), so it has a
+  // branch, agent/<id>, the owner can fetch (ADR 0022 §2a).
+  bool own_clone = 22;
 }
 
 message WatchTeamRequest {

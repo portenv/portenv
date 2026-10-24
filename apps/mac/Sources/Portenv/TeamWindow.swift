@@ -94,8 +94,18 @@ struct TeamColumn: View {
                         Text(TeamMessageText.messagesWithYou).font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
                             .accessibilityAddTraits(.isHeader)
                         ForEach(team.state.conversation(with: agent.id)) { m in
-                            TeamMessageRow(message: m, sender: team.state.agent(m.from), team: team.state.agents)
-                                .id(m.id)
+                            VStack(alignment: .leading, spacing: 6) {
+                                TeamMessageRow(message: m, sender: team.state.agent(m.from), team: team.state.agents)
+                                // Its shared branch, fetched into your
+                                // project by portenvd (ADR 0022 §2a).
+                                if TeamFetch.shows(on: m, for: agent) {
+                                    Button(TeamFetch.button) { Task { await team.fetch(agent.id) } }
+                                        .disabled(team.isFetching(agent.id))
+                                        .accessibilityLabel(TeamFetch.menuTitle(agent.id))
+                                        .padding(.leading, 30)
+                                }
+                            }
+                            .id(m.id)
                         }
                         // What it asks you, and the team's first start
                         // while it names this agent, answered here

@@ -34,6 +34,17 @@ struct TeamControls: View {
                     if agent.status == .stopped {
                         Text(TeamText.word(agent.status)).font(.system(size: 11)).foregroundStyle(.secondary)
                     }
+                    // Its shared branch into your project (ADR 0022 §2a).
+                    if team.canFetch(agent) {
+                        Button(TeamFetch.menuTitle(agent.id)) { Task { await team.fetch(agent.id) } }
+                            .disabled(team.isFetching(agent.id))
+                    }
+                }
+                if let line = team.fetchLine(for: agent.id) {
+                    Text(verbatim: line.text).font(.system(size: 11))
+                        .foregroundStyle(line.failed ? SwiftUI.Color(nsColor: .systemRed) : .secondary)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 // Start waits for the team's first start: where to approve
                 // it, calmly, never as an error.

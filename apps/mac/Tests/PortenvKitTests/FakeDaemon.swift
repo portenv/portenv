@@ -280,6 +280,13 @@ final class FakeDaemon: DaemonAPI, @unchecked Sendable {
         try await record(["app", "stop-agent", box, id])
         return TeamAgent(id: id, name: id, status: .stopped)
     }
+    /// What fetchAgentBranch answers: the ref and the commit.
+    var fetched = ("", "")
+    func fetchAgentBranch(_ box: String, id: String) async throws -> FetchedBranch {
+        try await record(["app", "fetch-agent", box, id])
+        let (ref, commit) = lock.withLock { fetched }
+        return FetchedBranch(ref: ref, commit: commit)
+    }
     /// Each agent's file as getAgentFile returns it.
     var agentFiles: [String: AgentFileContent] = [:]
     func getAgentFile(_ box: String, id: String) async throws -> AgentFileContent {

@@ -80,6 +80,14 @@ service AgentService {
   rpc CloneProject(stream CloneProjectRequest) returns (CloneProjectResponse);
   // Whether the project folder exists, and the room left for it.
   rpc GetProjectRoom(GetProjectRoomRequest) returns (GetProjectRoomResponse);
+  // The owner's git name and email from the Mac (findings 21 and 22),
+  // written as work into work's ~/.gitconfig with git config --file, each
+  // only when work's git has none of its own (~/.gitconfig or
+  // ~/.config/git/config): what the owner set in the workspace is never
+  // replaced. Agents keep their own identities (ADR 0022). A value with a
+  // control or bidi character, an angle bracket or over the length limit is
+  // InvalidArgument; an empty one is left out.
+  rpc SetWorkGitIdentity(SetWorkGitIdentityRequest) returns (SetWorkGitIdentityResponse);
   // The bundle git-remote-portenv handed in for a push (R-0391), once:
   // it's deleted as it's read.
   rpc ReadPushBundle(ReadPushBundleRequest) returns (stream ReadPushBundleResponse);
@@ -993,4 +1001,17 @@ message GetProjectRoomResponse {
   bool exists = 1;
   // Free bytes on the workspace's disk, for work.
   uint64 free_bytes = 2;
+}
+
+message SetWorkGitIdentityRequest {
+  // user.name; empty: not offered.
+  string name = 1;
+  // user.email; empty: not offered.
+  string email = 2;
+}
+
+message SetWorkGitIdentityResponse {
+  // Whether each was written (false: work had its own, or none was offered).
+  bool name_set = 1;
+  bool email_set = 2;
 }

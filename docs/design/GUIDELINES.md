@@ -52,7 +52,7 @@ From top to bottom, left to right:
 | --- | --- | --- |
 | Toolbar (unified, 52 pt) | sidebar toggle · title button · flexible space · open-port pills · agent avatars · inspector toggle | Title button is the workspace's document menu |
 | Sidebar (leading, 248 pt) | Needs you · Team (You, the agents, Add Agent…) | Shown by default when the workspace has a team, ⌘0 toggles it (6.2) |
-| Tab bar (30 pt) | one tab per terminal session, `+` for a new tab | Tabs replace tmux's status bar, which is always hidden |
+| Tab bar (30 pt) | one tab per terminal session, `+` for a new tab (none in an agent's view), and Split Right and Split Down with You selected (§4.1) | Tabs replace tmux's status bar, which is always hidden |
 | Terminal | blocks, sticky header, inline answer card | Fills the remaining space |
 | Inspector (trailing, 260–400 pt, 300 by default) | Where it is · Saves · Who's here · Running now | Hidden by default, ⌥⌘I or toolbar button |
 
@@ -64,7 +64,7 @@ The title shows the workspace name, a sync symbol and a chevron; the line under 
 
 | Situation | Symbol | State line |
 | --- | --- | --- |
-| New workspace, never saved | none | `This Mac · Not saved yet` |
+| New workspace, never saved | none | `This Mac · New` (not a warning: nothing is missing yet) |
 | Saving | `arrow.triangle.2.circlepath` (animated, unless Reduce Motion) | `This Mac · Saving…` |
 | Saved | `checkmark.circle` | `This Mac · Saved at 14:58` (`Saved just now` for the first minute; from the next day `Saved yesterday at 23:43`, then `Saved on 9 Oct at 23:43`, with the year once it's another year; the words change at midnight with no new save) |
 | Offline | `icloud.slash`-style "not synced" symbol | `This Mac · Offline · will save later` |
@@ -146,8 +146,11 @@ A sheet on the window, the only confirmation in the app that asks for typing (Pr
 - Each tab is a persistent session in the workspace, so work survives the window closing, the Mac sleeping and the workspace moving.
 - tmux is plumbing. Its status bar is always off, its prefix key never surfaces, and nothing in the UI mentions it.
 - The app, not tmux, owns tab names, order, badges and the new-tab button.
+- **In an agent's view the tab strip has no + button: agents open their own tabs (owner, 2026-10-21).** You, All tabs and Team activity keep it (§6.2).
+- **Split Right and Split Down are You's, in the tab bar: agents split their own panes (owner, 2026-10-21, R-0410).** The two buttons sit next to `+` only while You is selected; the window's toolbar has none, in any view. Window › Split Right ⌘D and Split Down ⇧⌘D stay, and are disabled while an agent's view is in front.
 - **The tab bar's tabs are the workspace's terminal tabs;** macOS's own window tabs hold workspaces (§3.3).
 - **The current tab is marked by more than a shade** (§12): its name in semibold, and an accent line along its bottom edge, on top of the mockup's background. (A shade alone was too faint at the Mac, 2026-10-10.)
+- **Switching lands at the prompt** (the owner, 2026-10-22): choosing another agent, You or All tabs in the sidebar, or another tab in the bar, shows that tab scrolled to the bottom, at its live prompt and the cursor's line. The one exception: if the owner had scrolled up in that tab themselves and nothing new has arrived there since, their place holds. Output alone never moves the view while they read back; only a switch does (`TerminalLanding`). Each pane remembers, per tab it showed, only where the owner had scrolled to and the screen then; nothing is kept once the window closes.
 - **Each viewer keeps its own current tab.** The app and each agent see the same tabs, but choosing a tab moves only that viewer's terminal: an agent switching tabs never changes the owner's.
 - **Tab shortcuts:**
 
@@ -293,6 +296,7 @@ The Team section is the workspace's sidebar when the workspace has a team (agent
   2. **Needs you · <n>**, when a decision is pending: one row per decision, oldest first, with the question in one line and how long it has waited ("Waiting 6 min").
   3. **Team:** You first ("You", with your tab count), then one row per agent in agent-file order, then files that can't start, then **Add Agent…**.
 - An agent row: avatar, name, status as a word and a symbol, and the agent's latest board line, one line, truncated. Statuses: ▶ running (accent), ◌ idle, ■ stopped, ● needs you (orange), ⚠ can't start (red, with portenvd's reason as the line), starting. Colour never carries the status alone.
+- On the active (blue) selection, the selected row's status is drawn in the system's selected-content colour (white), not its own colour, which can't be read there (R-0411). Unselected rows and the inactive (grey) selection keep the status colours.
 - Remote agents (ADR 0022 §10) appear only once a remote way in exists, under **Connected from outside**, as connected or disconnected. Portenv never starts them.
 - **The agent limit** (R-0347): **Settings › Team › Agents allowed** is how many agents can run at once in one workspace, 1 to 8, 4 by default, for every workspace on the Mac. `portenvd` keeps and enforces it; the app only shows it. Its line: "How many agents can run at once in one workspace, from 1 to 8. Lowering it stops no agent that's running." Below the agent rows, the Team section shows `portenvd`'s line about it:
   - one short of the limit or at it, a quiet secondary line: "3 of 4 agents allowed in this workspace.", "4 of 4 agents allowed: the team is at your limit.";
@@ -301,7 +305,7 @@ The Team section is the workspace's sidebar when the workspace has a team (agent
   - A Start or Approve past the limit is refused by `portenvd` with one line under the button that says what to do: "Builder can't start: 4 agents are running in this workspace, and you allow 4. Stop one, or raise Agents allowed in Portenv's Settings › Team."
 
 **Selecting:**
-- **An agent:** its tabs expand beneath its row, the tab bar shows only its tabs (named "Builder · tests"), with **All tabs** at its trailing end, and its column takes the inspector's place: who it runs as, its runner and its pane grant ("Runs as user builder · Claude Code · may open 4 panes"), its messages with you, its Team section, its Agent files, and a field to message it (R-0313, R-0314).
+- **An agent:** its tabs expand beneath its row, the tab bar shows only its tabs (named "Builder · tests"), with no `+` or split buttons (§4.1) and **All tabs** at its trailing end, and its column takes the inspector's place: who it runs as, its runner and its pane grant ("Runs as user builder · Claude Code · may open 4 panes"), its messages with you, its Team section, its Agent files, and a field to message it (R-0313, R-0314).
   - **Messages with you** come first: what it sent you, what you sent it, and Portenv's notices to you about it.
   - **Team · <n>**, below them, **collapsed by default**: every other message this agent sent or received, oldest first. Each entry is one line, "Lead → Builder", the time and the message's first line; clicking it shows the whole text. Portenv's own notices about the agent (a routine's note, a status request, a start that failed) are in the same list, greyed, from "Portenv".
   - **The message field** is the column's last row: "Message Builder", with Send, and "Return to send · Shift-Return for a new line" under it. Return sends, Shift-Return starts a new line. It sends exactly what you typed, as you, to this agent only, through portenvd (an idle agent wakes to read it). Plain text, at most 8 KB. A refusal shows under the field in red, as one line that says what to do ("A message can be at most 8 KB; this one is 9.2 KB. Shorten it and send again."), and keeps what you typed.
@@ -319,6 +323,7 @@ The Team section is the workspace's sidebar when the workspace has a team (agent
 - An agent-file change shows its diff, and its `runner` line on its own, prominently: that's code that will run (R-0245).
 - A package decision lists every package with its exact version and the repository it comes from, and says "Installing runs these packages' setup scripts as root."
 - The first start of a team shows the residual-risk sentence from ADR 0022 §2.
+- While the team's first start waits for your Approve, every agent's Start is off, with a grey line under it that says where to approve: "Approve the team's first start above." in the column whose card it is, or "Approve the team's first start in Needs you." for an agent the card doesn't name. It's never an error line, and `portenvd`'s refusal for it (written for the CLI) is never shown in the app. Once approved, Start works as before.
 - An expired decision is greyed, with no Approve; it never becomes an approval.
 - A question with choices (`ask-owner --choice`, CC-0501) shows one button per choice, in order, full width and wrapping, in Approve's place, with no default button, then **Decline…**. Each label is plain text. Answered, it reads “Chose “<label>””. VoiceOver: “Choose “Option b: install deps”: <question>”.
 

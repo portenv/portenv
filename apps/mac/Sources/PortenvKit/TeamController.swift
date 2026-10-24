@@ -67,6 +67,7 @@ public final class TeamController {
             do {
                 for try await (event, cursor) in daemon.watchTeam(box, cursor: state.cursor) {
                     state.apply(event, cursor: cursor)
+                    saw(event)
                     if case .removed(let id) = event, selection == .agent(id) { selection = .allTabs }
                     didChange()
                 }
@@ -126,6 +127,7 @@ public final class TeamController {
 
     private func answered(_ d: TeamDecision) {
         state.apply(.decision(d))
+        saw(.decision(d))
         didChange()
         if selection == .decision(d.id), !d.answerable {
             let next = d.state == .approved ? d.startAgents.first { state.agent($0) != nil } : nil
@@ -142,6 +144,18 @@ public final class TeamController {
     public private(set) var setupProblem: SetupProblem?
     /// ApplyTeamPlan is working (a clone can take a while).
     public private(set) var settingUp = false
+    /// The kept GitHub project, OWNER/REPO, once portenvd has named it.
+    public private(set) var project: String?
+
+    /// The window's line while the project is brought in: "Cloning
+    /// OWNER/REPO…" once it's known (R-0409), else the general line; nil
+    /// when nothing is under way.
+    public var progressLine: String? { Self.progressLine(settingUp: settingUp, project: project) }
+
+    public static func progressLine(settingUp: Bool, project: String?) -> String? {
+        guard settingUp else { return nil }
+        return project.map(ProjectText.cloning) ?? ProjectText.settingUp
+    }
 
     /// Brings in the project and writes and pins the team New workspace
     /// kept, once the workspace is open (portenvd does it; nothing when
@@ -154,6 +168,7 @@ public final class TeamController {
         defer { settingUp = false }
         do {
             var r = try await daemon.applyTeamPlan(box, githubToken: nil)
+            if let p = r.project { project = p }
             if r.needsToken {
                 guard let token = try? await github.token(), !token.isEmpty else {
                     teamPlanChecked = true
@@ -161,6 +176,7 @@ public final class TeamController {
                     return
                 }
                 r = try await daemon.applyTeamPlan(box, githubToken: token)
+                if let p = r.project { project = p }
             }
             teamPlanChecked = true
             if let line = r.projectError, !line.isEmpty {
@@ -173,6 +189,10 @@ public final class TeamController {
             teamPlanChecked = true
         } catch {}
     }
+
+    /// Signed in from the window's line: tries the clone again at once,
+    /// showing its progress instead of the line (R-0409).
+    public func signedIn() async { await retrySetup() }
 
     /// The window's Try Again: portenvd still has the choice.
     public func retrySetup() async {
@@ -255,19 +275,54 @@ public final class TeamController {
     }
 
     /// Whether Start is on: a stopped agent of this workspace whose file
-    /// is approved (R-0285). Portenv never starts remote agents.
-    public func canStart(_ a: TeamAgent) -> Bool { a.approved && !a.remote && a.status == .stopped }
+    /// is approved (R-0285), while the team's first start isn't waiting
+    /// for the owner. Portenv never starts remote agents.
+    public func canStart(_ a: TeamAgent) -> Bool { a.approved && !a.remote && a.status == .stopped && !teamStartPending }
+
+    /// Agents whose Start portenvd refused because the team's first start
+    /// waits for the owner, before its decision reached the app (a race).
+    /// Cleared once the app has that decision.
+    private var refusedForTeamStart: Set<String> = []
+
+    /// Whether the team's first start waits for the owner's Approve: its
+    /// decision is pending, or portenvd just said so. Every agent's Start
+    /// waits for it.
+    public var teamStartPending: Bool {
+        !refusedForTeamStart.isEmpty || state.needsYou.contains { $0.kind == .teamStart }
+    }
+
+    /// The calm line under an agent's Start while the team's first start
+    /// waits: where to approve it. Above, when the card is in this agent's
+    /// column; otherwise in Needs you. Nil when Start isn't waiting for it.
+    public func startHint(_ a: TeamAgent) -> String? {
+        guard teamStartPending, a.approved, !a.remote, a.status == .stopped else { return nil }
+        let above = refusedForTeamStart.contains(a.id) || decisions(for: a.id).contains { $0.kind == .teamStart }
+        return above ? TeamText.approveTeamStartAbove : TeamText.approveTeamStartInNeedsYou
+    }
+
+    /// A team-start decision reached the app: it, not the refusal, now
+    /// says whether the first start waits.
+    private func saw(_ event: TeamEvent) {
+        if case .decision(let d) = event, d.kind == .teamStart { refusedForTeamStart = [] }
+    }
 
     /// Starts an agent whose file is approved. The team's first start waits
     /// for the owner's team-start decision, which names this agent;
-    /// approving it starts the agent in portenvd.
+    /// approving it starts the agent in portenvd. While that decision is
+    /// pending, Start waits (its hint says where to approve), and
+    /// portenvd's refusal for it, written for the CLI, is never shown.
     public func start(_ agent: String) async {
         if let a = state.agent(agent), !a.approved {
             error = TeamText.approveFirst(a.name)
             return
         }
+        guard !teamStartPending else { return }
         await perform {
-            self.state.apply(.agent(try await self.daemon.startAgent(self.box, id: agent)))
+            do {
+                self.state.apply(.agent(try await self.daemon.startAgent(self.box, id: agent)))
+            } catch let e as DaemonError where e.teamStartPending {
+                self.refusedForTeamStart.insert(agent)
+            }
         }
     }
 
@@ -346,6 +401,7 @@ public final class TeamController {
     /// Tests: an event as if from the stream.
     func receive(_ event: TeamEvent) {
         state.apply(event)
+        saw(event)
         didChange()
     }
 

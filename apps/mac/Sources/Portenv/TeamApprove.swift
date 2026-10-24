@@ -27,8 +27,9 @@ struct TeamControls: View {
                     } else {
                         Button(TeamText.start) { Task { await team.start(agent.id) } }
                             .disabled(!team.canStart(agent))
-                            .help(agent.approved ? "" : TeamText.approveFirst(agent.name))
+                            .help(agent.approved ? team.startHint(agent) ?? "" : TeamText.approveFirst(agent.name))
                             .accessibilityLabel("Start \(agent.name)")
+                            .accessibilityHint(team.startHint(agent) ?? "")
                     }
                     if agent.status == .stopped {
                         Text(TeamText.word(agent.status)).font(.system(size: 11)).foregroundStyle(.secondary)
@@ -43,6 +44,12 @@ struct TeamControls: View {
                     Text(verbatim: line.text).font(.system(size: 11))
                         .foregroundStyle(line.failed ? SwiftUI.Color(nsColor: .systemRed) : .secondary)
                         .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                // Start waits for the team's first start: where to approve
+                // it, calmly, never as an error.
+                if let hint = team.startHint(agent) {
+                    Text(hint).font(.system(size: 11)).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 // A failed Start, or why the start Approve set going

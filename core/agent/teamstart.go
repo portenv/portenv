@@ -157,6 +157,8 @@ func (s *apiServer) StartTeamAgent(ctx context.Context, req *agentv1.StartTeamAg
 			"TMPDIR=" + u.TmpDir,
 		},
 	}
+	// The Mac's time zone, as this start's shells get it (R-0411).
+	spec.Env = append(spec.Env, zoneEnv()...)
 	start := s.startAgentServer
 	if start == nil {
 		return nil, fail(codes.Unimplemented, "%v", errNoAgentServers)

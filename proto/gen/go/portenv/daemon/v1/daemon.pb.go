@@ -4519,7 +4519,9 @@ type ProjectSource struct {
 	//	*ProjectSource_GithubUrl
 	Source isProjectSource_Source `protobuf_oneof:"source"`
 	// Clone with the owner's GitHub sign-in (a private repository): the app
-	// passes it to ApplyTeamPlan, in memory; it's never kept.
+	// passes it to ApplyTeamPlan, in memory; it's never kept. False means
+	// "fetch plain first; use the sign-in only if GitHub refuses" (R-0413):
+	// portenvd then asks for it (needs_token) whatever was chosen at Create.
 	UseSignIn     bool `protobuf:"varint,3,opt,name=use_sign_in,json=useSignIn,proto3" json:"use_sign_in,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -7318,7 +7320,10 @@ type ApplyTeamPlanResponse struct {
 	NeedsSignIn bool `protobuf:"varint,5,opt,name=needs_sign_in,json=needsSignIn,proto3" json:"needs_sign_in,omitempty"`
 	// The kept setup clones with the owner's sign-in and none was given: the
 	// app reads it and calls again. Nothing was done.
-	NeedsToken    bool `protobuf:"varint,6,opt,name=needs_token,json=needsToken,proto3" json:"needs_token,omitempty"`
+	NeedsToken bool `protobuf:"varint,6,opt,name=needs_token,json=needsToken,proto3" json:"needs_token,omitempty"`
+	// The kept GitHub project, as OWNER/REPO, when it wasn't brought in: the
+	// window says "Cloning OWNER/REPO…" while the next try runs (R-0409).
+	Project       string `protobuf:"bytes,7,opt,name=project,proto3" json:"project,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -7393,6 +7398,13 @@ func (x *ApplyTeamPlanResponse) GetNeedsToken() bool {
 		return x.NeedsToken
 	}
 	return false
+}
+
+func (x *ApplyTeamPlanResponse) GetProject() string {
+	if x != nil {
+		return x.Project
+	}
+	return ""
 }
 
 type GetTeamSettingsRequest struct {
@@ -10380,7 +10392,7 @@ const file_portenv_daemon_v1_daemon_proto_rawDesc = "" +
 	"\bproblems\x18\x16 \x03(\tR\bproblems\"M\n" +
 	"\x14ApplyTeamPlanRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12!\n" +
-	"\fgithub_token\x18\x02 \x01(\tR\vgithubToken\"\xc9\x01\n" +
+	"\fgithub_token\x18\x02 \x01(\tR\vgithubToken\"\xe3\x01\n" +
 	"\x15ApplyTeamPlanResponse\x12\x18\n" +
 	"\aapplied\x18\x01 \x01(\bR\aapplied\x12\x16\n" +
 	"\x06pinned\x18\x02 \x03(\tR\x06pinned\x12\x14\n" +
@@ -10388,7 +10400,8 @@ const file_portenv_daemon_v1_daemon_proto_rawDesc = "" +
 	"\rproject_error\x18\x04 \x01(\tR\fprojectError\x12\"\n" +
 	"\rneeds_sign_in\x18\x05 \x01(\bR\vneedsSignIn\x12\x1f\n" +
 	"\vneeds_token\x18\x06 \x01(\bR\n" +
-	"needsToken\"\x18\n" +
+	"needsToken\x12\x18\n" +
+	"\aproject\x18\a \x01(\tR\aproject\"\x18\n" +
 	"\x16GetTeamSettingsRequest\"\xa4\x01\n" +
 	"\x17GetTeamSettingsResponse\x12%\n" +
 	"\x0eagents_allowed\x18\x01 \x01(\x05R\ragentsAllowed\x124\n" +

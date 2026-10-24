@@ -139,6 +139,11 @@ service AgentService {
   // checks. The helper writes the line itself; no message text is ever
   // typed, and from must be an agent id or "owner".
   rpc WakeAgent(WakeAgentRequest) returns (WakeAgentResponse);
+  // Sets the workspace's clock to the Mac's time zone (R-0411), at each
+  // start: init links /etc/localtime to the zone in the image's tz
+  // database, and every later shell and agent runner gets TZ. A name
+  // that isn't a known IANA zone falls back to UTC.
+  rpc SetTimeZone(SetTimeZoneRequest) returns (SetTimeZoneResponse);
 }
 
 message RunResticRequest {
@@ -941,6 +946,16 @@ message WakeAgentRequest {
 }
 
 message WakeAgentResponse {}
+
+message SetTimeZoneRequest {
+  // An IANA zone name, such as "Europe/Paris"; never "Local".
+  string zone = 1;
+}
+
+message SetTimeZoneResponse {
+  // The zone the workspace now uses: the one asked for, or "UTC".
+  string zone = 1;
+}
 
 message WriteAgentFilesRequest {
   // The project folder, /home/work/<workspace>.

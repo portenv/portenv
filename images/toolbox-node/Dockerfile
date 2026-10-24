@@ -84,7 +84,7 @@ RUN userdel --remove ubuntu \
  && apt-get install -y --no-install-recommends \
       acl build-essential ca-certificates curl git gnupg jq less libcap2-bin locales \
       openssh-client postgresql-client procps python3 python3-pip \
-      python3-venv ripgrep sudo 'tmux=3.4-*' unzip xz-utils \
+      python3-venv ripgrep sudo 'tmux=3.4-*' tzdata unzip xz-utils \
  && rm -rf /var/lib/apt/lists/*
 
 RUN case "$TARGETARCH" in \

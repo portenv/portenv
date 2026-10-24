@@ -623,3 +623,16 @@ public enum TerminalLabel {
         return "No tab open"
     }
 }
+
+/// How a Team sidebar row draws its status (R-0411): on the active (blue)
+/// selection, in the selected-content colour, since its own colour can't be
+/// read there; an unselected row and the inactive (grey) selection keep the
+/// status's colour (GUIDELINES 6.2).
+public enum TeamStatusInk: Equatable, Sendable {
+    case status
+    case selectedContent
+
+    public static func of(selected: Bool, activeSelection: Bool) -> TeamStatusInk {
+        selected && activeSelection ? .selectedContent : .status
+    }
+}

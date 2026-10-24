@@ -18,7 +18,7 @@ struct StateLineTests {
         #expect(s?.save == .saved)
         #expect(s?.location == "portenv@server-a")
         #expect(s?.line(now: later, timeZone: utc, locale: gb) == "server-a · Saved at 09:42")
-        #expect(BoxState.parse(#"{"state":"SAVE_STATE_NOT_SAVED_YET"}"#)?.line() == "This Mac · Not saved yet")
+        #expect(BoxState.parse(#"{"state":"SAVE_STATE_NOT_SAVED_YET"}"#)?.line() == "This Mac · New")
         #expect(BoxState.parse(#"{"state":"SAVE_STATE_RETRYING","saved_at":"2026-10-08T09:42:00Z"}"#)?.save == .retrying)
         #expect(BoxState.parse("not json") == nil)
     }
@@ -26,14 +26,14 @@ struct StateLineTests {
 
 @MainActor
 struct BoxControllerTests {
-    /// A successful open says nothing about saves: a new box shows "Not
-    /// saved yet" because that is what portenvd records.
-    @Test func aNewBoxShowsNotSavedYet() async {
+    /// A successful open says nothing about saves: a new box shows "New"
+    /// because that is what portenvd records (never saved).
+    @Test func aNewBoxShowsNew() async {
         let cli = FakeDaemon()
         let c = BoxController(box: "demo", daemon: cli)
         await c.open()
         #expect(c.location == .thisMac)
-        #expect(c.subtitle == "This Mac · Not saved yet")
+        #expect(c.subtitle == "This Mac · New")
         #expect(c.servers == ["portenv@server-a"])
     }
 

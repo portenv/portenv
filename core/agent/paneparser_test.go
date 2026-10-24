@@ -368,27 +368,49 @@ func TestPaneParserMarksAfterScrollingInOneChunk(t *testing.T) {
 	}
 }
 
-// drainGoroutines counts the parsers' reply-draining goroutines.
-func drainGoroutines() int {
+// drainGoroutines is the set of the parsers' reply-draining goroutines, by
+// goroutine ID. IDs are never reused, so a test counts only the drains that
+// started after its own snapshot: a drain from an earlier test still on its
+// way out (its pipe closed, its goroutine not yet gone) is not one of them.
+func drainGoroutines() map[string]bool {
 	buf := make([]byte, 1<<22)
 	buf = buf[:runtime.Stack(buf, true)]
-	return bytes.Count(buf, []byte("agent.(*paneParser).start.func1"))
+	ids := map[string]bool{}
+	for _, g := range bytes.Split(buf, []byte("\n\n")) {
+		if !bytes.Contains(g, []byte("agent.(*paneParser).start.func1")) {
+			continue
+		}
+		// "goroutine 123 [state]:"
+		if f := bytes.Fields(g); len(f) > 1 && string(f[0]) == "goroutine" {
+			ids[string(f[1])] = true
+		}
+	}
+	return ids
 }
 
 // Each parser has one reply-draining goroutine: a panic's restart ends the
 // old one, and stop ends the last (R-0176).
 func TestPaneParserDrainGoroutinesEnd(t *testing.T) {
+	before := drainGoroutines()
+	ours := func() int {
+		n := 0
+		for id := range drainGoroutines() {
+			if !before[id] {
+				n++
+			}
+		}
+		return n
+	}
 	waitFor := func(want int, what string) {
 		t.Helper()
 		end := time.Now().Add(3 * time.Second)
-		for drainGoroutines() != want && time.Now().Before(end) {
+		for ours() != want && time.Now().Before(end) {
 			time.Sleep(10 * time.Millisecond)
 		}
-		if n := drainGoroutines(); n != want {
+		if n := ours(); n != want {
 			t.Fatalf("%s: %d drain goroutines, want %d", what, n, want)
 		}
 	}
-	before := drainGoroutines()
 	var ps []*paneParser
 	for range 20 {
 		p := newPaneParser(80, 24, t.Logf)
@@ -403,15 +425,15 @@ func TestPaneParserDrainGoroutinesEnd(t *testing.T) {
 		p.feed([]byte("\x1b[c hello"))
 		ps = append(ps, p)
 	}
-	waitFor(before+20, "after restarts")
+	waitFor(20, "after restarts")
 	for _, p := range ps {
 		p.restart()
 	}
-	waitFor(before+20, "after restarting each")
+	waitFor(20, "after restarting each")
 	for _, p := range ps {
 		p.stop()
 	}
-	waitFor(before, "after stopping each")
+	waitFor(0, "after stopping each")
 }
 
 // A full reset (RIS) or a soft reset (DECSTR) clears the pen and bracketed

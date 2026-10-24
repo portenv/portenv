@@ -773,7 +773,8 @@ extension DaemonClient {
         let r = try await call { try await api.applyTeamPlan(req) }
         return TeamPlanApplied(applied: r.applied, pinned: r.pinned, lines: r.lines.map { TeamText.line($0, max: 300) },
                                projectError: r.projectError.isEmpty ? nil : TeamText.line(r.projectError, max: 300),
-                               needsSignIn: r.needsSignIn, needsToken: r.needsToken)
+                               needsSignIn: r.needsSignIn, needsToken: r.needsToken,
+                               project: r.project.isEmpty ? nil : TeamText.line(r.project, max: 140))
     }
 
     public func agentsAllowed() async throws -> Int {

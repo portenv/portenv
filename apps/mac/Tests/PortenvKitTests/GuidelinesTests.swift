@@ -21,7 +21,7 @@ struct StateLineTableTests {
 
     @Test func newBoxNeverSaved() {
         let s = BoxState(save: .notSavedYet)
-        #expect(line(s) == "This Mac · Not saved yet")
+        #expect(line(s) == "This Mac · New")
         #expect(s.symbol == nil)
     }
 
@@ -156,6 +156,8 @@ struct AccessibilityLabelTests {
         #expect(A11y.symbolLabel(BoxState(save: .saving)) == "Saving")
         #expect(A11y.symbolLabel(BoxState(save: .offline)) == "Offline")
         #expect(A11y.symbolLabel(BoxState(save: .agentUnavailable)) == "Not saved")
+        // A new workspace, until its first save: "New", not a warning.
+        #expect(A11y.symbolLabel(BoxState(save: .notSavedYet)) == "New")
         #expect(A11y.terminal(box: "acme-api") == "Terminal in acme-api")
     }
 

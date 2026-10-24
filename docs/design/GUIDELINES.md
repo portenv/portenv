@@ -64,7 +64,7 @@ The title shows the workspace name, a sync symbol and a chevron; the line under 
 
 | Situation | Symbol | State line |
 | --- | --- | --- |
-| New workspace, never saved | none | `This Mac · Not saved yet` |
+| New workspace, never saved | none | `This Mac · New` (not a warning: nothing is missing yet) |
 | Saving | `arrow.triangle.2.circlepath` (animated, unless Reduce Motion) | `This Mac · Saving…` |
 | Saved | `checkmark.circle` | `This Mac · Saved at 14:58` (`Saved just now` for the first minute; from the next day `Saved yesterday at 23:43`, then `Saved on 9 Oct at 23:43`, with the year once it's another year; the words change at midnight with no new save) |
 | Offline | `icloud.slash`-style "not synced" symbol | `This Mac · Offline · will save later` |

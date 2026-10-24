@@ -286,9 +286,12 @@ final class FakeDaemon: DaemonAPI, @unchecked Sendable {
     var applied = TeamPlanApplied(applied: false)
     /// Answers in turn before `applied` (a needed sign-in, a failed clone).
     var appliedFirst: [TeamPlanApplied] = []
+    /// An ApplyTeamPlan with the sign-in takes this long (a clone).
+    var applyDelay: Duration?
     func applyTeamPlan(_ box: String, githubToken: String?) async throws -> TeamPlanApplied {
         // The sign-in is recorded only as whether one was given.
         try await record(["app", "apply-team-plan", box, githubToken == nil ? "no-token" : "token"])
+        if githubToken != nil, let d = lock.withLock({ applyDelay }) { try? await Task.sleep(for: d) }
         return lock.withLock { appliedFirst.isEmpty ? applied : appliedFirst.removeFirst() }
     }
     /// The workspace's repository and whether pushes are allowed.

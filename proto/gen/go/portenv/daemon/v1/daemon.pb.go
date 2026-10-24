@@ -4519,7 +4519,9 @@ type ProjectSource struct {
 	//	*ProjectSource_GithubUrl
 	Source isProjectSource_Source `protobuf_oneof:"source"`
 	// Clone with the owner's GitHub sign-in (a private repository): the app
-	// passes it to ApplyTeamPlan, in memory; it's never kept.
+	// passes it to ApplyTeamPlan, in memory; it's never kept. False means
+	// "fetch plain first; use the sign-in only if GitHub refuses" (R-0413):
+	// portenvd then asks for it (needs_token) whatever was chosen at Create.
 	UseSignIn     bool `protobuf:"varint,3,opt,name=use_sign_in,json=useSignIn,proto3" json:"use_sign_in,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

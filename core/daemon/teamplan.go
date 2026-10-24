@@ -463,6 +463,10 @@ func (s *Server) cloneProject(ctx context.Context, h agentv1.AgentServiceClient,
 	if src.GetUseSignIn() && token == "" {
 		return &cloneOutcome{needToken: true}
 	}
+	// A repository kept without the sign-in is fetched plainly first: a
+	// public one is never sent it. Only when GitHub refuses that fetch is
+	// the sign-in used (the owner may have signed in since Create).
+	signIn := token
 	if !src.GetUseSignIn() {
 		token = ""
 	}
@@ -505,6 +509,19 @@ func (s *Server) cloneProject(ctx context.Context, h agentv1.AgentServiceClient,
 		return &cloneOutcome{line: "Portenv couldn\u2019t clone " + repo.String() + ". Try again."}
 	}
 	got, err := githubrepo.FetchBundle(ctx, client, gitBase+"/"+repo.Owner+"/"+repo.Name, token, f, limit)
+	if errors.Is(err, githubrepo.ErrNeedsSignIn) && token == "" {
+		if signIn == "" {
+			return &cloneOutcome{needToken: true} // the app reads the Keychain, or says to sign in
+		}
+		token = signIn
+		if err := f.Truncate(0); err != nil {
+			return &cloneOutcome{line: "Portenv couldn\u2019t clone " + repo.String() + ". Try again."}
+		}
+		if _, err := f.Seek(0, 0); err != nil {
+			return &cloneOutcome{line: "Portenv couldn\u2019t clone " + repo.String() + ". Try again."}
+		}
+		got, err = githubrepo.FetchBundle(ctx, client, gitBase+"/"+repo.Owner+"/"+repo.Name, token, f, limit)
+	}
 	switch {
 	case errors.Is(err, githubrepo.ErrNeedsSignIn) && token != "":
 		return &cloneOutcome{line: signInEndedLine, needsSignIn: true}

@@ -51,6 +51,9 @@ final class AppModel {
     /// Show on a workspace with no window: opened in the next new window
     /// tab, with the decision selected.
     @ObservationIgnored private var pendingShow: (box: String, decision: String)?
+    /// File › New Workspace… with a workspace in front: the next new
+    /// window tab starts the flow (R-0404).
+    @ObservationIgnored private var pendingNewBox = false
 
     /// A new window's session. Its controller brings this window (its tab)
     /// forward before a read that may raise a Keychain prompt (R-0214).
@@ -82,7 +85,13 @@ final class AppModel {
                 session.team?.show(decision: decision)
             }
         }
+        if launchClaimed, pendingNewBox {
+            pendingNewBox = false
+            newBox(in: session)
+        }
         guard !launchClaimed else { return }
+        // The launch window shows the launch's own screens.
+        pendingNewBox = false
         // A notification is for a workspace whose tab isn't in front.
         Notifier.frontWorkspace = { [sessions] in
             sessions.all.first { $0.window != nil && $0.window === NSApp.mainWindow }?.box
@@ -179,6 +188,9 @@ final class AppModel {
             },
             report: { [weak self] report in self?.waiting(report) },
             sleep: { try? await Task.sleep(for: $0) },
+            // Once per wait, silently, before any line shows (R-0401):
+            // what fixed a rebuilt app's refused portenvd by hand.
+            reRegister: { await LoginItemRestarter().hard() },
             boxes: { [daemon] in
                 // After an in-place update the running portenvd is still the
                 // old one: restart it here, saying so, rather than "out of
@@ -538,6 +550,24 @@ final class AppModel {
                                 githubLogin: { GitHubAccount.system.login }, repoAccess: GitHubRepoAccess())
         service.keychainWaiting = { [weak flow] on in Task { @MainActor in flow?.keychainWaiting = on } }
         return flow
+    }
+
+    /// File › New Workspace… (⇧⌘N, R-0404): the list's New Workspace flow
+    /// in the window in front (the launch window when none is); a window
+    /// showing a workspace keeps it and the flow opens in a new tab.
+    func newWorkspace() {
+        NewWorkspaceCommand.perform(
+            front: sessions.current, launchWindow: launchSession, launch: launch,
+            start: { s in
+                newBox(in: s)
+                s.bringForward()
+            },
+            openTab: {
+                pendingNewBox = true
+                WorkspaceWindows.open?()
+            },
+            bringForward: { $0.bringForward() }
+        )
     }
 
     /// The box list's New Box…: first run's first-box step, titled "New

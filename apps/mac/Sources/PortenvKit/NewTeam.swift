@@ -450,3 +450,27 @@ public extension AvatarLook {
         return AvatarLook(symbol: nil, initial: a.name.first.map { String($0).uppercased() } ?? "?", colour: colour)
     }
 }
+
+/// How many columns New workspace's choice cards take at a width: as many
+/// as fit at their minimum width, in balanced rows (2 + 2, not 3 + 1), so
+/// a step never runs wider than its window.
+public enum CardColumns {
+    public static let minimumWidth: CGFloat = 200
+    public static let spacing: CGFloat = 10
+
+    /// Never more than four in a row, however wide the window.
+    public static let maximum = 4
+
+    public static func count(cards: Int, width: CGFloat) -> Int {
+        guard cards > 0 else { return 1 }
+        let fit = max(1, Int(((width + spacing) / (minimumWidth + spacing)).rounded(.down)))
+        let most = min(fit, maximum, cards)
+        let rows = (cards + most - 1) / most
+        return (cards + rows - 1) / rows
+    }
+
+    public static func columnWidth(columns: Int, width: CGFloat) -> CGFloat {
+        let n = CGFloat(max(1, columns))
+        return (width - (n - 1) * spacing) / n
+    }
+}

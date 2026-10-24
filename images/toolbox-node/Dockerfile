@@ -8,8 +8,9 @@
 #   docker build -f images/toolbox-node/Dockerfile -t portenv/toolbox-node:dev .
 #
 # Base images are Docker Hub's official images, pinned by digest (the same
-# bytes wherever they're pulled from). BASE says where from: ECR Public's
-# copy by default, which anyone can pull. CI pulls them from
+# bytes wherever they're pulled from). BASE says where from: mirror.gcr.io,
+# Google's public mirror of Docker Hub, by default, which anyone can pull. CI
+# pulls them from
 # ghcr.io/portenv/base (BASE, and BUILDKIT_SYNTAX for the frontend; see
 # scripts/base-images.sh and .github/workflows/base-images.yml), because
 # anonymous pulls from shared runners were refused with "429 Too Many
@@ -19,7 +20,7 @@
 # /home travels. Nothing may depend on Docker-only features (the same image
 # runs on Apple Containerization and microVMs).
 
-ARG BASE=public.ecr.aws/docker/library
+ARG BASE=mirror.gcr.io/library
 
 # --- restic, built from source at the pinned version -----------------------
 FROM --platform=$BUILDPLATFORM ${BASE}/golang:1.26.7-bookworm@sha256:e8c859f5632dcfde7b32d2012b4351728f6437930887c2f6a91ea242459e5514 AS restic

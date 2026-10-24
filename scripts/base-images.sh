@@ -15,7 +15,8 @@
 #                          writes base= and syntax= (the BASE and
 #                          BUILDKIT_SYNTAX build arguments) to $GITHUB_OUTPUT
 #                          and PORTENV_BASE to $GITHUB_ENV; otherwise the
-#                          Dockerfile's public defaults, with a warning
+#                          Dockerfile's default (mirror.gcr.io), with a
+#                          warning
 #
 # Digests never change here: an image is copied with its digest preserved
 # and checked against the pinned one, and a build pulls it by that digest.
@@ -28,7 +29,7 @@ list() {
 	# The frontend: # syntax=REGISTRY/docker/dockerfile:TAG@DIGEST
 	sed -nE 's|^# syntax=[^ ]*/docker/dockerfile:([^@ ]+)@(sha256:[0-9a-f]{64})$|dockerfile \1 \2 mirror.gcr.io/docker/dockerfile docker.io/docker/dockerfile|p' "$dockerfile"
 	# The bases: FROM ... ${BASE}/NAME:TAG@DIGEST, Docker Hub's official images.
-	sed -nE 's|^FROM .*\$\{BASE\}/([a-z0-9-]+):([^@ ]+)@(sha256:[0-9a-f]{64}).*$|\1 \2 \3 public.ecr.aws/docker/library/\1 mirror.gcr.io/library/\1 docker.io/library/\1|p' "$dockerfile" | sort -u
+	sed -nE 's|^FROM .*\$\{BASE\}/([a-z0-9-]+):([^@ ]+)@(sha256:[0-9a-f]{64}).*$|\1 \2 \3 mirror.gcr.io/library/\1 public.ecr.aws/docker/library/\1 docker.io/library/\1|p' "$dockerfile" | sort -u
 }
 
 # digest_of REF: the sha256 of REF's manifest (an index, for a multi-arch image).
@@ -79,9 +80,9 @@ choose() {
 	done < <(list)
 	if [[ -n $missing ]]; then
 		echo "::warning::Not in $mirror yet:$missing. Pulling the base images from their public registries (they may refuse with 429); the Base images workflow copies them."
-		echo "base=public.ecr.aws/docker/library" >>"$GITHUB_OUTPUT"
+		echo "base=mirror.gcr.io/library" >>"$GITHUB_OUTPUT"
 		echo "syntax=" >>"$GITHUB_OUTPUT"
-		echo "PORTENV_BASE=public.ecr.aws/docker/library" >>"$GITHUB_ENV"
+		echo "PORTENV_BASE=mirror.gcr.io/library" >>"$GITHUB_ENV"
 		return
 	fi
 	echo "base=$mirror" >>"$GITHUB_OUTPUT"

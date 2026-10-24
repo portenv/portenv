@@ -41,15 +41,29 @@ func testTabsCmd(t *testing.T) (tabs, func(args ...string) string, tmuxCmdFunc) 
 		t.Skip("tmux not installed")
 	}
 	sock := fmt.Sprintf("portenv-tabs-test-%d-%d", os.Getpid(), time.Now().UnixNano())
-	conf := filepath.Join(t.TempDir(), "tmux.conf")
-	if err := os.WriteFile(conf, []byte("set -g allow-rename on\nsetw -g automatic-rename on\n"), 0o600); err != nil {
+	dir := t.TempDir()
+	conf := filepath.Join(dir, "tmux.conf")
+	// The tabs' shell is /bin/sh, in a home of the test's own, with no
+	// history file: never the person's login shell and its config (a zsh
+	// config took seconds to start on a loaded Mac, past the tests' waits
+	// for a typed command's output), and never a write to the real home
+	// (bash saved the typed commands to ~/.bash_history when tmux hung up,
+	// which core/local's TestCheckWritesNothing, running at the same time,
+	// saw as Check's write).
+	home := filepath.Join(dir, "home")
+	if err := os.Mkdir(home, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	run := func(ctx context.Context, args ...string) (string, error) {
-		cmd := exec.CommandContext(ctx, "tmux", append([]string{"-L", sock, "-f", conf}, args...)...) // #nosec G204 -- test
+	if err := os.WriteFile(conf, []byte("set -g default-shell /bin/sh\nset -g allow-rename on\nsetw -g automatic-rename on\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	env := append(os.Environ(), "HOME="+home, "SHELL=/bin/sh", "HISTFILE=", "ENV=",
 		// The agent runs tmux with LANG=C.UTF-8 (envFor); without a UTF-8
 		// locale tmux prints the tab separator in formats as "_".
-		cmd.Env = append(os.Environ(), "LANG=C.UTF-8")
+		"LANG=C.UTF-8")
+	run := func(ctx context.Context, args ...string) (string, error) {
+		cmd := exec.CommandContext(ctx, "tmux", append([]string{"-L", sock, "-f", conf}, args...)...) // #nosec G204 -- test
+		cmd.Env = env
 		out, err := cmd.CombinedOutput()
 		if err != nil {
 			return string(out), fmt.Errorf("tmux %s: %w: %s", args[0], err, strings.TrimSpace(string(out)))
@@ -67,7 +81,7 @@ func testTabsCmd(t *testing.T) (tabs, func(args ...string) string, tmuxCmdFunc) 
 	}
 	cmdf := func(ctx context.Context, args ...string) *exec.Cmd {
 		cmd := exec.CommandContext(ctx, "tmux", append([]string{"-L", sock, "-f", conf}, args...)...) // #nosec G204 -- test
-		cmd.Env = append(os.Environ(), "LANG=C.UTF-8")
+		cmd.Env = env
 		return cmd
 	}
 	return tabs{tmux: run, session: "main"}, raw, cmdf
@@ -347,8 +361,7 @@ func TestTabsSayWhatIsRunning(t *testing.T) {
 		t.Fatalf("an idle shell reports program %q, want none", p)
 	}
 	raw("send-keys", "-t", ts[0].GetId(), "sleep 30", "Enter")
-	// Wait for sleep itself: the person's shell config may briefly run
-	// other programs (a grep) as the shell starts.
+	// Wait for sleep itself: it starts after the shell reads the line.
 	var p string
 	for range 50 {
 		if p = mustList(t, tb)[0].GetProgram(); p == "sleep" {

@@ -94,6 +94,8 @@ const (
 	DaemonService_AnswerPush_FullMethodName            = "/portenv.daemon.v1.DaemonService/AnswerPush"
 	DaemonService_GetPushes_FullMethodName             = "/portenv.daemon.v1.DaemonService/GetPushes"
 	DaemonService_StopAllowingPushes_FullMethodName    = "/portenv.daemon.v1.DaemonService/StopAllowingPushes"
+	DaemonService_GetDeletePlan_FullMethodName         = "/portenv.daemon.v1.DaemonService/GetDeletePlan"
+	DaemonService_DeleteBox_FullMethodName             = "/portenv.daemon.v1.DaemonService/DeleteBox"
 )
 
 // DaemonServiceClient is the client API for DaemonService service.
@@ -317,6 +319,21 @@ type DaemonServiceClient interface {
 	// on the Mac), and the inspector's Stop Allowing Pushes.
 	GetPushes(ctx context.Context, in *GetPushesRequest, opts ...grpc.CallOption) (*GetPushesResponse, error)
 	StopAllowingPushes(ctx context.Context, in *StopAllowingPushesRequest, opts ...grpc.CallOption) (*StopAllowingPushesResponse, error)
+	// Delete Workspace… (ADR 0029): what deleting the box would remove and
+	// whether it can be deleted now, for the confirmation sheet. Read only:
+	// it needs no key and runs no restic.
+	GetDeletePlan(ctx context.Context, in *GetDeletePlanRequest, opts ...grpc.CallOption) (*GetDeletePlanResponse, error)
+	// Deletes a box (ADR 0029), only for the person at this Mac (the app or
+	// the CLI; never an agent), in a fixed order, each step safe to repeat:
+	// the checks (the typed name, not open or saving here, not moving or on
+	// a server, saves elsewhere confirmed, no other machine holding the
+	// lease); the instance; the home storage; the saves on this Mac (saves
+	// elsewhere are left where they are, and so is the key); then, when the
+	// saves are gone, the app deletes the key from the Keychain and calls
+	// again with keys_deleted; last, portenvd's record. A failure records the
+	// step it stopped at (ListBoxes shows it, OpenBox refuses the box) and a
+	// call again continues from there.
+	DeleteBox(ctx context.Context, in *DeleteBoxRequest, opts ...grpc.CallOption) (*DeleteBoxResponse, error)
 }
 
 type daemonServiceClient struct {
@@ -1071,6 +1088,26 @@ func (c *daemonServiceClient) StopAllowingPushes(ctx context.Context, in *StopAl
 	return out, nil
 }
 
+func (c *daemonServiceClient) GetDeletePlan(ctx context.Context, in *GetDeletePlanRequest, opts ...grpc.CallOption) (*GetDeletePlanResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetDeletePlanResponse)
+	err := c.cc.Invoke(ctx, DaemonService_GetDeletePlan_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) DeleteBox(ctx context.Context, in *DeleteBoxRequest, opts ...grpc.CallOption) (*DeleteBoxResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteBoxResponse)
+	err := c.cc.Invoke(ctx, DaemonService_DeleteBox_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DaemonServiceServer is the server API for DaemonService service.
 // All implementations must embed UnimplementedDaemonServiceServer
 // for forward compatibility.
@@ -1292,6 +1329,21 @@ type DaemonServiceServer interface {
 	// on the Mac), and the inspector's Stop Allowing Pushes.
 	GetPushes(context.Context, *GetPushesRequest) (*GetPushesResponse, error)
 	StopAllowingPushes(context.Context, *StopAllowingPushesRequest) (*StopAllowingPushesResponse, error)
+	// Delete Workspace… (ADR 0029): what deleting the box would remove and
+	// whether it can be deleted now, for the confirmation sheet. Read only:
+	// it needs no key and runs no restic.
+	GetDeletePlan(context.Context, *GetDeletePlanRequest) (*GetDeletePlanResponse, error)
+	// Deletes a box (ADR 0029), only for the person at this Mac (the app or
+	// the CLI; never an agent), in a fixed order, each step safe to repeat:
+	// the checks (the typed name, not open or saving here, not moving or on
+	// a server, saves elsewhere confirmed, no other machine holding the
+	// lease); the instance; the home storage; the saves on this Mac (saves
+	// elsewhere are left where they are, and so is the key); then, when the
+	// saves are gone, the app deletes the key from the Keychain and calls
+	// again with keys_deleted; last, portenvd's record. A failure records the
+	// step it stopped at (ListBoxes shows it, OpenBox refuses the box) and a
+	// call again continues from there.
+	DeleteBox(context.Context, *DeleteBoxRequest) (*DeleteBoxResponse, error)
 	mustEmbedUnimplementedDaemonServiceServer()
 }
 
@@ -1508,6 +1560,12 @@ func (UnimplementedDaemonServiceServer) GetPushes(context.Context, *GetPushesReq
 }
 func (UnimplementedDaemonServiceServer) StopAllowingPushes(context.Context, *StopAllowingPushesRequest) (*StopAllowingPushesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method StopAllowingPushes not implemented")
+}
+func (UnimplementedDaemonServiceServer) GetDeletePlan(context.Context, *GetDeletePlanRequest) (*GetDeletePlanResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetDeletePlan not implemented")
+}
+func (UnimplementedDaemonServiceServer) DeleteBox(context.Context, *DeleteBoxRequest) (*DeleteBoxResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeleteBox not implemented")
 }
 func (UnimplementedDaemonServiceServer) mustEmbedUnimplementedDaemonServiceServer() {}
 func (UnimplementedDaemonServiceServer) testEmbeddedByValue()                       {}
@@ -2704,6 +2762,42 @@ func _DaemonService_StopAllowingPushes_Handler(srv interface{}, ctx context.Cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _DaemonService_GetDeletePlan_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetDeletePlanRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).GetDeletePlan(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_GetDeletePlan_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).GetDeletePlan(ctx, req.(*GetDeletePlanRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_DeleteBox_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteBoxRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).DeleteBox(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_DeleteBox_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).DeleteBox(ctx, req.(*DeleteBoxRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // DaemonService_ServiceDesc is the grpc.ServiceDesc for DaemonService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -2954,6 +3048,14 @@ var DaemonService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "StopAllowingPushes",
 			Handler:    _DaemonService_StopAllowingPushes_Handler,
+		},
+		{
+			MethodName: "GetDeletePlan",
+			Handler:    _DaemonService_GetDeletePlan_Handler,
+		},
+		{
+			MethodName: "DeleteBox",
+			Handler:    _DaemonService_DeleteBox_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

@@ -227,6 +227,21 @@ service DaemonService {
   // on the Mac), and the inspector's Stop Allowing Pushes.
   rpc GetPushes(GetPushesRequest) returns (GetPushesResponse);
   rpc StopAllowingPushes(StopAllowingPushesRequest) returns (StopAllowingPushesResponse);
+  // Delete Workspace… (ADR 0029): what deleting the box would remove and
+  // whether it can be deleted now, for the confirmation sheet. Read only:
+  // it needs no key and runs no restic.
+  rpc GetDeletePlan(GetDeletePlanRequest) returns (GetDeletePlanResponse);
+  // Deletes a box (ADR 0029), only for the person at this Mac (the app or
+  // the CLI; never an agent), in a fixed order, each step safe to repeat:
+  // the checks (the typed name, not open or saving here, not moving or on
+  // a server, saves elsewhere confirmed, no other machine holding the
+  // lease); the instance; the home storage; the saves on this Mac (saves
+  // elsewhere are left where they are, and so is the key); then, when the
+  // saves are gone, the app deletes the key from the Keychain and calls
+  // again with keys_deleted; last, portenvd's record. A failure records the
+  // step it stopped at (ListBoxes shows it, OpenBox refuses the box) and a
+  // call again continues from there.
+  rpc DeleteBox(DeleteBoxRequest) returns (DeleteBoxResponse);
 }
 
 message GetPushesRequest {
@@ -423,6 +438,11 @@ message BoxStatus {
   // The box's repository also has the recovery-derived key (ADR 0019), so
   // a typed recovery key can be checked against it. Not a secret.
   bool carries_recovery_key = 4;
+  // DeleteBox started and hasn't finished (ADR 0029): the box can't open;
+  // DeleteBox again continues from delete_step.
+  bool deleting = 5;
+  // The step the deletion stopped at.
+  DeleteStep delete_step = 6;
 }
 
 message GetChannelRequest {
@@ -726,7 +746,9 @@ message ProjectSource {
     string github_url = 2;
   }
   // Clone with the owner's GitHub sign-in (a private repository): the app
-  // passes it to ApplyTeamPlan, in memory; it's never kept.
+  // passes it to ApplyTeamPlan, in memory; it's never kept. False means
+  // "fetch plain first; use the sign-in only if GitHub refuses" (R-0413):
+  // portenvd then asks for it (needs_token) whatever was chosen at Create.
   bool use_sign_in = 3;
 }
 
@@ -1132,6 +1154,9 @@ message ApplyTeamPlanResponse {
   // The kept setup clones with the owner's sign-in and none was given: the
   // app reads it and calls again. Nothing was done.
   bool needs_token = 6;
+  // The kept GitHub project, as OWNER/REPO, when it wasn't brought in: the
+  // window says "Cloning OWNER/REPO…" while the next try runs (R-0409).
+  string project = 7;
 }
 
 message GetTeamSettingsRequest {}
@@ -1191,6 +1216,9 @@ message AgentInfo {
   // Set when its file asks for share_login, which this build doesn't
   // support: one plain line saying nothing is shared (R-0323).
   string share_login_off = 21;
+  // It works in its own copy of the project (checkout: own), so it has a
+  // branch, agent/<id>, the owner can fetch (ADR 0022 §2a).
+  bool own_clone = 22;
 }
 
 message WatchTeamRequest {
@@ -1387,4 +1415,72 @@ message DeployRequest {
 message DeployResponse {
   // The decision the deploy waits on in the app, once deploys run.
   portenv.types.v1.Decision decision = 1;
+}
+
+// DeleteBox's steps, in order (ADR 0029).
+enum DeleteStep {
+  DELETE_STEP_UNSPECIFIED = 0;
+  // Stopping and removing the box's instance on this Mac.
+  DELETE_STEP_INSTANCE = 1;
+  // Removing its home storage.
+  DELETE_STEP_HOME = 2;
+  // Deleting its saves on this Mac (saves elsewhere are left).
+  DELETE_STEP_SAVES = 3;
+  // The saves are gone: the app deletes the key from the Keychain.
+  DELETE_STEP_KEY = 4;
+  // Removing portenvd's record of the box, last.
+  DELETE_STEP_RECORD = 5;
+}
+
+message GetDeletePlanRequest {
+  string name = 1;
+}
+
+message GetDeletePlanResponse {
+  string box_id = 1;
+  // How many saves the box has on this Mac and their size on disk, when
+  // its saves are on this Mac (counted without a key: one file per save).
+  int32 save_count = 2;
+  int64 saves_bytes = 3;
+  // The saves are somewhere other than this Mac (a server or a cloud
+  // bucket): DeleteBox leaves them there, and the key stays so they can
+  // still be restored. saves_place says where, as people read it.
+  bool saves_elsewhere = 4;
+  string saves_place = 5;
+  // Open here (running, or still being saved after Quit Anyway): it must
+  // be closed first, the usual way.
+  bool open_here = 6;
+  // Why it can't be deleted now, as one plain line ("" when it can, as far
+  // as portenvd knows without the key; the lease is checked by DeleteBox).
+  string refusal = 7;
+  // A deletion that stopped: DeleteBox continues from here.
+  DeleteStep stopped_at = 8;
+  // The repository also has the recovery-derived key: copies of the saves
+  // made outside Portenv (Time Machine) still open with the recovery key.
+  bool carries_recovery_key = 9;
+}
+
+message DeleteBoxRequest {
+  string name = 1;
+  // The name as the person typed it to confirm; it must equal name.
+  string confirm_name = 2;
+  // The second confirmation, for a box whose saves are elsewhere: the
+  // person read that they stay there. Refused without it.
+  bool confirm_saves_elsewhere = 3;
+  // The app deleted the key IDs the last response gave from the Keychain:
+  // portenvd removes its record and the deletion is finished.
+  bool keys_deleted = 4;
+}
+
+message DeleteBoxResponse {
+  // The record is gone: the box is deleted from this Mac.
+  bool finished = 1;
+  // Set once the saves on this Mac are gone (step KEY): the Keychain
+  // items to delete now. The app deletes them, then calls again with
+  // keys_deleted. Never set while any save remains.
+  repeated string delete_key_ids = 2;
+  // Saves left where they are, as people read the place ("" when none).
+  string saves_left_at = 3;
+  // The step reached.
+  DeleteStep step = 4;
 }

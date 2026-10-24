@@ -278,6 +278,70 @@ func (Answers) EnumDescriptor() ([]byte, []int) {
 	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{3}
 }
 
+// DeleteBox's steps, in order (ADR 0029).
+type DeleteStep int32
+
+const (
+	DeleteStep_DELETE_STEP_UNSPECIFIED DeleteStep = 0
+	// Stopping and removing the box's instance on this Mac.
+	DeleteStep_DELETE_STEP_INSTANCE DeleteStep = 1
+	// Removing its home storage.
+	DeleteStep_DELETE_STEP_HOME DeleteStep = 2
+	// Deleting its saves on this Mac (saves elsewhere are left).
+	DeleteStep_DELETE_STEP_SAVES DeleteStep = 3
+	// The saves are gone: the app deletes the key from the Keychain.
+	DeleteStep_DELETE_STEP_KEY DeleteStep = 4
+	// Removing portenvd's record of the box, last.
+	DeleteStep_DELETE_STEP_RECORD DeleteStep = 5
+)
+
+// Enum value maps for DeleteStep.
+var (
+	DeleteStep_name = map[int32]string{
+		0: "DELETE_STEP_UNSPECIFIED",
+		1: "DELETE_STEP_INSTANCE",
+		2: "DELETE_STEP_HOME",
+		3: "DELETE_STEP_SAVES",
+		4: "DELETE_STEP_KEY",
+		5: "DELETE_STEP_RECORD",
+	}
+	DeleteStep_value = map[string]int32{
+		"DELETE_STEP_UNSPECIFIED": 0,
+		"DELETE_STEP_INSTANCE":    1,
+		"DELETE_STEP_HOME":        2,
+		"DELETE_STEP_SAVES":       3,
+		"DELETE_STEP_KEY":         4,
+		"DELETE_STEP_RECORD":      5,
+	}
+)
+
+func (x DeleteStep) Enum() *DeleteStep {
+	p := new(DeleteStep)
+	*p = x
+	return p
+}
+
+func (x DeleteStep) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (DeleteStep) Descriptor() protoreflect.EnumDescriptor {
+	return file_portenv_daemon_v1_daemon_proto_enumTypes[4].Descriptor()
+}
+
+func (DeleteStep) Type() protoreflect.EnumType {
+	return &file_portenv_daemon_v1_daemon_proto_enumTypes[4]
+}
+
+func (x DeleteStep) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use DeleteStep.Descriptor instead.
+func (DeleteStep) EnumDescriptor() ([]byte, []int) {
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{4}
+}
+
 type GetPushesRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
@@ -2004,8 +2068,13 @@ type BoxStatus struct {
 	// The box's repository also has the recovery-derived key (ADR 0019), so
 	// a typed recovery key can be checked against it. Not a secret.
 	CarriesRecoveryKey bool `protobuf:"varint,4,opt,name=carries_recovery_key,json=carriesRecoveryKey,proto3" json:"carries_recovery_key,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// DeleteBox started and hasn't finished (ADR 0029): the box can't open;
+	// DeleteBox again continues from delete_step.
+	Deleting bool `protobuf:"varint,5,opt,name=deleting,proto3" json:"deleting,omitempty"`
+	// The step the deletion stopped at.
+	DeleteStep    DeleteStep `protobuf:"varint,6,opt,name=delete_step,json=deleteStep,proto3,enum=portenv.daemon.v1.DeleteStep" json:"delete_step,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *BoxStatus) Reset() {
@@ -2064,6 +2133,20 @@ func (x *BoxStatus) GetCarriesRecoveryKey() bool {
 		return x.CarriesRecoveryKey
 	}
 	return false
+}
+
+func (x *BoxStatus) GetDeleting() bool {
+	if x != nil {
+		return x.Deleting
+	}
+	return false
+}
+
+func (x *BoxStatus) GetDeleteStep() DeleteStep {
+	if x != nil {
+		return x.DeleteStep
+	}
+	return DeleteStep_DELETE_STEP_UNSPECIFIED
 }
 
 type GetChannelRequest struct {
@@ -4436,7 +4519,9 @@ type ProjectSource struct {
 	//	*ProjectSource_GithubUrl
 	Source isProjectSource_Source `protobuf_oneof:"source"`
 	// Clone with the owner's GitHub sign-in (a private repository): the app
-	// passes it to ApplyTeamPlan, in memory; it's never kept.
+	// passes it to ApplyTeamPlan, in memory; it's never kept. False means
+	// "fetch plain first; use the sign-in only if GitHub refuses" (R-0413):
+	// portenvd then asks for it (needs_token) whatever was chosen at Create.
 	UseSignIn     bool `protobuf:"varint,3,opt,name=use_sign_in,json=useSignIn,proto3" json:"use_sign_in,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -7235,7 +7320,10 @@ type ApplyTeamPlanResponse struct {
 	NeedsSignIn bool `protobuf:"varint,5,opt,name=needs_sign_in,json=needsSignIn,proto3" json:"needs_sign_in,omitempty"`
 	// The kept setup clones with the owner's sign-in and none was given: the
 	// app reads it and calls again. Nothing was done.
-	NeedsToken    bool `protobuf:"varint,6,opt,name=needs_token,json=needsToken,proto3" json:"needs_token,omitempty"`
+	NeedsToken bool `protobuf:"varint,6,opt,name=needs_token,json=needsToken,proto3" json:"needs_token,omitempty"`
+	// The kept GitHub project, as OWNER/REPO, when it wasn't brought in: the
+	// window says "Cloning OWNER/REPO…" while the next try runs (R-0409).
+	Project       string `protobuf:"bytes,7,opt,name=project,proto3" json:"project,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -7310,6 +7398,13 @@ func (x *ApplyTeamPlanResponse) GetNeedsToken() bool {
 		return x.NeedsToken
 	}
 	return false
+}
+
+func (x *ApplyTeamPlanResponse) GetProject() string {
+	if x != nil {
+		return x.Project
+	}
+	return ""
 }
 
 type GetTeamSettingsRequest struct {
@@ -7538,6 +7633,9 @@ type AgentInfo struct {
 	// Set when its file asks for share_login, which this build doesn't
 	// support: one plain line saying nothing is shared (R-0323).
 	ShareLoginOff string `protobuf:"bytes,21,opt,name=share_login_off,json=shareLoginOff,proto3" json:"share_login_off,omitempty"`
+	// It works in its own copy of the project (checkout: own), so it has a
+	// branch, agent/<id>, the owner can fetch (ADR 0022 §2a).
+	OwnClone      bool `protobuf:"varint,22,opt,name=own_clone,json=ownClone,proto3" json:"own_clone,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -7717,6 +7815,13 @@ func (x *AgentInfo) GetShareLoginOff() string {
 		return x.ShareLoginOff
 	}
 	return ""
+}
+
+func (x *AgentInfo) GetOwnClone() bool {
+	if x != nil {
+		return x.OwnClone
+	}
+	return false
 }
 
 type WatchTeamRequest struct {
@@ -9542,6 +9647,317 @@ func (x *DeployResponse) GetDecision() *v1.Decision {
 	return nil
 }
 
+type GetDeletePlanRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetDeletePlanRequest) Reset() {
+	*x = GetDeletePlanRequest{}
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[160]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetDeletePlanRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetDeletePlanRequest) ProtoMessage() {}
+
+func (x *GetDeletePlanRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[160]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetDeletePlanRequest.ProtoReflect.Descriptor instead.
+func (*GetDeletePlanRequest) Descriptor() ([]byte, []int) {
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{160}
+}
+
+func (x *GetDeletePlanRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+type GetDeletePlanResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	BoxId string                 `protobuf:"bytes,1,opt,name=box_id,json=boxId,proto3" json:"box_id,omitempty"`
+	// How many saves the box has on this Mac and their size on disk, when
+	// its saves are on this Mac (counted without a key: one file per save).
+	SaveCount  int32 `protobuf:"varint,2,opt,name=save_count,json=saveCount,proto3" json:"save_count,omitempty"`
+	SavesBytes int64 `protobuf:"varint,3,opt,name=saves_bytes,json=savesBytes,proto3" json:"saves_bytes,omitempty"`
+	// The saves are somewhere other than this Mac (a server or a cloud
+	// bucket): DeleteBox leaves them there, and the key stays so they can
+	// still be restored. saves_place says where, as people read it.
+	SavesElsewhere bool   `protobuf:"varint,4,opt,name=saves_elsewhere,json=savesElsewhere,proto3" json:"saves_elsewhere,omitempty"`
+	SavesPlace     string `protobuf:"bytes,5,opt,name=saves_place,json=savesPlace,proto3" json:"saves_place,omitempty"`
+	// Open here (running, or still being saved after Quit Anyway): it must
+	// be closed first, the usual way.
+	OpenHere bool `protobuf:"varint,6,opt,name=open_here,json=openHere,proto3" json:"open_here,omitempty"`
+	// Why it can't be deleted now, as one plain line ("" when it can, as far
+	// as portenvd knows without the key; the lease is checked by DeleteBox).
+	Refusal string `protobuf:"bytes,7,opt,name=refusal,proto3" json:"refusal,omitempty"`
+	// A deletion that stopped: DeleteBox continues from here.
+	StoppedAt DeleteStep `protobuf:"varint,8,opt,name=stopped_at,json=stoppedAt,proto3,enum=portenv.daemon.v1.DeleteStep" json:"stopped_at,omitempty"`
+	// The repository also has the recovery-derived key: copies of the saves
+	// made outside Portenv (Time Machine) still open with the recovery key.
+	CarriesRecoveryKey bool `protobuf:"varint,9,opt,name=carries_recovery_key,json=carriesRecoveryKey,proto3" json:"carries_recovery_key,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *GetDeletePlanResponse) Reset() {
+	*x = GetDeletePlanResponse{}
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[161]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetDeletePlanResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetDeletePlanResponse) ProtoMessage() {}
+
+func (x *GetDeletePlanResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[161]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetDeletePlanResponse.ProtoReflect.Descriptor instead.
+func (*GetDeletePlanResponse) Descriptor() ([]byte, []int) {
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{161}
+}
+
+func (x *GetDeletePlanResponse) GetBoxId() string {
+	if x != nil {
+		return x.BoxId
+	}
+	return ""
+}
+
+func (x *GetDeletePlanResponse) GetSaveCount() int32 {
+	if x != nil {
+		return x.SaveCount
+	}
+	return 0
+}
+
+func (x *GetDeletePlanResponse) GetSavesBytes() int64 {
+	if x != nil {
+		return x.SavesBytes
+	}
+	return 0
+}
+
+func (x *GetDeletePlanResponse) GetSavesElsewhere() bool {
+	if x != nil {
+		return x.SavesElsewhere
+	}
+	return false
+}
+
+func (x *GetDeletePlanResponse) GetSavesPlace() string {
+	if x != nil {
+		return x.SavesPlace
+	}
+	return ""
+}
+
+func (x *GetDeletePlanResponse) GetOpenHere() bool {
+	if x != nil {
+		return x.OpenHere
+	}
+	return false
+}
+
+func (x *GetDeletePlanResponse) GetRefusal() string {
+	if x != nil {
+		return x.Refusal
+	}
+	return ""
+}
+
+func (x *GetDeletePlanResponse) GetStoppedAt() DeleteStep {
+	if x != nil {
+		return x.StoppedAt
+	}
+	return DeleteStep_DELETE_STEP_UNSPECIFIED
+}
+
+func (x *GetDeletePlanResponse) GetCarriesRecoveryKey() bool {
+	if x != nil {
+		return x.CarriesRecoveryKey
+	}
+	return false
+}
+
+type DeleteBoxRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// The name as the person typed it to confirm; it must equal name.
+	ConfirmName string `protobuf:"bytes,2,opt,name=confirm_name,json=confirmName,proto3" json:"confirm_name,omitempty"`
+	// The second confirmation, for a box whose saves are elsewhere: the
+	// person read that they stay there. Refused without it.
+	ConfirmSavesElsewhere bool `protobuf:"varint,3,opt,name=confirm_saves_elsewhere,json=confirmSavesElsewhere,proto3" json:"confirm_saves_elsewhere,omitempty"`
+	// The app deleted the key IDs the last response gave from the Keychain:
+	// portenvd removes its record and the deletion is finished.
+	KeysDeleted   bool `protobuf:"varint,4,opt,name=keys_deleted,json=keysDeleted,proto3" json:"keys_deleted,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteBoxRequest) Reset() {
+	*x = DeleteBoxRequest{}
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[162]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteBoxRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteBoxRequest) ProtoMessage() {}
+
+func (x *DeleteBoxRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[162]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteBoxRequest.ProtoReflect.Descriptor instead.
+func (*DeleteBoxRequest) Descriptor() ([]byte, []int) {
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{162}
+}
+
+func (x *DeleteBoxRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *DeleteBoxRequest) GetConfirmName() string {
+	if x != nil {
+		return x.ConfirmName
+	}
+	return ""
+}
+
+func (x *DeleteBoxRequest) GetConfirmSavesElsewhere() bool {
+	if x != nil {
+		return x.ConfirmSavesElsewhere
+	}
+	return false
+}
+
+func (x *DeleteBoxRequest) GetKeysDeleted() bool {
+	if x != nil {
+		return x.KeysDeleted
+	}
+	return false
+}
+
+type DeleteBoxResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The record is gone: the box is deleted from this Mac.
+	Finished bool `protobuf:"varint,1,opt,name=finished,proto3" json:"finished,omitempty"`
+	// Set once the saves on this Mac are gone (step KEY): the Keychain
+	// items to delete now. The app deletes them, then calls again with
+	// keys_deleted. Never set while any save remains.
+	DeleteKeyIds []string `protobuf:"bytes,2,rep,name=delete_key_ids,json=deleteKeyIds,proto3" json:"delete_key_ids,omitempty"`
+	// Saves left where they are, as people read the place ("" when none).
+	SavesLeftAt string `protobuf:"bytes,3,opt,name=saves_left_at,json=savesLeftAt,proto3" json:"saves_left_at,omitempty"`
+	// The step reached.
+	Step          DeleteStep `protobuf:"varint,4,opt,name=step,proto3,enum=portenv.daemon.v1.DeleteStep" json:"step,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteBoxResponse) Reset() {
+	*x = DeleteBoxResponse{}
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[163]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteBoxResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteBoxResponse) ProtoMessage() {}
+
+func (x *DeleteBoxResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_portenv_daemon_v1_daemon_proto_msgTypes[163]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteBoxResponse.ProtoReflect.Descriptor instead.
+func (*DeleteBoxResponse) Descriptor() ([]byte, []int) {
+	return file_portenv_daemon_v1_daemon_proto_rawDescGZIP(), []int{163}
+}
+
+func (x *DeleteBoxResponse) GetFinished() bool {
+	if x != nil {
+		return x.Finished
+	}
+	return false
+}
+
+func (x *DeleteBoxResponse) GetDeleteKeyIds() []string {
+	if x != nil {
+		return x.DeleteKeyIds
+	}
+	return nil
+}
+
+func (x *DeleteBoxResponse) GetSavesLeftAt() string {
+	if x != nil {
+		return x.SavesLeftAt
+	}
+	return ""
+}
+
+func (x *DeleteBoxResponse) GetStep() DeleteStep {
+	if x != nil {
+		return x.Step
+	}
+	return DeleteStep_DELETE_STEP_UNSPECIFIED
+}
+
 var File_portenv_daemon_v1_daemon_proto protoreflect.FileDescriptor
 
 const file_portenv_daemon_v1_daemon_proto_rawDesc = "" +
@@ -9640,12 +10056,15 @@ const file_portenv_daemon_v1_daemon_proto_rawDesc = "" +
 	"\x05build\x18\x01 \x01(\v2\x1b.portenv.types.v1.BuildInfoR\x05build\"\x12\n" +
 	"\x10ListBoxesRequest\"G\n" +
 	"\x11ListBoxesResponse\x122\n" +
-	"\x05boxes\x18\x01 \x03(\v2\x1c.portenv.daemon.v1.BoxStatusR\x05boxes\"\xb4\x01\n" +
+	"\x05boxes\x18\x01 \x03(\v2\x1c.portenv.daemon.v1.BoxStatusR\x05boxes\"\x90\x02\n" +
 	"\tBoxStatus\x12'\n" +
 	"\x03box\x18\x01 \x01(\v2\x15.portenv.types.v1.BoxR\x03box\x120\n" +
 	"\x05state\x18\x02 \x01(\x0e2\x1a.portenv.types.v1.BoxStateR\x05state\x12\x1a\n" +
 	"\bcreating\x18\x03 \x01(\bR\bcreating\x120\n" +
-	"\x14carries_recovery_key\x18\x04 \x01(\bR\x12carriesRecoveryKey\"'\n" +
+	"\x14carries_recovery_key\x18\x04 \x01(\bR\x12carriesRecoveryKey\x12\x1a\n" +
+	"\bdeleting\x18\x05 \x01(\bR\bdeleting\x12>\n" +
+	"\vdelete_step\x18\x06 \x01(\x0e2\x1d.portenv.daemon.v1.DeleteStepR\n" +
+	"deleteStep\"'\n" +
 	"\x11GetChannelRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\"_\n" +
 	"\x12GetChannelResponse\x12\x18\n" +
@@ -9973,7 +10392,7 @@ const file_portenv_daemon_v1_daemon_proto_rawDesc = "" +
 	"\bproblems\x18\x16 \x03(\tR\bproblems\"M\n" +
 	"\x14ApplyTeamPlanRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12!\n" +
-	"\fgithub_token\x18\x02 \x01(\tR\vgithubToken\"\xc9\x01\n" +
+	"\fgithub_token\x18\x02 \x01(\tR\vgithubToken\"\xe3\x01\n" +
 	"\x15ApplyTeamPlanResponse\x12\x18\n" +
 	"\aapplied\x18\x01 \x01(\bR\aapplied\x12\x16\n" +
 	"\x06pinned\x18\x02 \x03(\tR\x06pinned\x12\x14\n" +
@@ -9981,7 +10400,8 @@ const file_portenv_daemon_v1_daemon_proto_rawDesc = "" +
 	"\rproject_error\x18\x04 \x01(\tR\fprojectError\x12\"\n" +
 	"\rneeds_sign_in\x18\x05 \x01(\bR\vneedsSignIn\x12\x1f\n" +
 	"\vneeds_token\x18\x06 \x01(\bR\n" +
-	"needsToken\"\x18\n" +
+	"needsToken\x12\x18\n" +
+	"\aproject\x18\a \x01(\tR\aproject\"\x18\n" +
 	"\x16GetTeamSettingsRequest\"\xa4\x01\n" +
 	"\x17GetTeamSettingsResponse\x12%\n" +
 	"\x0eagents_allowed\x18\x01 \x01(\x05R\ragentsAllowed\x124\n" +
@@ -9990,7 +10410,7 @@ const file_portenv_daemon_v1_daemon_proto_rawDesc = "" +
 	"\x17SetAgentsAllowedRequest\x12%\n" +
 	"\x0eagents_allowed\x18\x01 \x01(\x05R\ragentsAllowed\"b\n" +
 	"\x18SetAgentsAllowedResponse\x12F\n" +
-	"\bsettings\x18\x01 \x01(\v2*.portenv.daemon.v1.GetTeamSettingsResponseR\bsettings\"\xc1\x05\n" +
+	"\bsettings\x18\x01 \x01(\v2*.portenv.daemon.v1.GetTeamSettingsResponseR\bsettings\"\xde\x05\n" +
 	"\tAgentInfo\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
@@ -10015,7 +10435,8 @@ const file_portenv_daemon_v1_daemon_proto_rawDesc = "" +
 	"\x06status\x18\x12 \x01(\v2\x1d.portenv.types.v1.AgentStatusR\x06status\x125\n" +
 	"\broutines\x18\x13 \x03(\v2\x19.portenv.types.v1.RoutineR\broutines\x12!\n" +
 	"\froutines_off\x18\x14 \x01(\tR\vroutinesOff\x12&\n" +
-	"\x0fshare_login_off\x18\x15 \x01(\tR\rshareLoginOff\">\n" +
+	"\x0fshare_login_off\x18\x15 \x01(\tR\rshareLoginOff\x12\x1b\n" +
+	"\town_clone\x18\x16 \x01(\bR\bownClone\">\n" +
 	"\x10WatchTeamRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x16\n" +
 	"\x06cursor\x18\x02 \x01(\tR\x06cursor\"\xcb\x02\n" +
@@ -10127,7 +10548,33 @@ const file_portenv_daemon_v1_daemon_proto_rawDesc = "" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x16\n" +
 	"\x06target\x18\x02 \x01(\tR\x06target\"H\n" +
 	"\x0eDeployResponse\x126\n" +
-	"\bdecision\x18\x01 \x01(\v2\x1a.portenv.types.v1.DecisionR\bdecision*\x93\x02\n" +
+	"\bdecision\x18\x01 \x01(\v2\x1a.portenv.types.v1.DecisionR\bdecision\"*\n" +
+	"\x14GetDeletePlanRequest\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\"\xdf\x02\n" +
+	"\x15GetDeletePlanResponse\x12\x15\n" +
+	"\x06box_id\x18\x01 \x01(\tR\x05boxId\x12\x1d\n" +
+	"\n" +
+	"save_count\x18\x02 \x01(\x05R\tsaveCount\x12\x1f\n" +
+	"\vsaves_bytes\x18\x03 \x01(\x03R\n" +
+	"savesBytes\x12'\n" +
+	"\x0fsaves_elsewhere\x18\x04 \x01(\bR\x0esavesElsewhere\x12\x1f\n" +
+	"\vsaves_place\x18\x05 \x01(\tR\n" +
+	"savesPlace\x12\x1b\n" +
+	"\topen_here\x18\x06 \x01(\bR\bopenHere\x12\x18\n" +
+	"\arefusal\x18\a \x01(\tR\arefusal\x12<\n" +
+	"\n" +
+	"stopped_at\x18\b \x01(\x0e2\x1d.portenv.daemon.v1.DeleteStepR\tstoppedAt\x120\n" +
+	"\x14carries_recovery_key\x18\t \x01(\bR\x12carriesRecoveryKey\"\xa4\x01\n" +
+	"\x10DeleteBoxRequest\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12!\n" +
+	"\fconfirm_name\x18\x02 \x01(\tR\vconfirmName\x126\n" +
+	"\x17confirm_saves_elsewhere\x18\x03 \x01(\bR\x15confirmSavesElsewhere\x12!\n" +
+	"\fkeys_deleted\x18\x04 \x01(\bR\vkeysDeleted\"\xac\x01\n" +
+	"\x11DeleteBoxResponse\x12\x1a\n" +
+	"\bfinished\x18\x01 \x01(\bR\bfinished\x12$\n" +
+	"\x0edelete_key_ids\x18\x02 \x03(\tR\fdeleteKeyIds\x12\"\n" +
+	"\rsaves_left_at\x18\x03 \x01(\tR\vsavesLeftAt\x121\n" +
+	"\x04step\x18\x04 \x01(\x0e2\x1d.portenv.daemon.v1.DeleteStepR\x04step*\x93\x02\n" +
 	"\tSaveState\x12\x1a\n" +
 	"\x16SAVE_STATE_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18SAVE_STATE_NOT_SAVED_YET\x10\x01\x12\x15\n" +
@@ -10153,7 +10600,15 @@ const file_portenv_daemon_v1_daemon_proto_rawDesc = "" +
 	"\vANSWERS_YES\x10\x01\x12\x0e\n" +
 	"\n" +
 	"ANSWERS_NO\x10\x02\x12\x16\n" +
-	"\x12ANSWERS_CANNOT_ASK\x10\x032\xb53\n" +
+	"\x12ANSWERS_CANNOT_ASK\x10\x03*\x9d\x01\n" +
+	"\n" +
+	"DeleteStep\x12\x1b\n" +
+	"\x17DELETE_STEP_UNSPECIFIED\x10\x00\x12\x18\n" +
+	"\x14DELETE_STEP_INSTANCE\x10\x01\x12\x14\n" +
+	"\x10DELETE_STEP_HOME\x10\x02\x12\x15\n" +
+	"\x11DELETE_STEP_SAVES\x10\x03\x12\x13\n" +
+	"\x0fDELETE_STEP_KEY\x10\x04\x12\x16\n" +
+	"\x12DELETE_STEP_RECORD\x10\x052\xf14\n" +
 	"\rDaemonService\x12Y\n" +
 	"\n" +
 	"GetVersion\x12$.portenv.daemon.v1.GetVersionRequest\x1a%.portenv.daemon.v1.GetVersionResponse\x12V\n" +
@@ -10230,7 +10685,9 @@ const file_portenv_daemon_v1_daemon_proto_rawDesc = "" +
 	"\n" +
 	"AnswerPush\x12$.portenv.daemon.v1.AnswerPushRequest\x1a%.portenv.daemon.v1.AnswerPushResponse\x12V\n" +
 	"\tGetPushes\x12#.portenv.daemon.v1.GetPushesRequest\x1a$.portenv.daemon.v1.GetPushesResponse\x12q\n" +
-	"\x12StopAllowingPushes\x12,.portenv.daemon.v1.StopAllowingPushesRequest\x1a-.portenv.daemon.v1.StopAllowingPushesResponseB\xce\x01\n" +
+	"\x12StopAllowingPushes\x12,.portenv.daemon.v1.StopAllowingPushesRequest\x1a-.portenv.daemon.v1.StopAllowingPushesResponse\x12b\n" +
+	"\rGetDeletePlan\x12'.portenv.daemon.v1.GetDeletePlanRequest\x1a(.portenv.daemon.v1.GetDeletePlanResponse\x12V\n" +
+	"\tDeleteBox\x12#.portenv.daemon.v1.DeleteBoxRequest\x1a$.portenv.daemon.v1.DeleteBoxResponseB\xce\x01\n" +
 	"\x15com.portenv.daemon.v1B\vDaemonProtoP\x01ZBgithub.com/portenv/portenv/proto/gen/go/portenv/daemon/v1;daemonv1\xa2\x02\x03PDX\xaa\x02\x11Portenv.Daemon.V1\xca\x02\x11Portenv\\Daemon\\V1\xe2\x02\x1dPortenv\\Daemon\\V1\\GPBMetadata\xea\x02\x13Portenv::Daemon::V1b\x06proto3"
 
 var (
@@ -10245,421 +10702,433 @@ func file_portenv_daemon_v1_daemon_proto_rawDescGZIP() []byte {
 	return file_portenv_daemon_v1_daemon_proto_rawDescData
 }
 
-var file_portenv_daemon_v1_daemon_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_portenv_daemon_v1_daemon_proto_msgTypes = make([]protoimpl.MessageInfo, 164)
+var file_portenv_daemon_v1_daemon_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
+var file_portenv_daemon_v1_daemon_proto_msgTypes = make([]protoimpl.MessageInfo, 168)
 var file_portenv_daemon_v1_daemon_proto_goTypes = []any{
 	(SaveState)(0),                        // 0: portenv.daemon.v1.SaveState
 	(NetworkPath)(0),                      // 1: portenv.daemon.v1.NetworkPath
 	(Holder)(0),                           // 2: portenv.daemon.v1.Holder
 	(Answers)(0),                          // 3: portenv.daemon.v1.Answers
-	(*GetPushesRequest)(nil),              // 4: portenv.daemon.v1.GetPushesRequest
-	(*GetPushesResponse)(nil),             // 5: portenv.daemon.v1.GetPushesResponse
-	(*StopAllowingPushesRequest)(nil),     // 6: portenv.daemon.v1.StopAllowingPushesRequest
-	(*StopAllowingPushesResponse)(nil),    // 7: portenv.daemon.v1.StopAllowingPushesResponse
-	(*WatchPushesRequest)(nil),            // 8: portenv.daemon.v1.WatchPushesRequest
-	(*WatchPushesResponse)(nil),           // 9: portenv.daemon.v1.WatchPushesResponse
-	(*PushQuestion)(nil),                  // 10: portenv.daemon.v1.PushQuestion
-	(*PushUpdateInfo)(nil),                // 11: portenv.daemon.v1.PushUpdateInfo
-	(*AnswerPushRequest)(nil),             // 12: portenv.daemon.v1.AnswerPushRequest
-	(*AnswerPushResponse)(nil),            // 13: portenv.daemon.v1.AnswerPushResponse
-	(*CheckBoxRequest)(nil),               // 14: portenv.daemon.v1.CheckBoxRequest
-	(*CheckBoxResponse)(nil),              // 15: portenv.daemon.v1.CheckBoxResponse
-	(*RestartBoxRequest)(nil),             // 16: portenv.daemon.v1.RestartBoxRequest
-	(*RestartBoxResponse)(nil),            // 17: portenv.daemon.v1.RestartBoxResponse
-	(*OpenBoxRequest)(nil),                // 18: portenv.daemon.v1.OpenBoxRequest
-	(*OpenBoxResponse)(nil),               // 19: portenv.daemon.v1.OpenBoxResponse
-	(*CloseBoxRequest)(nil),               // 20: portenv.daemon.v1.CloseBoxRequest
-	(*CloseBoxResponse)(nil),              // 21: portenv.daemon.v1.CloseBoxResponse
-	(*MakeSavePointRequest)(nil),          // 22: portenv.daemon.v1.MakeSavePointRequest
-	(*MakeSavePointResponse)(nil),         // 23: portenv.daemon.v1.MakeSavePointResponse
-	(*RevertToLastSavePointRequest)(nil),  // 24: portenv.daemon.v1.RevertToLastSavePointRequest
-	(*RevertToLastSavePointResponse)(nil), // 25: portenv.daemon.v1.RevertToLastSavePointResponse
-	(*MoveBoxRequest)(nil),                // 26: portenv.daemon.v1.MoveBoxRequest
-	(*MoveBoxResponse)(nil),               // 27: portenv.daemon.v1.MoveBoxResponse
-	(*TerminalRequest)(nil),               // 28: portenv.daemon.v1.TerminalRequest
-	(*TerminalOpen)(nil),                  // 29: portenv.daemon.v1.TerminalOpen
-	(*TerminalSize)(nil),                  // 30: portenv.daemon.v1.TerminalSize
-	(*TerminalResponse)(nil),              // 31: portenv.daemon.v1.TerminalResponse
-	(*GetVersionRequest)(nil),             // 32: portenv.daemon.v1.GetVersionRequest
-	(*GetVersionResponse)(nil),            // 33: portenv.daemon.v1.GetVersionResponse
-	(*ListBoxesRequest)(nil),              // 34: portenv.daemon.v1.ListBoxesRequest
-	(*ListBoxesResponse)(nil),             // 35: portenv.daemon.v1.ListBoxesResponse
-	(*BoxStatus)(nil),                     // 36: portenv.daemon.v1.BoxStatus
-	(*GetChannelRequest)(nil),             // 37: portenv.daemon.v1.GetChannelRequest
-	(*GetChannelResponse)(nil),            // 38: portenv.daemon.v1.GetChannelResponse
-	(*GetBoxStateRequest)(nil),            // 39: portenv.daemon.v1.GetBoxStateRequest
-	(*GetBoxStateResponse)(nil),           // 40: portenv.daemon.v1.GetBoxStateResponse
-	(*SetNetworkPathRequest)(nil),         // 41: portenv.daemon.v1.SetNetworkPathRequest
-	(*SetNetworkPathResponse)(nil),        // 42: portenv.daemon.v1.SetNetworkPathResponse
-	(*WokeRequest)(nil),                   // 43: portenv.daemon.v1.WokeRequest
-	(*WokeResponse)(nil),                  // 44: portenv.daemon.v1.WokeResponse
-	(*WokeBox)(nil),                       // 45: portenv.daemon.v1.WokeBox
-	(*RetryPackagesRequest)(nil),          // 46: portenv.daemon.v1.RetryPackagesRequest
-	(*RetryPackagesResponse)(nil),         // 47: portenv.daemon.v1.RetryPackagesResponse
-	(*ProvideKeysRequest)(nil),            // 48: portenv.daemon.v1.ProvideKeysRequest
-	(*ProvideKeysResponse)(nil),           // 49: portenv.daemon.v1.ProvideKeysResponse
-	(*RelaunchRequest)(nil),               // 50: portenv.daemon.v1.RelaunchRequest
-	(*RelaunchResponse)(nil),              // 51: portenv.daemon.v1.RelaunchResponse
-	(*WatchBoxStateRequest)(nil),          // 52: portenv.daemon.v1.WatchBoxStateRequest
-	(*WatchBoxStateResponse)(nil),         // 53: portenv.daemon.v1.WatchBoxStateResponse
-	(*ListServersRequest)(nil),            // 54: portenv.daemon.v1.ListServersRequest
-	(*ListServersResponse)(nil),           // 55: portenv.daemon.v1.ListServersResponse
-	(*GetKeyIDsRequest)(nil),              // 56: portenv.daemon.v1.GetKeyIDsRequest
-	(*GetKeyIDsResponse)(nil),             // 57: portenv.daemon.v1.GetKeyIDsResponse
-	(*SaveNowRequest)(nil),                // 58: portenv.daemon.v1.SaveNowRequest
-	(*SaveNowResponse)(nil),               // 59: portenv.daemon.v1.SaveNowResponse
-	(*ListSavesRequest)(nil),              // 60: portenv.daemon.v1.ListSavesRequest
-	(*ListSavesResponse)(nil),             // 61: portenv.daemon.v1.ListSavesResponse
-	(*SaveEntry)(nil),                     // 62: portenv.daemon.v1.SaveEntry
-	(*HousekeepRequest)(nil),              // 63: portenv.daemon.v1.HousekeepRequest
-	(*HousekeepResponse)(nil),             // 64: portenv.daemon.v1.HousekeepResponse
-	(*LeaveUnsavedRequest)(nil),           // 65: portenv.daemon.v1.LeaveUnsavedRequest
-	(*LeaveUnsavedResponse)(nil),          // 66: portenv.daemon.v1.LeaveUnsavedResponse
-	(*TakeSavedAfterQuitRequest)(nil),     // 67: portenv.daemon.v1.TakeSavedAfterQuitRequest
-	(*TakeSavedAfterQuitResponse)(nil),    // 68: portenv.daemon.v1.TakeSavedAfterQuitResponse
-	(*SavedAfterQuit)(nil),                // 69: portenv.daemon.v1.SavedAfterQuit
-	(*ListTabsRequest)(nil),               // 70: portenv.daemon.v1.ListTabsRequest
-	(*ListTabsResponse)(nil),              // 71: portenv.daemon.v1.ListTabsResponse
-	(*NewTabRequest)(nil),                 // 72: portenv.daemon.v1.NewTabRequest
-	(*NewTabResponse)(nil),                // 73: portenv.daemon.v1.NewTabResponse
-	(*CloseTabRequest)(nil),               // 74: portenv.daemon.v1.CloseTabRequest
-	(*CloseTabResponse)(nil),              // 75: portenv.daemon.v1.CloseTabResponse
-	(*RenameTabRequest)(nil),              // 76: portenv.daemon.v1.RenameTabRequest
-	(*RenameTabResponse)(nil),             // 77: portenv.daemon.v1.RenameTabResponse
-	(*SelectTabRequest)(nil),              // 78: portenv.daemon.v1.SelectTabRequest
-	(*SelectTabResponse)(nil),             // 79: portenv.daemon.v1.SelectTabResponse
-	(*WatchTabsRequest)(nil),              // 80: portenv.daemon.v1.WatchTabsRequest
-	(*WatchTabsResponse)(nil),             // 81: portenv.daemon.v1.WatchTabsResponse
-	(*CreateBoxRequest)(nil),              // 82: portenv.daemon.v1.CreateBoxRequest
-	(*ProjectSource)(nil),                 // 83: portenv.daemon.v1.ProjectSource
-	(*WorkspaceSetup)(nil),                // 84: portenv.daemon.v1.WorkspaceSetup
-	(*CreateBoxResponse)(nil),             // 85: portenv.daemon.v1.CreateBoxResponse
-	(*DiscardCreationRequest)(nil),        // 86: portenv.daemon.v1.DiscardCreationRequest
-	(*DiscardCreationResponse)(nil),       // 87: portenv.daemon.v1.DiscardCreationResponse
-	(*RecoverBoxRequest)(nil),             // 88: portenv.daemon.v1.RecoverBoxRequest
-	(*RecoverBoxResponse)(nil),            // 89: portenv.daemon.v1.RecoverBoxResponse
-	(*CheckRecoveryKeyRequest)(nil),       // 90: portenv.daemon.v1.CheckRecoveryKeyRequest
-	(*CheckRecoveryKeyResponse)(nil),      // 91: portenv.daemon.v1.CheckRecoveryKeyResponse
-	(*GetPlacementRequest)(nil),           // 92: portenv.daemon.v1.GetPlacementRequest
-	(*GetPlacementResponse)(nil),          // 93: portenv.daemon.v1.GetPlacementResponse
-	(*TabTerminalRequest)(nil),            // 94: portenv.daemon.v1.TabTerminalRequest
-	(*TabTerminalOpen)(nil),               // 95: portenv.daemon.v1.TabTerminalOpen
-	(*TabTerminalResponse)(nil),           // 96: portenv.daemon.v1.TabTerminalResponse
-	(*TabTerminalReset)(nil),              // 97: portenv.daemon.v1.TabTerminalReset
-	(*CommandAuthor)(nil),                 // 98: portenv.daemon.v1.CommandAuthor
-	(*ServerInfo)(nil),                    // 99: portenv.daemon.v1.ServerInfo
-	(*ScanServerKeyRequest)(nil),          // 100: portenv.daemon.v1.ScanServerKeyRequest
-	(*ScanServerKeyResponse)(nil),         // 101: portenv.daemon.v1.ScanServerKeyResponse
-	(*TrustServerKeyRequest)(nil),         // 102: portenv.daemon.v1.TrustServerKeyRequest
-	(*TrustServerKeyResponse)(nil),        // 103: portenv.daemon.v1.TrustServerKeyResponse
-	(*ForgetServerKeyRequest)(nil),        // 104: portenv.daemon.v1.ForgetServerKeyRequest
-	(*ForgetServerKeyResponse)(nil),       // 105: portenv.daemon.v1.ForgetServerKeyResponse
-	(*ProvideServerKeyRequest)(nil),       // 106: portenv.daemon.v1.ProvideServerKeyRequest
-	(*ProvideServerKeyResponse)(nil),      // 107: portenv.daemon.v1.ProvideServerKeyResponse
-	(*CheckServerRequest)(nil),            // 108: portenv.daemon.v1.CheckServerRequest
-	(*CheckLine)(nil),                     // 109: portenv.daemon.v1.CheckLine
-	(*CheckServerResponse)(nil),           // 110: portenv.daemon.v1.CheckServerResponse
-	(*GetEngineRequest)(nil),              // 111: portenv.daemon.v1.GetEngineRequest
-	(*GetEngineResponse)(nil),             // 112: portenv.daemon.v1.GetEngineResponse
-	(*ImagePull)(nil),                     // 113: portenv.daemon.v1.ImagePull
-	(*ListAgentsRequest)(nil),             // 114: portenv.daemon.v1.ListAgentsRequest
-	(*ListAgentsResponse)(nil),            // 115: portenv.daemon.v1.ListAgentsResponse
-	(*TeamLimit)(nil),                     // 116: portenv.daemon.v1.TeamLimit
-	(*ListTeamTemplatesRequest)(nil),      // 117: portenv.daemon.v1.ListTeamTemplatesRequest
-	(*ListTeamTemplatesResponse)(nil),     // 118: portenv.daemon.v1.ListTeamTemplatesResponse
-	(*TeamTemplate)(nil),                  // 119: portenv.daemon.v1.TeamTemplate
-	(*TeamPlanChoice)(nil),                // 120: portenv.daemon.v1.TeamPlanChoice
-	(*TeamAgentChoice)(nil),               // 121: portenv.daemon.v1.TeamAgentChoice
-	(*PlanTeamRequest)(nil),               // 122: portenv.daemon.v1.PlanTeamRequest
-	(*PlanTeamResponse)(nil),              // 123: portenv.daemon.v1.PlanTeamResponse
-	(*PlannedAgent)(nil),                  // 124: portenv.daemon.v1.PlannedAgent
-	(*ApplyTeamPlanRequest)(nil),          // 125: portenv.daemon.v1.ApplyTeamPlanRequest
-	(*ApplyTeamPlanResponse)(nil),         // 126: portenv.daemon.v1.ApplyTeamPlanResponse
-	(*GetTeamSettingsRequest)(nil),        // 127: portenv.daemon.v1.GetTeamSettingsRequest
-	(*GetTeamSettingsResponse)(nil),       // 128: portenv.daemon.v1.GetTeamSettingsResponse
-	(*SetAgentsAllowedRequest)(nil),       // 129: portenv.daemon.v1.SetAgentsAllowedRequest
-	(*SetAgentsAllowedResponse)(nil),      // 130: portenv.daemon.v1.SetAgentsAllowedResponse
-	(*AgentInfo)(nil),                     // 131: portenv.daemon.v1.AgentInfo
-	(*WatchTeamRequest)(nil),              // 132: portenv.daemon.v1.WatchTeamRequest
-	(*WatchTeamResponse)(nil),             // 133: portenv.daemon.v1.WatchTeamResponse
-	(*FetchAgentBranchRequest)(nil),       // 134: portenv.daemon.v1.FetchAgentBranchRequest
-	(*FetchAgentBranchResponse)(nil),      // 135: portenv.daemon.v1.FetchAgentBranchResponse
-	(*StartAgentRequest)(nil),             // 136: portenv.daemon.v1.StartAgentRequest
-	(*StartAgentResponse)(nil),            // 137: portenv.daemon.v1.StartAgentResponse
-	(*StopAgentRequest)(nil),              // 138: portenv.daemon.v1.StopAgentRequest
-	(*StopAgentResponse)(nil),             // 139: portenv.daemon.v1.StopAgentResponse
-	(*AnswerDecisionRequest)(nil),         // 140: portenv.daemon.v1.AnswerDecisionRequest
-	(*AnswerDecisionResponse)(nil),        // 141: portenv.daemon.v1.AnswerDecisionResponse
-	(*GetAgentFileRequest)(nil),           // 142: portenv.daemon.v1.GetAgentFileRequest
-	(*GetAgentFileResponse)(nil),          // 143: portenv.daemon.v1.GetAgentFileResponse
-	(*ApproveAgentFileRequest)(nil),       // 144: portenv.daemon.v1.ApproveAgentFileRequest
-	(*ApproveAgentFileResponse)(nil),      // 145: portenv.daemon.v1.ApproveAgentFileResponse
-	(*SendMessageRequest)(nil),            // 146: portenv.daemon.v1.SendMessageRequest
-	(*SendMessageResponse)(nil),           // 147: portenv.daemon.v1.SendMessageResponse
-	(*RemoveAgentRequest)(nil),            // 148: portenv.daemon.v1.RemoveAgentRequest
-	(*RemoveAgentResponse)(nil),           // 149: portenv.daemon.v1.RemoveAgentResponse
-	(*ListAgentFilesRequest)(nil),         // 150: portenv.daemon.v1.ListAgentFilesRequest
-	(*ListAgentFilesResponse)(nil),        // 151: portenv.daemon.v1.ListAgentFilesResponse
-	(*ReadAgentFileRequest)(nil),          // 152: portenv.daemon.v1.ReadAgentFileRequest
-	(*ReadAgentFileResponse)(nil),         // 153: portenv.daemon.v1.ReadAgentFileResponse
-	(*AddAgentFilesRequest)(nil),          // 154: portenv.daemon.v1.AddAgentFilesRequest
-	(*AddAgentFilesResponse)(nil),         // 155: portenv.daemon.v1.AddAgentFilesResponse
-	(*SetRoutinePausedRequest)(nil),       // 156: portenv.daemon.v1.SetRoutinePausedRequest
-	(*SetRoutinePausedResponse)(nil),      // 157: portenv.daemon.v1.SetRoutinePausedResponse
-	(*WakeAgentRequest)(nil),              // 158: portenv.daemon.v1.WakeAgentRequest
-	(*WakeAgentResponse)(nil),             // 159: portenv.daemon.v1.WakeAgentResponse
-	(*ListDecisionsRequest)(nil),          // 160: portenv.daemon.v1.ListDecisionsRequest
-	(*ListDecisionsResponse)(nil),         // 161: portenv.daemon.v1.ListDecisionsResponse
-	(*DeployRequest)(nil),                 // 162: portenv.daemon.v1.DeployRequest
-	(*DeployResponse)(nil),                // 163: portenv.daemon.v1.DeployResponse
-	nil,                                   // 164: portenv.daemon.v1.ProvideKeysRequest.KeysEntry
-	nil,                                   // 165: portenv.daemon.v1.CreateBoxRequest.KeysEntry
-	nil,                                   // 166: portenv.daemon.v1.RecoverBoxRequest.KeysEntry
-	nil,                                   // 167: portenv.daemon.v1.CheckRecoveryKeyRequest.RecoveryPasswordsEntry
-	(*v1.SnapshotRef)(nil),                // 168: portenv.types.v1.SnapshotRef
-	(*v1.BuildInfo)(nil),                  // 169: portenv.types.v1.BuildInfo
-	(*v1.Box)(nil),                        // 170: portenv.types.v1.Box
-	(v1.BoxState)(0),                      // 171: portenv.types.v1.BoxState
-	(*timestamppb.Timestamp)(nil),         // 172: google.protobuf.Timestamp
-	(*v1.Tab)(nil),                        // 173: portenv.types.v1.Tab
-	(v1.TabTerminalEnd)(0),                // 174: portenv.types.v1.TabTerminalEnd
-	(v1.ServerKeyState)(0),                // 175: portenv.types.v1.ServerKeyState
-	(v1.CheckState)(0),                    // 176: portenv.types.v1.CheckState
-	(v1.AgentState)(0),                    // 177: portenv.types.v1.AgentState
-	(*v1.AgentGrant)(nil),                 // 178: portenv.types.v1.AgentGrant
-	(*v1.AgentStatus)(nil),                // 179: portenv.types.v1.AgentStatus
-	(*v1.Routine)(nil),                    // 180: portenv.types.v1.Routine
-	(*v1.BoardMessage)(nil),               // 181: portenv.types.v1.BoardMessage
-	(*v1.Decision)(nil),                   // 182: portenv.types.v1.Decision
-	(v1.MessageType)(0),                   // 183: portenv.types.v1.MessageType
-	(*v1.AgentFile)(nil),                  // 184: portenv.types.v1.AgentFile
+	(DeleteStep)(0),                       // 4: portenv.daemon.v1.DeleteStep
+	(*GetPushesRequest)(nil),              // 5: portenv.daemon.v1.GetPushesRequest
+	(*GetPushesResponse)(nil),             // 6: portenv.daemon.v1.GetPushesResponse
+	(*StopAllowingPushesRequest)(nil),     // 7: portenv.daemon.v1.StopAllowingPushesRequest
+	(*StopAllowingPushesResponse)(nil),    // 8: portenv.daemon.v1.StopAllowingPushesResponse
+	(*WatchPushesRequest)(nil),            // 9: portenv.daemon.v1.WatchPushesRequest
+	(*WatchPushesResponse)(nil),           // 10: portenv.daemon.v1.WatchPushesResponse
+	(*PushQuestion)(nil),                  // 11: portenv.daemon.v1.PushQuestion
+	(*PushUpdateInfo)(nil),                // 12: portenv.daemon.v1.PushUpdateInfo
+	(*AnswerPushRequest)(nil),             // 13: portenv.daemon.v1.AnswerPushRequest
+	(*AnswerPushResponse)(nil),            // 14: portenv.daemon.v1.AnswerPushResponse
+	(*CheckBoxRequest)(nil),               // 15: portenv.daemon.v1.CheckBoxRequest
+	(*CheckBoxResponse)(nil),              // 16: portenv.daemon.v1.CheckBoxResponse
+	(*RestartBoxRequest)(nil),             // 17: portenv.daemon.v1.RestartBoxRequest
+	(*RestartBoxResponse)(nil),            // 18: portenv.daemon.v1.RestartBoxResponse
+	(*OpenBoxRequest)(nil),                // 19: portenv.daemon.v1.OpenBoxRequest
+	(*OpenBoxResponse)(nil),               // 20: portenv.daemon.v1.OpenBoxResponse
+	(*CloseBoxRequest)(nil),               // 21: portenv.daemon.v1.CloseBoxRequest
+	(*CloseBoxResponse)(nil),              // 22: portenv.daemon.v1.CloseBoxResponse
+	(*MakeSavePointRequest)(nil),          // 23: portenv.daemon.v1.MakeSavePointRequest
+	(*MakeSavePointResponse)(nil),         // 24: portenv.daemon.v1.MakeSavePointResponse
+	(*RevertToLastSavePointRequest)(nil),  // 25: portenv.daemon.v1.RevertToLastSavePointRequest
+	(*RevertToLastSavePointResponse)(nil), // 26: portenv.daemon.v1.RevertToLastSavePointResponse
+	(*MoveBoxRequest)(nil),                // 27: portenv.daemon.v1.MoveBoxRequest
+	(*MoveBoxResponse)(nil),               // 28: portenv.daemon.v1.MoveBoxResponse
+	(*TerminalRequest)(nil),               // 29: portenv.daemon.v1.TerminalRequest
+	(*TerminalOpen)(nil),                  // 30: portenv.daemon.v1.TerminalOpen
+	(*TerminalSize)(nil),                  // 31: portenv.daemon.v1.TerminalSize
+	(*TerminalResponse)(nil),              // 32: portenv.daemon.v1.TerminalResponse
+	(*GetVersionRequest)(nil),             // 33: portenv.daemon.v1.GetVersionRequest
+	(*GetVersionResponse)(nil),            // 34: portenv.daemon.v1.GetVersionResponse
+	(*ListBoxesRequest)(nil),              // 35: portenv.daemon.v1.ListBoxesRequest
+	(*ListBoxesResponse)(nil),             // 36: portenv.daemon.v1.ListBoxesResponse
+	(*BoxStatus)(nil),                     // 37: portenv.daemon.v1.BoxStatus
+	(*GetChannelRequest)(nil),             // 38: portenv.daemon.v1.GetChannelRequest
+	(*GetChannelResponse)(nil),            // 39: portenv.daemon.v1.GetChannelResponse
+	(*GetBoxStateRequest)(nil),            // 40: portenv.daemon.v1.GetBoxStateRequest
+	(*GetBoxStateResponse)(nil),           // 41: portenv.daemon.v1.GetBoxStateResponse
+	(*SetNetworkPathRequest)(nil),         // 42: portenv.daemon.v1.SetNetworkPathRequest
+	(*SetNetworkPathResponse)(nil),        // 43: portenv.daemon.v1.SetNetworkPathResponse
+	(*WokeRequest)(nil),                   // 44: portenv.daemon.v1.WokeRequest
+	(*WokeResponse)(nil),                  // 45: portenv.daemon.v1.WokeResponse
+	(*WokeBox)(nil),                       // 46: portenv.daemon.v1.WokeBox
+	(*RetryPackagesRequest)(nil),          // 47: portenv.daemon.v1.RetryPackagesRequest
+	(*RetryPackagesResponse)(nil),         // 48: portenv.daemon.v1.RetryPackagesResponse
+	(*ProvideKeysRequest)(nil),            // 49: portenv.daemon.v1.ProvideKeysRequest
+	(*ProvideKeysResponse)(nil),           // 50: portenv.daemon.v1.ProvideKeysResponse
+	(*RelaunchRequest)(nil),               // 51: portenv.daemon.v1.RelaunchRequest
+	(*RelaunchResponse)(nil),              // 52: portenv.daemon.v1.RelaunchResponse
+	(*WatchBoxStateRequest)(nil),          // 53: portenv.daemon.v1.WatchBoxStateRequest
+	(*WatchBoxStateResponse)(nil),         // 54: portenv.daemon.v1.WatchBoxStateResponse
+	(*ListServersRequest)(nil),            // 55: portenv.daemon.v1.ListServersRequest
+	(*ListServersResponse)(nil),           // 56: portenv.daemon.v1.ListServersResponse
+	(*GetKeyIDsRequest)(nil),              // 57: portenv.daemon.v1.GetKeyIDsRequest
+	(*GetKeyIDsResponse)(nil),             // 58: portenv.daemon.v1.GetKeyIDsResponse
+	(*SaveNowRequest)(nil),                // 59: portenv.daemon.v1.SaveNowRequest
+	(*SaveNowResponse)(nil),               // 60: portenv.daemon.v1.SaveNowResponse
+	(*ListSavesRequest)(nil),              // 61: portenv.daemon.v1.ListSavesRequest
+	(*ListSavesResponse)(nil),             // 62: portenv.daemon.v1.ListSavesResponse
+	(*SaveEntry)(nil),                     // 63: portenv.daemon.v1.SaveEntry
+	(*HousekeepRequest)(nil),              // 64: portenv.daemon.v1.HousekeepRequest
+	(*HousekeepResponse)(nil),             // 65: portenv.daemon.v1.HousekeepResponse
+	(*LeaveUnsavedRequest)(nil),           // 66: portenv.daemon.v1.LeaveUnsavedRequest
+	(*LeaveUnsavedResponse)(nil),          // 67: portenv.daemon.v1.LeaveUnsavedResponse
+	(*TakeSavedAfterQuitRequest)(nil),     // 68: portenv.daemon.v1.TakeSavedAfterQuitRequest
+	(*TakeSavedAfterQuitResponse)(nil),    // 69: portenv.daemon.v1.TakeSavedAfterQuitResponse
+	(*SavedAfterQuit)(nil),                // 70: portenv.daemon.v1.SavedAfterQuit
+	(*ListTabsRequest)(nil),               // 71: portenv.daemon.v1.ListTabsRequest
+	(*ListTabsResponse)(nil),              // 72: portenv.daemon.v1.ListTabsResponse
+	(*NewTabRequest)(nil),                 // 73: portenv.daemon.v1.NewTabRequest
+	(*NewTabResponse)(nil),                // 74: portenv.daemon.v1.NewTabResponse
+	(*CloseTabRequest)(nil),               // 75: portenv.daemon.v1.CloseTabRequest
+	(*CloseTabResponse)(nil),              // 76: portenv.daemon.v1.CloseTabResponse
+	(*RenameTabRequest)(nil),              // 77: portenv.daemon.v1.RenameTabRequest
+	(*RenameTabResponse)(nil),             // 78: portenv.daemon.v1.RenameTabResponse
+	(*SelectTabRequest)(nil),              // 79: portenv.daemon.v1.SelectTabRequest
+	(*SelectTabResponse)(nil),             // 80: portenv.daemon.v1.SelectTabResponse
+	(*WatchTabsRequest)(nil),              // 81: portenv.daemon.v1.WatchTabsRequest
+	(*WatchTabsResponse)(nil),             // 82: portenv.daemon.v1.WatchTabsResponse
+	(*CreateBoxRequest)(nil),              // 83: portenv.daemon.v1.CreateBoxRequest
+	(*ProjectSource)(nil),                 // 84: portenv.daemon.v1.ProjectSource
+	(*WorkspaceSetup)(nil),                // 85: portenv.daemon.v1.WorkspaceSetup
+	(*CreateBoxResponse)(nil),             // 86: portenv.daemon.v1.CreateBoxResponse
+	(*DiscardCreationRequest)(nil),        // 87: portenv.daemon.v1.DiscardCreationRequest
+	(*DiscardCreationResponse)(nil),       // 88: portenv.daemon.v1.DiscardCreationResponse
+	(*RecoverBoxRequest)(nil),             // 89: portenv.daemon.v1.RecoverBoxRequest
+	(*RecoverBoxResponse)(nil),            // 90: portenv.daemon.v1.RecoverBoxResponse
+	(*CheckRecoveryKeyRequest)(nil),       // 91: portenv.daemon.v1.CheckRecoveryKeyRequest
+	(*CheckRecoveryKeyResponse)(nil),      // 92: portenv.daemon.v1.CheckRecoveryKeyResponse
+	(*GetPlacementRequest)(nil),           // 93: portenv.daemon.v1.GetPlacementRequest
+	(*GetPlacementResponse)(nil),          // 94: portenv.daemon.v1.GetPlacementResponse
+	(*TabTerminalRequest)(nil),            // 95: portenv.daemon.v1.TabTerminalRequest
+	(*TabTerminalOpen)(nil),               // 96: portenv.daemon.v1.TabTerminalOpen
+	(*TabTerminalResponse)(nil),           // 97: portenv.daemon.v1.TabTerminalResponse
+	(*TabTerminalReset)(nil),              // 98: portenv.daemon.v1.TabTerminalReset
+	(*CommandAuthor)(nil),                 // 99: portenv.daemon.v1.CommandAuthor
+	(*ServerInfo)(nil),                    // 100: portenv.daemon.v1.ServerInfo
+	(*ScanServerKeyRequest)(nil),          // 101: portenv.daemon.v1.ScanServerKeyRequest
+	(*ScanServerKeyResponse)(nil),         // 102: portenv.daemon.v1.ScanServerKeyResponse
+	(*TrustServerKeyRequest)(nil),         // 103: portenv.daemon.v1.TrustServerKeyRequest
+	(*TrustServerKeyResponse)(nil),        // 104: portenv.daemon.v1.TrustServerKeyResponse
+	(*ForgetServerKeyRequest)(nil),        // 105: portenv.daemon.v1.ForgetServerKeyRequest
+	(*ForgetServerKeyResponse)(nil),       // 106: portenv.daemon.v1.ForgetServerKeyResponse
+	(*ProvideServerKeyRequest)(nil),       // 107: portenv.daemon.v1.ProvideServerKeyRequest
+	(*ProvideServerKeyResponse)(nil),      // 108: portenv.daemon.v1.ProvideServerKeyResponse
+	(*CheckServerRequest)(nil),            // 109: portenv.daemon.v1.CheckServerRequest
+	(*CheckLine)(nil),                     // 110: portenv.daemon.v1.CheckLine
+	(*CheckServerResponse)(nil),           // 111: portenv.daemon.v1.CheckServerResponse
+	(*GetEngineRequest)(nil),              // 112: portenv.daemon.v1.GetEngineRequest
+	(*GetEngineResponse)(nil),             // 113: portenv.daemon.v1.GetEngineResponse
+	(*ImagePull)(nil),                     // 114: portenv.daemon.v1.ImagePull
+	(*ListAgentsRequest)(nil),             // 115: portenv.daemon.v1.ListAgentsRequest
+	(*ListAgentsResponse)(nil),            // 116: portenv.daemon.v1.ListAgentsResponse
+	(*TeamLimit)(nil),                     // 117: portenv.daemon.v1.TeamLimit
+	(*ListTeamTemplatesRequest)(nil),      // 118: portenv.daemon.v1.ListTeamTemplatesRequest
+	(*ListTeamTemplatesResponse)(nil),     // 119: portenv.daemon.v1.ListTeamTemplatesResponse
+	(*TeamTemplate)(nil),                  // 120: portenv.daemon.v1.TeamTemplate
+	(*TeamPlanChoice)(nil),                // 121: portenv.daemon.v1.TeamPlanChoice
+	(*TeamAgentChoice)(nil),               // 122: portenv.daemon.v1.TeamAgentChoice
+	(*PlanTeamRequest)(nil),               // 123: portenv.daemon.v1.PlanTeamRequest
+	(*PlanTeamResponse)(nil),              // 124: portenv.daemon.v1.PlanTeamResponse
+	(*PlannedAgent)(nil),                  // 125: portenv.daemon.v1.PlannedAgent
+	(*ApplyTeamPlanRequest)(nil),          // 126: portenv.daemon.v1.ApplyTeamPlanRequest
+	(*ApplyTeamPlanResponse)(nil),         // 127: portenv.daemon.v1.ApplyTeamPlanResponse
+	(*GetTeamSettingsRequest)(nil),        // 128: portenv.daemon.v1.GetTeamSettingsRequest
+	(*GetTeamSettingsResponse)(nil),       // 129: portenv.daemon.v1.GetTeamSettingsResponse
+	(*SetAgentsAllowedRequest)(nil),       // 130: portenv.daemon.v1.SetAgentsAllowedRequest
+	(*SetAgentsAllowedResponse)(nil),      // 131: portenv.daemon.v1.SetAgentsAllowedResponse
+	(*AgentInfo)(nil),                     // 132: portenv.daemon.v1.AgentInfo
+	(*WatchTeamRequest)(nil),              // 133: portenv.daemon.v1.WatchTeamRequest
+	(*WatchTeamResponse)(nil),             // 134: portenv.daemon.v1.WatchTeamResponse
+	(*FetchAgentBranchRequest)(nil),       // 135: portenv.daemon.v1.FetchAgentBranchRequest
+	(*FetchAgentBranchResponse)(nil),      // 136: portenv.daemon.v1.FetchAgentBranchResponse
+	(*StartAgentRequest)(nil),             // 137: portenv.daemon.v1.StartAgentRequest
+	(*StartAgentResponse)(nil),            // 138: portenv.daemon.v1.StartAgentResponse
+	(*StopAgentRequest)(nil),              // 139: portenv.daemon.v1.StopAgentRequest
+	(*StopAgentResponse)(nil),             // 140: portenv.daemon.v1.StopAgentResponse
+	(*AnswerDecisionRequest)(nil),         // 141: portenv.daemon.v1.AnswerDecisionRequest
+	(*AnswerDecisionResponse)(nil),        // 142: portenv.daemon.v1.AnswerDecisionResponse
+	(*GetAgentFileRequest)(nil),           // 143: portenv.daemon.v1.GetAgentFileRequest
+	(*GetAgentFileResponse)(nil),          // 144: portenv.daemon.v1.GetAgentFileResponse
+	(*ApproveAgentFileRequest)(nil),       // 145: portenv.daemon.v1.ApproveAgentFileRequest
+	(*ApproveAgentFileResponse)(nil),      // 146: portenv.daemon.v1.ApproveAgentFileResponse
+	(*SendMessageRequest)(nil),            // 147: portenv.daemon.v1.SendMessageRequest
+	(*SendMessageResponse)(nil),           // 148: portenv.daemon.v1.SendMessageResponse
+	(*RemoveAgentRequest)(nil),            // 149: portenv.daemon.v1.RemoveAgentRequest
+	(*RemoveAgentResponse)(nil),           // 150: portenv.daemon.v1.RemoveAgentResponse
+	(*ListAgentFilesRequest)(nil),         // 151: portenv.daemon.v1.ListAgentFilesRequest
+	(*ListAgentFilesResponse)(nil),        // 152: portenv.daemon.v1.ListAgentFilesResponse
+	(*ReadAgentFileRequest)(nil),          // 153: portenv.daemon.v1.ReadAgentFileRequest
+	(*ReadAgentFileResponse)(nil),         // 154: portenv.daemon.v1.ReadAgentFileResponse
+	(*AddAgentFilesRequest)(nil),          // 155: portenv.daemon.v1.AddAgentFilesRequest
+	(*AddAgentFilesResponse)(nil),         // 156: portenv.daemon.v1.AddAgentFilesResponse
+	(*SetRoutinePausedRequest)(nil),       // 157: portenv.daemon.v1.SetRoutinePausedRequest
+	(*SetRoutinePausedResponse)(nil),      // 158: portenv.daemon.v1.SetRoutinePausedResponse
+	(*WakeAgentRequest)(nil),              // 159: portenv.daemon.v1.WakeAgentRequest
+	(*WakeAgentResponse)(nil),             // 160: portenv.daemon.v1.WakeAgentResponse
+	(*ListDecisionsRequest)(nil),          // 161: portenv.daemon.v1.ListDecisionsRequest
+	(*ListDecisionsResponse)(nil),         // 162: portenv.daemon.v1.ListDecisionsResponse
+	(*DeployRequest)(nil),                 // 163: portenv.daemon.v1.DeployRequest
+	(*DeployResponse)(nil),                // 164: portenv.daemon.v1.DeployResponse
+	(*GetDeletePlanRequest)(nil),          // 165: portenv.daemon.v1.GetDeletePlanRequest
+	(*GetDeletePlanResponse)(nil),         // 166: portenv.daemon.v1.GetDeletePlanResponse
+	(*DeleteBoxRequest)(nil),              // 167: portenv.daemon.v1.DeleteBoxRequest
+	(*DeleteBoxResponse)(nil),             // 168: portenv.daemon.v1.DeleteBoxResponse
+	nil,                                   // 169: portenv.daemon.v1.ProvideKeysRequest.KeysEntry
+	nil,                                   // 170: portenv.daemon.v1.CreateBoxRequest.KeysEntry
+	nil,                                   // 171: portenv.daemon.v1.RecoverBoxRequest.KeysEntry
+	nil,                                   // 172: portenv.daemon.v1.CheckRecoveryKeyRequest.RecoveryPasswordsEntry
+	(*v1.SnapshotRef)(nil),                // 173: portenv.types.v1.SnapshotRef
+	(*v1.BuildInfo)(nil),                  // 174: portenv.types.v1.BuildInfo
+	(*v1.Box)(nil),                        // 175: portenv.types.v1.Box
+	(v1.BoxState)(0),                      // 176: portenv.types.v1.BoxState
+	(*timestamppb.Timestamp)(nil),         // 177: google.protobuf.Timestamp
+	(*v1.Tab)(nil),                        // 178: portenv.types.v1.Tab
+	(v1.TabTerminalEnd)(0),                // 179: portenv.types.v1.TabTerminalEnd
+	(v1.ServerKeyState)(0),                // 180: portenv.types.v1.ServerKeyState
+	(v1.CheckState)(0),                    // 181: portenv.types.v1.CheckState
+	(v1.AgentState)(0),                    // 182: portenv.types.v1.AgentState
+	(*v1.AgentGrant)(nil),                 // 183: portenv.types.v1.AgentGrant
+	(*v1.AgentStatus)(nil),                // 184: portenv.types.v1.AgentStatus
+	(*v1.Routine)(nil),                    // 185: portenv.types.v1.Routine
+	(*v1.BoardMessage)(nil),               // 186: portenv.types.v1.BoardMessage
+	(*v1.Decision)(nil),                   // 187: portenv.types.v1.Decision
+	(v1.MessageType)(0),                   // 188: portenv.types.v1.MessageType
+	(*v1.AgentFile)(nil),                  // 189: portenv.types.v1.AgentFile
 }
 var file_portenv_daemon_v1_daemon_proto_depIdxs = []int32{
-	10,  // 0: portenv.daemon.v1.WatchPushesResponse.question:type_name -> portenv.daemon.v1.PushQuestion
-	11,  // 1: portenv.daemon.v1.PushQuestion.updates:type_name -> portenv.daemon.v1.PushUpdateInfo
-	168, // 2: portenv.daemon.v1.MakeSavePointResponse.snapshot:type_name -> portenv.types.v1.SnapshotRef
-	168, // 3: portenv.daemon.v1.RevertToLastSavePointResponse.restored:type_name -> portenv.types.v1.SnapshotRef
-	168, // 4: portenv.daemon.v1.RevertToLastSavePointResponse.saved_before:type_name -> portenv.types.v1.SnapshotRef
-	29,  // 5: portenv.daemon.v1.TerminalRequest.open:type_name -> portenv.daemon.v1.TerminalOpen
-	30,  // 6: portenv.daemon.v1.TerminalRequest.resize:type_name -> portenv.daemon.v1.TerminalSize
-	30,  // 7: portenv.daemon.v1.TerminalOpen.size:type_name -> portenv.daemon.v1.TerminalSize
-	169, // 8: portenv.daemon.v1.GetVersionResponse.build:type_name -> portenv.types.v1.BuildInfo
-	36,  // 9: portenv.daemon.v1.ListBoxesResponse.boxes:type_name -> portenv.daemon.v1.BoxStatus
-	170, // 10: portenv.daemon.v1.BoxStatus.box:type_name -> portenv.types.v1.Box
-	171, // 11: portenv.daemon.v1.BoxStatus.state:type_name -> portenv.types.v1.BoxState
-	0,   // 12: portenv.daemon.v1.GetBoxStateResponse.state:type_name -> portenv.daemon.v1.SaveState
-	172, // 13: portenv.daemon.v1.GetBoxStateResponse.saved_at:type_name -> google.protobuf.Timestamp
-	172, // 14: portenv.daemon.v1.GetBoxStateResponse.opened_at:type_name -> google.protobuf.Timestamp
-	113, // 15: portenv.daemon.v1.GetBoxStateResponse.image_pull:type_name -> portenv.daemon.v1.ImagePull
-	1,   // 16: portenv.daemon.v1.SetNetworkPathRequest.path:type_name -> portenv.daemon.v1.NetworkPath
-	45,  // 17: portenv.daemon.v1.WokeResponse.boxes:type_name -> portenv.daemon.v1.WokeBox
-	164, // 18: portenv.daemon.v1.ProvideKeysRequest.keys:type_name -> portenv.daemon.v1.ProvideKeysRequest.KeysEntry
-	40,  // 19: portenv.daemon.v1.WatchBoxStateResponse.state:type_name -> portenv.daemon.v1.GetBoxStateResponse
-	99,  // 20: portenv.daemon.v1.ListServersResponse.infos:type_name -> portenv.daemon.v1.ServerInfo
-	168, // 21: portenv.daemon.v1.SaveNowResponse.snapshot:type_name -> portenv.types.v1.SnapshotRef
-	62,  // 22: portenv.daemon.v1.ListSavesResponse.saves:type_name -> portenv.daemon.v1.SaveEntry
-	172, // 23: portenv.daemon.v1.SaveEntry.time:type_name -> google.protobuf.Timestamp
-	69,  // 24: portenv.daemon.v1.TakeSavedAfterQuitResponse.saved:type_name -> portenv.daemon.v1.SavedAfterQuit
-	172, // 25: portenv.daemon.v1.SavedAfterQuit.saved_at:type_name -> google.protobuf.Timestamp
-	173, // 26: portenv.daemon.v1.ListTabsResponse.tabs:type_name -> portenv.types.v1.Tab
-	173, // 27: portenv.daemon.v1.NewTabResponse.tab:type_name -> portenv.types.v1.Tab
-	173, // 28: portenv.daemon.v1.WatchTabsResponse.tabs:type_name -> portenv.types.v1.Tab
-	165, // 29: portenv.daemon.v1.CreateBoxRequest.keys:type_name -> portenv.daemon.v1.CreateBoxRequest.KeysEntry
-	120, // 30: portenv.daemon.v1.CreateBoxRequest.team:type_name -> portenv.daemon.v1.TeamPlanChoice
-	83,  // 31: portenv.daemon.v1.CreateBoxRequest.project:type_name -> portenv.daemon.v1.ProjectSource
-	83,  // 32: portenv.daemon.v1.WorkspaceSetup.project:type_name -> portenv.daemon.v1.ProjectSource
-	120, // 33: portenv.daemon.v1.WorkspaceSetup.team:type_name -> portenv.daemon.v1.TeamPlanChoice
-	166, // 34: portenv.daemon.v1.RecoverBoxRequest.keys:type_name -> portenv.daemon.v1.RecoverBoxRequest.KeysEntry
-	167, // 35: portenv.daemon.v1.CheckRecoveryKeyRequest.recovery_passwords:type_name -> portenv.daemon.v1.CheckRecoveryKeyRequest.RecoveryPasswordsEntry
-	2,   // 36: portenv.daemon.v1.GetPlacementResponse.holder:type_name -> portenv.daemon.v1.Holder
-	172, // 37: portenv.daemon.v1.GetPlacementResponse.newest_save_at:type_name -> google.protobuf.Timestamp
-	3,   // 38: portenv.daemon.v1.GetPlacementResponse.answers:type_name -> portenv.daemon.v1.Answers
-	95,  // 39: portenv.daemon.v1.TabTerminalRequest.open:type_name -> portenv.daemon.v1.TabTerminalOpen
-	30,  // 40: portenv.daemon.v1.TabTerminalRequest.resize:type_name -> portenv.daemon.v1.TerminalSize
-	30,  // 41: portenv.daemon.v1.TabTerminalOpen.size:type_name -> portenv.daemon.v1.TerminalSize
-	97,  // 42: portenv.daemon.v1.TabTerminalResponse.reset:type_name -> portenv.daemon.v1.TabTerminalReset
-	30,  // 43: portenv.daemon.v1.TabTerminalResponse.resized:type_name -> portenv.daemon.v1.TerminalSize
-	174, // 44: portenv.daemon.v1.TabTerminalResponse.end:type_name -> portenv.types.v1.TabTerminalEnd
-	98,  // 45: portenv.daemon.v1.TabTerminalResponse.author:type_name -> portenv.daemon.v1.CommandAuthor
-	30,  // 46: portenv.daemon.v1.TabTerminalReset.size:type_name -> portenv.daemon.v1.TerminalSize
-	98,  // 47: portenv.daemon.v1.TabTerminalReset.authors:type_name -> portenv.daemon.v1.CommandAuthor
-	175, // 48: portenv.daemon.v1.ServerInfo.state:type_name -> portenv.types.v1.ServerKeyState
-	99,  // 49: portenv.daemon.v1.ScanServerKeyResponse.info:type_name -> portenv.daemon.v1.ServerInfo
-	99,  // 50: portenv.daemon.v1.TrustServerKeyResponse.info:type_name -> portenv.daemon.v1.ServerInfo
-	99,  // 51: portenv.daemon.v1.ForgetServerKeyResponse.info:type_name -> portenv.daemon.v1.ServerInfo
-	176, // 52: portenv.daemon.v1.CheckLine.state:type_name -> portenv.types.v1.CheckState
-	109, // 53: portenv.daemon.v1.CheckServerResponse.lines:type_name -> portenv.daemon.v1.CheckLine
-	131, // 54: portenv.daemon.v1.ListAgentsResponse.agents:type_name -> portenv.daemon.v1.AgentInfo
-	116, // 55: portenv.daemon.v1.ListAgentsResponse.team_limit:type_name -> portenv.daemon.v1.TeamLimit
-	119, // 56: portenv.daemon.v1.ListTeamTemplatesResponse.templates:type_name -> portenv.daemon.v1.TeamTemplate
-	124, // 57: portenv.daemon.v1.TeamTemplate.agents:type_name -> portenv.daemon.v1.PlannedAgent
-	121, // 58: portenv.daemon.v1.TeamPlanChoice.agents:type_name -> portenv.daemon.v1.TeamAgentChoice
-	120, // 59: portenv.daemon.v1.PlanTeamRequest.choice:type_name -> portenv.daemon.v1.TeamPlanChoice
-	124, // 60: portenv.daemon.v1.PlanTeamResponse.agents:type_name -> portenv.daemon.v1.PlannedAgent
-	128, // 61: portenv.daemon.v1.SetAgentsAllowedResponse.settings:type_name -> portenv.daemon.v1.GetTeamSettingsResponse
-	177, // 62: portenv.daemon.v1.AgentInfo.state:type_name -> portenv.types.v1.AgentState
-	178, // 63: portenv.daemon.v1.AgentInfo.grant:type_name -> portenv.types.v1.AgentGrant
-	179, // 64: portenv.daemon.v1.AgentInfo.status:type_name -> portenv.types.v1.AgentStatus
-	180, // 65: portenv.daemon.v1.AgentInfo.routines:type_name -> portenv.types.v1.Routine
-	131, // 66: portenv.daemon.v1.WatchTeamResponse.agent:type_name -> portenv.daemon.v1.AgentInfo
-	181, // 67: portenv.daemon.v1.WatchTeamResponse.message:type_name -> portenv.types.v1.BoardMessage
-	182, // 68: portenv.daemon.v1.WatchTeamResponse.decision:type_name -> portenv.types.v1.Decision
-	116, // 69: portenv.daemon.v1.WatchTeamResponse.team_limit:type_name -> portenv.daemon.v1.TeamLimit
-	131, // 70: portenv.daemon.v1.StartAgentResponse.agent:type_name -> portenv.daemon.v1.AgentInfo
-	131, // 71: portenv.daemon.v1.StopAgentResponse.agent:type_name -> portenv.daemon.v1.AgentInfo
-	182, // 72: portenv.daemon.v1.AnswerDecisionResponse.decision:type_name -> portenv.types.v1.Decision
-	131, // 73: portenv.daemon.v1.ApproveAgentFileResponse.agent:type_name -> portenv.daemon.v1.AgentInfo
-	183, // 74: portenv.daemon.v1.SendMessageRequest.type:type_name -> portenv.types.v1.MessageType
-	181, // 75: portenv.daemon.v1.SendMessageResponse.message:type_name -> portenv.types.v1.BoardMessage
-	182, // 76: portenv.daemon.v1.RemoveAgentResponse.delete_files:type_name -> portenv.types.v1.Decision
-	184, // 77: portenv.daemon.v1.ListAgentFilesResponse.files:type_name -> portenv.types.v1.AgentFile
-	184, // 78: portenv.daemon.v1.AddAgentFilesResponse.added:type_name -> portenv.types.v1.AgentFile
-	131, // 79: portenv.daemon.v1.SetRoutinePausedResponse.agent:type_name -> portenv.daemon.v1.AgentInfo
-	182, // 80: portenv.daemon.v1.ListDecisionsResponse.decisions:type_name -> portenv.types.v1.Decision
-	182, // 81: portenv.daemon.v1.DeployResponse.decision:type_name -> portenv.types.v1.Decision
-	32,  // 82: portenv.daemon.v1.DaemonService.GetVersion:input_type -> portenv.daemon.v1.GetVersionRequest
-	34,  // 83: portenv.daemon.v1.DaemonService.ListBoxes:input_type -> portenv.daemon.v1.ListBoxesRequest
-	18,  // 84: portenv.daemon.v1.DaemonService.OpenBox:input_type -> portenv.daemon.v1.OpenBoxRequest
-	20,  // 85: portenv.daemon.v1.DaemonService.CloseBox:input_type -> portenv.daemon.v1.CloseBoxRequest
-	22,  // 86: portenv.daemon.v1.DaemonService.MakeSavePoint:input_type -> portenv.daemon.v1.MakeSavePointRequest
-	24,  // 87: portenv.daemon.v1.DaemonService.RevertToLastSavePoint:input_type -> portenv.daemon.v1.RevertToLastSavePointRequest
-	26,  // 88: portenv.daemon.v1.DaemonService.MoveBox:input_type -> portenv.daemon.v1.MoveBoxRequest
-	28,  // 89: portenv.daemon.v1.DaemonService.Terminal:input_type -> portenv.daemon.v1.TerminalRequest
-	14,  // 90: portenv.daemon.v1.DaemonService.CheckBox:input_type -> portenv.daemon.v1.CheckBoxRequest
-	16,  // 91: portenv.daemon.v1.DaemonService.RestartBox:input_type -> portenv.daemon.v1.RestartBoxRequest
-	37,  // 92: portenv.daemon.v1.DaemonService.GetChannel:input_type -> portenv.daemon.v1.GetChannelRequest
-	39,  // 93: portenv.daemon.v1.DaemonService.GetBoxState:input_type -> portenv.daemon.v1.GetBoxStateRequest
-	52,  // 94: portenv.daemon.v1.DaemonService.WatchBoxState:input_type -> portenv.daemon.v1.WatchBoxStateRequest
-	41,  // 95: portenv.daemon.v1.DaemonService.SetNetworkPath:input_type -> portenv.daemon.v1.SetNetworkPathRequest
-	43,  // 96: portenv.daemon.v1.DaemonService.Woke:input_type -> portenv.daemon.v1.WokeRequest
-	46,  // 97: portenv.daemon.v1.DaemonService.RetryPackages:input_type -> portenv.daemon.v1.RetryPackagesRequest
-	48,  // 98: portenv.daemon.v1.DaemonService.ProvideKeys:input_type -> portenv.daemon.v1.ProvideKeysRequest
-	50,  // 99: portenv.daemon.v1.DaemonService.Relaunch:input_type -> portenv.daemon.v1.RelaunchRequest
-	54,  // 100: portenv.daemon.v1.DaemonService.ListServers:input_type -> portenv.daemon.v1.ListServersRequest
-	56,  // 101: portenv.daemon.v1.DaemonService.GetKeyIDs:input_type -> portenv.daemon.v1.GetKeyIDsRequest
-	58,  // 102: portenv.daemon.v1.DaemonService.SaveNow:input_type -> portenv.daemon.v1.SaveNowRequest
-	60,  // 103: portenv.daemon.v1.DaemonService.ListSaves:input_type -> portenv.daemon.v1.ListSavesRequest
-	63,  // 104: portenv.daemon.v1.DaemonService.Housekeep:input_type -> portenv.daemon.v1.HousekeepRequest
-	65,  // 105: portenv.daemon.v1.DaemonService.LeaveUnsaved:input_type -> portenv.daemon.v1.LeaveUnsavedRequest
-	67,  // 106: portenv.daemon.v1.DaemonService.TakeSavedAfterQuit:input_type -> portenv.daemon.v1.TakeSavedAfterQuitRequest
-	70,  // 107: portenv.daemon.v1.DaemonService.ListTabs:input_type -> portenv.daemon.v1.ListTabsRequest
-	72,  // 108: portenv.daemon.v1.DaemonService.NewTab:input_type -> portenv.daemon.v1.NewTabRequest
-	74,  // 109: portenv.daemon.v1.DaemonService.CloseTab:input_type -> portenv.daemon.v1.CloseTabRequest
-	76,  // 110: portenv.daemon.v1.DaemonService.RenameTab:input_type -> portenv.daemon.v1.RenameTabRequest
-	78,  // 111: portenv.daemon.v1.DaemonService.SelectTab:input_type -> portenv.daemon.v1.SelectTabRequest
-	80,  // 112: portenv.daemon.v1.DaemonService.WatchTabs:input_type -> portenv.daemon.v1.WatchTabsRequest
-	82,  // 113: portenv.daemon.v1.DaemonService.CreateBox:input_type -> portenv.daemon.v1.CreateBoxRequest
-	86,  // 114: portenv.daemon.v1.DaemonService.DiscardCreation:input_type -> portenv.daemon.v1.DiscardCreationRequest
-	88,  // 115: portenv.daemon.v1.DaemonService.RecoverBox:input_type -> portenv.daemon.v1.RecoverBoxRequest
-	90,  // 116: portenv.daemon.v1.DaemonService.CheckRecoveryKey:input_type -> portenv.daemon.v1.CheckRecoveryKeyRequest
-	92,  // 117: portenv.daemon.v1.DaemonService.GetPlacement:input_type -> portenv.daemon.v1.GetPlacementRequest
-	94,  // 118: portenv.daemon.v1.DaemonService.TabTerminal:input_type -> portenv.daemon.v1.TabTerminalRequest
-	100, // 119: portenv.daemon.v1.DaemonService.ScanServerKey:input_type -> portenv.daemon.v1.ScanServerKeyRequest
-	102, // 120: portenv.daemon.v1.DaemonService.TrustServerKey:input_type -> portenv.daemon.v1.TrustServerKeyRequest
-	104, // 121: portenv.daemon.v1.DaemonService.ForgetServerKey:input_type -> portenv.daemon.v1.ForgetServerKeyRequest
-	106, // 122: portenv.daemon.v1.DaemonService.ProvideServerKey:input_type -> portenv.daemon.v1.ProvideServerKeyRequest
-	108, // 123: portenv.daemon.v1.DaemonService.CheckServer:input_type -> portenv.daemon.v1.CheckServerRequest
-	111, // 124: portenv.daemon.v1.DaemonService.GetEngine:input_type -> portenv.daemon.v1.GetEngineRequest
-	114, // 125: portenv.daemon.v1.DaemonService.ListAgents:input_type -> portenv.daemon.v1.ListAgentsRequest
-	132, // 126: portenv.daemon.v1.DaemonService.WatchTeam:input_type -> portenv.daemon.v1.WatchTeamRequest
-	136, // 127: portenv.daemon.v1.DaemonService.StartAgent:input_type -> portenv.daemon.v1.StartAgentRequest
-	138, // 128: portenv.daemon.v1.DaemonService.StopAgent:input_type -> portenv.daemon.v1.StopAgentRequest
-	134, // 129: portenv.daemon.v1.DaemonService.FetchAgentBranch:input_type -> portenv.daemon.v1.FetchAgentBranchRequest
-	140, // 130: portenv.daemon.v1.DaemonService.AnswerDecision:input_type -> portenv.daemon.v1.AnswerDecisionRequest
-	142, // 131: portenv.daemon.v1.DaemonService.GetAgentFile:input_type -> portenv.daemon.v1.GetAgentFileRequest
-	144, // 132: portenv.daemon.v1.DaemonService.ApproveAgentFile:input_type -> portenv.daemon.v1.ApproveAgentFileRequest
-	146, // 133: portenv.daemon.v1.DaemonService.SendMessage:input_type -> portenv.daemon.v1.SendMessageRequest
-	148, // 134: portenv.daemon.v1.DaemonService.RemoveAgent:input_type -> portenv.daemon.v1.RemoveAgentRequest
-	150, // 135: portenv.daemon.v1.DaemonService.ListAgentFiles:input_type -> portenv.daemon.v1.ListAgentFilesRequest
-	152, // 136: portenv.daemon.v1.DaemonService.ReadAgentFile:input_type -> portenv.daemon.v1.ReadAgentFileRequest
-	154, // 137: portenv.daemon.v1.DaemonService.AddAgentFiles:input_type -> portenv.daemon.v1.AddAgentFilesRequest
-	156, // 138: portenv.daemon.v1.DaemonService.SetRoutinePaused:input_type -> portenv.daemon.v1.SetRoutinePausedRequest
-	158, // 139: portenv.daemon.v1.DaemonService.WakeAgent:input_type -> portenv.daemon.v1.WakeAgentRequest
-	160, // 140: portenv.daemon.v1.DaemonService.ListDecisions:input_type -> portenv.daemon.v1.ListDecisionsRequest
-	162, // 141: portenv.daemon.v1.DaemonService.Deploy:input_type -> portenv.daemon.v1.DeployRequest
-	127, // 142: portenv.daemon.v1.DaemonService.GetTeamSettings:input_type -> portenv.daemon.v1.GetTeamSettingsRequest
-	129, // 143: portenv.daemon.v1.DaemonService.SetAgentsAllowed:input_type -> portenv.daemon.v1.SetAgentsAllowedRequest
-	117, // 144: portenv.daemon.v1.DaemonService.ListTeamTemplates:input_type -> portenv.daemon.v1.ListTeamTemplatesRequest
-	122, // 145: portenv.daemon.v1.DaemonService.PlanTeam:input_type -> portenv.daemon.v1.PlanTeamRequest
-	125, // 146: portenv.daemon.v1.DaemonService.ApplyTeamPlan:input_type -> portenv.daemon.v1.ApplyTeamPlanRequest
-	8,   // 147: portenv.daemon.v1.DaemonService.WatchPushes:input_type -> portenv.daemon.v1.WatchPushesRequest
-	12,  // 148: portenv.daemon.v1.DaemonService.AnswerPush:input_type -> portenv.daemon.v1.AnswerPushRequest
-	4,   // 149: portenv.daemon.v1.DaemonService.GetPushes:input_type -> portenv.daemon.v1.GetPushesRequest
-	6,   // 150: portenv.daemon.v1.DaemonService.StopAllowingPushes:input_type -> portenv.daemon.v1.StopAllowingPushesRequest
-	33,  // 151: portenv.daemon.v1.DaemonService.GetVersion:output_type -> portenv.daemon.v1.GetVersionResponse
-	35,  // 152: portenv.daemon.v1.DaemonService.ListBoxes:output_type -> portenv.daemon.v1.ListBoxesResponse
-	19,  // 153: portenv.daemon.v1.DaemonService.OpenBox:output_type -> portenv.daemon.v1.OpenBoxResponse
-	21,  // 154: portenv.daemon.v1.DaemonService.CloseBox:output_type -> portenv.daemon.v1.CloseBoxResponse
-	23,  // 155: portenv.daemon.v1.DaemonService.MakeSavePoint:output_type -> portenv.daemon.v1.MakeSavePointResponse
-	25,  // 156: portenv.daemon.v1.DaemonService.RevertToLastSavePoint:output_type -> portenv.daemon.v1.RevertToLastSavePointResponse
-	27,  // 157: portenv.daemon.v1.DaemonService.MoveBox:output_type -> portenv.daemon.v1.MoveBoxResponse
-	31,  // 158: portenv.daemon.v1.DaemonService.Terminal:output_type -> portenv.daemon.v1.TerminalResponse
-	15,  // 159: portenv.daemon.v1.DaemonService.CheckBox:output_type -> portenv.daemon.v1.CheckBoxResponse
-	17,  // 160: portenv.daemon.v1.DaemonService.RestartBox:output_type -> portenv.daemon.v1.RestartBoxResponse
-	38,  // 161: portenv.daemon.v1.DaemonService.GetChannel:output_type -> portenv.daemon.v1.GetChannelResponse
-	40,  // 162: portenv.daemon.v1.DaemonService.GetBoxState:output_type -> portenv.daemon.v1.GetBoxStateResponse
-	53,  // 163: portenv.daemon.v1.DaemonService.WatchBoxState:output_type -> portenv.daemon.v1.WatchBoxStateResponse
-	42,  // 164: portenv.daemon.v1.DaemonService.SetNetworkPath:output_type -> portenv.daemon.v1.SetNetworkPathResponse
-	44,  // 165: portenv.daemon.v1.DaemonService.Woke:output_type -> portenv.daemon.v1.WokeResponse
-	47,  // 166: portenv.daemon.v1.DaemonService.RetryPackages:output_type -> portenv.daemon.v1.RetryPackagesResponse
-	49,  // 167: portenv.daemon.v1.DaemonService.ProvideKeys:output_type -> portenv.daemon.v1.ProvideKeysResponse
-	51,  // 168: portenv.daemon.v1.DaemonService.Relaunch:output_type -> portenv.daemon.v1.RelaunchResponse
-	55,  // 169: portenv.daemon.v1.DaemonService.ListServers:output_type -> portenv.daemon.v1.ListServersResponse
-	57,  // 170: portenv.daemon.v1.DaemonService.GetKeyIDs:output_type -> portenv.daemon.v1.GetKeyIDsResponse
-	59,  // 171: portenv.daemon.v1.DaemonService.SaveNow:output_type -> portenv.daemon.v1.SaveNowResponse
-	61,  // 172: portenv.daemon.v1.DaemonService.ListSaves:output_type -> portenv.daemon.v1.ListSavesResponse
-	64,  // 173: portenv.daemon.v1.DaemonService.Housekeep:output_type -> portenv.daemon.v1.HousekeepResponse
-	66,  // 174: portenv.daemon.v1.DaemonService.LeaveUnsaved:output_type -> portenv.daemon.v1.LeaveUnsavedResponse
-	68,  // 175: portenv.daemon.v1.DaemonService.TakeSavedAfterQuit:output_type -> portenv.daemon.v1.TakeSavedAfterQuitResponse
-	71,  // 176: portenv.daemon.v1.DaemonService.ListTabs:output_type -> portenv.daemon.v1.ListTabsResponse
-	73,  // 177: portenv.daemon.v1.DaemonService.NewTab:output_type -> portenv.daemon.v1.NewTabResponse
-	75,  // 178: portenv.daemon.v1.DaemonService.CloseTab:output_type -> portenv.daemon.v1.CloseTabResponse
-	77,  // 179: portenv.daemon.v1.DaemonService.RenameTab:output_type -> portenv.daemon.v1.RenameTabResponse
-	79,  // 180: portenv.daemon.v1.DaemonService.SelectTab:output_type -> portenv.daemon.v1.SelectTabResponse
-	81,  // 181: portenv.daemon.v1.DaemonService.WatchTabs:output_type -> portenv.daemon.v1.WatchTabsResponse
-	85,  // 182: portenv.daemon.v1.DaemonService.CreateBox:output_type -> portenv.daemon.v1.CreateBoxResponse
-	87,  // 183: portenv.daemon.v1.DaemonService.DiscardCreation:output_type -> portenv.daemon.v1.DiscardCreationResponse
-	89,  // 184: portenv.daemon.v1.DaemonService.RecoverBox:output_type -> portenv.daemon.v1.RecoverBoxResponse
-	91,  // 185: portenv.daemon.v1.DaemonService.CheckRecoveryKey:output_type -> portenv.daemon.v1.CheckRecoveryKeyResponse
-	93,  // 186: portenv.daemon.v1.DaemonService.GetPlacement:output_type -> portenv.daemon.v1.GetPlacementResponse
-	96,  // 187: portenv.daemon.v1.DaemonService.TabTerminal:output_type -> portenv.daemon.v1.TabTerminalResponse
-	101, // 188: portenv.daemon.v1.DaemonService.ScanServerKey:output_type -> portenv.daemon.v1.ScanServerKeyResponse
-	103, // 189: portenv.daemon.v1.DaemonService.TrustServerKey:output_type -> portenv.daemon.v1.TrustServerKeyResponse
-	105, // 190: portenv.daemon.v1.DaemonService.ForgetServerKey:output_type -> portenv.daemon.v1.ForgetServerKeyResponse
-	107, // 191: portenv.daemon.v1.DaemonService.ProvideServerKey:output_type -> portenv.daemon.v1.ProvideServerKeyResponse
-	110, // 192: portenv.daemon.v1.DaemonService.CheckServer:output_type -> portenv.daemon.v1.CheckServerResponse
-	112, // 193: portenv.daemon.v1.DaemonService.GetEngine:output_type -> portenv.daemon.v1.GetEngineResponse
-	115, // 194: portenv.daemon.v1.DaemonService.ListAgents:output_type -> portenv.daemon.v1.ListAgentsResponse
-	133, // 195: portenv.daemon.v1.DaemonService.WatchTeam:output_type -> portenv.daemon.v1.WatchTeamResponse
-	137, // 196: portenv.daemon.v1.DaemonService.StartAgent:output_type -> portenv.daemon.v1.StartAgentResponse
-	139, // 197: portenv.daemon.v1.DaemonService.StopAgent:output_type -> portenv.daemon.v1.StopAgentResponse
-	135, // 198: portenv.daemon.v1.DaemonService.FetchAgentBranch:output_type -> portenv.daemon.v1.FetchAgentBranchResponse
-	141, // 199: portenv.daemon.v1.DaemonService.AnswerDecision:output_type -> portenv.daemon.v1.AnswerDecisionResponse
-	143, // 200: portenv.daemon.v1.DaemonService.GetAgentFile:output_type -> portenv.daemon.v1.GetAgentFileResponse
-	145, // 201: portenv.daemon.v1.DaemonService.ApproveAgentFile:output_type -> portenv.daemon.v1.ApproveAgentFileResponse
-	147, // 202: portenv.daemon.v1.DaemonService.SendMessage:output_type -> portenv.daemon.v1.SendMessageResponse
-	149, // 203: portenv.daemon.v1.DaemonService.RemoveAgent:output_type -> portenv.daemon.v1.RemoveAgentResponse
-	151, // 204: portenv.daemon.v1.DaemonService.ListAgentFiles:output_type -> portenv.daemon.v1.ListAgentFilesResponse
-	153, // 205: portenv.daemon.v1.DaemonService.ReadAgentFile:output_type -> portenv.daemon.v1.ReadAgentFileResponse
-	155, // 206: portenv.daemon.v1.DaemonService.AddAgentFiles:output_type -> portenv.daemon.v1.AddAgentFilesResponse
-	157, // 207: portenv.daemon.v1.DaemonService.SetRoutinePaused:output_type -> portenv.daemon.v1.SetRoutinePausedResponse
-	159, // 208: portenv.daemon.v1.DaemonService.WakeAgent:output_type -> portenv.daemon.v1.WakeAgentResponse
-	161, // 209: portenv.daemon.v1.DaemonService.ListDecisions:output_type -> portenv.daemon.v1.ListDecisionsResponse
-	163, // 210: portenv.daemon.v1.DaemonService.Deploy:output_type -> portenv.daemon.v1.DeployResponse
-	128, // 211: portenv.daemon.v1.DaemonService.GetTeamSettings:output_type -> portenv.daemon.v1.GetTeamSettingsResponse
-	130, // 212: portenv.daemon.v1.DaemonService.SetAgentsAllowed:output_type -> portenv.daemon.v1.SetAgentsAllowedResponse
-	118, // 213: portenv.daemon.v1.DaemonService.ListTeamTemplates:output_type -> portenv.daemon.v1.ListTeamTemplatesResponse
-	123, // 214: portenv.daemon.v1.DaemonService.PlanTeam:output_type -> portenv.daemon.v1.PlanTeamResponse
-	126, // 215: portenv.daemon.v1.DaemonService.ApplyTeamPlan:output_type -> portenv.daemon.v1.ApplyTeamPlanResponse
-	9,   // 216: portenv.daemon.v1.DaemonService.WatchPushes:output_type -> portenv.daemon.v1.WatchPushesResponse
-	13,  // 217: portenv.daemon.v1.DaemonService.AnswerPush:output_type -> portenv.daemon.v1.AnswerPushResponse
-	5,   // 218: portenv.daemon.v1.DaemonService.GetPushes:output_type -> portenv.daemon.v1.GetPushesResponse
-	7,   // 219: portenv.daemon.v1.DaemonService.StopAllowingPushes:output_type -> portenv.daemon.v1.StopAllowingPushesResponse
-	151, // [151:220] is the sub-list for method output_type
-	82,  // [82:151] is the sub-list for method input_type
-	82,  // [82:82] is the sub-list for extension type_name
-	82,  // [82:82] is the sub-list for extension extendee
-	0,   // [0:82] is the sub-list for field type_name
+	11,  // 0: portenv.daemon.v1.WatchPushesResponse.question:type_name -> portenv.daemon.v1.PushQuestion
+	12,  // 1: portenv.daemon.v1.PushQuestion.updates:type_name -> portenv.daemon.v1.PushUpdateInfo
+	173, // 2: portenv.daemon.v1.MakeSavePointResponse.snapshot:type_name -> portenv.types.v1.SnapshotRef
+	173, // 3: portenv.daemon.v1.RevertToLastSavePointResponse.restored:type_name -> portenv.types.v1.SnapshotRef
+	173, // 4: portenv.daemon.v1.RevertToLastSavePointResponse.saved_before:type_name -> portenv.types.v1.SnapshotRef
+	30,  // 5: portenv.daemon.v1.TerminalRequest.open:type_name -> portenv.daemon.v1.TerminalOpen
+	31,  // 6: portenv.daemon.v1.TerminalRequest.resize:type_name -> portenv.daemon.v1.TerminalSize
+	31,  // 7: portenv.daemon.v1.TerminalOpen.size:type_name -> portenv.daemon.v1.TerminalSize
+	174, // 8: portenv.daemon.v1.GetVersionResponse.build:type_name -> portenv.types.v1.BuildInfo
+	37,  // 9: portenv.daemon.v1.ListBoxesResponse.boxes:type_name -> portenv.daemon.v1.BoxStatus
+	175, // 10: portenv.daemon.v1.BoxStatus.box:type_name -> portenv.types.v1.Box
+	176, // 11: portenv.daemon.v1.BoxStatus.state:type_name -> portenv.types.v1.BoxState
+	4,   // 12: portenv.daemon.v1.BoxStatus.delete_step:type_name -> portenv.daemon.v1.DeleteStep
+	0,   // 13: portenv.daemon.v1.GetBoxStateResponse.state:type_name -> portenv.daemon.v1.SaveState
+	177, // 14: portenv.daemon.v1.GetBoxStateResponse.saved_at:type_name -> google.protobuf.Timestamp
+	177, // 15: portenv.daemon.v1.GetBoxStateResponse.opened_at:type_name -> google.protobuf.Timestamp
+	114, // 16: portenv.daemon.v1.GetBoxStateResponse.image_pull:type_name -> portenv.daemon.v1.ImagePull
+	1,   // 17: portenv.daemon.v1.SetNetworkPathRequest.path:type_name -> portenv.daemon.v1.NetworkPath
+	46,  // 18: portenv.daemon.v1.WokeResponse.boxes:type_name -> portenv.daemon.v1.WokeBox
+	169, // 19: portenv.daemon.v1.ProvideKeysRequest.keys:type_name -> portenv.daemon.v1.ProvideKeysRequest.KeysEntry
+	41,  // 20: portenv.daemon.v1.WatchBoxStateResponse.state:type_name -> portenv.daemon.v1.GetBoxStateResponse
+	100, // 21: portenv.daemon.v1.ListServersResponse.infos:type_name -> portenv.daemon.v1.ServerInfo
+	173, // 22: portenv.daemon.v1.SaveNowResponse.snapshot:type_name -> portenv.types.v1.SnapshotRef
+	63,  // 23: portenv.daemon.v1.ListSavesResponse.saves:type_name -> portenv.daemon.v1.SaveEntry
+	177, // 24: portenv.daemon.v1.SaveEntry.time:type_name -> google.protobuf.Timestamp
+	70,  // 25: portenv.daemon.v1.TakeSavedAfterQuitResponse.saved:type_name -> portenv.daemon.v1.SavedAfterQuit
+	177, // 26: portenv.daemon.v1.SavedAfterQuit.saved_at:type_name -> google.protobuf.Timestamp
+	178, // 27: portenv.daemon.v1.ListTabsResponse.tabs:type_name -> portenv.types.v1.Tab
+	178, // 28: portenv.daemon.v1.NewTabResponse.tab:type_name -> portenv.types.v1.Tab
+	178, // 29: portenv.daemon.v1.WatchTabsResponse.tabs:type_name -> portenv.types.v1.Tab
+	170, // 30: portenv.daemon.v1.CreateBoxRequest.keys:type_name -> portenv.daemon.v1.CreateBoxRequest.KeysEntry
+	121, // 31: portenv.daemon.v1.CreateBoxRequest.team:type_name -> portenv.daemon.v1.TeamPlanChoice
+	84,  // 32: portenv.daemon.v1.CreateBoxRequest.project:type_name -> portenv.daemon.v1.ProjectSource
+	84,  // 33: portenv.daemon.v1.WorkspaceSetup.project:type_name -> portenv.daemon.v1.ProjectSource
+	121, // 34: portenv.daemon.v1.WorkspaceSetup.team:type_name -> portenv.daemon.v1.TeamPlanChoice
+	171, // 35: portenv.daemon.v1.RecoverBoxRequest.keys:type_name -> portenv.daemon.v1.RecoverBoxRequest.KeysEntry
+	172, // 36: portenv.daemon.v1.CheckRecoveryKeyRequest.recovery_passwords:type_name -> portenv.daemon.v1.CheckRecoveryKeyRequest.RecoveryPasswordsEntry
+	2,   // 37: portenv.daemon.v1.GetPlacementResponse.holder:type_name -> portenv.daemon.v1.Holder
+	177, // 38: portenv.daemon.v1.GetPlacementResponse.newest_save_at:type_name -> google.protobuf.Timestamp
+	3,   // 39: portenv.daemon.v1.GetPlacementResponse.answers:type_name -> portenv.daemon.v1.Answers
+	96,  // 40: portenv.daemon.v1.TabTerminalRequest.open:type_name -> portenv.daemon.v1.TabTerminalOpen
+	31,  // 41: portenv.daemon.v1.TabTerminalRequest.resize:type_name -> portenv.daemon.v1.TerminalSize
+	31,  // 42: portenv.daemon.v1.TabTerminalOpen.size:type_name -> portenv.daemon.v1.TerminalSize
+	98,  // 43: portenv.daemon.v1.TabTerminalResponse.reset:type_name -> portenv.daemon.v1.TabTerminalReset
+	31,  // 44: portenv.daemon.v1.TabTerminalResponse.resized:type_name -> portenv.daemon.v1.TerminalSize
+	179, // 45: portenv.daemon.v1.TabTerminalResponse.end:type_name -> portenv.types.v1.TabTerminalEnd
+	99,  // 46: portenv.daemon.v1.TabTerminalResponse.author:type_name -> portenv.daemon.v1.CommandAuthor
+	31,  // 47: portenv.daemon.v1.TabTerminalReset.size:type_name -> portenv.daemon.v1.TerminalSize
+	99,  // 48: portenv.daemon.v1.TabTerminalReset.authors:type_name -> portenv.daemon.v1.CommandAuthor
+	180, // 49: portenv.daemon.v1.ServerInfo.state:type_name -> portenv.types.v1.ServerKeyState
+	100, // 50: portenv.daemon.v1.ScanServerKeyResponse.info:type_name -> portenv.daemon.v1.ServerInfo
+	100, // 51: portenv.daemon.v1.TrustServerKeyResponse.info:type_name -> portenv.daemon.v1.ServerInfo
+	100, // 52: portenv.daemon.v1.ForgetServerKeyResponse.info:type_name -> portenv.daemon.v1.ServerInfo
+	181, // 53: portenv.daemon.v1.CheckLine.state:type_name -> portenv.types.v1.CheckState
+	110, // 54: portenv.daemon.v1.CheckServerResponse.lines:type_name -> portenv.daemon.v1.CheckLine
+	132, // 55: portenv.daemon.v1.ListAgentsResponse.agents:type_name -> portenv.daemon.v1.AgentInfo
+	117, // 56: portenv.daemon.v1.ListAgentsResponse.team_limit:type_name -> portenv.daemon.v1.TeamLimit
+	120, // 57: portenv.daemon.v1.ListTeamTemplatesResponse.templates:type_name -> portenv.daemon.v1.TeamTemplate
+	125, // 58: portenv.daemon.v1.TeamTemplate.agents:type_name -> portenv.daemon.v1.PlannedAgent
+	122, // 59: portenv.daemon.v1.TeamPlanChoice.agents:type_name -> portenv.daemon.v1.TeamAgentChoice
+	121, // 60: portenv.daemon.v1.PlanTeamRequest.choice:type_name -> portenv.daemon.v1.TeamPlanChoice
+	125, // 61: portenv.daemon.v1.PlanTeamResponse.agents:type_name -> portenv.daemon.v1.PlannedAgent
+	129, // 62: portenv.daemon.v1.SetAgentsAllowedResponse.settings:type_name -> portenv.daemon.v1.GetTeamSettingsResponse
+	182, // 63: portenv.daemon.v1.AgentInfo.state:type_name -> portenv.types.v1.AgentState
+	183, // 64: portenv.daemon.v1.AgentInfo.grant:type_name -> portenv.types.v1.AgentGrant
+	184, // 65: portenv.daemon.v1.AgentInfo.status:type_name -> portenv.types.v1.AgentStatus
+	185, // 66: portenv.daemon.v1.AgentInfo.routines:type_name -> portenv.types.v1.Routine
+	132, // 67: portenv.daemon.v1.WatchTeamResponse.agent:type_name -> portenv.daemon.v1.AgentInfo
+	186, // 68: portenv.daemon.v1.WatchTeamResponse.message:type_name -> portenv.types.v1.BoardMessage
+	187, // 69: portenv.daemon.v1.WatchTeamResponse.decision:type_name -> portenv.types.v1.Decision
+	117, // 70: portenv.daemon.v1.WatchTeamResponse.team_limit:type_name -> portenv.daemon.v1.TeamLimit
+	132, // 71: portenv.daemon.v1.StartAgentResponse.agent:type_name -> portenv.daemon.v1.AgentInfo
+	132, // 72: portenv.daemon.v1.StopAgentResponse.agent:type_name -> portenv.daemon.v1.AgentInfo
+	187, // 73: portenv.daemon.v1.AnswerDecisionResponse.decision:type_name -> portenv.types.v1.Decision
+	132, // 74: portenv.daemon.v1.ApproveAgentFileResponse.agent:type_name -> portenv.daemon.v1.AgentInfo
+	188, // 75: portenv.daemon.v1.SendMessageRequest.type:type_name -> portenv.types.v1.MessageType
+	186, // 76: portenv.daemon.v1.SendMessageResponse.message:type_name -> portenv.types.v1.BoardMessage
+	187, // 77: portenv.daemon.v1.RemoveAgentResponse.delete_files:type_name -> portenv.types.v1.Decision
+	189, // 78: portenv.daemon.v1.ListAgentFilesResponse.files:type_name -> portenv.types.v1.AgentFile
+	189, // 79: portenv.daemon.v1.AddAgentFilesResponse.added:type_name -> portenv.types.v1.AgentFile
+	132, // 80: portenv.daemon.v1.SetRoutinePausedResponse.agent:type_name -> portenv.daemon.v1.AgentInfo
+	187, // 81: portenv.daemon.v1.ListDecisionsResponse.decisions:type_name -> portenv.types.v1.Decision
+	187, // 82: portenv.daemon.v1.DeployResponse.decision:type_name -> portenv.types.v1.Decision
+	4,   // 83: portenv.daemon.v1.GetDeletePlanResponse.stopped_at:type_name -> portenv.daemon.v1.DeleteStep
+	4,   // 84: portenv.daemon.v1.DeleteBoxResponse.step:type_name -> portenv.daemon.v1.DeleteStep
+	33,  // 85: portenv.daemon.v1.DaemonService.GetVersion:input_type -> portenv.daemon.v1.GetVersionRequest
+	35,  // 86: portenv.daemon.v1.DaemonService.ListBoxes:input_type -> portenv.daemon.v1.ListBoxesRequest
+	19,  // 87: portenv.daemon.v1.DaemonService.OpenBox:input_type -> portenv.daemon.v1.OpenBoxRequest
+	21,  // 88: portenv.daemon.v1.DaemonService.CloseBox:input_type -> portenv.daemon.v1.CloseBoxRequest
+	23,  // 89: portenv.daemon.v1.DaemonService.MakeSavePoint:input_type -> portenv.daemon.v1.MakeSavePointRequest
+	25,  // 90: portenv.daemon.v1.DaemonService.RevertToLastSavePoint:input_type -> portenv.daemon.v1.RevertToLastSavePointRequest
+	27,  // 91: portenv.daemon.v1.DaemonService.MoveBox:input_type -> portenv.daemon.v1.MoveBoxRequest
+	29,  // 92: portenv.daemon.v1.DaemonService.Terminal:input_type -> portenv.daemon.v1.TerminalRequest
+	15,  // 93: portenv.daemon.v1.DaemonService.CheckBox:input_type -> portenv.daemon.v1.CheckBoxRequest
+	17,  // 94: portenv.daemon.v1.DaemonService.RestartBox:input_type -> portenv.daemon.v1.RestartBoxRequest
+	38,  // 95: portenv.daemon.v1.DaemonService.GetChannel:input_type -> portenv.daemon.v1.GetChannelRequest
+	40,  // 96: portenv.daemon.v1.DaemonService.GetBoxState:input_type -> portenv.daemon.v1.GetBoxStateRequest
+	53,  // 97: portenv.daemon.v1.DaemonService.WatchBoxState:input_type -> portenv.daemon.v1.WatchBoxStateRequest
+	42,  // 98: portenv.daemon.v1.DaemonService.SetNetworkPath:input_type -> portenv.daemon.v1.SetNetworkPathRequest
+	44,  // 99: portenv.daemon.v1.DaemonService.Woke:input_type -> portenv.daemon.v1.WokeRequest
+	47,  // 100: portenv.daemon.v1.DaemonService.RetryPackages:input_type -> portenv.daemon.v1.RetryPackagesRequest
+	49,  // 101: portenv.daemon.v1.DaemonService.ProvideKeys:input_type -> portenv.daemon.v1.ProvideKeysRequest
+	51,  // 102: portenv.daemon.v1.DaemonService.Relaunch:input_type -> portenv.daemon.v1.RelaunchRequest
+	55,  // 103: portenv.daemon.v1.DaemonService.ListServers:input_type -> portenv.daemon.v1.ListServersRequest
+	57,  // 104: portenv.daemon.v1.DaemonService.GetKeyIDs:input_type -> portenv.daemon.v1.GetKeyIDsRequest
+	59,  // 105: portenv.daemon.v1.DaemonService.SaveNow:input_type -> portenv.daemon.v1.SaveNowRequest
+	61,  // 106: portenv.daemon.v1.DaemonService.ListSaves:input_type -> portenv.daemon.v1.ListSavesRequest
+	64,  // 107: portenv.daemon.v1.DaemonService.Housekeep:input_type -> portenv.daemon.v1.HousekeepRequest
+	66,  // 108: portenv.daemon.v1.DaemonService.LeaveUnsaved:input_type -> portenv.daemon.v1.LeaveUnsavedRequest
+	68,  // 109: portenv.daemon.v1.DaemonService.TakeSavedAfterQuit:input_type -> portenv.daemon.v1.TakeSavedAfterQuitRequest
+	71,  // 110: portenv.daemon.v1.DaemonService.ListTabs:input_type -> portenv.daemon.v1.ListTabsRequest
+	73,  // 111: portenv.daemon.v1.DaemonService.NewTab:input_type -> portenv.daemon.v1.NewTabRequest
+	75,  // 112: portenv.daemon.v1.DaemonService.CloseTab:input_type -> portenv.daemon.v1.CloseTabRequest
+	77,  // 113: portenv.daemon.v1.DaemonService.RenameTab:input_type -> portenv.daemon.v1.RenameTabRequest
+	79,  // 114: portenv.daemon.v1.DaemonService.SelectTab:input_type -> portenv.daemon.v1.SelectTabRequest
+	81,  // 115: portenv.daemon.v1.DaemonService.WatchTabs:input_type -> portenv.daemon.v1.WatchTabsRequest
+	83,  // 116: portenv.daemon.v1.DaemonService.CreateBox:input_type -> portenv.daemon.v1.CreateBoxRequest
+	87,  // 117: portenv.daemon.v1.DaemonService.DiscardCreation:input_type -> portenv.daemon.v1.DiscardCreationRequest
+	89,  // 118: portenv.daemon.v1.DaemonService.RecoverBox:input_type -> portenv.daemon.v1.RecoverBoxRequest
+	91,  // 119: portenv.daemon.v1.DaemonService.CheckRecoveryKey:input_type -> portenv.daemon.v1.CheckRecoveryKeyRequest
+	93,  // 120: portenv.daemon.v1.DaemonService.GetPlacement:input_type -> portenv.daemon.v1.GetPlacementRequest
+	95,  // 121: portenv.daemon.v1.DaemonService.TabTerminal:input_type -> portenv.daemon.v1.TabTerminalRequest
+	101, // 122: portenv.daemon.v1.DaemonService.ScanServerKey:input_type -> portenv.daemon.v1.ScanServerKeyRequest
+	103, // 123: portenv.daemon.v1.DaemonService.TrustServerKey:input_type -> portenv.daemon.v1.TrustServerKeyRequest
+	105, // 124: portenv.daemon.v1.DaemonService.ForgetServerKey:input_type -> portenv.daemon.v1.ForgetServerKeyRequest
+	107, // 125: portenv.daemon.v1.DaemonService.ProvideServerKey:input_type -> portenv.daemon.v1.ProvideServerKeyRequest
+	109, // 126: portenv.daemon.v1.DaemonService.CheckServer:input_type -> portenv.daemon.v1.CheckServerRequest
+	112, // 127: portenv.daemon.v1.DaemonService.GetEngine:input_type -> portenv.daemon.v1.GetEngineRequest
+	115, // 128: portenv.daemon.v1.DaemonService.ListAgents:input_type -> portenv.daemon.v1.ListAgentsRequest
+	133, // 129: portenv.daemon.v1.DaemonService.WatchTeam:input_type -> portenv.daemon.v1.WatchTeamRequest
+	137, // 130: portenv.daemon.v1.DaemonService.StartAgent:input_type -> portenv.daemon.v1.StartAgentRequest
+	139, // 131: portenv.daemon.v1.DaemonService.StopAgent:input_type -> portenv.daemon.v1.StopAgentRequest
+	135, // 132: portenv.daemon.v1.DaemonService.FetchAgentBranch:input_type -> portenv.daemon.v1.FetchAgentBranchRequest
+	141, // 133: portenv.daemon.v1.DaemonService.AnswerDecision:input_type -> portenv.daemon.v1.AnswerDecisionRequest
+	143, // 134: portenv.daemon.v1.DaemonService.GetAgentFile:input_type -> portenv.daemon.v1.GetAgentFileRequest
+	145, // 135: portenv.daemon.v1.DaemonService.ApproveAgentFile:input_type -> portenv.daemon.v1.ApproveAgentFileRequest
+	147, // 136: portenv.daemon.v1.DaemonService.SendMessage:input_type -> portenv.daemon.v1.SendMessageRequest
+	149, // 137: portenv.daemon.v1.DaemonService.RemoveAgent:input_type -> portenv.daemon.v1.RemoveAgentRequest
+	151, // 138: portenv.daemon.v1.DaemonService.ListAgentFiles:input_type -> portenv.daemon.v1.ListAgentFilesRequest
+	153, // 139: portenv.daemon.v1.DaemonService.ReadAgentFile:input_type -> portenv.daemon.v1.ReadAgentFileRequest
+	155, // 140: portenv.daemon.v1.DaemonService.AddAgentFiles:input_type -> portenv.daemon.v1.AddAgentFilesRequest
+	157, // 141: portenv.daemon.v1.DaemonService.SetRoutinePaused:input_type -> portenv.daemon.v1.SetRoutinePausedRequest
+	159, // 142: portenv.daemon.v1.DaemonService.WakeAgent:input_type -> portenv.daemon.v1.WakeAgentRequest
+	161, // 143: portenv.daemon.v1.DaemonService.ListDecisions:input_type -> portenv.daemon.v1.ListDecisionsRequest
+	163, // 144: portenv.daemon.v1.DaemonService.Deploy:input_type -> portenv.daemon.v1.DeployRequest
+	128, // 145: portenv.daemon.v1.DaemonService.GetTeamSettings:input_type -> portenv.daemon.v1.GetTeamSettingsRequest
+	130, // 146: portenv.daemon.v1.DaemonService.SetAgentsAllowed:input_type -> portenv.daemon.v1.SetAgentsAllowedRequest
+	118, // 147: portenv.daemon.v1.DaemonService.ListTeamTemplates:input_type -> portenv.daemon.v1.ListTeamTemplatesRequest
+	123, // 148: portenv.daemon.v1.DaemonService.PlanTeam:input_type -> portenv.daemon.v1.PlanTeamRequest
+	126, // 149: portenv.daemon.v1.DaemonService.ApplyTeamPlan:input_type -> portenv.daemon.v1.ApplyTeamPlanRequest
+	9,   // 150: portenv.daemon.v1.DaemonService.WatchPushes:input_type -> portenv.daemon.v1.WatchPushesRequest
+	13,  // 151: portenv.daemon.v1.DaemonService.AnswerPush:input_type -> portenv.daemon.v1.AnswerPushRequest
+	5,   // 152: portenv.daemon.v1.DaemonService.GetPushes:input_type -> portenv.daemon.v1.GetPushesRequest
+	7,   // 153: portenv.daemon.v1.DaemonService.StopAllowingPushes:input_type -> portenv.daemon.v1.StopAllowingPushesRequest
+	165, // 154: portenv.daemon.v1.DaemonService.GetDeletePlan:input_type -> portenv.daemon.v1.GetDeletePlanRequest
+	167, // 155: portenv.daemon.v1.DaemonService.DeleteBox:input_type -> portenv.daemon.v1.DeleteBoxRequest
+	34,  // 156: portenv.daemon.v1.DaemonService.GetVersion:output_type -> portenv.daemon.v1.GetVersionResponse
+	36,  // 157: portenv.daemon.v1.DaemonService.ListBoxes:output_type -> portenv.daemon.v1.ListBoxesResponse
+	20,  // 158: portenv.daemon.v1.DaemonService.OpenBox:output_type -> portenv.daemon.v1.OpenBoxResponse
+	22,  // 159: portenv.daemon.v1.DaemonService.CloseBox:output_type -> portenv.daemon.v1.CloseBoxResponse
+	24,  // 160: portenv.daemon.v1.DaemonService.MakeSavePoint:output_type -> portenv.daemon.v1.MakeSavePointResponse
+	26,  // 161: portenv.daemon.v1.DaemonService.RevertToLastSavePoint:output_type -> portenv.daemon.v1.RevertToLastSavePointResponse
+	28,  // 162: portenv.daemon.v1.DaemonService.MoveBox:output_type -> portenv.daemon.v1.MoveBoxResponse
+	32,  // 163: portenv.daemon.v1.DaemonService.Terminal:output_type -> portenv.daemon.v1.TerminalResponse
+	16,  // 164: portenv.daemon.v1.DaemonService.CheckBox:output_type -> portenv.daemon.v1.CheckBoxResponse
+	18,  // 165: portenv.daemon.v1.DaemonService.RestartBox:output_type -> portenv.daemon.v1.RestartBoxResponse
+	39,  // 166: portenv.daemon.v1.DaemonService.GetChannel:output_type -> portenv.daemon.v1.GetChannelResponse
+	41,  // 167: portenv.daemon.v1.DaemonService.GetBoxState:output_type -> portenv.daemon.v1.GetBoxStateResponse
+	54,  // 168: portenv.daemon.v1.DaemonService.WatchBoxState:output_type -> portenv.daemon.v1.WatchBoxStateResponse
+	43,  // 169: portenv.daemon.v1.DaemonService.SetNetworkPath:output_type -> portenv.daemon.v1.SetNetworkPathResponse
+	45,  // 170: portenv.daemon.v1.DaemonService.Woke:output_type -> portenv.daemon.v1.WokeResponse
+	48,  // 171: portenv.daemon.v1.DaemonService.RetryPackages:output_type -> portenv.daemon.v1.RetryPackagesResponse
+	50,  // 172: portenv.daemon.v1.DaemonService.ProvideKeys:output_type -> portenv.daemon.v1.ProvideKeysResponse
+	52,  // 173: portenv.daemon.v1.DaemonService.Relaunch:output_type -> portenv.daemon.v1.RelaunchResponse
+	56,  // 174: portenv.daemon.v1.DaemonService.ListServers:output_type -> portenv.daemon.v1.ListServersResponse
+	58,  // 175: portenv.daemon.v1.DaemonService.GetKeyIDs:output_type -> portenv.daemon.v1.GetKeyIDsResponse
+	60,  // 176: portenv.daemon.v1.DaemonService.SaveNow:output_type -> portenv.daemon.v1.SaveNowResponse
+	62,  // 177: portenv.daemon.v1.DaemonService.ListSaves:output_type -> portenv.daemon.v1.ListSavesResponse
+	65,  // 178: portenv.daemon.v1.DaemonService.Housekeep:output_type -> portenv.daemon.v1.HousekeepResponse
+	67,  // 179: portenv.daemon.v1.DaemonService.LeaveUnsaved:output_type -> portenv.daemon.v1.LeaveUnsavedResponse
+	69,  // 180: portenv.daemon.v1.DaemonService.TakeSavedAfterQuit:output_type -> portenv.daemon.v1.TakeSavedAfterQuitResponse
+	72,  // 181: portenv.daemon.v1.DaemonService.ListTabs:output_type -> portenv.daemon.v1.ListTabsResponse
+	74,  // 182: portenv.daemon.v1.DaemonService.NewTab:output_type -> portenv.daemon.v1.NewTabResponse
+	76,  // 183: portenv.daemon.v1.DaemonService.CloseTab:output_type -> portenv.daemon.v1.CloseTabResponse
+	78,  // 184: portenv.daemon.v1.DaemonService.RenameTab:output_type -> portenv.daemon.v1.RenameTabResponse
+	80,  // 185: portenv.daemon.v1.DaemonService.SelectTab:output_type -> portenv.daemon.v1.SelectTabResponse
+	82,  // 186: portenv.daemon.v1.DaemonService.WatchTabs:output_type -> portenv.daemon.v1.WatchTabsResponse
+	86,  // 187: portenv.daemon.v1.DaemonService.CreateBox:output_type -> portenv.daemon.v1.CreateBoxResponse
+	88,  // 188: portenv.daemon.v1.DaemonService.DiscardCreation:output_type -> portenv.daemon.v1.DiscardCreationResponse
+	90,  // 189: portenv.daemon.v1.DaemonService.RecoverBox:output_type -> portenv.daemon.v1.RecoverBoxResponse
+	92,  // 190: portenv.daemon.v1.DaemonService.CheckRecoveryKey:output_type -> portenv.daemon.v1.CheckRecoveryKeyResponse
+	94,  // 191: portenv.daemon.v1.DaemonService.GetPlacement:output_type -> portenv.daemon.v1.GetPlacementResponse
+	97,  // 192: portenv.daemon.v1.DaemonService.TabTerminal:output_type -> portenv.daemon.v1.TabTerminalResponse
+	102, // 193: portenv.daemon.v1.DaemonService.ScanServerKey:output_type -> portenv.daemon.v1.ScanServerKeyResponse
+	104, // 194: portenv.daemon.v1.DaemonService.TrustServerKey:output_type -> portenv.daemon.v1.TrustServerKeyResponse
+	106, // 195: portenv.daemon.v1.DaemonService.ForgetServerKey:output_type -> portenv.daemon.v1.ForgetServerKeyResponse
+	108, // 196: portenv.daemon.v1.DaemonService.ProvideServerKey:output_type -> portenv.daemon.v1.ProvideServerKeyResponse
+	111, // 197: portenv.daemon.v1.DaemonService.CheckServer:output_type -> portenv.daemon.v1.CheckServerResponse
+	113, // 198: portenv.daemon.v1.DaemonService.GetEngine:output_type -> portenv.daemon.v1.GetEngineResponse
+	116, // 199: portenv.daemon.v1.DaemonService.ListAgents:output_type -> portenv.daemon.v1.ListAgentsResponse
+	134, // 200: portenv.daemon.v1.DaemonService.WatchTeam:output_type -> portenv.daemon.v1.WatchTeamResponse
+	138, // 201: portenv.daemon.v1.DaemonService.StartAgent:output_type -> portenv.daemon.v1.StartAgentResponse
+	140, // 202: portenv.daemon.v1.DaemonService.StopAgent:output_type -> portenv.daemon.v1.StopAgentResponse
+	136, // 203: portenv.daemon.v1.DaemonService.FetchAgentBranch:output_type -> portenv.daemon.v1.FetchAgentBranchResponse
+	142, // 204: portenv.daemon.v1.DaemonService.AnswerDecision:output_type -> portenv.daemon.v1.AnswerDecisionResponse
+	144, // 205: portenv.daemon.v1.DaemonService.GetAgentFile:output_type -> portenv.daemon.v1.GetAgentFileResponse
+	146, // 206: portenv.daemon.v1.DaemonService.ApproveAgentFile:output_type -> portenv.daemon.v1.ApproveAgentFileResponse
+	148, // 207: portenv.daemon.v1.DaemonService.SendMessage:output_type -> portenv.daemon.v1.SendMessageResponse
+	150, // 208: portenv.daemon.v1.DaemonService.RemoveAgent:output_type -> portenv.daemon.v1.RemoveAgentResponse
+	152, // 209: portenv.daemon.v1.DaemonService.ListAgentFiles:output_type -> portenv.daemon.v1.ListAgentFilesResponse
+	154, // 210: portenv.daemon.v1.DaemonService.ReadAgentFile:output_type -> portenv.daemon.v1.ReadAgentFileResponse
+	156, // 211: portenv.daemon.v1.DaemonService.AddAgentFiles:output_type -> portenv.daemon.v1.AddAgentFilesResponse
+	158, // 212: portenv.daemon.v1.DaemonService.SetRoutinePaused:output_type -> portenv.daemon.v1.SetRoutinePausedResponse
+	160, // 213: portenv.daemon.v1.DaemonService.WakeAgent:output_type -> portenv.daemon.v1.WakeAgentResponse
+	162, // 214: portenv.daemon.v1.DaemonService.ListDecisions:output_type -> portenv.daemon.v1.ListDecisionsResponse
+	164, // 215: portenv.daemon.v1.DaemonService.Deploy:output_type -> portenv.daemon.v1.DeployResponse
+	129, // 216: portenv.daemon.v1.DaemonService.GetTeamSettings:output_type -> portenv.daemon.v1.GetTeamSettingsResponse
+	131, // 217: portenv.daemon.v1.DaemonService.SetAgentsAllowed:output_type -> portenv.daemon.v1.SetAgentsAllowedResponse
+	119, // 218: portenv.daemon.v1.DaemonService.ListTeamTemplates:output_type -> portenv.daemon.v1.ListTeamTemplatesResponse
+	124, // 219: portenv.daemon.v1.DaemonService.PlanTeam:output_type -> portenv.daemon.v1.PlanTeamResponse
+	127, // 220: portenv.daemon.v1.DaemonService.ApplyTeamPlan:output_type -> portenv.daemon.v1.ApplyTeamPlanResponse
+	10,  // 221: portenv.daemon.v1.DaemonService.WatchPushes:output_type -> portenv.daemon.v1.WatchPushesResponse
+	14,  // 222: portenv.daemon.v1.DaemonService.AnswerPush:output_type -> portenv.daemon.v1.AnswerPushResponse
+	6,   // 223: portenv.daemon.v1.DaemonService.GetPushes:output_type -> portenv.daemon.v1.GetPushesResponse
+	8,   // 224: portenv.daemon.v1.DaemonService.StopAllowingPushes:output_type -> portenv.daemon.v1.StopAllowingPushesResponse
+	166, // 225: portenv.daemon.v1.DaemonService.GetDeletePlan:output_type -> portenv.daemon.v1.GetDeletePlanResponse
+	168, // 226: portenv.daemon.v1.DaemonService.DeleteBox:output_type -> portenv.daemon.v1.DeleteBoxResponse
+	156, // [156:227] is the sub-list for method output_type
+	85,  // [85:156] is the sub-list for method input_type
+	85,  // [85:85] is the sub-list for extension type_name
+	85,  // [85:85] is the sub-list for extension extendee
+	0,   // [0:85] is the sub-list for field type_name
 }
 
 func init() { file_portenv_daemon_v1_daemon_proto_init() }
@@ -10704,8 +11173,8 @@ func file_portenv_daemon_v1_daemon_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_portenv_daemon_v1_daemon_proto_rawDesc), len(file_portenv_daemon_v1_daemon_proto_rawDesc)),
-			NumEnums:      4,
-			NumMessages:   164,
+			NumEnums:      5,
+			NumMessages:   168,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

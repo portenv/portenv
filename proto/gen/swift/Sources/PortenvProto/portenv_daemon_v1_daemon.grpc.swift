@@ -919,6 +919,32 @@ public enum Portenv_Daemon_V1_DaemonService: Sendable {
                 type: .unary
             )
         }
+        /// Namespace for "GetDeletePlan" metadata.
+        public enum GetDeletePlan: Sendable {
+            /// Request type for "GetDeletePlan".
+            public typealias Input = Portenv_Daemon_V1_GetDeletePlanRequest
+            /// Response type for "GetDeletePlan".
+            public typealias Output = Portenv_Daemon_V1_GetDeletePlanResponse
+            /// Descriptor for "GetDeletePlan".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "GetDeletePlan",
+                type: .unary
+            )
+        }
+        /// Namespace for "DeleteBox" metadata.
+        public enum DeleteBox: Sendable {
+            /// Request type for "DeleteBox".
+            public typealias Input = Portenv_Daemon_V1_DeleteBoxRequest
+            /// Response type for "DeleteBox".
+            public typealias Output = Portenv_Daemon_V1_DeleteBoxResponse
+            /// Descriptor for "DeleteBox".
+            public static let descriptor = GRPCCore.MethodDescriptor(
+                service: GRPCCore.ServiceDescriptor(fullyQualifiedService: "portenv.daemon.v1.DaemonService"),
+                method: "DeleteBox",
+                type: .unary
+            )
+        }
         /// Descriptors for all methods in the "portenv.daemon.v1.DaemonService" service.
         public static let descriptors: [GRPCCore.MethodDescriptor] = [
             GetVersion.descriptor,
@@ -989,7 +1015,9 @@ public enum Portenv_Daemon_V1_DaemonService: Sendable {
             WatchPushes.descriptor,
             AnswerPush.descriptor,
             GetPushes.descriptor,
-            StopAllowingPushes.descriptor
+            StopAllowingPushes.descriptor,
+            GetDeletePlan.descriptor,
+            DeleteBox.descriptor
         ]
     }
 }
@@ -2645,6 +2673,63 @@ extension Portenv_Daemon_V1_DaemonService {
             deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_StopAllowingPushesResponse>,
             options: GRPCCore.CallOptions,
             onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_StopAllowingPushesResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "GetDeletePlan" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Delete Workspace… (ADR 0029): what deleting the box would remove and
+        /// > whether it can be deleted now, for the confirmation sheet. Read only:
+        /// > it needs no key and runs no restic.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_GetDeletePlanRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_GetDeletePlanRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_GetDeletePlanResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func getDeletePlan<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_GetDeletePlanRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_GetDeletePlanRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_GetDeletePlanResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_GetDeletePlanResponse>) async throws -> Result
+        ) async throws -> Result where Result: Sendable
+
+        /// Call the "DeleteBox" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Deletes a box (ADR 0029), only for the person at this Mac (the app or
+        /// > the CLI; never an agent), in a fixed order, each step safe to repeat:
+        /// > the checks (the typed name, not open or saving here, not moving or on
+        /// > a server, saves elsewhere confirmed, no other machine holding the
+        /// > lease); the instance; the home storage; the saves on this Mac (saves
+        /// > elsewhere are left where they are, and so is the key); then, when the
+        /// > saves are gone, the app deletes the key from the Keychain and calls
+        /// > again with keys_deleted; last, portenvd's record. A failure records the
+        /// > step it stopped at (ListBoxes shows it, OpenBox refuses the box) and a
+        /// > call again continues from there.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_DeleteBoxRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_DeleteBoxRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_DeleteBoxResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        func deleteBox<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_DeleteBoxRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_DeleteBoxRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_DeleteBoxResponse>,
+            options: GRPCCore.CallOptions,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_DeleteBoxResponse>) async throws -> Result
         ) async throws -> Result where Result: Sendable
     }
 
@@ -5046,6 +5131,85 @@ extension Portenv_Daemon_V1_DaemonService {
                 onResponse: handleResponse
             )
         }
+
+        /// Call the "GetDeletePlan" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Delete Workspace… (ADR 0029): what deleting the box would remove and
+        /// > whether it can be deleted now, for the confirmation sheet. Read only:
+        /// > it needs no key and runs no restic.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_GetDeletePlanRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_GetDeletePlanRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_GetDeletePlanResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func getDeletePlan<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_GetDeletePlanRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_GetDeletePlanRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_GetDeletePlanResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_GetDeletePlanResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.GetDeletePlan.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
+
+        /// Call the "DeleteBox" method.
+        ///
+        /// > Source IDL Documentation:
+        /// >
+        /// > Deletes a box (ADR 0029), only for the person at this Mac (the app or
+        /// > the CLI; never an agent), in a fixed order, each step safe to repeat:
+        /// > the checks (the typed name, not open or saving here, not moving or on
+        /// > a server, saves elsewhere confirmed, no other machine holding the
+        /// > lease); the instance; the home storage; the saves on this Mac (saves
+        /// > elsewhere are left where they are, and so is the key); then, when the
+        /// > saves are gone, the app deletes the key from the Keychain and calls
+        /// > again with keys_deleted; last, portenvd's record. A failure records the
+        /// > step it stopped at (ListBoxes shows it, OpenBox refuses the box) and a
+        /// > call again continues from there.
+        ///
+        /// - Parameters:
+        ///   - request: A request containing a single `Portenv_Daemon_V1_DeleteBoxRequest` message.
+        ///   - serializer: A serializer for `Portenv_Daemon_V1_DeleteBoxRequest` messages.
+        ///   - deserializer: A deserializer for `Portenv_Daemon_V1_DeleteBoxResponse` messages.
+        ///   - options: Options to apply to this RPC.
+        ///   - handleResponse: A closure which handles the response and returns its result to
+        ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+        ///       already finished.
+        /// - Returns: The result of `handleResponse`.
+        public func deleteBox<Result>(
+            request: GRPCCore.ClientRequest<Portenv_Daemon_V1_DeleteBoxRequest>,
+            serializer: some GRPCCore.MessageSerializer<Portenv_Daemon_V1_DeleteBoxRequest>,
+            deserializer: some GRPCCore.MessageDeserializer<Portenv_Daemon_V1_DeleteBoxResponse>,
+            options: GRPCCore.CallOptions = .defaults,
+            onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_DeleteBoxResponse>) async throws -> Result = { response in
+                try response.message
+            }
+        ) async throws -> Result where Result: Sendable {
+            try await self.client.unary(
+                request: request,
+                descriptor: Portenv_Daemon_V1_DaemonService.Method.DeleteBox.descriptor,
+                serializer: serializer,
+                deserializer: deserializer,
+                options: options,
+                onResponse: handleResponse
+            )
+        }
     }
 }
 
@@ -7081,6 +7245,75 @@ extension Portenv_Daemon_V1_DaemonService.ClientProtocol {
             request: request,
             serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_StopAllowingPushesRequest>(),
             deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_StopAllowingPushesResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "GetDeletePlan" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Delete Workspace… (ADR 0029): what deleting the box would remove and
+    /// > whether it can be deleted now, for the confirmation sheet. Read only:
+    /// > it needs no key and runs no restic.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_GetDeletePlanRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func getDeletePlan<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_GetDeletePlanRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_GetDeletePlanResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.getDeletePlan(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_GetDeletePlanRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_GetDeletePlanResponse>(),
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "DeleteBox" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Deletes a box (ADR 0029), only for the person at this Mac (the app or
+    /// > the CLI; never an agent), in a fixed order, each step safe to repeat:
+    /// > the checks (the typed name, not open or saving here, not moving or on
+    /// > a server, saves elsewhere confirmed, no other machine holding the
+    /// > lease); the instance; the home storage; the saves on this Mac (saves
+    /// > elsewhere are left where they are, and so is the key); then, when the
+    /// > saves are gone, the app deletes the key from the Keychain and calls
+    /// > again with keys_deleted; last, portenvd's record. A failure records the
+    /// > step it stopped at (ListBoxes shows it, OpenBox refuses the box) and a
+    /// > call again continues from there.
+    ///
+    /// - Parameters:
+    ///   - request: A request containing a single `Portenv_Daemon_V1_DeleteBoxRequest` message.
+    ///   - options: Options to apply to this RPC.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func deleteBox<Result>(
+        request: GRPCCore.ClientRequest<Portenv_Daemon_V1_DeleteBoxRequest>,
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_DeleteBoxResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        try await self.deleteBox(
+            request: request,
+            serializer: GRPCProtobuf.ProtobufSerializer<Portenv_Daemon_V1_DeleteBoxRequest>(),
+            deserializer: GRPCProtobuf.ProtobufDeserializer<Portenv_Daemon_V1_DeleteBoxResponse>(),
             options: options,
             onResponse: handleResponse
         )
@@ -9397,6 +9630,83 @@ extension Portenv_Daemon_V1_DaemonService.ClientProtocol {
             metadata: metadata
         )
         return try await self.stopAllowingPushes(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "GetDeletePlan" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Delete Workspace… (ADR 0029): what deleting the box would remove and
+    /// > whether it can be deleted now, for the confirmation sheet. Read only:
+    /// > it needs no key and runs no restic.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func getDeletePlan<Result>(
+        _ message: Portenv_Daemon_V1_GetDeletePlanRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_GetDeletePlanResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_GetDeletePlanRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.getDeletePlan(
+            request: request,
+            options: options,
+            onResponse: handleResponse
+        )
+    }
+
+    /// Call the "DeleteBox" method.
+    ///
+    /// > Source IDL Documentation:
+    /// >
+    /// > Deletes a box (ADR 0029), only for the person at this Mac (the app or
+    /// > the CLI; never an agent), in a fixed order, each step safe to repeat:
+    /// > the checks (the typed name, not open or saving here, not moving or on
+    /// > a server, saves elsewhere confirmed, no other machine holding the
+    /// > lease); the instance; the home storage; the saves on this Mac (saves
+    /// > elsewhere are left where they are, and so is the key); then, when the
+    /// > saves are gone, the app deletes the key from the Keychain and calls
+    /// > again with keys_deleted; last, portenvd's record. A failure records the
+    /// > step it stopped at (ListBoxes shows it, OpenBox refuses the box) and a
+    /// > call again continues from there.
+    ///
+    /// - Parameters:
+    ///   - message: request message to send.
+    ///   - metadata: Additional metadata to send, defaults to empty.
+    ///   - options: Options to apply to this RPC, defaults to `.defaults`.
+    ///   - handleResponse: A closure which handles the response and returns its result to
+    ///       the caller. Returning from the closure will cancel the RPC if it hasn't
+    ///       already finished.
+    /// - Returns: The result of `handleResponse`.
+    public func deleteBox<Result>(
+        _ message: Portenv_Daemon_V1_DeleteBoxRequest,
+        metadata: GRPCCore.Metadata = [:],
+        options: GRPCCore.CallOptions = .defaults,
+        onResponse handleResponse: @Sendable @escaping (GRPCCore.ClientResponse<Portenv_Daemon_V1_DeleteBoxResponse>) async throws -> Result = { response in
+            try response.message
+        }
+    ) async throws -> Result where Result: Sendable {
+        let request = GRPCCore.ClientRequest<Portenv_Daemon_V1_DeleteBoxRequest>(
+            message: message,
+            metadata: metadata
+        )
+        return try await self.deleteBox(
             request: request,
             options: options,
             onResponse: handleResponse

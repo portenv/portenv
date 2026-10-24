@@ -717,6 +717,58 @@ func TestShareNamesTheAgentsBranch(t *testing.T) {
 // ADR 0022 §2a: the owner's Fetch asks the helper for the agent's branch,
 // within its home's limit, and tells the agent; an agent without a clone
 // has nothing to fetch.
+// The app's Fetch (ADR 0022 §2a): a share's message names the branch it
+// shared, as data, so the app offers Fetch on it; a plain message from
+// the same agent names none, even when its text says the same.
+func TestAShareNamesItsBranchForTheApp(t *testing.T) {
+	e, h, _ := newTestEngine(t, defaultTeam()...)
+	ctx := context.Background()
+	r := e.handleCall(ctx, "w", &agentv1.TeamCallsResponse{AgentId: "builder", Op: &agentv1.TeamCallsResponse_Share{Share: &agentv1.Share{Text: "tests pass"}}})
+	if !r.GetOk() || r.GetMessage().GetSharedBranch() != "agent/builder" {
+		t.Fatalf("share: %v", r)
+	}
+	var toOwner *typesv1.BoardMessage
+	for _, l := range h.board {
+		if m := l.GetMessage(); m.GetTo() == "owner" {
+			toOwner = m
+		}
+	}
+	if toOwner.GetSharedBranch() != "agent/builder" || toOwner.GetText() != "Work is ready on agent/builder: tests pass" {
+		t.Errorf("the board's line to the owner: %v", toOwner)
+	}
+	m := e.handleCall(ctx, "w", msgCall("builder", "lead", "Work is ready on agent/builder"))
+	if !m.GetOk() || m.GetMessage().GetSharedBranch() != "" {
+		t.Errorf("a plain message names a branch: %v", m)
+	}
+}
+
+// AgentInfo says whether the agent has its own copy of the project, so the
+// app offers Fetch only for one that has a branch.
+func TestAgentInfoSaysItHasAClone(t *testing.T) {
+	team := defaultTeam()
+	team[2].Spec.Checkout = CheckoutNone
+	e, _, _ := newTestEngine(t, team...)
+	b, err := e.lockBox(context.Background(), "w")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer b.mu.Unlock()
+	if !e.infoLocked(b, &team[1]).GetOwnClone() || e.infoLocked(b, &team[2]).GetOwnClone() {
+		t.Error("own_clone: want builder true, reviewer false")
+	}
+}
+
+// An agent with its own copy is told the owner brings its branch in with
+// Fetch in Portenv, the command line after it.
+func TestAgentsMDNamesTheOwnersFetch(t *testing.T) {
+	team := defaultTeam()
+	md := agentsMDBlock(&Team{Agents: team}, &team[1], "w")
+	fetch, cli := strings.Index(md, "the owner chooses Fetch in Portenv"), strings.Index(md, "portenv app fetch-agent w builder")
+	if fetch < 0 || cli < 0 || fetch > cli || !strings.Contains(md, "as agents/builder") {
+		t.Errorf("builder's AGENTS.md doesn't name Fetch first: %s", md)
+	}
+}
+
 func TestTheOwnersFetch(t *testing.T) {
 	team := defaultTeam()
 	team[2].Spec.Checkout = CheckoutNone

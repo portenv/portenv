@@ -212,6 +212,8 @@ func pushRefuse(id, line string) *agentv1.TeamCallsRequest {
 
 // handlePush answers the owner's list or push from work's socket.
 func (s *Server) handlePush(ctx context.Context, name string, c *agentv1.TeamCallsResponse) *agentv1.TeamCallsRequest {
+	// In flight until answered: Delete Workspace waits (ADR 0029).
+	defer s.gitCall(name)()
 	id := c.GetCallId()
 	if !c.GetOwner() || c.GetAgentId() != "" {
 		return pushRefuse(id, "Only you can push from this workspace. Agents can’t push.")

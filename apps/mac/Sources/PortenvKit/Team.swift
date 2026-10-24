@@ -69,14 +69,18 @@ public struct TeamAgent: Equatable, Sendable, Identifiable {
     /// Set when its file asks for share_login, which this build doesn't
     /// support: nothing is shared (R-0323).
     public var shareLoginOff: String
+    /// It works in its own copy of the project, on agent/<id>, which the
+    /// owner can fetch (ADR 0022 §2a).
+    public var ownClone: Bool
 
     public init(id: String, name: String, role: String = "", avatar: String = "", remote: Bool = false, via: String = "",
                 status: AgentStatus, problem: String = "", fileSHA256: String = "", approved: Bool = true,
                 tabIDs: [String] = [], lastLine: String = "", pendingDecisions: Int = 0,
                 homeBytes: Int64 = 0, homeQuotaBytes: Int64 = 0, runner: String = "", grant: TeamGrant = TeamGrant(),
                 workStatus: AgentWorkStatus? = nil, routines: [AgentRoutine] = [], routinesOff: String = "",
-                shareLoginOff: String = "") {
+                shareLoginOff: String = "", ownClone: Bool = false) {
         self.id = id
+        self.ownClone = ownClone
         self.name = TeamText.line(name, max: 64)
         self.role = TeamText.line(role, max: 120)
         self.avatar = avatar
@@ -116,10 +120,14 @@ public struct TeamMessage: Equatable, Sendable, Identifiable {
     /// For Portenv's notices about one agent (a start that failed): its
     /// id, so the notice shows in that agent's column (R-0302).
     public var about: String
+    /// Set only by portenvd on portenv share's message: the branch the
+    /// agent shared, agent/<from>, for the owner's Fetch.
+    public var sharedBranch: String
 
     public init(id: String, from: String, to: String, threadID: String = "", kind: Kind = .answer, text: String, createdAt: Date? = nil,
-                about: String = "") {
+                about: String = "", sharedBranch: String = "") {
         self.id = id
+        self.sharedBranch = sharedBranch
         self.about = about
         self.from = from
         self.to = to
@@ -237,6 +245,11 @@ public struct TeamState: Equatable, Sendable {
     public private(set) var cursor = ""
 
     public init() {}
+
+    /// An agent is running in any way (R-0358: Delete Workspace… waits).
+    public var agentsRunning: Bool {
+        agents.contains { [.starting, .running, .idle, .needsYou, .connected].contains($0.status) }
+    }
 
     public mutating func apply(_ event: TeamEvent, cursor: String = "") {
         switch event {
@@ -608,5 +621,18 @@ public enum TerminalLabel {
             return "\(name) has no tab open"
         }
         return "No tab open"
+    }
+}
+
+/// How a Team sidebar row draws its status (R-0411): on the active (blue)
+/// selection, in the selected-content colour, since its own colour can't be
+/// read there; an unselected row and the inactive (grey) selection keep the
+/// status's colour (GUIDELINES 6.2).
+public enum TeamStatusInk: Equatable, Sendable {
+    case status
+    case selectedContent
+
+    public static func of(selected: Bool, activeSelection: Bool) -> TeamStatusInk {
+        selected && activeSelection ? .selectedContent : .status
     }
 }

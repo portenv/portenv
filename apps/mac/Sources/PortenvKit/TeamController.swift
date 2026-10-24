@@ -144,6 +144,18 @@ public final class TeamController {
     public private(set) var setupProblem: SetupProblem?
     /// ApplyTeamPlan is working (a clone can take a while).
     public private(set) var settingUp = false
+    /// The kept GitHub project, OWNER/REPO, once portenvd has named it.
+    public private(set) var project: String?
+
+    /// The window's line while the project is brought in: "Cloning
+    /// OWNER/REPO…" once it's known (R-0409), else the general line; nil
+    /// when nothing is under way.
+    public var progressLine: String? { Self.progressLine(settingUp: settingUp, project: project) }
+
+    public static func progressLine(settingUp: Bool, project: String?) -> String? {
+        guard settingUp else { return nil }
+        return project.map(ProjectText.cloning) ?? ProjectText.settingUp
+    }
 
     /// Brings in the project and writes and pins the team New workspace
     /// kept, once the workspace is open (portenvd does it; nothing when
@@ -156,6 +168,7 @@ public final class TeamController {
         defer { settingUp = false }
         do {
             var r = try await daemon.applyTeamPlan(box, githubToken: nil)
+            if let p = r.project { project = p }
             if r.needsToken {
                 guard let token = try? await github.token(), !token.isEmpty else {
                     teamPlanChecked = true
@@ -163,6 +176,7 @@ public final class TeamController {
                     return
                 }
                 r = try await daemon.applyTeamPlan(box, githubToken: token)
+                if let p = r.project { project = p }
             }
             teamPlanChecked = true
             if let line = r.projectError, !line.isEmpty {
@@ -175,6 +189,10 @@ public final class TeamController {
             teamPlanChecked = true
         } catch {}
     }
+
+    /// Signed in from the window's line: tries the clone again at once,
+    /// showing its progress instead of the line (R-0409).
+    public func signedIn() async { await retrySetup() }
 
     /// The window's Try Again: portenvd still has the choice.
     public func retrySetup() async {

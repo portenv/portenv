@@ -699,6 +699,68 @@ func (d *Driver) Destroy(ctx context.Context, id driver.BoxID) error {
 	return nil
 }
 
+// DeleteHome deletes the box's home volume and its restic cache volume, and
+// on a server the home's folder in HomesDir (ADR 0029). The instance must
+// be gone first (Destroy). A volume labelled for another box is refused,
+// and storage already gone is fine, so a repeat finishes what a failure
+// left.
+func (d *Driver) DeleteHome(ctx context.Context, id driver.BoxID, home driver.HomeStorage) error {
+	if _, err := d.specPath(id); err != nil {
+		return err
+	}
+	if !idRE.MatchString(home.Ref) {
+		return fmt.Errorf("invalid home volume name %q", home.Ref)
+	}
+	cctx, cancel := call(ctx, 0)
+	_, err := d.cli.ContainerInspect(cctx, d.containerName(id), client.ContainerInspectOptions{})
+	cancel()
+	switch {
+	case err == nil:
+		return errors.New("the workspace's instance still exists: remove it first") // Destroy, then DeleteHome
+	case !cerrdefs.IsNotFound(err):
+		return engineErr(ctx, "inspect container", err)
+	}
+	// The home volume carries the box's label (MountHome makes it). The
+	// cache volume is made by Docker from the mount, with no label; its name
+	// comes from the box's ID, so no label is fine, another box's isn't.
+	if err := d.removeVolume(ctx, id, home.Ref, false); err != nil {
+		return err
+	}
+	if err := d.removeVolume(ctx, id, d.cacheVolume(id), true); err != nil {
+		return err
+	}
+	if d.cfg.HomesDir != "" {
+		if err := os.RemoveAll(filepath.Join(d.cfg.HomesDir, home.Ref)); err != nil {
+			return fmt.Errorf("remove home directory: %w", err)
+		}
+	}
+	return nil
+}
+
+// removeVolume removes the named volume if it is there, and only if it is
+// labelled with this box's ID (or, with unlabelledOK, has no box label).
+func (d *Driver) removeVolume(ctx context.Context, id driver.BoxID, name string, unlabelledOK bool) error {
+	vctx, cancel := call(ctx, 0)
+	v, err := d.cli.VolumeInspect(vctx, name, client.VolumeInspectOptions{})
+	cancel()
+	if cerrdefs.IsNotFound(err) {
+		return nil
+	}
+	if err != nil {
+		return engineErr(ctx, "inspect volume", err)
+	}
+	if label := v.Volume.Labels[labelBox]; label != string(id) && (label != "" || !unlabelledOK) {
+		return fmt.Errorf("volume %s isn't this workspace's (%s): not removed", name, id)
+	}
+	rctx, cancel := call(ctx, 0)
+	_, err = d.cli.VolumeRemove(rctx, name, client.VolumeRemoveOptions{})
+	cancel()
+	if err != nil && !cerrdefs.IsNotFound(err) {
+		return engineErr(ctx, "remove volume", err)
+	}
+	return nil
+}
+
 // Logs yields the box's console output.
 func (d *Driver) Logs(ctx context.Context, id driver.BoxID, opts driver.LogOptions) iter.Seq2[driver.LogChunk, error] {
 	return func(yield func(driver.LogChunk, error) bool) {

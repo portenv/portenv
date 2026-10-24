@@ -200,7 +200,7 @@ public struct TitleLook: Equatable, Sendable {
 /// menu are built from the same list, in the same order. "—" is a separator.
 public struct BoxMenuItem: Equatable, Sendable {
     public enum Action: Equatable, Sendable {
-        case none, open, move(String), revertToLastSavePoint, makeSavePoint, restartBox
+        case none, open, move(String), revertToLastSavePoint, makeSavePoint, restartBox, deleteWorkspace
     }
     public var title: String
     public var enabled = true
@@ -233,7 +233,8 @@ public enum BoxMenuModel {
     /// disabled when they're known and none is a save point.
     public static func items(open: Bool, busy: Bool, agentUnavailable: Bool, optionHeld: Bool,
                              location: String?, servers: [String],
-                             lastSavePoint: Date? = nil, savesKnown: Bool = false, now: Date = Date()) -> [BoxMenuItem] {
+                             lastSavePoint: Date? = nil, savesKnown: Bool = false, now: Date = Date(),
+                             agentsRunning: Bool = false) -> [BoxMenuItem] {
         let act = open && !busy
         let move = moveSubmenu(busy: busy, location: location, servers: servers)
         var items: [BoxMenuItem] = []
@@ -257,6 +258,8 @@ public enum BoxMenuModel {
             items.append(BoxMenuItem(title: "Restart Workspace", enabled: act, action: .restartBox))
         }
         items.append(BoxMenuItem(title: "Show in Finder", enabled: false, shortcut: "⌥⌘R"))
+        // Last, after a divider (ADR 0029); never while an agent runs (R-0358).
+        items += [.separator, BoxMenuItem(title: "Delete Workspace…", enabled: !busy && !agentsRunning, action: .deleteWorkspace)]
         return items
     }
 }

@@ -96,6 +96,8 @@ While the workspace is closed, **Open** comes first, then a divider (R-0211). Th
 7. ———
 8. Restart Workspace (only shown when the workspace helper is unavailable, or with ⌥ held)
 9. Show in Finder ⌥⌘R
+10. ———
+11. Delete Workspace… (ADR 0029; disabled while the window is busy or an agent of the team is running; also in the workspace list's context menu)
 
 Menu items that can't work right now are disabled with no explanation in the menu; the explanation appears in the inspector or as an alert when chosen from the palette.
 
@@ -117,10 +119,23 @@ Each open workspace has a window of its own, and workspace windows group as **ma
   | Shortcut | Action | Menu |
   | --- | --- | --- |
   | ⌘N | "Your workspaces" in a new tab | File › Open Workspace… |
+  | ⇧⌘N | The New Workspace flow, as the list's New Workspace… button: in the window in front when it shows the list (the launch window when none is in front); a window showing a workspace keeps it and the flow opens in a new tab; a window already making one comes forward (R-0404) | File › New Workspace… |
   | ⌃⌘1–⌃⌘9 | Show the workspace tab at that position in the window's tab group; past the last, nothing | Window › Show Workspace Tab ▸ |
   | ⌃Tab / ⌃⇧Tab | Show the next / previous workspace tab, wrapping around | Window › Show Next Tab, Show Previous Tab (macOS's own) |
 
   Terminal tabs keep ⌘1–⌘9 (§4.1).
+
+### 3.4 Delete Workspace… (ADR 0029)
+
+A sheet on the window, the only confirmation in the app that asks for typing (Principle 5's exception: a deletion has no undo).
+
+- **Open first:** a workspace open here shows "acme-api is open. Close it first, then delete it." with Close Workspace (the usual close) and Cancel. Any other refusal (an agent running: "Stop its agents first (stop its team), then delete it.") is portenvd's line, with only Cancel.
+- **Title:** "Delete “acme-api”?" Then "This deletes:" and one line each for what goes: "All 12 saves on this Mac (340 MB)", "Everything in the workspace on this Mac: its files, programs and settings", "Its key in this Mac’s Keychain". Then "Copies of its saves in Time Machine backups aren’t deleted." and, in bold, "This can’t be undone."
+- **Saves elsewhere:** "Its saves on Test server aren’t deleted: they stay there, with this Mac’s key for them, so you can restore the workspace later.", with a checkbox, "Leave its saves on Test server", that must be ticked too.
+- **Confirming:** a field under "Type acme-api to confirm." Delete Workspace is the destructive button (`.destructive` role, red), disabled until the name matches exactly; Cancel is the default button (Return and ⎋ cancel).
+- **While it runs:** "Deleting…" with a spinner (none with Reduce Motion), the buttons disabled. A stop shows portenvd's line in red under the field ("Deleting acme-api stopped while deleting its saves. What's left of it is still there. Choose Delete Workspace… again to continue."); the list marks a workspace whose deletion stopped with "Deleting didn’t finish".
+- **After:** the window that asked shows "Your workspaces", saying "Deleted acme-api." (or "Deleted far-api from this Mac. Its saves stay on Test server."). A window tab that showed the workspace closes (§3.3); as the last window, it shows the list.
+- **The sheet belongs to the window that asked** (§3.3): its title menu, the menu bar while it's in front, or its list.
 
 ---
 
@@ -397,6 +412,7 @@ From the own-route rule (ADR 0008):
 - Sentence case for buttons and headings. Ellipsis on commands that open a sheet or ask more ("Move To…", "Connect an Agent…").
 - No exclamation marks, no blame ("You entered…"), no internal terms (section 2).
 - Numbers: "8.2 of 12 MB", "about 6 seconds left", "3 min".
+- **Portenv's background service:** when it doesn't start at launch, the app registers it afresh once, silently, before saying anything; only if it still doesn't start does its line show, with Try Again (R-0401). Waiting for the person's approval in Login Items is said at once.
 - **Errors say what to do next,** everywhere: the app, the CLI, `portenvd`'s messages, the guide. Give what happened, then the next step, as one plain line: "Keychain needs your approval. Open Portenv on this Mac to allow it." Agents read these too (PLAN.md, Agent readiness).
 
 ---

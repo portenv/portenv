@@ -67,6 +67,8 @@ struct MainWindow: View {
             .sheet(item: Binding(get: { team?.push.asking }, set: { _ in })) { ask in
                 if let push = team?.push { PushSheet(ask: ask, workspace: controller.box, push: push) }
             }
+            // Delete Workspace… waits while an agent runs (R-0358).
+            .onChange(of: team?.state.agentsRunning ?? false, initial: true) { _, on in controller.agentsRunning = on }
             .onGeometryChange(for: Bool.self) { $0.size.width < 900 } action: { narrow = $0 }
             // The terminal side and the inspector share the window's width;
             // only the window has a minimum width (R-0073, R-0075).

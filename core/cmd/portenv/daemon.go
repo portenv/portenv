@@ -48,6 +48,7 @@ func dialDaemon(e *local.Env) (daemonv1.DaemonServiceClient, func(), error) {
 //	portenv app housekeep BOX [--prune]
 //	portenv app leave-unsaved BOX   (Quit Anyway: the marker; saved in the background until it works)
 //	portenv app unregister-service  (dev builds: remove portenvd's login item; this portenv's app)
+//	portenv app delete BOX [--yes-delete-everything] [--saves-elsewhere-stay]  (ADR 0029; the key is the app's to delete)
 //	portenv app move BOX this-mac|USER@HOST
 //	portenv app servers BOX         (the Move To targets, one per line)
 //	portenv app trust-server USER@HOST "TYPE BASE64"  (the owner's scripts only: add a server with its known host key; refused in a workspace)
@@ -197,6 +198,8 @@ func cmdApp(ctx context.Context, e *local.Env, op string, args []string) error {
 	defer done()
 	var summary string
 	switch op {
+	case "delete":
+		return deleteWorkspace(ctx, c, name, args[1:], os.Stdin, os.Stdout, term.IsTerminal(int(os.Stdin.Fd()))) // #nosec G115 -- a file descriptor
 	case "fetch-agent":
 		// The owner's Fetch (ADR 0022 §2a): the agent's branch into the
 		// project as refs/remotes/agents/<id>.

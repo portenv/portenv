@@ -15,7 +15,7 @@ struct ProjectStepView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 10) {
+            CardRows {
                 TemplateCard(title: ProjectText.empty, line: ProjectText.emptyLine, selected: flow.projectKind == .empty) {
                     flow.projectKind = .empty
                 }

@@ -183,6 +183,8 @@ public enum ServiceText {
 }
 
 /// Why portenvd isn't running, as the app says it (R-0028, R-0032).
+/// Before either line, the launch wait registers the login item afresh
+/// once, silently (R-0401), except while it waits for approval.
 /// - launchd refused it (exit 78): both remedies in one line, Login Items
 ///   first, with Open Login Items and Try Again; the wait ends. SMAppService
 ///   can't be trusted to tell an approved item apart (it said "enabled"
@@ -197,22 +199,30 @@ public struct BackgroundServiceProblem: Equatable, Sendable {
     /// Whether the wait for portenvd should end (a refusal); approval keeps
     /// waiting, with Try Again too (R-0250).
     public let endsWait: Bool
-    public init(message: String, opensLoginItems: Bool, offersTryAgain: Bool, endsWait: Bool? = nil) {
+    /// Whether registering the login item afresh may fix it: the launch
+    /// wait does that once, silently, before saying anything (R-0401).
+    public let reRegisterFirst: Bool
+    public init(message: String, opensLoginItems: Bool, offersTryAgain: Bool, endsWait: Bool? = nil, reRegisterFirst: Bool = false) {
         self.message = message
         self.opensLoginItems = opensLoginItems
         self.offersTryAgain = offersTryAgain
         self.endsWait = endsWait ?? offersTryAgain
+        self.reRegisterFirst = reRegisterFirst
     }
 
     public static func of(status: ServiceStatus, launchdJob: String, placement _: AppPlacement) -> BackgroundServiceProblem? {
         if LaunchdJob.refused(in: launchdJob) {
-            return BackgroundServiceProblem(message: ServiceText.notStarted, opensLoginItems: true, offersTryAgain: true)
+            return BackgroundServiceProblem(message: ServiceText.notStarted, opensLoginItems: true, offersTryAgain: true,
+                                            reRegisterFirst: true)
         }
         if status != .enabled {
             // Try Again too: after the person turns Portenv on, it checks
             // again at once, and again whenever the app comes to the front
             // (R-0250).
-            return BackgroundServiceProblem(message: ServiceText.needsApproval, opensLoginItems: true, offersTryAgain: true, endsWait: false)
+            // Not registered (or not found) may be fixed by registering
+            // afresh; approval is the person's to give, never re-registered.
+            return BackgroundServiceProblem(message: ServiceText.needsApproval, opensLoginItems: true, offersTryAgain: true, endsWait: false,
+                                            reRegisterFirst: status != .requiresApproval)
         }
         return nil
     }

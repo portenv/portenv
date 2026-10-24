@@ -171,6 +171,7 @@ A box is a toolbox image plus a home. The image is rebuilt or pulled on each mac
 
 - `work` has passwordless sudo. A stand-in agent acts as `work`, sudo included; approvals for it are opt-in per action (ADR 0006).
 - Lane users have no sudo by default and cannot read other homes (`chmod 700` on every home).
+- **The clock follows the Mac (R-0411):** at every start `portenvd` reads the Mac's IANA time zone (the `/etc/localtime` link, or Go's `time.Local` name; never `Local`), checks it against the tz database and sends it to the helper, which has init link `/etc/localtime` to the zone in the image's `tzdata` and gives every later shell and agent runner `TZ`. An unknown or malformed name is UTC. Nothing is fixed at Create, so a travelling owner's workspace keeps the right time.
 - Users and groups are recreated from a manifest in `/home/work/.portenv/` at every start, because `/etc` does not travel. Until milestone 4.1 only `work` exists, and the image creates it.
 - A new box's home is created from the image's skeleton only when the caller says the box is new (`PORTENV_INIT_HOME=1`, resume rule 1); a missing or empty home otherwise fails the start (ADR 0003).
 

@@ -498,6 +498,13 @@ func (s *Server) openBox(ctx context.Context, name string, takeOver bool) (*open
 	} else if state != agentv1.ReadinessState_READINESS_STATE_READY {
 		return nil, none, errors.New("the workspace failed to start")
 	}
+	// The Mac's time zone, at every start; a failure leaves the image's
+	// clock (UTC) and never stops the open.
+	if zone, err := sendTimeZone(ctx, ob.client(), macZone); err != nil {
+		s.log.Warn("the workspace's time zone couldn't be set; it stays on UTC", "box_id", id, "err", err)
+	} else if zone != "" {
+		step("time zone " + zone)
+	}
 	step("workspace ready")
 	return ob, res, nil
 }

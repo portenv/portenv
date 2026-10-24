@@ -1,13 +1,19 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
 #
-# check-app-identity.sh APP [INSTANCE]: fails unless Portenv.app carries
-# exactly the release identity (no INSTANCE) or a dev lane's (INSTANCE=dev-X):
-# bundle ID, PortenvInstance, and one launch agent with the matching file
-# name, label, associated bundle ID and PORTENV_INSTANCE, and Go helpers
-# stamped with the same instance (or none).
+# check-app-identity.sh APP [INSTANCE [SIGN_ID]]: fails unless Portenv.app
+# carries exactly the release identity (no INSTANCE) or a dev lane's
+# (INSTANCE=dev-X): bundle ID, PortenvInstance, and one launch agent with the
+# matching file name, label, associated bundle ID and PORTENV_INSTANCE, and Go
+# helpers stamped with the same instance (or none).
+#
+# Signing (R-0328): both kinds of dev build pass. Without SIGN_ID nothing is
+# asked of the helpers' signatures (ad-hoc, as gmake app signs by default; a
+# release is signed afterwards by release-local.sh). With SIGN_ID (gmake app
+# LANE=X DEV_SIGN_ID=…, a dev lane only) every helper must carry a valid
+# signature that isn't ad-hoc, by that identity when SIGN_ID is its name.
 set -euo pipefail
-app=$1 inst=${2:-}
+app=$1 inst=${2:-} sign_id=${3:-}
 pb=/usr/libexec/PlistBuddy
 info=$app/Contents/Info.plist
 agents=$app/Contents/Library/LaunchAgents
@@ -41,4 +47,18 @@ if [[ -z $inst ]]; then
 		fail "a release build's binary was built with ATTACHED_TERMINAL"
 	fi
 fi
-echo "identity ok: $id, $label${inst:+ ($inst)}"
+if [[ -n $sign_id ]]; then
+	[[ -n $inst ]] || fail "a release build is never signed with a dev identity ('$sign_id')"
+	for h in portenv portenvd restic; do
+		f=$app/Contents/Helpers/$h
+		codesign --verify --strict "$f" 2>/dev/null || fail "$h's signature doesn't verify"
+		d=$(codesign -d --verbose=2 "$f" 2>&1) || fail "$h has no signature"
+		! grep -qx 'Signature=adhoc' <<<"$d" || fail "$h is signed ad-hoc, not with '$sign_id'"
+		# A SHA-1 hash names the certificate too; only a name can be compared
+		# with the signature's Authority line.
+		if ! [[ $sign_id =~ ^[0-9A-Fa-f]{40}$ ]]; then
+			grep -qxF "Authority=$sign_id" <<<"$d" || fail "$h isn't signed by '$sign_id'"
+		fi
+	done
+fi
+echo "identity ok: $id, $label${inst:+ ($inst)}${sign_id:+, signed by $sign_id}"

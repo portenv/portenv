@@ -15,7 +15,7 @@ struct ProjectStepView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 10) {
+            CardRows {
                 TemplateCard(title: ProjectText.empty, line: ProjectText.emptyLine, selected: flow.projectKind == .empty) {
                     flow.projectKind = .empty
                 }
@@ -32,12 +32,65 @@ struct ProjectStepView: View {
                         .autocorrectionDisabled()
                         .accessibilityLabel(ProjectText.urlField)
                         .onSubmit { Task { await flow.next() } }
-                    GitHubAccountRow(signIn: signIn) { signingIn = true }
+                    // What GitHub says about it, asked on this Mac once the
+                    // address is valid (finding 10).
+                    RepoAccessRow(flow: flow) { signingIn = true }
+                    if !flow.accessWantsSignIn {
+                        GitHubAccountRow(signIn: signIn) { signingIn = true }
+                    }
                 }
             }
         }
+        // Asked again after a pause in typing, and when the sign-in changes.
+        .task(id: "\(flow.accessKey)\n\(signIn.state)") { await flow.checkAccess() }
+        .onChange(of: flow.accessLine) { _, line in
+            if let line, line != ProjectText.checking { Announce.high(line) }
+        }
         .sheet(isPresented: $signingIn) {
             GitHubSignInSheet(signIn: signIn) { signingIn = false }
+        }
+    }
+}
+
+/// The access check's line under the address, and Sign in with GitHub…
+/// when that would fix it.
+struct RepoAccessRow: View {
+    @Bindable var flow: FirstRunFlow
+    let signIn: () -> Void
+
+    var body: some View {
+        if let line = flow.accessLine {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                if flow.access == nil {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Image(systemName: icon).foregroundStyle(tint).accessibilityHidden(true)
+                }
+                Text(verbatim: line).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+            .font(.callout)
+            .frame(maxWidth: 460, alignment: .leading)
+            .accessibilityElement(children: .combine)
+            if flow.accessWantsSignIn {
+                Button(GitHubSignInText.button, action: signIn)
+                    .buttonStyle(.borderedProminent)
+            }
+        }
+    }
+
+    private var icon: String {
+        switch flow.access {
+        case .publicRepo?, .reachable?: "checkmark.circle"
+        case .couldNotCheck?: "questionmark.circle"
+        default: "exclamationmark.triangle"
+        }
+    }
+
+    private var tint: SwiftUI.Color {
+        switch flow.access {
+        case .publicRepo?, .reachable?: .green
+        case .couldNotCheck?: .secondary
+        default: .orange
         }
     }
 }
@@ -138,33 +191,42 @@ struct SetupBanner: View {
     @State private var signingIn = false
 
     var body: some View {
-        if let problem = team.setupProblem {
-            HStack(spacing: 10) {
-                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange).accessibilityHidden(true)
-                Text(verbatim: problem.line).fixedSize(horizontal: false, vertical: true)
-                Spacer(minLength: 8)
-                if problem.needsSignIn {
-                    Button(GitHubSignInText.button) { signingIn = true }
+        // One container, so the sign-in sheet stays up while the line
+        // turns into the clone's progress (R-0409).
+        VStack(spacing: 0) {
+            if let problem = team.setupProblem {
+                HStack(spacing: 10) {
+                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange).accessibilityHidden(true)
+                    Text(verbatim: problem.line).fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 8)
+                    if problem.needsSignIn {
+                        Button(GitHubSignInText.button) { signingIn = true }
+                    }
+                    Button(ProjectText.tryAgain) { Task { await team.retrySetup() } }
                 }
-                Button(ProjectText.tryAgain) { Task { await team.retrySetup() } }
+                .font(.callout)
+                .padding(10)
+                .background(SwiftUI.Color.orange.opacity(0.12))
+                .accessibilityElement(children: .contain)
+                .onAppear { Announce.high(problem.line) }
+            } else if let line = team.progressLine {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text(verbatim: line).foregroundStyle(.secondary)
+                }
+                .font(.callout)
+                .padding(8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityElement(children: .combine)
+                .onAppear { Announce.high(line) }
             }
-            .font(.callout)
-            .padding(10)
-            .background(SwiftUI.Color.orange.opacity(0.12))
-            .accessibilityElement(children: .contain)
-            .onAppear { Announce.high(problem.line) }
-            .sheet(isPresented: $signingIn) {
-                GitHubSignInSheet(signIn: signIn) { signingIn = false }
-            }
-        } else if team.settingUp {
-            HStack(spacing: 8) {
-                ProgressView().controlSize(.small)
-                Text(ProjectText.settingUp).foregroundStyle(.secondary)
-            }
-            .font(.callout)
-            .padding(8)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .accessibilityElement(children: .combine)
+        }
+        .sheet(isPresented: $signingIn) {
+            GitHubSignInSheet(signIn: signIn) { signingIn = false }
+        }
+        // Signing in from the line tries the clone again at once.
+        .onChange(of: signIn.state) { _, s in
+            if case .signedIn = s { Task { await team.signedIn() } }
         }
     }
 }

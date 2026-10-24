@@ -1,0 +1,45 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# make swift-env-check: a fake secret in the environment never reaches the
+# Swift build folders (scripts/check-swift-env.sh). It runs swift-test again
+# and builds the app (with its third-party notices check), which added 16-22
+# minutes to every Swift CI job.
+#
+# owner 2026-10-24: off PR CI for speed; runs nightly. It also runs on
+# demand (workflow_dispatch). The make target and its local use are unchanged.
+name: Nightly Swift env check
+
+on:
+  schedule:
+    - cron: '53 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-swift-env-check
+  cancel-in-progress: false
+
+jobs:
+  swift-env-check:
+    name: Swift env check (macOS arm64)
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # make app builds the Go helpers into the bundle.
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: core/go.mod
+          cache: false
+      - uses: ./.github/actions/go-cache
+        with:
+          tools: true
+      # The Makefile needs GNU Make 4 or later; macOS ships 3.81.
+      - name: GNU Make 4
+        run: |
+          brew install make
+          echo "$(brew --prefix)/opt/make/libexec/gnubin" >> "$GITHUB_PATH"
+      - run: make --version | head -1
+      - run: make swift-env-check

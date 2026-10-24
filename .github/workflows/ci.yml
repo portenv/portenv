@@ -87,7 +87,7 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # make app (in swift-env-check) builds the Go helpers into the bundle.
+      # proto-check and cli-darwin need Go.
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: core/go.mod
@@ -110,7 +110,8 @@ jobs:
       - run: scripts/test-attached-terminal.sh
         env:
           MAKE: make
-      - run: make swift-env-check
+      # make swift-env-check (owner 2026-10-24: off PR CI for speed; runs
+      # nightly) is in nightly-swift-env-check.yml.
       # Internal CLI artifacts (signed public releases: ADR 0009, later).
       - run: make cli-darwin
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

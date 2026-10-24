@@ -861,6 +861,12 @@ func (e *teamEngine) startAgent(ctx context.Context, name, agentID string) (*dae
 	return e.startAgentAs(ctx, name, agentID, false)
 }
 
+// errTeamStartPending is a Start's refusal while the team's first start
+// waits for the owner's Approve. StartAgent marks it with the trailer
+// portenv-refusal: team-start-pending for the app (R-0413); the words are
+// the CLI's.
+var errTeamStartPending = errors.New("approve the team's first start in Portenv first")
+
 // startAgentAs is startAgent; approved is a start the owner's team_start
 // Approve set going, which answerLocked already showed as starting.
 func (e *teamEngine) startAgentAs(ctx context.Context, name, agentID string, approved bool) (*daemonv1.AgentInfo, error) {
@@ -907,7 +913,7 @@ func (e *teamEngine) startAgentAs(ctx context.Context, name, agentID string, app
 		if err := e.askTeamStartLocked(ctx, name, b, agentID); err != nil {
 			return nil, err
 		}
-		return nil, errors.New("approve the team's first start in Portenv first")
+		return nil, errTeamStartPending
 	}
 	h, err := e.helper(ctx, name)
 	if err != nil {

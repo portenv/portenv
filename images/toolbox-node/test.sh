@@ -121,6 +121,7 @@ check "remove the agent's user" in_box sh -c "userdel $agent && { ! getent group
 in_box bash -c '(sleep 1 &) ; exit 0'
 sleep 3
 check "orphans are reaped" test "$(in_box ps -eo stat= | grep -c '^Z' || true)" = 0
+check "the tz database is in the image (the Mac's time zone, R-0411)" in_box test -f /usr/share/zoneinfo/Europe/Paris
 
 echo "== package replay"
 as_work 'echo cowsay >> ~/.portenv/apt-packages.txt'

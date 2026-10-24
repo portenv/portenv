@@ -149,7 +149,8 @@ extension BoxState {
         let notSavedSince = savedAt.map { "Not saved since " + clock($0) } ?? "Not saved"
         let state: String
         switch save {
-        case .notSavedYet: state = "Not saved yet"
+        // Until the first save: "New", not a warning (finding 11).
+        case .notSavedYet: state = "New"
         case .saving: state = "Saving…"
         case .saved:
             if let at = savedAt {
@@ -308,7 +309,7 @@ public enum A11y {
         case .saved: return "Saved"
         case .offline: return "Offline"
         case .agentUnavailable, .notSaved, .quitUnsaved: return "Not saved"
-        default: return "Not saved yet"
+        default: return "New"
         }
     }
 

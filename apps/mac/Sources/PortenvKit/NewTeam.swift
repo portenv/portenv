@@ -139,8 +139,12 @@ public struct TeamPlanApplied: Equatable, Sendable {
     public var needsSignIn: Bool
     /// The clone needs the owner's GitHub sign-in, which the app reads.
     public var needsToken: Bool
-    public init(applied: Bool, pinned: [String] = [], lines: [String] = [], projectError: String? = nil, needsSignIn: Bool = false, needsToken: Bool = false) {
+    /// The kept GitHub project, OWNER/REPO, when it wasn't brought in.
+    public var project: String?
+    public init(applied: Bool, pinned: [String] = [], lines: [String] = [], projectError: String? = nil, needsSignIn: Bool = false, needsToken: Bool = false,
+                project: String? = nil) {
         self.applied = applied
+        self.project = project
         self.pinned = pinned
         self.lines = lines
         self.projectError = projectError
@@ -444,5 +448,29 @@ public extension AvatarLook {
     static func planned(_ a: PlannedAgentFile, index: Int) -> AvatarLook {
         let colour = AgentColours.order.contains(a.avatar) ? a.avatar : AgentColours.order[index % AgentColours.order.count]
         return AvatarLook(symbol: nil, initial: a.name.first.map { String($0).uppercased() } ?? "?", colour: colour)
+    }
+}
+
+/// How many columns New workspace's choice cards take at a width: as many
+/// as fit at their minimum width, in balanced rows (2 + 2, not 3 + 1), so
+/// a step never runs wider than its window.
+public enum CardColumns {
+    public static let minimumWidth: CGFloat = 200
+    public static let spacing: CGFloat = 10
+
+    /// Never more than four in a row, however wide the window.
+    public static let maximum = 4
+
+    public static func count(cards: Int, width: CGFloat) -> Int {
+        guard cards > 0 else { return 1 }
+        let fit = max(1, Int(((width + spacing) / (minimumWidth + spacing)).rounded(.down)))
+        let most = min(fit, maximum, cards)
+        let rows = (cards + most - 1) / most
+        return (cards + rows - 1) / rows
+    }
+
+    public static func columnWidth(columns: Int, width: CGFloat) -> CGFloat {
+        let n = CGFloat(max(1, columns))
+        return (width - (n - 1) * spacing) / n
     }
 }

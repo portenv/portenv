@@ -1154,6 +1154,9 @@ message ApplyTeamPlanResponse {
   // The kept setup clones with the owner's sign-in and none was given: the
   // app reads it and calls again. Nothing was done.
   bool needs_token = 6;
+  // The kept GitHub project, as OWNER/REPO, when it wasn't brought in: the
+  // window says "Cloning OWNER/REPO…" while the next try runs (R-0409).
+  string project = 7;
 }
 
 message GetTeamSettingsRequest {}

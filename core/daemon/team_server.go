@@ -14,7 +14,9 @@ import (
 	"sync"
 	"time"
 
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 
@@ -334,6 +336,9 @@ func (s *Server) StartAgent(ctx context.Context, req *daemonv1.StartAgentRequest
 	s.ensureTeamPump(req.GetName())
 	info, err := s.teamEng().startAgent(ctx, req.GetName(), req.GetAgentId())
 	if err != nil {
+		if errors.Is(err, errTeamStartPending) {
+			_ = grpc.SetTrailer(ctx, metadata.Pairs(RefusalTrailer, RefusalTeamStartPending))
+		}
 		return nil, teamStatus(err)
 	}
 	return &daemonv1.StartAgentResponse{Agent: info}, nil

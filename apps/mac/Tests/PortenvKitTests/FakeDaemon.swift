@@ -31,6 +31,9 @@ final class FakeDaemon: DaemonAPI, @unchecked Sendable {
     var movingFor: Set<String> = []
     /// "action box" pairs that fail every time (one box's close, say).
     var failingFor: Set<String> = []
+    /// Actions portenvd refuses once because the team's first start waits
+    /// (its trailer portenv-refusal: team-start-pending).
+    var teamStartPendingOnce: Set<String> = []
     /// Actions that fail only the first time.
     var failingOnce: [String: String] = [:]
     /// The time revert reports for the restored save point.
@@ -44,6 +47,12 @@ final class FakeDaemon: DaemonAPI, @unchecked Sendable {
         lock.withLock { _calls.append(args) }
         await onRun?(args)
         let action = args.count > 1 ? args[1] : ""
+        if lock.withLock({ teamStartPendingOnce.remove(action) }) != nil {
+            // portenvd's words are the CLI's; the app goes by the trailer.
+            var refused = DaemonError("words written for the CLI")
+            refused.teamStartPending = true
+            throw refused
+        }
         if let message = lock.withLock({ failingOnce.removeValue(forKey: action) }) {
             throw DaemonError(message, unavailable: message.contains("not running"))
         }
@@ -286,9 +295,12 @@ final class FakeDaemon: DaemonAPI, @unchecked Sendable {
     var applied = TeamPlanApplied(applied: false)
     /// Answers in turn before `applied` (a needed sign-in, a failed clone).
     var appliedFirst: [TeamPlanApplied] = []
+    /// An ApplyTeamPlan with the sign-in takes this long (a clone).
+    var applyDelay: Duration?
     func applyTeamPlan(_ box: String, githubToken: String?) async throws -> TeamPlanApplied {
         // The sign-in is recorded only as whether one was given.
         try await record(["app", "apply-team-plan", box, githubToken == nil ? "no-token" : "token"])
+        if githubToken != nil, let d = lock.withLock({ applyDelay }) { try? await Task.sleep(for: d) }
         return lock.withLock { appliedFirst.isEmpty ? applied : appliedFirst.removeFirst() }
     }
     /// The workspace's repository and whether pushes are allowed.

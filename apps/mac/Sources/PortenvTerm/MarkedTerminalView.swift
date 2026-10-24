@@ -11,8 +11,9 @@ import SwiftTerm
 /// overlay; split view puts one in each pane.
 ///
 /// The overlay draws what a block header needs to line up with: a tint band
-/// on each prompt row, a rule above it, and the previous command's status at
-/// the right of the row its end mark is on. It's redrawn whenever the view
+/// on each prompt row, a rule above it, and each finished command's status
+/// at the right of its own prompt row (not of the row its end mark is on,
+/// which is the next prompt's; finding 23). It's redrawn whenever the view
 /// scrolls, receives output or changes size.
 public final class MarkedTerminalView: TerminalView {
     public private(set) var tracker: OverlayTracker!
@@ -420,20 +421,27 @@ public final class MarkOverlay: NSView {
                 row.fill()
                 NSColor.controlAccentColor.withAlphaComponent(0.6).setFill()
                 NSRect(x: row.minX, y: row.maxY - 1, width: row.width, height: 1).fill()
-            case let .commandEnd(exit):
-                let ok = exit == 0
-                let label = ok ? "✓" : "✗ exit \(exit.map(String.init) ?? "?")"
-                let attrs: [NSAttributedString.Key: Any] = [
-                    .font: NSFont.monospacedSystemFont(ofSize: max(9, row.height * 0.7), weight: .semibold),
-                    .foregroundColor: ok ? NSColor.systemGreen : NSColor.systemRed,
-                ]
-                let size = (label as NSString).size(withAttributes: attrs)
-                (label as NSString).draw(at: NSPoint(x: row.maxX - size.width - 8, y: row.minY + (row.height - size.height) / 2),
-                                         withAttributes: attrs)
-            case .commandStart:
-                break
+            case .commandEnd, .commandStart:
+                // A status is drawn on its command's prompt row, below.
+                continue
             }
             drawn.append((placed.mark.kind, row))
+        }
+        // Each command's status at the right of its own prompt row, not of
+        // the row its end mark is on, which is the next prompt's (the
+        // shell sends D when that prompt starts; finding 23).
+        for status in host.tracker.statuses() {
+            let row = host.rect(screenRow: status.row)
+            let ok = status.exit == 0
+            let label = ok ? "✓" : "✗ exit \(status.exit.map(String.init) ?? "?")"
+            let attrs: [NSAttributedString.Key: Any] = [
+                .font: NSFont.monospacedSystemFont(ofSize: max(9, row.height * 0.7), weight: .semibold),
+                .foregroundColor: ok ? NSColor.systemGreen : NSColor.systemRed,
+            ]
+            let size = (label as NSString).size(withAttributes: attrs)
+            (label as NSString).draw(at: NSPoint(x: row.maxX - size.width - 8, y: row.minY + (row.height - size.height) / 2),
+                                     withAttributes: attrs)
+            drawn.append((.commandEnd(exit: status.exit), row))
         }
     }
 }

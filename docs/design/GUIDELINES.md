@@ -64,7 +64,7 @@ The title shows the workspace name, a sync symbol and a chevron; the line under 
 
 | Situation | Symbol | State line |
 | --- | --- | --- |
-| New workspace, never saved | none | `This Mac · Not saved yet` |
+| New workspace, never saved | none | `This Mac · New` (not a warning: nothing is missing yet) |
 | Saving | `arrow.triangle.2.circlepath` (animated, unless Reduce Motion) | `This Mac · Saving…` |
 | Saved | `checkmark.circle` | `This Mac · Saved at 14:58` (`Saved just now` for the first minute; from the next day `Saved yesterday at 23:43`, then `Saved on 9 Oct at 23:43`, with the year once it's another year; the words change at midnight with no new save) |
 | Offline | `icloud.slash`-style "not synced" symbol | `This Mac · Offline · will save later` |
@@ -119,6 +119,7 @@ Each open workspace has a window of its own, and workspace windows group as **ma
   | Shortcut | Action | Menu |
   | --- | --- | --- |
   | ⌘N | "Your workspaces" in a new tab | File › Open Workspace… |
+  | ⇧⌘N | The New Workspace flow, as the list's New Workspace… button: in the window in front when it shows the list (the launch window when none is in front); a window showing a workspace keeps it and the flow opens in a new tab; a window already making one comes forward (R-0404) | File › New Workspace… |
   | ⌃⌘1–⌃⌘9 | Show the workspace tab at that position in the window's tab group; past the last, nothing | Window › Show Workspace Tab ▸ |
   | ⌃Tab / ⌃⇧Tab | Show the next / previous workspace tab, wrapping around | Window › Show Next Tab, Show Previous Tab (macOS's own) |
 
@@ -321,6 +322,7 @@ The Team section is the workspace's sidebar when the workspace has a team (agent
 - An agent-file change shows its diff, and its `runner` line on its own, prominently: that's code that will run (R-0245).
 - A package decision lists every package with its exact version and the repository it comes from, and says "Installing runs these packages' setup scripts as root."
 - The first start of a team shows the residual-risk sentence from ADR 0022 §2.
+- While the team's first start waits for your Approve, every agent's Start is off, with a grey line under it that says where to approve: "Approve the team's first start above." in the column whose card it is, or "Approve the team's first start in Needs you." for an agent the card doesn't name. It's never an error line, and `portenvd`'s refusal for it (written for the CLI) is never shown in the app. Once approved, Start works as before.
 - An expired decision is greyed, with no Approve; it never becomes an approval.
 - A question with choices (`ask-owner --choice`, CC-0501) shows one button per choice, in order, full width and wrapping, in Approve's place, with no default button, then **Decline…**. Each label is plain text. Answered, it reads “Chose “<label>””. VoiceOver: “Choose “Option b: install deps”: <question>”.
 
@@ -414,6 +416,7 @@ From the own-route rule (ADR 0008):
 - Sentence case for buttons and headings. Ellipsis on commands that open a sheet or ask more ("Move To…", "Connect an Agent…").
 - No exclamation marks, no blame ("You entered…"), no internal terms (section 2).
 - Numbers: "8.2 of 12 MB", "about 6 seconds left", "3 min".
+- **Portenv's background service:** when it doesn't start at launch, the app registers it afresh once, silently, before saying anything; only if it still doesn't start does its line show, with Try Again (R-0401). Waiting for the person's approval in Login Items is said at once.
 - **Errors say what to do next,** everywhere: the app, the CLI, `portenvd`'s messages, the guide. Give what happened, then the next step, as one plain line: "Keychain needs your approval. Open Portenv on this Mac to allow it." Agents read these too (PLAN.md, Agent readiness).
 
 ---

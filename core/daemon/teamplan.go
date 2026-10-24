@@ -341,11 +341,16 @@ func (s *Server) ApplyTeamPlan(ctx context.Context, req *daemonv1.ApplyTeamPlanR
 			}
 		}
 		if o != nil {
+			// Named, so the window can say what it's cloning on the next try.
+			var named string
+			if repo, err := githubrepo.Parse(setup.GetProject().GetGithubUrl()); err == nil {
+				named = repo.Owner + "/" + repo.Name
+			}
 			if o.needToken {
-				return &daemonv1.ApplyTeamPlanResponse{NeedsToken: true}, nil
+				return &daemonv1.ApplyTeamPlanResponse{NeedsToken: true, Project: named}, nil
 			}
 			s.log.Info("project not brought in", "box_id", box.ID, "sign_in", o.needsSignIn)
-			return &daemonv1.ApplyTeamPlanResponse{ProjectError: o.line, NeedsSignIn: o.needsSignIn}, nil
+			return &daemonv1.ApplyTeamPlanResponse{ProjectError: o.line, NeedsSignIn: o.needsSignIn, Project: named}, nil
 		}
 	}
 	out := &daemonv1.ApplyTeamPlanResponse{Applied: true}
@@ -458,6 +463,10 @@ func (s *Server) cloneProject(ctx context.Context, h agentv1.AgentServiceClient,
 	if src.GetUseSignIn() && token == "" {
 		return &cloneOutcome{needToken: true}
 	}
+	// A repository kept without the sign-in is fetched plainly first: a
+	// public one is never sent it. Only when GitHub refuses that fetch is
+	// the sign-in used (the owner may have signed in since Create).
+	signIn := token
 	if !src.GetUseSignIn() {
 		token = ""
 	}
@@ -500,6 +509,19 @@ func (s *Server) cloneProject(ctx context.Context, h agentv1.AgentServiceClient,
 		return &cloneOutcome{line: "Portenv couldn\u2019t clone " + repo.String() + ". Try again."}
 	}
 	got, err := githubrepo.FetchBundle(ctx, client, gitBase+"/"+repo.Owner+"/"+repo.Name, token, f, limit)
+	if errors.Is(err, githubrepo.ErrNeedsSignIn) && token == "" {
+		if signIn == "" {
+			return &cloneOutcome{needToken: true} // the app reads the Keychain, or says to sign in
+		}
+		token = signIn
+		if err := f.Truncate(0); err != nil {
+			return &cloneOutcome{line: "Portenv couldn\u2019t clone " + repo.String() + ". Try again."}
+		}
+		if _, err := f.Seek(0, 0); err != nil {
+			return &cloneOutcome{line: "Portenv couldn\u2019t clone " + repo.String() + ". Try again."}
+		}
+		got, err = githubrepo.FetchBundle(ctx, client, gitBase+"/"+repo.Owner+"/"+repo.Name, token, f, limit)
+	}
 	switch {
 	case errors.Is(err, githubrepo.ErrNeedsSignIn) && token != "":
 		return &cloneOutcome{line: signInEndedLine, needsSignIn: true}

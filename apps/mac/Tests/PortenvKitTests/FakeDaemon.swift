@@ -31,6 +31,9 @@ final class FakeDaemon: DaemonAPI, @unchecked Sendable {
     var movingFor: Set<String> = []
     /// "action box" pairs that fail every time (one box's close, say).
     var failingFor: Set<String> = []
+    /// Actions portenvd refuses once because the team's first start waits
+    /// (its trailer portenv-refusal: team-start-pending).
+    var teamStartPendingOnce: Set<String> = []
     /// Actions that fail only the first time.
     var failingOnce: [String: String] = [:]
     /// The time revert reports for the restored save point.
@@ -44,6 +47,12 @@ final class FakeDaemon: DaemonAPI, @unchecked Sendable {
         lock.withLock { _calls.append(args) }
         await onRun?(args)
         let action = args.count > 1 ? args[1] : ""
+        if lock.withLock({ teamStartPendingOnce.remove(action) }) != nil {
+            // portenvd's words are the CLI's; the app goes by the trailer.
+            var refused = DaemonError("words written for the CLI")
+            refused.teamStartPending = true
+            throw refused
+        }
         if let message = lock.withLock({ failingOnce.removeValue(forKey: action) }) {
             throw DaemonError(message, unavailable: message.contains("not running"))
         }

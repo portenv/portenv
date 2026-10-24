@@ -319,6 +319,7 @@ The Team section is the workspace's sidebar when the workspace has a team (agent
 - An agent-file change shows its diff, and its `runner` line on its own, prominently: that's code that will run (R-0245).
 - A package decision lists every package with its exact version and the repository it comes from, and says "Installing runs these packages' setup scripts as root."
 - The first start of a team shows the residual-risk sentence from ADR 0022 §2.
+- While the team's first start waits for your Approve, every agent's Start is off, with a grey line under it that says where to approve: "Approve the team's first start above." in the column whose card it is, or "Approve the team's first start in Needs you." for an agent the card doesn't name. It's never an error line, and `portenvd`'s refusal for it (written for the CLI) is never shown in the app. Once approved, Start works as before.
 - An expired decision is greyed, with no Approve; it never becomes an approval.
 - A question with choices (`ask-owner --choice`, CC-0501) shows one button per choice, in order, full width and wrapping, in Approve's place, with no default button, then **Decline…**. Each label is plain text. Answered, it reads “Chose “<label>””. VoiceOver: “Choose “Option b: install deps”: <question>”.
 

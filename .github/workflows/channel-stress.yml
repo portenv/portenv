@@ -15,6 +15,7 @@ on:
       - images/**
       - .github/workflows/channel-stress.yml
       - .github/actions/toolbox-build/**
+      - scripts/base-images.sh
   workflow_dispatch:
 
 permissions:
@@ -29,6 +30,9 @@ jobs:
     name: TestChannelConditions x20 under load
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: read # the base images' copy in ghcr.io/portenv/base
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1

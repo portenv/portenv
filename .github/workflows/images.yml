@@ -22,6 +22,7 @@ on:
       - Makefile
       - .github/workflows/images.yml
       - .github/actions/toolbox-build/**
+      - scripts/base-images.sh
   push:
     branches: [main]
     paths:
@@ -37,6 +38,7 @@ on:
       - Makefile
       - .github/workflows/images.yml
       - .github/actions/toolbox-build/**
+      - scripts/base-images.sh
     tags:
       - toolbox-node/v*
 

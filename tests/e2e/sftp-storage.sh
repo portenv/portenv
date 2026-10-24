@@ -46,10 +46,12 @@ echo "== stand-in server: sshd, with uid and gid 990 already taken"
 # host.portenv.internal, the host itself (listing, lease tags) through the
 # loopback address.
 bind=127.0.0.1; [[ $(uname) == Linux ]] && bind=0.0.0.0
-# The same Ubuntu as the toolbox image, from ECR Public by the same digest.
-# Pulled first, and up to three times with a wait in between: registries
-# refuse CI now and then (429 Too Many Requests), a minute at a time.
-ubuntu=public.ecr.aws/docker/library/ubuntu:24.04@sha256:534baea6a22c03a63003dbc8dbe78fe34bc0d7e595d9a9dc9834884ff530eb55
+# The same Ubuntu as the toolbox image, by the same digest: from
+# PORTENV_BASE when set (CI: ghcr.io/portenv/base, see
+# scripts/base-images.sh), else ECR Public. Pulled first, and up to three
+# times with a wait in between: public registries refuse CI now and then
+# (429 Too Many Requests), a minute at a time.
+ubuntu=${PORTENV_BASE:-public.ecr.aws/docker/library}/ubuntu:24.04@sha256:534baea6a22c03a63003dbc8dbe78fe34bc0d7e595d9a9dc9834884ff530eb55
 for wait in 30 65 0; do
   docker pull -q "$ubuntu" >/dev/null && break
   [[ $wait == 0 ]] && { echo "couldn't pull $ubuntu" >&2; exit 1; }

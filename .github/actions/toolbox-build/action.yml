@@ -3,14 +3,20 @@
 # Builds images/toolbox-node/Dockerfile with docker/build-push-action, and
 # once more a little over a minute later if that fails.
 #
-# Why: registries refuse CI now and then with "429 Too Many Requests". The
-# base images come from ECR Public (see the Dockerfile), but the Dockerfile
-# frontend is only on Docker Hub and mirror.gcr.io, and mirror.gcr.io's quota
-# is one for everyone who uses it, counted per minute ("Quota exceeded for
-# quota metric 'Requests per project in the US multi-region' ... per
-# minute"): when it runs out, every pull fails until the minute is over. So
-# the second try waits 65 seconds. A build that fails for any other reason
-# fails twice, and the job fails with the second try's error.
+# Where the base images come from: ghcr.io/portenv/base, this
+# organization's copy of the pinned digests (scripts/base-images.sh, the
+# Base images workflow), pulled with the workflow's own token, since
+# anonymous pulls from shared runners were refused with "429 Too Many
+# Requests" by mirror.gcr.io and ECR Public alike. Until an image is copied
+# there (a new digest), the public registries, with a warning. The job needs
+# packages: read. Later steps get PORTENV_BASE, for the e2e's stand-in
+# server.
+#
+# Why the second try: a public registry's quota is counted per minute
+# ("Quota exceeded for quota metric 'Requests per project in the US
+# multi-region' ... per minute"), so it waits 65 seconds. A build that fails
+# for any other reason fails twice, and the job fails with the second try's
+# error.
 #
 # Same inputs as the build-push-action steps it replaces; the digests stay
 # pinned in the Dockerfile.
@@ -44,6 +50,15 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Sign in to ghcr.io (the base images' copy)
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin <<<"$GH_TOKEN" || echo "::warning::Couldn't sign in to ghcr.io; the base images come from the public registries."
+    - name: Where the base images come from
+      id: base
+      shell: bash
+      run: scripts/base-images.sh choose
     - name: Build
       id: first
       continue-on-error: true
@@ -58,7 +73,10 @@ runs:
         outputs: ${{ inputs.outputs }}
         provenance: false
         sbom: false
-        build-args: ${{ inputs.build-args }}
+        build-args: |
+          BASE=${{ steps.base.outputs.base }}
+          ${{ steps.base.outputs.syntax && format('BUILDKIT_SYNTAX={0}', steps.base.outputs.syntax) || '' }}
+          ${{ inputs.build-args }}
         cache-from: ${{ inputs.cache-from }}
         cache-to: ${{ inputs.cache-to }}
     - name: Wait for the registry's quota minute to pass
@@ -80,6 +98,9 @@ runs:
         outputs: ${{ inputs.outputs }}
         provenance: false
         sbom: false
-        build-args: ${{ inputs.build-args }}
+        build-args: |
+          BASE=${{ steps.base.outputs.base }}
+          ${{ steps.base.outputs.syntax && format('BUILDKIT_SYNTAX={0}', steps.base.outputs.syntax) || '' }}
+          ${{ inputs.build-args }}
         cache-from: ${{ inputs.cache-from }}
         cache-to: ${{ inputs.cache-to }}

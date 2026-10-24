@@ -150,6 +150,7 @@ A sheet on the window, the only confirmation in the app that asks for typing (Pr
 - **Split Right and Split Down are You's, in the tab bar: agents split their own panes (owner, 2026-10-21, R-0410).** The two buttons sit next to `+` only while You is selected; the window's toolbar has none, in any view. Window › Split Right ⌘D and Split Down ⇧⌘D stay, and are disabled while an agent's view is in front.
 - **The tab bar's tabs are the workspace's terminal tabs;** macOS's own window tabs hold workspaces (§3.3).
 - **The current tab is marked by more than a shade** (§12): its name in semibold, and an accent line along its bottom edge, on top of the mockup's background. (A shade alone was too faint at the Mac, 2026-10-10.)
+- **Switching lands at the prompt** (the owner, 2026-10-22): choosing another agent, You or All tabs in the sidebar, or another tab in the bar, shows that tab scrolled to the bottom, at its live prompt and the cursor's line. The one exception: if the owner had scrolled up in that tab themselves and nothing new has arrived there since, their place holds. Output alone never moves the view while they read back; only a switch does (`TerminalLanding`). Each pane remembers, per tab it showed, only where the owner had scrolled to and the screen then; nothing is kept once the window closes.
 - **Each viewer keeps its own current tab.** The app and each agent see the same tabs, but choosing a tab moves only that viewer's terminal: an agent switching tabs never changes the owner's.
 - **Tab shortcuts:**
 

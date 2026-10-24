@@ -153,6 +153,8 @@ public final class MarkedTerminalView: TerminalView {
     public func attach(_ source: any TabTerminalSource) {
         detach()
         self.source = source
+        landing = true
+        lastLanding = nil
         let t = getTerminal()
         let size = fitted ?? TabTerminalSize(cols: t.cols, rows: t.rows)
         fitted = size
@@ -167,6 +169,7 @@ public final class MarkedTerminalView: TerminalView {
 
     /// Stops showing the tab; the tab keeps running.
     public func detach() {
+        remember()
         reading?.cancel()
         reading = nil
         source?.close()
@@ -184,6 +187,10 @@ public final class MarkedTerminalView: TerminalView {
             tracker.seeding = true
             ingest(seed)
             tracker.seeding = false
+            if landing {
+                landing = false
+                land()
+            }
             onReset(size)
             // The tab was at another size (another viewer, or this view
             // changed while disconnected): ask for this view's own.
@@ -206,8 +213,13 @@ public final class MarkedTerminalView: TerminalView {
     /// default-deny filter.
     public func ingest(_ bytes: [UInt8]) {
         keepDelegate()
+        if !tracker.seeding, scrolledUp { outputWhileScrolledUp = true }
         let allowed = filter.filter(bytes)
-        if !allowed.isEmpty { feed(byteArray: allowed[...]) }
+        if !allowed.isEmpty {
+            feeding = true
+            feed(byteArray: allowed[...])
+            feeding = false
+        }
         overlay.needsDisplay = true
     }
 
@@ -232,6 +244,89 @@ public final class MarkedTerminalView: TerminalView {
     /// pastes, clicks or enters through IME goes to the source, through
     /// SwiftTerm's `send(data:)`.
     public override func send(source _: Terminal, data _: ArraySlice<UInt8>) {}
+
+    // MARK: Landing on a switch (GUIDELINES §4.1)
+
+    /// What a tab the owner left was showing: where they had scrolled up
+    /// to, the screen then, and whether output had come since they chose
+    /// that place. Only for tabs left scrolled up.
+    struct Kept: Equatable {
+        var linesFromBottom: Int
+        var screen: [String]
+        var outputSince: Bool
+    }
+
+    /// By tab, for the tabs this pane has shown.
+    private var kept: [String: Kept] = [:]
+    /// The next reset is a switch to the source just attached.
+    private var landing = false
+    /// The landing for the tab on screen, nil until its seed is drawn
+    /// (tests).
+    private(set) var lastLanding: TerminalLanding?
+    /// Output came while the owner was scrolled up in the tab on screen,
+    /// since they last scrolled.
+    private(set) var outputWhileScrolledUp = false
+
+    /// Whether the owner has scrolled up from the prompt.
+    var scrolledUp: Bool { canScroll && scrollPosition < 1 }
+
+    /// The sidebar's selection changed but this tab stayed on screen: the
+    /// same rule as a switch, for the tab as it is.
+    public func shownBySelection() {
+        guard !landing, source != nil else { return }
+        let l = TerminalLanding.on(switched: true, scrolledUp: scrolledUp, newOutputSince: outputWhileScrolledUp)
+        lastLanding = l
+        if l == .bottom { toBottom() }
+    }
+
+    /// The view scrolled by the owner's hand (the wheel, the scroller, or
+    /// this view's own landing; output scrolls another way): the place they
+    /// read from is theirs again, whatever came before.
+    func viewScrolled() {
+        if !feeding { outputWhileScrolledUp = false }
+    }
+
+    /// Output is being drawn: its scrolling isn't the owner's.
+    private var feeding = false
+
+    /// Records the tab being left.
+    private func remember() {
+        guard let tab = source?.tab else { return }
+        defer { outputWhileScrolledUp = false }
+        guard scrolledUp else {
+            kept[tab] = nil
+            return
+        }
+        let place = getTerminal().buffer.yDisp
+        let outputSince = outputWhileScrolledUp
+        toBottom()
+        let bottom = getTerminal().buffer.yDisp
+        let screen = screenLines()
+        scrollTo(row: place)
+        kept[tab] = Kept(linesFromBottom: bottom - place, screen: screen, outputSince: outputSince)
+    }
+
+    /// After a switch's seed: the prompt, or the owner's place in it.
+    private func land() {
+        guard let tab = source?.tab else { return }
+        let k = kept.removeValue(forKey: tab)
+        toBottom()
+        let l = TerminalLanding.on(switched: true, scrolledUp: k != nil,
+                                   newOutputSince: k.map { $0.outputSince || $0.screen != screenLines() } ?? false)
+        lastLanding = l
+        if l == .keep, let k {
+            scrollTo(row: max(0, getTerminal().buffer.yDisp - k.linesFromBottom))
+        }
+        outputWhileScrolledUp = false
+    }
+
+    private func toBottom() { scrollTo(row: Int.max) }
+
+    /// The screen's text, at the bottom.
+    private func screenLines() -> [String] {
+        let t = getTerminal()
+        return (0 ..< t.rows).map { t.getLine(row: $0)?.translateToString(trimRight: true) ?? "" }
+    }
 
     public override func scrolled(source terminal: Terminal, yDisp: Int) {
         super.scrolled(source: terminal, yDisp: yDisp)
@@ -277,7 +372,9 @@ private final class SizeRelay: TerminalViewDelegate {
         MainActor.assumeIsolated { view?.keepDelegate() }
     }
     nonisolated func hostCurrentDirectoryUpdate(source _: TerminalView, directory _: String?) {}
-    nonisolated func scrolled(source _: TerminalView, position _: Double) {}
+    nonisolated func scrolled(source _: TerminalView, position _: Double) {
+        MainActor.assumeIsolated { view?.viewScrolled() }
+    }
     /// A ⌘-clicked link goes through TerminalLinks, as in the attached
     /// terminal (R-0161).
     nonisolated func requestOpenLink(source _: TerminalView, link: String, params _: [String: String]) {

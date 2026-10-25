@@ -153,6 +153,11 @@ func (s *apiServer) StartTeamAgent(ctx context.Context, req *agentv1.StartTeamAg
 			"PORTENV_AGENT=" + id,
 			"PORTENV_SOCKET=" + filepath.Join(base, "portenv.sock"),
 			"TMPDIR=" + u.TmpDir,
+			// The image pins the runner (Claude Code from the apt stable
+			// channel), so it mustn't nudge an update: this turns off its
+			// update check and with it the "Update available! Run: …"
+			// notice under the input (ADR 0025 §9).
+			"DISABLE_AUTOUPDATER=1",
 		},
 	}
 	// The Mac's time zone, as this start's shells get it (R-0411).

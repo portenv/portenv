@@ -2970,6 +2970,15 @@ public nonisolated struct Portenv_Daemon_V1_AgentInfo: @unchecked Sendable {
     set {_uniqueStorage()._ownClone = newValue}
   }
 
+  /// "Can't tell if <name> is idle: …" when its runner has an idle rule
+  /// but its pane has been quiet with no idle prompt recognised for 3
+  /// minutes, so wake-ups and routines wait (R-0411). Empty again as soon
+  /// as a prompt is recognised or output resumes.
+  public var idleUnknown: String {
+    get {_storage._idleUnknown}
+    set {_uniqueStorage()._idleUnknown = newValue}
+  }
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -8522,7 +8531,7 @@ nonisolated extension Portenv_Daemon_V1_SetAgentsAllowedResponse: SwiftProtobuf.
 
 nonisolated extension Portenv_Daemon_V1_AgentInfo: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".AgentInfo"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}name\0\u{1}role\0\u{1}avatar\0\u{1}remote\0\u{1}via\0\u{1}state\0\u{1}problem\0\u{3}file_sha256\0\u{1}approved\0\u{3}tab_ids\0\u{3}last_line\0\u{3}pending_decisions\0\u{3}home_bytes\0\u{3}home_quota_bytes\0\u{1}runner\0\u{1}grant\0\u{1}status\0\u{1}routines\0\u{3}routines_off\0\u{3}share_login_off\0\u{3}own_clone\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}name\0\u{1}role\0\u{1}avatar\0\u{1}remote\0\u{1}via\0\u{1}state\0\u{1}problem\0\u{3}file_sha256\0\u{1}approved\0\u{3}tab_ids\0\u{3}last_line\0\u{3}pending_decisions\0\u{3}home_bytes\0\u{3}home_quota_bytes\0\u{1}runner\0\u{1}grant\0\u{1}status\0\u{1}routines\0\u{3}routines_off\0\u{3}share_login_off\0\u{3}own_clone\0\u{3}idle_unknown\0")
 
   fileprivate class _StorageClass {
     var _id: String = String()
@@ -8547,6 +8556,7 @@ nonisolated extension Portenv_Daemon_V1_AgentInfo: SwiftProtobuf.Message, SwiftP
     var _routinesOff: String = String()
     var _shareLoginOff: String = String()
     var _ownClone: Bool = false
+    var _idleUnknown: String = String()
 
       // This property is used as the initial default value for new instances of the type.
       // The type itself is protecting the reference to its storage via CoW semantics.
@@ -8579,6 +8589,7 @@ nonisolated extension Portenv_Daemon_V1_AgentInfo: SwiftProtobuf.Message, SwiftP
       _routinesOff = source._routinesOff
       _shareLoginOff = source._shareLoginOff
       _ownClone = source._ownClone
+      _idleUnknown = source._idleUnknown
     }
   }
 
@@ -8619,6 +8630,7 @@ nonisolated extension Portenv_Daemon_V1_AgentInfo: SwiftProtobuf.Message, SwiftP
         case 20: try { try decoder.decodeSingularStringField(value: &_storage._routinesOff) }()
         case 21: try { try decoder.decodeSingularStringField(value: &_storage._shareLoginOff) }()
         case 22: try { try decoder.decodeSingularBoolField(value: &_storage._ownClone) }()
+        case 23: try { try decoder.decodeSingularStringField(value: &_storage._idleUnknown) }()
         default: break
         }
       }
@@ -8697,6 +8709,9 @@ nonisolated extension Portenv_Daemon_V1_AgentInfo: SwiftProtobuf.Message, SwiftP
       if _storage._ownClone != false {
         try visitor.visitSingularBoolField(value: _storage._ownClone, fieldNumber: 22)
       }
+      if !_storage._idleUnknown.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._idleUnknown, fieldNumber: 23)
+      }
     }
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -8728,6 +8743,7 @@ nonisolated extension Portenv_Daemon_V1_AgentInfo: SwiftProtobuf.Message, SwiftP
         if _storage._routinesOff != rhs_storage._routinesOff {return false}
         if _storage._shareLoginOff != rhs_storage._shareLoginOff {return false}
         if _storage._ownClone != rhs_storage._ownClone {return false}
+        if _storage._idleUnknown != rhs_storage._idleUnknown {return false}
         return true
       }
       if !storagesAreEqual {return false}

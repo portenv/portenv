@@ -490,6 +490,14 @@ struct TeamAgentStatusMappingTests {
         let a = info { $0.shareLoginOff = "Sharing your sign-in (claude) isn\u{2019}t in this build, so nothing is shared.\n\u{1b}[2J" }
         #expect(a.shareLoginOff == "Sharing your sign-in (claude) isn\u{2019}t in this build, so nothing is shared. [2J")
     }
+
+    /// R-0411: "Can't tell if <name> is idle" reaches the agent's column
+    /// as one plain line, and is gone when portenvd clears it.
+    @Test func idleUnknownIsCarriedAsPlainText() {
+        #expect(info().idleUnknown.isEmpty)
+        let a = info { $0.idleUnknown = "Can't tell if Code Writer is idle: Portenv doesn't recognise its prompt.\n\u{1b}[2J" }
+        #expect(a.idleUnknown == "Can't tell if Code Writer is idle: Portenv doesn't recognise its prompt. [2J")
+    }
 }
 
 /// Follows the team until done says so (or a second), then stops.

@@ -16,6 +16,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/portenv/portenv/core/internal/idleinput"
 	agentv1 "github.com/portenv/portenv/proto/gen/go/portenv/agent/v1"
 	typesv1 "github.com/portenv/portenv/proto/gen/go/portenv/types/v1"
 )
@@ -520,7 +521,7 @@ func TestARoutineIsTypedIntoTheAgentsMainPaneOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.SetAgentIdleInput("builder", idleBoxPattern); err != nil {
+	if err := s.SetAgentIdleInput("builder", testIdle(idleBoxPattern)); err != nil {
 		t.Fatal(err)
 	}
 	// Another pane, current, also waiting for a line.
@@ -584,6 +585,11 @@ const (
 	idleBoxPattern = `^│ > *│$`
 )
 
+// testIdle is a test's idle-input rule: pattern on any of the last lines.
+func testIdle(pattern string) idleinput.Input {
+	return idleinput.Input{Pattern: pattern, Lines: idleinput.MaxLines}
+}
+
 // standIn runs script with sh, $0 as arg.
 func standIn(script, arg string) []string { return []string{"sh", "-c", script, arg} }
 
@@ -621,7 +627,7 @@ func TestARoutineIsNeverTypedIntoABusyAgent(t *testing.T) {
 		if _, err := s.StartAgentTerminals(ctx, testSpec(t, c.id, standIn(c.script, "x")...)); err != nil {
 			t.Fatal(err)
 		}
-		if err := s.SetAgentIdleInput(c.id, c.pattern); err != nil {
+		if err := s.SetAgentIdleInput(c.id, testIdle(c.pattern)); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -636,8 +642,8 @@ func TestARoutineIsNeverTypedIntoABusyAgent(t *testing.T) {
 			t.Errorf("%s: typed into it:\n%s", c.id, screen)
 		}
 	}
-	for _, bad := range []string{"(", strings.Repeat("x", maxIdleInput+1)} {
-		if err := s.SetAgentIdleInput("asks", bad); status.Code(err) != codes.InvalidArgument {
+	for _, bad := range []string{"(", strings.Repeat("x", idleinput.MaxPattern+1)} {
+		if err := s.SetAgentIdleInput("asks", testIdle(bad)); status.Code(err) != codes.InvalidArgument {
 			t.Errorf("pattern %.10q: %v", bad, err)
 		}
 	}

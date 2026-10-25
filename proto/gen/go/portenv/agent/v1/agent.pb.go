@@ -136,6 +136,67 @@ func (TabTerminalEnd) EnumDescriptor() ([]byte, []int) {
 	return file_portenv_agent_v1_agent_proto_rawDescGZIP(), []int{1}
 }
 
+// What CheckAgentIdle saw in an agent's main pane.
+type AgentIdleCheck int32
+
+const (
+	AgentIdleCheck_AGENT_IDLE_CHECK_UNSPECIFIED AgentIdleCheck = 0
+	// At its empty input: a routine or a wake-up would be typed.
+	AgentIdleCheck_AGENT_IDLE_CHECK_IDLE AgentIdleCheck = 1
+	// Printing, asking something, a secret prompt or a full-screen program.
+	AgentIdleCheck_AGENT_IDLE_CHECK_BUSY AgentIdleCheck = 2
+	// Quiet and not asking, but the runner's idle rule finds no empty input:
+	// something typed, or a screen Portenv doesn't recognise.
+	AgentIdleCheck_AGENT_IDLE_CHECK_NO_PROMPT AgentIdleCheck = 3
+	// The runner has no idle rule.
+	AgentIdleCheck_AGENT_IDLE_CHECK_NO_RULE AgentIdleCheck = 4
+)
+
+// Enum value maps for AgentIdleCheck.
+var (
+	AgentIdleCheck_name = map[int32]string{
+		0: "AGENT_IDLE_CHECK_UNSPECIFIED",
+		1: "AGENT_IDLE_CHECK_IDLE",
+		2: "AGENT_IDLE_CHECK_BUSY",
+		3: "AGENT_IDLE_CHECK_NO_PROMPT",
+		4: "AGENT_IDLE_CHECK_NO_RULE",
+	}
+	AgentIdleCheck_value = map[string]int32{
+		"AGENT_IDLE_CHECK_UNSPECIFIED": 0,
+		"AGENT_IDLE_CHECK_IDLE":        1,
+		"AGENT_IDLE_CHECK_BUSY":        2,
+		"AGENT_IDLE_CHECK_NO_PROMPT":   3,
+		"AGENT_IDLE_CHECK_NO_RULE":     4,
+	}
+)
+
+func (x AgentIdleCheck) Enum() *AgentIdleCheck {
+	p := new(AgentIdleCheck)
+	*p = x
+	return p
+}
+
+func (x AgentIdleCheck) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (AgentIdleCheck) Descriptor() protoreflect.EnumDescriptor {
+	return file_portenv_agent_v1_agent_proto_enumTypes[2].Descriptor()
+}
+
+func (AgentIdleCheck) Type() protoreflect.EnumType {
+	return &file_portenv_agent_v1_agent_proto_enumTypes[2]
+}
+
+func (x AgentIdleCheck) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use AgentIdleCheck.Descriptor instead.
+func (AgentIdleCheck) EnumDescriptor() ([]byte, []int) {
+	return file_portenv_agent_v1_agent_proto_rawDescGZIP(), []int{2}
+}
+
 type RunResticRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// restic's arguments, without the binary name.
@@ -4187,10 +4248,12 @@ type StartTeamAgentRequest struct {
 	// at most 100 MB together, new files only; ~/.portenv-seeded records it.
 	HomeSeed       []string `protobuf:"bytes,4,rep,name=home_seed,json=homeSeed,proto3" json:"home_seed,omitempty"`
 	HomeQuotaBytes int64    `protobuf:"varint,5,opt,name=home_quota_bytes,json=homeQuotaBytes,proto3" json:"home_quota_bytes,omitempty"`
-	// The runner's idle-input pattern (RE2, matched against the main pane's
-	// last line) from portenvd's runner table: DeliverRoutine types only
-	// when it matches, with no question on screen, 5 s of quiet and not the
-	// alternate screen. Empty: routines are off for this runner (R-0258).
+	// The runner's idle-input pattern from portenvd's runner table: RE2,
+	// matched against one whole line of the main pane, on each of its last
+	// idle_lines non-empty lines. DeliverRoutine and WakeAgent type only
+	// when it finds the runner's empty input there, with no question on
+	// screen under it, 5 s of quiet and not the alternate screen. Empty:
+	// routines and wake-ups are off for this runner (R-0258, CC-0498).
 	IdlePattern string `protobuf:"bytes,6,opt,name=idle_pattern,json=idlePattern,proto3" json:"idle_pattern,omitempty"`
 	// The owner's project, /home/work/<workspace>, for an agent with
 	// checkout: own (ADR 0022 §2a): the helper makes the agent's own clone
@@ -4211,7 +4274,11 @@ type StartTeamAgentRequest struct {
 	ProjectDir string `protobuf:"bytes,9,opt,name=project_dir,json=projectDir,proto3" json:"project_dir,omitempty"`
 	// The agent's display name, for its clone's git identity
 	// ("<name> (Portenv agent)", set when the clone is made).
-	AgentName     string `protobuf:"bytes,10,opt,name=agent_name,json=agentName,proto3" json:"agent_name,omitempty"`
+	AgentName string `protobuf:"bytes,10,opt,name=agent_name,json=agentName,proto3" json:"agent_name,omitempty"`
+	// How many of the main pane's last non-empty lines idle_pattern is
+	// tried on, 1 to 8, from the bottom: a runner may draw a rule and a
+	// status footer under its input. 0 means 1, the last line.
+	IdleLines     int32 `protobuf:"varint,11,opt,name=idle_lines,json=idleLines,proto3" json:"idle_lines,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4314,6 +4381,13 @@ func (x *StartTeamAgentRequest) GetAgentName() string {
 		return x.AgentName
 	}
 	return ""
+}
+
+func (x *StartTeamAgentRequest) GetIdleLines() int32 {
+	if x != nil {
+		return x.IdleLines
+	}
+	return 0
 }
 
 // One writer's clone and the lenses that may read it.
@@ -6798,6 +6872,94 @@ func (x *SetTimeZoneResponse) GetZone() string {
 	return ""
 }
 
+type CheckAgentIdleRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	AgentId       string                 `protobuf:"bytes,1,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CheckAgentIdleRequest) Reset() {
+	*x = CheckAgentIdleRequest{}
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[106]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CheckAgentIdleRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CheckAgentIdleRequest) ProtoMessage() {}
+
+func (x *CheckAgentIdleRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[106]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CheckAgentIdleRequest.ProtoReflect.Descriptor instead.
+func (*CheckAgentIdleRequest) Descriptor() ([]byte, []int) {
+	return file_portenv_agent_v1_agent_proto_rawDescGZIP(), []int{106}
+}
+
+func (x *CheckAgentIdleRequest) GetAgentId() string {
+	if x != nil {
+		return x.AgentId
+	}
+	return ""
+}
+
+type CheckAgentIdleResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Check         AgentIdleCheck         `protobuf:"varint,1,opt,name=check,proto3,enum=portenv.agent.v1.AgentIdleCheck" json:"check,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CheckAgentIdleResponse) Reset() {
+	*x = CheckAgentIdleResponse{}
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[107]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CheckAgentIdleResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CheckAgentIdleResponse) ProtoMessage() {}
+
+func (x *CheckAgentIdleResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[107]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CheckAgentIdleResponse.ProtoReflect.Descriptor instead.
+func (*CheckAgentIdleResponse) Descriptor() ([]byte, []int) {
+	return file_portenv_agent_v1_agent_proto_rawDescGZIP(), []int{107}
+}
+
+func (x *CheckAgentIdleResponse) GetCheck() AgentIdleCheck {
+	if x != nil {
+		return x.Check
+	}
+	return AgentIdleCheck_AGENT_IDLE_CHECK_UNSPECIFIED
+}
+
 type WriteAgentFilesRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The project folder, /home/work/<workspace>.
@@ -6810,7 +6972,7 @@ type WriteAgentFilesRequest struct {
 
 func (x *WriteAgentFilesRequest) Reset() {
 	*x = WriteAgentFilesRequest{}
-	mi := &file_portenv_agent_v1_agent_proto_msgTypes[106]
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[108]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6822,7 +6984,7 @@ func (x *WriteAgentFilesRequest) String() string {
 func (*WriteAgentFilesRequest) ProtoMessage() {}
 
 func (x *WriteAgentFilesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_agent_v1_agent_proto_msgTypes[106]
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[108]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6835,7 +6997,7 @@ func (x *WriteAgentFilesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WriteAgentFilesRequest.ProtoReflect.Descriptor instead.
 func (*WriteAgentFilesRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_agent_v1_agent_proto_rawDescGZIP(), []int{106}
+	return file_portenv_agent_v1_agent_proto_rawDescGZIP(), []int{108}
 }
 
 func (x *WriteAgentFilesRequest) GetProjectDir() string {
@@ -6865,7 +7027,7 @@ type WriteAgentFilesResponse struct {
 
 func (x *WriteAgentFilesResponse) Reset() {
 	*x = WriteAgentFilesResponse{}
-	mi := &file_portenv_agent_v1_agent_proto_msgTypes[107]
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[109]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6877,7 +7039,7 @@ func (x *WriteAgentFilesResponse) String() string {
 func (*WriteAgentFilesResponse) ProtoMessage() {}
 
 func (x *WriteAgentFilesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_agent_v1_agent_proto_msgTypes[107]
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[109]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6890,7 +7052,7 @@ func (x *WriteAgentFilesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WriteAgentFilesResponse.ProtoReflect.Descriptor instead.
 func (*WriteAgentFilesResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_agent_v1_agent_proto_rawDescGZIP(), []int{107}
+	return file_portenv_agent_v1_agent_proto_rawDescGZIP(), []int{109}
 }
 
 func (x *WriteAgentFilesResponse) GetWritten() []string {
@@ -6927,7 +7089,7 @@ type CloneProjectRequest struct {
 
 func (x *CloneProjectRequest) Reset() {
 	*x = CloneProjectRequest{}
-	mi := &file_portenv_agent_v1_agent_proto_msgTypes[108]
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[110]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6939,7 +7101,7 @@ func (x *CloneProjectRequest) String() string {
 func (*CloneProjectRequest) ProtoMessage() {}
 
 func (x *CloneProjectRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_agent_v1_agent_proto_msgTypes[108]
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[110]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6952,7 +7114,7 @@ func (x *CloneProjectRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CloneProjectRequest.ProtoReflect.Descriptor instead.
 func (*CloneProjectRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_agent_v1_agent_proto_rawDescGZIP(), []int{108}
+	return file_portenv_agent_v1_agent_proto_rawDescGZIP(), []int{110}
 }
 
 func (x *CloneProjectRequest) GetMsg() isCloneProjectRequest_Msg {
@@ -7017,7 +7179,7 @@ type CloneProjectStart struct {
 
 func (x *CloneProjectStart) Reset() {
 	*x = CloneProjectStart{}
-	mi := &file_portenv_agent_v1_agent_proto_msgTypes[109]
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[111]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7029,7 +7191,7 @@ func (x *CloneProjectStart) String() string {
 func (*CloneProjectStart) ProtoMessage() {}
 
 func (x *CloneProjectStart) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_agent_v1_agent_proto_msgTypes[109]
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[111]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7042,7 +7204,7 @@ func (x *CloneProjectStart) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CloneProjectStart.ProtoReflect.Descriptor instead.
 func (*CloneProjectStart) Descriptor() ([]byte, []int) {
-	return file_portenv_agent_v1_agent_proto_rawDescGZIP(), []int{109}
+	return file_portenv_agent_v1_agent_proto_rawDescGZIP(), []int{111}
 }
 
 func (x *CloneProjectStart) GetProjectDir() string {
@@ -7090,7 +7252,7 @@ type CloneProjectResponse struct {
 
 func (x *CloneProjectResponse) Reset() {
 	*x = CloneProjectResponse{}
-	mi := &file_portenv_agent_v1_agent_proto_msgTypes[110]
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[112]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7102,7 +7264,7 @@ func (x *CloneProjectResponse) String() string {
 func (*CloneProjectResponse) ProtoMessage() {}
 
 func (x *CloneProjectResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_agent_v1_agent_proto_msgTypes[110]
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[112]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7115,7 +7277,7 @@ func (x *CloneProjectResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CloneProjectResponse.ProtoReflect.Descriptor instead.
 func (*CloneProjectResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_agent_v1_agent_proto_rawDescGZIP(), []int{110}
+	return file_portenv_agent_v1_agent_proto_rawDescGZIP(), []int{112}
 }
 
 func (x *CloneProjectResponse) GetExisted() bool {
@@ -7134,7 +7296,7 @@ type GetProjectRoomRequest struct {
 
 func (x *GetProjectRoomRequest) Reset() {
 	*x = GetProjectRoomRequest{}
-	mi := &file_portenv_agent_v1_agent_proto_msgTypes[111]
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[113]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7146,7 +7308,7 @@ func (x *GetProjectRoomRequest) String() string {
 func (*GetProjectRoomRequest) ProtoMessage() {}
 
 func (x *GetProjectRoomRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_agent_v1_agent_proto_msgTypes[111]
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[113]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7159,7 +7321,7 @@ func (x *GetProjectRoomRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetProjectRoomRequest.ProtoReflect.Descriptor instead.
 func (*GetProjectRoomRequest) Descriptor() ([]byte, []int) {
-	return file_portenv_agent_v1_agent_proto_rawDescGZIP(), []int{111}
+	return file_portenv_agent_v1_agent_proto_rawDescGZIP(), []int{113}
 }
 
 func (x *GetProjectRoomRequest) GetProjectDir() string {
@@ -7180,7 +7342,7 @@ type GetProjectRoomResponse struct {
 
 func (x *GetProjectRoomResponse) Reset() {
 	*x = GetProjectRoomResponse{}
-	mi := &file_portenv_agent_v1_agent_proto_msgTypes[112]
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[114]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7192,7 +7354,7 @@ func (x *GetProjectRoomResponse) String() string {
 func (*GetProjectRoomResponse) ProtoMessage() {}
 
 func (x *GetProjectRoomResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portenv_agent_v1_agent_proto_msgTypes[112]
+	mi := &file_portenv_agent_v1_agent_proto_msgTypes[114]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7205,7 +7367,7 @@ func (x *GetProjectRoomResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetProjectRoomResponse.ProtoReflect.Descriptor instead.
 func (*GetProjectRoomResponse) Descriptor() ([]byte, []int) {
-	return file_portenv_agent_v1_agent_proto_rawDescGZIP(), []int{112}
+	return file_portenv_agent_v1_agent_proto_rawDescGZIP(), []int{114}
 }
 
 func (x *GetProjectRoomResponse) GetExists() bool {
@@ -7476,7 +7638,7 @@ const file_portenv_agent_v1_agent_proto_rawDesc = "" +
 	"\x05state\x18\x04 \x01(\x0e2\x1c.portenv.types.v1.AgentStateR\x05state\x125\n" +
 	"\x06status\x18\x05 \x01(\v2\x1d.portenv.types.v1.AgentStatusR\x06status\x12+\n" +
 	"\x11pending_decisions\x18\x06 \x01(\x05R\x10pendingDecisions\x12!\n" +
-	"\fidle_seconds\x18\a \x01(\x03R\vidleSeconds\"\xfe\x02\n" +
+	"\fidle_seconds\x18\a \x01(\x03R\vidleSeconds\"\x9d\x03\n" +
 	"\x15StartTeamAgentRequest\x12\x19\n" +
 	"\bagent_id\x18\x01 \x01(\tR\aagentId\x12\x12\n" +
 	"\x04argv\x18\x02 \x03(\tR\x04argv\x12\x1b\n" +
@@ -7490,7 +7652,9 @@ const file_portenv_agent_v1_agent_proto_rawDesc = "" +
 	"projectDir\x12\x1d\n" +
 	"\n" +
 	"agent_name\x18\n" +
-	" \x01(\tR\tagentName\"@\n" +
+	" \x01(\tR\tagentName\x12\x1d\n" +
+	"\n" +
+	"idle_lines\x18\v \x01(\x05R\tidleLines\"@\n" +
 	"\fCloneReaders\x12\x16\n" +
 	"\x06writer\x18\x01 \x01(\tR\x06writer\x12\x18\n" +
 	"\areaders\x18\x02 \x03(\tR\areaders\"C\n" +
@@ -7636,7 +7800,11 @@ const file_portenv_agent_v1_agent_proto_rawDesc = "" +
 	"\x12SetTimeZoneRequest\x12\x12\n" +
 	"\x04zone\x18\x01 \x01(\tR\x04zone\")\n" +
 	"\x13SetTimeZoneResponse\x12\x12\n" +
-	"\x04zone\x18\x01 \x01(\tR\x04zone\"s\n" +
+	"\x04zone\x18\x01 \x01(\tR\x04zone\"2\n" +
+	"\x15CheckAgentIdleRequest\x12\x19\n" +
+	"\bagent_id\x18\x01 \x01(\tR\aagentId\"P\n" +
+	"\x16CheckAgentIdleResponse\x126\n" +
+	"\x05check\x18\x01 \x01(\x0e2 .portenv.agent.v1.AgentIdleCheckR\x05check\"s\n" +
 	"\x16WriteAgentFilesRequest\x12\x1f\n" +
 	"\vproject_dir\x18\x01 \x01(\tR\n" +
 	"projectDir\x128\n" +
@@ -7673,7 +7841,13 @@ const file_portenv_agent_v1_agent_proto_rawDesc = "" +
 	"\x0eTabTerminalEnd\x12 \n" +
 	"\x1cTAB_TERMINAL_END_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bTAB_TERMINAL_END_TAB_CLOSED\x10\x01\x12!\n" +
-	"\x1dTAB_TERMINAL_END_BOX_STOPPING\x10\x022\xbf\x1d\n" +
+	"\x1dTAB_TERMINAL_END_BOX_STOPPING\x10\x02*\xa6\x01\n" +
+	"\x0eAgentIdleCheck\x12 \n" +
+	"\x1cAGENT_IDLE_CHECK_UNSPECIFIED\x10\x00\x12\x19\n" +
+	"\x15AGENT_IDLE_CHECK_IDLE\x10\x01\x12\x19\n" +
+	"\x15AGENT_IDLE_CHECK_BUSY\x10\x02\x12\x1e\n" +
+	"\x1aAGENT_IDLE_CHECK_NO_PROMPT\x10\x03\x12\x1c\n" +
+	"\x18AGENT_IDLE_CHECK_NO_RULE\x10\x042\xa4\x1e\n" +
 	"\fAgentService\x12W\n" +
 	"\n" +
 	"GetVersion\x12#.portenv.agent.v1.GetVersionRequest\x1a$.portenv.agent.v1.GetVersionResponse\x12]\n" +
@@ -7714,7 +7888,8 @@ const file_portenv_agent_v1_agent_proto_rawDesc = "" +
 	"\x10FetchAgentBranch\x12).portenv.agent.v1.FetchAgentBranchRequest\x1a*.portenv.agent.v1.FetchAgentBranchResponse\x12u\n" +
 	"\x14ResolveTeamMigration\x12-.portenv.agent.v1.ResolveTeamMigrationRequest\x1a..portenv.agent.v1.ResolveTeamMigrationResponse\x12T\n" +
 	"\tWakeAgent\x12\".portenv.agent.v1.WakeAgentRequest\x1a#.portenv.agent.v1.WakeAgentResponse\x12Z\n" +
-	"\vSetTimeZone\x12$.portenv.agent.v1.SetTimeZoneRequest\x1a%.portenv.agent.v1.SetTimeZoneResponseB\xc6\x01\n" +
+	"\vSetTimeZone\x12$.portenv.agent.v1.SetTimeZoneRequest\x1a%.portenv.agent.v1.SetTimeZoneResponse\x12c\n" +
+	"\x0eCheckAgentIdle\x12'.portenv.agent.v1.CheckAgentIdleRequest\x1a(.portenv.agent.v1.CheckAgentIdleResponseB\xc6\x01\n" +
 	"\x14com.portenv.agent.v1B\n" +
 	"AgentProtoP\x01Z@github.com/portenv/portenv/proto/gen/go/portenv/agent/v1;agentv1\xa2\x02\x03PAX\xaa\x02\x10Portenv.Agent.V1\xca\x02\x10Portenv\\Agent\\V1\xe2\x02\x1cPortenv\\Agent\\V1\\GPBMetadata\xea\x02\x12Portenv::Agent::V1b\x06proto3"
 
@@ -7730,300 +7905,306 @@ func file_portenv_agent_v1_agent_proto_rawDescGZIP() []byte {
 	return file_portenv_agent_v1_agent_proto_rawDescData
 }
 
-var file_portenv_agent_v1_agent_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_portenv_agent_v1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 114)
+var file_portenv_agent_v1_agent_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
+var file_portenv_agent_v1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 116)
 var file_portenv_agent_v1_agent_proto_goTypes = []any{
 	(ReadinessState)(0),                  // 0: portenv.agent.v1.ReadinessState
 	(TabTerminalEnd)(0),                  // 1: portenv.agent.v1.TabTerminalEnd
-	(*RunResticRequest)(nil),             // 2: portenv.agent.v1.RunResticRequest
-	(*RunResticResponse)(nil),            // 3: portenv.agent.v1.RunResticResponse
-	(*GetPathInfoRequest)(nil),           // 4: portenv.agent.v1.GetPathInfoRequest
-	(*GetPathInfoResponse)(nil),          // 5: portenv.agent.v1.GetPathInfoResponse
-	(*TerminalRequest)(nil),              // 6: portenv.agent.v1.TerminalRequest
-	(*TerminalOpen)(nil),                 // 7: portenv.agent.v1.TerminalOpen
-	(*TerminalSize)(nil),                 // 8: portenv.agent.v1.TerminalSize
-	(*TerminalResponse)(nil),             // 9: portenv.agent.v1.TerminalResponse
-	(*GetVersionRequest)(nil),            // 10: portenv.agent.v1.GetVersionRequest
-	(*GetVersionResponse)(nil),           // 11: portenv.agent.v1.GetVersionResponse
-	(*GetReadinessRequest)(nil),          // 12: portenv.agent.v1.GetReadinessRequest
-	(*GetReadinessResponse)(nil),         // 13: portenv.agent.v1.GetReadinessResponse
-	(*RetryPackagesRequest)(nil),         // 14: portenv.agent.v1.RetryPackagesRequest
-	(*RetryPackagesResponse)(nil),        // 15: portenv.agent.v1.RetryPackagesResponse
-	(*ListTabsRequest)(nil),              // 16: portenv.agent.v1.ListTabsRequest
-	(*ListTabsResponse)(nil),             // 17: portenv.agent.v1.ListTabsResponse
-	(*NewTabRequest)(nil),                // 18: portenv.agent.v1.NewTabRequest
-	(*NewTabResponse)(nil),               // 19: portenv.agent.v1.NewTabResponse
-	(*CloseTabRequest)(nil),              // 20: portenv.agent.v1.CloseTabRequest
-	(*CloseTabResponse)(nil),             // 21: portenv.agent.v1.CloseTabResponse
-	(*RenameTabRequest)(nil),             // 22: portenv.agent.v1.RenameTabRequest
-	(*RenameTabResponse)(nil),            // 23: portenv.agent.v1.RenameTabResponse
-	(*SelectTabRequest)(nil),             // 24: portenv.agent.v1.SelectTabRequest
-	(*SelectTabResponse)(nil),            // 25: portenv.agent.v1.SelectTabResponse
-	(*WatchTabsRequest)(nil),             // 26: portenv.agent.v1.WatchTabsRequest
-	(*WatchTabsResponse)(nil),            // 27: portenv.agent.v1.WatchTabsResponse
-	(*TabTerminalRequest)(nil),           // 28: portenv.agent.v1.TabTerminalRequest
-	(*TabTerminalOpen)(nil),              // 29: portenv.agent.v1.TabTerminalOpen
-	(*TabTerminalResponse)(nil),          // 30: portenv.agent.v1.TabTerminalResponse
-	(*TabTerminalReset)(nil),             // 31: portenv.agent.v1.TabTerminalReset
-	(*CommandAuthor)(nil),                // 32: portenv.agent.v1.CommandAuthor
-	(*TeamCallsResponse)(nil),            // 33: portenv.agent.v1.TeamCallsResponse
-	(*PushList)(nil),                     // 34: portenv.agent.v1.PushList
-	(*FetchRefs)(nil),                    // 35: portenv.agent.v1.FetchRefs
-	(*FetchResult)(nil),                  // 36: portenv.agent.v1.FetchResult
-	(*WriteFetchBundleRequest)(nil),      // 37: portenv.agent.v1.WriteFetchBundleRequest
-	(*WriteFetchBundleResponse)(nil),     // 38: portenv.agent.v1.WriteFetchBundleResponse
-	(*PushRefs)(nil),                     // 39: portenv.agent.v1.PushRefs
-	(*PushUpdate)(nil),                   // 40: portenv.agent.v1.PushUpdate
-	(*RemoteRef)(nil),                    // 41: portenv.agent.v1.RemoteRef
-	(*PushListResult)(nil),               // 42: portenv.agent.v1.PushListResult
-	(*PushRefStatus)(nil),                // 43: portenv.agent.v1.PushRefStatus
-	(*PushResult)(nil),                   // 44: portenv.agent.v1.PushResult
-	(*ReadPushBundleRequest)(nil),        // 45: portenv.agent.v1.ReadPushBundleRequest
-	(*ReadPushBundleResponse)(nil),       // 46: portenv.agent.v1.ReadPushBundleResponse
-	(*TeamCallsRequest)(nil),             // 47: portenv.agent.v1.TeamCallsRequest
-	(*Split)(nil),                        // 48: portenv.agent.v1.Split
-	(*NewTeamTab)(nil),                   // 49: portenv.agent.v1.NewTeamTab
-	(*PaneRef)(nil),                      // 50: portenv.agent.v1.PaneRef
-	(*Msg)(nil),                          // 51: portenv.agent.v1.Msg
-	(*AskOwner)(nil),                     // 52: portenv.agent.v1.AskOwner
-	(*Inbox)(nil),                        // 53: portenv.agent.v1.Inbox
-	(*InboxResult)(nil),                  // 54: portenv.agent.v1.InboxResult
-	(*Share)(nil),                        // 55: portenv.agent.v1.Share
-	(*ProposeAgentChange)(nil),           // 56: portenv.agent.v1.ProposeAgentChange
-	(*RequestPackage)(nil),               // 57: portenv.agent.v1.RequestPackage
-	(*WhoAmI)(nil),                       // 58: portenv.agent.v1.WhoAmI
-	(*WhoAmIResult)(nil),                 // 59: portenv.agent.v1.WhoAmIResult
-	(*Teammate)(nil),                     // 60: portenv.agent.v1.Teammate
-	(*StartTeamAgentRequest)(nil),        // 61: portenv.agent.v1.StartTeamAgentRequest
-	(*CloneReaders)(nil),                 // 62: portenv.agent.v1.CloneReaders
-	(*StartTeamAgentResponse)(nil),       // 63: portenv.agent.v1.StartTeamAgentResponse
-	(*StopTeamAgentRequest)(nil),         // 64: portenv.agent.v1.StopTeamAgentRequest
-	(*StopTeamAgentResponse)(nil),        // 65: portenv.agent.v1.StopTeamAgentResponse
-	(*AppendBoardRequest)(nil),           // 66: portenv.agent.v1.AppendBoardRequest
-	(*AppendBoardResponse)(nil),          // 67: portenv.agent.v1.AppendBoardResponse
-	(*ListHomeFilesRequest)(nil),         // 68: portenv.agent.v1.ListHomeFilesRequest
-	(*ListHomeFilesResponse)(nil),        // 69: portenv.agent.v1.ListHomeFilesResponse
-	(*ReadHomeFileRequest)(nil),          // 70: portenv.agent.v1.ReadHomeFileRequest
-	(*ReadHomeFileResponse)(nil),         // 71: portenv.agent.v1.ReadHomeFileResponse
-	(*WriteHomeFilesRequest)(nil),        // 72: portenv.agent.v1.WriteHomeFilesRequest
-	(*WriteHomeFilesResponse)(nil),       // 73: portenv.agent.v1.WriteHomeFilesResponse
-	(*EnsureAgentUserRequest)(nil),       // 74: portenv.agent.v1.EnsureAgentUserRequest
-	(*EnsureAgentUserResponse)(nil),      // 75: portenv.agent.v1.EnsureAgentUserResponse
-	(*RemoveAgentUserRequest)(nil),       // 76: portenv.agent.v1.RemoveAgentUserRequest
-	(*RemoveAgentUserResponse)(nil),      // 77: portenv.agent.v1.RemoveAgentUserResponse
-	(*SimulatePackageRequest)(nil),       // 78: portenv.agent.v1.SimulatePackageRequest
-	(*SimulatePackageResponse)(nil),      // 79: portenv.agent.v1.SimulatePackageResponse
-	(*InstallPackagesRequest)(nil),       // 80: portenv.agent.v1.InstallPackagesRequest
-	(*InstallPackagesResponse)(nil),      // 81: portenv.agent.v1.InstallPackagesResponse
-	(*AgentPaneActionRequest)(nil),       // 82: portenv.agent.v1.AgentPaneActionRequest
-	(*AgentPaneActionResponse)(nil),      // 83: portenv.agent.v1.AgentPaneActionResponse
-	(*ReadBoardRequest)(nil),             // 84: portenv.agent.v1.ReadBoardRequest
-	(*ReadBoardResponse)(nil),            // 85: portenv.agent.v1.ReadBoardResponse
-	(*ReadAgentFilesRequest)(nil),        // 86: portenv.agent.v1.ReadAgentFilesRequest
-	(*ReadAgentFilesResponse)(nil),       // 87: portenv.agent.v1.ReadAgentFilesResponse
-	(*AgentFileContent)(nil),             // 88: portenv.agent.v1.AgentFileContent
-	(*SetStatus)(nil),                    // 89: portenv.agent.v1.SetStatus
-	(*TeamStatus)(nil),                   // 90: portenv.agent.v1.TeamStatus
-	(*TeamStatusResult)(nil),             // 91: portenv.agent.v1.TeamStatusResult
-	(*Handoff)(nil),                      // 92: portenv.agent.v1.Handoff
-	(*ProposeRoutine)(nil),               // 93: portenv.agent.v1.ProposeRoutine
-	(*DeliverRoutineRequest)(nil),        // 94: portenv.agent.v1.DeliverRoutineRequest
-	(*DeliverRoutineResponse)(nil),       // 95: portenv.agent.v1.DeliverRoutineResponse
-	(*HandoffFilesRequest)(nil),          // 96: portenv.agent.v1.HandoffFilesRequest
-	(*HandoffFilesResponse)(nil),         // 97: portenv.agent.v1.HandoffFilesResponse
-	(*FetchAgentBranchRequest)(nil),      // 98: portenv.agent.v1.FetchAgentBranchRequest
-	(*FetchAgentBranchResponse)(nil),     // 99: portenv.agent.v1.FetchAgentBranchResponse
-	(*PrepareTeamProjectRequest)(nil),    // 100: portenv.agent.v1.PrepareTeamProjectRequest
-	(*PrepareTeamProjectResponse)(nil),   // 101: portenv.agent.v1.PrepareTeamProjectResponse
-	(*ResolveTeamMigrationRequest)(nil),  // 102: portenv.agent.v1.ResolveTeamMigrationRequest
-	(*ResolveTeamMigrationResponse)(nil), // 103: portenv.agent.v1.ResolveTeamMigrationResponse
-	(*WakeAgentRequest)(nil),             // 104: portenv.agent.v1.WakeAgentRequest
-	(*WakeAgentResponse)(nil),            // 105: portenv.agent.v1.WakeAgentResponse
-	(*SetTimeZoneRequest)(nil),           // 106: portenv.agent.v1.SetTimeZoneRequest
-	(*SetTimeZoneResponse)(nil),          // 107: portenv.agent.v1.SetTimeZoneResponse
-	(*WriteAgentFilesRequest)(nil),       // 108: portenv.agent.v1.WriteAgentFilesRequest
-	(*WriteAgentFilesResponse)(nil),      // 109: portenv.agent.v1.WriteAgentFilesResponse
-	(*CloneProjectRequest)(nil),          // 110: portenv.agent.v1.CloneProjectRequest
-	(*CloneProjectStart)(nil),            // 111: portenv.agent.v1.CloneProjectStart
-	(*CloneProjectResponse)(nil),         // 112: portenv.agent.v1.CloneProjectResponse
-	(*GetProjectRoomRequest)(nil),        // 113: portenv.agent.v1.GetProjectRoomRequest
-	(*GetProjectRoomResponse)(nil),       // 114: portenv.agent.v1.GetProjectRoomResponse
-	nil,                                  // 115: portenv.agent.v1.PrepareTeamProjectRequest.AgentNamesEntry
-	(*v1.BuildInfo)(nil),                 // 116: portenv.types.v1.BuildInfo
-	(*v1.Tab)(nil),                       // 117: portenv.types.v1.Tab
-	(*v1.Decision)(nil),                  // 118: portenv.types.v1.Decision
-	(*v1.BoardMessage)(nil),              // 119: portenv.types.v1.BoardMessage
-	(v1.MessageType)(0),                  // 120: portenv.types.v1.MessageType
-	(*v1.AgentGrant)(nil),                // 121: portenv.types.v1.AgentGrant
-	(*v1.AgentStatus)(nil),               // 122: portenv.types.v1.AgentStatus
-	(v1.AgentState)(0),                   // 123: portenv.types.v1.AgentState
-	(*v1.AgentFile)(nil),                 // 124: portenv.types.v1.AgentFile
-	(*v1.PackagePlan)(nil),               // 125: portenv.types.v1.PackagePlan
-	(*v1.HandoffFile)(nil),               // 126: portenv.types.v1.HandoffFile
-	(*v1.MigrationItem)(nil),             // 127: portenv.types.v1.MigrationItem
+	(AgentIdleCheck)(0),                  // 2: portenv.agent.v1.AgentIdleCheck
+	(*RunResticRequest)(nil),             // 3: portenv.agent.v1.RunResticRequest
+	(*RunResticResponse)(nil),            // 4: portenv.agent.v1.RunResticResponse
+	(*GetPathInfoRequest)(nil),           // 5: portenv.agent.v1.GetPathInfoRequest
+	(*GetPathInfoResponse)(nil),          // 6: portenv.agent.v1.GetPathInfoResponse
+	(*TerminalRequest)(nil),              // 7: portenv.agent.v1.TerminalRequest
+	(*TerminalOpen)(nil),                 // 8: portenv.agent.v1.TerminalOpen
+	(*TerminalSize)(nil),                 // 9: portenv.agent.v1.TerminalSize
+	(*TerminalResponse)(nil),             // 10: portenv.agent.v1.TerminalResponse
+	(*GetVersionRequest)(nil),            // 11: portenv.agent.v1.GetVersionRequest
+	(*GetVersionResponse)(nil),           // 12: portenv.agent.v1.GetVersionResponse
+	(*GetReadinessRequest)(nil),          // 13: portenv.agent.v1.GetReadinessRequest
+	(*GetReadinessResponse)(nil),         // 14: portenv.agent.v1.GetReadinessResponse
+	(*RetryPackagesRequest)(nil),         // 15: portenv.agent.v1.RetryPackagesRequest
+	(*RetryPackagesResponse)(nil),        // 16: portenv.agent.v1.RetryPackagesResponse
+	(*ListTabsRequest)(nil),              // 17: portenv.agent.v1.ListTabsRequest
+	(*ListTabsResponse)(nil),             // 18: portenv.agent.v1.ListTabsResponse
+	(*NewTabRequest)(nil),                // 19: portenv.agent.v1.NewTabRequest
+	(*NewTabResponse)(nil),               // 20: portenv.agent.v1.NewTabResponse
+	(*CloseTabRequest)(nil),              // 21: portenv.agent.v1.CloseTabRequest
+	(*CloseTabResponse)(nil),             // 22: portenv.agent.v1.CloseTabResponse
+	(*RenameTabRequest)(nil),             // 23: portenv.agent.v1.RenameTabRequest
+	(*RenameTabResponse)(nil),            // 24: portenv.agent.v1.RenameTabResponse
+	(*SelectTabRequest)(nil),             // 25: portenv.agent.v1.SelectTabRequest
+	(*SelectTabResponse)(nil),            // 26: portenv.agent.v1.SelectTabResponse
+	(*WatchTabsRequest)(nil),             // 27: portenv.agent.v1.WatchTabsRequest
+	(*WatchTabsResponse)(nil),            // 28: portenv.agent.v1.WatchTabsResponse
+	(*TabTerminalRequest)(nil),           // 29: portenv.agent.v1.TabTerminalRequest
+	(*TabTerminalOpen)(nil),              // 30: portenv.agent.v1.TabTerminalOpen
+	(*TabTerminalResponse)(nil),          // 31: portenv.agent.v1.TabTerminalResponse
+	(*TabTerminalReset)(nil),             // 32: portenv.agent.v1.TabTerminalReset
+	(*CommandAuthor)(nil),                // 33: portenv.agent.v1.CommandAuthor
+	(*TeamCallsResponse)(nil),            // 34: portenv.agent.v1.TeamCallsResponse
+	(*PushList)(nil),                     // 35: portenv.agent.v1.PushList
+	(*FetchRefs)(nil),                    // 36: portenv.agent.v1.FetchRefs
+	(*FetchResult)(nil),                  // 37: portenv.agent.v1.FetchResult
+	(*WriteFetchBundleRequest)(nil),      // 38: portenv.agent.v1.WriteFetchBundleRequest
+	(*WriteFetchBundleResponse)(nil),     // 39: portenv.agent.v1.WriteFetchBundleResponse
+	(*PushRefs)(nil),                     // 40: portenv.agent.v1.PushRefs
+	(*PushUpdate)(nil),                   // 41: portenv.agent.v1.PushUpdate
+	(*RemoteRef)(nil),                    // 42: portenv.agent.v1.RemoteRef
+	(*PushListResult)(nil),               // 43: portenv.agent.v1.PushListResult
+	(*PushRefStatus)(nil),                // 44: portenv.agent.v1.PushRefStatus
+	(*PushResult)(nil),                   // 45: portenv.agent.v1.PushResult
+	(*ReadPushBundleRequest)(nil),        // 46: portenv.agent.v1.ReadPushBundleRequest
+	(*ReadPushBundleResponse)(nil),       // 47: portenv.agent.v1.ReadPushBundleResponse
+	(*TeamCallsRequest)(nil),             // 48: portenv.agent.v1.TeamCallsRequest
+	(*Split)(nil),                        // 49: portenv.agent.v1.Split
+	(*NewTeamTab)(nil),                   // 50: portenv.agent.v1.NewTeamTab
+	(*PaneRef)(nil),                      // 51: portenv.agent.v1.PaneRef
+	(*Msg)(nil),                          // 52: portenv.agent.v1.Msg
+	(*AskOwner)(nil),                     // 53: portenv.agent.v1.AskOwner
+	(*Inbox)(nil),                        // 54: portenv.agent.v1.Inbox
+	(*InboxResult)(nil),                  // 55: portenv.agent.v1.InboxResult
+	(*Share)(nil),                        // 56: portenv.agent.v1.Share
+	(*ProposeAgentChange)(nil),           // 57: portenv.agent.v1.ProposeAgentChange
+	(*RequestPackage)(nil),               // 58: portenv.agent.v1.RequestPackage
+	(*WhoAmI)(nil),                       // 59: portenv.agent.v1.WhoAmI
+	(*WhoAmIResult)(nil),                 // 60: portenv.agent.v1.WhoAmIResult
+	(*Teammate)(nil),                     // 61: portenv.agent.v1.Teammate
+	(*StartTeamAgentRequest)(nil),        // 62: portenv.agent.v1.StartTeamAgentRequest
+	(*CloneReaders)(nil),                 // 63: portenv.agent.v1.CloneReaders
+	(*StartTeamAgentResponse)(nil),       // 64: portenv.agent.v1.StartTeamAgentResponse
+	(*StopTeamAgentRequest)(nil),         // 65: portenv.agent.v1.StopTeamAgentRequest
+	(*StopTeamAgentResponse)(nil),        // 66: portenv.agent.v1.StopTeamAgentResponse
+	(*AppendBoardRequest)(nil),           // 67: portenv.agent.v1.AppendBoardRequest
+	(*AppendBoardResponse)(nil),          // 68: portenv.agent.v1.AppendBoardResponse
+	(*ListHomeFilesRequest)(nil),         // 69: portenv.agent.v1.ListHomeFilesRequest
+	(*ListHomeFilesResponse)(nil),        // 70: portenv.agent.v1.ListHomeFilesResponse
+	(*ReadHomeFileRequest)(nil),          // 71: portenv.agent.v1.ReadHomeFileRequest
+	(*ReadHomeFileResponse)(nil),         // 72: portenv.agent.v1.ReadHomeFileResponse
+	(*WriteHomeFilesRequest)(nil),        // 73: portenv.agent.v1.WriteHomeFilesRequest
+	(*WriteHomeFilesResponse)(nil),       // 74: portenv.agent.v1.WriteHomeFilesResponse
+	(*EnsureAgentUserRequest)(nil),       // 75: portenv.agent.v1.EnsureAgentUserRequest
+	(*EnsureAgentUserResponse)(nil),      // 76: portenv.agent.v1.EnsureAgentUserResponse
+	(*RemoveAgentUserRequest)(nil),       // 77: portenv.agent.v1.RemoveAgentUserRequest
+	(*RemoveAgentUserResponse)(nil),      // 78: portenv.agent.v1.RemoveAgentUserResponse
+	(*SimulatePackageRequest)(nil),       // 79: portenv.agent.v1.SimulatePackageRequest
+	(*SimulatePackageResponse)(nil),      // 80: portenv.agent.v1.SimulatePackageResponse
+	(*InstallPackagesRequest)(nil),       // 81: portenv.agent.v1.InstallPackagesRequest
+	(*InstallPackagesResponse)(nil),      // 82: portenv.agent.v1.InstallPackagesResponse
+	(*AgentPaneActionRequest)(nil),       // 83: portenv.agent.v1.AgentPaneActionRequest
+	(*AgentPaneActionResponse)(nil),      // 84: portenv.agent.v1.AgentPaneActionResponse
+	(*ReadBoardRequest)(nil),             // 85: portenv.agent.v1.ReadBoardRequest
+	(*ReadBoardResponse)(nil),            // 86: portenv.agent.v1.ReadBoardResponse
+	(*ReadAgentFilesRequest)(nil),        // 87: portenv.agent.v1.ReadAgentFilesRequest
+	(*ReadAgentFilesResponse)(nil),       // 88: portenv.agent.v1.ReadAgentFilesResponse
+	(*AgentFileContent)(nil),             // 89: portenv.agent.v1.AgentFileContent
+	(*SetStatus)(nil),                    // 90: portenv.agent.v1.SetStatus
+	(*TeamStatus)(nil),                   // 91: portenv.agent.v1.TeamStatus
+	(*TeamStatusResult)(nil),             // 92: portenv.agent.v1.TeamStatusResult
+	(*Handoff)(nil),                      // 93: portenv.agent.v1.Handoff
+	(*ProposeRoutine)(nil),               // 94: portenv.agent.v1.ProposeRoutine
+	(*DeliverRoutineRequest)(nil),        // 95: portenv.agent.v1.DeliverRoutineRequest
+	(*DeliverRoutineResponse)(nil),       // 96: portenv.agent.v1.DeliverRoutineResponse
+	(*HandoffFilesRequest)(nil),          // 97: portenv.agent.v1.HandoffFilesRequest
+	(*HandoffFilesResponse)(nil),         // 98: portenv.agent.v1.HandoffFilesResponse
+	(*FetchAgentBranchRequest)(nil),      // 99: portenv.agent.v1.FetchAgentBranchRequest
+	(*FetchAgentBranchResponse)(nil),     // 100: portenv.agent.v1.FetchAgentBranchResponse
+	(*PrepareTeamProjectRequest)(nil),    // 101: portenv.agent.v1.PrepareTeamProjectRequest
+	(*PrepareTeamProjectResponse)(nil),   // 102: portenv.agent.v1.PrepareTeamProjectResponse
+	(*ResolveTeamMigrationRequest)(nil),  // 103: portenv.agent.v1.ResolveTeamMigrationRequest
+	(*ResolveTeamMigrationResponse)(nil), // 104: portenv.agent.v1.ResolveTeamMigrationResponse
+	(*WakeAgentRequest)(nil),             // 105: portenv.agent.v1.WakeAgentRequest
+	(*WakeAgentResponse)(nil),            // 106: portenv.agent.v1.WakeAgentResponse
+	(*SetTimeZoneRequest)(nil),           // 107: portenv.agent.v1.SetTimeZoneRequest
+	(*SetTimeZoneResponse)(nil),          // 108: portenv.agent.v1.SetTimeZoneResponse
+	(*CheckAgentIdleRequest)(nil),        // 109: portenv.agent.v1.CheckAgentIdleRequest
+	(*CheckAgentIdleResponse)(nil),       // 110: portenv.agent.v1.CheckAgentIdleResponse
+	(*WriteAgentFilesRequest)(nil),       // 111: portenv.agent.v1.WriteAgentFilesRequest
+	(*WriteAgentFilesResponse)(nil),      // 112: portenv.agent.v1.WriteAgentFilesResponse
+	(*CloneProjectRequest)(nil),          // 113: portenv.agent.v1.CloneProjectRequest
+	(*CloneProjectStart)(nil),            // 114: portenv.agent.v1.CloneProjectStart
+	(*CloneProjectResponse)(nil),         // 115: portenv.agent.v1.CloneProjectResponse
+	(*GetProjectRoomRequest)(nil),        // 116: portenv.agent.v1.GetProjectRoomRequest
+	(*GetProjectRoomResponse)(nil),       // 117: portenv.agent.v1.GetProjectRoomResponse
+	nil,                                  // 118: portenv.agent.v1.PrepareTeamProjectRequest.AgentNamesEntry
+	(*v1.BuildInfo)(nil),                 // 119: portenv.types.v1.BuildInfo
+	(*v1.Tab)(nil),                       // 120: portenv.types.v1.Tab
+	(*v1.Decision)(nil),                  // 121: portenv.types.v1.Decision
+	(*v1.BoardMessage)(nil),              // 122: portenv.types.v1.BoardMessage
+	(v1.MessageType)(0),                  // 123: portenv.types.v1.MessageType
+	(*v1.AgentGrant)(nil),                // 124: portenv.types.v1.AgentGrant
+	(*v1.AgentStatus)(nil),               // 125: portenv.types.v1.AgentStatus
+	(v1.AgentState)(0),                   // 126: portenv.types.v1.AgentState
+	(*v1.AgentFile)(nil),                 // 127: portenv.types.v1.AgentFile
+	(*v1.PackagePlan)(nil),               // 128: portenv.types.v1.PackagePlan
+	(*v1.HandoffFile)(nil),               // 129: portenv.types.v1.HandoffFile
+	(*v1.MigrationItem)(nil),             // 130: portenv.types.v1.MigrationItem
 }
 var file_portenv_agent_v1_agent_proto_depIdxs = []int32{
-	7,   // 0: portenv.agent.v1.TerminalRequest.open:type_name -> portenv.agent.v1.TerminalOpen
-	8,   // 1: portenv.agent.v1.TerminalRequest.resize:type_name -> portenv.agent.v1.TerminalSize
-	8,   // 2: portenv.agent.v1.TerminalOpen.size:type_name -> portenv.agent.v1.TerminalSize
-	116, // 3: portenv.agent.v1.GetVersionResponse.build:type_name -> portenv.types.v1.BuildInfo
+	8,   // 0: portenv.agent.v1.TerminalRequest.open:type_name -> portenv.agent.v1.TerminalOpen
+	9,   // 1: portenv.agent.v1.TerminalRequest.resize:type_name -> portenv.agent.v1.TerminalSize
+	9,   // 2: portenv.agent.v1.TerminalOpen.size:type_name -> portenv.agent.v1.TerminalSize
+	119, // 3: portenv.agent.v1.GetVersionResponse.build:type_name -> portenv.types.v1.BuildInfo
 	0,   // 4: portenv.agent.v1.GetReadinessResponse.state:type_name -> portenv.agent.v1.ReadinessState
-	117, // 5: portenv.agent.v1.ListTabsResponse.tabs:type_name -> portenv.types.v1.Tab
-	117, // 6: portenv.agent.v1.NewTabResponse.tab:type_name -> portenv.types.v1.Tab
-	117, // 7: portenv.agent.v1.WatchTabsResponse.tabs:type_name -> portenv.types.v1.Tab
-	29,  // 8: portenv.agent.v1.TabTerminalRequest.open:type_name -> portenv.agent.v1.TabTerminalOpen
-	8,   // 9: portenv.agent.v1.TabTerminalRequest.resize:type_name -> portenv.agent.v1.TerminalSize
-	8,   // 10: portenv.agent.v1.TabTerminalOpen.size:type_name -> portenv.agent.v1.TerminalSize
-	31,  // 11: portenv.agent.v1.TabTerminalResponse.reset:type_name -> portenv.agent.v1.TabTerminalReset
-	8,   // 12: portenv.agent.v1.TabTerminalResponse.resized:type_name -> portenv.agent.v1.TerminalSize
+	120, // 5: portenv.agent.v1.ListTabsResponse.tabs:type_name -> portenv.types.v1.Tab
+	120, // 6: portenv.agent.v1.NewTabResponse.tab:type_name -> portenv.types.v1.Tab
+	120, // 7: portenv.agent.v1.WatchTabsResponse.tabs:type_name -> portenv.types.v1.Tab
+	30,  // 8: portenv.agent.v1.TabTerminalRequest.open:type_name -> portenv.agent.v1.TabTerminalOpen
+	9,   // 9: portenv.agent.v1.TabTerminalRequest.resize:type_name -> portenv.agent.v1.TerminalSize
+	9,   // 10: portenv.agent.v1.TabTerminalOpen.size:type_name -> portenv.agent.v1.TerminalSize
+	32,  // 11: portenv.agent.v1.TabTerminalResponse.reset:type_name -> portenv.agent.v1.TabTerminalReset
+	9,   // 12: portenv.agent.v1.TabTerminalResponse.resized:type_name -> portenv.agent.v1.TerminalSize
 	1,   // 13: portenv.agent.v1.TabTerminalResponse.end:type_name -> portenv.agent.v1.TabTerminalEnd
-	32,  // 14: portenv.agent.v1.TabTerminalResponse.author:type_name -> portenv.agent.v1.CommandAuthor
-	8,   // 15: portenv.agent.v1.TabTerminalReset.size:type_name -> portenv.agent.v1.TerminalSize
-	32,  // 16: portenv.agent.v1.TabTerminalReset.authors:type_name -> portenv.agent.v1.CommandAuthor
-	48,  // 17: portenv.agent.v1.TeamCallsResponse.split:type_name -> portenv.agent.v1.Split
-	49,  // 18: portenv.agent.v1.TeamCallsResponse.tab:type_name -> portenv.agent.v1.NewTeamTab
-	50,  // 19: portenv.agent.v1.TeamCallsResponse.focus:type_name -> portenv.agent.v1.PaneRef
-	50,  // 20: portenv.agent.v1.TeamCallsResponse.close:type_name -> portenv.agent.v1.PaneRef
-	51,  // 21: portenv.agent.v1.TeamCallsResponse.msg:type_name -> portenv.agent.v1.Msg
-	52,  // 22: portenv.agent.v1.TeamCallsResponse.ask_owner:type_name -> portenv.agent.v1.AskOwner
-	53,  // 23: portenv.agent.v1.TeamCallsResponse.inbox:type_name -> portenv.agent.v1.Inbox
-	55,  // 24: portenv.agent.v1.TeamCallsResponse.share:type_name -> portenv.agent.v1.Share
-	56,  // 25: portenv.agent.v1.TeamCallsResponse.propose:type_name -> portenv.agent.v1.ProposeAgentChange
-	57,  // 26: portenv.agent.v1.TeamCallsResponse.request_package:type_name -> portenv.agent.v1.RequestPackage
-	58,  // 27: portenv.agent.v1.TeamCallsResponse.whoami:type_name -> portenv.agent.v1.WhoAmI
-	89,  // 28: portenv.agent.v1.TeamCallsResponse.set_status:type_name -> portenv.agent.v1.SetStatus
-	90,  // 29: portenv.agent.v1.TeamCallsResponse.team_status:type_name -> portenv.agent.v1.TeamStatus
-	92,  // 30: portenv.agent.v1.TeamCallsResponse.handoff:type_name -> portenv.agent.v1.Handoff
-	93,  // 31: portenv.agent.v1.TeamCallsResponse.propose_routine:type_name -> portenv.agent.v1.ProposeRoutine
-	34,  // 32: portenv.agent.v1.TeamCallsResponse.push_list:type_name -> portenv.agent.v1.PushList
-	39,  // 33: portenv.agent.v1.TeamCallsResponse.push:type_name -> portenv.agent.v1.PushRefs
-	35,  // 34: portenv.agent.v1.TeamCallsResponse.fetch:type_name -> portenv.agent.v1.FetchRefs
-	41,  // 35: portenv.agent.v1.FetchRefs.wants:type_name -> portenv.agent.v1.RemoteRef
-	40,  // 36: portenv.agent.v1.PushRefs.updates:type_name -> portenv.agent.v1.PushUpdate
-	41,  // 37: portenv.agent.v1.PushListResult.refs:type_name -> portenv.agent.v1.RemoteRef
-	43,  // 38: portenv.agent.v1.PushResult.statuses:type_name -> portenv.agent.v1.PushRefStatus
-	50,  // 39: portenv.agent.v1.TeamCallsRequest.pane:type_name -> portenv.agent.v1.PaneRef
-	54,  // 40: portenv.agent.v1.TeamCallsRequest.inbox:type_name -> portenv.agent.v1.InboxResult
-	118, // 41: portenv.agent.v1.TeamCallsRequest.decision:type_name -> portenv.types.v1.Decision
-	119, // 42: portenv.agent.v1.TeamCallsRequest.message:type_name -> portenv.types.v1.BoardMessage
-	59,  // 43: portenv.agent.v1.TeamCallsRequest.whoami:type_name -> portenv.agent.v1.WhoAmIResult
-	91,  // 44: portenv.agent.v1.TeamCallsRequest.team_status:type_name -> portenv.agent.v1.TeamStatusResult
-	42,  // 45: portenv.agent.v1.TeamCallsRequest.push_list:type_name -> portenv.agent.v1.PushListResult
-	44,  // 46: portenv.agent.v1.TeamCallsRequest.push:type_name -> portenv.agent.v1.PushResult
-	36,  // 47: portenv.agent.v1.TeamCallsRequest.fetch:type_name -> portenv.agent.v1.FetchResult
-	120, // 48: portenv.agent.v1.Msg.type:type_name -> portenv.types.v1.MessageType
-	119, // 49: portenv.agent.v1.InboxResult.messages:type_name -> portenv.types.v1.BoardMessage
-	118, // 50: portenv.agent.v1.InboxResult.decisions:type_name -> portenv.types.v1.Decision
-	121, // 51: portenv.agent.v1.WhoAmIResult.grant:type_name -> portenv.types.v1.AgentGrant
-	60,  // 52: portenv.agent.v1.WhoAmIResult.teammates:type_name -> portenv.agent.v1.Teammate
-	122, // 53: portenv.agent.v1.WhoAmIResult.status:type_name -> portenv.types.v1.AgentStatus
-	123, // 54: portenv.agent.v1.Teammate.state:type_name -> portenv.types.v1.AgentState
-	122, // 55: portenv.agent.v1.Teammate.status:type_name -> portenv.types.v1.AgentStatus
-	62,  // 56: portenv.agent.v1.StartTeamAgentRequest.clone_readers:type_name -> portenv.agent.v1.CloneReaders
-	117, // 57: portenv.agent.v1.StartTeamAgentResponse.tabs:type_name -> portenv.types.v1.Tab
-	119, // 58: portenv.agent.v1.AppendBoardRequest.message:type_name -> portenv.types.v1.BoardMessage
-	118, // 59: portenv.agent.v1.AppendBoardRequest.decision:type_name -> portenv.types.v1.Decision
-	124, // 60: portenv.agent.v1.ListHomeFilesResponse.files:type_name -> portenv.types.v1.AgentFile
-	124, // 61: portenv.agent.v1.WriteHomeFilesResponse.added:type_name -> portenv.types.v1.AgentFile
-	125, // 62: portenv.agent.v1.SimulatePackageResponse.packages:type_name -> portenv.types.v1.PackagePlan
-	125, // 63: portenv.agent.v1.InstallPackagesRequest.approved:type_name -> portenv.types.v1.PackagePlan
-	48,  // 64: portenv.agent.v1.AgentPaneActionRequest.split:type_name -> portenv.agent.v1.Split
-	49,  // 65: portenv.agent.v1.AgentPaneActionRequest.tab:type_name -> portenv.agent.v1.NewTeamTab
-	50,  // 66: portenv.agent.v1.AgentPaneActionRequest.focus:type_name -> portenv.agent.v1.PaneRef
-	50,  // 67: portenv.agent.v1.AgentPaneActionRequest.close:type_name -> portenv.agent.v1.PaneRef
-	50,  // 68: portenv.agent.v1.AgentPaneActionResponse.pane:type_name -> portenv.agent.v1.PaneRef
-	119, // 69: portenv.agent.v1.ReadBoardResponse.message:type_name -> portenv.types.v1.BoardMessage
-	118, // 70: portenv.agent.v1.ReadBoardResponse.decision:type_name -> portenv.types.v1.Decision
-	88,  // 71: portenv.agent.v1.ReadAgentFilesResponse.files:type_name -> portenv.agent.v1.AgentFileContent
-	60,  // 72: portenv.agent.v1.TeamStatusResult.teammates:type_name -> portenv.agent.v1.Teammate
-	126, // 73: portenv.agent.v1.HandoffFilesResponse.files:type_name -> portenv.types.v1.HandoffFile
-	115, // 74: portenv.agent.v1.PrepareTeamProjectRequest.agent_names:type_name -> portenv.agent.v1.PrepareTeamProjectRequest.AgentNamesEntry
-	127, // 75: portenv.agent.v1.PrepareTeamProjectResponse.migration:type_name -> portenv.types.v1.MigrationItem
-	88,  // 76: portenv.agent.v1.WriteAgentFilesRequest.files:type_name -> portenv.agent.v1.AgentFileContent
-	111, // 77: portenv.agent.v1.CloneProjectRequest.start:type_name -> portenv.agent.v1.CloneProjectStart
-	10,  // 78: portenv.agent.v1.AgentService.GetVersion:input_type -> portenv.agent.v1.GetVersionRequest
-	12,  // 79: portenv.agent.v1.AgentService.GetReadiness:input_type -> portenv.agent.v1.GetReadinessRequest
-	14,  // 80: portenv.agent.v1.AgentService.RetryPackages:input_type -> portenv.agent.v1.RetryPackagesRequest
-	2,   // 81: portenv.agent.v1.AgentService.RunRestic:input_type -> portenv.agent.v1.RunResticRequest
-	4,   // 82: portenv.agent.v1.AgentService.GetPathInfo:input_type -> portenv.agent.v1.GetPathInfoRequest
-	6,   // 83: portenv.agent.v1.AgentService.Terminal:input_type -> portenv.agent.v1.TerminalRequest
-	16,  // 84: portenv.agent.v1.AgentService.ListTabs:input_type -> portenv.agent.v1.ListTabsRequest
-	18,  // 85: portenv.agent.v1.AgentService.NewTab:input_type -> portenv.agent.v1.NewTabRequest
-	20,  // 86: portenv.agent.v1.AgentService.CloseTab:input_type -> portenv.agent.v1.CloseTabRequest
-	22,  // 87: portenv.agent.v1.AgentService.RenameTab:input_type -> portenv.agent.v1.RenameTabRequest
-	24,  // 88: portenv.agent.v1.AgentService.SelectTab:input_type -> portenv.agent.v1.SelectTabRequest
-	26,  // 89: portenv.agent.v1.AgentService.WatchTabs:input_type -> portenv.agent.v1.WatchTabsRequest
-	28,  // 90: portenv.agent.v1.AgentService.TabTerminal:input_type -> portenv.agent.v1.TabTerminalRequest
-	47,  // 91: portenv.agent.v1.AgentService.TeamCalls:input_type -> portenv.agent.v1.TeamCallsRequest
-	61,  // 92: portenv.agent.v1.AgentService.StartTeamAgent:input_type -> portenv.agent.v1.StartTeamAgentRequest
-	64,  // 93: portenv.agent.v1.AgentService.StopTeamAgent:input_type -> portenv.agent.v1.StopTeamAgentRequest
-	66,  // 94: portenv.agent.v1.AgentService.AppendBoard:input_type -> portenv.agent.v1.AppendBoardRequest
-	68,  // 95: portenv.agent.v1.AgentService.ListHomeFiles:input_type -> portenv.agent.v1.ListHomeFilesRequest
-	70,  // 96: portenv.agent.v1.AgentService.ReadHomeFile:input_type -> portenv.agent.v1.ReadHomeFileRequest
-	72,  // 97: portenv.agent.v1.AgentService.WriteHomeFiles:input_type -> portenv.agent.v1.WriteHomeFilesRequest
-	108, // 98: portenv.agent.v1.AgentService.WriteAgentFiles:input_type -> portenv.agent.v1.WriteAgentFilesRequest
-	110, // 99: portenv.agent.v1.AgentService.CloneProject:input_type -> portenv.agent.v1.CloneProjectRequest
-	113, // 100: portenv.agent.v1.AgentService.GetProjectRoom:input_type -> portenv.agent.v1.GetProjectRoomRequest
-	45,  // 101: portenv.agent.v1.AgentService.ReadPushBundle:input_type -> portenv.agent.v1.ReadPushBundleRequest
-	37,  // 102: portenv.agent.v1.AgentService.WriteFetchBundle:input_type -> portenv.agent.v1.WriteFetchBundleRequest
-	74,  // 103: portenv.agent.v1.AgentService.EnsureAgentUser:input_type -> portenv.agent.v1.EnsureAgentUserRequest
-	76,  // 104: portenv.agent.v1.AgentService.RemoveAgentUser:input_type -> portenv.agent.v1.RemoveAgentUserRequest
-	78,  // 105: portenv.agent.v1.AgentService.SimulatePackage:input_type -> portenv.agent.v1.SimulatePackageRequest
-	80,  // 106: portenv.agent.v1.AgentService.InstallPackages:input_type -> portenv.agent.v1.InstallPackagesRequest
-	82,  // 107: portenv.agent.v1.AgentService.AgentPaneAction:input_type -> portenv.agent.v1.AgentPaneActionRequest
-	84,  // 108: portenv.agent.v1.AgentService.ReadBoard:input_type -> portenv.agent.v1.ReadBoardRequest
-	86,  // 109: portenv.agent.v1.AgentService.ReadAgentFiles:input_type -> portenv.agent.v1.ReadAgentFilesRequest
-	94,  // 110: portenv.agent.v1.AgentService.DeliverRoutine:input_type -> portenv.agent.v1.DeliverRoutineRequest
-	96,  // 111: portenv.agent.v1.AgentService.HandoffFiles:input_type -> portenv.agent.v1.HandoffFilesRequest
-	100, // 112: portenv.agent.v1.AgentService.PrepareTeamProject:input_type -> portenv.agent.v1.PrepareTeamProjectRequest
-	98,  // 113: portenv.agent.v1.AgentService.FetchAgentBranch:input_type -> portenv.agent.v1.FetchAgentBranchRequest
-	102, // 114: portenv.agent.v1.AgentService.ResolveTeamMigration:input_type -> portenv.agent.v1.ResolveTeamMigrationRequest
-	104, // 115: portenv.agent.v1.AgentService.WakeAgent:input_type -> portenv.agent.v1.WakeAgentRequest
-	106, // 116: portenv.agent.v1.AgentService.SetTimeZone:input_type -> portenv.agent.v1.SetTimeZoneRequest
-	11,  // 117: portenv.agent.v1.AgentService.GetVersion:output_type -> portenv.agent.v1.GetVersionResponse
-	13,  // 118: portenv.agent.v1.AgentService.GetReadiness:output_type -> portenv.agent.v1.GetReadinessResponse
-	15,  // 119: portenv.agent.v1.AgentService.RetryPackages:output_type -> portenv.agent.v1.RetryPackagesResponse
-	3,   // 120: portenv.agent.v1.AgentService.RunRestic:output_type -> portenv.agent.v1.RunResticResponse
-	5,   // 121: portenv.agent.v1.AgentService.GetPathInfo:output_type -> portenv.agent.v1.GetPathInfoResponse
-	9,   // 122: portenv.agent.v1.AgentService.Terminal:output_type -> portenv.agent.v1.TerminalResponse
-	17,  // 123: portenv.agent.v1.AgentService.ListTabs:output_type -> portenv.agent.v1.ListTabsResponse
-	19,  // 124: portenv.agent.v1.AgentService.NewTab:output_type -> portenv.agent.v1.NewTabResponse
-	21,  // 125: portenv.agent.v1.AgentService.CloseTab:output_type -> portenv.agent.v1.CloseTabResponse
-	23,  // 126: portenv.agent.v1.AgentService.RenameTab:output_type -> portenv.agent.v1.RenameTabResponse
-	25,  // 127: portenv.agent.v1.AgentService.SelectTab:output_type -> portenv.agent.v1.SelectTabResponse
-	27,  // 128: portenv.agent.v1.AgentService.WatchTabs:output_type -> portenv.agent.v1.WatchTabsResponse
-	30,  // 129: portenv.agent.v1.AgentService.TabTerminal:output_type -> portenv.agent.v1.TabTerminalResponse
-	33,  // 130: portenv.agent.v1.AgentService.TeamCalls:output_type -> portenv.agent.v1.TeamCallsResponse
-	63,  // 131: portenv.agent.v1.AgentService.StartTeamAgent:output_type -> portenv.agent.v1.StartTeamAgentResponse
-	65,  // 132: portenv.agent.v1.AgentService.StopTeamAgent:output_type -> portenv.agent.v1.StopTeamAgentResponse
-	67,  // 133: portenv.agent.v1.AgentService.AppendBoard:output_type -> portenv.agent.v1.AppendBoardResponse
-	69,  // 134: portenv.agent.v1.AgentService.ListHomeFiles:output_type -> portenv.agent.v1.ListHomeFilesResponse
-	71,  // 135: portenv.agent.v1.AgentService.ReadHomeFile:output_type -> portenv.agent.v1.ReadHomeFileResponse
-	73,  // 136: portenv.agent.v1.AgentService.WriteHomeFiles:output_type -> portenv.agent.v1.WriteHomeFilesResponse
-	109, // 137: portenv.agent.v1.AgentService.WriteAgentFiles:output_type -> portenv.agent.v1.WriteAgentFilesResponse
-	112, // 138: portenv.agent.v1.AgentService.CloneProject:output_type -> portenv.agent.v1.CloneProjectResponse
-	114, // 139: portenv.agent.v1.AgentService.GetProjectRoom:output_type -> portenv.agent.v1.GetProjectRoomResponse
-	46,  // 140: portenv.agent.v1.AgentService.ReadPushBundle:output_type -> portenv.agent.v1.ReadPushBundleResponse
-	38,  // 141: portenv.agent.v1.AgentService.WriteFetchBundle:output_type -> portenv.agent.v1.WriteFetchBundleResponse
-	75,  // 142: portenv.agent.v1.AgentService.EnsureAgentUser:output_type -> portenv.agent.v1.EnsureAgentUserResponse
-	77,  // 143: portenv.agent.v1.AgentService.RemoveAgentUser:output_type -> portenv.agent.v1.RemoveAgentUserResponse
-	79,  // 144: portenv.agent.v1.AgentService.SimulatePackage:output_type -> portenv.agent.v1.SimulatePackageResponse
-	81,  // 145: portenv.agent.v1.AgentService.InstallPackages:output_type -> portenv.agent.v1.InstallPackagesResponse
-	83,  // 146: portenv.agent.v1.AgentService.AgentPaneAction:output_type -> portenv.agent.v1.AgentPaneActionResponse
-	85,  // 147: portenv.agent.v1.AgentService.ReadBoard:output_type -> portenv.agent.v1.ReadBoardResponse
-	87,  // 148: portenv.agent.v1.AgentService.ReadAgentFiles:output_type -> portenv.agent.v1.ReadAgentFilesResponse
-	95,  // 149: portenv.agent.v1.AgentService.DeliverRoutine:output_type -> portenv.agent.v1.DeliverRoutineResponse
-	97,  // 150: portenv.agent.v1.AgentService.HandoffFiles:output_type -> portenv.agent.v1.HandoffFilesResponse
-	101, // 151: portenv.agent.v1.AgentService.PrepareTeamProject:output_type -> portenv.agent.v1.PrepareTeamProjectResponse
-	99,  // 152: portenv.agent.v1.AgentService.FetchAgentBranch:output_type -> portenv.agent.v1.FetchAgentBranchResponse
-	103, // 153: portenv.agent.v1.AgentService.ResolveTeamMigration:output_type -> portenv.agent.v1.ResolveTeamMigrationResponse
-	105, // 154: portenv.agent.v1.AgentService.WakeAgent:output_type -> portenv.agent.v1.WakeAgentResponse
-	107, // 155: portenv.agent.v1.AgentService.SetTimeZone:output_type -> portenv.agent.v1.SetTimeZoneResponse
-	117, // [117:156] is the sub-list for method output_type
-	78,  // [78:117] is the sub-list for method input_type
-	78,  // [78:78] is the sub-list for extension type_name
-	78,  // [78:78] is the sub-list for extension extendee
-	0,   // [0:78] is the sub-list for field type_name
+	33,  // 14: portenv.agent.v1.TabTerminalResponse.author:type_name -> portenv.agent.v1.CommandAuthor
+	9,   // 15: portenv.agent.v1.TabTerminalReset.size:type_name -> portenv.agent.v1.TerminalSize
+	33,  // 16: portenv.agent.v1.TabTerminalReset.authors:type_name -> portenv.agent.v1.CommandAuthor
+	49,  // 17: portenv.agent.v1.TeamCallsResponse.split:type_name -> portenv.agent.v1.Split
+	50,  // 18: portenv.agent.v1.TeamCallsResponse.tab:type_name -> portenv.agent.v1.NewTeamTab
+	51,  // 19: portenv.agent.v1.TeamCallsResponse.focus:type_name -> portenv.agent.v1.PaneRef
+	51,  // 20: portenv.agent.v1.TeamCallsResponse.close:type_name -> portenv.agent.v1.PaneRef
+	52,  // 21: portenv.agent.v1.TeamCallsResponse.msg:type_name -> portenv.agent.v1.Msg
+	53,  // 22: portenv.agent.v1.TeamCallsResponse.ask_owner:type_name -> portenv.agent.v1.AskOwner
+	54,  // 23: portenv.agent.v1.TeamCallsResponse.inbox:type_name -> portenv.agent.v1.Inbox
+	56,  // 24: portenv.agent.v1.TeamCallsResponse.share:type_name -> portenv.agent.v1.Share
+	57,  // 25: portenv.agent.v1.TeamCallsResponse.propose:type_name -> portenv.agent.v1.ProposeAgentChange
+	58,  // 26: portenv.agent.v1.TeamCallsResponse.request_package:type_name -> portenv.agent.v1.RequestPackage
+	59,  // 27: portenv.agent.v1.TeamCallsResponse.whoami:type_name -> portenv.agent.v1.WhoAmI
+	90,  // 28: portenv.agent.v1.TeamCallsResponse.set_status:type_name -> portenv.agent.v1.SetStatus
+	91,  // 29: portenv.agent.v1.TeamCallsResponse.team_status:type_name -> portenv.agent.v1.TeamStatus
+	93,  // 30: portenv.agent.v1.TeamCallsResponse.handoff:type_name -> portenv.agent.v1.Handoff
+	94,  // 31: portenv.agent.v1.TeamCallsResponse.propose_routine:type_name -> portenv.agent.v1.ProposeRoutine
+	35,  // 32: portenv.agent.v1.TeamCallsResponse.push_list:type_name -> portenv.agent.v1.PushList
+	40,  // 33: portenv.agent.v1.TeamCallsResponse.push:type_name -> portenv.agent.v1.PushRefs
+	36,  // 34: portenv.agent.v1.TeamCallsResponse.fetch:type_name -> portenv.agent.v1.FetchRefs
+	42,  // 35: portenv.agent.v1.FetchRefs.wants:type_name -> portenv.agent.v1.RemoteRef
+	41,  // 36: portenv.agent.v1.PushRefs.updates:type_name -> portenv.agent.v1.PushUpdate
+	42,  // 37: portenv.agent.v1.PushListResult.refs:type_name -> portenv.agent.v1.RemoteRef
+	44,  // 38: portenv.agent.v1.PushResult.statuses:type_name -> portenv.agent.v1.PushRefStatus
+	51,  // 39: portenv.agent.v1.TeamCallsRequest.pane:type_name -> portenv.agent.v1.PaneRef
+	55,  // 40: portenv.agent.v1.TeamCallsRequest.inbox:type_name -> portenv.agent.v1.InboxResult
+	121, // 41: portenv.agent.v1.TeamCallsRequest.decision:type_name -> portenv.types.v1.Decision
+	122, // 42: portenv.agent.v1.TeamCallsRequest.message:type_name -> portenv.types.v1.BoardMessage
+	60,  // 43: portenv.agent.v1.TeamCallsRequest.whoami:type_name -> portenv.agent.v1.WhoAmIResult
+	92,  // 44: portenv.agent.v1.TeamCallsRequest.team_status:type_name -> portenv.agent.v1.TeamStatusResult
+	43,  // 45: portenv.agent.v1.TeamCallsRequest.push_list:type_name -> portenv.agent.v1.PushListResult
+	45,  // 46: portenv.agent.v1.TeamCallsRequest.push:type_name -> portenv.agent.v1.PushResult
+	37,  // 47: portenv.agent.v1.TeamCallsRequest.fetch:type_name -> portenv.agent.v1.FetchResult
+	123, // 48: portenv.agent.v1.Msg.type:type_name -> portenv.types.v1.MessageType
+	122, // 49: portenv.agent.v1.InboxResult.messages:type_name -> portenv.types.v1.BoardMessage
+	121, // 50: portenv.agent.v1.InboxResult.decisions:type_name -> portenv.types.v1.Decision
+	124, // 51: portenv.agent.v1.WhoAmIResult.grant:type_name -> portenv.types.v1.AgentGrant
+	61,  // 52: portenv.agent.v1.WhoAmIResult.teammates:type_name -> portenv.agent.v1.Teammate
+	125, // 53: portenv.agent.v1.WhoAmIResult.status:type_name -> portenv.types.v1.AgentStatus
+	126, // 54: portenv.agent.v1.Teammate.state:type_name -> portenv.types.v1.AgentState
+	125, // 55: portenv.agent.v1.Teammate.status:type_name -> portenv.types.v1.AgentStatus
+	63,  // 56: portenv.agent.v1.StartTeamAgentRequest.clone_readers:type_name -> portenv.agent.v1.CloneReaders
+	120, // 57: portenv.agent.v1.StartTeamAgentResponse.tabs:type_name -> portenv.types.v1.Tab
+	122, // 58: portenv.agent.v1.AppendBoardRequest.message:type_name -> portenv.types.v1.BoardMessage
+	121, // 59: portenv.agent.v1.AppendBoardRequest.decision:type_name -> portenv.types.v1.Decision
+	127, // 60: portenv.agent.v1.ListHomeFilesResponse.files:type_name -> portenv.types.v1.AgentFile
+	127, // 61: portenv.agent.v1.WriteHomeFilesResponse.added:type_name -> portenv.types.v1.AgentFile
+	128, // 62: portenv.agent.v1.SimulatePackageResponse.packages:type_name -> portenv.types.v1.PackagePlan
+	128, // 63: portenv.agent.v1.InstallPackagesRequest.approved:type_name -> portenv.types.v1.PackagePlan
+	49,  // 64: portenv.agent.v1.AgentPaneActionRequest.split:type_name -> portenv.agent.v1.Split
+	50,  // 65: portenv.agent.v1.AgentPaneActionRequest.tab:type_name -> portenv.agent.v1.NewTeamTab
+	51,  // 66: portenv.agent.v1.AgentPaneActionRequest.focus:type_name -> portenv.agent.v1.PaneRef
+	51,  // 67: portenv.agent.v1.AgentPaneActionRequest.close:type_name -> portenv.agent.v1.PaneRef
+	51,  // 68: portenv.agent.v1.AgentPaneActionResponse.pane:type_name -> portenv.agent.v1.PaneRef
+	122, // 69: portenv.agent.v1.ReadBoardResponse.message:type_name -> portenv.types.v1.BoardMessage
+	121, // 70: portenv.agent.v1.ReadBoardResponse.decision:type_name -> portenv.types.v1.Decision
+	89,  // 71: portenv.agent.v1.ReadAgentFilesResponse.files:type_name -> portenv.agent.v1.AgentFileContent
+	61,  // 72: portenv.agent.v1.TeamStatusResult.teammates:type_name -> portenv.agent.v1.Teammate
+	129, // 73: portenv.agent.v1.HandoffFilesResponse.files:type_name -> portenv.types.v1.HandoffFile
+	118, // 74: portenv.agent.v1.PrepareTeamProjectRequest.agent_names:type_name -> portenv.agent.v1.PrepareTeamProjectRequest.AgentNamesEntry
+	130, // 75: portenv.agent.v1.PrepareTeamProjectResponse.migration:type_name -> portenv.types.v1.MigrationItem
+	2,   // 76: portenv.agent.v1.CheckAgentIdleResponse.check:type_name -> portenv.agent.v1.AgentIdleCheck
+	89,  // 77: portenv.agent.v1.WriteAgentFilesRequest.files:type_name -> portenv.agent.v1.AgentFileContent
+	114, // 78: portenv.agent.v1.CloneProjectRequest.start:type_name -> portenv.agent.v1.CloneProjectStart
+	11,  // 79: portenv.agent.v1.AgentService.GetVersion:input_type -> portenv.agent.v1.GetVersionRequest
+	13,  // 80: portenv.agent.v1.AgentService.GetReadiness:input_type -> portenv.agent.v1.GetReadinessRequest
+	15,  // 81: portenv.agent.v1.AgentService.RetryPackages:input_type -> portenv.agent.v1.RetryPackagesRequest
+	3,   // 82: portenv.agent.v1.AgentService.RunRestic:input_type -> portenv.agent.v1.RunResticRequest
+	5,   // 83: portenv.agent.v1.AgentService.GetPathInfo:input_type -> portenv.agent.v1.GetPathInfoRequest
+	7,   // 84: portenv.agent.v1.AgentService.Terminal:input_type -> portenv.agent.v1.TerminalRequest
+	17,  // 85: portenv.agent.v1.AgentService.ListTabs:input_type -> portenv.agent.v1.ListTabsRequest
+	19,  // 86: portenv.agent.v1.AgentService.NewTab:input_type -> portenv.agent.v1.NewTabRequest
+	21,  // 87: portenv.agent.v1.AgentService.CloseTab:input_type -> portenv.agent.v1.CloseTabRequest
+	23,  // 88: portenv.agent.v1.AgentService.RenameTab:input_type -> portenv.agent.v1.RenameTabRequest
+	25,  // 89: portenv.agent.v1.AgentService.SelectTab:input_type -> portenv.agent.v1.SelectTabRequest
+	27,  // 90: portenv.agent.v1.AgentService.WatchTabs:input_type -> portenv.agent.v1.WatchTabsRequest
+	29,  // 91: portenv.agent.v1.AgentService.TabTerminal:input_type -> portenv.agent.v1.TabTerminalRequest
+	48,  // 92: portenv.agent.v1.AgentService.TeamCalls:input_type -> portenv.agent.v1.TeamCallsRequest
+	62,  // 93: portenv.agent.v1.AgentService.StartTeamAgent:input_type -> portenv.agent.v1.StartTeamAgentRequest
+	65,  // 94: portenv.agent.v1.AgentService.StopTeamAgent:input_type -> portenv.agent.v1.StopTeamAgentRequest
+	67,  // 95: portenv.agent.v1.AgentService.AppendBoard:input_type -> portenv.agent.v1.AppendBoardRequest
+	69,  // 96: portenv.agent.v1.AgentService.ListHomeFiles:input_type -> portenv.agent.v1.ListHomeFilesRequest
+	71,  // 97: portenv.agent.v1.AgentService.ReadHomeFile:input_type -> portenv.agent.v1.ReadHomeFileRequest
+	73,  // 98: portenv.agent.v1.AgentService.WriteHomeFiles:input_type -> portenv.agent.v1.WriteHomeFilesRequest
+	111, // 99: portenv.agent.v1.AgentService.WriteAgentFiles:input_type -> portenv.agent.v1.WriteAgentFilesRequest
+	113, // 100: portenv.agent.v1.AgentService.CloneProject:input_type -> portenv.agent.v1.CloneProjectRequest
+	116, // 101: portenv.agent.v1.AgentService.GetProjectRoom:input_type -> portenv.agent.v1.GetProjectRoomRequest
+	46,  // 102: portenv.agent.v1.AgentService.ReadPushBundle:input_type -> portenv.agent.v1.ReadPushBundleRequest
+	38,  // 103: portenv.agent.v1.AgentService.WriteFetchBundle:input_type -> portenv.agent.v1.WriteFetchBundleRequest
+	75,  // 104: portenv.agent.v1.AgentService.EnsureAgentUser:input_type -> portenv.agent.v1.EnsureAgentUserRequest
+	77,  // 105: portenv.agent.v1.AgentService.RemoveAgentUser:input_type -> portenv.agent.v1.RemoveAgentUserRequest
+	79,  // 106: portenv.agent.v1.AgentService.SimulatePackage:input_type -> portenv.agent.v1.SimulatePackageRequest
+	81,  // 107: portenv.agent.v1.AgentService.InstallPackages:input_type -> portenv.agent.v1.InstallPackagesRequest
+	83,  // 108: portenv.agent.v1.AgentService.AgentPaneAction:input_type -> portenv.agent.v1.AgentPaneActionRequest
+	85,  // 109: portenv.agent.v1.AgentService.ReadBoard:input_type -> portenv.agent.v1.ReadBoardRequest
+	87,  // 110: portenv.agent.v1.AgentService.ReadAgentFiles:input_type -> portenv.agent.v1.ReadAgentFilesRequest
+	95,  // 111: portenv.agent.v1.AgentService.DeliverRoutine:input_type -> portenv.agent.v1.DeliverRoutineRequest
+	97,  // 112: portenv.agent.v1.AgentService.HandoffFiles:input_type -> portenv.agent.v1.HandoffFilesRequest
+	101, // 113: portenv.agent.v1.AgentService.PrepareTeamProject:input_type -> portenv.agent.v1.PrepareTeamProjectRequest
+	99,  // 114: portenv.agent.v1.AgentService.FetchAgentBranch:input_type -> portenv.agent.v1.FetchAgentBranchRequest
+	103, // 115: portenv.agent.v1.AgentService.ResolveTeamMigration:input_type -> portenv.agent.v1.ResolveTeamMigrationRequest
+	105, // 116: portenv.agent.v1.AgentService.WakeAgent:input_type -> portenv.agent.v1.WakeAgentRequest
+	107, // 117: portenv.agent.v1.AgentService.SetTimeZone:input_type -> portenv.agent.v1.SetTimeZoneRequest
+	109, // 118: portenv.agent.v1.AgentService.CheckAgentIdle:input_type -> portenv.agent.v1.CheckAgentIdleRequest
+	12,  // 119: portenv.agent.v1.AgentService.GetVersion:output_type -> portenv.agent.v1.GetVersionResponse
+	14,  // 120: portenv.agent.v1.AgentService.GetReadiness:output_type -> portenv.agent.v1.GetReadinessResponse
+	16,  // 121: portenv.agent.v1.AgentService.RetryPackages:output_type -> portenv.agent.v1.RetryPackagesResponse
+	4,   // 122: portenv.agent.v1.AgentService.RunRestic:output_type -> portenv.agent.v1.RunResticResponse
+	6,   // 123: portenv.agent.v1.AgentService.GetPathInfo:output_type -> portenv.agent.v1.GetPathInfoResponse
+	10,  // 124: portenv.agent.v1.AgentService.Terminal:output_type -> portenv.agent.v1.TerminalResponse
+	18,  // 125: portenv.agent.v1.AgentService.ListTabs:output_type -> portenv.agent.v1.ListTabsResponse
+	20,  // 126: portenv.agent.v1.AgentService.NewTab:output_type -> portenv.agent.v1.NewTabResponse
+	22,  // 127: portenv.agent.v1.AgentService.CloseTab:output_type -> portenv.agent.v1.CloseTabResponse
+	24,  // 128: portenv.agent.v1.AgentService.RenameTab:output_type -> portenv.agent.v1.RenameTabResponse
+	26,  // 129: portenv.agent.v1.AgentService.SelectTab:output_type -> portenv.agent.v1.SelectTabResponse
+	28,  // 130: portenv.agent.v1.AgentService.WatchTabs:output_type -> portenv.agent.v1.WatchTabsResponse
+	31,  // 131: portenv.agent.v1.AgentService.TabTerminal:output_type -> portenv.agent.v1.TabTerminalResponse
+	34,  // 132: portenv.agent.v1.AgentService.TeamCalls:output_type -> portenv.agent.v1.TeamCallsResponse
+	64,  // 133: portenv.agent.v1.AgentService.StartTeamAgent:output_type -> portenv.agent.v1.StartTeamAgentResponse
+	66,  // 134: portenv.agent.v1.AgentService.StopTeamAgent:output_type -> portenv.agent.v1.StopTeamAgentResponse
+	68,  // 135: portenv.agent.v1.AgentService.AppendBoard:output_type -> portenv.agent.v1.AppendBoardResponse
+	70,  // 136: portenv.agent.v1.AgentService.ListHomeFiles:output_type -> portenv.agent.v1.ListHomeFilesResponse
+	72,  // 137: portenv.agent.v1.AgentService.ReadHomeFile:output_type -> portenv.agent.v1.ReadHomeFileResponse
+	74,  // 138: portenv.agent.v1.AgentService.WriteHomeFiles:output_type -> portenv.agent.v1.WriteHomeFilesResponse
+	112, // 139: portenv.agent.v1.AgentService.WriteAgentFiles:output_type -> portenv.agent.v1.WriteAgentFilesResponse
+	115, // 140: portenv.agent.v1.AgentService.CloneProject:output_type -> portenv.agent.v1.CloneProjectResponse
+	117, // 141: portenv.agent.v1.AgentService.GetProjectRoom:output_type -> portenv.agent.v1.GetProjectRoomResponse
+	47,  // 142: portenv.agent.v1.AgentService.ReadPushBundle:output_type -> portenv.agent.v1.ReadPushBundleResponse
+	39,  // 143: portenv.agent.v1.AgentService.WriteFetchBundle:output_type -> portenv.agent.v1.WriteFetchBundleResponse
+	76,  // 144: portenv.agent.v1.AgentService.EnsureAgentUser:output_type -> portenv.agent.v1.EnsureAgentUserResponse
+	78,  // 145: portenv.agent.v1.AgentService.RemoveAgentUser:output_type -> portenv.agent.v1.RemoveAgentUserResponse
+	80,  // 146: portenv.agent.v1.AgentService.SimulatePackage:output_type -> portenv.agent.v1.SimulatePackageResponse
+	82,  // 147: portenv.agent.v1.AgentService.InstallPackages:output_type -> portenv.agent.v1.InstallPackagesResponse
+	84,  // 148: portenv.agent.v1.AgentService.AgentPaneAction:output_type -> portenv.agent.v1.AgentPaneActionResponse
+	86,  // 149: portenv.agent.v1.AgentService.ReadBoard:output_type -> portenv.agent.v1.ReadBoardResponse
+	88,  // 150: portenv.agent.v1.AgentService.ReadAgentFiles:output_type -> portenv.agent.v1.ReadAgentFilesResponse
+	96,  // 151: portenv.agent.v1.AgentService.DeliverRoutine:output_type -> portenv.agent.v1.DeliverRoutineResponse
+	98,  // 152: portenv.agent.v1.AgentService.HandoffFiles:output_type -> portenv.agent.v1.HandoffFilesResponse
+	102, // 153: portenv.agent.v1.AgentService.PrepareTeamProject:output_type -> portenv.agent.v1.PrepareTeamProjectResponse
+	100, // 154: portenv.agent.v1.AgentService.FetchAgentBranch:output_type -> portenv.agent.v1.FetchAgentBranchResponse
+	104, // 155: portenv.agent.v1.AgentService.ResolveTeamMigration:output_type -> portenv.agent.v1.ResolveTeamMigrationResponse
+	106, // 156: portenv.agent.v1.AgentService.WakeAgent:output_type -> portenv.agent.v1.WakeAgentResponse
+	108, // 157: portenv.agent.v1.AgentService.SetTimeZone:output_type -> portenv.agent.v1.SetTimeZoneResponse
+	110, // 158: portenv.agent.v1.AgentService.CheckAgentIdle:output_type -> portenv.agent.v1.CheckAgentIdleResponse
+	119, // [119:159] is the sub-list for method output_type
+	79,  // [79:119] is the sub-list for method input_type
+	79,  // [79:79] is the sub-list for extension type_name
+	79,  // [79:79] is the sub-list for extension extendee
+	0,   // [0:79] is the sub-list for field type_name
 }
 
 func init() { file_portenv_agent_v1_agent_proto_init() }
@@ -8097,7 +8278,7 @@ func file_portenv_agent_v1_agent_proto_init() {
 		(*ReadBoardResponse_Message)(nil),
 		(*ReadBoardResponse_Decision)(nil),
 	}
-	file_portenv_agent_v1_agent_proto_msgTypes[108].OneofWrappers = []any{
+	file_portenv_agent_v1_agent_proto_msgTypes[110].OneofWrappers = []any{
 		(*CloneProjectRequest_Start)(nil),
 		(*CloneProjectRequest_Chunk)(nil),
 	}
@@ -8106,8 +8287,8 @@ func file_portenv_agent_v1_agent_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_portenv_agent_v1_agent_proto_rawDesc), len(file_portenv_agent_v1_agent_proto_rawDesc)),
-			NumEnums:      2,
-			NumMessages:   114,
+			NumEnums:      3,
+			NumMessages:   116,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -8,7 +8,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -19,6 +18,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/portenv/portenv/core/internal/idleinput"
 	"github.com/portenv/portenv/core/internal/teamkit"
 	agentv1 "github.com/portenv/portenv/proto/gen/go/portenv/agent/v1"
 	daemonv1 "github.com/portenv/portenv/proto/gen/go/portenv/daemon/v1"
@@ -1262,8 +1262,8 @@ func TestPausedAndStoppedRoutinesDontFire(t *testing.T) {
 // and says so.
 func TestRoutinesNeedAKnownRunner(t *testing.T) {
 	_, h, _ := startedWithRoutine(t)
-	if p := h.started[0].GetIdlePattern(); p == "" || p != runnerIdlePattern([]string{"claude"}) {
-		t.Errorf("idle pattern sent: %q", p)
+	if p, n := h.started[0].GetIdlePattern(), h.started[0].GetIdleLines(); p == "" || p != idleinput.Claude.Pattern || int(n) != idleinput.Claude.Lines {
+		t.Errorf("idle input sent: %q on %d lines", p, n)
 	}
 
 	team := routineTeam()
@@ -1291,14 +1291,18 @@ func TestRoutinesNeedAKnownRunner(t *testing.T) {
 }
 
 func TestTheRunnerTablesPatterns(t *testing.T) {
-	re := regexp.MustCompile(runnerIdlePattern([]string{"claude", "--permission-mode", "acceptEdits"}))
-	for _, idle := range []string{"> ", "│ >                │", "  >"} {
-		if !re.MatchString(idle) {
+	in := runnerIdle([]string{"claude", "--permission-mode", "acceptEdits"})
+	m, err := idleinput.Compile(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, idle := range [][]string{{"> "}, {"│ >                │"}, {"  >"}, {"───", `❯ Try "refactor <filepath>"`, "───", "  ▸▸ auto mode on (shift+tab to cycle)"}} {
+		if m.Find(idle) < 0 {
 			t.Errorf("%q isn't idle", idle)
 		}
 	}
-	for _, busy := range []string{"> fix the tests", "Do you want to proceed? (y/n)", "✻ Thinking…", ""} {
-		if re.MatchString(busy) {
+	for _, busy := range [][]string{{"> fix the tests"}, {"❯ fix the bug", "───", "footer"}, {"Do you want to proceed? (y/n)"}, {"✻ Thinking…"}, {""}} {
+		if m.Find(busy) >= 0 {
 			t.Errorf("%q counted as idle", busy)
 		}
 	}

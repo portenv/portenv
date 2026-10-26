@@ -7635,7 +7635,12 @@ type AgentInfo struct {
 	ShareLoginOff string `protobuf:"bytes,21,opt,name=share_login_off,json=shareLoginOff,proto3" json:"share_login_off,omitempty"`
 	// It works in its own copy of the project (checkout: own), so it has a
 	// branch, agent/<id>, the owner can fetch (ADR 0022 §2a).
-	OwnClone      bool `protobuf:"varint,22,opt,name=own_clone,json=ownClone,proto3" json:"own_clone,omitempty"`
+	OwnClone bool `protobuf:"varint,22,opt,name=own_clone,json=ownClone,proto3" json:"own_clone,omitempty"`
+	// "Can't tell if <name> is idle: …" when its runner has an idle rule
+	// but its pane has been quiet with no idle prompt recognised for 3
+	// minutes, so wake-ups and routines wait (R-0411). Empty again as soon
+	// as a prompt is recognised or output resumes.
+	IdleUnknown   string `protobuf:"bytes,23,opt,name=idle_unknown,json=idleUnknown,proto3" json:"idle_unknown,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -7822,6 +7827,13 @@ func (x *AgentInfo) GetOwnClone() bool {
 		return x.OwnClone
 	}
 	return false
+}
+
+func (x *AgentInfo) GetIdleUnknown() string {
+	if x != nil {
+		return x.IdleUnknown
+	}
+	return ""
 }
 
 type WatchTeamRequest struct {
@@ -10410,7 +10422,7 @@ const file_portenv_daemon_v1_daemon_proto_rawDesc = "" +
 	"\x17SetAgentsAllowedRequest\x12%\n" +
 	"\x0eagents_allowed\x18\x01 \x01(\x05R\ragentsAllowed\"b\n" +
 	"\x18SetAgentsAllowedResponse\x12F\n" +
-	"\bsettings\x18\x01 \x01(\v2*.portenv.daemon.v1.GetTeamSettingsResponseR\bsettings\"\xde\x05\n" +
+	"\bsettings\x18\x01 \x01(\v2*.portenv.daemon.v1.GetTeamSettingsResponseR\bsettings\"\x81\x06\n" +
 	"\tAgentInfo\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
@@ -10436,7 +10448,8 @@ const file_portenv_daemon_v1_daemon_proto_rawDesc = "" +
 	"\broutines\x18\x13 \x03(\v2\x19.portenv.types.v1.RoutineR\broutines\x12!\n" +
 	"\froutines_off\x18\x14 \x01(\tR\vroutinesOff\x12&\n" +
 	"\x0fshare_login_off\x18\x15 \x01(\tR\rshareLoginOff\x12\x1b\n" +
-	"\town_clone\x18\x16 \x01(\bR\bownClone\">\n" +
+	"\town_clone\x18\x16 \x01(\bR\bownClone\x12!\n" +
+	"\fidle_unknown\x18\x17 \x01(\tR\vidleUnknown\">\n" +
 	"\x10WatchTeamRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x16\n" +
 	"\x06cursor\x18\x02 \x01(\tR\x06cursor\"\xcb\x02\n" +

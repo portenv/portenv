@@ -9,7 +9,6 @@ import (
 	"io"
 	"path"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 
@@ -18,11 +17,9 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 
+	"github.com/portenv/portenv/core/internal/idleinput"
 	agentv1 "github.com/portenv/portenv/proto/gen/go/portenv/agent/v1"
 )
-
-// maxIdlePattern is the helper's limit on an idle-input pattern.
-const maxIdlePattern = 512
 
 // maxAgentsMD caps AGENTS.md: the generated block and a file's
 // instructions (32 KB, ADR 0022 §3), with room to spare.
@@ -87,10 +84,11 @@ func (s *apiServer) StartTeamAgent(ctx context.Context, req *agentv1.StartTeamAg
 	if len(argv) == 0 || argv[0] == "" {
 		return nil, status.Errorf(codes.InvalidArgument, "%s has no runner", id)
 	}
-	if p := req.GetIdlePattern(); len(p) > maxIdlePattern {
-		return nil, status.Errorf(codes.InvalidArgument, "%s's idle pattern is over %d bytes", id, maxIdlePattern)
-	} else if _, err := regexp.Compile(p); err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "%s's idle pattern: %v", id, err)
+	idle := idleinput.Input{Pattern: req.GetIdlePattern(), Lines: int(req.GetIdleLines())}
+	if idle.Pattern != "" {
+		if _, err := idleinput.Compile(idle); err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "%s's idle input: %v", id, err)
+		}
 	}
 	seedFrom, err := s.checkSeed(req)
 	if err != nil {
@@ -155,6 +153,11 @@ func (s *apiServer) StartTeamAgent(ctx context.Context, req *agentv1.StartTeamAg
 			"PORTENV_AGENT=" + id,
 			"PORTENV_SOCKET=" + filepath.Join(base, "portenv.sock"),
 			"TMPDIR=" + u.TmpDir,
+			// The image pins the runner (Claude Code from the apt stable
+			// channel), so it mustn't nudge an update: this turns off its
+			// update check and with it the "Update available! Run: …"
+			// notice under the input (ADR 0025 §9).
+			"DISABLE_AUTOUPDATER=1",
 		},
 	}
 	// The Mac's time zone, as this start's shells get it (R-0411).
@@ -167,10 +170,10 @@ func (s *apiServer) StartTeamAgent(ctx context.Context, req *agentv1.StartTeamAg
 	if err != nil {
 		return nil, fail(codes.Internal, "start %s's terminal: %v", id, err)
 	}
-	// The runner's idle-input pattern, for routines (R-0258): none means
-	// the agent gets no routines.
-	if p := req.GetIdlePattern(); p != "" && s.setAgentIdleInput != nil {
-		if err := s.setAgentIdleInput(id, p); err != nil {
+	// The runner's idle-input rule, for routines (R-0258) and wake-ups
+	// (CC-0498): none means the agent gets neither.
+	if idle.Pattern != "" && s.setAgentIdleInput != nil {
+		if err := s.setAgentIdleInput(id, idle); err != nil {
 			return nil, status.Errorf(codes.Internal, "set %s's idle pattern: %v", id, err)
 		}
 	}

@@ -48,6 +48,7 @@ const (
 	AgentService_WriteAgentFiles_FullMethodName      = "/portenv.agent.v1.AgentService/WriteAgentFiles"
 	AgentService_CloneProject_FullMethodName         = "/portenv.agent.v1.AgentService/CloneProject"
 	AgentService_GetProjectRoom_FullMethodName       = "/portenv.agent.v1.AgentService/GetProjectRoom"
+	AgentService_SetWorkGitIdentity_FullMethodName   = "/portenv.agent.v1.AgentService/SetWorkGitIdentity"
 	AgentService_ReadPushBundle_FullMethodName       = "/portenv.agent.v1.AgentService/ReadPushBundle"
 	AgentService_WriteFetchBundle_FullMethodName     = "/portenv.agent.v1.AgentService/WriteFetchBundle"
 	AgentService_EnsureAgentUser_FullMethodName      = "/portenv.agent.v1.AgentService/EnsureAgentUser"
@@ -64,6 +65,7 @@ const (
 	AgentService_ResolveTeamMigration_FullMethodName = "/portenv.agent.v1.AgentService/ResolveTeamMigration"
 	AgentService_WakeAgent_FullMethodName            = "/portenv.agent.v1.AgentService/WakeAgent"
 	AgentService_SetTimeZone_FullMethodName          = "/portenv.agent.v1.AgentService/SetTimeZone"
+	AgentService_CheckAgentIdle_FullMethodName       = "/portenv.agent.v1.AgentService/CheckAgentIdle"
 )
 
 // AgentServiceClient is the client API for AgentService service.
@@ -141,6 +143,14 @@ type AgentServiceClient interface {
 	CloneProject(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[CloneProjectRequest, CloneProjectResponse], error)
 	// Whether the project folder exists, and the room left for it.
 	GetProjectRoom(ctx context.Context, in *GetProjectRoomRequest, opts ...grpc.CallOption) (*GetProjectRoomResponse, error)
+	// The owner's git name and email from the Mac (findings 21 and 22),
+	// written as work into work's ~/.gitconfig with git config --file, each
+	// only when work's git has none of its own (~/.gitconfig or
+	// ~/.config/git/config): what the owner set in the workspace is never
+	// replaced. Agents keep their own identities (ADR 0022). A value with a
+	// control or bidi character, an angle bracket or over the length limit is
+	// InvalidArgument; an empty one is left out.
+	SetWorkGitIdentity(ctx context.Context, in *SetWorkGitIdentityRequest, opts ...grpc.CallOption) (*SetWorkGitIdentityResponse, error)
 	// The bundle git-remote-portenv handed in for a push (R-0391), once:
 	// it's deleted as it's read.
 	ReadPushBundle(ctx context.Context, in *ReadPushBundleRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ReadPushBundleResponse], error)
@@ -205,6 +215,10 @@ type AgentServiceClient interface {
 	// database, and every later shell and agent runner gets TZ. A name
 	// that isn't a known IANA zone falls back to UTC.
 	SetTimeZone(ctx context.Context, in *SetTimeZoneRequest, opts ...grpc.CallOption) (*SetTimeZoneResponse, error)
+	// Says whether the agent's main pane would take a routine or a wake-up
+	// now, under exactly their checks, and types nothing: portenvd's way to
+	// notice a runner whose idle prompt it doesn't recognise (R-0411).
+	CheckAgentIdle(ctx context.Context, in *CheckAgentIdleRequest, opts ...grpc.CallOption) (*CheckAgentIdleResponse, error)
 }
 
 type agentServiceClient struct {
@@ -478,6 +492,16 @@ func (c *agentServiceClient) GetProjectRoom(ctx context.Context, in *GetProjectR
 	return out, nil
 }
 
+func (c *agentServiceClient) SetWorkGitIdentity(ctx context.Context, in *SetWorkGitIdentityRequest, opts ...grpc.CallOption) (*SetWorkGitIdentityResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetWorkGitIdentityResponse)
+	err := c.cc.Invoke(ctx, AgentService_SetWorkGitIdentity_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *agentServiceClient) ReadPushBundle(ctx context.Context, in *ReadPushBundleRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ReadPushBundleResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	stream, err := c.cc.NewStream(ctx, &AgentService_ServiceDesc.Streams[7], AgentService_ReadPushBundle_FullMethodName, cOpts...)
@@ -659,6 +683,16 @@ func (c *agentServiceClient) SetTimeZone(ctx context.Context, in *SetTimeZoneReq
 	return out, nil
 }
 
+func (c *agentServiceClient) CheckAgentIdle(ctx context.Context, in *CheckAgentIdleRequest, opts ...grpc.CallOption) (*CheckAgentIdleResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CheckAgentIdleResponse)
+	err := c.cc.Invoke(ctx, AgentService_CheckAgentIdle_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AgentServiceServer is the server API for AgentService service.
 // All implementations must embed UnimplementedAgentServiceServer
 // for forward compatibility.
@@ -734,6 +768,14 @@ type AgentServiceServer interface {
 	CloneProject(grpc.ClientStreamingServer[CloneProjectRequest, CloneProjectResponse]) error
 	// Whether the project folder exists, and the room left for it.
 	GetProjectRoom(context.Context, *GetProjectRoomRequest) (*GetProjectRoomResponse, error)
+	// The owner's git name and email from the Mac (findings 21 and 22),
+	// written as work into work's ~/.gitconfig with git config --file, each
+	// only when work's git has none of its own (~/.gitconfig or
+	// ~/.config/git/config): what the owner set in the workspace is never
+	// replaced. Agents keep their own identities (ADR 0022). A value with a
+	// control or bidi character, an angle bracket or over the length limit is
+	// InvalidArgument; an empty one is left out.
+	SetWorkGitIdentity(context.Context, *SetWorkGitIdentityRequest) (*SetWorkGitIdentityResponse, error)
 	// The bundle git-remote-portenv handed in for a push (R-0391), once:
 	// it's deleted as it's read.
 	ReadPushBundle(*ReadPushBundleRequest, grpc.ServerStreamingServer[ReadPushBundleResponse]) error
@@ -798,6 +840,10 @@ type AgentServiceServer interface {
 	// database, and every later shell and agent runner gets TZ. A name
 	// that isn't a known IANA zone falls back to UTC.
 	SetTimeZone(context.Context, *SetTimeZoneRequest) (*SetTimeZoneResponse, error)
+	// Says whether the agent's main pane would take a routine or a wake-up
+	// now, under exactly their checks, and types nothing: portenvd's way to
+	// notice a runner whose idle prompt it doesn't recognise (R-0411).
+	CheckAgentIdle(context.Context, *CheckAgentIdleRequest) (*CheckAgentIdleResponse, error)
 	mustEmbedUnimplementedAgentServiceServer()
 }
 
@@ -877,6 +923,9 @@ func (UnimplementedAgentServiceServer) CloneProject(grpc.ClientStreamingServer[C
 func (UnimplementedAgentServiceServer) GetProjectRoom(context.Context, *GetProjectRoomRequest) (*GetProjectRoomResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetProjectRoom not implemented")
 }
+func (UnimplementedAgentServiceServer) SetWorkGitIdentity(context.Context, *SetWorkGitIdentityRequest) (*SetWorkGitIdentityResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetWorkGitIdentity not implemented")
+}
 func (UnimplementedAgentServiceServer) ReadPushBundle(*ReadPushBundleRequest, grpc.ServerStreamingServer[ReadPushBundleResponse]) error {
 	return status.Error(codes.Unimplemented, "method ReadPushBundle not implemented")
 }
@@ -924,6 +973,9 @@ func (UnimplementedAgentServiceServer) WakeAgent(context.Context, *WakeAgentRequ
 }
 func (UnimplementedAgentServiceServer) SetTimeZone(context.Context, *SetTimeZoneRequest) (*SetTimeZoneResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SetTimeZone not implemented")
+}
+func (UnimplementedAgentServiceServer) CheckAgentIdle(context.Context, *CheckAgentIdleRequest) (*CheckAgentIdleResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CheckAgentIdle not implemented")
 }
 func (UnimplementedAgentServiceServer) mustEmbedUnimplementedAgentServiceServer() {}
 func (UnimplementedAgentServiceServer) testEmbeddedByValue()                      {}
@@ -1291,6 +1343,24 @@ func _AgentService_GetProjectRoom_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AgentService_SetWorkGitIdentity_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetWorkGitIdentityRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentServiceServer).SetWorkGitIdentity(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentService_SetWorkGitIdentity_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentServiceServer).SetWorkGitIdentity(ctx, req.(*SetWorkGitIdentityRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _AgentService_ReadPushBundle_Handler(srv interface{}, stream grpc.ServerStream) error {
 	m := new(ReadPushBundleRequest)
 	if err := stream.RecvMsg(m); err != nil {
@@ -1554,6 +1624,24 @@ func _AgentService_SetTimeZone_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AgentService_CheckAgentIdle_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CheckAgentIdleRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentServiceServer).CheckAgentIdle(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentService_CheckAgentIdle_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentServiceServer).CheckAgentIdle(ctx, req.(*CheckAgentIdleRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AgentService_ServiceDesc is the grpc.ServiceDesc for AgentService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1626,6 +1714,10 @@ var AgentService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _AgentService_GetProjectRoom_Handler,
 		},
 		{
+			MethodName: "SetWorkGitIdentity",
+			Handler:    _AgentService_SetWorkGitIdentity_Handler,
+		},
+		{
 			MethodName: "EnsureAgentUser",
 			Handler:    _AgentService_EnsureAgentUser_Handler,
 		},
@@ -1676,6 +1768,10 @@ var AgentService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SetTimeZone",
 			Handler:    _AgentService_SetTimeZone_Handler,
+		},
+		{
+			MethodName: "CheckAgentIdle",
+			Handler:    _AgentService_CheckAgentIdle_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

@@ -51,6 +51,9 @@ final class AppModel {
     /// Show on a workspace with no window: opened in the next new window
     /// tab, with the decision selected.
     @ObservationIgnored private var pendingShow: (box: String, decision: String)?
+    /// File › New Workspace… with a workspace in front: the next new
+    /// window tab starts the flow (R-0404).
+    @ObservationIgnored private var pendingNewBox = false
 
     /// A new window's session. Its controller brings this window (its tab)
     /// forward before a read that may raise a Keychain prompt (R-0214).
@@ -82,7 +85,13 @@ final class AppModel {
                 session.team?.show(decision: decision)
             }
         }
+        if launchClaimed, pendingNewBox {
+            pendingNewBox = false
+            newBox(in: session)
+        }
         guard !launchClaimed else { return }
+        // The launch window shows the launch's own screens.
+        pendingNewBox = false
         // A notification is for a workspace whose tab isn't in front.
         Notifier.frontWorkspace = { [sessions] in
             sessions.all.first { $0.window != nil && $0.window === NSApp.mainWindow }?.box
@@ -111,6 +120,18 @@ final class AppModel {
     var moveOffered = false
     /// Why a move failed, shown once.
     var moveError: String?
+
+    /// Delete Workspace…'s sheet, while it shows (ADR 0029).
+    var deleting: DeleteFlow?
+    /// The sheet's flow, kept until the sheet has gone.
+    private var shownDeletion: DeleteFlow?
+    /// The window that asked: the sheet shows there.
+    private(set) weak var deletingSession: WorkspaceSession?
+    /// "Deleted acme-api.", for that window's list.
+    private var deleteNotice: String?
+    private weak var noticeSession: WorkspaceSession?
+    /// Workspaces whose deletion stopped part-way: the list says so.
+    private(set) var deletionStopped: Set<String> = []
 
     /// At launch: make sure portenvd runs, offer to move to Applications
     /// alongside (a sheet; nothing waits for the answer, R-0121), list the
@@ -167,6 +188,9 @@ final class AppModel {
             },
             report: { [weak self] report in self?.waiting(report) },
             sleep: { try? await Task.sleep(for: $0) },
+            // Once per wait, silently, before any line shows (R-0401):
+            // what fixed a rebuilt app's refused portenvd by hand.
+            reRegister: { await LoginItemRestarter().hard() },
             boxes: { [daemon] in
                 // After an in-place update the running portenvd is still the
                 // old one: restart it here, saying so, rather than "out of
@@ -304,6 +328,10 @@ final class AppModel {
         let controller = s.show(box)
         // This window follows the team now, not the background.
         windowless.windowOpened(box)
+        // Delete Workspace… acts on this window's session (ADR 0029).
+        controller.onDelete = { [weak self, weak s] name in
+            if let self, let s { self.askToDelete(name, in: s) }
+        }
         guard let tabs = s.tabs else { return }
         // A long command finishing in a tab, when the window isn't in
         // front (§5).
@@ -416,11 +444,75 @@ final class AppModel {
         }
     }
 
-    /// Reads which workspaces run on this Mac.
+    /// Reads which workspaces run on this Mac, and which deletions stopped.
     func refreshRunning() async {
         let now = Set(await RunningWorkspaces.here(daemon))
         if now != running { running = now }
         windowless.update(running: now)
+        if let creating = daemon as? BoxCreating, let listed = try? await creating.listings() {
+            let stopped = Set(listed.filter(\.deleting).map(\.name))
+            if stopped != deletionStopped { deletionStopped = stopped }
+        }
+    }
+
+    /// Delete Workspace…, from a window's title menu or its list (ADR
+    /// 0029): the sheet shows on that window.
+    func askToDelete(_ box: String, in s: WorkspaceSession) {
+        guard let api = daemon as? WorkspaceDeleting else { return }
+        let deleter = WorkspaceDeleter(daemon: api)
+        let flow = DeleteFlow(name: box, daemon: api, deleter: deleter) { [weak self] name in
+            await self?.closeForDeleting(name)
+        }
+        shownDeletion = flow
+        deletingSession = s
+        deleteNotice = nil
+        deleting = flow
+    }
+
+    /// The sheet's Close Workspace: the usual close; a window that showed
+    /// the workspace goes back to its list.
+    private func closeForDeleting(_ box: String) async {
+        await closeWorkspace(box)
+        guard !running.contains(box) else { return }
+        for s in sessions.all where s.box == box { await showList(s) }
+    }
+
+    /// The sheet closed: after a deletion, the window that showed the
+    /// workspace closes its tab (or, as the last window, shows the list);
+    /// the window that asked shows the list, saying so.
+    func deleteSheetClosed() {
+        guard let flow = shownDeletion else { return }
+        let asked = deletingSession
+        shownDeletion = nil
+        deletingSession = nil
+        deleting = nil
+        Task {
+            await refreshRunning()
+            guard let notice = flow.notice else { return }
+            boxes = WorkspaceList.afterDeleting(flow.name, from: boxes)
+            for s in sessions.all where s.box == flow.name {
+                if s !== launchSession, let w = s.window, WindowCloseHook.hookedWindows.count > 1 {
+                    WindowCloseHook.requestClose(w)
+                } else {
+                    await showList(s)
+                }
+            }
+            if let listed = try? await daemon.boxes() { boxes = listed }
+            if let asked, sessions.all.contains(where: { $0 === asked }) {
+                if asked === launchSession {
+                    launch = .boxList(notice: notice)
+                } else {
+                    deleteNotice = notice
+                    noticeSession = asked
+                }
+            }
+        }
+    }
+
+    /// The list's notice for a window other than the launch's, after a
+    /// deletion it asked for.
+    func listNotice(for s: WorkspaceSession) -> String? {
+        noticeSession === s ? deleteNotice : nil
     }
 
     /// Back to "Your workspaces"; the workspace shown may still be running.
@@ -455,9 +547,27 @@ final class AppModel {
         // The Team step (ADR 0025) plans through portenvd.
         let flow = FirstRunFlow(service: service, at: step, existing: boxes, fromBoxList: fromBoxList, memory: memory,
                                 docker: nil, serviceGone: serviceGone, teamPlanner: daemon as? TeamPlanning,
-                                githubLogin: { GitHubAccount.system.login })
+                                githubLogin: { GitHubAccount.system.login }, repoAccess: GitHubRepoAccess())
         service.keychainWaiting = { [weak flow] on in Task { @MainActor in flow?.keychainWaiting = on } }
         return flow
+    }
+
+    /// File › New Workspace… (⇧⌘N, R-0404): the list's New Workspace flow
+    /// in the window in front (the launch window when none is); a window
+    /// showing a workspace keeps it and the flow opens in a new tab.
+    func newWorkspace() {
+        NewWorkspaceCommand.perform(
+            front: sessions.current, launchWindow: launchSession, launch: launch,
+            start: { s in
+                newBox(in: s)
+                s.bringForward()
+            },
+            openTab: {
+                pendingNewBox = true
+                WorkspaceWindows.open?()
+            },
+            bringForward: { $0.bringForward() }
+        )
     }
 
     /// The box list's New Box…: first run's first-box step, titled "New
@@ -569,7 +679,7 @@ struct AppRoot: View {
                     if model.launch == nil {
                         starting
                     } else {
-                        list(notice: nil)
+                        list(notice: model.listNotice(for: session))
                     }
                 }
             }
@@ -593,6 +703,14 @@ struct AppRoot: View {
         .sheet(isPresented: Binding(get: { model.moveOffered && model.launchSession === session },
                                     set: { model.moveOffered = $0 })) {
             MoveOfferView { model.answerMove($0) }
+        }
+        // Delete Workspace… (ADR 0029): on the window whose session asked,
+        // from its title menu or its list.
+        .sheet(item: Binding(get: { model.deletingSession === session ? model.deleting : nil },
+                             set: { if $0 == nil { model.deleting = nil } }),
+               onDismiss: { model.deleteSheetClosed() }) { flow in
+            DeleteWorkspaceSheet(flow: flow) { model.deleting = nil }
+                .onChange(of: flow.outcome?.finished == true) { _, done in if done { model.deleting = nil } }
         }
         .alert(model.moveError ?? "", isPresented: Binding(get: { model.moveError != nil && model.launchSession === session },
                                                           set: { if !$0 { model.moveError = nil } })) {
@@ -643,6 +761,8 @@ struct AppRoot: View {
                     retry: model.serviceNotAnswering ? { model.begin() } : nil,
                     running: model.running,
                     close: { box in Task { await model.closeWorkspace(box) } },
+                    deletionStopped: model.deletionStopped,
+                    delete: { box in model.askToDelete(box, in: session) },
                     refresh: { await model.refreshRunning() }) { box in
             Task { await model.open(box, in: session) }
         } newBox: {

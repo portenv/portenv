@@ -21,7 +21,7 @@ struct StateLineTableTests {
 
     @Test func newBoxNeverSaved() {
         let s = BoxState(save: .notSavedYet)
-        #expect(line(s) == "This Mac · Not saved yet")
+        #expect(line(s) == "This Mac · New")
         #expect(s.symbol == nil)
     }
 
@@ -111,7 +111,7 @@ struct BoxMenuOrderTests {
     @Test func theGuidelineOrder() {
         let items = BoxMenuModel.items(open: true, busy: false, agentUnavailable: false, optionHeld: false,
                                        location: "this-mac", servers: ["portenv@52.47.207.191"])
-        #expect(titles(items) == ["Rename…", "Move To", "—", "Revert To", "Make a Save Point", "—", "Show in Finder"])
+        #expect(titles(items) == ["Rename…", "Move To", "—", "Revert To", "Make a Save Point", "—", "Show in Finder", "—", "Delete Workspace…"])
         let move = items[1].submenu
         #expect(titles(move) == ["This Mac", "—", "52.47.207.191", "—", "Add a Server…"])
         #expect(move[0].checked && !move[2].checked)
@@ -125,7 +125,7 @@ struct BoxMenuOrderTests {
         let normal = BoxMenuModel.items(open: true, busy: false, agentUnavailable: false, optionHeld: false, location: "this-mac", servers: [])
         #expect(!titles(normal).contains("Restart Workspace"))
         let down = BoxMenuModel.items(open: true, busy: false, agentUnavailable: true, optionHeld: false, location: "this-mac", servers: [])
-        #expect(titles(down) == ["Rename…", "Move To", "—", "Revert To", "Make a Save Point", "—", "Restart Workspace", "Show in Finder"])
+        #expect(titles(down) == ["Rename…", "Move To", "—", "Revert To", "Make a Save Point", "—", "Restart Workspace", "Show in Finder", "—", "Delete Workspace…"])
         let option = BoxMenuModel.items(open: true, busy: false, agentUnavailable: false, optionHeld: true, location: "this-mac", servers: [])
         #expect(titles(option).contains("Restart Workspace"))
     }
@@ -156,6 +156,8 @@ struct AccessibilityLabelTests {
         #expect(A11y.symbolLabel(BoxState(save: .saving)) == "Saving")
         #expect(A11y.symbolLabel(BoxState(save: .offline)) == "Offline")
         #expect(A11y.symbolLabel(BoxState(save: .agentUnavailable)) == "Not saved")
+        // A new workspace, until its first save: "New", not a warning.
+        #expect(A11y.symbolLabel(BoxState(save: .notSavedYet)) == "New")
         #expect(A11y.terminal(box: "acme-api") == "Terminal in acme-api")
     }
 

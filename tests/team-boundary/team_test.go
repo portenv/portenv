@@ -29,6 +29,12 @@ for spec in builder:2001 reviewer:2002; do
   passwd -l "$id" >/dev/null
   install -d -o "$id" -g "$id" -m 0700 "/home/$id"
   echo "$id-secret" > "/home/$id/secret"; chown "$id:$id" "/home/$id/secret"; chmod 0600 "/home/$id/secret"
+  # The agent's runner login, as Claude Code writes it (ADR 0025 section 10):
+  # the agent's own files, 0600, in its own home.
+  install -d -o "$id" -g "$id" -m 0700 "/home/$id/.claude"
+  for f in .claude/.credentials.json .claude.json; do
+    echo "$id-login $f" > "/home/$id/$f"; chown "$id:$id" "/home/$id/$f"; chmod 0600 "/home/$id/$f"
+  done
   install -d -o 991 -g "$id" -m 0710 "/run/portenv-team/$id"
   install -d -o "$id" -g "$id" -m 0700 "/run/portenv-team/$id/tmux" "/run/portenv-team/$id/tmp"
   # The agent's portenv socket: the helper's (991), the agent's group, 0660.

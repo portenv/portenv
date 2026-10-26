@@ -1757,3 +1757,56 @@ func TestHomeSeedReachesTheHelper(t *testing.T) {
 		t.Errorf("request: seed %v, project %q, quota %d", r.GetHomeSeed(), r.GetProjectDir(), r.GetHomeQuotaBytes())
 	}
 }
+
+// lastAgentState is the state of an agent's newest row on the stream: what
+// the app shows after it has read every event.
+func lastAgentState(e *teamEngine, id string) typesv1.AgentState {
+	b := e.box("w")
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for i := len(b.events) - 1; i >= 0; i-- {
+		if a := b.events[i].agent; a != nil && a.GetId() == id {
+			return a.GetState()
+		}
+	}
+	return typesv1.AgentState_AGENT_STATE_UNSPECIFIED
+}
+
+// The owner's live test (2026-10-21): the owner answered an agent's
+// decision, the card cleared, and the agent's row still said "needs you".
+// A decision asked, answered or expired sends the asking agent's row again,
+// so the stream never ends on a "needs you" with nothing pending.
+func TestAnAnsweredOrExpiredDecisionClearsTheAgentsNeedsYou(t *testing.T) {
+	e, _, clock := newTestEngine(t, defaultTeam()...)
+	ctx := context.Background()
+	approveFirstStart(t, e)
+	if _, err := e.startAgent(ctx, "w", "builder"); err != nil {
+		t.Fatal(err)
+	}
+	d := e.handleCall(ctx, "w", splitCall("builder")).GetDecision()
+	if d == nil {
+		t.Fatal("builder's split made no decision")
+	}
+	if s := lastAgentState(e, "builder"); s != typesv1.AgentState_AGENT_STATE_NEEDS_YOU {
+		t.Fatalf("asked: builder's row = %v, want needs you", s)
+	}
+	if _, err := e.answer(ctx, "w", d.GetId(), false, "not now"); err != nil {
+		t.Fatal(err)
+	}
+	if s := lastAgentState(e, "builder"); s != typesv1.AgentState_AGENT_STATE_RUNNING {
+		t.Errorf("answered: builder's row = %v, want running", s)
+	}
+
+	if e.handleCall(ctx, "w", splitCall("builder")).GetDecision() == nil {
+		t.Fatal("builder's second split made no decision")
+	}
+	clock.add(decisionExpiry + time.Second)
+	b, err := e.lockBox(ctx, "w") // the sweep expires it
+	if err != nil {
+		t.Fatal(err)
+	}
+	b.mu.Unlock()
+	if s := lastAgentState(e, "builder"); s != typesv1.AgentState_AGENT_STATE_RUNNING {
+		t.Errorf("expired: builder's row = %v, want running", s)
+	}
+}

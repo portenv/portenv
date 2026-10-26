@@ -201,10 +201,29 @@ func (e *teamEngine) appendLocked(ctx context.Context, name string, b *teamBox, 
 		d := line.GetDecision()
 		b.decisions[d.GetId()] = d
 		b.events = append(b.events, teamEvent{dec: d})
+		e.agentRowLocked(ctx, name, b, d.GetFrom())
 	}
 	b.noteWakeLocked(line)
 	b.changedLocked()
 	return nil
+}
+
+// agentRowLocked sends an agent's row again after one of its decisions was
+// asked, answered or expired: "needs you" follows its pending decisions, so
+// the row never keeps it once nothing is pending (the owner's live test,
+// 2026-10-21). Nothing for Portenv's own decisions, or when the team can't
+// be read (the agent's next row is right).
+func (e *teamEngine) agentRowLocked(ctx context.Context, name string, b *teamBox, id string) {
+	if id == "" || id == boardFrom {
+		return
+	}
+	team, err := e.loadTeam(ctx, name)
+	if err != nil {
+		return
+	}
+	if a := team.agent(id); a != nil {
+		b.events = append(b.events, teamEvent{agent: e.infoLocked(b, a)})
+	}
 }
 
 func (e *teamEngine) noticeLocked(ctx context.Context, name string, b *teamBox, to, thread, text string) {

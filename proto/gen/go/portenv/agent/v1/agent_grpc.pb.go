@@ -48,6 +48,7 @@ const (
 	AgentService_WriteAgentFiles_FullMethodName      = "/portenv.agent.v1.AgentService/WriteAgentFiles"
 	AgentService_CloneProject_FullMethodName         = "/portenv.agent.v1.AgentService/CloneProject"
 	AgentService_GetProjectRoom_FullMethodName       = "/portenv.agent.v1.AgentService/GetProjectRoom"
+	AgentService_SetWorkGitIdentity_FullMethodName   = "/portenv.agent.v1.AgentService/SetWorkGitIdentity"
 	AgentService_ReadPushBundle_FullMethodName       = "/portenv.agent.v1.AgentService/ReadPushBundle"
 	AgentService_WriteFetchBundle_FullMethodName     = "/portenv.agent.v1.AgentService/WriteFetchBundle"
 	AgentService_EnsureAgentUser_FullMethodName      = "/portenv.agent.v1.AgentService/EnsureAgentUser"
@@ -142,6 +143,14 @@ type AgentServiceClient interface {
 	CloneProject(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[CloneProjectRequest, CloneProjectResponse], error)
 	// Whether the project folder exists, and the room left for it.
 	GetProjectRoom(ctx context.Context, in *GetProjectRoomRequest, opts ...grpc.CallOption) (*GetProjectRoomResponse, error)
+	// The owner's git name and email from the Mac (findings 21 and 22),
+	// written as work into work's ~/.gitconfig with git config --file, each
+	// only when work's git has none of its own (~/.gitconfig or
+	// ~/.config/git/config): what the owner set in the workspace is never
+	// replaced. Agents keep their own identities (ADR 0022). A value with a
+	// control or bidi character, an angle bracket or over the length limit is
+	// InvalidArgument; an empty one is left out.
+	SetWorkGitIdentity(ctx context.Context, in *SetWorkGitIdentityRequest, opts ...grpc.CallOption) (*SetWorkGitIdentityResponse, error)
 	// The bundle git-remote-portenv handed in for a push (R-0391), once:
 	// it's deleted as it's read.
 	ReadPushBundle(ctx context.Context, in *ReadPushBundleRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ReadPushBundleResponse], error)
@@ -483,6 +492,16 @@ func (c *agentServiceClient) GetProjectRoom(ctx context.Context, in *GetProjectR
 	return out, nil
 }
 
+func (c *agentServiceClient) SetWorkGitIdentity(ctx context.Context, in *SetWorkGitIdentityRequest, opts ...grpc.CallOption) (*SetWorkGitIdentityResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetWorkGitIdentityResponse)
+	err := c.cc.Invoke(ctx, AgentService_SetWorkGitIdentity_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *agentServiceClient) ReadPushBundle(ctx context.Context, in *ReadPushBundleRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ReadPushBundleResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	stream, err := c.cc.NewStream(ctx, &AgentService_ServiceDesc.Streams[7], AgentService_ReadPushBundle_FullMethodName, cOpts...)
@@ -749,6 +768,14 @@ type AgentServiceServer interface {
 	CloneProject(grpc.ClientStreamingServer[CloneProjectRequest, CloneProjectResponse]) error
 	// Whether the project folder exists, and the room left for it.
 	GetProjectRoom(context.Context, *GetProjectRoomRequest) (*GetProjectRoomResponse, error)
+	// The owner's git name and email from the Mac (findings 21 and 22),
+	// written as work into work's ~/.gitconfig with git config --file, each
+	// only when work's git has none of its own (~/.gitconfig or
+	// ~/.config/git/config): what the owner set in the workspace is never
+	// replaced. Agents keep their own identities (ADR 0022). A value with a
+	// control or bidi character, an angle bracket or over the length limit is
+	// InvalidArgument; an empty one is left out.
+	SetWorkGitIdentity(context.Context, *SetWorkGitIdentityRequest) (*SetWorkGitIdentityResponse, error)
 	// The bundle git-remote-portenv handed in for a push (R-0391), once:
 	// it's deleted as it's read.
 	ReadPushBundle(*ReadPushBundleRequest, grpc.ServerStreamingServer[ReadPushBundleResponse]) error
@@ -895,6 +922,9 @@ func (UnimplementedAgentServiceServer) CloneProject(grpc.ClientStreamingServer[C
 }
 func (UnimplementedAgentServiceServer) GetProjectRoom(context.Context, *GetProjectRoomRequest) (*GetProjectRoomResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetProjectRoom not implemented")
+}
+func (UnimplementedAgentServiceServer) SetWorkGitIdentity(context.Context, *SetWorkGitIdentityRequest) (*SetWorkGitIdentityResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetWorkGitIdentity not implemented")
 }
 func (UnimplementedAgentServiceServer) ReadPushBundle(*ReadPushBundleRequest, grpc.ServerStreamingServer[ReadPushBundleResponse]) error {
 	return status.Error(codes.Unimplemented, "method ReadPushBundle not implemented")
@@ -1313,6 +1343,24 @@ func _AgentService_GetProjectRoom_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AgentService_SetWorkGitIdentity_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetWorkGitIdentityRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentServiceServer).SetWorkGitIdentity(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentService_SetWorkGitIdentity_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentServiceServer).SetWorkGitIdentity(ctx, req.(*SetWorkGitIdentityRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _AgentService_ReadPushBundle_Handler(srv interface{}, stream grpc.ServerStream) error {
 	m := new(ReadPushBundleRequest)
 	if err := stream.RecvMsg(m); err != nil {
@@ -1664,6 +1712,10 @@ var AgentService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetProjectRoom",
 			Handler:    _AgentService_GetProjectRoom_Handler,
+		},
+		{
+			MethodName: "SetWorkGitIdentity",
+			Handler:    _AgentService_SetWorkGitIdentity_Handler,
 		},
 		{
 			MethodName: "EnsureAgentUser",

@@ -78,13 +78,17 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # tmux is pinned to 3.4: the helper's control mode was measured on it and
 # refuses older (ADR 0020, decision 10); raising it reruns the spike's tests.
 # Base toolchain. The stock "ubuntu" user (uid 1000) is removed so "work" can
-# take uid 1000.
+# take uid 1000. git runs an editor for a merge's message: nano is Debian's
+# `editor` (git's default when EDITOR is unset), with vim-tiny for vi
+# (finding 22: git merge failed with "unable to start editor 'editor'").
 RUN userdel --remove ubuntu \
  && apt-get update \
  && apt-get install -y --no-install-recommends \
       acl build-essential ca-certificates curl git gnupg jq less libcap2-bin locales \
-      openssh-client postgresql-client procps python3 python3-pip \
-      python3-venv ripgrep sudo 'tmux=3.4-*' tzdata unzip xz-utils \
+      nano openssh-client postgresql-client procps python3 python3-pip \
+      python3-venv ripgrep sudo 'tmux=3.4-*' tzdata unzip vim-tiny xz-utils \
+ && update-alternatives --set editor "$(update-alternatives --list editor | grep -m1 '/nano$')" \
+ && test "$(readlink -f "$(command -v editor)")" = "$(readlink -f "$(command -v nano)")" \
  && rm -rf /var/lib/apt/lists/*
 
 RUN case "$TARGETARCH" in \

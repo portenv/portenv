@@ -118,14 +118,14 @@ func emptyProject() *daemonv1.ProjectSource {
 	return &daemonv1.ProjectSource{Source: &daemonv1.ProjectSource_Empty{Empty: true}}
 }
 
-func useFakeGitHub(s *Server, gh *fakeGitHub) {
-	s.githubAPI, s.githubGit = gh.api, gh.git
+// withGitHub points the server at a fake GitHub before it serves.
+func withGitHub(gh *fakeGitHub) func(*Server) {
+	return func(s *Server) { s.githubAPI, s.githubGit = gh.api, gh.git }
 }
 
 func TestApplyClonesThenWritesTheTeam(t *testing.T) {
-	s, fake, c := servingProject(t)
 	gh := newFakeGitHub(t, false)
-	useFakeGitHub(s, gh)
+	s, fake, c := servingProject(t, withGitHub(gh))
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	if err := keepSetup(filepath.Join(s.env.Dir, "state", "box-1"), &daemonv1.WorkspaceSetup{Project: githubURL("https://github.com/acme/api.git", false), Team: approvedChoice(t, "starter")}); err != nil {
@@ -182,10 +182,10 @@ func scanFor(t *testing.T, b []byte, roots ...string) {
 // clone worked or not.
 func TestAPrivateCloneKeepsTheSignInOnTheMac(t *testing.T) {
 	var logs bytes.Buffer
-	s, fake, c := servingProject(t)
-	s.log = slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	gh := newFakeGitHub(t, true)
-	useFakeGitHub(s, gh)
+	s, fake, c := servingProject(t, withGitHub(gh), func(s *Server) {
+		s.log = slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	})
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	state := filepath.Join(s.env.Dir, "state", "box-1")
@@ -196,6 +196,10 @@ func TestAPrivateCloneKeepsTheSignInOnTheMac(t *testing.T) {
 	r, err := c.ApplyTeamPlan(ctx, &daemonv1.ApplyTeamPlanRequest{Name: "acme-api"})
 	if err != nil || !r.GetNeedsToken() || r.GetApplied() || len(gh.auths) != 0 || len(fake.clones) != 0 {
 		t.Fatalf("no token: %v %v %v", r, err, gh.auths)
+	}
+	// The window names the repository while it tries again (R-0409).
+	if r.GetProject() != "acme/api" {
+		t.Fatalf("the project isn't named: %q", r.GetProject())
 	}
 	// A sign-in GitHub refuses: the line, the setup kept.
 	r, err = c.ApplyTeamPlan(ctx, &daemonv1.ApplyTeamPlanRequest{Name: "acme-api", GithubToken: wrongToken})
@@ -224,12 +228,62 @@ func TestAPrivateCloneKeepsTheSignInOnTheMac(t *testing.T) {
 	}
 }
 
+// A private repository kept without a sign-in (the owner was signed out at
+// Create): GitHub's refusal of the plain fetch asks the app for the
+// sign-in, so signing in afterwards and Try Again clone it. Until then
+// nothing is written; the sign-in is used for that fetch alone, on the Mac.
+func TestSigningInAfterCreateClonesAPrivateRepository(t *testing.T) {
+	var logs bytes.Buffer
+	gh := newFakeGitHub(t, true)
+	s, fake, c := servingProject(t, withGitHub(gh), func(s *Server) {
+		s.log = slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	state := filepath.Join(s.env.Dir, "state", "box-1")
+	if err := keepSetup(state, &daemonv1.WorkspaceSetup{Project: githubURL("https://github.com/acme/api", false), Team: approvedChoice(t, "starter")}); err != nil {
+		t.Fatal(err)
+	}
+	// Signed out (or not yet read): the plain fetch is refused, and the
+	// app is asked for the sign-in; nothing written, the setup kept.
+	r, err := c.ApplyTeamPlan(ctx, &daemonv1.ApplyTeamPlanRequest{Name: "acme-api"})
+	if err != nil || !r.GetNeedsToken() || r.GetApplied() || fake.writes != 0 || len(fake.clones) != 0 {
+		t.Fatalf("no sign-in: %v %v", r, err)
+	}
+	for _, a := range gh.auths {
+		if a != "" {
+			t.Fatalf("a sign-in was sent before GitHub asked for one: %q", a)
+		}
+	}
+	if kept, _ := loadSetup(state); kept == nil || kept.GetTeam().GetTemplate() != "starter" {
+		t.Fatal("the setup wasn't kept")
+	}
+	// The owner signed in since: Try Again carries the sign-in.
+	r, err = c.ApplyTeamPlan(ctx, &daemonv1.ApplyTeamPlanRequest{Name: "acme-api", GithubToken: testToken})
+	if err != nil || !r.GetApplied() || len(r.GetPinned()) != 3 {
+		t.Fatalf("after signing in: %v %v", r, err)
+	}
+	for _, b := range fake.bundles {
+		if bytes.Contains(b, []byte(testToken)) {
+			t.Fatal("the sign-in went into the workspace with the bundle")
+		}
+	}
+	for _, st := range fake.clones {
+		if strings.Contains(st.String(), testToken) {
+			t.Fatal("the sign-in went into the workspace with the clone's start")
+		}
+	}
+	scanFor(t, []byte(testToken), s.env.Dir, fake.root, os.TempDir())
+	if strings.Contains(logs.String(), testToken) {
+		t.Fatal("the sign-in is in portenvd's log")
+	}
+}
+
 // A failed clone: one plain line, nothing written or pinned, the setup
 // kept; Try Again goes through.
 func TestAFailedCloneKeepsTheSetup(t *testing.T) {
-	s, fake, c := servingProject(t)
 	gh := newFakeGitHub(t, false)
-	useFakeGitHub(s, gh)
+	s, fake, c := servingProject(t, withGitHub(gh))
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	state := filepath.Join(s.env.Dir, "state", "box-1")
@@ -242,7 +296,6 @@ func TestAFailedCloneKeepsTheSetup(t *testing.T) {
 		signIn    bool
 		wantStart string
 	}{
-		{"a private repository, no sign-in", func() { s.githubGit = gh.git + "/nope" }, true, "This repository needs a sign-in. Sign in with GitHub, then try again."},
 		{"the helper refuses the bundle", func() {
 			s.githubGit = gh.git
 			fake.cloneErr = status.Error(codes.FailedPrecondition, "Portenv couldn’t clone github.com/acme/api: its bundle was refused.")
@@ -252,7 +305,7 @@ func TestAFailedCloneKeepsTheSetup(t *testing.T) {
 	} {
 		tc.set()
 		r, err := c.ApplyTeamPlan(ctx, &daemonv1.ApplyTeamPlanRequest{Name: "acme-api"})
-		if err != nil || r.GetApplied() || r.GetNeedsSignIn() != tc.signIn || !strings.HasPrefix(r.GetProjectError(), tc.wantStart) || len(r.GetPinned()) != 0 {
+		if err != nil || r.GetApplied() || r.GetNeedsSignIn() != tc.signIn || !strings.HasPrefix(r.GetProjectError(), tc.wantStart) || len(r.GetPinned()) != 0 || r.GetProject() != "acme/api" {
 			t.Fatalf("%s: %v %v", tc.name, r, err)
 		}
 		if fake.writes != 0 {
@@ -264,6 +317,20 @@ func TestAFailedCloneKeepsTheSetup(t *testing.T) {
 		if ents, _ := os.ReadDir(filepath.Join(s.env.Dir, "clone")); len(ents) != 0 {
 			t.Fatalf("%s: the bundle was left behind: %v", tc.name, ents)
 		}
+	}
+	// GitHub refuses the plain fetch: the app is asked for the sign-in; one
+	// GitHub refuses too gives the line, and the setup stays.
+	fake.free = 0
+	s.githubGit = gh.git + "/nope"
+	if r, err := c.ApplyTeamPlan(ctx, &daemonv1.ApplyTeamPlanRequest{Name: "acme-api"}); err != nil || !r.GetNeedsToken() || r.GetApplied() {
+		t.Fatalf("a refused plain fetch: %v %v", r, err)
+	}
+	if r, err := c.ApplyTeamPlan(ctx, &daemonv1.ApplyTeamPlanRequest{Name: "acme-api", GithubToken: wrongToken}); err != nil || r.GetApplied() || !r.GetNeedsSignIn() ||
+		!strings.HasPrefix(r.GetProjectError(), "Your GitHub sign-in in Portenv has ended") || fake.writes != 0 {
+		t.Fatalf("a refused sign-in: %v %v", r, err)
+	}
+	if kept, _ := loadSetup(state); kept == nil {
+		t.Fatal("the setup wasn't kept after a refused sign-in")
 	}
 	s.githubGit = gh.git
 	r, err := c.ApplyTeamPlan(ctx, &daemonv1.ApplyTeamPlanRequest{Name: "acme-api"})
@@ -291,8 +358,7 @@ func TestApplyEmptyWithNoTeam(t *testing.T) {
 
 // A GitHub repository with no team is cloned, and that's all.
 func TestApplyCloneWithNoTeam(t *testing.T) {
-	s, fake, c := servingProject(t)
-	useFakeGitHub(s, newFakeGitHub(t, false))
+	s, fake, c := servingProject(t, withGitHub(newFakeGitHub(t, false)))
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	if err := keepSetup(filepath.Join(s.env.Dir, "state", "box-1"), &daemonv1.WorkspaceSetup{Project: githubURL("https://github.com/acme/api", false)}); err != nil {
@@ -343,18 +409,14 @@ func TestCheckSetup(t *testing.T) {
 // GitHub's size first: a repository too big for the workspace with its
 // team is refused before any byte is fetched.
 func TestTooBigIsRefusedBeforeAnyByte(t *testing.T) {
-	s, fake, c := servingProject(t)
-	gh := newFakeGitHub(t, false)
 	gitHits := 0
 	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`{"size": 80000000}`)) // 82 GB
 	}))
 	defer api.Close()
-	s.githubAPI = api.URL
-	s.githubGit = gh.git
 	counting := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { gitHits++; http.NotFound(w, nil) }))
 	defer counting.Close()
-	s.githubGit = counting.URL
+	s, fake, c := servingProject(t, func(s *Server) { s.githubAPI, s.githubGit = api.URL, counting.URL })
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := keepSetup(filepath.Join(s.env.Dir, "state", "box-1"), &daemonv1.WorkspaceSetup{Project: githubURL("https://github.com/acme/api", false)}); err != nil {
@@ -368,9 +430,8 @@ func TestTooBigIsRefusedBeforeAnyByte(t *testing.T) {
 
 // A public repository never gets the sign-in, even when the app has one.
 func TestAPublicCloneNeverSendsTheSignIn(t *testing.T) {
-	s, _, c := servingProject(t)
 	gh := newFakeGitHub(t, false)
-	useFakeGitHub(s, gh)
+	s, _, c := servingProject(t, withGitHub(gh))
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	if err := keepSetup(filepath.Join(s.env.Dir, "state", "box-1"), &daemonv1.WorkspaceSetup{Project: githubURL("https://github.com/acme/api", false)}); err != nil {

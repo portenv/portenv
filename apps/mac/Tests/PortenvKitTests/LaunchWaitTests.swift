@@ -283,6 +283,112 @@ struct LaunchWaitTests {
         #expect(!again) // never below zero
     }
 
+    /// The login item as launchd and ServiceManagement see it: a rebuilt
+    /// app's portenvd that launchd won't spawn (exit 78, "needs LWCR
+    /// update"), until it's registered afresh, if that fixes it (R-0401).
+    @MainActor final class FakeLoginItem {
+        enum State { case running, spawnRefused, notRegistered, awaitingApproval }
+        var state: State
+        /// What one unregister-then-register leaves.
+        let afterReRegister: State
+        private(set) var reRegisters = 0
+        init(_ state: State, afterReRegister: State) {
+            self.state = state
+            self.afterReRegister = afterReRegister
+        }
+        func ping() -> Bool { state == .running }
+        /// The real mapping, from the status and launchctl's print.
+        func problem() -> BackgroundServiceProblem? {
+            let status: ServiceStatus = switch state {
+            case .running, .spawnRefused: .enabled
+            case .notRegistered: .notRegistered
+            case .awaitingApproval: .requiresApproval
+            }
+            let job = state == .spawnRefused ? "state = not running\n\tlast exit code = 78: EX_CONFIG\n" : ""
+            return BackgroundServiceProblem.of(status: status, launchdJob: job, placement: .applications)
+        }
+        func reRegister() {
+            reRegisters += 1
+            state = afterReRegister
+        }
+        /// A wait that never ends fails the test instead of hanging it:
+        /// past this many sleeps (about 40 s of checks) it's cancelled.
+        private var sleeps = 0
+        func run(reports: Reports) async -> LaunchWait.RunOutcome {
+            await LaunchWait.run(ping: { self.ping() }, problem: { self.problem() },
+                                 report: { reports.all.append($0) },
+                                 sleep: { _ in
+                                     self.sleeps += 1
+                                     if self.sleeps > 200 { withUnsafeCurrentTask { $0?.cancel() } }
+                                 },
+                                 reRegister: { self.reRegister() },
+                                 boxes: { ["acme-api"] }, decide: { _ in })
+        }
+    }
+
+    /// launchd won't spawn the rebuilt portenvd; registering it afresh,
+    /// once and silently, brings it up, and no error ever shows (R-0401).
+    @Test func aRefusedSpawnIsReRegisteredSilently() async {
+        let item = FakeLoginItem(.spawnRefused, afterReRegister: .running)
+        let reports = Reports()
+        #expect(await item.run(reports: reports) == .decided)
+        #expect(item.reRegisters == 1)
+        #expect(reports.all.isEmpty)
+    }
+
+    /// Still refused after the one silent re-register: the error line,
+    /// with Try Again, after exactly one attempt; never a loop.
+    @Test func aSecondRefusalShowsTheErrorAfterOneAttempt() async {
+        let item = FakeLoginItem(.spawnRefused, afterReRegister: .spawnRefused)
+        let reports = Reports()
+        let outcome = await item.run(reports: reports)
+        guard case let .refused(p) = outcome else {
+            Issue.record("expected the refusal, got \(outcome)")
+            return
+        }
+        #expect(p.message == ServiceText.notStarted)
+        #expect(p.offersTryAgain)
+        #expect(item.reRegisters == 1)
+        #expect(reports.all.isEmpty)
+        // Try Again starts a new wait, which may try once more itself.
+        _ = await item.run(reports: reports)
+        #expect(item.reRegisters == 2)
+    }
+
+    /// A login item that isn't registered is registered afresh once,
+    /// silently, too.
+    @Test func anUnregisteredItemIsReRegisteredSilently() async {
+        let item = FakeLoginItem(.notRegistered, afterReRegister: .running)
+        let reports = Reports()
+        #expect(await item.run(reports: reports) == .decided)
+        #expect(item.reRegisters == 1)
+        #expect(reports.all.isEmpty)
+    }
+
+    /// A normal start: portenvd answers and nothing is registered again.
+    @Test func aNormalStartNeverReRegisters() async {
+        let item = FakeLoginItem(.running, afterReRegister: .running)
+        let reports = Reports()
+        #expect(await item.run(reports: reports) == .decided)
+        #expect(item.reRegisters == 0)
+        #expect(reports.all.isEmpty)
+    }
+
+    /// Waiting for the person's approval is theirs to give: no
+    /// re-register, the approval line, and the wait goes on.
+    @Test func approvalIsNeverReRegistered() async {
+        let item = FakeLoginItem(.awaitingApproval, afterReRegister: .running)
+        let reports = Reports()
+        var pings = 0
+        let outcome = await LaunchWait.untilAnswered(
+            ping: { pings += 1; if pings > 2 * LaunchWait.pingsPerCheck { item.state = .running }; return item.ping() },
+            problem: { item.problem() }, report: { reports.all.append($0) }, sleep: { _ in },
+            reRegister: { item.reRegister() })
+        #expect(outcome == .answered)
+        #expect(item.reRegisters == 0)
+        #expect(reports.all.first == .problem(BackgroundServiceProblem.of(status: .requiresApproval, launchdJob: "", placement: .applications)!))
+    }
+
     /// The spinner has words for VoiceOver.
     @Test func theSpinnerIsLabelled() {
         #expect(LaunchWait.starting == "Starting Portenv\u{2026}")

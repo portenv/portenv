@@ -34,6 +34,15 @@ public enum WindowPlacement {
         return CGRect(x: main.midX - width / 2, y: main.midY - height / 2, width: width, height: height)
     }
 
+    /// Whether a window is full screen for placing it (R-0408): its style
+    /// says so, another tab in its group does (a tab joining a full-screen
+    /// group, or one behind the tab in front, can become key before its own
+    /// style says so), or its frame is its whole display. Such a window is
+    /// macOS's to place; moving it shrank it inside its full-screen Space.
+    public static func isFullScreen(styleSays: Bool, tabsSay: Bool, frame: CGRect, screen: CGRect?) -> Bool {
+        styleSays || tabsSay || (screen.map { $0 == frame } ?? false)
+    }
+
     /// First run's window: the board's size (R-0186), centred on the
     /// display the app was launched from, the one under the pointer then
     /// (R-0196's note: it once opened full screen on the other display).

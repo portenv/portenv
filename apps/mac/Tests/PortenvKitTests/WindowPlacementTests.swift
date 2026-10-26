@@ -93,4 +93,28 @@ struct WindowPlacementTests {
         // With no screens known, still left alone.
         #expect(WindowPlacement.visible(fullScreenOnLaptop, screens: [], fullScreen: true) == fullScreenOnLaptop)
     }
+
+    /// R-0408 (8, 9): full screen with workspace tabs. A tab joining a
+    /// full-screen group, or one behind the tab in front, can become key
+    /// before its own style says full screen while its frame already fills
+    /// the display. Moved as if off screen, it shrank to the laptop's
+    /// visible size inside the full-screen Space (57% of the external
+    /// display): the title bar and tab strip cut short, the toolbar's items
+    /// in an overflow (») with no inspector toggle. A window counts as full
+    /// screen when it says so, when another tab in its group does, or when
+    /// its frame is its whole display.
+    @Test func aTabOfAFullScreenGroupCountsAsFullScreen() {
+        let display = CGRect(x: 1470, y: -484, width: 2560, height: 1440)
+        let filling = display
+        let windowed = CGRect(x: 1600, y: 0, width: 1200, height: 800)
+        #expect(WindowPlacement.isFullScreen(styleSays: true, tabsSay: false, frame: windowed, screen: display))
+        #expect(WindowPlacement.isFullScreen(styleSays: false, tabsSay: true, frame: windowed, screen: display))
+        #expect(WindowPlacement.isFullScreen(styleSays: false, tabsSay: false, frame: filling, screen: display))
+        #expect(!WindowPlacement.isFullScreen(styleSays: false, tabsSay: false, frame: windowed, screen: display))
+        #expect(!WindowPlacement.isFullScreen(styleSays: false, tabsSay: false, frame: windowed, screen: nil))
+        // And so it is never moved: before, the title-bar check shrank it.
+        #expect(WindowPlacement.visible(filling, screens: [laptop, external]) != filling)
+        let full = WindowPlacement.isFullScreen(styleSays: false, tabsSay: false, frame: filling, screen: display)
+        #expect(WindowPlacement.visible(filling, screens: [laptop, external], fullScreen: full) == filling)
+    }
 }

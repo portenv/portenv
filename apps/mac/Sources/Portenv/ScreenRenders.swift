@@ -256,17 +256,20 @@ enum ScreenRenders {
             team.projectKind = .github
             team.githubURL = "https://github.com/acme/acme-api"
             try snapshot(FirstRunView(flow: team, opened: { _ in }, cancel: {}, followsDocker: false), name: "new-workspace-project", size: NSSize(width: 880, height: 660), in: dir)
+            try snapshotSizes(FirstRunView(flow: team, opened: { _ in }, cancel: {}, followsDocker: false), name: "new-workspace-project", in: dir)
             await team.next()
             await team.team.load()
             await team.team.choose("starter")
             await team.team.setModel("reviewer", "opus")
             try snapshot(FirstRunView(flow: team, opened: { _ in }, cancel: {}, followsDocker: false), name: "new-workspace-team", size: NSSize(width: 880, height: 660), in: dir)
+            try snapshotSizes(FirstRunView(flow: team, opened: { _ in }, cancel: {}, followsDocker: false), name: "new-workspace-team", in: dir)
             await team.next()
             team.team.opened("lead")
             team.team.approve("lead")
             team.team.opened("builder")
             team.team.reviewing = "reviewer"
             try snapshot(FirstRunView(flow: team, opened: { _ in }, cancel: {}, followsDocker: false), name: "new-workspace-review", size: NSSize(width: 880, height: 660), in: dir)
+            try snapshotSizes(FirstRunView(flow: team, opened: { _ in }, cancel: {}, followsDocker: false), name: "new-workspace-review", in: dir)
             // Portenv › Settings…, each pane (R-0137).
             try await SettingsRender.render(to: dir)
             return 0
@@ -434,6 +437,19 @@ enum ScreenRenders {
         try snapshot(view: { NSHostingView(rootView: view.frame(width: size.width, height: size.height).environment(\.isRendering, true)
                                 .environment(\.controlActiveState, .key)) },
                      name: name, size: size, in: dir)
+    }
+
+    /// New workspace's steps at the window's minimum and full screen: each
+    /// must lay out within the window, never wider or taller (the Team step
+    /// was cut off on both sides at the minimum).
+    private static func snapshotSizes(_ view: some View, name: String, in dir: URL) throws {
+        for (suffix, size) in [("min", NSSize(width: 720, height: 520)), ("full", NSSize(width: 1512, height: 945))] {
+            let fit = NSHostingController(rootView: view.environment(\.isRendering, true)).sizeThatFits(in: size)
+            if fit.width > size.width + 0.5 || fit.height > size.height + 0.5 {
+                throw FirstRunError("\(name)-\(suffix) needs \(Int(fit.width.rounded())) × \(Int(fit.height.rounded())) pt and has \(Int(size.width)) × \(Int(size.height))")
+            }
+            try snapshot(view, name: "\(name)-\(suffix)", size: size, in: dir)
+        }
     }
 
     /// Fails when the view, at its own height with every text wrapped, is

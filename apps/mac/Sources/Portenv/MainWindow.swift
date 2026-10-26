@@ -20,6 +20,8 @@ struct MainWindow: View {
     @AppStorage private var sidebarChoice: String
     /// Below 900 pt the sidebar is compact (GUIDELINES 6.2).
     @State private var narrow = false
+    /// The sidebar's selection changes, counted, for the terminal's landing.
+    @State private var selectionChanges = 0
     /// Renders only (ScreenRenders): a sample terminal in place of
     /// `portenv attach`.
     private let renderTerminal: (() -> NSView)?
@@ -67,6 +69,8 @@ struct MainWindow: View {
             .sheet(item: Binding(get: { team?.push.asking }, set: { _ in })) { ask in
                 if let push = team?.push { PushSheet(ask: ask, workspace: controller.box, push: push) }
             }
+            // Delete Workspace… waits while an agent runs (R-0358).
+            .onChange(of: team?.state.agentsRunning ?? false, initial: true) { _, on in controller.agentsRunning = on }
             .onGeometryChange(for: Bool.self) { $0.size.width < 900 } action: { narrow = $0 }
             // The terminal side and the inspector share the window's width;
             // only the window has a minimum width (R-0073, R-0075).
@@ -89,15 +93,8 @@ struct MainWindow: View {
             }
             .navigationTitle(controller.box)
             // Keep Waiting's way out (R-0178), next to "Waiting for …".
-            // Split Right and Split Down, in the title bar (the board),
-            // while the workspace's terminal shows.
-            .toolbar {
-                if let split, splitShows {
-                    ToolbarItemGroup(placement: .primaryAction) {
-                        SplitToolbarButtons(split: split)
-                    }
-                }
-            }
+            // Split Right and Split Down are in the tab bar, You's alone
+            // (R-0410), never in the toolbar.
             .toolbar {
                 if let place = controller.waitingFor {
                     ToolbarItem(placement: .primaryAction) {
@@ -252,7 +249,8 @@ struct MainWindow: View {
             VStack(spacing: 0) {
                 HStack(spacing: 0) {
                     TabBar(tabs: tabs, team: team?.state.agents ?? [],
-                           paneFrame: { split?.paneFrame(forTab: $0) })
+                           paneFrame: { split?.paneFrame(forTab: $0) },
+                           split: splitShows ? split : nil)
                     // An agent's tabs only: All tabs at the trailing end
                     // brings back every tab (R-0241).
                     if team != nil, tabs.selection != .allTabs {
@@ -273,6 +271,8 @@ struct MainWindow: View {
                     .onChange(of: team?.selection, initial: true) {
                         tabs.view(team?.selection ?? .allTabs)
                         split?.tabsChanged()
+                        // The tab on screen lands at its prompt (GUIDELINES §4.1).
+                        selectionChanges += 1
                     }
                     // The tab bar widened the selection itself (a new tab, a
                     // pane showing another agent's tab): the sidebar follows.
@@ -297,7 +297,8 @@ struct MainWindow: View {
                         MainTabTerminal(shown: TabTerminalShown(provider: provider), box: controller.box, tab: tab.id,
                                         generation: controller.terminalGeneration, label: terminalLabel,
                                         tabName: TerminalLabel.title(tab, team: team?.state.agents ?? []),
-                                        serviceComing: controller.reconnectingToService)
+                                        serviceComing: controller.reconnectingToService,
+                                        selectionChanges: selectionChanges)
                     } else if !AppTerminal.attached, controller.tabTerminals != nil {
                         // The tabs aren't known yet: "Opening <workspace>…",
                         // never a bare background (R-0384).

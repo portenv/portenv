@@ -92,3 +92,13 @@ func TestGuideSaysShareLoginIsOff(t *testing.T) {
 		t.Error("portenv guide doesn't say share_login is off")
 	}
 }
+
+// The app's Fetch (ADR 0022 §2a): portenv share's entry names the owner's
+// Fetch first, the command line after it.
+func TestGuideNamesTheOwnersFetchFirst(t *testing.T) {
+	text := NewGuide().Text()
+	fetch, cli := strings.Index(text, "the owner chooses Fetch in Portenv"), strings.Index(text, "portenv app fetch-agent <workspace> <id>")
+	if fetch < 0 || cli < 0 || fetch > cli {
+		t.Errorf("portenv guide doesn't name Fetch first (Fetch at %d, the command at %d)", fetch, cli)
+	}
+}

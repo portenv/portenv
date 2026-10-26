@@ -13,6 +13,7 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
 
@@ -357,5 +358,37 @@ func (w *watchStream) Send(r *daemonv1.WatchTeamResponse) error {
 		return nil
 	case <-w.ctx.Done():
 		return w.ctx.Err()
+	}
+}
+
+// R-0413: StartAgent's refusal while the team's first start waits for the
+// owner is FailedPrecondition with the trailer portenv-refusal:
+// team-start-pending, so the app shows its own hint and never reads the
+// words; the words stay the CLI's. Any other refusal has no trailer.
+func TestTeamStartPendingIsMarked(t *testing.T) {
+	e, _, _ := newTestEngine(t, defaultTeam()...)
+	s := limitServer(t, e)
+	s.teamPumps = map[string]bool{"w": true} // no helper to pump in this test
+	start := func(id string) (metadata.MD, error) {
+		stream := &trailerStream{}
+		ctx := grpc.NewContextWithServerTransportStream(ownerCtx(), stream)
+		_, err := s.StartAgent(ctx, &daemonv1.StartAgentRequest{Name: "w", AgentId: id})
+		return stream.trailer, err
+	}
+	for _, id := range []string{"lead", "builder"} { // raises the decision, then joins it
+		trailer, err := start(id)
+		if status.Code(err) != codes.FailedPrecondition {
+			t.Fatalf("%s: code %v (%v)", id, status.Code(err), err)
+		}
+		if got := trailer.Get(RefusalTrailer); len(got) != 1 || got[0] != RefusalTeamStartPending {
+			t.Fatalf("%s: trailer %v", id, trailer)
+		}
+		if msg := status.Convert(err).Message(); msg != "approve the team's first start in Portenv first" {
+			t.Errorf("%s: the CLI's line is %q", id, msg)
+		}
+	}
+	trailer, err := start("nobody")
+	if err == nil || len(trailer.Get(RefusalTrailer)) != 0 {
+		t.Fatalf("another refusal: %v, trailer %v", err, trailer)
 	}
 }

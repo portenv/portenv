@@ -250,6 +250,10 @@ model: opus         # one of that entry's models; omitted means the entry's firs
 ### 10. Logins stay manual
 
 - Each runner signs in in the agent's own tab, the first time it starts there; the registry's `login_hint` is the agent's row line until it's done. The login stays in the agent's home and travels with the workspace (ADR 0022 §2).
+- **The owner's credentials and an agent's runner login follow different rules** (the owner, 2026-10-26, on CC-0690, R-0411 and R-0414):
+  - **The owner's credentials never enter a workspace** (R-0391): the GitHub sign-in (section 6), deploy secrets and any access given to agents from outside stay on the Mac, not even in memory in the workspace.
+  - **An agent's runner login is that agent's own identity**, so it lives where its runner runs: the files the runner writes in the agent's home (the registry's `login_files`, for example Claude Code's `.claude/.credentials.json` and `.claude.json`), 0600, in the agent's 0700 home. No other agent can read them. They're never copied from one agent to another, and never into a template, a saved team or an export (section 7); `share_login` copies nothing.
+  - **Tested:** `tests/team-boundary`'s row "an agent can't read another agent's runner login" opens another agent's login files as an agent and must get EACCES; its mutation loosens the home and the files, and the row must then fail.
 - **No credentials in templates, ever** (section 7), and Create copies none.
 - **`share_login` stays a no-op:** `portenvd` parses it, no decision is raised, and the helper copies nothing. The review screen says "Asks to share your Claude Code sign-in: not available yet, left out." How a runner's login could be offered per runner later is an open question.
 

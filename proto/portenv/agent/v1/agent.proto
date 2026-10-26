@@ -80,6 +80,14 @@ service AgentService {
   rpc CloneProject(stream CloneProjectRequest) returns (CloneProjectResponse);
   // Whether the project folder exists, and the room left for it.
   rpc GetProjectRoom(GetProjectRoomRequest) returns (GetProjectRoomResponse);
+  // The owner's git name and email from the Mac (findings 21 and 22),
+  // written as work into work's ~/.gitconfig with git config --file, each
+  // only when work's git has none of its own (~/.gitconfig or
+  // ~/.config/git/config): what the owner set in the workspace is never
+  // replaced. Agents keep their own identities (ADR 0022). A value with a
+  // control or bidi character, an angle bracket or over the length limit is
+  // InvalidArgument; an empty one is left out.
+  rpc SetWorkGitIdentity(SetWorkGitIdentityRequest) returns (SetWorkGitIdentityResponse);
   // The bundle git-remote-portenv handed in for a push (R-0391), once:
   // it's deleted as it's read.
   rpc ReadPushBundle(ReadPushBundleRequest) returns (stream ReadPushBundleResponse);
@@ -144,6 +152,10 @@ service AgentService {
   // database, and every later shell and agent runner gets TZ. A name
   // that isn't a known IANA zone falls back to UTC.
   rpc SetTimeZone(SetTimeZoneRequest) returns (SetTimeZoneResponse);
+  // Says whether the agent's main pane would take a routine or a wake-up
+  // now, under exactly their checks, and types nothing: portenvd's way to
+  // notice a runner whose idle prompt it doesn't recognise (R-0411).
+  rpc CheckAgentIdle(CheckAgentIdleRequest) returns (CheckAgentIdleResponse);
 }
 
 message RunResticRequest {
@@ -662,10 +674,12 @@ message StartTeamAgentRequest {
   // at most 100 MB together, new files only; ~/.portenv-seeded records it.
   repeated string home_seed = 4;
   int64 home_quota_bytes = 5;
-  // The runner's idle-input pattern (RE2, matched against the main pane's
-  // last line) from portenvd's runner table: DeliverRoutine types only
-  // when it matches, with no question on screen, 5 s of quiet and not the
-  // alternate screen. Empty: routines are off for this runner (R-0258).
+  // The runner's idle-input pattern from portenvd's runner table: RE2,
+  // matched against one whole line of the main pane, on each of its last
+  // idle_lines non-empty lines. DeliverRoutine and WakeAgent type only
+  // when it finds the runner's empty input there, with no question on
+  // screen under it, 5 s of quiet and not the alternate screen. Empty:
+  // routines and wake-ups are off for this runner (R-0258, CC-0498).
   string idle_pattern = 6;
   // The owner's project, /home/work/<workspace>, for an agent with
   // checkout: own (ADR 0022 §2a): the helper makes the agent's own clone
@@ -687,6 +701,10 @@ message StartTeamAgentRequest {
   // The agent's display name, for its clone's git identity
   // ("<name> (Portenv agent)", set when the clone is made).
   string agent_name = 10;
+  // How many of the main pane's last non-empty lines idle_pattern is
+  // tried on, 1 to 8, from the bottom: a runner may draw a rule and a
+  // status footer under its input. 0 means 1, the last line.
+  int32 idle_lines = 11;
 }
 
 // One writer's clone and the lenses that may read it.
@@ -957,6 +975,28 @@ message SetTimeZoneResponse {
   string zone = 1;
 }
 
+message CheckAgentIdleRequest {
+  string agent_id = 1;
+}
+
+// What CheckAgentIdle saw in an agent's main pane.
+enum AgentIdleCheck {
+  AGENT_IDLE_CHECK_UNSPECIFIED = 0;
+  // At its empty input: a routine or a wake-up would be typed.
+  AGENT_IDLE_CHECK_IDLE = 1;
+  // Printing, asking something, a secret prompt or a full-screen program.
+  AGENT_IDLE_CHECK_BUSY = 2;
+  // Quiet and not asking, but the runner's idle rule finds no empty input:
+  // something typed, or a screen Portenv doesn't recognise.
+  AGENT_IDLE_CHECK_NO_PROMPT = 3;
+  // The runner has no idle rule.
+  AGENT_IDLE_CHECK_NO_RULE = 4;
+}
+
+message CheckAgentIdleResponse {
+  AgentIdleCheck check = 1;
+}
+
 message WriteAgentFilesRequest {
   // The project folder, /home/work/<workspace>.
   string project_dir = 1;
@@ -1008,4 +1048,17 @@ message GetProjectRoomResponse {
   bool exists = 1;
   // Free bytes on the workspace's disk, for work.
   uint64 free_bytes = 2;
+}
+
+message SetWorkGitIdentityRequest {
+  // user.name; empty: not offered.
+  string name = 1;
+  // user.email; empty: not offered.
+  string email = 2;
+}
+
+message SetWorkGitIdentityResponse {
+  // Whether each was written (false: work had its own, or none was offered).
+  bool name_set = 1;
+  bool email_set = 2;
 }

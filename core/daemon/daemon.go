@@ -99,6 +99,9 @@ type Server struct {
 	alive   func(pid int) bool // whether a reporting app still runs
 	// engine asks the box engine whether it answers (tests set it).
 	engine func(ctx context.Context) error
+	// macGitIdentity reads the owner's git name and email from the Mac
+	// (nil: theMacGitIdentity; tests set another).
+	macGitIdentity func(ctx context.Context) (name, email string)
 	// freeBytes is the space free to this user on dir's volume (tests
 	// set it).
 	freeBytes func(dir string) (uint64, error)
@@ -397,6 +400,9 @@ func (s *Server) OpenBox(ctx context.Context, req *daemonv1.OpenBoxRequest) (_ *
 	s.mu.Lock()
 	s.open[req.GetName()] = ob
 	s.mu.Unlock()
+	// work's git gets the owner's name and email from the Mac where it has
+	// none (findings 21 and 22); never fails the open.
+	s.shareGitIdentity(ctx, ob.sess.Cfg.ID, ob.client())
 	summary := fmt.Sprintf("open on %s (resume rule %d: %s)", s.env.Machine, res.Rule, res.Action)
 	// Rule 4: say where the unsaved work went, with its time.
 	if o := res.Orphaned; o != nil {

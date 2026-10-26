@@ -146,8 +146,9 @@ A box is a toolbox image plus a home. The image is rebuilt or pulled on each mac
 **Toolbox image (default: `portenv/toolbox-node`)**
 
 - Base: Ubuntu 24.04, multi-arch (arm64 and amd64).
-- Toolchain: Node 22, PostgreSQL client, git, tmux, ripgrep, jq, build-essential, Python 3. `gh` joins it for Link GitHub, in its own PR: from GitHub's signed apt repository, with the key's fingerprint checked.
+- Toolchain: Node 22, PostgreSQL client, git, tmux, ripgrep, jq, build-essential, Python 3, nano (Debian's `editor` and `EDITOR` in login shells, so git can open a merge message; finding 22) and vim-tiny. `gh` joins it for Link GitHub, in its own PR: from GitHub's signed apt repository, with the key's fingerprint checked.
 - Claude Code from Anthropic's signed apt repository (stable channel); updated by rebuilding the image, never into home.
+- **work's git identity comes from the Mac** (findings 21 and 22): at each open (a new workspace's first open is its Create), `portenvd` reads the Mac's `git config --global user.name` and `user.email` (a clean environment, HOME the Mac user's; Homebrew's git, or `/usr/bin/git` only when the Command Line Tools are installed, so no install prompt) and the helper writes them as `work` with `git config --file ~/.gitconfig`, each only where work's git has none of its own (`SetWorkGitIdentity`). Both are checked first: one line, no control or bidi characters, no angle brackets, bounded. With none on the Mac nothing is set: the signed-in GitHub account's login and noreply address would need a GitHub call with the sign-in, which `portenvd` holds only for one request (R-0391). Agents keep their own identities (ADR 0022). A server's runner has no Mac to read, so server workspaces get none yet.
 - `portenv-agent` as the container's init process (it reaps children and supervises the agent's services).
 - Images are versioned (`toolbox-node:v12`) and published to a registry by CI. A machine without network access to the registry builds from the Dockerfile.
 - VM-ready: nothing in the image may assume Docker-only features.

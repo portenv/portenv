@@ -93,6 +93,13 @@ check "python 3" as_work 'python3 --version'
 check "shell integration (OSC 133) in login shells" as_work 'bash -lic "declare -F __portenv_osc133_precmd"'
 check "skeleton .zshrc sources the zsh integration" in_box grep -q osc133.zsh /home/work/.zshrc
 check "claude code" as_work 'claude --version'
+check "claude code's update check off in login shells" as_work 'test "$DISABLE_AUTOUPDATER" = 1'
+# git merge opens an editor for its message (finding 22): the one git
+# names must exist, in a login shell and with no EDITOR at all.
+check "git's editor exists in login shells" as_work 'e=$(git var GIT_EDITOR) && test "$e" = nano && test -x "$(command -v "$e")"'
+check "git's editor exists with no EDITOR (Debian's editor is nano)" as_work \
+	'e=$(env -u EDITOR -u VISUAL -u GIT_EDITOR TERM=xterm-256color git var GIT_EDITOR) && test -x "$(command -v "$e")" && test "$(readlink -f "$(command -v "$e")")" = "$(readlink -f "$(command -v nano)")"'
+check "vi is there (vim-tiny)" as_work 'test -x "$(command -v vi)"'
 # The portenv CLI, for agents' own commands inside the workspace (ADR 0022 §4).
 check "portenv on PATH at /usr/local/bin, root's, 755" in_box sh -c 'test "$(command -v portenv)" = /usr/local/bin/portenv && test "$(stat -c %U:%G:%a /usr/local/bin/portenv)" = root:root:755'
 check "portenv whoami in a plain shell exits 2 and says why" as_work \

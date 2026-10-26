@@ -1219,6 +1219,11 @@ message AgentInfo {
   // It works in its own copy of the project (checkout: own), so it has a
   // branch, agent/<id>, the owner can fetch (ADR 0022 §2a).
   bool own_clone = 22;
+  // "Can't tell if <name> is idle: …" when its runner has an idle rule
+  // but its pane has been quiet with no idle prompt recognised for 3
+  // minutes, so wake-ups and routines wait (R-0411). Empty again as soon
+  // as a prompt is recognised or output resumes.
+  string idle_unknown = 23;
 }
 
 message WatchTeamRequest {

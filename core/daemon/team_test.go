@@ -8,7 +8,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -19,6 +18,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/portenv/portenv/core/internal/idleinput"
 	"github.com/portenv/portenv/core/internal/teamkit"
 	agentv1 "github.com/portenv/portenv/proto/gen/go/portenv/agent/v1"
 	daemonv1 "github.com/portenv/portenv/proto/gen/go/portenv/daemon/v1"
@@ -717,6 +717,58 @@ func TestShareNamesTheAgentsBranch(t *testing.T) {
 // ADR 0022 §2a: the owner's Fetch asks the helper for the agent's branch,
 // within its home's limit, and tells the agent; an agent without a clone
 // has nothing to fetch.
+// The app's Fetch (ADR 0022 §2a): a share's message names the branch it
+// shared, as data, so the app offers Fetch on it; a plain message from
+// the same agent names none, even when its text says the same.
+func TestAShareNamesItsBranchForTheApp(t *testing.T) {
+	e, h, _ := newTestEngine(t, defaultTeam()...)
+	ctx := context.Background()
+	r := e.handleCall(ctx, "w", &agentv1.TeamCallsResponse{AgentId: "builder", Op: &agentv1.TeamCallsResponse_Share{Share: &agentv1.Share{Text: "tests pass"}}})
+	if !r.GetOk() || r.GetMessage().GetSharedBranch() != "agent/builder" {
+		t.Fatalf("share: %v", r)
+	}
+	var toOwner *typesv1.BoardMessage
+	for _, l := range h.board {
+		if m := l.GetMessage(); m.GetTo() == "owner" {
+			toOwner = m
+		}
+	}
+	if toOwner.GetSharedBranch() != "agent/builder" || toOwner.GetText() != "Work is ready on agent/builder: tests pass" {
+		t.Errorf("the board's line to the owner: %v", toOwner)
+	}
+	m := e.handleCall(ctx, "w", msgCall("builder", "lead", "Work is ready on agent/builder"))
+	if !m.GetOk() || m.GetMessage().GetSharedBranch() != "" {
+		t.Errorf("a plain message names a branch: %v", m)
+	}
+}
+
+// AgentInfo says whether the agent has its own copy of the project, so the
+// app offers Fetch only for one that has a branch.
+func TestAgentInfoSaysItHasAClone(t *testing.T) {
+	team := defaultTeam()
+	team[2].Spec.Checkout = CheckoutNone
+	e, _, _ := newTestEngine(t, team...)
+	b, err := e.lockBox(context.Background(), "w")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer b.mu.Unlock()
+	if !e.infoLocked(b, &team[1]).GetOwnClone() || e.infoLocked(b, &team[2]).GetOwnClone() {
+		t.Error("own_clone: want builder true, reviewer false")
+	}
+}
+
+// An agent with its own copy is told the owner brings its branch in with
+// Fetch in Portenv, the command line after it.
+func TestAgentsMDNamesTheOwnersFetch(t *testing.T) {
+	team := defaultTeam()
+	md := agentsMDBlock(&Team{Agents: team}, &team[1], "w")
+	fetch, cli := strings.Index(md, "the owner chooses Fetch in Portenv"), strings.Index(md, "portenv app fetch-agent w builder")
+	if fetch < 0 || cli < 0 || fetch > cli || !strings.Contains(md, "as agents/builder") {
+		t.Errorf("builder's AGENTS.md doesn't name Fetch first: %s", md)
+	}
+}
+
 func TestTheOwnersFetch(t *testing.T) {
 	team := defaultTeam()
 	team[2].Spec.Checkout = CheckoutNone
@@ -1210,8 +1262,8 @@ func TestPausedAndStoppedRoutinesDontFire(t *testing.T) {
 // and says so.
 func TestRoutinesNeedAKnownRunner(t *testing.T) {
 	_, h, _ := startedWithRoutine(t)
-	if p := h.started[0].GetIdlePattern(); p == "" || p != runnerIdlePattern([]string{"claude"}) {
-		t.Errorf("idle pattern sent: %q", p)
+	if p, n := h.started[0].GetIdlePattern(), h.started[0].GetIdleLines(); p == "" || p != idleinput.Claude.Pattern || int(n) != idleinput.Claude.Lines {
+		t.Errorf("idle input sent: %q on %d lines", p, n)
 	}
 
 	team := routineTeam()
@@ -1239,14 +1291,18 @@ func TestRoutinesNeedAKnownRunner(t *testing.T) {
 }
 
 func TestTheRunnerTablesPatterns(t *testing.T) {
-	re := regexp.MustCompile(runnerIdlePattern([]string{"claude", "--permission-mode", "acceptEdits"}))
-	for _, idle := range []string{"> ", "│ >                │", "  >"} {
-		if !re.MatchString(idle) {
+	in := runnerIdle([]string{"claude", "--permission-mode", "acceptEdits"})
+	m, err := idleinput.Compile(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, idle := range [][]string{{"> "}, {"│ >                │"}, {"  >"}, {"───", `❯ Try "refactor <filepath>"`, "───", "  ▸▸ auto mode on (shift+tab to cycle)"}} {
+		if m.Find(idle) < 0 {
 			t.Errorf("%q isn't idle", idle)
 		}
 	}
-	for _, busy := range []string{"> fix the tests", "Do you want to proceed? (y/n)", "✻ Thinking…", ""} {
-		if re.MatchString(busy) {
+	for _, busy := range [][]string{{"> fix the tests"}, {"❯ fix the bug", "───", "footer"}, {"Do you want to proceed? (y/n)"}, {"✻ Thinking…"}, {""}} {
+		if m.Find(busy) >= 0 {
 			t.Errorf("%q counted as idle", busy)
 		}
 	}
@@ -1699,5 +1755,58 @@ func TestHomeSeedReachesTheHelper(t *testing.T) {
 	r := h.started[0]
 	if !slices.Equal(r.GetHomeSeed(), []string{"docs/style-guide.md"}) || r.GetProjectDir() != "/home/work/w" || r.GetHomeQuotaBytes() <= 0 {
 		t.Errorf("request: seed %v, project %q, quota %d", r.GetHomeSeed(), r.GetProjectDir(), r.GetHomeQuotaBytes())
+	}
+}
+
+// lastAgentState is the state of an agent's newest row on the stream: what
+// the app shows after it has read every event.
+func lastAgentState(e *teamEngine, id string) typesv1.AgentState {
+	b := e.box("w")
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for i := len(b.events) - 1; i >= 0; i-- {
+		if a := b.events[i].agent; a != nil && a.GetId() == id {
+			return a.GetState()
+		}
+	}
+	return typesv1.AgentState_AGENT_STATE_UNSPECIFIED
+}
+
+// The owner's live test (2026-10-21): the owner answered an agent's
+// decision, the card cleared, and the agent's row still said "needs you".
+// A decision asked, answered or expired sends the asking agent's row again,
+// so the stream never ends on a "needs you" with nothing pending.
+func TestAnAnsweredOrExpiredDecisionClearsTheAgentsNeedsYou(t *testing.T) {
+	e, _, clock := newTestEngine(t, defaultTeam()...)
+	ctx := context.Background()
+	approveFirstStart(t, e)
+	if _, err := e.startAgent(ctx, "w", "builder"); err != nil {
+		t.Fatal(err)
+	}
+	d := e.handleCall(ctx, "w", splitCall("builder")).GetDecision()
+	if d == nil {
+		t.Fatal("builder's split made no decision")
+	}
+	if s := lastAgentState(e, "builder"); s != typesv1.AgentState_AGENT_STATE_NEEDS_YOU {
+		t.Fatalf("asked: builder's row = %v, want needs you", s)
+	}
+	if _, err := e.answer(ctx, "w", d.GetId(), false, "not now"); err != nil {
+		t.Fatal(err)
+	}
+	if s := lastAgentState(e, "builder"); s != typesv1.AgentState_AGENT_STATE_RUNNING {
+		t.Errorf("answered: builder's row = %v, want running", s)
+	}
+
+	if e.handleCall(ctx, "w", splitCall("builder")).GetDecision() == nil {
+		t.Fatal("builder's second split made no decision")
+	}
+	clock.add(decisionExpiry + time.Second)
+	b, err := e.lockBox(ctx, "w") // the sweep expires it
+	if err != nil {
+		t.Fatal(err)
+	}
+	b.mu.Unlock()
+	if s := lastAgentState(e, "builder"); s != typesv1.AgentState_AGENT_STATE_RUNNING {
+		t.Errorf("expired: builder's row = %v, want running", s)
 	}
 }

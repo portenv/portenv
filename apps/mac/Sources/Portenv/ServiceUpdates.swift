@@ -17,8 +17,9 @@ enum ServiceUpdates {
     }()
 }
 
-/// This lane's or the release's own launch agent, never another's.
-private struct LoginItemRestarter: ServiceRestarter {
+/// This lane's or the release's own launch agent, never another's. Its
+/// hard restart is also the launch wait's one silent re-register (R-0401).
+struct LoginItemRestarter: ServiceRestarter {
     func gentle() async { try? await SharedDaemon.client.relaunch() }
     /// Registered afresh, so launchd takes the updated bundle's code (an
     /// ad-hoc signed dev build's portenvd is refused, EX_CONFIG, until it

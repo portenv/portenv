@@ -144,7 +144,9 @@ struct LaunchdJobTests {
         for status in [ServiceStatus.enabled, .requiresApproval, .notRegistered, .notFound] {
             for placement in [AppPlacement.applications, .elsewhere, .translocated] {
                 let p = BackgroundServiceProblem.of(status: status, launchdJob: refused, placement: placement)
-                #expect(p == BackgroundServiceProblem(message: ServiceText.notStarted, opensLoginItems: true, offersTryAgain: true), "\(status) \(placement)")
+                // Registered afresh once, silently, before it's said (R-0401).
+                #expect(p == BackgroundServiceProblem(message: ServiceText.notStarted, opensLoginItems: true, offersTryAgain: true,
+                                                      reRegisterFirst: true), "\(status) \(placement)")
             }
         }
         #expect(ServiceText.notStarted == "Portenv\u{2019}s background service didn\u{2019}t start. Turn Portenv on in System Settings \u{203A} General \u{203A} Login Items, and if it\u{2019}s not in the Applications folder, move it there.")
@@ -155,7 +157,10 @@ struct LaunchdJobTests {
     @Test func waitingForApprovalSaysSo() {
         for status in [ServiceStatus.requiresApproval, .notRegistered, .notFound] {
             let p = BackgroundServiceProblem.of(status: status, launchdJob: running, placement: .elsewhere)
-            #expect(p == BackgroundServiceProblem(message: ServiceText.needsApproval, opensLoginItems: true, offersTryAgain: true, endsWait: false), "\(status)")
+            // Not registered may be fixed by registering afresh (R-0401);
+            // approval is the person's, never re-registered.
+            #expect(p == BackgroundServiceProblem(message: ServiceText.needsApproval, opensLoginItems: true, offersTryAgain: true, endsWait: false,
+                                                  reRegisterFirst: status != .requiresApproval), "\(status)")
             #expect(p?.offersTryAgain == true && p?.endsWait == false, "approval: Try Again, and the wait goes on (R-0250)")
         }
         #expect(ServiceText.needsApproval == "Portenv needs permission to run in the background. Turn it on in System Settings \u{203A} General \u{203A} Login Items.")

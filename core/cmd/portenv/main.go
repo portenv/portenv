@@ -177,7 +177,8 @@ Commands:
   attach <box> [--session NAME]           this terminal in the box's tmux session (portenvd)
   app ACTION BOX [TARGET]                 the box's actions through portenvd: open [--take-over],
                                           close, save, point, revert, history, housekeep [--prune],
-                                          move BOX this-mac|USER@HOST, …
+                                          move BOX this-mac|USER@HOST,
+                                          delete BOX --yes-delete-everything, …
   version
 
 Your team, on this Mac (each through portenvd, as the app does it; approvals stay in the app):

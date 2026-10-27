@@ -124,6 +124,7 @@ test: $(TOOLS_STAMP)
 	scripts/test-attached-terminal.sh
 	scripts/test-check-ssh-keygen.sh
 	scripts/test-check-dev-previews.sh
+	scripts/test-dev-signing.sh
 
 ## fuzz: the workspace helper's control-mode decoder, line reader and pane parser, briefly (R-0162, R-0142)
 # Counts of runs, not durations: with a duration, go test fails with
@@ -201,7 +202,7 @@ proto-check-go: proto-go
 	git diff --exit-code -- proto/gen/go
 	test -z "$$(git status --porcelain -- proto/gen/go | tee /dev/stderr)"
 
-## app: build Portenv.app into bin/, with portenv, portenvd and restic inside (1.0: ad-hoc signed to run here)
+## app: build Portenv.app into bin/, with portenv, portenvd and restic inside (ad-hoc signed; a dev lane with DEV_SIGN_ID=<certificate name> signs with that identity instead, R-0328)
 # Built outside the repository: SwiftPM's resource accessor falls back to the
 # build folder's path, and a repository under ~/Documents would make macOS ask
 # for access to Documents at launch. (A proper Xcode project, 1.8, embeds
@@ -239,6 +240,23 @@ endif
 APP_SWIFTFLAGS := -Xswiftc -DPORTENV_ATTACHED_TERMINAL
 APP_BUILD := $(APP_BUILD)-attached
 endif
+# DEV_SIGN_ID (a dev lane only, R-0328, R-0401): the name or SHA-1 hash of a
+# code-signing certificate in this Mac's keychain, such as "Portenv Dev
+# (<host>)". A lane's helpers and app are signed with it instead of ad-hoc,
+# so portenvd's designated requirement names the certificate, not the
+# build's hash, and launchd keeps accepting the login item after a rebuild.
+# It's a certificate's name, never a secret; only the codesign steps below
+# use it (never SwiftPM, whose environment is cleared). A release build (no
+# LANE, as release-local.sh makes) ignores it and signs ad-hoc as before;
+# release-local.sh then signs with Developer ID. Signing with it reads the
+# certificate's private key, so macOS may ask to allow codesign the first
+# time: a failure fails the build, never falling back to ad-hoc quietly.
+DEV_SIGN_ID ?=
+APP_SIGN_ID := $(if $(LANE),$(strip $(DEV_SIGN_ID)))
+ifneq ($(findstring ',$(APP_SIGN_ID)),)
+$(error DEV_SIGN_ID=$(APP_SIGN_ID): a signing identity's name can't contain a single quote)
+endif
+APP_CODESIGN := codesign --force --sign $(if $(APP_SIGN_ID),'$(APP_SIGN_ID)',-)
 # Swift builds run with a clean environment: SwiftPM's plugin caches record
 # the environment they ran in, so a session token or other secret in the
 # shell would end up on disk under .build (scripts/check-swift-env.sh).
@@ -258,7 +276,8 @@ app: build $(TOOLS_STAMP)
 	if nm -u $(BIN)/Portenv.app/Contents/MacOS/Portenv | grep -q SecKeychainSetUserInteractionAllowed; then echo "Portenv imports SecKeychainSetUserInteractionAllowed: prompts would stop working in the app" >&2; exit 1; fi
 	# Helpers, not MacOS/: on a case-insensitive disk portenv would replace Portenv.
 	mkdir -p $(BIN)/Portenv.app/Contents/Helpers && cp $(BIN)/portenv $(BIN)/portenvd $(BIN)/restic $(BIN)/Portenv.app/Contents/Helpers/
-	for f in portenv portenvd restic; do codesign --force --sign - $(BIN)/Portenv.app/Contents/Helpers/$$f; done
+	$(if $(APP_SIGN_ID),@printf '%s\n' 'Signing with $(APP_SIGN_ID) (DEV_SIGN_ID): macOS may ask you to allow codesign to use its key.',$(if $(strip $(DEV_SIGN_ID)),@echo 'DEV_SIGN_ID is for a dev lane build (LANE=X) only: signing ad-hoc.'))
+	for f in portenv portenvd restic; do $(APP_CODESIGN) $(BIN)/Portenv.app/Contents/Helpers/$$f; done
 	cp apps/mac/Info.plist $(BIN)/Portenv.app/Contents/Info.plist
 	/usr/libexec/PlistBuddy -c "Add :PortenvBuildID string $(BUILD_ID)" $(BIN)/Portenv.app/Contents/Info.plist
 	$(if $(ATTACHED_TERMINAL),/usr/libexec/PlistBuddy -c "Add :PortenvAttachedTerminal bool true" $(BIN)/Portenv.app/Contents/Info.plist)
@@ -283,10 +302,10 @@ app: build $(TOOLS_STAMP)
 		$(addprefix $(BIN)/Portenv.app/Contents/Helpers/,portenv portenvd restic)
 	go run ./core/tools/notices check --app $(BIN)/Portenv.app --resolved apps/mac/Package.resolved
 	$(if $(INSTANCE),scripts/stamp-instance.sh $(BIN)/Portenv.app $(INSTANCE))
-	scripts/check-app-identity.sh $(BIN)/Portenv.app $(INSTANCE)
+	scripts/check-app-identity.sh $(BIN)/Portenv.app '$(INSTANCE)' '$(APP_SIGN_ID)'
 	$(if $(LANE),,scripts/check-dev-previews.sh --binary $(BIN)/Portenv.app/Contents/MacOS/Portenv)
 	scripts/check-build-paths.sh $(BIN)/Portenv.app/Contents/MacOS/Portenv $(addprefix $(BIN)/Portenv.app/Contents/Helpers/,portenv portenvd restic)
-	codesign --force --sign - $(BIN)/Portenv.app
+	$(APP_CODESIGN) $(BIN)/Portenv.app
 
 ## swift-test: build and test the Swift packages (macOS only)
 swift-test:

@@ -162,6 +162,41 @@ struct TeamStateTests {
         t.apply(.message(TeamMessage(id: "7", from: "portenv", to: "owner", kind: .notice, text: "7", about: "lead")))
         #expect(t.conversation(with: "builder").map(\.id) == ["2", "3", "6"])
     }
+
+    /// The owner's live test (2026-10-21): the decision card cleared but the
+    /// row still said "needs you". The badge is the app's: a running agent
+    /// shows it exactly while it has a decision waiting, whatever row
+    /// portenvd sent last, and nothing the agent writes sets or keeps it.
+    @Test func needsYouFollowsTheAgentsPendingDecisions() {
+        var t = TeamState()
+        let asked = TeamDecision(id: "d1", from: "reviewer", kind: .askOwner, summary: "Merge #42?", createdAt: at(100))
+        t.apply(.agent(TeamAgent(id: "reviewer", name: "Reviewer", status: .running)))
+        t.apply(.decision(asked))
+        #expect(t.agent("reviewer")?.status == .needsYou)
+        var answered = asked
+        answered.state = .approved
+        t.apply(.decision(answered))
+        #expect(t.agent("reviewer")?.status == .running)
+        // A row from before the answer, replayed after it, doesn't bring it back.
+        t.apply(.agent(TeamAgent(id: "reviewer", name: "Reviewer", status: .needsYou, pendingDecisions: 1)))
+        #expect(t.agent("reviewer")?.status == .running && t.agent("reviewer")?.pendingDecisions == 0)
+        // Its own status line, even "blocked: needs you", is its words, not the badge.
+        t.apply(.agent(TeamAgent(id: "reviewer", name: "Reviewer", status: .running,
+                                 workStatus: AgentWorkStatus(text: "needs you", blocked: "needs you", setAt: at(150)))))
+        #expect(t.agent("reviewer")?.status == .running)
+        // Expired clears it as answered does.
+        var again = TeamDecision(id: "d2", from: "reviewer", kind: .pane, summary: "Open a pane?", createdAt: at(200))
+        t.apply(.decision(again))
+        #expect(t.agent("reviewer")?.status == .needsYou && t.agent("reviewer")?.pendingDecisions == 1)
+        again.state = .expired
+        t.apply(.decision(again))
+        #expect(t.agent("reviewer")?.status == .running)
+        // Only a running agent shows it, as portenvd decides: idle, stopped
+        // and starting stay what they are.
+        t.apply(.agent(TeamAgent(id: "builder", name: "Builder", status: .idle)))
+        t.apply(.decision(TeamDecision(id: "d3", from: "builder", kind: .askOwner, summary: "Which branch?")))
+        #expect(t.agent("builder")?.status == .idle)
+    }
 }
 
 @MainActor
@@ -289,6 +324,22 @@ struct TeamControllerTests {
         expired.state = .expired
         await team.answer(expired, approve: true)
         #expect(daemon.calls.filter { $0[1] == "answer-decision" }.count == 1)
+    }
+
+    /// Answering the card clears the asking agent's "needs you" at once, in
+    /// the sidebar's row, before portenvd sends the row again.
+    @Test func answeringClearsTheAgentsNeedsYou() async {
+        let daemon = FakeDaemon()
+        let pending = TeamDecision(id: "d1", from: "reviewer", kind: .askOwner, summary: "Merge #42?")
+        var declined = pending
+        declined.state = .declined
+        daemon.answered = ["d1": declined]
+        let team = TeamController(box: "acme", daemon: daemon)
+        team.receive(.agent(TeamAgent(id: "reviewer", name: "Reviewer", status: .needsYou, pendingDecisions: 1)))
+        team.receive(.decision(pending))
+        #expect(team.state.agent("reviewer")?.status == .needsYou)
+        await team.answer(pending, approve: false, note: "Not yet")
+        #expect(team.state.agent("reviewer")?.status == .running)
     }
 
     @Test func messagesAndStartStop() async {
@@ -489,6 +540,14 @@ struct TeamAgentStatusMappingTests {
         #expect(info().shareLoginOff.isEmpty)
         let a = info { $0.shareLoginOff = "Sharing your sign-in (claude) isn\u{2019}t in this build, so nothing is shared.\n\u{1b}[2J" }
         #expect(a.shareLoginOff == "Sharing your sign-in (claude) isn\u{2019}t in this build, so nothing is shared. [2J")
+    }
+
+    /// R-0411: "Can't tell if <name> is idle" reaches the agent's column
+    /// as one plain line, and is gone when portenvd clears it.
+    @Test func idleUnknownIsCarriedAsPlainText() {
+        #expect(info().idleUnknown.isEmpty)
+        let a = info { $0.idleUnknown = "Can't tell if Code Writer is idle: Portenv doesn't recognise its prompt.\n\u{1b}[2J" }
+        #expect(a.idleUnknown == "Can't tell if Code Writer is idle: Portenv doesn't recognise its prompt. [2J")
     }
 }
 

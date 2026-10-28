@@ -84,7 +84,12 @@ jobs:
   swift:
     name: Swift (macOS arm64)
     runs-on: macos-26
-    timeout-minutes: 45
+    # 35 successful runs (October 2026) took 22 to 42 minutes, median 35:
+    # make swift-test takes 10 to 12, and make swift-env-check 16 to 22 (it
+    # runs a control build, the whole of make swift-test again and make app,
+    # with the canary). At 45 minutes, slower runners were cancelled part-way
+    # through swift-env-check with nothing failed.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # make app (in swift-env-check) builds the Go helpers into the bundle.

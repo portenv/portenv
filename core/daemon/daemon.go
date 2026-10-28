@@ -99,6 +99,9 @@ type Server struct {
 	alive   func(pid int) bool // whether a reporting app still runs
 	// engine asks the box engine whether it answers (tests set it).
 	engine func(ctx context.Context) error
+	// macGitIdentity reads the owner's git name and email from the Mac
+	// (nil: theMacGitIdentity; tests set another).
+	macGitIdentity func(ctx context.Context) (name, email string)
 	// freeBytes is the space free to this user on dir's volume (tests
 	// set it).
 	freeBytes func(dir string) (uint64, error)
@@ -397,6 +400,9 @@ func (s *Server) OpenBox(ctx context.Context, req *daemonv1.OpenBoxRequest) (_ *
 	s.mu.Lock()
 	s.open[req.GetName()] = ob
 	s.mu.Unlock()
+	// work's git gets the owner's name and email from the Mac where it has
+	// none (findings 21 and 22); never fails the open.
+	s.shareGitIdentity(ctx, ob.sess.Cfg.ID, ob.client())
 	summary := fmt.Sprintf("open on %s (resume rule %d: %s)", s.env.Machine, res.Rule, res.Action)
 	// Rule 4: say where the unsaved work went, with its time.
 	if o := res.Orphaned; o != nil {
@@ -497,6 +503,13 @@ func (s *Server) openBox(ctx context.Context, name string, takeOver bool) (*open
 		return nil, none, err
 	} else if state != agentv1.ReadinessState_READINESS_STATE_READY {
 		return nil, none, errors.New("the workspace failed to start")
+	}
+	// The Mac's time zone, at every start; a failure leaves the image's
+	// clock (UTC) and never stops the open.
+	if zone, err := sendTimeZone(ctx, ob.client(), macZone); err != nil {
+		s.log.Warn("the workspace's time zone couldn't be set; it stays on UTC", "box_id", id, "err", err)
+	} else if zone != "" {
+		step("time zone " + zone)
 	}
 	step("workspace ready")
 	return ob, res, nil

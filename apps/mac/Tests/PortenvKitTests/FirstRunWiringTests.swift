@@ -36,17 +36,6 @@ final class LockedBool: @unchecked Sendable {
     }
 }
 
-/// A store whose calls take a while, as a Keychain prompt does.
-final class SlowSecretStore: SecretStore, @unchecked Sendable {
-    let inner = FakeSecretStore()
-    let delay: TimeInterval
-    init(delay: TimeInterval) { self.delay = delay }
-    func read(account: String) throws -> Data? { Thread.sleep(forTimeInterval: delay); return try inner.read(account: account) }
-    func add(account: String, data: Data, label: String) throws { Thread.sleep(forTimeInterval: delay); try inner.add(account: account, data: data, label: label) }
-    func set(account: String, data: Data, label: String) throws { Thread.sleep(forTimeInterval: delay); try inner.set(account: account, data: data, label: label) }
-    func delete(account: String) throws { Thread.sleep(forTimeInterval: delay); try inner.delete(account: account) }
-}
-
 /// What the Keychain wait reported, in order.
 final class WaitLog: @unchecked Sendable {
     private let lock = NSLock()
@@ -189,10 +178,22 @@ struct FirstRunWiringTests {
 
     /// GUIDELINES §3.1: a Keychain call that takes longer than the
     /// threshold says so, and the line goes when it's done.
+    ///
+    /// The slow call lasts until the line is shown (up to 10 s), not a
+    /// fixed 0.3 s: the line's timer runs on the cooperative pool, one
+    /// thread in these tests, which other suites can hold for longer than
+    /// that on a loaded machine; the call then ended before the timer ran.
     @Test func aSlowKeychainSaysItsWaiting() async throws {
         let log = WaitLog()
-        let slow = SlowSecretStore(delay: 0.3)
-        _ = try await onKeychainQueue(waiting: { log.report($0) }, after: .milliseconds(50)) { try slow.read(account: "x") }
+        let shown = DispatchSemaphore(value: 0)
+        let inner = FakeSecretStore()
+        _ = try await onKeychainQueue(waiting: { on in
+            log.report(on)
+            if on { shown.signal() }
+        }, after: .milliseconds(50)) {
+            _ = shown.wait(timeout: .now() + 10)
+            return try inner.read(account: "x")
+        }
         #expect(log.seen == [true, false])
 
         let quick = WaitLog()

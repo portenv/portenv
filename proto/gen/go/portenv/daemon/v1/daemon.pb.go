@@ -4519,7 +4519,9 @@ type ProjectSource struct {
 	//	*ProjectSource_GithubUrl
 	Source isProjectSource_Source `protobuf_oneof:"source"`
 	// Clone with the owner's GitHub sign-in (a private repository): the app
-	// passes it to ApplyTeamPlan, in memory; it's never kept.
+	// passes it to ApplyTeamPlan, in memory; it's never kept. False means
+	// "fetch plain first; use the sign-in only if GitHub refuses" (R-0413):
+	// portenvd then asks for it (needs_token) whatever was chosen at Create.
 	UseSignIn     bool `protobuf:"varint,3,opt,name=use_sign_in,json=useSignIn,proto3" json:"use_sign_in,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -7318,7 +7320,10 @@ type ApplyTeamPlanResponse struct {
 	NeedsSignIn bool `protobuf:"varint,5,opt,name=needs_sign_in,json=needsSignIn,proto3" json:"needs_sign_in,omitempty"`
 	// The kept setup clones with the owner's sign-in and none was given: the
 	// app reads it and calls again. Nothing was done.
-	NeedsToken    bool `protobuf:"varint,6,opt,name=needs_token,json=needsToken,proto3" json:"needs_token,omitempty"`
+	NeedsToken bool `protobuf:"varint,6,opt,name=needs_token,json=needsToken,proto3" json:"needs_token,omitempty"`
+	// The kept GitHub project, as OWNER/REPO, when it wasn't brought in: the
+	// window says "Cloning OWNER/REPO…" while the next try runs (R-0409).
+	Project       string `protobuf:"bytes,7,opt,name=project,proto3" json:"project,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -7393,6 +7398,13 @@ func (x *ApplyTeamPlanResponse) GetNeedsToken() bool {
 		return x.NeedsToken
 	}
 	return false
+}
+
+func (x *ApplyTeamPlanResponse) GetProject() string {
+	if x != nil {
+		return x.Project
+	}
+	return ""
 }
 
 type GetTeamSettingsRequest struct {
@@ -7621,6 +7633,14 @@ type AgentInfo struct {
 	// Set when its file asks for share_login, which this build doesn't
 	// support: one plain line saying nothing is shared (R-0323).
 	ShareLoginOff string `protobuf:"bytes,21,opt,name=share_login_off,json=shareLoginOff,proto3" json:"share_login_off,omitempty"`
+	// It works in its own copy of the project (checkout: own), so it has a
+	// branch, agent/<id>, the owner can fetch (ADR 0022 §2a).
+	OwnClone bool `protobuf:"varint,22,opt,name=own_clone,json=ownClone,proto3" json:"own_clone,omitempty"`
+	// "Can't tell if <name> is idle: …" when its runner has an idle rule
+	// but its pane has been quiet with no idle prompt recognised for 3
+	// minutes, so wake-ups and routines wait (R-0411). Empty again as soon
+	// as a prompt is recognised or output resumes.
+	IdleUnknown   string `protobuf:"bytes,23,opt,name=idle_unknown,json=idleUnknown,proto3" json:"idle_unknown,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -7798,6 +7818,20 @@ func (x *AgentInfo) GetRoutinesOff() string {
 func (x *AgentInfo) GetShareLoginOff() string {
 	if x != nil {
 		return x.ShareLoginOff
+	}
+	return ""
+}
+
+func (x *AgentInfo) GetOwnClone() bool {
+	if x != nil {
+		return x.OwnClone
+	}
+	return false
+}
+
+func (x *AgentInfo) GetIdleUnknown() string {
+	if x != nil {
+		return x.IdleUnknown
 	}
 	return ""
 }
@@ -10370,7 +10404,7 @@ const file_portenv_daemon_v1_daemon_proto_rawDesc = "" +
 	"\bproblems\x18\x16 \x03(\tR\bproblems\"M\n" +
 	"\x14ApplyTeamPlanRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12!\n" +
-	"\fgithub_token\x18\x02 \x01(\tR\vgithubToken\"\xc9\x01\n" +
+	"\fgithub_token\x18\x02 \x01(\tR\vgithubToken\"\xe3\x01\n" +
 	"\x15ApplyTeamPlanResponse\x12\x18\n" +
 	"\aapplied\x18\x01 \x01(\bR\aapplied\x12\x16\n" +
 	"\x06pinned\x18\x02 \x03(\tR\x06pinned\x12\x14\n" +
@@ -10378,7 +10412,8 @@ const file_portenv_daemon_v1_daemon_proto_rawDesc = "" +
 	"\rproject_error\x18\x04 \x01(\tR\fprojectError\x12\"\n" +
 	"\rneeds_sign_in\x18\x05 \x01(\bR\vneedsSignIn\x12\x1f\n" +
 	"\vneeds_token\x18\x06 \x01(\bR\n" +
-	"needsToken\"\x18\n" +
+	"needsToken\x12\x18\n" +
+	"\aproject\x18\a \x01(\tR\aproject\"\x18\n" +
 	"\x16GetTeamSettingsRequest\"\xa4\x01\n" +
 	"\x17GetTeamSettingsResponse\x12%\n" +
 	"\x0eagents_allowed\x18\x01 \x01(\x05R\ragentsAllowed\x124\n" +
@@ -10387,7 +10422,7 @@ const file_portenv_daemon_v1_daemon_proto_rawDesc = "" +
 	"\x17SetAgentsAllowedRequest\x12%\n" +
 	"\x0eagents_allowed\x18\x01 \x01(\x05R\ragentsAllowed\"b\n" +
 	"\x18SetAgentsAllowedResponse\x12F\n" +
-	"\bsettings\x18\x01 \x01(\v2*.portenv.daemon.v1.GetTeamSettingsResponseR\bsettings\"\xc1\x05\n" +
+	"\bsettings\x18\x01 \x01(\v2*.portenv.daemon.v1.GetTeamSettingsResponseR\bsettings\"\x81\x06\n" +
 	"\tAgentInfo\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
@@ -10412,7 +10447,9 @@ const file_portenv_daemon_v1_daemon_proto_rawDesc = "" +
 	"\x06status\x18\x12 \x01(\v2\x1d.portenv.types.v1.AgentStatusR\x06status\x125\n" +
 	"\broutines\x18\x13 \x03(\v2\x19.portenv.types.v1.RoutineR\broutines\x12!\n" +
 	"\froutines_off\x18\x14 \x01(\tR\vroutinesOff\x12&\n" +
-	"\x0fshare_login_off\x18\x15 \x01(\tR\rshareLoginOff\">\n" +
+	"\x0fshare_login_off\x18\x15 \x01(\tR\rshareLoginOff\x12\x1b\n" +
+	"\town_clone\x18\x16 \x01(\bR\bownClone\x12!\n" +
+	"\fidle_unknown\x18\x17 \x01(\tR\vidleUnknown\">\n" +
 	"\x10WatchTeamRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x16\n" +
 	"\x06cursor\x18\x02 \x01(\tR\x06cursor\"\xcb\x02\n" +

@@ -406,7 +406,12 @@ public final class SplitController {
         followFocus()
     }
 
-    public func canSplit(_ axis: SplitAxis) -> Bool { layout.canSplit(axis, in: size) }
+    /// Whether the owner can split now: never in an agent's view, since
+    /// agents split their own panes (owner, 2026-10-21, R-0410), and only
+    /// while the focused pane has room.
+    public func canSplit(_ axis: SplitAxis) -> Bool {
+        TabBarControls.allowsSplit(for: selection) && layout.canSplit(axis, in: size)
+    }
 
     /// Splits the focused pane: the new pane shows the first tab the tab bar
     /// shows that no pane shows, or a new shell tab when every one is in a

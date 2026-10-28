@@ -63,6 +63,14 @@ func resticBinary(t *testing.T) string {
 func newWorld(t *testing.T) *world {
 	t.Helper()
 	t.Parallel()
+	return newSerialWorld(t)
+}
+
+// newSerialWorld is newWorld for a test that doesn't run in parallel: Go
+// runs it while the package's parallel tests wait, so a timing it measures
+// is its own work, not theirs too.
+func newSerialWorld(t *testing.T) *world {
+	t.Helper()
 	root := t.TempDir()
 	return &world{
 		t: t, root: root, repo: filepath.Join(root, "storage", "boxes", "box1"),

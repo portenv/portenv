@@ -139,8 +139,12 @@ public struct TeamPlanApplied: Equatable, Sendable {
     public var needsSignIn: Bool
     /// The clone needs the owner's GitHub sign-in, which the app reads.
     public var needsToken: Bool
-    public init(applied: Bool, pinned: [String] = [], lines: [String] = [], projectError: String? = nil, needsSignIn: Bool = false, needsToken: Bool = false) {
+    /// The kept GitHub project, OWNER/REPO, when it wasn't brought in.
+    public var project: String?
+    public init(applied: Bool, pinned: [String] = [], lines: [String] = [], projectError: String? = nil, needsSignIn: Bool = false, needsToken: Bool = false,
+                project: String? = nil) {
         self.applied = applied
+        self.project = project
         self.pinned = pinned
         self.lines = lines
         self.projectError = projectError

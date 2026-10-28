@@ -239,3 +239,74 @@ public enum WorkspaceTabKeys {
         return [window]
     }
 }
+
+/// File › New Workspace… (⇧⌘N, R-0404): the same New Workspace flow as the
+/// list's "New Workspace…" button, from the window in front, or the launch
+/// window when none is. A window showing a workspace keeps it: the flow
+/// starts in a new tab instead.
+public enum NewWorkspaceCommand {
+    public static let title = "New Workspace\u{2026}"
+    public static let key: KeyEquivalent = "n"
+    public static let modifiers: EventModifiers = [.command, .shift]
+    /// The menu's shortcut text, "⇧⌘N".
+    public static let shortcut = "\u{21E7}\u{2318}N"
+
+    /// What a window shows, as far as the command cares.
+    public enum Shows: Equatable, Sendable {
+        /// "Your workspaces": the flow starts here.
+        case list
+        /// New Workspace… or first run already: it comes forward as it is.
+        case creating
+        /// A workspace: the flow starts in a new tab.
+        case workspace
+        /// The launch hasn't decided yet (or a workspace is opening): it
+        /// comes forward, and its list or first run follows.
+        case starting
+    }
+
+    public enum Route: Equatable, Sendable {
+        case here, bringForward, newTab
+    }
+
+    /// With no window (nil), a new one.
+    public static func route(_ shows: Shows?) -> Route {
+        switch shows {
+        case .list: .here
+        case .creating, .starting: .bringForward
+        case .workspace, nil: .newTab
+        }
+    }
+
+    /// What a window's session shows, given the launch's decision (the
+    /// launch window shows it; every window waits for it).
+    @MainActor
+    public static func shows(_ s: WorkspaceSession, launch: Launch?) -> Shows {
+        if s.controller != nil { return .workspace }
+        switch s.screen {
+        case .newBox:
+            return s.newBox != nil ? .creating : .list
+        case .launch:
+            switch launch {
+            case nil, .open: return .starting
+            case .firstRun: return .creating
+            case .boxList: return .list
+            }
+        case .list, .workspace:
+            return launch == nil ? .starting : .list
+        }
+    }
+
+    /// Carries the command out: the window in front, else the launch
+    /// window.
+    @MainActor
+    public static func perform(front: WorkspaceSession?, launchWindow: WorkspaceSession?, launch: Launch?,
+                               start: (WorkspaceSession) -> Void, openTab: () -> Void,
+                               bringForward: (WorkspaceSession) -> Void) {
+        let target = front ?? launchWindow
+        switch route(target.map { shows($0, launch: launch) }) {
+        case .here: if let target { start(target) }
+        case .bringForward: if let target { bringForward(target) }
+        case .newTab: openTab()
+        }
+    }
+}

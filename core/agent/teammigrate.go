@@ -16,6 +16,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 
 	"golang.org/x/sys/unix"
 
@@ -135,7 +136,30 @@ func (t *TeamUsers) mops() *migrateOps {
 	if t.migrate != nil {
 		return t.migrate
 	}
-	return defaultMigrateOps(t.Cfg)
+	ops := defaultMigrateOps(t.Cfg)
+	if r, ok := t.Run.(ExecRunner); ok {
+		ops.asAgent = holdingReaper(r.Mu, ops.asAgent)
+	}
+	return ops
+}
+
+// asAgentFunc runs team-io as an agent (runTeamIOAsAgent).
+type asAgentFunc = func(ctx context.Context, uid int, home string, args []string, stdin io.Reader) ([]byte, error)
+
+// holdingReaper runs as-agent holding mu, the lock init's reaper shares
+// with its own commands (ExecRunner.Mu): the move runs in init, whose
+// reaper collects every exited child, and would otherwise take as-agent's
+// exit status before cmd.Wait did ("migrate-copy: waitid: no child
+// processes").
+func holdingReaper(mu *sync.Mutex, asAgent asAgentFunc) asAgentFunc {
+	if mu == nil {
+		return asAgent
+	}
+	return func(ctx context.Context, uid int, home string, args []string, stdin io.Reader) ([]byte, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		return asAgent(ctx, uid, home, args, stdin)
+	}
 }
 
 // errAgentsRunning is the plain line while an agent process runs.

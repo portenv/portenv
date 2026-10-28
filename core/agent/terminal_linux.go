@@ -77,14 +77,5 @@ func groupsOf(user string) ([]uint32, error) {
 	return gs, nil
 }
 
-// envFor is the environment of a terminal as the main user.
-func envFor(cfg Config) []string {
-	return []string{
-		"HOME=" + cfg.Home(), "USER=" + cfg.User, "LOGNAME=" + cfg.User,
-		"SHELL=/bin/bash", "TERM=xterm-256color", "LANG=C.UTF-8", "COLORTERM=truecolor",
-		"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-	}
-}
-
 // inputQueueReq asks a terminal how much input its program hasn't read.
 const inputQueueReq = unix.TIOCINQ

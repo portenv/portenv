@@ -456,9 +456,18 @@ func TestTabTerminalEndsWhenTheTabGoes(t *testing.T) {
 	if m.GetEnd() != agentv1.TabTerminalEnd_TAB_TERMINAL_END_TAB_CLOSED || time.Since(start) > time.Second {
 		t.Fatalf("opening a gone tab: %v after %s", m, time.Since(start))
 	}
-	h.raw("new-window", "-d", "-t", "=main:", "sh -c 'sleep 0.5; echo last-words; sleep 0.2'")
+	// The tab prints its last words once the stream has its first state
+	// (tmux wait-for, from inside the pane), then closes: they come as
+	// output, after the seed. A fixed half second before printing wasn't
+	// always enough on a loaded machine for the stream to start, and the
+	// words were then in the seed, or the tab was gone before it.
+	h.raw("new-window", "-d", "-t", "=main:", "sh -c 'tmux wait-for last-words; echo last-words; sleep 0.2'")
 	tab := strings.Fields(h.raw("list-windows", "-t", "=main:", "-F", "#{window_id}"))[1]
 	tt := h.open(ctx, tab, "", 80, 24)
+	if m := tt.next(10 * time.Second); m == nil || m.GetReset_() == nil {
+		t.Fatalf("the stream's first message: %v", m)
+	}
+	h.raw("wait-for", "-S", "last-words")
 	var out []byte
 	for {
 		m := tt.next(5 * time.Second)
@@ -904,25 +913,48 @@ func TestTabTerminalFloodStallsNoOtherTab(t *testing.T) {
 		}
 	}()
 	watch.take()
-	start, last := time.Now(), time.Now()
-	var worst time.Duration
-	for !strings.Contains(h.raw("capture-pane", "-p", "-t", flood), "flood-done") {
-		select {
-		case m := <-b.events:
-			if m == nil {
-				t.Fatal("the quiet tab's stream ended")
+	// The quiet tab's stream is read on its own, each output timed as it
+	// arrives: a wait measured in the loop below would also count the
+	// loop's own capture-pane calls, which on a loaded machine took most
+	// of a second while tmux served the flood.
+	type quietEnd struct {
+		worst time.Duration
+		ended bool
+	}
+	floodDone, quietDone := make(chan struct{}), make(chan quietEnd, 1)
+	start := time.Now()
+	go func() {
+		last := start
+		var worst time.Duration
+		for {
+			select {
+			case m := <-b.events:
+				if m == nil {
+					quietDone <- quietEnd{ended: true}
+					return
+				}
+				if len(m.GetOutput()) > 0 || m.GetReset_() != nil {
+					worst = max(worst, time.Since(last))
+					last = time.Now()
+				}
+			case <-floodDone:
+				quietDone <- quietEnd{worst: max(worst, time.Since(last))}
+				return
 			}
-			if len(m.GetOutput()) > 0 || m.GetReset_() != nil {
-				worst = max(worst, time.Since(last))
-				last = time.Now()
-			}
-		case <-time.After(100 * time.Millisecond):
 		}
+	}()
+	for !strings.Contains(h.raw("capture-pane", "-p", "-t", flood), "flood-done") {
 		if time.Since(start) > 3*time.Minute {
 			t.Fatal("the flood didn't finish")
 		}
+		time.Sleep(100 * time.Millisecond)
 	}
-	worst = max(worst, time.Since(last))
+	close(floodDone)
+	q := <-quietDone
+	if q.ended {
+		t.Fatal("the quiet tab's stream ended")
+	}
+	worst := q.worst
 	t.Logf("the flood took %s; the quiet tab's longest wait %s", time.Since(start).Round(time.Millisecond), worst)
 	if worst > time.Second {
 		t.Errorf("the quiet tab waited %s for output during the flood", worst)

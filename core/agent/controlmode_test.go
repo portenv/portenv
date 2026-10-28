@@ -86,7 +86,9 @@ func newShellCommand(t *testing.T, shell string) string {
 		if err := os.WriteFile(rc, []byte("PS1='$ '\n. "+filepath.Join(root, "osc133.bash")+"\n"), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		return fmt.Sprintf("env -i HOME=%s TERM=xterm-256color PATH=/usr/bin:/bin %s --noprofile --rcfile %s -i", home, path, rc)
+		// No history file: bash saved one in home when tmux hung up, as
+		// the test's cleanup removed home ("directory not empty").
+		return fmt.Sprintf("env -i HOME=%s HISTFILE= TERM=xterm-256color PATH=/usr/bin:/bin %s --noprofile --rcfile %s -i", home, path, rc)
 	case "zsh":
 		rc := filepath.Join(home, ".zshrc")
 		if err := os.WriteFile(rc, []byte("PS1='%% '\nsource "+filepath.Join(root, "osc133.zsh")+"\n"), 0o600); err != nil {

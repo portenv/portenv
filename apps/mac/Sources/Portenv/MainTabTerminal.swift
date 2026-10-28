@@ -28,6 +28,9 @@ struct MainTabTerminal: View {
     /// the keys; and what to do when a click in the terminal focuses it.
     var isActive = true
     var onFocus: () -> Void = {}
+    /// The sidebar's selection changes, counted: each lands the tab on
+    /// screen as a switch does (GUIDELINES §4.1).
+    var selectionChanges = 0
     @State private var focused = true
     /// This pane's text size, from its workspace's (View › Bigger, Smaller).
     @State private var textSize: TerminalTextSizeState?
@@ -38,6 +41,7 @@ struct MainTabTerminal: View {
                 TabTerminalPane(source: source, label: label, isFocused: $focused,
                                 textSize: textSize?.points ?? TerminalTextSize.stored(box: box),
                                 onTextSizeKey: { textSize?.apply($0) },
+                                selectionChanges: selectionChanges,
                                 onReset: { shown.reset($0) }, onEnded: { shown.ended($0) })
                     .padding(TerminalLayout.margin)
             }

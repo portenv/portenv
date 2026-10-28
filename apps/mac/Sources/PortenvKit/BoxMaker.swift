@@ -10,11 +10,14 @@ public struct BoxListing: Equatable, Sendable {
     /// Its repository also has the recovery key (a typed key can be checked
     /// against it).
     public let hasRecoveryKey: Bool
-    public init(name: String, id: String, creating: Bool, hasRecoveryKey: Bool = false) {
+    /// A deletion started and didn't finish (ADR 0029).
+    public let deleting: Bool
+    public init(name: String, id: String, creating: Bool, hasRecoveryKey: Bool = false, deleting: Bool = false) {
         self.name = name
         self.id = id
         self.creating = creating
         self.hasRecoveryKey = hasRecoveryKey
+        self.deleting = deleting
     }
 }
 

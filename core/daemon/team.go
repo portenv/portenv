@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"maps"
 	"path"
 	"regexp"
@@ -77,6 +78,12 @@ type teamEngine struct {
 	// starts is the agent starts an approved team_start set going, so
 	// tests can wait for them.
 	starts sync.WaitGroup
+
+	// log is portenvd's log (nil: none, in tests); notTyped is when each
+	// "<box>/<agent>/<path>" last logged a wake-up or routine not typed.
+	log      *slog.Logger
+	logMu    sync.Mutex
+	notTyped map[string]time.Time
 }
 
 func newTeamEngine(helper func(context.Context, string) (agentv1.AgentServiceClient, error), loadTeam func(context.Context, string) (Team, error)) *teamEngine {
@@ -102,7 +109,12 @@ type teamBox struct {
 	listed      map[string]string                          // agent → its files as syncAgents last saw them
 	wakes       map[string]*wakeState                      // agent → its unread batch (CC-0498)
 	wakeable    map[string]bool                            // agent → its runner has an idle pattern
-	changed     chan struct{}
+	// noPromptSince is when each agent's pane was first seen quiet with no
+	// idle prompt recognised, and idleUnknown those past idleUnknownAfter
+	// (R-0411, teamidle.go).
+	noPromptSince map[string]time.Time
+	idleUnknown   map[string]bool
+	changed       chan struct{}
 }
 
 // teamEvent is one thing that happened, in order; a cursor is a count of
@@ -189,10 +201,29 @@ func (e *teamEngine) appendLocked(ctx context.Context, name string, b *teamBox, 
 		d := line.GetDecision()
 		b.decisions[d.GetId()] = d
 		b.events = append(b.events, teamEvent{dec: d})
+		e.agentRowLocked(ctx, name, b, d.GetFrom())
 	}
 	b.noteWakeLocked(line)
 	b.changedLocked()
 	return nil
+}
+
+// agentRowLocked sends an agent's row again after one of its decisions was
+// asked, answered or expired: "needs you" follows its pending decisions, so
+// the row never keeps it once nothing is pending (the owner's live test,
+// 2026-10-21). Nothing for Portenv's own decisions, or when the team can't
+// be read (the agent's next row is right).
+func (e *teamEngine) agentRowLocked(ctx context.Context, name string, b *teamBox, id string) {
+	if id == "" || id == boardFrom {
+		return
+	}
+	team, err := e.loadTeam(ctx, name)
+	if err != nil {
+		return
+	}
+	if a := team.agent(id); a != nil {
+		b.events = append(b.events, teamEvent{agent: e.infoLocked(b, a)})
+	}
 }
 
 func (e *teamEngine) noticeLocked(ctx context.Context, name string, b *teamBox, to, thread, text string) {
@@ -331,7 +362,8 @@ func (e *teamEngine) handleCall(ctx context.Context, name string, c *agentv1.Tea
 			if to == me.ID || (to != boardOwner && !slices.Contains(g.GetMessage(), to)) {
 				continue
 			}
-			r := e.msgLocked(ctx, name, b, &team, me, &agentv1.Msg{To: to, Text: text, Type: typesv1.MessageType_MESSAGE_TYPE_NOTICE}, id)
+			r := e.msgLocked(ctx, name, b, &team, me, &agentv1.Msg{To: to, Text: text, Type: typesv1.MessageType_MESSAGE_TYPE_NOTICE}, id,
+				func(m *typesv1.BoardMessage) { m.SharedBranch = branch })
 			if !r.GetOk() {
 				return r
 			}
@@ -355,7 +387,9 @@ func (e *teamEngine) handleCall(ctx context.Context, name string, c *agentv1.Tea
 	return refuse(id, "Portenv doesn't know that command.")
 }
 
-func (e *teamEngine) msgLocked(ctx context.Context, name string, b *teamBox, team *Team, me *TeamAgent, m *agentv1.Msg, id string) *agentv1.TeamCallsRequest {
+// msgLocked posts an agent's message; set (if given) fills in what only
+// portenvd may say about it (a share's branch).
+func (e *teamEngine) msgLocked(ctx context.Context, name string, b *teamBox, team *Team, me *TeamAgent, m *agentv1.Msg, id string, set ...func(*typesv1.BoardMessage)) *agentv1.TeamCallsRequest {
 	to := m.GetTo()
 	if to != boardOwner && (team.agent(to) == nil || !slices.Contains(me.Grant.GetMessage(), to)) {
 		return refuse(id, "%s may not message %s (its grant's message list doesn't name it).", me.ID, to)
@@ -385,6 +419,9 @@ func (e *teamEngine) msgLocked(ctx context.Context, name string, b *teamBox, tea
 	msg := &typesv1.BoardMessage{Id: newULID(now), From: me.ID, To: to, ThreadId: m.GetThreadId(), Type: typ, Text: text, CreatedAt: timestamppb.New(now)}
 	if msg.ThreadId == "" {
 		msg.ThreadId = msg.Id
+	}
+	for _, f := range set {
+		f(msg)
 	}
 	if err := e.appendLocked(ctx, name, b, &agentv1.AppendBoardRequest{Line: &agentv1.AppendBoardRequest_Message{Message: msg}}); err != nil {
 		return refuse(id, "%v", err)
@@ -861,6 +898,12 @@ func (e *teamEngine) startAgent(ctx context.Context, name, agentID string) (*dae
 	return e.startAgentAs(ctx, name, agentID, false)
 }
 
+// errTeamStartPending is a Start's refusal while the team's first start
+// waits for the owner's Approve. StartAgent marks it with the trailer
+// portenv-refusal: team-start-pending for the app (R-0413); the words are
+// the CLI's.
+var errTeamStartPending = errors.New("approve the team's first start in Portenv first")
+
 // startAgentAs is startAgent; approved is a start the owner's team_start
 // Approve set going, which answerLocked already showed as starting.
 func (e *teamEngine) startAgentAs(ctx context.Context, name, agentID string, approved bool) (*daemonv1.AgentInfo, error) {
@@ -907,7 +950,7 @@ func (e *teamEngine) startAgentAs(ctx context.Context, name, agentID string, app
 		if err := e.askTeamStartLocked(ctx, name, b, agentID); err != nil {
 			return nil, err
 		}
-		return nil, errors.New("approve the team's first start in Portenv first")
+		return nil, errTeamStartPending
 	}
 	h, err := e.helper(ctx, name)
 	if err != nil {
@@ -956,7 +999,8 @@ func (e *teamEngine) startAgentAs(ctx context.Context, name, agentID string, app
 		HomeSeed:        a.Spec.HomeSeed,
 		ProjectDir:      projectDir(name),
 		HomeQuotaBytes:  defaultHomeQuota,
-		IdlePattern:     runnerIdlePattern(a.Runner),
+		IdlePattern:     runnerIdle(a.Runner).Pattern,
+		IdleLines:       int32(runnerIdle(a.Runner).Lines), // #nosec G115 -- at most idleinput.MaxLines
 	})
 	if err != nil {
 		b.states[agentID] = typesv1.AgentState_AGENT_STATE_STOPPED
@@ -971,6 +1015,7 @@ func (e *teamEngine) startAgentAs(ctx context.Context, name, agentID string, app
 		b.routinesOff[agentID] = off
 	}
 	b.setWakeableLocked(agentID, idle != "")
+	b.clearIdleUnknownLocked(agentID)
 	for _, r := range a.Spec.Routines {
 		if idle == "" {
 			break
@@ -1011,6 +1056,7 @@ func (e *teamEngine) stopAgent(ctx context.Context, name, agentID string) (*daem
 	}
 	defer b.mu.Unlock()
 	b.states[agentID] = typesv1.AgentState_AGENT_STATE_STOPPED
+	b.clearIdleUnknownLocked(agentID)
 	delete(b.routines, agentID)
 	b.tabs[agentID], b.panes[agentID] = nil, nil
 	info := e.infoLocked(b, a)
@@ -1207,6 +1253,13 @@ func (e *teamEngine) infoLocked(b *teamBox, a *TeamAgent) *daemonv1.AgentInfo {
 	info.Status = b.status[a.ID]
 	info.RoutinesOff = b.routinesOff[a.ID]
 	info.ShareLoginOff = shareLoginOffLine(a)
+	info.OwnClone = a.Spec != nil && a.OwnClone()
+	if b.idleUnknown[a.ID] && b.states[a.ID] == typesv1.AgentState_AGENT_STATE_RUNNING {
+		info.IdleUnknown = idleUnknownLine(info.GetName())
+		if info.Name == "" {
+			info.IdleUnknown = idleUnknownLine(a.ID)
+		}
+	}
 	if info.RoutinesOff == "" && a.Spec != nil && !a.Remote {
 		info.RoutinesOff = idleOffLine(a.Runner, len(a.Spec.Routines) > 0)
 	}
@@ -1455,7 +1508,7 @@ func agentsMDBlock(team *Team, a *TeamAgent, workspace string) string {
 		cant = append(cant, "ask the owner for decisions")
 	}
 	if a.OwnClone() {
-		can = append(can, fmt.Sprintf("work in your own copy of the project, ~/%s, on branch %s, and say it's ready with portenv share once you've committed", workspace, agentBranch(a.ID)))
+		can = append(can, fmt.Sprintf("work in your own copy of the project, ~/%[1]s, on branch %[2]s, and say it's ready with portenv share once you've committed; the owner chooses Fetch in Portenv (or runs portenv app fetch-agent %[1]s %[3]s) to bring it into the project as agents/%[3]s", workspace, agentBranch(a.ID), a.ID))
 		cant = append(cant, fmt.Sprintf("change the owner's project in /home/work/%s (you can read it, and git fetch owner brings its new commits)", workspace))
 	}
 	if rc := g.GetReadClones(); len(rc) > 0 {
@@ -1623,7 +1676,9 @@ func (e *teamEngine) tickRoutines(ctx context.Context) {
 				if err != nil {
 					continue
 				}
-				if _, err := h.DeliverRoutine(ctx, &agentv1.DeliverRoutineRequest{AgentId: agent, Text: text}); err == nil {
+				_, err = h.DeliverRoutine(ctx, &agentv1.DeliverRoutineRequest{AgentId: agent, Text: text})
+				e.logNotTyped(name, agent, "routine not typed", err)
+				if err == nil {
 					r.missed = 0
 				}
 			}

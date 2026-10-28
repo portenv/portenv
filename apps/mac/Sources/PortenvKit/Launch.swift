@@ -45,7 +45,7 @@ public enum LaunchDecision {
 /// portenvd is asked every 200 ms; each 2 s without an answer is a missed
 /// check. The login item's status is read at each missed check: waiting for
 /// approval is said as such and the wait goes on; launchd refusing the item
-/// ends the wait. Otherwise two missed checks in a row (about 4 s, as on
+/// ends the wait, after one silent re-register (R-0401). Otherwise two missed checks in a row (about 4 s, as on
 /// Welcome) say the service isn't answering, and the checks go on.
 public enum LaunchWait {
     /// What the window says while there's no answer.
@@ -73,43 +73,53 @@ public enum LaunchWait {
     public static func untilAnswered(ping: () async -> Bool,
                                      problem: () -> BackgroundServiceProblem?,
                                      report: (Report) -> Void,
-                                     sleep: (Duration) async -> Void) async -> Outcome {
+                                     sleep: (Duration) async -> Void,
+                                     reRegister: () async -> Void = {}) async -> Outcome {
         var misses = 0
         var last: Report?
-        // The first ask, then the login item's status at once (R-0125):
-        // approval is said and a refusal ends the wait without waiting 2 s.
-        if Task.isCancelled { return .cancelled }
-        if await ping() { return .answered }
-        // A wait replaced while it asked says nothing (R-0133).
-        if Task.isCancelled { return .cancelled }
-        if let p = problem() {
-            if p.endsWait { return .refused(p) }
-            report(.problem(p))
-            last = .problem(p)
-        }
-        await sleep(pollEvery)
-        var first = true
+        // One silent re-register per wait (R-0401): a rebuilt app's
+        // portenvd that launchd won't spawn, or a login item that didn't
+        // register, is registered afresh before anything is said. Try
+        // Again starts a new wait, so it never loops by itself.
+        var reRegistered = false
+        // Round 0 is the first ask alone: the login item's status is read
+        // at once after it (R-0125), so approval is said and a refusal acted
+        // on without waiting 2 s. Each later round is one check (2 s).
+        var round = 0
         while true {
-            // The first check already made its first ask.
-            for _ in 0 ..< (first ? pingsPerCheck - 1 : pingsPerCheck) {
+            if round == 0 {
                 if Task.isCancelled { return .cancelled }
                 if await ping() { return .answered }
-                await sleep(pollEvery)
-            }
-            first = false
-            if Task.isCancelled { return .cancelled }
-            misses += 1
-            let now: Report?
-            if let p = problem() {
-                if p.endsWait { return .refused(p) }
-                now = .problem(p)
             } else {
-                now = misses >= missesBeforeNotice ? .notAnswering : nil
+                // The first check already made its first ask.
+                for _ in 0 ..< (round == 1 ? pingsPerCheck - 1 : pingsPerCheck) {
+                    if Task.isCancelled { return .cancelled }
+                    if await ping() { return .answered }
+                    await sleep(pollEvery)
+                }
+                misses += 1
             }
+            // A wait replaced while it asked says nothing (R-0133).
+            if Task.isCancelled { return .cancelled }
+            let p = problem()
+            if let p, p.reRegisterFirst, !reRegistered {
+                reRegistered = true
+                await reRegister()
+                if Task.isCancelled { return .cancelled }
+                // A whole check for the fresh registration to come up
+                // before its status counts.
+                misses = 0
+                round = 1
+                continue
+            }
+            if let p, p.endsWait { return .refused(p) }
+            let now: Report? = p.map { .problem($0) } ?? (misses >= missesBeforeNotice ? .notAnswering : nil)
             if let now, now != last {
                 report(now)
                 last = now
             }
+            if round == 0 { await sleep(pollEvery) }
+            round += 1
         }
     }
 
@@ -129,9 +139,10 @@ public enum LaunchWait {
                            problem: () -> BackgroundServiceProblem?,
                            report: (Report) -> Void,
                            sleep: (Duration) async -> Void,
+                           reRegister: () async -> Void = {},
                            boxes: () async throws -> [String],
                            decide: ([String]) -> Void) async -> RunOutcome {
-        switch await untilAnswered(ping: ping, problem: problem, report: report, sleep: sleep) {
+        switch await untilAnswered(ping: ping, problem: problem, report: report, sleep: sleep, reRegister: reRegister) {
         case .answered: break
         // A replaced wait never sets the problem (R-0132).
         case let .refused(p): return Task.isCancelled ? .cancelled : .refused(p)

@@ -39,7 +39,7 @@ func TestDeliverRoutineRPCRunsTheRoutineChecks(t *testing.T) {
 		if _, err := s.StartAgentTerminals(ctx, testSpec(t, c.id, standIn(c.script, "x")...)); err != nil {
 			t.Fatal(err)
 		}
-		if err := s.SetAgentIdleInput(c.id, c.pattern); err != nil {
+		if err := s.SetAgentIdleInput(c.id, testIdle(c.pattern)); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -47,7 +47,7 @@ func TestDeliverRoutineRPCRunsTheRoutineChecks(t *testing.T) {
 	if _, err := s.StartAgentTerminals(ctx, testSpec(t, "ready", standIn(ready, filepath.Join(dir, "ready"))...)); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.SetAgentIdleInput("ready", idleBoxPattern); err != nil {
+	if err := s.SetAgentIdleInput("ready", testIdle(idleBoxPattern)); err != nil {
 		t.Fatal(err)
 	}
 	waitQuiet()

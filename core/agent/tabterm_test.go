@@ -913,25 +913,48 @@ func TestTabTerminalFloodStallsNoOtherTab(t *testing.T) {
 		}
 	}()
 	watch.take()
-	start, last := time.Now(), time.Now()
-	var worst time.Duration
-	for !strings.Contains(h.raw("capture-pane", "-p", "-t", flood), "flood-done") {
-		select {
-		case m := <-b.events:
-			if m == nil {
-				t.Fatal("the quiet tab's stream ended")
+	// The quiet tab's stream is read on its own, each output timed as it
+	// arrives: a wait measured in the loop below would also count the
+	// loop's own capture-pane calls, which on a loaded machine took most
+	// of a second while tmux served the flood.
+	type quietEnd struct {
+		worst time.Duration
+		ended bool
+	}
+	floodDone, quietDone := make(chan struct{}), make(chan quietEnd, 1)
+	start := time.Now()
+	go func() {
+		last := start
+		var worst time.Duration
+		for {
+			select {
+			case m := <-b.events:
+				if m == nil {
+					quietDone <- quietEnd{ended: true}
+					return
+				}
+				if len(m.GetOutput()) > 0 || m.GetReset_() != nil {
+					worst = max(worst, time.Since(last))
+					last = time.Now()
+				}
+			case <-floodDone:
+				quietDone <- quietEnd{worst: max(worst, time.Since(last))}
+				return
 			}
-			if len(m.GetOutput()) > 0 || m.GetReset_() != nil {
-				worst = max(worst, time.Since(last))
-				last = time.Now()
-			}
-		case <-time.After(100 * time.Millisecond):
 		}
+	}()
+	for !strings.Contains(h.raw("capture-pane", "-p", "-t", flood), "flood-done") {
 		if time.Since(start) > 3*time.Minute {
 			t.Fatal("the flood didn't finish")
 		}
+		time.Sleep(100 * time.Millisecond)
 	}
-	worst = max(worst, time.Since(last))
+	close(floodDone)
+	q := <-quietDone
+	if q.ended {
+		t.Fatal("the quiet tab's stream ended")
+	}
+	worst := q.worst
 	t.Logf("the flood took %s; the quiet tab's longest wait %s", time.Since(start).Round(time.Millisecond), worst)
 	if worst > time.Second {
 		t.Errorf("the quiet tab waited %s for output during the flood", worst)

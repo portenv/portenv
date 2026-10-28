@@ -58,7 +58,21 @@ public enum ProjectText {
     public static let privateHint = "For a private repository, sign in with GitHub first."
     public static let needsSignIn = "This repository needs a sign-in. Sign in with GitHub, then try again."
     public static let settingUp = "Setting up the workspace\u{2019}s project\u{2026}"
+    /// While a kept project is cloned again (R-0409).
+    public static func cloning(_ project: String) -> String { "Cloning \(project)\u{2026}" }
     public static let tryAgain = "Try Again"
+    // The access check's lines (finding 10).
+    public static let checking = "Checking the repository with GitHub\u{2026}"
+    public static let publicRepo = "Public repository."
+    public static let reachable = "Private repository. Cloned with your GitHub sign-in, on this Mac."
+    public static let privateOrMissing = "GitHub doesn\u{2019}t show this repository without a sign-in. If it\u{2019}s private, sign in with GitHub."
+    public static func notFound(_ login: String) -> String {
+        "GitHub has no repository at this address that \(login) can reach. Check the address, or sign in to another account."
+    }
+    public static let signInEnded = "Your GitHub sign-in in Portenv has ended. Sign in again."
+    public static let couldNotCheck = "Portenv couldn\u{2019}t check this repository with GitHub. You can continue; if the clone needs a sign-in, the workspace will say so."
+    public static let signInToContinue = "Sign in with GitHub to continue, or choose Empty."
+    public static let checkAddress = "Check the repository\u{2019}s address, or choose Empty."
 }
 
 /// Usage counting (1.8) needs the update check, which tester builds don't
@@ -256,6 +270,15 @@ public final class FirstRunFlow {
     public var githubURL = ""
     /// The owner's GitHub login when signed in (the Keychain isn't read).
     private let githubLogin: @Sendable () -> String?
+    /// The Project step's access check (finding 10); nil checks nothing
+    /// (renders, older tests), and Continue doesn't wait for it.
+    private let accessChecker: RepoAccessChecking?
+    /// How long typing must pause before GitHub is asked, and how long its
+    /// answer is waited for before Continue goes on without it.
+    private let accessDelay: Duration
+    private let accessTimeout: Duration
+    /// The last answer, with the address and sign-in it was for.
+    private var accessChecked: (key: String, access: RepoAccess)?
 
     private let service: FirstRunService
     private let existing: Set<String>
@@ -273,8 +296,12 @@ public final class FirstRunFlow {
                 memory: FirstRunMemory = NoFirstRunMemory(), retryEvery: Duration = .seconds(1), retryFor: Duration = .seconds(10),
                 docker: DockerStatus? = .running, serviceGone: Bool = false,
                 awake: @escaping @Sendable () -> SuspendingClock.Instant = { .now }, teamPlanner: TeamPlanning? = nil,
-                githubLogin: @escaping @Sendable () -> String? = { nil }) {
+                githubLogin: @escaping @Sendable () -> String? = { nil }, repoAccess: RepoAccessChecking? = nil,
+                accessDelay: Duration = .milliseconds(600), accessTimeout: Duration = .seconds(10)) {
         self.githubLogin = githubLogin
+        accessChecker = repoAccess
+        self.accessDelay = accessDelay
+        self.accessTimeout = accessTimeout
         team = NewTeamFlow(planner: teamPlanner ?? NoTeamPlanner())
         hasTeamStep = teamPlanner != nil
         self.retryEvery = retryEvery
@@ -314,7 +341,7 @@ public final class FirstRunFlow {
             // Docker Desktop ready before making the first workspace (R-0211).
             return docker == .running && !boxName.isEmpty && nameProblem == nil
         case .project:
-            return projectProblem == nil
+            return projectProblem == nil && accessAllowsContinue
         case .team:
             return team.canContinue && (!createsHere || docker == .running)
         case .review:
@@ -334,7 +361,63 @@ public final class FirstRunFlow {
     /// The project CreateBox gets.
     public var project: ProjectChoice {
         guard projectKind == .github, let url = GitHubRepoURL.canonical(githubURL) else { return .empty }
-        return .github(url: url, useSignIn: githubLogin() != nil)
+        // A repository GitHub showed plainly is cloned without the sign-in.
+        return .github(url: url, useSignIn: githubLogin() != nil && access != .publicRepo)
+    }
+
+    /// What the access check is for: the address and the sign-in; empty
+    /// when there's nothing to check. The view checks again when it changes.
+    public var accessKey: String {
+        guard accessChecker != nil, projectKind == .github, let url = GitHubRepoURL.canonical(githubURL) else { return "" }
+        return url + "\n" + (githubLogin() ?? "")
+    }
+
+    /// GitHub's answer for this address and sign-in; nil before it comes.
+    public var access: RepoAccess? {
+        guard let c = accessChecked, !accessKey.isEmpty, c.key == accessKey else { return nil }
+        return c.access
+    }
+
+    private var accessAllowsContinue: Bool {
+        guard !accessKey.isEmpty else { return true } // Empty, or no checker
+        return access?.allowsContinue ?? false
+    }
+
+    /// The line under the address: what GitHub said (or that it's asking).
+    public var accessLine: String? {
+        guard !accessKey.isEmpty, projectProblem == nil else { return nil }
+        switch access {
+        case nil: return ProjectText.checking
+        case .publicRepo: return ProjectText.publicRepo
+        case .reachable: return ProjectText.reachable
+        case .needsSignIn: return ProjectText.privateOrMissing
+        case .notFound(let login): return ProjectText.notFound(login)
+        case .signInEnded: return ProjectText.signInEnded
+        case .couldNotCheck: return ProjectText.couldNotCheck
+        }
+    }
+
+    /// Sign in with GitHub, on the step, would fix it.
+    public var accessWantsSignIn: Bool { access?.wantsSignIn ?? false }
+
+    /// Asks GitHub about the address, after a pause in typing (the view
+    /// runs this as a task keyed on `accessKey`, so a change cancels the
+    /// wait). An answer that takes longer than `accessTimeout` counts as
+    /// couldn't check: Continue is never held for ever.
+    public func checkAccess() async {
+        let key = accessKey
+        guard let checker = accessChecker, !key.isEmpty, let url = GitHubRepoURL.canonical(githubURL) else { return }
+        if accessDelay > .zero { try? await Task.sleep(for: accessDelay) }
+        guard !Task.isCancelled, key == accessKey else { return }
+        let timeout = accessTimeout
+        let answer: RepoAccess = await withCheckedContinuation { done in
+            let once = Once<RepoAccess>()
+            once.set { done.resume(returning: $0) }
+            Task { once.resume(await checker.access(url)) }
+            Task { try? await Task.sleep(for: timeout); once.resume(.couldNotCheck) }
+        }
+        guard !Task.isCancelled, key == accessKey else { return }
+        accessChecked = (key, answer)
     }
 
     /// Whether leaving this step makes the workspace: the name's step
@@ -365,7 +448,12 @@ public final class FirstRunFlow {
             if docker != .running { return docker?.card?.title ?? DockerText.checkingFirst }
             return nameProblem ?? FirstRunText.typeName
         case .project:
-            return projectProblem
+            if let problem = projectProblem { return problem }
+            switch access {
+            case nil: return ProjectText.checking
+            case .needsSignIn, .signInEnded: return ProjectText.signInToContinue
+            default: return ProjectText.checkAddress
+            }
         case .team:
             if let why = team.whyNotContinue { return why }
             return docker?.card?.title ?? DockerText.checkingFirst

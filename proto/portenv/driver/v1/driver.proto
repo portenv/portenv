@@ -25,6 +25,10 @@ service DriverService {
   rpc Stop(StopRequest) returns (StopResponse);
   // Removes the box's instance. Never deletes its home storage.
   rpc Destroy(DestroyRequest) returns (DestroyResponse);
+  // Deletes the box's home storage, only for Delete Workspace (ADR 0029),
+  // after Destroy: refused while the box's instance exists. Deleting
+  // storage that is already gone succeeds. Never touches another box's.
+  rpc DeleteHome(DeleteHomeRequest) returns (DeleteHomeResponse);
   // Streams the box's console output.
   rpc Logs(LogsRequest) returns (stream LogsResponse);
   // Returns a point-in-time snapshot of the box's state and resource use.
@@ -77,6 +81,13 @@ message DestroyRequest {
 }
 
 message DestroyResponse {}
+
+message DeleteHomeRequest {
+  string box_id = 1;
+  HomeStorage home = 2;
+}
+
+message DeleteHomeResponse {}
 
 // Which console stream a log chunk came from.
 enum LogStream {

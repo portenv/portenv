@@ -46,7 +46,7 @@ struct TeamSidebar: View {
                 YouRow(tabs: tabs.filter { $0.agentID.isEmpty }.count, compact: compact)
                     .tag(TeamSelection.you)
                 ForEach(state.agents) { a in
-                    AgentRow(agent: a, team: state.agents, now: now, compact: compact)
+                    AgentRow(agent: a, team: state.agents, now: now, compact: compact, selected: selection == .agent(a.id))
                         .tag(TeamSelection.agent(a.id))
                     if selection == .agent(a.id), !compact {
                         ForEach(tabs.filter { $0.agentID == a.id }) { t in
@@ -136,6 +136,10 @@ struct TeamAvatar: View {
 struct TeamStatus: View {
     let status: AgentStatus
     var symbolOnly = false
+    /// Whether its row is the selected one (R-0411).
+    var selected = false
+    /// The list draws the active (blue) selection with increased prominence.
+    @Environment(\.backgroundProminence) private var prominence
 
     var body: some View {
         Group {
@@ -147,8 +151,17 @@ struct TeamStatus: View {
             }
         }
         .font(.system(size: 11, weight: status == .needsYou ? .semibold : .regular))
-        .foregroundStyle(Self.tint(status))
+        .foregroundStyle(ink)
         .lineLimit(1)
+    }
+
+    /// On the active selection, the system's selected-content colour (white
+    /// on the accent); otherwise the status's own colour (R-0411).
+    private var ink: SwiftUI.Color {
+        switch TeamStatusInk.of(selected: selected, activeSelection: prominence == .increased) {
+        case .selectedContent: SwiftUI.Color(nsColor: .alternateSelectedControlTextColor)
+        case .status: Self.tint(status)
+        }
     }
 
     static func tint(_ s: AgentStatus) -> SwiftUI.Color {
@@ -185,12 +198,14 @@ struct AgentRow: View {
     let team: [TeamAgent]
     var now = Date()
     var compact = false
+    /// Whether this row is the sidebar's selection (R-0411).
+    var selected = false
 
     var body: some View {
         Group {
             if compact {
                 TeamAvatar(agent: agent, team: team)
-                    .overlay(alignment: .bottomTrailing) { TeamStatus(status: agent.status, symbolOnly: true).offset(x: 4, y: 3) }
+                    .overlay(alignment: .bottomTrailing) { TeamStatus(status: agent.status, symbolOnly: true, selected: selected).offset(x: 4, y: 3) }
                     .help("\(agent.name), \(TeamText.word(agent.status))")
             } else {
                 HStack(alignment: .top, spacing: 8) {
@@ -205,7 +220,7 @@ struct AgentRow: View {
                         HStack(spacing: 6) {
                             Text(agent.name).lineLimit(1).truncationMode(.tail)
                             Spacer(minLength: 4)
-                            TeamStatus(status: agent.status)
+                            TeamStatus(status: agent.status, selected: selected)
                         }
                         // Its status while it runs (R-0256), else its latest line.
                         // Why its start failed, in red (R-0302).

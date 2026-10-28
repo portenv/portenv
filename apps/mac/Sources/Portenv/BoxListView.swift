@@ -15,6 +15,10 @@ struct BoxListView: View {
     /// with Close Workspace.
     var running: Set<String> = []
     var close: (String) -> Void = { _ in }
+    /// Workspaces whose deletion stopped part-way (ADR 0029).
+    var deletionStopped: Set<String> = []
+    /// Delete Workspace… (ADR 0029).
+    var delete: (String) -> Void = { _ in }
     /// Reads `running` again when the list shows.
     var refresh: () async -> Void = {}
     let open: (String) -> Void
@@ -38,7 +42,9 @@ struct BoxListView: View {
                 HStack {
                     Label(box, systemImage: "shippingbox")
                     Spacer()
-                    if running.contains(box) {
+                    if deletionStopped.contains(box) {
+                        Text(BoxListText.deletionStopped).foregroundStyle(.secondary)
+                    } else if running.contains(box) {
                         Text(BoxListText.running).foregroundStyle(.secondary)
                     }
                 }
@@ -50,6 +56,10 @@ struct BoxListView: View {
             .contextMenu(forSelectionType: String.self) { picked in
                 if let box = picked.first, running.contains(box) {
                     Button(BoxListText.closeWorkspace) { close(box) }
+                }
+                if let box = picked.first {
+                    Divider()
+                    Button(BoxListText.deleteWorkspace) { delete(box) }
                 }
             } primaryAction: { picked in
                 if let box = picked.first { open(box) }

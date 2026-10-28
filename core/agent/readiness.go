@@ -111,6 +111,9 @@ type server struct {
 	// team makes and removes agent users (ADR 0022 §1); nil where init
 	// doesn't serve them.
 	team *TeamUsers
+	// etcDir and zoneinfoDir are /etc and the image's tz database (tests
+	// replace them).
+	etcDir, zoneinfoDir string
 }
 
 func (s *server) GetVersion(context.Context, *agentv1.GetVersionRequest) (*agentv1.GetVersionResponse, error) {

@@ -119,11 +119,12 @@ func (p *pushRemote) bundle(n string, not string) []byte {
 // GitHub the remote, and the workspace's repository recorded.
 func pushServer(t *testing.T) (*Server, *fakeProjectAgent, *pushRemote, *bytes.Buffer) {
 	t.Helper()
-	s, fake, _ := servingProject(t)
 	var logs bytes.Buffer
-	s.log = slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	r := newPushRemote(t)
-	s.githubGit = r.base
+	s, fake, _ := servingProject(t, func(s *Server) {
+		s.log = slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
+		s.githubGit = r.base
+	})
 	if err := keepGitHubRepo(filepath.Join(s.env.Dir, "state", "box-1"), "https://github.com/acme/api"); err != nil {
 		t.Fatal(err)
 	}
@@ -294,8 +295,7 @@ func TestAnswerPushIsTheAppsAlone(t *testing.T) {
 
 // The clone records the workspace's repository.
 func TestTheCloneRecordsTheRepository(t *testing.T) {
-	s, _, c := servingProject(t)
-	useFakeGitHub(s, newFakeGitHub(t, false))
+	s, _, c := servingProject(t, withGitHub(newFakeGitHub(t, false)))
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	state := filepath.Join(s.env.Dir, "state", "box-1")
@@ -312,9 +312,8 @@ func TestTheCloneRecordsTheRepository(t *testing.T) {
 
 // The window's stream: each question, then its going once answered.
 func TestWatchPushesShowsEachQuestion(t *testing.T) {
-	s, _, c := servingProject(t)
 	r := newPushRemote(t)
-	s.githubGit = r.base
+	s, _, c := servingProject(t, func(s *Server) { s.githubGit = r.base })
 	if err := keepGitHubRepo(filepath.Join(s.env.Dir, "state", "box-1"), "https://github.com/acme/api"); err != nil {
 		t.Fatal(err)
 	}

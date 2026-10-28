@@ -83,6 +83,8 @@ type Server struct {
 	// elsewhere: the lease another machine held on a box when OpenBox was
 	// last refused (GetPlacement).
 	elsewhere map[string]boxsync.Lease
+	// deleting: boxes a DeleteBox call is deleting now (ADR 0029).
+	deleting map[string]bool
 	// gen counts each box's moves, closes and restarts by this daemon, so
 	// a terminal that ends because of one is not reported as a failure.
 	gen map[string]uint64
@@ -97,6 +99,9 @@ type Server struct {
 	alive   func(pid int) bool // whether a reporting app still runs
 	// engine asks the box engine whether it answers (tests set it).
 	engine func(ctx context.Context) error
+	// macGitIdentity reads the owner's git name and email from the Mac
+	// (nil: theMacGitIdentity; tests set another).
+	macGitIdentity func(ctx context.Context) (name, email string)
 	// freeBytes is the space free to this user on dir's volume (tests
 	// set it).
 	freeBytes func(dir string) (uint64, error)
@@ -108,6 +113,12 @@ type Server struct {
 	// pushes from workspaces waiting for the app (R-0391).
 	pushOnce sync.Once
 	pushes   *pushQuestions
+	// gitBusy counts each workspace's pushes and fetches with GitHub in
+	// flight (R-0391): Delete Workspace waits for them (ADR 0029).
+	gitBusy map[string]int
+	// deleter deletes boxes (ADR 0029; nil: this Mac's engine and folder,
+	// tests set a fake).
+	deleter boxDeleter
 }
 
 // openBox is a box this daemon opened: its session, sync engine and agent
@@ -300,8 +311,12 @@ func (s *Server) ListBoxes(context.Context, *daemonv1.ListBoxesRequest) (*daemon
 			state = typesv1.BoxState_BOX_STATE_RUNNING
 		}
 		s.mu.Unlock()
-		resp.Boxes = append(resp.Boxes, &daemonv1.BoxStatus{Box: &typesv1.Box{Id: c.ID, Name: c.Name, ToolboxImage: c.Image}, State: state,
-			CarriesRecoveryKey: c.Recovery})
+		st := &daemonv1.BoxStatus{Box: &typesv1.Box{Id: c.ID, Name: c.Name, ToolboxImage: c.Image}, State: state,
+			CarriesRecoveryKey: c.Recovery}
+		if c.Deleting != nil {
+			st.Deleting, st.DeleteStep = true, deleteStepEnum[c.Deleting.Step]
+		}
+		resp.Boxes = append(resp.Boxes, st)
 	}
 	// Boxes CreateBox hasn't finished: shown, never opened (ADR 0019).
 	creating, err := s.env.Creations()
@@ -335,6 +350,11 @@ func (s *Server) OpenBox(ctx context.Context, req *daemonv1.OpenBoxRequest) (_ *
 	}()
 	if req.GetConnectThere() {
 		return s.connectThere(ctx, req.GetName())
+	}
+	// Being deleted, or its deletion stopped part-way: its home or saves
+	// may be gone, so it never starts (ADR 0029).
+	if s.beingDeleted(req.GetName()) {
+		return nil, status.Errorf(codes.FailedPrecondition, "Deleting %s stopped before it finished, so it can't open. Choose Delete Workspace… again to finish.", req.GetName())
 	}
 	// A box this Mac moved to a server stays there until Move To brings it
 	// back: show it where it runs.
@@ -380,6 +400,9 @@ func (s *Server) OpenBox(ctx context.Context, req *daemonv1.OpenBoxRequest) (_ *
 	s.mu.Lock()
 	s.open[req.GetName()] = ob
 	s.mu.Unlock()
+	// work's git gets the owner's name and email from the Mac where it has
+	// none (findings 21 and 22); never fails the open.
+	s.shareGitIdentity(ctx, ob.sess.Cfg.ID, ob.client())
 	summary := fmt.Sprintf("open on %s (resume rule %d: %s)", s.env.Machine, res.Rule, res.Action)
 	// Rule 4: say where the unsaved work went, with its time.
 	if o := res.Orphaned; o != nil {
@@ -480,6 +503,13 @@ func (s *Server) openBox(ctx context.Context, name string, takeOver bool) (*open
 		return nil, none, err
 	} else if state != agentv1.ReadinessState_READINESS_STATE_READY {
 		return nil, none, errors.New("the workspace failed to start")
+	}
+	// The Mac's time zone, at every start; a failure leaves the image's
+	// clock (UTC) and never stops the open.
+	if zone, err := sendTimeZone(ctx, ob.client(), macZone); err != nil {
+		s.log.Warn("the workspace's time zone couldn't be set; it stays on UTC", "box_id", id, "err", err)
+	} else if zone != "" {
+		step("time zone " + zone)
 	}
 	step("workspace ready")
 	return ob, res, nil

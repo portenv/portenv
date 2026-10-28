@@ -352,7 +352,8 @@ public final class BoxController {
         }
         return BoxMenuModel.items(open: isOpen, busy: busy, agentUnavailable: agentUnavailable,
                                   optionHeld: optionHeld, location: here, servers: servers,
-                                  lastSavePoint: lastSavePoint, savesKnown: savesLoaded && location == .thisMac, now: now())
+                                  lastSavePoint: lastSavePoint, savesKnown: savesLoaded && location == .thisMac, now: now(),
+                                  agentsRunning: agentsRunning)
     }
 
     /// The newest save point among the saves read here, if any.
@@ -371,6 +372,13 @@ public final class BoxController {
         return BoxMenuModel.moveSubmenu(busy: busy, location: here, servers: servers)
     }
 
+    /// Delete Workspace… was chosen: the app shows its sheet (ADR 0029).
+    @ObservationIgnored public var onDelete: ((String) -> Void)?
+
+    /// An agent of the workspace's team is running (R-0358): Delete
+    /// Workspace… is disabled.
+    public var agentsRunning = false
+
     /// Runs a menu item's action.
     public func run(_ action: BoxMenuItem.Action) async {
         switch action {
@@ -380,6 +388,7 @@ public final class BoxController {
         case .revertToLastSavePoint: await revertToLastSavePoint()
         case .makeSavePoint: await makeSavePoint()
         case .restartBox: await restartBox()
+        case .deleteWorkspace: onDelete?(box)
         }
     }
 

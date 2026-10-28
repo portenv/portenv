@@ -80,12 +80,7 @@ public final class DaemonClient: DaemonAPI, Sendable {
         do {
             return try await body()
         } catch let e as RPCError {
-            if e.metadata[stringValues: "portenv-refusal"].contains("open-elsewhere") {
-                throw DaemonError(e.message, openElsewhere: true)
-            }
-            if e.metadata[stringValues: "portenv-refusal"].contains("moving") {
-                var refused = DaemonError(e.message)
-                refused.moving = true
+            if let refused = DaemonError.refusal(Array(e.metadata[stringValues: "portenv-refusal"]), message: e.message) {
                 throw refused
             }
             throw DaemonError.fromRPC(message: DaemonErrorText.plain(code: e.code, message: e.message), unimplemented: e.code == .unimplemented,
@@ -323,7 +318,8 @@ public final class DaemonClient: DaemonAPI, Sendable {
 extension DaemonClient: BoxCreating, RecoveryChecking {
     public func listings() async throws -> [BoxListing] {
         try await call {
-            try await api.listBoxes(.init()).boxes.map { BoxListing(name: $0.box.name, id: $0.box.id, creating: $0.creating, hasRecoveryKey: $0.carriesRecoveryKey) }
+            try await api.listBoxes(.init()).boxes.map { BoxListing(name: $0.box.name, id: $0.box.id, creating: $0.creating, hasRecoveryKey: $0.carriesRecoveryKey,
+                                                         deleting: $0.deleting) }
         }
     }
 
@@ -378,6 +374,27 @@ extension DaemonClient: BoxCreating, RecoveryChecking {
         case .unavailable: 14
         default: 13
         }
+    }
+}
+
+/// Delete Workspace… (ADR 0029). keyIDs and provideKeys are DaemonAPI's.
+extension DaemonClient: WorkspaceDeleting {
+    public func deletePlan(_ box: String) async throws -> DeletePlan {
+        let r = try await call { try await api.getDeletePlan(.with { $0.name = box }) }
+        return DeletePlan(boxID: r.boxID, saveCount: Int(r.saveCount), savesBytes: r.savesBytes, savesElsewhere: r.savesElsewhere,
+                          savesPlace: r.savesPlace, openHere: r.openHere, refusal: r.refusal,
+                          stoppedAt: DeleteStep(rawValue: r.stoppedAt.rawValue) ?? .none, carriesRecoveryKey: r.carriesRecoveryKey)
+    }
+
+    public func deleteBox(_ box: String, confirmName: String, savesElsewhereConfirmed: Bool, keysDeleted: Bool) async throws -> DeleteOutcome {
+        var req = Portenv_Daemon_V1_DeleteBoxRequest()
+        req.name = box
+        req.confirmName = confirmName
+        req.confirmSavesElsewhere = savesElsewhereConfirmed
+        req.keysDeleted = keysDeleted
+        let r = try await call { try await api.deleteBox(req) }
+        return DeleteOutcome(finished: r.finished, deleteKeyIDs: r.deleteKeyIds, savesLeftAt: r.savesLeftAt,
+                             step: DeleteStep(rawValue: r.step.rawValue) ?? .none)
     }
 }
 
@@ -728,6 +745,14 @@ extension DaemonClient {
         return try await call { TeamAgent(try await api.stopAgent(req).agent) }
     }
 
+    public func fetchAgentBranch(_ box: String, id: String) async throws -> FetchedBranch {
+        let req = Portenv_Daemon_V1_FetchAgentBranchRequest.with { $0.name = box; $0.agentID = id }
+        return try await call {
+            let r = try await api.fetchAgentBranch(req)
+            return FetchedBranch(ref: r.ref, commit: r.commit)
+        }
+    }
+
     public func getAgentFile(_ box: String, id: String) async throws -> AgentFileContent {
         let req = Portenv_Daemon_V1_GetAgentFileRequest.with { $0.name = box; $0.agentID = id }
         return try await call {
@@ -751,7 +776,8 @@ extension DaemonClient {
         let r = try await call { try await api.applyTeamPlan(req) }
         return TeamPlanApplied(applied: r.applied, pinned: r.pinned, lines: r.lines.map { TeamText.line($0, max: 300) },
                                projectError: r.projectError.isEmpty ? nil : TeamText.line(r.projectError, max: 300),
-                               needsSignIn: r.needsSignIn, needsToken: r.needsToken)
+                               needsSignIn: r.needsSignIn, needsToken: r.needsToken,
+                               project: r.project.isEmpty ? nil : TeamText.line(r.project, max: 140))
     }
 
     public func agentsAllowed() async throws -> Int {
@@ -797,7 +823,8 @@ extension TeamAgent {
                   runner: a.runner, grant: TeamGrant(a.grant),
                   workStatus: a.hasStatus ? AgentWorkStatus(a.status) : nil,
                   routines: a.routines.map { AgentRoutine(every: TimeInterval($0.everyMinutes) * 60, note: $0.note, paused: $0.paused) },
-                  routinesOff: a.routinesOff, shareLoginOff: a.shareLoginOff)
+                  routinesOff: a.routinesOff, shareLoginOff: a.shareLoginOff, ownClone: a.ownClone,
+                  idleUnknown: a.idleUnknown)
     }
 }
 
@@ -835,7 +862,7 @@ extension TeamMessage {
         case .answer, .unspecified, .UNRECOGNIZED: .answer
         }
         self.init(id: m.id, from: m.from, to: m.to, threadID: m.threadID, kind: kind, text: m.text,
-                  createdAt: m.hasCreatedAt ? m.createdAt.date : nil, about: m.about)
+                  createdAt: m.hasCreatedAt ? m.createdAt.date : nil, about: m.about, sharedBranch: m.sharedBranch)
     }
 }
 

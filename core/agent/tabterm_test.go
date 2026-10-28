@@ -456,9 +456,18 @@ func TestTabTerminalEndsWhenTheTabGoes(t *testing.T) {
 	if m.GetEnd() != agentv1.TabTerminalEnd_TAB_TERMINAL_END_TAB_CLOSED || time.Since(start) > time.Second {
 		t.Fatalf("opening a gone tab: %v after %s", m, time.Since(start))
 	}
-	h.raw("new-window", "-d", "-t", "=main:", "sh -c 'sleep 0.5; echo last-words; sleep 0.2'")
+	// The tab prints its last words once the stream has its first state
+	// (tmux wait-for, from inside the pane), then closes: they come as
+	// output, after the seed. A fixed half second before printing wasn't
+	// always enough on a loaded machine for the stream to start, and the
+	// words were then in the seed, or the tab was gone before it.
+	h.raw("new-window", "-d", "-t", "=main:", "sh -c 'tmux wait-for last-words; echo last-words; sleep 0.2'")
 	tab := strings.Fields(h.raw("list-windows", "-t", "=main:", "-F", "#{window_id}"))[1]
 	tt := h.open(ctx, tab, "", 80, 24)
+	if m := tt.next(10 * time.Second); m == nil || m.GetReset_() == nil {
+		t.Fatalf("the stream's first message: %v", m)
+	}
+	h.raw("wait-for", "-S", "last-words")
 	var out []byte
 	for {
 		m := tt.next(5 * time.Second)

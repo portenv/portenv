@@ -4,7 +4,9 @@ package docker
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
+	"net"
 	"strings"
 	"testing"
 	"time"
@@ -225,12 +227,8 @@ func TestChannelConditions(t *testing.T) {
 		t.Fatalf("the agent was restarted without its secrets: %s", got)
 	}
 	sh("", "openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -subj /CN=portenv-agent -days 1 -keyout /tmp/i.key -out /tmp/i.crt 2>/dev/null; "+
-		"setsid sh -c 'openssl s_server -accept 7700 -cert /tmp/i.crt -key /tmp/i.key -quiet > /tmp/impostor.log 2>&1' >/dev/null 2>&1 & sleep 1")
-	if raw, err := ch.Dial(ctx); err != nil {
-		t.Fatalf("the impostor is not listening: %v", err)
-	} else {
-		_ = raw.Close()
-	}
+		"setsid sh -c 'openssl s_server -accept 7700 -cert /tmp/i.crt -key /tmp/i.key -quiet > /tmp/impostor.log 2>&1' >/dev/null 2>&1 &")
+	waitForImpostor(ctx, t, ch.Dial)
 	conn2, err := agent.DialChannel(ch.Dial, ch.CertPEM, ch.Token)
 	if err != nil {
 		t.Fatal(err)
@@ -243,5 +241,34 @@ func TestChannelConditions(t *testing.T) {
 	log := sh("", "cat /tmp/impostor.log")
 	if strings.Contains(log, ch.Token) || strings.Contains(log, password) {
 		t.Fatal("the impostor received the token or the password")
+	}
+}
+
+// waitForImpostor waits until the impostor answers a TLS handshake through
+// the box's published port. A plain connection proves nothing: Docker's
+// proxy accepts one on the host whether or not anything listens in the box,
+// and closes it if nothing does, so a client that came before openssl was
+// listening (a fixed second wasn't always enough under load) saw an EOF in
+// the handshake instead of the impostor's certificate.
+func waitForImpostor(ctx context.Context, t *testing.T, dial func(context.Context) (net.Conn, error)) {
+	t.Helper()
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		raw, err := dial(ctx)
+		if err == nil {
+			// Only whether something serves TLS: the certificate is the
+			// impostor's own, refused below by the client under test.
+			c := tls.Client(raw, &tls.Config{InsecureSkipVerify: true, MinVersion: tls.VersionTLS12}) // #nosec G402 -- test probe
+			_ = c.SetDeadline(time.Now().Add(5 * time.Second))
+			err = c.Handshake()
+			_ = c.Close()
+		}
+		if err == nil {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the impostor is not serving TLS on the agent's port: %v", err)
+		}
+		time.Sleep(100 * time.Millisecond)
 	}
 }

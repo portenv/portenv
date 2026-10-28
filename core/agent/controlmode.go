@@ -34,10 +34,10 @@ const (
 	ctlOverflow
 	// ctlRestart: the control client exited and was started again; events
 	// between the two were never seen (ADR 0020, decision 2). It comes once
-	// the new client takes commands.
+	// the new client is attached and has answered its first commands.
 	ctlRestart
-	// ctlReady: the session's first client takes commands; a subscriber
-	// that couldn't send one before it can now.
+	// ctlReady: the session's first client is attached and has answered its
+	// first commands; a subscriber that couldn't send one before it can now.
 	ctlReady
 	// ctlSessionGone: the session no longer exists, so its client stopped
 	// for good (R-0167); the next subscriber starts one again.

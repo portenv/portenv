@@ -341,11 +341,16 @@ func (s *Server) ApplyTeamPlan(ctx context.Context, req *daemonv1.ApplyTeamPlanR
 			}
 		}
 		if o != nil {
+			// Named, so the window can say what it's cloning on the next try.
+			var named string
+			if repo, err := githubrepo.Parse(setup.GetProject().GetGithubUrl()); err == nil {
+				named = repo.Owner + "/" + repo.Name
+			}
 			if o.needToken {
-				return &daemonv1.ApplyTeamPlanResponse{NeedsToken: true}, nil
+				return &daemonv1.ApplyTeamPlanResponse{NeedsToken: true, Project: named}, nil
 			}
 			s.log.Info("project not brought in", "box_id", box.ID, "sign_in", o.needsSignIn)
-			return &daemonv1.ApplyTeamPlanResponse{ProjectError: o.line, NeedsSignIn: o.needsSignIn}, nil
+			return &daemonv1.ApplyTeamPlanResponse{ProjectError: o.line, NeedsSignIn: o.needsSignIn, Project: named}, nil
 		}
 	}
 	out := &daemonv1.ApplyTeamPlanResponse{Applied: true}

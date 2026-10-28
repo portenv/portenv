@@ -746,7 +746,9 @@ message ProjectSource {
     string github_url = 2;
   }
   // Clone with the owner's GitHub sign-in (a private repository): the app
-  // passes it to ApplyTeamPlan, in memory; it's never kept.
+  // passes it to ApplyTeamPlan, in memory; it's never kept. False means
+  // "fetch plain first; use the sign-in only if GitHub refuses" (R-0413):
+  // portenvd then asks for it (needs_token) whatever was chosen at Create.
   bool use_sign_in = 3;
 }
 
@@ -1152,6 +1154,9 @@ message ApplyTeamPlanResponse {
   // The kept setup clones with the owner's sign-in and none was given: the
   // app reads it and calls again. Nothing was done.
   bool needs_token = 6;
+  // The kept GitHub project, as OWNER/REPO, when it wasn't brought in: the
+  // window says "Cloning OWNER/REPO…" while the next try runs (R-0409).
+  string project = 7;
 }
 
 message GetTeamSettingsRequest {}
@@ -1211,6 +1216,14 @@ message AgentInfo {
   // Set when its file asks for share_login, which this build doesn't
   // support: one plain line saying nothing is shared (R-0323).
   string share_login_off = 21;
+  // It works in its own copy of the project (checkout: own), so it has a
+  // branch, agent/<id>, the owner can fetch (ADR 0022 §2a).
+  bool own_clone = 22;
+  // "Can't tell if <name> is idle: …" when its runner has an idle rule
+  // but its pane has been quiet with no idle prompt recognised for 3
+  // minutes, so wake-ups and routines wait (R-0411). Empty again as soon
+  // as a prompt is recognised or output resumes.
+  string idle_unknown = 23;
 }
 
 message WatchTeamRequest {

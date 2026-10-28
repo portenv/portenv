@@ -4,6 +4,7 @@ package daemon
 
 import (
 	"context"
+	"log/slog"
 	"strings"
 	"sync"
 	"testing"
@@ -227,4 +228,62 @@ func TestNoWakeForAnUnknownRunnerAStoppedAgentOrOneThatRead(t *testing.T) {
 	if h.tries != 0 {
 		t.Errorf("woke a stopped agent or one that had read: %v", h.wakes())
 	}
+}
+
+// A refused wake-up is visible in portenvd's log: one line per agent,
+// rate-limited, with the helper's reason and never the message's text;
+// a wake-up that lands starts a new episode. A routine refused as busy
+// says so the same way.
+func TestARefusedWakeIsLoggedOncePerAgent(t *testing.T) {
+	e, h, clock := newWakeEngine(t, defaultTeam(), "lead")
+	var out strings.Builder
+	var mu sync.Mutex
+	e.log = slog.New(slog.NewTextHandler(lockedWriter{&mu, &out}, nil))
+	logged := func() string { mu.Lock(); defer mu.Unlock(); return out.String() }
+	ctx := context.Background()
+	h.busy = true
+	mustCall(t, e, msgCall("builder", "lead", "the secret plan"))
+	for range 5 {
+		e.tickWakes(ctx)
+		clock.add(wakeTick)
+	}
+	if n := strings.Count(logged(), "not woken"); n != 1 {
+		t.Fatalf("%d lines for 5 refusals, want 1:\n%s", n, logged())
+	}
+	if l := logged(); !strings.Contains(l, "its prompt wasn't idle") || !strings.Contains(l, "agent=lead") || !strings.Contains(l, "isn't waiting at its input") || strings.Contains(l, "secret plan") {
+		t.Errorf("the line: %s", l)
+	}
+	clock.add(notTypedLogEvery)
+	e.tickWakes(ctx)
+	if n := strings.Count(logged(), "not woken"); n != 2 {
+		t.Errorf("%d lines after %s, want 2", n, notTypedLogEvery)
+	}
+}
+
+func TestARefusedRoutineIsLogged(t *testing.T) {
+	e, h, clock := startedWithRoutine(t)
+	var out strings.Builder
+	var mu sync.Mutex
+	e.log = slog.New(slog.NewTextHandler(lockedWriter{&mu, &out}, nil))
+	h.busy = true
+	clock.add(time.Hour)
+	e.tickRoutines(context.Background())
+	clock.add(30 * time.Second)
+	e.tickRoutines(context.Background())
+	mu.Lock()
+	defer mu.Unlock()
+	if l := out.String(); strings.Count(l, "routine not typed") != 1 || strings.Contains(l, "Status round") {
+		t.Errorf("the log: %s", l)
+	}
+}
+
+type lockedWriter struct {
+	mu *sync.Mutex
+	b  *strings.Builder
+}
+
+func (w lockedWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.b.Write(p)
 }

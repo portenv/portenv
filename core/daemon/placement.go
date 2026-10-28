@@ -28,6 +28,10 @@ const (
 	// RefusalMoving: a Move To is in progress, so CloseBox refused
 	// (R-0249); the app says so, and offers no Close or Quit Anyway.
 	RefusalMoving = "moving"
+	// RefusalTeamStartPending: StartAgent refused because the team's first
+	// start waits for the owner's Approve (R-0413); the app shows its own
+	// hint, and the CLI the words.
+	RefusalTeamStartPending = "team-start-pending"
 )
 
 // refuseOpenElsewhere is OpenBox's answer when another machine holds the

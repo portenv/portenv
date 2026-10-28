@@ -2,6 +2,7 @@
 
 import Foundation
 import Observation
+import os
 
 // Sign in with GitHub (ADR 0025 §6, R-0390, R-0391): GitHub's device flow
 // with Portenv's registered OAuth app, a public client with no secret. The
@@ -113,6 +114,14 @@ public final class GitHubSignIn: CustomStringConvertible {
     private var deviceCode: String?
     private var interval: Int = 5
     private var expiresIn: Int = 900
+    /// Each start() is a new attempt; an older attempt's poll never
+    /// changes the state once a newer one has begun.
+    private var attempt = 0
+    /// Polls that may fail in a row (no answer, a non-200, an answer that
+    /// isn't GitHub's) before the sheet says GitHub can't be reached. The
+    /// code stays valid on GitHub, so a missed poll costs nothing.
+    static let pollRetries = 3
+    private static let log = Logger(subsystem: "com.portenv.Portenv", category: "github-sign-in")
 
     public init(http: GitHubHTTP = URLSessionGitHubHTTP(), account: GitHubAccount = .system,
                 sleep: @escaping @Sendable (Duration) async -> Void = { try? await Task.sleep(for: $0) }) {
@@ -141,10 +150,12 @@ public final class GitHubSignIn: CustomStringConvertible {
 
     /// Asks GitHub for a code to show.
     public func start() async {
+        attempt += 1
         do {
             let (code, data) = try await http.send(url: GitHubApp.deviceCodeURL, form: ["client_id": GitHubApp.clientID, "scope": GitHubApp.scope], bearer: nil)
             guard code == 200, let a = try? JSONDecoder().decode(CodeAnswer.self, from: data),
                   let url = URL(string: a.verification_uri), url.scheme == "https", url.host == "github.com" else {
+                Self.log.error("device code answer unusable: HTTP \(code, privacy: .public)")
                 state = .failed(GitHubSignInText.unreachable)
                 return
             }
@@ -155,38 +166,78 @@ public final class GitHubSignIn: CustomStringConvertible {
             expiresIn = a.expires_in ?? 900
             state = .waiting
         } catch {
+            if error is CancellationError || Task.isCancelled { return }
+            Self.log.error("device code request failed: \(Self.describe(error), privacy: .public)")
             state = .failed(GitHubSignInText.unreachable)
         }
+    }
+
+    /// The kind of failure, for the log: never a token or a code.
+    nonisolated static func describe(_ error: Error) -> String {
+        if let p = error as? PollProblem { return p.description }
+        let e = error as NSError
+        return "\(e.domain) \(e.code)"
     }
 
     /// Polls GitHub until the person has entered the code (or declined, or
     /// it expired), then keeps the token in the Keychain.
     public func waitForApproval() async {
         guard let deviceCode else { return }
+        let mine = attempt
         var waited = 0
-        while state == .waiting, !Task.isCancelled, waited <= expiresIn {
+        var failures = 0
+        // Only this attempt's poll may change the state.
+        func current() -> Bool { attempt == mine && state == .waiting }
+        while current(), !Task.isCancelled, waited <= expiresIn {
             await sleep(.seconds(interval))
             waited += interval
-            guard let (code, data) = try? await http.send(url: GitHubApp.tokenURL, form: [
-                "client_id": GitHubApp.clientID, "device_code": deviceCode,
-                "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
-            ], bearer: nil), code == 200, let a = try? JSONDecoder().decode(TokenAnswer.self, from: data) else {
-                state = .failed(GitHubSignInText.unreachable)
-                return
+            // Cancelled (the sheet went away): stop without a word.
+            if Task.isCancelled || !current() { return }
+            let answer: TokenAnswer
+            do {
+                let (code, data) = try await http.send(url: GitHubApp.tokenURL, form: [
+                    "client_id": GitHubApp.clientID, "device_code": deviceCode,
+                    "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
+                ], bearer: nil)
+                guard code == 200, let a = try? JSONDecoder().decode(TokenAnswer.self, from: data) else {
+                    throw PollProblem.answer(code)
+                }
+                answer = a
+                failures = 0
+            } catch {
+                if error is CancellationError || Task.isCancelled || !current() { return }
+                failures += 1
+                Self.log.error("poll \(failures, privacy: .public) of \(Self.pollRetries, privacy: .public) failed: \(Self.describe(error), privacy: .public)")
+                if failures >= Self.pollRetries {
+                    state = .failed(GitHubSignInText.unreachable)
+                    return
+                }
+                continue
             }
-            if let token = a.access_token, !token.isEmpty {
+            if let token = answer.access_token, !token.isEmpty {
                 await finish(token)
                 return
             }
-            switch a.error {
+            switch answer.error {
             case "authorization_pending": continue
-            case "slow_down": interval = max(a.interval ?? interval + 5, interval + 1)
+            case "slow_down": interval = max(answer.interval ?? interval + 5, interval + 1)
             case "access_denied": state = .failed(GitHubSignInText.denied)
             case "expired_token": state = .failed(GitHubSignInText.expired)
-            default: state = .failed(GitHubSignInText.unreachable)
+            default:
+                // GitHub's own refusal, not the network: say so, and log
+                // its code (never the token or the device code).
+                Self.log.error("GitHub answered \(answer.error ?? "nothing", privacy: .public)")
+                state = .failed(GitHubSignInText.refused)
             }
         }
-        if state == .waiting { state = .failed(GitHubSignInText.expired) }
+        if current(), !Task.isCancelled { state = .failed(GitHubSignInText.expired) }
+    }
+
+    private enum PollProblem: Error, CustomStringConvertible {
+        case answer(Int)
+        var description: String {
+            switch self { case .answer(let code): "HTTP \(code) or an answer that isn't GitHub's" }
+        }
     }
 
     private func finish(_ token: String) async {
@@ -234,6 +285,7 @@ public enum GitHubSignInText {
     public static let denied = "GitHub said no to the sign-in. Try again if you meant to allow it."
     public static let expired = "The code expired before it was entered. Try again for a new one."
     public static let unreachable = "Portenv couldn\u{2019}t reach GitHub. Check your connection, then try again."
+    public static let refused = "GitHub didn\u{2019}t accept the sign-in. Try again for a new code."
     public static let notKept = "The Keychain didn\u{2019}t keep your GitHub sign-in. Try again."
     public static let signOut = "Sign Out of GitHub"
     public static func signedIn(_ login: String) -> String { "Signed in to GitHub as \(login)." }

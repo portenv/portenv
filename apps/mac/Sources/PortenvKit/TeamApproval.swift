@@ -109,6 +109,11 @@ public extension TeamText {
     static let approveFile = "Approve"
     static let start = "Start"
     static let stop = "Stop"
+    /// Under Start while the team's first start waits: the card is above
+    /// it in the agent's column, or in Needs you for an agent it doesn't
+    /// name.
+    static let approveTeamStartAbove = "Approve the team\u{2019}s first start above."
+    static let approveTeamStartInNeedsYou = "Approve the team\u{2019}s first start in Needs you."
     static let fileNotShownExactly = "Portenv couldn\u{2019}t show this file exactly as it is, so it can\u{2019}t be approved. Try again."
 
     static func approveFirst(_ name: String) -> String { "Approve \(name)\u{2019}s file first." }

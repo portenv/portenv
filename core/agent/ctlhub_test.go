@@ -321,6 +321,22 @@ func TestControlClientStopsWithItsLastSubscriber(t *testing.T) {
 	}
 }
 
+// controlAttached waits until a control client is attached to session:
+// tmux sends a client only the events after its attach, so a window made
+// before it would never be seen (a fixed 200 ms wait wasn't always enough
+// on a loaded machine).
+func controlAttached(t *testing.T, raw func(args ...string) string, session string) {
+	t.Helper()
+	for end := time.Now().Add(5 * time.Second); ; time.Sleep(10 * time.Millisecond) {
+		if slices.Contains(strings.Fields(raw("list-clients", "-t", "="+session, "-F", "#{client_control_mode}")), "1") {
+			return
+		}
+		if time.Now().After(end) {
+			t.Fatalf("no control client attached to %s", session)
+		}
+	}
+}
+
 // When the session is gone, its client stops instead of trying again
 // forever (R-0167): subscribers get ctlSessionGone once, the hub logs it
 // once and forgets the client, and the next subscriber starts one again.
@@ -341,7 +357,7 @@ func TestControlClientStopsWhenTheSessionIsGone(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer stop()
-	time.Sleep(200 * time.Millisecond)
+	controlAttached(t, raw, "main")
 	raw("kill-session", "-t", "=main")
 	gone := false
 	for end := time.Now().Add(3 * time.Second); !gone && time.Now().Before(end); {
@@ -378,7 +394,7 @@ func TestControlClientStopsWhenTheSessionIsGone(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer stop2()
-	time.Sleep(200 * time.Millisecond)
+	controlAttached(t, raw, "main")
 	raw("new-window", "-d", "-t", "=main:", "-n", "again")
 	for end := time.Now().Add(3 * time.Second); ; {
 		if time.Now().After(end) {

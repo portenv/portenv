@@ -3,6 +3,7 @@
 package agent
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"errors"
@@ -10,6 +11,7 @@ import (
 	"io"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 	"unicode/utf8"
 
@@ -28,6 +30,10 @@ import (
 const (
 	// inputChunk is the most bytes one send-keys -H carries.
 	inputChunk = 512
+	// pasteChunk is the most bytes of a paste one set-buffer carries, and
+	// maxPaste the longest paste held for tmux.
+	pasteChunk = 16 << 10
+	maxPaste   = 16 << 20
 	// maxInput is the most bytes one input message may carry.
 	maxInput = 1 << 20
 	// maxAuthorName is the longest author name accepted.
@@ -128,7 +134,21 @@ type tabStream struct {
 	// lineBase turns the parser's line numbers into the viewer's (its
 	// first line is the seed's first) since the last reset.
 	lineBase int64
+	// pasting: a paste's start marker came, and paste is its text so far
+	// (deliver).
+	pasting bool
+	paste   []byte
 }
+
+// The bracketed-paste markers: the app sends each as an input of its own
+// around every paste (TabTerminalReset.paste_markers).
+const (
+	pasteStart = "\x1b[200~"
+	pasteEnd   = "\x1b[201~"
+)
+
+// pasteSeq names each paste's tmux buffer, unique on the server.
+var pasteSeq atomic.Uint64
 
 // tabInput is what the reader of the client's messages hands on.
 type tabInput struct {
@@ -213,7 +233,7 @@ func (t *tabStream) run(ctx context.Context) error {
 				}
 				continue
 			}
-			ids, err := t.input(in.data)
+			ids, err := t.deliver(in.data)
 			if err != nil {
 				return status.Errorf(codes.Unavailable, "%d bytes of input weren't delivered: %v", len(in.data), err)
 			}
@@ -331,6 +351,101 @@ func (t *tabStream) resize() error {
 	return nil
 }
 
+// deliver hands one input message on: a paste between its markers to
+// tmux as one paste (pasteIn), anything else as typed (input). The markers
+// count only as whole messages, so an Escape typed alone is never held
+// back waiting to see what follows.
+func (t *tabStream) deliver(b []byte) (map[uint64]int, error) {
+	switch {
+	case string(b) == pasteStart:
+		t.pasting, t.paste = true, nil
+		return nil, nil
+	case t.pasting && string(b) == pasteEnd:
+		p := t.paste
+		t.pasting, t.paste = false, nil
+		return t.pasteIn(p)
+	case t.pasting:
+		if len(t.paste)+len(b) > maxPaste {
+			return nil, status.Errorf(codes.InvalidArgument, "a paste is at most %d MB", maxPaste>>20)
+		}
+		t.paste = append(t.paste, b...)
+		return nil, nil
+	}
+	return t.input(b)
+}
+
+// pasteIn hands a paste to tmux (CC-0490): its bytes into a buffer of its
+// own, then paste-buffer -p, which brackets it only if the program asked
+// for bracketed paste. tmux knows the pane's mode; the app's terminal may
+// not (a reset's seed can't carry it on tmux 3.4, which has no format for
+// it), and a shell given a long paste unbracketed runs it line by line as
+// typing: tabs complete, and the rest is typed ahead of each command.
+//   - -r keeps the bytes as they came (no LF to CR), -d drops the buffer.
+//   - The pane leaves any mode first, as for typed input.
+//   - It runs on the control client in order with typed input.
+//   - A NUL can't go through a tmux string: it's dropped (the app's paste
+//     never holds one; PasteText.clean).
+func (t *tabStream) pasteIn(p []byte) (map[uint64]int, error) {
+	p = bytes.ReplaceAll(p, []byte{0}, nil)
+	if len(p) == 0 {
+		return nil, nil
+	}
+	c, err := t.client()
+	if err != nil {
+		return nil, err
+	}
+	name := fmt.Sprintf("portenv-paste-%d", pasteSeq.Add(1))
+	ids := map[uint64]int{}
+	for off := 0; off < len(p); off += pasteChunk {
+		flag := ""
+		if off > 0 {
+			flag = " -a"
+		}
+		id, err := c.sendWith("set-buffer"+flag+" -b "+name+" -- \""+tmuxQuoted(p[off:min(len(p), off+pasteChunk)])+"\"", ctlPending{})
+		if err != nil {
+			return nil, err
+		}
+		ids[id] = 0 // the paste's bytes count as undelivered until it's pasted
+	}
+	id, err := c.sendWith("copy-mode -q -t "+t.pane+" ; paste-buffer -p -r -d -b "+name+" -t "+t.pane, t.typedAfter(c, p))
+	if err != nil {
+		return nil, err
+	}
+	ids[id] = len(p)
+	return ids, nil
+}
+
+// tmuxQuoted is b for inside a tmux double-quoted string: plain ASCII as
+// it is, every other byte as an octal escape (raw bytes, so UTF-8 goes
+// through whole). No line break, no ";" (a command list splits on " ; "),
+// and nothing tmux would expand ($, ~) or take as quoting (", \).
+func tmuxQuoted(b []byte) string {
+	var sb strings.Builder
+	for _, c := range b {
+		if c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || strings.IndexByte(" !#%&'()*+,-./:<=>?@[]^_`{|}", c) >= 0 {
+			sb.WriteByte(c)
+		} else {
+			fmt.Fprintf(&sb, "\\%03o", c)
+		}
+	}
+	return sb.String()
+}
+
+// typedAfter records this stream's author once tmux has the keys, when b
+// holds an Enter, in the pane's lane: a prompt drawn before them can't end
+// it (R-0177).
+func (t *tabStream) typedAfter(c *ctlClient, b []byte) ctlPending {
+	if !bytes.ContainsAny(b, "\r\n") {
+		return ctlPending{}
+	}
+	pane, name, agentID := t.pane, t.author, t.agentID
+	return ctlPending{lanePane: pane, onReply: func(failed bool) {
+		if !failed {
+			c.typed(pane, name, agentID)
+		}
+	}}
+}
+
 // input sends bytes to the tab's pane as send-keys -H, at most inputChunk
 // bytes a command, each after leaving any mode a program put the pane in
 // (copy mode would swallow the keys; R-0133 item 8). The commands run in
@@ -346,17 +461,7 @@ func (t *tabStream) input(b []byte) (map[uint64]int, error) {
 		n := min(len(b), inputChunk)
 		chunk := b[:n]
 		b = b[n:]
-		// An Enter's author is recorded once tmux has the keys, in the
-		// pane's lane: a prompt drawn before them can't end it (R-0177).
-		var after ctlPending
-		if strings.ContainsAny(string(chunk), "\r\n") {
-			pane, name, agentID := t.pane, t.author, t.agentID
-			after = ctlPending{lanePane: pane, onReply: func(failed bool) {
-				if !failed {
-					c.typed(pane, name, agentID)
-				}
-			}}
-		}
+		after := t.typedAfter(c, chunk)
 		var sb strings.Builder
 		sb.WriteString("copy-mode -q -t " + t.pane + " ; send-keys -t " + t.pane + " -H")
 		h := hex.EncodeToString(chunk)
@@ -482,7 +587,7 @@ func (t *tabStream) resetOnce(ctx context.Context, skipped bool) error {
 	}
 	t.sent, t.lineBase = sz, base
 	return t.stream.Send(&agentv1.TabTerminalResponse{Msg: &agentv1.TabTerminalResponse_Reset_{Reset_: &agentv1.TabTerminalReset{
-		Size: termSize(sz[0], sz[1]), Seed: seed, Authors: authors, Skipped: skipped,
+		Size: termSize(sz[0], sz[1]), Seed: seed, Authors: authors, Skipped: skipped, PasteMarkers: true,
 	}}})
 }
 

@@ -154,6 +154,11 @@ Also checked on tmux 3.4 in the image:
      - **What's removed:** `ESC[201~` (the bracketed-paste end marker, which would end the paste early and run the rest as typed commands), and every C0 control except tab, CR and LF.
      - **Then** the text is wrapped in `ESC[200~`…`ESC[201~` when the program has turned bracketed paste on.
      - **The test:** a paste holding `ESC[201~rm -rf ~\r` and other controls reaches the pane as one bracketed paste of plain text.
+     - **Who decides the bracketing (CC-0490, as built):** tmux, which knows the pane's mode. The view can't always know it: a seed on tmux 3.4 can't say (no format), and the helper's parser only knows bracketed paste if it saw the program ask. A bash that drew its prompt before the helper's client started got a long paste unbracketed, ran it line by line as typing (tabs completed; the rest was typed ahead of each command and drawn over the screen).
+       - A helper that says `paste_markers` in its reset takes input between `ESC[200~` and `ESC[201~`, each marker an input message of its own, as one paste. It puts the bytes in a tmux buffer of its own (`set-buffer`, octal-escaped, 16 KB per command), then runs `paste-buffer -p -r -d`, which brackets only if the program asked, keeps LF, and deletes the buffer. A marker counts only as a whole message, so an Escape typed alone is never held back.
+       - The app then frames every paste, whatever its terminal thinks. An older helper's reset doesn't say `paste_markers`, and the app frames only when its terminal saw the program ask, as before.
+       - The app sends input in messages of at most 256 KB (the helper takes at most 1 MB per message).
+       - **The test:** 10 and 48 KB of heredocs with multibyte characters and tabs, pasted as the app does into bash 5.2 at its prompt on tmux 3.4, run byte for byte; with the helper's old behaviour the same test fails at the first tab.
    - **Attribution (R-0133 item 4):** the agent records which stream sent each Enter, for "author is whoever sent the Enter" (GUIDELINES §4.2).
      - **The author is set by portenvd** from the caller's identity: the app over its socket, or an agent's grant (ADR 0016). It's never set by the client.
      - **The proto:** the app's `TabTerminalOpen` to portenvd has no author field; portenvd fills `author` in the request it sends the agent.

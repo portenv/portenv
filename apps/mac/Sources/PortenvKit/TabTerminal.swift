@@ -62,6 +62,14 @@ public protocol TabTerminalSource: AnyObject {
     func resize(_ size: TabTerminalSize)
     /// Stops the stream. The tab keeps running.
     func close()
+    /// Every paste goes between bracketed-paste markers, whatever the
+    /// terminal's own idea of the mode: the workspace's helper hands it to
+    /// tmux, which brackets it only if the program asked (CC-0490).
+    var marksPastes: Bool { get }
+}
+
+public extension TabTerminalSource {
+    var marksPastes: Bool { false }
 }
 
 /// Opens tab terminals for one workspace.
@@ -81,6 +89,7 @@ public final class ScriptedTabSource: TabTerminalSource {
     public private(set) var sent: [[UInt8]] = []
     public private(set) var sizes: [TabTerminalSize] = []
     public private(set) var closed = false
+    public var marksPastes = false
 
     public init(tab: String) {
         self.tab = tab

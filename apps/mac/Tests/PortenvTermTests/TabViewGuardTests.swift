@@ -136,6 +136,18 @@ struct TabViewGuardTests {
         #expect(sent == Array("\u{1b}[200~ab\u{1b}[201~".utf8))
     }
 
+    /// CC-0490: when the helper takes marked pastes, every paste is framed,
+    /// each marker its own input, even though this view never saw the
+    /// program ask (a seed on tmux 3.4 can't say): tmux brackets it only if
+    /// the program asked.
+    @Test func aMarkedPasteIsFramedWhateverTheViewThinks() {
+        let (v, s) = view()
+        #expect(!v.getTerminal().bracketedPasteMode)
+        s.marksPastes = true
+        v.paste(text: "cat <<'EOF'\n\tdone\nEOF\n")
+        #expect(s.sent == [Array("\u{1b}[200~".utf8), Array("cat <<'EOF'\n\tdone\nEOF\n".utf8), Array("\u{1b}[201~".utf8)])
+    }
+
     /// A ⌘-clicked link in a tab view goes through TerminalLinks, as in the
     /// attached terminal (R-0161).
     @Test func aClickedLinkGoesThroughTerminalLinks() {

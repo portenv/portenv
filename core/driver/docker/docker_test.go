@@ -244,6 +244,37 @@ func TestMountsCompareAsDockerDesktopReportsThem(t *testing.T) {
 	}
 }
 
+// TestARetargetedSymlinkCountsAsChanged (R-0248): a box was created with
+// its storage folder reached through a symlink, and Docker Desktop recorded
+// the folder it resolved to then. If the symlink now points somewhere
+// else, the box can reach a folder its spec no longer names: that must
+// count as changed, so the take-over refuses and the box restarts.
+func TestARetargetedSymlinkCountsAsChanged(t *testing.T) {
+	first, second := t.TempDir(), t.TempDir()
+	link := filepath.Join(t.TempDir(), "link")
+	if err := os.Symlink(first, link); err != nil {
+		t.Fatal(err)
+	}
+	resolvedFirst, err := filepath.EvalSymlinks(first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mounted := mount.Mount{Type: mount.TypeBind, Source: "/host_mnt" + resolvedFirst, Target: StorageMount + "/box-1"}
+	want := mount.Mount{Type: mount.TypeBind, Source: link, Target: StorageMount + "/box-1"}
+	if !sameMounts([]mount.Mount{want}, []mount.Mount{mounted}) {
+		t.Fatal("before the retarget: the box's own folder, through the symlink, counts as changed")
+	}
+	if err := os.Remove(link); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(second, link); err != nil {
+		t.Fatal(err)
+	}
+	if sameMounts([]mount.Mount{want}, []mount.Mount{mounted}) {
+		t.Fatal("after the retarget: the box still reaches the old folder, and that counts as unchanged")
+	}
+}
+
 // TestAgentRefusesForbiddenCapabilities starts the toolbox image the way a
 // careless engine configuration might (with CAP_SYS_PTRACE, CAP_SYS_ADMIN,
 // or privileged) and expects the agent to refuse to report ready.

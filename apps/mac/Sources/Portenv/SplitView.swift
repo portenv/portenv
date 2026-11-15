@@ -18,6 +18,8 @@ struct SplitPanes: View {
     /// The team, so a pane names whose tab it shows (R-0314).
     var team: [TeamAgent] = []
     var serviceComing = false
+    /// Steps of the workspace image's download (R-0427).
+    var pullSteps = 0
 
     var body: some View {
         GeometryReader { geo in
@@ -27,7 +29,7 @@ struct SplitPanes: View {
                 ForEach(split.layout.panes, id: \.self) { pane in
                     if let frame = frames[pane], let tab = split.layout.tab(in: pane) {
                         PaneView(split: split, pane: pane, tab: tab, provider: provider, generation: generation,
-                                 box: box, team: team, serviceComing: serviceComing)
+                                 box: box, team: team, serviceComing: serviceComing, pullSteps: pullSteps)
                             .frame(width: frame.width, height: frame.height)
                             .offset(x: frame.minX, y: frame.minY)
                     }
@@ -60,6 +62,7 @@ private struct PaneView: View {
     let box: String
     let team: [TeamAgent]
     let serviceComing: Bool
+    let pullSteps: Int
 
     private var info: TabInfo? { split.tab(in: pane) }
     private var focused: Bool { split.layout.focused == pane }
@@ -79,7 +82,7 @@ private struct PaneView: View {
             }
             MainTabTerminal(shown: TabTerminalShown(provider: provider), box: box, tab: tab, generation: generation,
                             label: label, tabName: name, serviceComing: serviceComing,
-                            isActive: focused, onFocus: { split.focus(pane) })
+                            isActive: focused, onFocus: { split.focus(pane) }, pullSteps: pullSteps)
         }
         // The focused pane's 1 px accent outline (only when split: one pane
         // is always the focused one).

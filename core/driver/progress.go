@@ -4,14 +4,16 @@ package driver
 
 import "context"
 
-// PullProgress hears how far a toolbox image's pull has got: bytes fetched
-// of the bytes known so far (the total grows as layers start).
+// PullProgress hears how far a toolbox image's pull has got: the bytes
+// fetched over every layer, and the total once every layer's size is known
+// (0 until then, R-0427).
 type PullProgress func(done, total int64)
 
 type pullKey struct{}
 
 // WithPullProgress lets whoever opens a box follow its image's pull (the
-// first open's "Getting the workspace image…", R-0211).
+// first open's "Downloading the workspace image… 120 of 283 MB", R-0211,
+// R-0427).
 func WithPullProgress(ctx context.Context, f PullProgress) context.Context {
 	return context.WithValue(ctx, pullKey{}, f)
 }

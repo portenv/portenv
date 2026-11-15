@@ -17,9 +17,12 @@ import (
 	"github.com/portenv/portenv/core/driver"
 )
 
-// TestPullTallyCountsEveryLayer (R-0211): the bytes a pull has fetched,
-// over every layer it fetches, as Docker reports them layer by layer; a
-// layer already here counts for nothing, a finished one counts in full.
+// TestPullTallyCountsEveryLayer (R-0211, R-0427): the bytes a pull has
+// fetched, over every layer it fetches, as Docker reports them layer by
+// layer; a layer already here counts for nothing, a finished one counts in
+// full. The total is known (non-zero) only once every layer being fetched
+// has said its size: until then it is 0, so the window never shows a
+// total that is about to grow.
 func TestPullTallyCountsEveryLayer(t *testing.T) {
 	var p pullTally
 	steps := []struct {
@@ -30,7 +33,9 @@ func TestPullTallyCountsEveryLayer(t *testing.T) {
 		{jsonstream.Message{Status: "Already exists", ID: "aaa"}, 0, 0},
 		{jsonstream.Message{Status: "Pulling fs layer", ID: "bbb"}, 0, 0},
 		{jsonstream.Message{Status: "Pulling fs layer", ID: "ccc"}, 0, 0},
-		{jsonstream.Message{Status: "Downloading", ID: "bbb", Progress: &jsonstream.Progress{Current: 100, Total: 600}}, 100, 600},
+		{jsonstream.Message{Status: "Waiting", ID: "ccc"}, 0, 0},
+		// ccc's size isn't known yet: no total.
+		{jsonstream.Message{Status: "Downloading", ID: "bbb", Progress: &jsonstream.Progress{Current: 100, Total: 600}}, 100, 0},
 		{jsonstream.Message{Status: "Downloading", ID: "ccc", Progress: &jsonstream.Progress{Current: 50, Total: 300}}, 150, 900},
 		{jsonstream.Message{Status: "Downloading", ID: "bbb", Progress: &jsonstream.Progress{Current: 262, Total: 600}}, 312, 900},
 		{jsonstream.Message{Status: "Download complete", ID: "ccc"}, 562, 900},
@@ -44,6 +49,21 @@ func TestPullTallyCountsEveryLayer(t *testing.T) {
 		if done != s.wantDone || all != s.wantAll {
 			t.Fatalf("step %d (%s %s): %d of %d, want %d of %d", i, s.msg.Status, s.msg.ID, done, all, s.wantDone, s.wantAll)
 		}
+	}
+}
+
+// TestPullTallyALayerThatEndsWithoutASize: a layer Docker finishes
+// without ever saying its size (it came from elsewhere meanwhile) no
+// longer holds the total back, and counts for nothing.
+func TestPullTallyALayerThatEndsWithoutASize(t *testing.T) {
+	var p pullTally
+	p.update(jsonstream.Message{Status: "Pulling fs layer", ID: "bbb"})
+	p.update(jsonstream.Message{Status: "Pulling fs layer", ID: "ccc"})
+	if done, all := p.update(jsonstream.Message{Status: "Downloading", ID: "bbb", Progress: &jsonstream.Progress{Current: 120, Total: 283}}); done != 120 || all != 0 {
+		t.Fatalf("one size known: %d of %d, want 120 of 0", done, all)
+	}
+	if done, all := p.update(jsonstream.Message{Status: "Pull complete", ID: "ccc"}); done != 120 || all != 283 {
+		t.Fatalf("ccc ended without a size: %d of %d, want 120 of 283", done, all)
 	}
 }
 

@@ -290,7 +290,7 @@ struct MainWindow: View {
                         // (PLAN 1.2b, ADR 0020).
                         SplitPanes(split: split, provider: provider, generation: controller.terminalGeneration,
                                    box: controller.box, team: team?.state.agents ?? [],
-                                   serviceComing: controller.reconnectingToService)
+                                   serviceComing: controller.reconnectingToService, pullSteps: controller.pullSteps)
                     } else if !AppTerminal.attached, split == nil, let provider = controller.tabTerminals, let tab = tabs.terminalTab {
                         // Each tab's own terminal (ADR 0020): the tab the
                         // bar marks current, never another (R-0314).
@@ -298,7 +298,7 @@ struct MainWindow: View {
                                         generation: controller.terminalGeneration, label: terminalLabel,
                                         tabName: TerminalLabel.title(tab, team: team?.state.agents ?? []),
                                         serviceComing: controller.reconnectingToService,
-                                        selectionChanges: selectionChanges)
+                                        selectionChanges: selectionChanges, pullSteps: controller.pullSteps)
                     } else if !AppTerminal.attached, controller.tabTerminals != nil {
                         // The tabs aren't known yet: "Opening <workspace>…",
                         // never a bare background (R-0384).

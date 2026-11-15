@@ -18,7 +18,9 @@ import Observation
 ///   <tab>…"), and a stream that fails before then is `.couldNotOpen`, with
 ///   Try Again: never a bare background (basics audit, R-0384). An open
 ///   that sends nothing at all (no reset, no end) for `openDeadline` is
-///   `.couldNotOpen` too (R-0386).
+///   `.couldNotOpen` too (R-0386); a step of the workspace image's
+///   download (`progressed()`) starts that time again, so only a download
+///   that stalls lets it fire (R-0427).
 @MainActor
 @Observable
 public final class TabTerminalShown {
@@ -220,6 +222,18 @@ public final class TabTerminalShown {
         settling = nil
     }
 
+    /// Something the open waits on made progress (a step of the workspace
+    /// image's download, R-0427): activity, so the open's `openDeadline`
+    /// starts again, and a card it already showed goes back to opening.
+    /// Only a wait with no progress for `openDeadline` shows the card. Once
+    /// the tab has shown, or once the stream's trouble deadline has taken
+    /// over (`ended`), it does nothing.
+    public func progressed() {
+        guard shown != nil, source != nil, !opened, openTimer != nil || openTimedOut else { return }
+        stopOpenTimer()
+        startOpenTimer()
+    }
+
     private func open() {
         guard let shown else { return }
         source?.close()
@@ -227,6 +241,10 @@ public final class TabTerminalShown {
         source = provider.open(tab: shown.tab, size: size)
         stopOpenTimer()
         guard !opened else { return }
+        startOpenTimer()
+    }
+
+    private func startOpenTimer() {
         openTimer = Task { [weak self, openDeadline, sleep] in
             await sleep(openDeadline)
             guard !Task.isCancelled, let self, !self.opened else { return }

@@ -114,6 +114,14 @@ final class ManualTimers {
         waiting.removeAll { $0.0 == d }
         for (_, c) in hit { c.resume() }
     }
+
+    /// Ends only the oldest wait of this length: the time it waited for
+    /// has passed, and any started after it hasn't yet.
+    func fireOldest(_ d: Duration) {
+        guard let i = waiting.firstIndex(where: { $0.0 == d }) else { return }
+        let (_, c) = waiting.remove(at: i)
+        c.resume()
+    }
 }
 
 /// The outage gaps from the owner's restart test of #119 (R-0294): the
@@ -334,6 +342,45 @@ struct OpeningTabTests {
         #expect(shown.overlay(serviceComing: false) == .opening)
         shown.stop()
         #expect(!shown.openTimedOut)
+    }
+
+    /// R-0427: an image download that's making progress is activity. Each
+    /// step starts the 20 s again, so a slow download never shows the
+    /// card; once the steps stop for 20 s, it shows as before.
+    @Test func aDownloadThatProgressesKeepsTheOpenTimerOff() async {
+        let timers = ManualTimers()
+        let shown = TabTerminalShown(provider: TabTerminalShownTests.Provider(), deadline: .seconds(25), settle: .seconds(2),
+                                     openDeadline: .seconds(20), sleep: timers.sleep)
+        shown.show(tab: "@1", generation: 1)
+        for _ in 0..<1000 where timers.pending(.seconds(20)) == 0 { try? await Task.sleep(for: .milliseconds(5)) }
+        // Three steps, each within 20 s of the one before.
+        for step in 1...3 {
+            shown.progressed()
+            for _ in 0..<1000 where timers.pending(.seconds(20)) < 2 { try? await Task.sleep(for: .milliseconds(5)) }
+            timers.fireOldest(.seconds(20)) // 20 s since the step before: not since this one
+            for _ in 0..<20 { await Task.yield() }
+            #expect(!shown.openTimedOut, "step \(step)")
+            #expect(shown.overlay(serviceComing: false) == .opening)
+        }
+        // The download stalls: 20 s with no step.
+        #expect(timers.pending(.seconds(20)) == 1)
+        timers.fireOldest(.seconds(20))
+        for _ in 0..<1000 where !shown.openTimedOut { try? await Task.sleep(for: .milliseconds(5)) }
+        #expect(shown.overlay(serviceComing: false) == .couldNotOpen(TabTerminalShown.notOpeningLine))
+        // Progress again (the download picked up): opening once more, timed anew.
+        shown.progressed()
+        #expect(!shown.openTimedOut)
+        #expect(shown.overlay(serviceComing: false) == .opening)
+        // Once the tab has shown, progress starts nothing.
+        shown.reset(TabTerminalSize(cols: 80, rows: 24))
+        let before = timers.pending(.seconds(20))
+        shown.progressed()
+        for _ in 0..<20 { await Task.yield() }
+        #expect(timers.pending(.seconds(20)) == before)
+        timers.fire(.seconds(20))
+        for _ in 0..<20 { await Task.yield() }
+        #expect(!shown.openTimedOut)
+        #expect(shown.overlay(serviceComing: false) == .none)
     }
 
     @Test func theWords() {

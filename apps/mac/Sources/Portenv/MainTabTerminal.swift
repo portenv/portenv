@@ -31,6 +31,9 @@ struct MainTabTerminal: View {
     /// The sidebar's selection changes, counted: each lands the tab on
     /// screen as a switch does (GUIDELINES §4.1).
     var selectionChanges = 0
+    /// Steps of the workspace image's download, counted: each is activity
+    /// for the open's 20 s (R-0427).
+    var pullSteps = 0
     @State private var focused = true
     /// This pane's text size, from its workspace's (View › Bigger, Smaller).
     @State private var textSize: TerminalTextSizeState?
@@ -110,6 +113,7 @@ struct MainTabTerminal: View {
         .onChange(of: isActive) { focused = isActive }
         .onChange(of: focused) { if focused { onFocus() } }
         .onChange(of: "\(generation)/\(tab)") { shown.show(tab: tab, generation: generation) }
+        .onChange(of: pullSteps) { shown.progressed() }
         .onDisappear { shown.stop() }
     }
 }

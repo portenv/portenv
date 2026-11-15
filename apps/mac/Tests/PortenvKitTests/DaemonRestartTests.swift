@@ -77,7 +77,8 @@ struct DaemonRestartTests {
         await c.open()
         let following = Task { await c.follow() }
         defer { following.cancel() }
-        for _ in 0 ..< 200 where !cli.calls.contains(["app", "watch", "acme-api"]) { try? await Task.sleep(for: .milliseconds(5)) }
+        // The open watched while it ran (R-0427); follow() is the second watch.
+        for _ in 0 ..< 200 where cli.calls.filter({ $0 == ["app", "watch", "acme-api"] }).count < 2 { try? await Task.sleep(for: .milliseconds(5)) }
         let locations = Seen()
         cli.onRun = { args in
             await MainActor.run { locations.add("\(c.location)") }
@@ -109,7 +110,8 @@ struct DaemonRestartTests {
         await c.open()
         let following = Task { await c.follow() }
         defer { following.cancel() }
-        for _ in 0 ..< 200 where !cli.calls.contains(["app", "watch", "acme-api"]) { try? await Task.sleep(for: .milliseconds(5)) }
+        // The open watched while it ran (R-0427); follow() is the second watch.
+        for _ in 0 ..< 200 where cli.calls.filter({ $0 == ["app", "watch", "acme-api"] }).count < 2 { try? await Task.sleep(for: .milliseconds(5)) }
         let locations = Seen()
         cli.onRun = { args in
             await MainActor.run { locations.add("\(c.location)") }
@@ -138,7 +140,8 @@ struct DaemonRestartTests {
         await c.open()
         let following = Task { await c.follow() }
         defer { following.cancel() }
-        for _ in 0 ..< 200 where !cli.calls.contains(["app", "watch", "acme-api"]) { try? await Task.sleep(for: .milliseconds(5)) }
+        // The open watched while it ran (R-0427); follow() is the second watch.
+        for _ in 0 ..< 200 where cli.calls.filter({ $0 == ["app", "watch", "acme-api"] }).count < 2 { try? await Task.sleep(for: .milliseconds(5)) }
         let opensBefore = cli.calls.filter { $0.count > 1 && $0[1] == "open" }.count
         cli.push(#"{"state":"SAVE_STATE_CLOSED","saved_at":"\#(savedAt)"}"#)
         // Waits for the closed state rather than a fixed time: a loaded CI

@@ -371,6 +371,7 @@ struct OpeningTabTests {
         shown.progressed()
         #expect(!shown.openTimedOut)
         #expect(shown.overlay(serviceComing: false) == .opening)
+        for _ in 0..<1000 where timers.pending(.seconds(20)) == 0 { try? await Task.sleep(for: .milliseconds(5)) }
         // Once the tab has shown, progress starts nothing.
         shown.reset(TabTerminalSize(cols: 80, rows: 24))
         let before = timers.pending(.seconds(20))

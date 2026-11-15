@@ -93,6 +93,18 @@ func TestGuideSaysShareLoginIsOff(t *testing.T) {
 	}
 }
 
+// ADR 0022 §2a point 4 (R-0412 item 16): the guide tells a lens where a
+// writer's files are, never to run git there or trust them with
+// safe.directory, and how to fetch the writer's branch instead.
+func TestGuideTellsALensHowToReadAWriter(t *testing.T) {
+	text := NewGuide().Text()
+	for _, s := range []string{"portenv fetch AGENT", "refs/remotes/agents/", "read_clones", "/home/<writer>/<project>", "safe.directory"} {
+		if !strings.Contains(text, s) {
+			t.Errorf("portenv guide doesn't say %q", s)
+		}
+	}
+}
+
 // The app's Fetch (ADR 0022 §2a): portenv share's entry names the owner's
 // Fetch first, the command line after it.
 func TestGuideNamesTheOwnersFetchFirst(t *testing.T) {

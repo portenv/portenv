@@ -44,6 +44,7 @@ var teamUsage = map[string]string{
 	"team":                 "team status | team init [--template starter|orchestrate|app-product] [--dir PROJECT]",
 	"guide":                "guide [--json]",
 	"handoff":              "handoff AGENT PATH [--note TEXT]",
+	"fetch":                "fetch AGENT",
 }
 
 // maxProposedFile is an agent file's limit (ADR 0022 §3).
@@ -263,6 +264,11 @@ func buildTeamCall(name string, args []string, getenv func(string) string) (*age
 			return nil, false, fmt.Errorf("give %d to %d --choice labels, or none for a yes/no question", teamkit.MinChoices, teamkit.MaxChoices)
 		}
 		c.Op = &agentv1.TeamCallsResponse_AskOwner{AskOwner: &agentv1.AskOwner{Text: a.pos[0], ThreadId: a.flags["thread"], Choices: choices}}
+	case "fetch":
+		if err := needPos(1); err != nil {
+			return nil, false, err
+		}
+		c.Op = &agentv1.TeamCallsResponse_FetchClone{FetchClone: &agentv1.FetchClone{Agent: a.pos[0]}}
 	case "inbox":
 		if err := needPos(0); err != nil {
 			return nil, false, err
@@ -401,6 +407,8 @@ func printTeamReply(w io.Writer, name string, call *agentv1.TeamCallsResponse, r
 		result = x.Whoami
 	case *agentv1.TeamCallsRequest_TeamStatus:
 		result = x.TeamStatus
+	case *agentv1.TeamCallsRequest_Fetched:
+		result = x.Fetched
 	}
 	if jsonOut {
 		if result == nil {
@@ -428,6 +436,14 @@ func printTeamReply(w io.Writer, name string, call *agentv1.TeamCallsResponse, r
 		for _, f := range m.GetFiles() {
 			_, _ = fmt.Fprintf(w, "  %s  %s\n", shownPlain(f.GetSha256()), shownPlain(f.GetPath()))
 		}
+	case "fetch":
+		f, who := r.GetFetched(), call.GetFetchClone().GetAgent()
+		commit := f.GetCommit()
+		if len(commit) > 12 {
+			commit = commit[:12]
+		}
+		_, _ = fmt.Fprintf(w, "Fetched %s's branch into your copy as %s (%s).\n", shownPlain(who), shownPlain(f.GetRef()), shownPlain(commit))
+		_, _ = fmt.Fprintf(w, "Read it with: git log HEAD..agents/%[1]s, git diff HEAD...agents/%[1]s\n", shownPlain(who))
 	case "team":
 		for _, m := range r.GetTeamStatus().GetTeammates() {
 			line := strings.ToLower(strings.TrimPrefix(m.GetState().String(), "AGENT_STATE_"))

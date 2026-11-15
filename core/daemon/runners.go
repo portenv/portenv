@@ -4,9 +4,11 @@ package daemon
 
 import (
 	"path"
+	"slices"
 	"strings"
 
 	"github.com/portenv/portenv/core/internal/idleinput"
+	"github.com/portenv/portenv/core/internal/teamkit"
 )
 
 // runnerIdlePattern is the runner table's idle-input pattern for a
@@ -69,3 +71,26 @@ func idleOffLine(argv []string, routines bool) string {
 	}
 	return "Messages don't wake it: Portenv doesn't know when " + name + " is idle, so it reads them only when it runs portenv inbox."
 }
+
+// runnerArgv is the argv an agent starts with (ADR 0025 §9): its file's
+// runner, then, for a lens whose runner has an add-dir flag in the
+// registry, that flag with each clone its read_clones names, so the runner
+// lets it read them (R-0412 item 16). Nothing else is added; a runner
+// Portenv doesn't know gets its file's argv unchanged.
+func runnerArgv(a *TeamAgent, workspace string) []string {
+	argv := slices.Clone(a.Runner)
+	if len(argv) == 0 {
+		return argv
+	}
+	r, ok := teamkit.RunnerByID(path.Base(argv[0]))
+	if !ok || r.AddDirFlag == "" {
+		return argv
+	}
+	for _, w := range a.Grant.GetReadClones() {
+		argv = append(argv, r.AddDirFlag, lensPath(w, workspace))
+	}
+	return argv
+}
+
+// lensPath is where a lens reads a writer's clone (ADR 0022 §2a).
+func lensPath(writer, workspace string) string { return "/home/" + writer + "/" + workspace }

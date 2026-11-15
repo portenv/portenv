@@ -33,6 +33,15 @@ func (s *Server) teamEng() *teamEngine {
 		s.team = newTeamEngine(s.agentFor, s.loadTeam)
 		s.team.readBoard = s.readBoard
 		s.team.log = s.log
+		// Which agents were running, per workspace, in its state folder:
+		// the next open starts them again (CC-0747).
+		s.team.wantedFile = func(name string) string {
+			id := s.boxID(name)
+			if id == "" {
+				return ""
+			}
+			return filepath.Join(s.env.Dir, "state", id, teamRunningFile)
+		}
 		// Routines' timers (R-0258) and the idle checks, while portenvd runs.
 		go func() {
 			tick := time.NewTicker(30 * time.Second)

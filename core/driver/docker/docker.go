@@ -386,33 +386,55 @@ func (d *Driver) pull(ctx context.Context, ref string) error {
 // pullTally adds up a pull's bytes over its layers, from Docker's
 // per-layer messages: a layer's download counts as it goes, in full once
 // it's downloaded, and a layer already here counts for nothing. Extracting
-// (its own progress) is never counted again.
+// (its own progress) is never counted again. The total is reported only
+// once every layer being fetched has said its size (Docker says it when a
+// layer starts downloading, a few at a time); until then it is 0, so the
+// window shows the bytes alone rather than a total that will grow
+// (R-0427).
 type pullTally struct {
-	layers map[string]*[2]int64 // id: done, total
+	layers map[string]*layerTally
+}
+
+type layerTally struct {
+	done, total int64
+	sized       bool // its size is known, or it ended without one
 }
 
 func (p *pullTally) update(msg jsonstream.Message) (done, total int64) {
 	if p.layers == nil {
-		p.layers = map[string]*[2]int64{}
+		p.layers = map[string]*layerTally{}
 	}
 	l := p.layers[msg.ID]
+	layer := func() *layerTally {
+		if l == nil {
+			l = &layerTally{}
+			p.layers[msg.ID] = l
+		}
+		return l
+	}
 	switch msg.Status {
+	case "Pulling fs layer", "Waiting":
+		if msg.ID != "" {
+			layer()
+		}
 	case "Downloading":
 		if msg.Progress != nil && msg.Progress.Total > 0 {
-			if l == nil {
-				l = &[2]int64{}
-				p.layers[msg.ID] = l
-			}
-			l[0], l[1] = msg.Progress.Current, msg.Progress.Total
+			l := layer()
+			l.done, l.total, l.sized = msg.Progress.Current, msg.Progress.Total, true
 		}
 	case "Download complete", "Verifying Checksum", "Pull complete":
 		if l != nil {
-			l[0] = l[1]
+			l.done, l.sized = l.total, true
 		}
 	}
+	known := true
 	for _, l := range p.layers {
-		done += l[0]
-		total += l[1]
+		done += l.done
+		total += l.total
+		known = known && l.sized
+	}
+	if !known {
+		total = 0
 	}
 	return done, total
 }

@@ -30,16 +30,17 @@ public enum StateLine {
 
     public static let opening = "Opening\u{2026}"
 
-    /// The first open's image pull (R-0211): "Getting the workspace image…
-    /// 312 MB of 900 MB", in MB below a gigabyte, decimal (as Finder).
-    public static let gettingImagePrefix = "Getting the workspace image\u{2026}"
+    /// The first open's image pull (R-0211, R-0427): "Downloading the
+    /// workspace image… 120 of 283 MB", in whole MB, decimal (as Finder).
+    /// The total only once portenvd knows it ("… 120 MB" until then), and
+    /// the words alone before the first MB.
+    public static let downloadingImagePrefix = "Downloading the workspace image\u{2026}"
 
-    public static func gettingImage(done: Int64, total: Int64) -> String {
-        guard total > 0 else { return gettingImagePrefix }
-        func size(_ b: Int64) -> String {
-            b < 1_000_000_000 ? "\(Int((Double(b) / 1_000_000).rounded())) MB" : String(format: "%.1f GB", Double(b) / 1_000_000_000)
-        }
-        return "\(gettingImagePrefix) \(size(done)) of \(size(total))"
+    public static func downloadingImage(done: Int64, total: Int64) -> String {
+        func mb(_ b: Int64) -> Int64 { max(0, b) / 1_000_000 }
+        if total > 0 { return "\(downloadingImagePrefix) \(mb(min(done, total))) of \(max(1, mb(total))) MB" }
+        if mb(done) > 0 { return "\(downloadingImagePrefix) \(mb(done)) MB" }
+        return downloadingImagePrefix
     }
 
     public static func reverted(to time: Date, timeZone: TimeZone = .current, locale: Locale = .current) -> String {
@@ -191,7 +192,7 @@ public struct TitleLook: Equatable, Sendable {
 
     /// A symbol spins only while the line says something is in progress.
     public var consistent: Bool {
-        let inProgress = line.contains("Saving…") || line.contains("Moving to") || line.contains("Opening…") || line.hasPrefix(StateLine.gettingImagePrefix)
+        let inProgress = line.contains("Saving…") || line.contains("Moving to") || line.contains("Opening…") || line.hasPrefix(StateLine.downloadingImagePrefix)
             || line == StateLine.closing || line.hasSuffix("· retrying")
         return spins == inProgress && (!spins || symbol == "arrow.triangle.2.circlepath")
     }

@@ -6383,12 +6383,14 @@ func (x *GetEngineResponse) GetRunning() bool {
 	return false
 }
 
-// A toolbox image's pull: bytes fetched of the bytes known so far (the
-// total grows as Docker starts each layer).
+// A toolbox image's pull: the bytes fetched over every layer, and the
+// total once every layer being fetched has said its size.
 type ImagePull struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	DoneBytes     int64                  `protobuf:"varint,1,opt,name=done_bytes,json=doneBytes,proto3" json:"done_bytes,omitempty"`
-	TotalBytes    int64                  `protobuf:"varint,2,opt,name=total_bytes,json=totalBytes,proto3" json:"total_bytes,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	DoneBytes int64                  `protobuf:"varint,1,opt,name=done_bytes,json=doneBytes,proto3" json:"done_bytes,omitempty"`
+	// 0 until every layer's size is known, so the app shows the bytes alone
+	// rather than a total that will grow (R-0427).
+	TotalBytes    int64 `protobuf:"varint,2,opt,name=total_bytes,json=totalBytes,proto3" json:"total_bytes,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }

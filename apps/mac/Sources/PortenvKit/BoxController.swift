@@ -423,12 +423,38 @@ public final class BoxController {
     /// or a silent "is closed" (R-0211). Cleared when an open starts.
     public private(set) var openFailure: String?
 
+    /// How many steps of an image download this window has seen: each is
+    /// activity, so the open's 20 s timer starts again rather than firing
+    /// while the download makes progress (R-0427).
+    public private(set) var pullSteps = 0
+
+    /// How many follow() loops run.
+    @ObservationIgnored private var followers = 0
+
+    /// Follows the state while an open runs, when nothing else does (the
+    /// window starts following once the open is done): the line shows the
+    /// image's download as it goes, not "Opening…" for minutes (R-0427).
+    /// Pushed states only update the line while the open is busy.
+    private func followDuringOpen() -> Task<Void, Never>? {
+        guard followers == 0 else { return nil }
+        let stream = daemon.watch(box)
+        return Task { [weak self] in
+            do {
+                for try await st in stream {
+                    guard !Task.isCancelled, let self else { return }
+                    await self.apply(st, pushed: true)
+                }
+            } catch {}
+        }
+    }
+
     /// Opens the box (on this Mac, or shows it where it runs).
     public func open() async {
         stopWaiting() // a new open ends Keep Waiting (R-0178)
         openFailure = nil
         progress = resuming ? nil : "Opening…"
         var elsewhere = false
+        let following = followDuringOpen()
         await perform(failure: { [weak self] in self?.openFailure = $0 }) {
             self.servers = (try? await self.daemon.servers()) ?? []
             do {
@@ -452,6 +478,7 @@ public final class BoxController {
             // never shows "is closed" between the open and the terminal.
             await self.refresh()
         }
+        following?.cancel()
         progress = nil
         progressDetail = nil
         if elsewhere {
@@ -728,6 +755,8 @@ public final class BoxController {
     /// shows the real state and portenvd is started again (item 1g); then
     /// the box is followed again. Runs until the task is cancelled.
     public func follow() async {
+        followers += 1
+        defer { followers -= 1 }
         while !Task.isCancelled {
             do {
                 for try await st in daemon.watch(box) {
@@ -748,6 +777,9 @@ public final class BoxController {
     /// (refreshing before its busy state ends).
     private func apply(_ st: BoxState, pushed: Bool) async {
         let newSave = st.savedAt != state?.savedAt
+        // A step of the image's download: activity for the open's 20 s
+        // timer (R-0427). Its end is not.
+        if let pull = st.imagePull, pull != state?.imagePull { pullSteps += 1 }
         state = st
         // Once for this window, however often the state says it again.
         if st.restartedForSecurityUpdate && !securityRestartTold {
@@ -756,9 +788,9 @@ public final class BoxController {
         }
         if newSave { savedAtChanged() }
         // The first open's pull: the line says how far it has got, and
-        // goes back to "Opening…" when it's done (R-0211).
-        if busy, let line = progress, line == StateLine.opening || line.hasPrefix(StateLine.gettingImagePrefix) {
-            progress = st.imagePull.map { StateLine.gettingImage(done: $0.done, total: $0.total) } ?? StateLine.opening
+        // goes back to "Opening…" when it's done (R-0211, R-0427).
+        if busy, let line = progress, line == StateLine.opening || line.hasPrefix(StateLine.downloadingImagePrefix) {
+            progress = st.imagePull.map { StateLine.downloadingImage(done: $0.done, total: $0.total) } ?? StateLine.opening
         }
         // portenvd answers again: whatever said it was away no longer holds.
         daemonGoneSince = nil

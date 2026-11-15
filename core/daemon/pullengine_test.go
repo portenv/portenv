@@ -18,7 +18,7 @@ import (
 
 // TestAPullReachesTheBoxState (R-0216): an engine (a fake one) streams a
 // pull; while it's under way, the box's state carries how far it has got,
-// as the window's line reads it ("Getting the workspace image… 312 MB of
+// as the window's line reads it ("Downloading the workspace image… 312 of
 // 900 MB"); once the open ends, it's gone.
 func TestAPullReachesTheBoxState(t *testing.T) {
 	release := make(chan struct{})

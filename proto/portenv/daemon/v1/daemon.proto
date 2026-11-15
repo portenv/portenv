@@ -1009,10 +1009,12 @@ message GetEngineResponse {
   bool running = 1;
 }
 
-// A toolbox image's pull: bytes fetched of the bytes known so far (the
-// total grows as Docker starts each layer).
+// A toolbox image's pull: the bytes fetched over every layer, and the
+// total once every layer being fetched has said its size.
 message ImagePull {
   int64 done_bytes = 1;
+  // 0 until every layer's size is known, so the app shows the bytes alone
+  // rather than a total that will grow (R-0427).
   int64 total_bytes = 2;
 }
 

@@ -2375,8 +2375,8 @@ public nonisolated struct Portenv_Daemon_V1_GetEngineResponse: Sendable {
   public init() {}
 }
 
-/// A toolbox image's pull: bytes fetched of the bytes known so far (the
-/// total grows as Docker starts each layer).
+/// A toolbox image's pull: the bytes fetched over every layer, and the
+/// total once every layer being fetched has said its size.
 public nonisolated struct Portenv_Daemon_V1_ImagePull: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
@@ -2384,6 +2384,8 @@ public nonisolated struct Portenv_Daemon_V1_ImagePull: Sendable {
 
   public var doneBytes: Int64 = 0
 
+  /// 0 until every layer's size is known, so the app shows the bytes alone
+  /// rather than a total that will grow (R-0427).
   public var totalBytes: Int64 = 0
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()

@@ -360,6 +360,13 @@ func TeamIO(args []string, stdin io.Reader, stdout io.Writer) error {
 			return errors.New("fetch-agent PROJECT ID MAXBYTES")
 		}
 		return fetchAgent(context.Background(), dir, args[2], args[3], homeGit(filepath.Dir(dir)), stdin, stdout)
+	case "fetch-lens":
+		// As a lens, through as-agent (ADR 0022 §2a point 4): the bundle
+		// on stdin, fetched into its own clone from that file only.
+		if len(args) != 5 {
+			return errors.New("fetch-lens HOME NAME WRITER MAXBYTES")
+		}
+		return fetchLens(context.Background(), dir, args[2], args[3], args[4], homeGit(dir), stdin, stdout)
 	case "handoff-pack":
 		if len(args) != 3 {
 			return errors.New("handoff-pack BASE PATH")

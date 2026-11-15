@@ -52,7 +52,11 @@
 //     the bundle, where it reads the log and diff and checks the commit
 //     out; nothing of builder's tampered config runs as reviewer, the
 //     bundle doesn't stay, builder's clone is unchanged, and lead, without
-//     the grant, is refused;
+//     the grant, is refused; R-0415: every write reviewer tries into
+//     builder's clone (the one its runner has with --add-dir: append,
+//     overwrite, touch, chmod, rename, delete, new files, folders and
+//     links, .git's config, HEAD and hooks) is refused, and the clone is
+//     unchanged;
 //  11. the move (ADR 0022 §2a point 6): with every agent stopped, the
 //     workspace is put back the old way (the project group team's,
 //     setgid, g:team:rwX, core.sharedRepository, Portenv's safe.directory,
@@ -580,6 +584,7 @@ true`, workspace))
 	}
 	t.Logf("step 10: lead can't read builder's clone; the ACLs:\n%s", out)
 	h.lensReadsTheBranch(ctx, builderUID)
+	h.lensWritesAreRefused(ctx)
 
 	// Step 11: the move. Every agent stops first.
 	for _, id := range []string{"lead", "builder", "reviewer"} {
@@ -878,6 +883,52 @@ runuser -u builder -- git -C /home/builder/%s for-each-ref --format='%%(refname)
 		h.fatal("step 10: lead, without the grant, fetched builder's branch: exit %d: %s", code, out)
 	}
 	t.Logf("step 10: no marker of reviewer's (uid %s; builder is %s), builder's clone unchanged, lead refused: %s", reviewerUID, builderUID, strings.TrimSpace(out))
+}
+
+// lensWritesAreRefused is step 10's third part (R-0415): the reviewer's
+// runner was given builder's clone with Claude Code's --add-dir, so its
+// TUI may try to edit files there; read-only rests on the files'
+// permissions alone. Every kind of write a runner's edit tool makes, as
+// reviewer, into the clone and its .git, is refused by the kernel, and
+// builder's clone is byte for byte what it was.
+func (h *harness) lensWritesAreRefused(ctx context.Context) {
+	snapshot := fmt.Sprintf(`cd /home/builder/%s && find . -printf '%%p %%y %%m %%s %%T@\n' | LC_ALL=C sort | sha256sum`, workspace)
+	before, code := h.box(ctx, "root", snapshot)
+	if code != 0 {
+		h.fatal("step 10: snapshot builder's clone: exit %d: %s", code, before)
+	}
+	attempts := []string{
+		`sh -c 'echo x >> "$1"' - $f`,
+		`sh -c 'echo x > "$1"' - $f`,
+		`cp /etc/hostname $f`,
+		`touch $f`,
+		`chmod 666 $f`,
+		`mv $f $clone/moved.txt`,
+		`rm -f $f`,
+		`touch $clone/new-file.txt`,
+		`mkdir $clone/new-dir`,
+		`ln -s /tmp $clone/new-link`,
+		`sh -c 'echo x >> "$1"' - $clone/.git/config`,
+		`sh -c 'echo x > "$1"' - $clone/.git/HEAD`,
+		`touch $clone/.git/hooks/pre-commit`,
+		`mkdir $clone/.claude`,
+	}
+	out, code := h.box(ctx, "reviewer", fmt.Sprintf(`set -u
+clone=/home/builder/%s
+f=$clone/from-builder.txt
+test -r $f && echo "readable: $f"
+try() { if "$@" >/dev/null 2>&1; then echo "DID: $*"; else echo "refused: $*"; fi; }
+try %s
+true`, workspace, strings.Join(attempts, "\ntry ")))
+	if code != 0 || !strings.Contains(out, "readable: ") || strings.Contains(out, "DID:") || strings.Count(out, "refused:") != len(attempts) {
+		h.fatal("step 10: reviewer must read builder's clone and write none of it: exit %d:\n%s", code, out)
+	}
+	after, _ := h.box(ctx, "root", snapshot)
+	if after != before {
+		h.fatal("step 10: builder's clone changed while reviewer tried to write it: %s, then %s", before, after)
+	}
+	t := h.t
+	t.Logf("step 10: every write of reviewer's into builder's clone was refused, and the clone is unchanged:\n%s", out)
 }
 
 // boxIn is box for another workspace's container.

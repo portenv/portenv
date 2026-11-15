@@ -1085,11 +1085,7 @@ func (e *teamEngine) fetchAgent(ctx context.Context, name, agentID string) (*age
 	case !a.OwnClone():
 		return nil, fmt.Errorf("%s has no copy of the project (checkout: none), so it has no branch to fetch", agentID)
 	}
-	h, err := e.helper(ctx, name)
-	if err != nil {
-		return nil, err
-	}
-	r, err := h.FetchAgentBranch(ctx, &agentv1.FetchAgentBranchRequest{AgentId: agentID, ProjectDir: "/home/work/" + name, MaxBytes: defaultHomeQuota})
+	r, err := e.fetchBranch(ctx, name, agentID, "")
 	if err != nil {
 		return nil, errors.New(status.Convert(err).Message())
 	}
@@ -1120,15 +1116,23 @@ func (e *teamEngine) fetchClone(ctx context.Context, name string, team *Team, me
 	case w == nil || !w.OwnClone():
 		return refuse(id, "%s has no copy of the project (checkout: none), so it has no branch to fetch.", writer)
 	}
-	helper, err := e.helper(ctx, name)
-	if err != nil {
-		return refuse(id, "%v", err)
-	}
-	r, err := helper.FetchAgentBranch(ctx, &agentv1.FetchAgentBranchRequest{AgentId: writer, IntoAgent: me.ID, ProjectDir: "/home/work/" + name, MaxBytes: defaultHomeQuota})
+	r, err := e.fetchBranch(ctx, name, writer, me.ID)
 	if err != nil {
 		return refuse(id, "%s's branch couldn't be fetched: %v", writer, agentError(err))
 	}
 	return &agentv1.TeamCallsRequest{CallId: id, Ok: true, Result: &agentv1.TeamCallsRequest_Fetched{Fetched: r}}
+}
+
+// fetchBranch is the one way an agent's branch is fetched, for the owner's
+// Fetch (into "") and a lens's portenv fetch (into the lens): the helper's
+// two-half fetch, the bundle as the writer and the fetch as the receiver,
+// up to the writer's home quota.
+func (e *teamEngine) fetchBranch(ctx context.Context, name, writer, into string) (*agentv1.FetchAgentBranchResponse, error) {
+	h, err := e.helper(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	return h.FetchAgentBranch(ctx, &agentv1.FetchAgentBranchRequest{AgentId: writer, IntoAgent: into, ProjectDir: "/home/work/" + name, MaxBytes: defaultHomeQuota})
 }
 
 // askTeamStartLocked makes the team_start decision naming the agent, or

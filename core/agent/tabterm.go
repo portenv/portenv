@@ -46,7 +46,7 @@ const (
 const seedFormat = "#{pane_id} #{pane_width} #{pane_height} #{history_size} #{cursor_x} #{cursor_y} #{alternate_on} " +
 	"#{scroll_region_upper} #{scroll_region_lower} #{origin_flag} #{wrap_flag} #{insert_flag} #{keypad_cursor_flag} " +
 	"#{keypad_flag} #{mouse_standard_flag} #{mouse_button_flag} #{mouse_any_flag} #{mouse_sgr_flag} #{cursor_flag} " +
-	"#{focus_flag} #{bracket_paste_flag}"
+	"#{focus_flag} #{bracket_paste_flag} #{alternate_saved_x} #{alternate_saved_y}"
 
 // TabTerminal serves one tab's terminal. The caller is portenvd (only it
 // holds the channel's credentials), which sets the author from its own
@@ -457,8 +457,10 @@ func (t *tabStream) resetOnce(ctx context.Context, skipped bool) error {
 	}
 	line := size + "display -p -t " + pane + " '" + seedFormat + "' ; capture-pane -p -e -S -" + strconv.Itoa(seedLines) + " -E - -t " + pane +
 		" ; capture-pane -a -q -p -e -t " + pane
-	// Replies come in order: the display, the main screen, the alternate
-	// screen; the last one carries the parser's snapshot.
+	// Replies come in order: the display, the history and the screen on
+	// show, and the screen that isn't (tmux's -a is the grid it keeps
+	// aside: the main screen while a full-screen program runs); the last
+	// one carries the parser's snapshot.
 	first, err := c.send(line, pane, nil)
 	if err != nil {
 		return nil
@@ -472,11 +474,11 @@ func (t *tabStream) resetOnce(ctx context.Context, skipped bool) error {
 		}
 		replies = append(replies, r)
 	}
-	disp, main, alt := replies[n-3], replies[n-2], replies[n-1]
-	if disp.failed || main.failed {
+	disp, shown, aside := replies[n-3], replies[n-2], replies[n-1]
+	if disp.failed || shown.failed {
 		return t.closed()
 	}
-	seed, sz, authors, base, err := buildSeed(disp.lines, main.lines, alt.lines, alt.snap, alt.authors)
+	seed, sz, authors, base, err := buildSeed(disp.lines, shown.lines, aside.lines, aside.snap, aside.authors)
 	if err != nil {
 		return status.Errorf(codes.Internal, "seed: %v", err)
 	}
@@ -525,16 +527,25 @@ func (t *tabStream) waitReply(ctx context.Context, id uint64) (ctlEvent, bool, e
 // current epoch put back at the start of its line; the alternate screen if
 // one shows; then the scroll region, modes, pen and cursor.
 //
+// shown is tmux's plain capture: the history, then the screen on show.
+// aside is `capture-pane -a`: the grid tmux keeps aside, which is the main
+// screen while a full-screen program shows the alternate one (and nothing
+// otherwise). So with the alternate screen on, the main screen is aside's
+// and the alternate screen is shown's last rows: drawing them the other way
+// round put the shell's old screen where the program's should be, and a
+// full-screen program that redraws only what changes (Claude Code's
+// fullscreen renderer) came back blank but for those rows (build 257).
+//
 // It returns the seed, the tab's size, the authors of the commands whose
 // marks it carries (their lines numbered as the seed's), and the base that
 // turns the parser's later line numbers into the viewer's.
-func buildSeed(disp, main, alt []string, snap *paneSnapshot, authors []recordedAuthor) ([]byte, [2]int, []*agentv1.CommandAuthor, int64, error) {
+func buildSeed(disp, shown, aside []string, snap *paneSnapshot, authors []recordedAuthor) ([]byte, [2]int, []*agentv1.CommandAuthor, int64, error) {
 	if len(disp) != 1 {
 		return nil, [2]int{}, nil, 0, fmt.Errorf("display: %q", disp)
 	}
 	// A flag tmux hasn't set (focus_flag before any focus event) is empty.
 	f := strings.Split(disp[0], " ")
-	if len(f) != 21 {
+	if len(f) != 23 {
 		return nil, [2]int{}, nil, 0, fmt.Errorf("display: %q", disp[0])
 	}
 	n := make([]int, len(f))
@@ -551,8 +562,23 @@ func buildSeed(disp, main, alt []string, snap *paneSnapshot, authors []recordedA
 	cols, rows, cx, cy, altOn := n[1], n[2], n[4], n[5], n[6] == 1
 	top, bottom := n[7], n[8]
 	size := [2]int{cols, rows}
-	if len(main) < rows {
-		return nil, [2]int{}, nil, 0, fmt.Errorf("capture: %d lines for %d rows", len(main), rows)
+	if len(shown) < rows {
+		return nil, [2]int{}, nil, 0, fmt.Errorf("capture: %d lines for %d rows", len(shown), rows)
+	}
+	// main is the main screen's history and screen, alt the alternate
+	// screen when it's on.
+	main, alt := shown, []string(nil)
+	if altOn {
+		hist := len(shown) - rows
+		alt = shown[hist:]
+		screen := aside
+		if len(screen) > rows {
+			screen = screen[:rows]
+		}
+		main = append(append(make([]string, 0, hist+rows), shown[:hist]...), screen...)
+		for len(main) < hist+rows {
+			main = append(main, "")
+		}
 	}
 	// Under gRPC's limit: the oldest history lines go first, never the
 	// screen.
@@ -607,7 +633,11 @@ func buildSeed(disp, main, alt []string, snap *paneSnapshot, authors []recordedA
 		b.WriteString(l)
 	}
 	if altOn {
-		b.WriteString("\x1b[0m\x1b[?1049h\x1b[H\x1b[2J")
+		// The main screen's cursor, which 1049 keeps and gives back when
+		// the program leaves the alternate screen.
+		b.WriteString("\x1b[0m")
+		fmt.Fprintf(&b, "\x1b[%d;%dH", n[22]+1, n[21]+1)
+		b.WriteString("\x1b[?1049h\x1b[H\x1b[2J")
 		for i, l := range alt {
 			if i > 0 {
 				b.WriteString("\x1b[0m\r\n")

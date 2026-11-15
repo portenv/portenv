@@ -172,7 +172,8 @@ Also checked on tmux 3.4 in the image:
    - **The seed is one command list (R-0133 item 5).** The capture of the main screen, the capture of the alternate screen and the state read go in one control-mode command line, joined by `;`. tmux runs a command list without reading pane output in between, so no `%output` lands inside the seed. Its reply comes back in order with `%output`, so nothing is lost or repeated between the seed and what follows.
    - **What the seed holds:**
      - `capture-pane -p -e -S - -E -` of the main screen (history and visible lines);
-     - when `#{alternate_on}`, `\e[?1049h` and `capture-pane -a -p -e` of the alternate screen;
+     - when `#{alternate_on}`, `\e[?1049h` and the alternate screen;
+     - **Which capture is which (build 257):** tmux's `-a` is the grid it keeps aside, not "the alternate screen". While a full-screen program runs, the plain capture is the history and the alternate screen, and `-a` is the main screen. So with `#{alternate_on}` the seed draws the history, then `-a`'s main screen, puts the main screen's cursor (`#{alternate_saved_x}`/`_y`) where `\e[?1049h` keeps it, and then the plain capture's last rows on the alternate screen. Drawn the other way round, a full-screen program that redraws only what changes (Claude Code's fullscreen renderer) came back blank after a tab switch, but for the rows it redrew.
      - **the state:**
        - the scroll region (`#{scroll_region_upper}`/`lower`), origin mode (`#{origin_flag}`), autowrap (`#{wrap_flag}`), insert mode;
        - cursor keys and keypad (`#{keypad_cursor_flag}`, `#{keypad_flag}`), mouse modes (`#{mouse_*_flag}`);

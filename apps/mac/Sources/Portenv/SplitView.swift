@@ -200,7 +200,8 @@ struct PaneGlyph: View {
 
 /// Split view's commands (PLAN 1.2b), in the Window menu: Split Right ⌘D,
 /// Split Down ⇧⌘D, Close Pane, and ⌘⌥ and the arrows between panes. ⌘W
-/// (Close Tab) closes the focused pane first (TabCommands).
+/// (Close Tab) closes the focused pane first (TabCommands). Split Right and
+/// Split Down are off in an agent's view (SplitController.canSplit, R-0410).
 struct SplitCommands: Commands {
     let split: SplitController?
 
@@ -241,20 +242,28 @@ private struct SplitMenuItems: View {
     }
 }
 
-/// The title bar's Split Right and Split Down buttons (the board).
-struct SplitToolbarButtons: View {
+/// Split Right and Split Down in the tab bar, next to `+`, only while You
+/// is selected (owner, 2026-10-21, R-0410; TabBarControls): agents split
+/// their own panes, and the window's toolbar has no split buttons.
+struct TabBarSplitButtons: View {
     @Bindable var split: SplitController
 
     var body: some View {
-        Button { Task { await split.split(.right) } } label: {
-            Label(SplitText.splitRight, systemImage: "rectangle.split.2x1")
+        button(.right, symbol: "rectangle.split.2x1", title: SplitText.splitRight, keys: "\u{2318}D")
+        button(.down, symbol: "rectangle.split.1x2", title: SplitText.splitDown, keys: "\u{21E7}\u{2318}D")
+    }
+
+    private func button(_ axis: SplitAxis, symbol: String, title: String, keys: String) -> some View {
+        Button { Task { await split.split(axis) } } label: {
+            Image(systemName: symbol)
+                .font(.system(size: 12, weight: .medium))
+                .frame(width: 32, height: 30)
+                .contentShape(Rectangle())
         }
-        .help("\(SplitText.splitRight) (\u{2318}D)")
-        .disabled(!split.canSplit(.right))
-        Button { Task { await split.split(.down) } } label: {
-            Label(SplitText.splitDown, systemImage: "rectangle.split.1x2")
-        }
-        .help("\(SplitText.splitDown) (\u{21E7}\u{2318}D)")
-        .disabled(!split.canSplit(.down))
+        .buttonStyle(.plain)
+        .foregroundStyle(.secondary)
+        .disabled(!split.canSplit(axis))
+        .help("\(title) (\(keys))")
+        .accessibilityLabel(title)
     }
 }

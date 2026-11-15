@@ -9,6 +9,12 @@ import Testing
 /// and 4.
 @MainActor
 struct InspectorTests {
+    /// Waits (up to 5 s) for cond; the test's own expectations then say
+    /// what was missing.
+    func waitUntil(_ cond: @MainActor () -> Bool) async {
+        for _ in 0..<250 where !cond() { try? await Task.sleep(for: .milliseconds(20)) }
+    }
+
     private let noon = Date(timeIntervalSince1970: 1_791_288_000) // a fixed time
 
     // MARK: Where it is
@@ -177,11 +183,15 @@ struct InspectorTests {
         var finished: [CommandWatch.Finished] = []
         c.commandFinished = { finished.append($0) }
         let following = Task { await c.follow() }
-        try? await Task.sleep(for: .milliseconds(100))
+        // Each step waits for the one before to arrive, not a fixed 100 ms:
+        // on a loaded machine (one cooperative thread for the app's tests)
+        // the watch could start after the first push, which it then never
+        // saw. The watch is in place once the first list is in.
+        await waitUntil { c.tabs.map(\.name) == ["build"] }
         d.pushTabs([TabInfo(id: "@0", name: "build", active: true, program: "make")])
-        try? await Task.sleep(for: .milliseconds(100))
+        await waitUntil { c.tabs.first?.program == "make" }
         d.pushTabs([TabInfo(id: "@0", name: "build", active: true)])
-        try? await Task.sleep(for: .milliseconds(100))
+        await waitUntil { !finished.isEmpty }
         following.cancel()
         #expect(finished == [CommandWatch.Finished(tab: "build", program: "make", seconds: 50)])
     }

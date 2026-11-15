@@ -78,6 +78,9 @@ public protocol DaemonAPI: Sendable {
     func sendMessage(_ box: String, to agent: String, thread: String, text: String) async throws -> TeamMessage
     func startAgent(_ box: String, id: String) async throws -> TeamAgent
     func stopAgent(_ box: String, id: String) async throws -> TeamAgent
+    /// The owner's Fetch (ADR 0022 §2a): the agent's branch into the
+    /// owner's project as refs/remotes/agents/<id>, by portenvd's safe fetch.
+    func fetchAgentBranch(_ box: String, id: String) async throws -> FetchedBranch
     /// An agent file as portenvd has it, for Approve.
     func getAgentFile(_ box: String, id: String) async throws -> AgentFileContent
     /// Pins the agent file whose text hashes to `sha256`; only the owner's
@@ -125,6 +128,7 @@ public extension DaemonAPI {
     }
     func startAgent(_: String, id _: String) async throws -> TeamAgent { throw DaemonError(DaemonError.outOfDate) }
     func stopAgent(_: String, id _: String) async throws -> TeamAgent { throw DaemonError(DaemonError.outOfDate) }
+    func fetchAgentBranch(_: String, id _: String) async throws -> FetchedBranch { throw DaemonError(DaemonError.outOfDate) }
     func getAgentFile(_: String, id _: String) async throws -> AgentFileContent { throw DaemonError(DaemonError.outOfDate) }
     func approveAgentFile(_: String, id _: String, sha256 _: String) async throws -> TeamAgent { throw DaemonError(DaemonError.outOfDate) }
     func applyTeamPlan(_: String, githubToken _: String?) async throws -> TeamPlanApplied { throw DaemonError(DaemonError.outOfDate) }
@@ -163,6 +167,10 @@ public struct DaemonError: Error, LocalizedError, Equatable {
     /// trailer portenv-refusal: moving, R-0249): said plainly, with no
     /// Close Anyway or Quit Anyway.
     public var moving = false
+    /// StartAgent refused because the team's first start waits for the
+    /// owner's Approve (portenvd's trailer portenv-refusal:
+    /// team-start-pending, R-0413): Start's calm hint, never an error line.
+    public var teamStartPending = false
     public init(_ message: String, unavailable: Bool = false, openElsewhere: Bool = false) {
         self.message = message
         self.unavailable = unavailable
@@ -177,6 +185,23 @@ public struct DaemonError: Error, LocalizedError, Equatable {
     /// A gRPC failure as the app shows it: portenvd's own plain message,
     /// except a call portenvd doesn't have (an older portenvd), which says
     /// what to do instead of gRPC's "unknown method" (§10).
+    /// portenvd's refusal marked with the trailer portenv-refusal (its
+    /// values here), as the app knows it; nil when it isn't one the app
+    /// knows. The app never reads portenvd's words to know (R-0168, R-0413).
+    public static func refusal(_ values: [String], message: String) -> DaemonError? {
+        if values.contains("open-elsewhere") { return DaemonError(message, openElsewhere: true) }
+        var refused = DaemonError(message)
+        if values.contains("moving") {
+            refused.moving = true
+            return refused
+        }
+        if values.contains("team-start-pending") {
+            refused.teamStartPending = true
+            return refused
+        }
+        return nil
+    }
+
     public static func fromRPC(message: String, unimplemented: Bool, unavailable: Bool) -> DaemonError {
         unimplemented ? DaemonError(outOfDate) : DaemonError(message, unavailable: unavailable)
     }

@@ -22,7 +22,8 @@ import (
 // PRs). It starts with the first subscriber and ends with the last, runs in a
 // UTF-8 locale (envFor), and is started again if it exits; subscribers then
 // get ctlRestart, since events in between were never seen. Both come once
-// the client takes commands (ctlReady the first time).
+// the client is attached and has answered its first commands (ctlReady the
+// first time).
 
 // tmuxCmdFunc builds a tmux command as the main user, for a long-running
 // client (control mode) rather than one call.
@@ -319,13 +320,19 @@ func (h *ctlHub) once(ctx context.Context, session string, c *ctlClient, restart
 	// Past 10 s behind, tmux pauses a pane's output for this client instead
 	// of queueing it (ADR 0020, decision 11); each pane's size and window
 	// first, for its parser.
+	// Subscribers hear ctlReady or ctlRestart with the reply: tmux reads a
+	// control client's commands only once it's attached, and sends it only
+	// the events after that, so a subscriber that lists on either one sees
+	// every change after its list (the process starting is not enough).
 	_, _ = c.send("refresh-client -f pause-after=10", "", nil)
-	_, _ = c.send("list-panes -s -F '#{window_id} #{pane_id} #{pane_width} #{pane_height}'", "", c.paneList)
-	if restarted {
-		c.broadcast(ctlEvent{kind: ctlRestart})
-	} else {
-		c.broadcast(ctlEvent{kind: ctlReady})
-	}
+	_, _ = c.send("list-panes -s -F '#{window_id} #{pane_id} #{pane_width} #{pane_height}'", "", func(lines []string, failed bool) {
+		c.paneList(lines, failed)
+		if restarted {
+			c.broadcast(ctlEvent{kind: ctlRestart})
+		} else {
+			c.broadcast(ctlEvent{kind: ctlReady})
+		}
+	})
 	overflowed := false
 	var reply *ctlEvent
 	readErr := readControlLines(stdout, maxCtlLine, func(l []byte, err error) {

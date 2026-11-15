@@ -1272,7 +1272,10 @@ type BoardMessage struct {
 	Files []*HandoffFile `protobuf:"bytes,8,rep,name=files,proto3" json:"files,omitempty"`
 	// For Portenv's notices about one agent (a start that failed): its id,
 	// so the app shows the notice in that agent's column. Empty otherwise.
-	About         string `protobuf:"bytes,9,opt,name=about,proto3" json:"about,omitempty"`
+	About string `protobuf:"bytes,9,opt,name=about,proto3" json:"about,omitempty"`
+	// Set by portenvd on portenv share's message only: the branch shared,
+	// agent/<from>, so the app offers Fetch on it. Empty otherwise.
+	SharedBranch  string `protobuf:"bytes,10,opt,name=shared_branch,json=sharedBranch,proto3" json:"shared_branch,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1366,6 +1369,13 @@ func (x *BoardMessage) GetFiles() []*HandoffFile {
 func (x *BoardMessage) GetAbout() string {
 	if x != nil {
 		return x.About
+	}
+	return ""
+}
+
+func (x *BoardMessage) GetSharedBranch() string {
+	if x != nil {
+		return x.SharedBranch
 	}
 	return ""
 }
@@ -2152,7 +2162,7 @@ const file_portenv_types_v1_types_proto_rawDesc = "" +
 	"\acommand\x18\x05 \x01(\tR\acommand\x12?\n" +
 	"\rrunning_since\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\frunningSince\x12\x19\n" +
 	"\bagent_id\x18\a \x01(\tR\aagentId\x12\x19\n" +
-	"\bpane_ids\x18\b \x03(\tR\apaneIds\"\xac\x02\n" +
+	"\bpane_ids\x18\b \x03(\tR\apaneIds\"\xd1\x02\n" +
 	"\fBoardMessage\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04from\x18\x02 \x01(\tR\x04from\x12\x0e\n" +
@@ -2163,7 +2173,9 @@ const file_portenv_types_v1_types_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x123\n" +
 	"\x05files\x18\b \x03(\v2\x1d.portenv.types.v1.HandoffFileR\x05files\x12\x14\n" +
-	"\x05about\x18\t \x01(\tR\x05about\"\xfe\x04\n" +
+	"\x05about\x18\t \x01(\tR\x05about\x12#\n" +
+	"\rshared_branch\x18\n" +
+	" \x01(\tR\fsharedBranch\"\xfe\x04\n" +
 	"\bDecision\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04from\x18\x02 \x01(\tR\x04from\x122\n" +

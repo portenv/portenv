@@ -1,0 +1,52 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Copies the toolbox image's pinned base images (and its Dockerfile
+# frontend), by digest, into ghcr.io/portenv/base, where CI pulls them with
+# its own token (scripts/base-images.sh). Anonymous pulls from shared
+# runners were refused with "429 Too Many Requests" by mirror.gcr.io and ECR
+# Public alike. It runs when the Dockerfile or this list's script changes
+# on main, by hand (Actions > Base images > Run workflow, or
+# `gh workflow run base-images.yml`), and weekly to check the copies are all
+# there; until then CI pulls from the public registries, with a warning. An
+# image already copied is left as it is; each copy keeps its digest and is
+# checked against the pinned one. Never on pull requests: only reviewed code
+# on main writes to the organization's registry.
+name: Base images
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - images/toolbox-node/Dockerfile
+      - scripts/base-images.sh
+      - .github/workflows/base-images.yml
+  workflow_dispatch:
+  schedule:
+    - cron: "17 4 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: base-images
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    name: Copy the base images to ghcr.io/portenv/base
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write # push to ghcr.io/portenv/base
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: skopeo
+        run: command -v skopeo || { sudo apt-get update -q && sudo apt-get install -y -q skopeo; }
+      - name: Copy
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          skopeo login ghcr.io -u "$GITHUB_ACTOR" --password-stdin <<<"$GH_TOKEN"
+          scripts/base-images.sh mirror

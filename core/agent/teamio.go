@@ -399,6 +399,13 @@ func TeamIO(args []string, stdin io.Reader, stdout io.Writer) error {
 			return errors.New("write-agent-files PROJECT")
 		}
 		return teamIOWriteAgentFiles(dir, stdin, stdout)
+	case "git-identity":
+		// As work (findings 21 and 22): the owner's git name and email from
+		// the Mac, on stdin, where work's git has none of its own.
+		if len(args) != 2 {
+			return errors.New("git-identity HOME")
+		}
+		return teamIOGitIdentity(dir, stdin, stdout)
 	case "write-home":
 		if len(args) != 4 {
 			return errors.New("write-home HOME PATH QUOTA")

@@ -23,6 +23,9 @@ jobs:
     name: own-route
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: read # the base images' copy in ghcr.io/portenv/base
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -39,16 +42,14 @@ jobs:
       # workflow writes it. The restic stage and the agent stage's module
       # download are skipped when their inputs haven't changed. No provenance or SBOM here, so the loaded image
       # is the plain image it always was (publishing attests separately).
+      # Tried again after a minute if a registry refuses it
+      # (.github/actions/toolbox-build).
       - name: Build the toolbox image locally
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        uses: ./.github/actions/toolbox-build
         with:
-          context: .
-          file: images/toolbox-node/Dockerfile
           platforms: linux/amd64
           tags: toolbox-node:own-route
           load: true
-          provenance: false
-          sbom: false
           cache-from: type=gha,scope=toolbox-node-builders-amd64
       - name: Own-route journey with hosted endpoints blocked
         run: tests/e2e/own-route.sh toolbox-node:own-route

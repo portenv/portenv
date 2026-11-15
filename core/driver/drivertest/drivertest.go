@@ -13,6 +13,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -440,8 +441,9 @@ func takeOver(t *testing.T, env Env) {
 		return agentv1.NewAgentServiceClient(conn), ch, func() { _ = conn.Close() }
 	}
 	// runIn types a command into the box's main tmux session and returns
-	// the output up to want.
-	runIn := func(c agentv1.AgentServiceClient, cmd, want string) string {
+	// the output up to one of wants. A want must never be in the command
+	// itself: the terminal echoes what's typed.
+	runIn := func(c agentv1.AgentServiceClient, cmd string, wants ...string) string {
 		term, err := c.Terminal(ctx)
 		if err != nil {
 			t.Fatal(err)
@@ -456,7 +458,7 @@ func takeOver(t *testing.T, env Env) {
 			}
 		}
 		var out strings.Builder
-		for !strings.Contains(out.String(), want) {
+		for !slices.ContainsFunc(wants, func(w string) bool { return strings.Contains(out.String(), w) }) {
 			r, err := term.Recv()
 			if err != nil {
 				t.Fatalf("terminal: %v; output so far %q", err, out.String())
@@ -483,8 +485,11 @@ func takeOver(t *testing.T, env Env) {
 	if secondCh.Token == firstCh.Token {
 		t.Fatal("the re-key reused the old token")
 	}
-	out := runIn(second, "pgrep -x sleep >/dev/null && echo still=running", "still=")
-	if !strings.Contains(out, "still=running") {
+	// still=42 or gone=42, which the echoed command line never holds (it
+	// held "still=running" itself, so the check passed on the echo alone,
+	// and failed when the echo came in two pieces split after "still=").
+	out := runIn(second, "pgrep -x sleep >/dev/null && echo still=$((40+2)) || echo gone=$((40+2))", "still=42", "gone=42")
+	if !strings.Contains(out, "still=42") {
 		t.Fatalf("the long command didn't survive the take-over: %q", out)
 	}
 	// The old secrets no longer work.

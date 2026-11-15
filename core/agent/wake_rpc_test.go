@@ -33,7 +33,7 @@ func TestWakeAgentTypesOnlyTheFixedLineWhenIdle(t *testing.T) {
 		if _, err := s.StartAgentTerminals(ctx, testSpec(t, c.id, standIn(c.script, "x")...)); err != nil {
 			t.Fatal(err)
 		}
-		if err := s.SetAgentIdleInput(c.id, c.pattern); err != nil {
+		if err := s.SetAgentIdleInput(c.id, testIdle(c.pattern)); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -42,7 +42,7 @@ func TestWakeAgentTypesOnlyTheFixedLineWhenIdle(t *testing.T) {
 		if _, err := s.StartAgentTerminals(ctx, testSpec(t, id, standIn(ready, filepath.Join(dir, id))...)); err != nil {
 			t.Fatal(err)
 		}
-		if err := s.SetAgentIdleInput(id, idleBoxPattern); err != nil {
+		if err := s.SetAgentIdleInput(id, testIdle(idleBoxPattern)); err != nil {
 			t.Fatal(err)
 		}
 	}

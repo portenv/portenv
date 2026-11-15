@@ -118,6 +118,36 @@ public enum TabViewer {
     public static let app = "app"
 }
 
+/// The tab bar's own controls for what the Team sidebar selects (GUIDELINES
+/// §4.1, §6.2). Agents open their own tabs and split their own panes
+/// (owner, 2026-10-21; R-0410).
+public enum TabBarControls {
+    /// In an agent's view the tab strip has no `+` button. You, All tabs,
+    /// Team activity and a decision keep it. New Tab ⌘T and closing a tab
+    /// are unchanged.
+    public static func showsNewTabButton(for selection: TeamSelection) -> Bool {
+        switch selection {
+        case .agent: false
+        case .you, .allTabs, .activity, .decision: true
+        }
+    }
+
+    /// Split Right and Split Down as buttons: in the tab bar, next to `+`,
+    /// only while You is selected; never in the window's toolbar.
+    public static func showsSplitButtons(for selection: TeamSelection) -> Bool {
+        selection == .you
+    }
+
+    /// Split Right ⌘D and Split Down ⇧⌘D in the Window menu: off while an
+    /// agent's view is in front, on otherwise.
+    public static func allowsSplit(for selection: TeamSelection) -> Bool {
+        switch selection {
+        case .agent: false
+        case .you, .allTabs, .activity, .decision: true
+        }
+    }
+}
+
 /// ⌃Tab and ⌃⇧Tab (GUIDELINES §3.3): the next and previous workspace tab,
 /// as macOS's Window › Show Next Tab and Show Previous Tab (R-0345). Next
 /// is 1, previous is -1; any other key, or Tab with ⌥ or ⌘, is not a tab
@@ -239,6 +269,12 @@ public final class TabsController {
 
     /// The tabs the tab bar shows for the selection.
     public var shownTabs: [TabInfo] { shown(for: selection) }
+
+    /// Whether the tab bar has its `+` for the selection (TabBarControls).
+    public var showsNewTabButton: Bool { TabBarControls.showsNewTabButton(for: selection) }
+
+    /// Whether the tab bar has Split Right and Split Down (TabBarControls).
+    public var showsSplitButtons: Bool { TabBarControls.showsSplitButtons(for: selection) }
 
     /// The one tab the terminal (the focused pane, when split) shows and the
     /// tab bar marks current (R-0314): the current tab, only while it is in

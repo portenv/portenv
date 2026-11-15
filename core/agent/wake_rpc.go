@@ -49,3 +49,24 @@ func (s *apiServer) WakeAgent(ctx context.Context, req *agentv1.WakeAgentRequest
 	}
 	return &agentv1.WakeAgentResponse{}, nil
 }
+
+// CheckAgentIdle is portenvd's look at an agent's main pane (R-0411):
+// readyForRoutine's verdict, with nothing typed, so portenvd can tell a
+// runner whose idle prompt it doesn't recognise from one that's busy.
+func (s *apiServer) CheckAgentIdle(ctx context.Context, req *agentv1.CheckAgentIdleRequest) (*agentv1.CheckAgentIdleResponse, error) {
+	a, ok := s.agents.get(req.GetAgentId())
+	if !ok {
+		return nil, status.Errorf(codes.FailedPrecondition, "%s isn't running", req.GetAgentId())
+	}
+	if _, err := a.ownPane(ctx, a.mainPane); err != nil {
+		return nil, status.Errorf(codes.FailedPrecondition, "%s's main pane is gone", a.user.ID)
+	}
+	s.agents.mu.Lock()
+	idleInput := a.idleInput
+	s.agents.mu.Unlock()
+	check, _, err := a.readyForRoutine(ctx, idleInput)
+	if err != nil {
+		return nil, status.Errorf(codes.Unavailable, "check %s: %v", a.user.ID, err)
+	}
+	return &agentv1.CheckAgentIdleResponse{Check: check}, nil
+}

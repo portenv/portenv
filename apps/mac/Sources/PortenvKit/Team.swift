@@ -69,14 +69,23 @@ public struct TeamAgent: Equatable, Sendable, Identifiable {
     /// Set when its file asks for share_login, which this build doesn't
     /// support: nothing is shared (R-0323).
     public var shareLoginOff: String
+    /// It works in its own copy of the project, on agent/<id>, which the
+    /// owner can fetch (ADR 0022 §2a).
+    public var ownClone: Bool
+    /// "Can't tell if <name> is idle" when portenvd hasn't recognised its
+    /// runner's idle prompt for minutes, so messages and routines wait
+    /// (R-0411); empty otherwise.
+    public var idleUnknown: String
 
     public init(id: String, name: String, role: String = "", avatar: String = "", remote: Bool = false, via: String = "",
                 status: AgentStatus, problem: String = "", fileSHA256: String = "", approved: Bool = true,
                 tabIDs: [String] = [], lastLine: String = "", pendingDecisions: Int = 0,
                 homeBytes: Int64 = 0, homeQuotaBytes: Int64 = 0, runner: String = "", grant: TeamGrant = TeamGrant(),
                 workStatus: AgentWorkStatus? = nil, routines: [AgentRoutine] = [], routinesOff: String = "",
-                shareLoginOff: String = "") {
+                shareLoginOff: String = "", ownClone: Bool = false,
+                idleUnknown: String = "") {
         self.id = id
+        self.ownClone = ownClone
         self.name = TeamText.line(name, max: 64)
         self.role = TeamText.line(role, max: 120)
         self.avatar = avatar
@@ -97,6 +106,7 @@ public struct TeamAgent: Equatable, Sendable, Identifiable {
         self.routines = routines
         self.routinesOff = TeamText.line(routinesOff, max: 300)
         self.shareLoginOff = TeamText.line(shareLoginOff, max: 300)
+        self.idleUnknown = TeamText.line(idleUnknown, max: 300)
     }
 }
 
@@ -116,10 +126,14 @@ public struct TeamMessage: Equatable, Sendable, Identifiable {
     /// For Portenv's notices about one agent (a start that failed): its
     /// id, so the notice shows in that agent's column (R-0302).
     public var about: String
+    /// Set only by portenvd on portenv share's message: the branch the
+    /// agent shared, agent/<from>, for the owner's Fetch.
+    public var sharedBranch: String
 
     public init(id: String, from: String, to: String, threadID: String = "", kind: Kind = .answer, text: String, createdAt: Date? = nil,
-                about: String = "") {
+                about: String = "", sharedBranch: String = "") {
         self.id = id
+        self.sharedBranch = sharedBranch
         self.about = about
         self.from = from
         self.to = to
@@ -247,16 +261,35 @@ public struct TeamState: Equatable, Sendable {
         switch event {
         case .agent(let a):
             if let i = agents.firstIndex(where: { $0.id == a.id }) { agents[i] = a } else { agents.append(a) }
+            settleNeedsYou(a.id)
         case .removed(let id):
             agents.removeAll { $0.id == id }
         case .message(let m):
             if !messages.contains(where: { $0.id == m.id }) { messages.append(m) }
         case .decision(let d):
             if let i = decisions.firstIndex(where: { $0.id == d.id }) { decisions[i] = d } else { decisions.append(d) }
+            settleNeedsYou(d.from)
         case .limit(let l):
             limit = l
         }
         if !cursor.isEmpty { self.cursor = cursor }
+    }
+
+    /// "Needs you" is the app's (GUIDELINES §6): a running agent shows it
+    /// exactly while one of its decisions waits here, as portenvd decides
+    /// it, so answering or an expiry clears it at once, and a row portenvd
+    /// sent before the answer never brings it back. An agent's own status
+    /// line (`portenv status set`, even `--blocked`) is its words, shown as
+    /// its line: it never sets or keeps the badge.
+    private mutating func settleNeedsYou(_ id: String) {
+        guard let i = agents.firstIndex(where: { $0.id == id }) else { return }
+        let pending = decisions.count { $0.from == id && $0.answerable }
+        agents[i].pendingDecisions = pending
+        switch agents[i].status {
+        case .needsYou where pending == 0: agents[i].status = .running
+        case .running where pending > 0: agents[i].status = .needsYou
+        default: break
+        }
     }
 
     /// Whether the workspace has a team: the sidebar shows by default when
@@ -613,5 +646,18 @@ public enum TerminalLabel {
             return "\(name) has no tab open"
         }
         return "No tab open"
+    }
+}
+
+/// How a Team sidebar row draws its status (R-0411): on the active (blue)
+/// selection, in the selected-content colour, since its own colour can't be
+/// read there; an unselected row and the inactive (grey) selection keep the
+/// status's colour (GUIDELINES 6.2).
+public enum TeamStatusInk: Equatable, Sendable {
+    case status
+    case selectedContent
+
+    public static func of(selected: Bool, activeSelection: Bool) -> TeamStatusInk {
+        selected && activeSelection ? .selectedContent : .status
     }
 }

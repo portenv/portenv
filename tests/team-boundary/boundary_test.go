@@ -66,6 +66,37 @@ cat /home/builder/secret >/dev/null`}},
 chmod 0755 /home/reviewer; chmod 0644 /home/reviewer/secret`,
 	},
 	{
+		// The owner, 2026-10-26 (ADR 0025 section 10): an agent's runner
+		// login is its own, 0600 in its own home; R-0391 keeps the
+		// owner's credentials out of the workspace altogether.
+		name: "an agent can't read another agent's runner login",
+		steps: []step{
+			{"builder", `python3 - <<'PY'
+import sys
+bad = []
+for f in (".claude/.credentials.json", ".claude.json"):
+    p = "/home/reviewer/" + f
+    try:
+        open(p, "rb").close()
+        bad.append(p + ": opened")
+    except PermissionError:
+        pass
+    except OSError as e:
+        bad.append(p + ": " + e.strerror + ", not EACCES")
+if bad:
+    print("; ".join(bad))
+    sys.exit(1)
+PY`},
+			{"reviewer", `for f in .claude/.credentials.json .claude.json; do
+  [ "$(stat -c %a "$HOME/$f")" = 600 ] || { echo "$f is $(stat -c %a "$HOME/$f"), not 600"; exit 1; }
+  cat "$HOME/$f" >/dev/null
+done`},
+		},
+		mutate: `keep /home/reviewer /home/reviewer/.claude /home/reviewer/.claude/.credentials.json /home/reviewer/.claude.json
+chmod 0711 /home/reviewer; chmod 0711 /home/reviewer/.claude
+chmod 0644 /home/reviewer/.claude/.credentials.json /home/reviewer/.claude.json`,
+	},
+	{
 		name:  "an agent can't list the owner's home (0711, R-0261)",
 		steps: []step{{"builder", `! ls /home/work 2>/dev/null && test -d /home/work/proj/src`}},
 		mutate: `keep /home/work

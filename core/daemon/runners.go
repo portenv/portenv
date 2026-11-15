@@ -4,36 +4,18 @@ package daemon
 
 import (
 	"path"
-	"regexp"
 	"strings"
+
+	"github.com/portenv/portenv/core/internal/idleinput"
 )
 
-// runnerIdlePatterns is the runner table's idle-input line for each known
-// runner (R-0258): the helper types a routine into an agent's pane only
-// when its last line matches, there's no question on screen, its output
-// has been quiet for 5 s and it isn't on the alternate screen. Runners
-// not here get no routines.
-//
-// Stand-ins until each is checked against the real CLI and labelled.
-var runnerIdlePatterns = map[string]string{
-	// Claude Code's empty input box: "> " alone, maybe inside "│ … │".
-	"claude": `^\s*[│|]?\s*>\s*[│|]?\s*$`,
-	// Codex's empty prompt.
-	"codex": `^\s*›\s*$`,
-}
+// runnerIdlePattern is the runner table's idle-input pattern for a
+// runner's argv (idleinput.Runners, R-0258), or "" for one Portenv doesn't
+// know: such a runner gets no routines and no wake-ups. runnerIdle is the
+// whole rule, sent with the agent's start.
+func runnerIdlePattern(argv []string) string { return runnerIdle(argv).Pattern }
 
-// runnerIdlePattern is the pattern for a runner's argv, by its program's
-// name, or "" for one Portenv doesn't know.
-func runnerIdlePattern(argv []string) string {
-	if len(argv) == 0 {
-		return ""
-	}
-	p := runnerIdlePatterns[path.Base(argv[0])]
-	if _, err := regexp.Compile(p); err != nil {
-		return ""
-	}
-	return p
-}
+func runnerIdle(argv []string) idleinput.Input { return idleinput.ForRunner(argv) }
 
 // routinesOffLine says why an agent's routines are off.
 func routinesOffLine(argv []string) string {

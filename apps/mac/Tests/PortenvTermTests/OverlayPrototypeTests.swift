@@ -69,9 +69,9 @@ struct OverlayPrototypeTests {
         }
     }
 
-    /// At the bottom and scrolled up through the scrollback, every band is
-    /// drawn on a prompt row and every status on the row after a command's
-    /// output; and the rows are where SwiftTerm draws its own caret.
+    /// At the bottom and scrolled up through the scrollback, every band and
+    /// every status is drawn on a prompt row (a status on its own command's,
+    /// finding 23); and the rows are where SwiftTerm draws its own caret.
     @Test(arguments: ["scroll", "long", "fullscreen", "clear", "resize"])
     func theOverlayFollowsTheRows(_ name: String) throws {
         let (v, _) = view()
@@ -97,13 +97,59 @@ struct OverlayPrototypeTests {
             v.scrollTo(row: max(0, bottom - up))
             draw(v)
             positions += 1
-            for d in v.overlay.drawn where d.kind == .prompt {
+            for d in v.overlay.drawn {
                 let row = Int(((v.bounds.height - d.rect.maxY) / v.rowHeight).rounded())
                 let s = text(v, row: row)
-                #expect(s.hasPrefix("P"), "\(name), \(up) up: a band on \"\(s)\"")
+                #expect(s.hasPrefix("P"), "\(name), \(up) up: \(d.kind) on \"\(s)\"")
             }
             if up == 12 { try render(v, "\(name)-up12") }
         }
         #expect(positions > 1)
+    }
+
+    /// Finding 23: bash prints a command's D;<exit> when the next prompt
+    /// starts, on that prompt's row. Each status must sit on the prompt of
+    /// the command that produced it, not on the next one.
+    ///
+    /// The bytes are bash 5.2 with Portenv's integration in the toolbox
+    /// image, as recorded through control mode in
+    /// tests/spike/q3/fixtures/scroll.jsonl (pane %0, path C): the same
+    /// prompt, echo, bracketed-paste, PS0 (\u{01} C \u{02}) and D-then-A
+    /// framing, byte for byte, without the spike's tmux-wrapped duplicate
+    /// of each mark. Only the commands, their output and exit codes are the
+    /// owner's sequence: a failing git apply (128), cd (no output), a
+    /// failing git merge (128), then git config.
+    static let recorded: String = {
+        let e = "\u{1b}"
+        func prompt(_ n: Int) -> String { "\(e)]133;A\u{07}\(e)[?2004hP\(n)# \(e)]133;B\u{07}" }
+        func run(_ command: String) -> String { "\(command)\r\n\(e)[?2004l\r\u{01}\(e)]133;C\u{07}\u{02}" }
+        func end(_ code: Int) -> String { "\(e)]133;D;\(code)\u{07}" }
+        return prompt(1)
+            + run("git apply fix.patch") + "error: corrupt patch at line 7\r\n" + end(128) + prompt(2)
+            + run("cd acme-api") + end(0) + prompt(3)
+            + run("git merge origin/main") + "fatal: refusing to merge unrelated histories\r\n" + end(128) + prompt(4)
+            + run("git config user.name") + "Example Person\r\n" + end(0) + prompt(5)
+    }()
+
+    @Test func eachStatusSitsOnThePromptOfItsOwnCommand() throws {
+        let (v, _) = view()
+        v.ingest(Array(Self.recorded.utf8))
+        draw(v)
+        var statuses: [String: Int?] = [:]
+        for d in v.overlay.drawn {
+            guard case let .commandEnd(exit) = d.kind else { continue }
+            let row = Int(((v.bounds.height - d.rect.maxY) / v.rowHeight).rounded())
+            statuses[text(v, row: row)] = exit
+        }
+        #expect(statuses == [
+            "P1# git apply fix.patch": 128,
+            "P2# cd acme-api": 0,
+            "P3# git merge origin/main": 128,
+            "P4# git config user.name": 0,
+        ])
+        // The blocks agree: each command ends with its own code.
+        let blocks = BlockReader(view: v).blocks()
+        #expect(blocks.map(\.command) == ["git apply fix.patch", "cd acme-api", "git merge origin/main", "git config user.name"])
+        #expect(blocks.map(\.state) == [.failed(exit: 128), .succeeded, .failed(exit: 128), .succeeded])
     }
 }

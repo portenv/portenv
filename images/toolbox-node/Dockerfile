@@ -7,16 +7,23 @@
 #
 #   docker build -f images/toolbox-node/Dockerfile -t portenv/toolbox-node:dev .
 #
-# Base images and the Dockerfile frontend come from mirror.gcr.io, Google's
-# public mirror of Docker Hub, pinned by the same digests as on Docker Hub
-# (so the bytes are identical); CI's anonymous Docker Hub pulls were rate limited.
+# Base images are Docker Hub's official images, pinned by digest (the same
+# bytes wherever they're pulled from). BASE says where from: mirror.gcr.io,
+# Google's public mirror of Docker Hub, by default, which anyone can pull. CI
+# pulls them from
+# ghcr.io/portenv/base (BASE, and BUILDKIT_SYNTAX for the frontend; see
+# scripts/base-images.sh and .github/workflows/base-images.yml), because
+# anonymous pulls from shared runners were refused with "429 Too Many
+# Requests" by mirror.gcr.io and ECR Public alike.
 #
 # Everything here is rebuilt or pulled on each machine and never saved; only
 # /home travels. Nothing may depend on Docker-only features (the same image
 # runs on Apple Containerization and microVMs).
 
+ARG BASE=mirror.gcr.io/library
+
 # --- restic, built from source at the pinned version -----------------------
-FROM --platform=$BUILDPLATFORM mirror.gcr.io/library/golang:1.26.7-bookworm@sha256:e8c859f5632dcfde7b32d2012b4351728f6437930887c2f6a91ea242459e5514 AS restic
+FROM --platform=$BUILDPLATFORM ${BASE}/golang:1.26.7-bookworm@sha256:e8c859f5632dcfde7b32d2012b4351728f6437930887c2f6a91ea242459e5514 AS restic
 ARG TARGETARCH
 ARG RESTIC_VERSION=v0.19.1
 # The module and build caches persist across builds (BuildKit cache mounts).
@@ -26,7 +33,7 @@ RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache
  && install -D "$(find /go/bin -type f -name restic)" /out/restic
 
 # --- portenv-agent and portenv, built natively for the target architecture -
-FROM --platform=$BUILDPLATFORM mirror.gcr.io/library/golang:1.26.7-bookworm@sha256:e8c859f5632dcfde7b32d2012b4351728f6437930887c2f6a91ea242459e5514 AS agent
+FROM --platform=$BUILDPLATFORM ${BASE}/golang:1.26.7-bookworm@sha256:e8c859f5632dcfde7b32d2012b4351728f6437930887c2f6a91ea242459e5514 AS agent
 ARG TARGETARCH
 ARG VERSION=dev
 ARG COMMIT=unknown
@@ -57,7 +64,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
       -o /out/portenv ./core/cmd/portenv
 
 # --- the toolbox ------------------------------------------------------------
-FROM mirror.gcr.io/library/ubuntu:24.04@sha256:534baea6a22c03a63003dbc8dbe78fe34bc0d7e595d9a9dc9834884ff530eb55
+FROM ${BASE}/ubuntu:24.04@sha256:534baea6a22c03a63003dbc8dbe78fe34bc0d7e595d9a9dc9834884ff530eb55
 ARG TARGETARCH
 
 # Node 22, pinned by version and checksum per architecture.
@@ -78,13 +85,17 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # tmux is pinned to 3.4: the helper's control mode was measured on it and
 # refuses older (ADR 0020, decision 10); raising it reruns the spike's tests.
 # Base toolchain. The stock "ubuntu" user (uid 1000) is removed so "work" can
-# take uid 1000.
+# take uid 1000. git runs an editor for a merge's message: nano is Debian's
+# `editor` (git's default when EDITOR is unset), with vim-tiny for vi
+# (finding 22: git merge failed with "unable to start editor 'editor'").
 RUN userdel --remove ubuntu \
  && apt-get update \
  && apt-get install -y --no-install-recommends \
       acl build-essential ca-certificates curl git gnupg jq less libcap2-bin locales \
-      openssh-client postgresql-client procps python3 python3-pip \
-      python3-venv ripgrep sudo 'tmux=3.4-*' unzip xz-utils \
+      nano openssh-client postgresql-client procps python3 python3-pip \
+      python3-venv ripgrep sudo 'tmux=3.4-*' tzdata unzip vim-tiny xz-utils \
+ && update-alternatives --set editor "$(update-alternatives --list editor | grep -m1 '/nano$')" \
+ && test "$(readlink -f "$(command -v editor)")" = "$(readlink -f "$(command -v nano)")" \
  && rm -rf /var/lib/apt/lists/*
 
 RUN case "$TARGETARCH" in \

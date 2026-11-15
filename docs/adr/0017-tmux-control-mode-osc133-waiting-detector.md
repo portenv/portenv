@@ -136,7 +136,7 @@ Each false "waiting" is removed by another signal: OSC 133 removes the idle shel
   - the detector says the agent is **not** waiting;
   - its window has printed nothing for 5 s;
   - it isn't on the alternate screen;
-  - the runner's own idle-input pattern, which the kit supplies, matches its last lines.
+  - the runner's own idle-input rule, which the kit supplies, finds its empty input on one of its last lines (ADR 0025 §9).
 
   The helper can't read an agent's `/proc` or terminal modes, because the agent is another user. So for agents the verdict rests on the screen and the quiet time. Today the tests use stand-ins: an empty input box, a y/n question with and without the box, steady output, a full-screen program, no pattern, and a busy line. The real CLI's idle screen, and each runner's pattern, get labelled when its account is available.
 

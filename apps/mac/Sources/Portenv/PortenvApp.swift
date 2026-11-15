@@ -76,7 +76,7 @@ struct PortenvApp: App {
                     BoxMenu(controller: controller)
                 }
             }
-            WorkspaceTabCommands(hasWindow: !model.sessions.all.isEmpty)
+            WorkspaceTabCommands(hasWindow: !model.sessions.all.isEmpty, newWorkspace: { model.newWorkspace() })
             TabCommands(tabs: current?.tabs, split: current?.split)
             SplitCommands(split: current?.split)
             InspectorToggle(box: current?.controller?.box)

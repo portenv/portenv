@@ -65,12 +65,30 @@ struct SplitControllerTests {
         #expect(s.layout.tab(in: PaneID(1)) == "@0")
     }
 
-    /// With an agent selected in the Team sidebar, a new pane takes the next
-    /// of that agent's tabs.
+    /// With You selected in the Team sidebar, a new pane takes the next of
+    /// your tabs, never an agent's.
     @Test func splitTakesTheNextTabTheTabBarShows() async {
         let daemon = FakeDaemon()
-        let ts = [TabInfo(id: "a", name: "a", active: true), TabInfo(id: "b", name: "b", active: false),
-                  TabInfo(id: "c", name: "c", active: false, agentID: "grok")]
+        let ts = [TabInfo(id: "a", name: "a", active: true), TabInfo(id: "c", name: "c", active: false, agentID: "grok"),
+                  TabInfo(id: "b", name: "b", active: false)]
+        daemon.setTabs(ts)
+        let tabs = TabsController(box: "acme-api", daemon: daemon)
+        tabs.receive(ts)
+        let s = SplitController(tabs: tabs)
+        s.size = window
+        s.tabsChanged()
+        tabs.view(.you)
+        await s.split(.right)
+        #expect(s.layout.tab(in: PaneID(2)) == "b")
+    }
+
+    /// Agents split their own panes (owner, 2026-10-21, R-0410): with an
+    /// agent's view in front the owner can't split, from the menu, its
+    /// shortcut or a button; back on You they can.
+    @Test func noSplitInAnAgentsView() async {
+        let daemon = FakeDaemon()
+        let ts = [TabInfo(id: "a", name: "a", active: true), TabInfo(id: "c", name: "c", active: false, agentID: "grok"),
+                  TabInfo(id: "d", name: "d", active: false, agentID: "grok")]
         daemon.setTabs(ts)
         let tabs = TabsController(box: "acme-api", daemon: daemon)
         tabs.receive(ts)
@@ -78,8 +96,13 @@ struct SplitControllerTests {
         s.size = window
         s.tabsChanged()
         tabs.view(.agent("grok"))
+        #expect(!s.canSplit(.right) && !s.canSplit(.down))
         await s.split(.right)
-        #expect(s.layout.tab(in: PaneID(2)) == "c")
+        await s.split(.down)
+        #expect(s.layout.panes.count == 1)
+        #expect(!daemon.calls.contains { $0.count > 1 && $0[1] == "new-tab" })
+        tabs.view(.you)
+        #expect(s.canSplit(.right) && s.canSplit(.down))
     }
 
     /// Four panes at most: a fifth split does nothing, from the menu or a

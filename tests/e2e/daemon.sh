@@ -18,6 +18,7 @@ portenv=$repo/bin/portenv
 root=$(mktemp -d "${TMPDIR:-/tmp}/portenv-d.XXXXXX")
 export PORTENV_KEYS=file PORTENV_HOME=$root/mac PORTENV_DOCKER_NAMESPACE=daemon
 failures=0
+log_shown=0
 pass() { printf 'ok    %s\n' "$1"; }
 fail() { printf 'FAIL  %s\n' "$1"; failures=$((failures + 1)); }
 expect() { local name=$1; shift; if "$@" >/dev/null 2>&1; then pass "$name"; else fail "$name"; fi; }
@@ -36,7 +37,15 @@ start_daemon() {
 	for _ in $(seq 100); do "$portenv" app ping >/dev/null 2>&1 && break; sleep 0.1; done
 }
 cleanup() {
+	local rc=$?
 	# Nothing in the cleanup may fail: under set -e that would fail the run.
+	# A run that stopped early (a command failed under set -e) shows what
+	# portenvd said too, as the last check does when some failed: without
+	# it, a failure there left no trace of its cause.
+	if (( rc != 0 && ! log_shown )) && [[ -f $root/portenvd.log ]]; then
+		echo "stopped early (exit $rc) after $failures failed check(s); portenvd's log (last 60 lines):"
+		sed 's/^/  portenvd: /' "$root/portenvd.log" | tail -60 || true
+	fi
 	if [[ -n ${dpid:-} ]]; then kill "$dpid" 2>/dev/null || true; wait "$dpid" 2>/dev/null || true; fi
 	if [[ -n ${epid:-} ]]; then kill "$epid" 2>/dev/null || true; fi
 	local id; id=$(box_id 2>/dev/null || true)
@@ -356,5 +365,5 @@ others=$(grep "portenv-daemon-" "$root/execs.txt" | grep -vc 'exec_create: /usr/
 probes=$(wc -l <"$root/probes.txt" | tr -d ' ')
 expect "no docker exec into the box but the health check and this script's $probes probes ($others)" test "$others" = "$probes"
 
-if (( failures )); then echo "$failures check(s) failed"; sed 's/^/  portenvd: /' "$root/portenvd.log" | tail -20; exit 1; fi
+if (( failures )); then echo "$failures check(s) failed"; sed 's/^/  portenvd: /' "$root/portenvd.log" | tail -20; log_shown=1; exit 1; fi
 echo "all checks passed"

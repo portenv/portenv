@@ -1,6 +1,6 @@
 # toolbox-node
 
-The default toolbox image: Ubuntu 24.04, Node 22, PostgreSQL client, git, tmux, ripgrep, jq, build-essential, Python 3, Claude Code (stable channel) and `portenv-agent` as init. arm64 and amd64 from one Dockerfile.
+The default toolbox image: Ubuntu 24.04, Node 22, PostgreSQL client, git, tmux, ripgrep, jq, nano (the default editor) and vim-tiny, build-essential, Python 3, Claude Code (stable channel) and `portenv-agent` as init. arm64 and amd64 from one Dockerfile.
 
 ```sh
 make image        # build for this machine's architecture only

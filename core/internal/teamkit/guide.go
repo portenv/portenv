@@ -164,7 +164,7 @@ func NewGuide() Guide {
 		{"portenv inbox [--wait] [--since CURSOR] [--json]", "Your messages, and your decisions' answers, since a cursor. --wait waits up to a minute for something new.",
 			`portenv inbox --wait --since 12 --json`,
 			[]string{"Stopped waiting."}},
-		{"portenv share [agent/YOUR-ID] [--text TEXT]", "Tells the owner (and the lead, if your grant names it) that your work is ready on your branch, agent/<your id>, in your own copy of the project. Commit first: the owner fetches the branch, never your uncommitted files.",
+		{"portenv share [agent/YOUR-ID] [--text TEXT]", "Tells the owner (and the lead, if your grant names it) that your work is ready on your branch, agent/<your id>, in your own copy of the project. Commit first: the owner fetches the branch, never your uncommitted files. To bring it in, the owner chooses Fetch in Portenv, on your share's message or in your column (or runs portenv app fetch-agent <workspace> <id> on the Mac); it lands in their project as agents/<id>.",
 			`portenv share --text "tests pass"`,
 			[]string{"A message is 1 to " + kb(MaxMessageBytes) + " of plain text, with no control characters.", "builder shares its own branch, agent/builder, not main.", "builder has no copy of the project (checkout: none), so it has no branch to share."}},
 		{"portenv status set TEXT [--progress N/M] [--blocked REASON] | portenv status clear", "What you're working on, shown to the owner and, with the grant, to teammates.",

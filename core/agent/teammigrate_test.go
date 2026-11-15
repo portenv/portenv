@@ -9,10 +9,14 @@ import (
 	"errors"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"golang.org/x/sys/unix"
 
@@ -439,4 +443,65 @@ func TestTheMovesDecisionOnTheBoard(t *testing.T) {
 	if _, err := (&apiServer{}).ResolveTeamMigration(context.Background(), &agentv1.ResolveTeamMigrationRequest{}); err == nil {
 		t.Error("a server without init's relay resolved a move")
 	}
+}
+
+// The move's runs as agents hold init's reaper off (holdingReaper): run
+// in a process whose reaper collects every exited child, as init's does,
+// each run still gets its own child's exit status. Without the lock the
+// reaper took it first, and the run failed with "waitid: no child
+// processes" (team-start step 11). The reaper runs in a child process of
+// the test's own, so it never takes another test's children.
+func TestTheMovesRunsHoldTheReaperOff(t *testing.T) {
+	if os.Getenv("PORTENV_REAPER_HELPER") != "" {
+		var mu sync.Mutex
+		stop := make(chan struct{})
+		defer close(stop)
+		go func() { // init's reaper, as eager as it can be
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+				}
+				if mu.TryLock() {
+					var ws unix.WaitStatus
+					_, _ = unix.Wait4(-1, &ws, unix.WNOHANG, nil)
+					mu.Unlock()
+				}
+				runtime.Gosched()
+			}
+		}()
+		run := holdingReaper(&mu, func(ctx context.Context, _ int, _ string, _ []string, _ io.Reader) ([]byte, error) {
+			return exec.CommandContext(ctx, "sh", "-c", "echo ok").Output() // #nosec G204 -- test
+		})
+		for i := range 200 {
+			if out, err := run(context.Background(), 0, "", nil, nil); err != nil || strings.TrimSpace(string(out)) != "ok" {
+				t.Fatalf("run %d: %q, %v", i, out, err)
+			}
+		}
+		return
+	}
+	cmd := exec.Command(os.Args[0], "-test.run=^TestTheMovesRunsHoldTheReaperOff$", "-test.count=1") // #nosec G204 -- this test binary
+	cmd.Env = append(os.Environ(), "PORTENV_REAPER_HELPER=1")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("%v: %s", err, out)
+	}
+
+	// The move's ops are wired to it: with init's runner, a run waits for
+	// the lock.
+	var mu sync.Mutex
+	tu := &TeamUsers{Run: ExecRunner{Mu: &mu}}
+	mu.Lock()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_, _ = tu.mops().asAgent(context.Background(), 1, "/nowhere", []string{"migrate-copy"}, nil)
+	}()
+	select {
+	case <-done:
+		t.Fatal("a run as an agent went ahead while the reaper's lock was held")
+	case <-time.After(50 * time.Millisecond):
+	}
+	mu.Unlock()
+	<-done
 }

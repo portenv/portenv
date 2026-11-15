@@ -180,6 +180,9 @@ final class FreezingProxy: @unchecked Sendable {
         Thread.detachNewThread { [self] in acceptLoop() }
     }
 
+    /// Ends every connection: shut down here, closed by their pumps once
+    /// both are done, so a pump never reads, writes or shuts down a number
+    /// that's been closed (and may be another test's socket by then).
     func stop() {
         let all = lock.withLock { () -> [Int32] in
             stopped = true
@@ -187,7 +190,7 @@ final class FreezingProxy: @unchecked Sendable {
         }
         shutdown(listener, SHUT_RDWR)
         close(listener)
-        for fd in all { shutdown(fd, SHUT_RDWR); close(fd) }
+        for fd in all { shutdown(fd, SHUT_RDWR) }
         unlink(path)
     }
 
@@ -196,6 +199,11 @@ final class FreezingProxy: @unchecked Sendable {
             let client = accept(listener, nil, nil)
             if client < 0 { return }
             let up = socket(AF_UNIX, SOCK_STREAM, 0)
+            // A write to a side that's gone is EPIPE, not SIGPIPE: the
+            // signal ended the whole test run (signal 13) when the app's
+            // end closed while bytes held during a freeze were passed on.
+            Self.noSigPipe(client)
+            Self.noSigPipe(up)
             guard Self.withAddress(upstream, { connect(up, $0, $1) }) == 0 else {
                 close(client)
                 close(up)
@@ -211,9 +219,33 @@ final class FreezingProxy: @unchecked Sendable {
                 close(up)
                 return
             }
-            Thread.detachNewThread { [self] in pump(from: client, to: up) }
-            Thread.detachNewThread { [self] in pump(from: up, to: client) }
+            let pumps = Pumps()
+            Thread.detachNewThread { [self] in pump(from: client, to: up); ended(pumps, client, up) }
+            Thread.detachNewThread { [self] in pump(from: up, to: client); ended(pumps, client, up) }
         }
+    }
+
+    /// A connection's two pumps; the second to end closes it.
+    private final class Pumps: @unchecked Sendable {
+        var running = 2
+    }
+
+    private func ended(_ pumps: Pumps, _ a: Int32, _ b: Int32) {
+        let last = lock.withLock { () -> Bool in
+            pumps.running -= 1
+            guard pumps.running == 0 else { return false }
+            fds.removeAll { $0 == a || $0 == b }
+            return true
+        }
+        if last {
+            close(a)
+            close(b)
+        }
+    }
+
+    private static func noSigPipe(_ fd: Int32) {
+        var on: Int32 = 1
+        _ = setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &on, socklen_t(MemoryLayout<Int32>.size))
     }
 
     /// Holds what it read while frozen; passes it on once thawed.

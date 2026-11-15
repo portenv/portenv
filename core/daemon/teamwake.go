@@ -4,7 +4,11 @@ package daemon
 
 import (
 	"context"
+	"strings"
 	"time"
+
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	agentv1 "github.com/portenv/portenv/proto/gen/go/portenv/agent/v1"
 	typesv1 "github.com/portenv/portenv/proto/gen/go/portenv/types/v1"
@@ -122,10 +126,50 @@ func (e *teamEngine) tickWakes(ctx context.Context) {
 			if err != nil {
 				break
 			}
-			if _, err := h.WakeAgent(ctx, &agentv1.WakeAgentRequest{AgentId: agent, From: w.from, Count: int32(min(w.count, 1<<20))}); err == nil { // #nosec G115 -- bounded
+			_, err = h.WakeAgent(ctx, &agentv1.WakeAgentRequest{AgentId: agent, From: w.from, Count: int32(min(w.count, 1<<20))}) // #nosec G115 -- bounded
+			e.logNotTyped(name, agent, "not woken", err)
+			if err == nil {
 				w.typed, w.last = true, now
 			}
 		}
 		b.mu.Unlock()
 	}
+}
+
+// notTypedLogEvery is the least time between two log lines saying one
+// agent wasn't typed into, for each path: wakes are tried every 5 s and
+// routines every 30 s while it's busy.
+const notTypedLogEvery = 10 * time.Minute
+
+// logNotTyped writes, at most once per notTypedLogEvery per agent and
+// path, why a wake-up or a routine wasn't typed (err from the helper), so
+// a runner whose screen the idle rule doesn't know shows in portenvd's
+// log. The helper's busy reasons name only the agent and the check that
+// failed; other errors log only their code. Never a message's or a
+// routine's text. A typed line (nil err) ends the episode.
+func (e *teamEngine) logNotTyped(box, agent, what string, err error) {
+	key := box + "/" + agent + "/" + what
+	e.logMu.Lock()
+	defer e.logMu.Unlock()
+	if err == nil {
+		delete(e.notTyped, key)
+		return
+	}
+	if e.log == nil {
+		return
+	}
+	now := e.now()
+	if last, ok := e.notTyped[key]; ok && now.Sub(last) < notTypedLogEvery {
+		return
+	}
+	if e.notTyped == nil {
+		e.notTyped = map[string]time.Time{}
+	}
+	e.notTyped[key] = now
+	st := status.Convert(err)
+	if st.Code() == codes.FailedPrecondition && strings.HasPrefix(st.Message(), "busy") {
+		e.log.Info(what+": its prompt wasn't idle", "box", box, "agent", agent, "why", st.Message())
+		return
+	}
+	e.log.Info(what, "box", box, "agent", agent, "code", st.Code().String())
 }

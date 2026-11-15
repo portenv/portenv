@@ -42,7 +42,9 @@ struct TeamStepView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .top, spacing: 10) {
+            // Wrapped into balanced rows at the window's width: never wider
+            // than the window (CardColumns).
+            CardRows {
                 TemplateCard(title: NewTeamText.noneTitle, line: NewTeamText.noneLine, selected: team.template == nil) {
                     Task { await team.choose(nil) }
                 }
@@ -53,23 +55,21 @@ struct TeamStepView: View {
                 }
             }
             if team.template != nil {
-                ScrollView {
-                    VStack(spacing: 0) {
-                        HStack {
-                            Text("Agent").frame(maxWidth: .infinity, alignment: .leading).padding(.leading, 30)
-                            Text("Runner").frame(width: 140, alignment: .leading)
-                            Text("Model").frame(width: 170, alignment: .leading)
-                        }
-                        .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                        .padding(.horizontal, 10).padding(.vertical, 6)
+                // As tall as its rows: the step scrolls, as a whole, only
+                // when the window can't hold them (FirstRunView).
+                VStack(spacing: 0) {
+                    HStack {
+                        Text("Agent").frame(maxWidth: .infinity, alignment: .leading).padding(.leading, 30)
+                        Text("Runner").frame(width: 140, alignment: .leading)
+                        Text("Model").frame(width: 170, alignment: .leading)
+                    }
+                    .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    .padding(.horizontal, 10).padding(.vertical, 6)
+                    ForEach(Array(team.agents.enumerated()), id: \.element.id) { i, a in
                         Divider()
-                        ForEach(Array(team.agents.enumerated()), id: \.element.id) { i, a in
-                            AgentChoiceRow(team: team, agent: a, index: i)
-                            Divider()
-                        }
+                        AgentChoiceRow(team: team, agent: a, index: i)
                     }
                 }
-                .frame(maxHeight: 300)
                 .background(RoundedRectangle(cornerRadius: 8).stroke(SwiftUI.Color.primary.opacity(0.12)))
                 if let raise = team.raise, let title = raise.raiseTitle {
                     HStack(spacing: 8) {
@@ -99,6 +99,46 @@ struct TeamStepView: View {
     }
 }
 
+/// Choice cards in balanced rows that fit the width they're given
+/// (CardColumns): never wider, however narrow the window.
+struct CardRows: Layout {
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache _: inout ()) -> CGSize {
+        let width = Self.width(proposal, cards: subviews.count)
+        let heights = rowHeights(width: width, subviews: subviews)
+        return CGSize(width: width, height: heights.reduce(0, +) + CGFloat(max(0, heights.count - 1)) * CardColumns.spacing)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal _: ProposedViewSize, subviews: Subviews, cache _: inout ()) {
+        let columns = CardColumns.count(cards: subviews.count, width: bounds.width)
+        let column = CardColumns.columnWidth(columns: columns, width: bounds.width)
+        var y = bounds.minY
+        for (row, height) in rowHeights(width: bounds.width, subviews: subviews).enumerated() {
+            for i in row * columns..<min(subviews.count, (row + 1) * columns) {
+                let x = bounds.minX + CGFloat(i - row * columns) * (column + CardColumns.spacing)
+                subviews[i].place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(width: column, height: height))
+            }
+            y += height + CardColumns.spacing
+        }
+    }
+
+    /// The width offered, or, with none, every card in one row at its minimum.
+    private static func width(_ proposal: ProposedViewSize, cards: Int) -> CGFloat {
+        if let w = proposal.width, w.isFinite { return w }
+        let n = CGFloat(min(max(1, cards), CardColumns.maximum))
+        return n * CardColumns.minimumWidth + (n - 1) * CardColumns.spacing
+    }
+
+    /// Each row's height: its tallest card at the column's width.
+    private func rowHeights(width: CGFloat, subviews: Subviews) -> [CGFloat] {
+        let columns = CardColumns.count(cards: subviews.count, width: width)
+        let column = CardColumns.columnWidth(columns: columns, width: width)
+        return stride(from: 0, to: subviews.count, by: columns).map { start in
+            subviews[start..<min(subviews.count, start + columns)]
+                .map { $0.sizeThatFits(ProposedViewSize(width: column, height: nil)).height }.max() ?? 0
+        }
+    }
+}
+
 /// One team in the picker.
 struct TemplateCard: View {
     let title: String
@@ -110,10 +150,11 @@ struct TemplateCard: View {
         Button(action: choose) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(title).font(.headline)
-                Text(line).font(.caption).foregroundStyle(.secondary).lineLimit(3).fixedSize(horizontal: false, vertical: true)
+                Text(line).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
             .padding(10)
-            .frame(maxWidth: .infinity, minHeight: 62, alignment: .topLeading)
+            // Every card in a row as tall as the row (CardRows).
+            .frame(maxWidth: .infinity, minHeight: 62, maxHeight: .infinity, alignment: .topLeading)
             .contentShape(Rectangle())
             .background(RoundedRectangle(cornerRadius: 8).fill(selected ? Color.accentColor.opacity(0.12) : Color.clear))
             .overlay(RoundedRectangle(cornerRadius: 8).stroke(selected ? Color.accentColor : Color.secondary.opacity(0.3), lineWidth: selected ? 2 : 1))
@@ -130,6 +171,7 @@ struct AgentChoiceRow: View {
     @Bindable var team: NewTeamFlow
     let agent: PlannedAgentFile
     let index: Int
+    @FocusState private var naming: Bool
 
     var body: some View {
         let name = Binding(get: { team.typedName(agent.id) }, set: { v in Task { await team.rename(agent.id, v) } })
@@ -138,11 +180,27 @@ struct AgentChoiceRow: View {
                 .toggleStyle(.checkbox).labelsHidden()
                 .accessibilityLabel("Include \(agent.name)")
             PlannedAvatar(agent: agent, index: index)
-            VStack(alignment: .leading, spacing: 1) {
+            VStack(alignment: .leading, spacing: 2) {
+                // Looks editable at rest, not only on hover: a field's
+                // background and border, the accent while typing.
                 TextField("Name", text: name)
-                    .textFieldStyle(.roundedBorder).frame(maxWidth: 180)
+                    .textFieldStyle(.plain)
+                    .focused($naming)
+                    .padding(.horizontal, 6).padding(.vertical, 3)
+                    .background(RoundedRectangle(cornerRadius: 6).fill(SwiftUI.Color(nsColor: .textBackgroundColor)))
+                    .overlay(RoundedRectangle(cornerRadius: 6)
+                        .strokeBorder(naming ? Color.accentColor : SwiftUI.Color.secondary.opacity(0.5), lineWidth: naming ? 2 : 1))
+                    .frame(maxWidth: 180)
                     .accessibilityLabel("Name for \(agent.templateName)")
-                Text(verbatim: agent.id).font(.system(size: 10, design: .monospaced)).foregroundStyle(.secondary)
+                // Its id in monospace and its role, which stay the template's.
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Text(verbatim: agent.id).font(.system(size: 10, design: .monospaced))
+                    if !agent.role.isEmpty {
+                        Text(verbatim: "\u{00B7} " + agent.role).font(.system(size: 10))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             // MVP: Claude Code only (ADR 0025 §9).

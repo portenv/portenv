@@ -155,12 +155,20 @@ func checkTheSearchFindsIt(ctx context.Context, t *testing.T, d *Driver, id driv
 		}
 	}
 	// A process holding the decoy in its environment, then one holding it
-	// in its command line.
-	for what, start := range map[string]string{
-		"environment":  "DECOY=" + decoy + " setsid sleep 120 >/dev/null 2>&1 < /dev/null &",
-		"command line": "setsid sh -c 'sleep 120' " + decoy + " >/dev/null 2>&1 < /dev/null &",
+	// in its command line. Each is searched for once it holds the decoy:
+	// until its exec, the started process is a copy of the shell, with the
+	// shell's environment and command line. (A fixed 0.3 s wait for that
+	// wasn't always enough on a loaded machine.) "ready" is a test of $p,
+	// the started process, that never names the decoy itself.
+	for what, plant := range map[string]struct{ start, ready string }{
+		"environment": {"DECOY=" + decoy + " setsid sleep 120 >/dev/null 2>&1 < /dev/null &",
+			`[ "$(cat /proc/$p/comm)" != sh ] && grep -qz '^DECOY=' /proc/$p/environ`},
+		"command line": {"setsid sh -c 'sleep 120' " + decoy + " >/dev/null 2>&1 < /dev/null &",
+			`tr '\0' ' ' < /proc/$p/cmdline | grep -q '^sh -c sleep 120 '`},
 	} {
-		sh("", start+" sleep 0.3")
+		if got := sh("", plant.start+" p=$!; i=0; until "+plant.ready+"; do i=$((i+1)); [ $i -ge 300 ] && { echo NOT-STARTED; exit; }; sleep 0.1; done; echo STARTED"); got != "STARTED" {
+			t.Fatalf("control: the process with the decoy in its %s didn't start within 30 s (%s)", what, got)
+		}
 		found := searchToken(ctx, t, d, id, decoy, bound, "procs")
 		sh("", "pkill -f 'sleep 120' || true")
 		if len(found) == 0 {

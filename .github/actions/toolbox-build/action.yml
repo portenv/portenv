@@ -1,0 +1,106 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Builds images/toolbox-node/Dockerfile with docker/build-push-action, and
+# once more a little over a minute later if that fails.
+#
+# Where the base images come from: ghcr.io/portenv/base, this
+# organization's copy of the pinned digests (scripts/base-images.sh, the
+# Base images workflow), pulled with the workflow's own token, since
+# anonymous pulls from shared runners were refused with "429 Too Many
+# Requests" by mirror.gcr.io and ECR Public alike. Until an image is copied
+# there (a new digest), the public registries, with a warning. The job needs
+# packages: read. Later steps get PORTENV_BASE, for the e2e's stand-in
+# server.
+#
+# Why the second try: a public registry's quota is counted per minute
+# ("Quota exceeded for quota metric 'Requests per project in the US
+# multi-region' ... per minute"), so it waits 65 seconds. A build that fails
+# for any other reason fails twice, and the job fails with the second try's
+# error.
+#
+# Same inputs as the build-push-action steps it replaces; the digests stay
+# pinned in the Dockerfile.
+name: Build the toolbox image
+description: images/toolbox-node/Dockerfile through docker/build-push-action, tried again after a minute if it fails
+inputs:
+  target:
+    description: The stage to build (empty for the image)
+    default: ""
+  platforms:
+    description: build-push-action's platforms
+    required: true
+  tags:
+    description: build-push-action's tags
+    default: ""
+  load:
+    description: build-push-action's load
+    default: "false"
+  outputs:
+    description: build-push-action's outputs
+    default: ""
+  build-args:
+    description: build-push-action's build-args
+    default: ""
+  cache-from:
+    description: build-push-action's cache-from
+    default: ""
+  cache-to:
+    description: build-push-action's cache-to
+    default: ""
+runs:
+  using: composite
+  steps:
+    - name: Sign in to ghcr.io (the base images' copy)
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin <<<"$GH_TOKEN" || echo "::warning::Couldn't sign in to ghcr.io; the base images come from the public registries."
+    - name: Where the base images come from
+      id: base
+      shell: bash
+      run: scripts/base-images.sh choose
+    - name: Build
+      id: first
+      continue-on-error: true
+      uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+      with:
+        context: .
+        file: images/toolbox-node/Dockerfile
+        target: ${{ inputs.target }}
+        platforms: ${{ inputs.platforms }}
+        tags: ${{ inputs.tags }}
+        load: ${{ inputs.load }}
+        outputs: ${{ inputs.outputs }}
+        provenance: false
+        sbom: false
+        build-args: |
+          BASE=${{ steps.base.outputs.base }}
+          ${{ steps.base.outputs.syntax && format('BUILDKIT_SYNTAX={0}', steps.base.outputs.syntax) || '' }}
+          ${{ inputs.build-args }}
+        cache-from: ${{ inputs.cache-from }}
+        cache-to: ${{ inputs.cache-to }}
+    - name: Wait for the registry's quota minute to pass
+      if: steps.first.outcome == 'failure'
+      shell: bash
+      run: |
+        echo "::warning::The toolbox image's build failed; trying once more in 65 seconds (a registry's per-minute quota, 429 Too Many Requests, is the usual cause)."
+        sleep 65
+    - name: Build again
+      if: steps.first.outcome == 'failure'
+      uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+      with:
+        context: .
+        file: images/toolbox-node/Dockerfile
+        target: ${{ inputs.target }}
+        platforms: ${{ inputs.platforms }}
+        tags: ${{ inputs.tags }}
+        load: ${{ inputs.load }}
+        outputs: ${{ inputs.outputs }}
+        provenance: false
+        sbom: false
+        build-args: |
+          BASE=${{ steps.base.outputs.base }}
+          ${{ steps.base.outputs.syntax && format('BUILDKIT_SYNTAX={0}', steps.base.outputs.syntax) || '' }}
+          ${{ inputs.build-args }}
+        cache-from: ${{ inputs.cache-from }}
+        cache-to: ${{ inputs.cache-to }}

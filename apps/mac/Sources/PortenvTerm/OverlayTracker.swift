@@ -91,4 +91,12 @@ public final class OverlayTracker {
         refresh()
         return rows.visible(top: firstValid + terminal.buffer.yDisp, rows: terminal.rows)
     }
+
+    /// Each finished command's status on screen, on its own prompt's row
+    /// (finding 23). None while a full-screen program shows its own screen.
+    public func statuses() -> [OverlayRows.Status] {
+        if terminal.isCurrentBufferAlternate { return [] }
+        refresh()
+        return rows.visibleStatuses(top: firstValid + terminal.buffer.yDisp, rows: terminal.rows)
+    }
 }

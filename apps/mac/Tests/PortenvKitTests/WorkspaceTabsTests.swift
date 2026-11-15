@@ -225,6 +225,83 @@ struct WorkspaceTabsTests {
         #expect(WorkspaceTabKeys.shortcut(3) == "\u{2303}\u{2318}3")
     }
 
+    // MARK: File › New Workspace… (⌘⇧N, R-0404)
+
+    /// The command: its words, ⌘⇧N, and the menu's shortcut text; ⌘N
+    /// stays Open Workspace….
+    @Test func newWorkspaceIsCommandShiftN() {
+        #expect(NewWorkspaceCommand.title == "New Workspace\u{2026}")
+        #expect(NewWorkspaceCommand.title == "New Workspace…") // the list's button, word for word
+        #expect(NewWorkspaceCommand.key == "n")
+        #expect(NewWorkspaceCommand.modifiers == [.command, .shift])
+        #expect(NewWorkspaceCommand.shortcut == "\u{21E7}\u{2318}N")
+        #expect(NewWorkspaceCommand.modifiers != [.command])
+    }
+
+    /// Where it starts, by what the window in front shows: the New
+    /// Workspace flow in a window on the list; a workspace window keeps its
+    /// workspace and the flow starts in a new tab; one already making a
+    /// workspace (or first run, or the launch still starting) comes forward
+    /// as it is; with no window, a new one.
+    @Test func newWorkspaceStartsWhereTheWindowInFrontAllows() {
+        #expect(NewWorkspaceCommand.route(.list) == .here)
+        #expect(NewWorkspaceCommand.route(.workspace) == .newTab)
+        #expect(NewWorkspaceCommand.route(.creating) == .bringForward)
+        #expect(NewWorkspaceCommand.route(.starting) == .bringForward)
+        #expect(NewWorkspaceCommand.route(nil) == .newTab)
+    }
+
+    /// What a window shows, for the route: a workspace, the list, a flow
+    /// making one, or the launch still starting.
+    @Test func whatTheWindowInFrontShows() {
+        let d = FakeDaemon()
+        let list = session(d)
+        #expect(NewWorkspaceCommand.shows(list, launch: .boxList(notice: nil)) == .list)
+        #expect(NewWorkspaceCommand.shows(list, launch: nil) == .starting)
+        let launch = WorkspaceSession(daemon: d, screen: .launch)
+        #expect(NewWorkspaceCommand.shows(launch, launch: nil) == .starting)
+        #expect(NewWorkspaceCommand.shows(launch, launch: .boxList(notice: "gone")) == .list)
+        #expect(NewWorkspaceCommand.shows(launch, launch: .firstRun(.welcome)) == .creating)
+        #expect(NewWorkspaceCommand.shows(launch, launch: .firstRun(.firstBox)) == .creating)
+        #expect(NewWorkspaceCommand.shows(launch, launch: .open("acme-api")) == .starting)
+        let making = session(d)
+        making.screen = .newBox
+        making.newBox = FirstRunFlow(service: FakeFirstRunService(), at: .firstBox, fromBoxList: true, docker: nil)
+        #expect(NewWorkspaceCommand.shows(making, launch: .boxList(notice: nil)) == .creating)
+        let shown = session(d)
+        shown.show("acme-api")
+        #expect(NewWorkspaceCommand.shows(shown, launch: .boxList(notice: nil)) == .workspace)
+        shown.leave()
+    }
+
+    /// Choosing it starts the New Workspace flow: in the window in front
+    /// when it shows the list, else the launch window when none is in
+    /// front; a workspace in front gets a new tab, which starts the flow
+    /// when it appears.
+    @Test func newWorkspaceStartsTheFlow() {
+        let d = FakeDaemon()
+        var started: [WorkspaceSession] = []
+        var tabs = 0, forward = 0
+        func choose(front: WorkspaceSession?, launchWindow: WorkspaceSession?, launch: Launch?) {
+            NewWorkspaceCommand.perform(front: front, launchWindow: launchWindow, launch: launch,
+                                        start: { started.append($0) }, openTab: { tabs += 1 }, bringForward: { _ in forward += 1 })
+        }
+        let list = session(d), launchWindow = WorkspaceSession(daemon: d, screen: .launch)
+        choose(front: list, launchWindow: launchWindow, launch: .boxList(notice: nil))
+        #expect(started.count == 1 && started[0] === list)
+        choose(front: nil, launchWindow: launchWindow, launch: .boxList(notice: nil))
+        #expect(started.count == 2 && started[1] === launchWindow)
+        let shown = session(d)
+        shown.show("acme-api")
+        choose(front: shown, launchWindow: launchWindow, launch: .boxList(notice: nil))
+        #expect(started.count == 2 && tabs == 1)
+        choose(front: nil, launchWindow: nil, launch: .boxList(notice: nil))
+        #expect(started.count == 2 && tabs == 2)
+        choose(front: launchWindow, launchWindow: launchWindow, launch: .firstRun(.welcome))
+        #expect(started.count == 2 && forward == 1)
+        shown.leave()
+    }
+
     /// A lone window is a group of one: ⌃⌘1 is that window.
     @Test func aLoneWindowIsItsOwnGroup() {
         let w = window()

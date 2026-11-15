@@ -93,4 +93,57 @@ struct OverlayRowsTests {
         #expect(OverlayRows.cursorRow(lastValid: 1023, rows: 24, cursorY: 0) == 1000)
         #expect(OverlayRows.cursorRow(lastValid: 1023, rows: 24, cursorY: 23) == 1023)
     }
+
+    /// A command's status belongs to its own prompt row (finding 23). The
+    /// shell sends D;<exit> when the next prompt starts, so the end mark is
+    /// on the next prompt's row (with that prompt's A), and for a command
+    /// with no output on its own start row too. The marks here are the rows
+    /// bash's integration put them on: git apply (128), cd (no output),
+    /// git merge (128), git config.
+    @Test func eachStatusSitsOnThePromptOfTheCommandThatEnded() {
+        let buf = FakeBuffer(lines: (0 ..< 20).map { _ in Line() })
+        var o = OverlayRows()
+        let marks: [(Int, OverlayRows.Kind)] = [
+            (0, .prompt), (1, .commandStart), (2, .commandEnd(exit: 128)), (2, .prompt),
+            (3, .commandStart), (3, .commandEnd(exit: 0)), (3, .prompt),
+            (4, .commandStart), (6, .commandEnd(exit: 128)), (6, .prompt),
+            (7, .commandStart), (8, .commandEnd(exit: 0)), (8, .prompt),
+        ]
+        for (row, kind) in marks { o.add(row: row, line: buf.lineAt(row)!, kind: kind) }
+        let want: [OverlayRows.Status] = [
+            .init(row: 0, exit: 128), .init(row: 2, exit: 0), .init(row: 3, exit: 128), .init(row: 6, exit: 0),
+        ]
+        #expect(o.statuses() == want)
+        // Scrolled so row 2 is at the top: the statuses of rows 0 and 1 are
+        // above the screen.
+        let shown: [OverlayRows.Status] = [.init(row: 0, exit: 0), .init(row: 1, exit: 128), .init(row: 4, exit: 0)]
+        #expect(o.visibleStatuses(top: 2, rows: 5) == shown)
+    }
+
+    /// The order marks arrived in on one row doesn't move a status: a
+    /// prompt redrawn on the row of the previous command's end mark (its A
+    /// added again, after the D) still follows that D.
+    @Test func aRedrawnPromptDoesntTakeThePreviousStatus() {
+        let buf = FakeBuffer(lines: (0 ..< 10).map { _ in Line() })
+        var o = OverlayRows()
+        o.add(row: 0, line: buf.lineAt(0)!, kind: .prompt)
+        o.add(row: 1, line: buf.lineAt(1)!, kind: .commandStart)
+        o.add(row: 3, line: buf.lineAt(3)!, kind: .prompt)
+        o.add(row: 3, line: buf.lineAt(3)!, kind: .commandEnd(exit: 2))
+        #expect(o.statuses() == [OverlayRows.Status(row: 0, exit: 2)])
+    }
+
+    /// An end mark with no command since the last prompt, or a command whose
+    /// prompt isn't in the buffer, shows no status: never one on the wrong
+    /// row.
+    @Test func anEndMarkWithNoCommandOrPromptShowsNothing() {
+        let buf = FakeBuffer(lines: (0 ..< 10).map { _ in Line() })
+        var o = OverlayRows()
+        o.add(row: 1, line: buf.lineAt(1)!, kind: .commandStart)
+        o.add(row: 2, line: buf.lineAt(2)!, kind: .commandEnd(exit: 1))
+        o.add(row: 2, line: buf.lineAt(2)!, kind: .prompt)
+        o.add(row: 4, line: buf.lineAt(4)!, kind: .commandEnd(exit: 0))
+        o.add(row: 4, line: buf.lineAt(4)!, kind: .prompt)
+        #expect(o.statuses().isEmpty)
+    }
 }

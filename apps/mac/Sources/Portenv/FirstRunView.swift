@@ -45,8 +45,10 @@ struct FirstRunView: View {
         }
         .padding(.horizontal, 64)
         .padding(.vertical, 48)
-        // The Team and Review steps need more room (the new-box-team board).
-        .frame(minWidth: [.team, .review].contains(flow.step) ? 880 : 720, minHeight: [.team, .review].contains(flow.step) ? 660 : 520)
+        // Every step, Team and Review too, lays out within the window's
+        // minimum: a larger minimum here only cut the step off on both
+        // sides in a smaller window (the Team step was 880 pt in 720).
+        .frame(minWidth: 720, minHeight: 520)
         .background(.background)
         // The board's size, centred on the display Portenv was launched
         // from, the first time this window shows first run (R-0186).
@@ -328,8 +330,16 @@ struct FirstRunView: View {
 
     private var teamStep: some View {
         heading(NewTeamText.teamTitle, NewTeamText.teamLine) {
-            TeamStepView(team: flow.team)
-            dockerNotice.padding(.top, 8)
+            // The cards and every agent's row, scrolled as one only when the
+            // window can't hold them all.
+            ScrollView(.vertical) {
+                VStack(alignment: .leading, spacing: 0) {
+                    TeamStepView(team: flow.team)
+                    dockerNotice.padding(.top, 8)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .scrollBounceBehavior(.basedOnSize)
         }
         .task {
             guard followsDocker else { return }

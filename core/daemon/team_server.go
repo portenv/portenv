@@ -14,7 +14,9 @@ import (
 	"sync"
 	"time"
 
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 
@@ -30,7 +32,8 @@ func (s *Server) teamEng() *teamEngine {
 	s.teamOnce.Do(func() {
 		s.team = newTeamEngine(s.agentFor, s.loadTeam)
 		s.team.readBoard = s.readBoard
-		// Routines' timers (R-0258), while portenvd runs.
+		s.team.log = s.log
+		// Routines' timers (R-0258) and the idle checks, while portenvd runs.
 		go func() {
 			tick := time.NewTicker(30 * time.Second)
 			defer tick.Stop()
@@ -40,6 +43,8 @@ func (s *Server) teamEng() *teamEngine {
 					return
 				case <-tick.C:
 					s.team.tickRoutines(s.bgCtx)
+					// The same tick looks for a prompt it can't recognise (R-0411).
+					s.team.tickIdleChecks(s.bgCtx)
 				}
 			}
 		}()
@@ -334,6 +339,9 @@ func (s *Server) StartAgent(ctx context.Context, req *daemonv1.StartAgentRequest
 	s.ensureTeamPump(req.GetName())
 	info, err := s.teamEng().startAgent(ctx, req.GetName(), req.GetAgentId())
 	if err != nil {
+		if errors.Is(err, errTeamStartPending) {
+			_ = grpc.SetTrailer(ctx, metadata.Pairs(RefusalTrailer, RefusalTeamStartPending))
+		}
 		return nil, teamStatus(err)
 	}
 	return &daemonv1.StartAgentResponse{Agent: info}, nil

@@ -26,7 +26,7 @@ The streams below are real. tmux 3.4 in the toolbox image, with the repository's
 - **A-main is wrong almost everywhere.** Without the alternate screen, SwiftTerm's scrollback holds only the single top line tmux scrolls off each time, never the tab's history. tmux redraws by cursor addressing, and repaints on every tab switch, resize and clear, so a mark pinned to a line ends up on other text.
 - **C is right everywhere.** The tab's own bytes carry the marks with the text they belong to. Each tab has its own SwiftTerm buffer and scrollback, so tab switches don't disturb it, and a resize reflows SwiftTerm's own buffer.
 
-**The prototype.** `MarkedTerminalView` (PortenvTerm) is a SwiftTerm `TerminalView` with an overlay: a tint band and a rule on each prompt row, and the previous command's status at the right of its end mark's row. It's redrawn on scroll, output and resize.
+**The prototype.** `MarkedTerminalView` (PortenvTerm) is a SwiftTerm `TerminalView` with an overlay: a tint band and a rule on each prompt row, and each finished command's status at the right of its own prompt row. (Corrected for the owner's finding 23: the prototype drew it on its end mark's row, but the shell sends D when the next prompt starts, so that row is the next prompt's and every status read as the next command's.) It's redrawn on scroll, output and resize.
 - `OverlayPrototypeTests` feeds it the recorded control-mode output, off screen. Every band is on a prompt row at the bottom and scrolled up through the scrollback, after the resize too, and the rows match where SwiftTerm draws its own caret.
 - What remains is the reviewer's UI test on a live box, after decision 2 is built.
 

@@ -274,6 +274,9 @@ message BoardMessage {
   // For Portenv's notices about one agent (a start that failed): its id,
   // so the app shows the notice in that agent's column. Empty otherwise.
   string about = 9;
+  // Set by portenvd on portenv share's message only: the branch shared,
+  // agent/<from>, so the app offers Fetch on it. Empty otherwise.
+  string shared_branch = 10;
 }
 
 // A request for the owner (ADR 0022 §6). Only the app answers it.

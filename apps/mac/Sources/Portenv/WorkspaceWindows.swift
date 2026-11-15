@@ -63,17 +63,22 @@ enum WorkspaceWindows {
     }
 }
 
-/// Window › Show Workspace Tab ▸ 1–9 (⌃⌘1–⌃⌘9, R-0345), and File › Open
-/// Workspace… (⌘N) in place of New Window: "Your workspaces" in a new tab.
+/// Window › Show Workspace Tab ▸ 1–9 (⌃⌘1–⌃⌘9, R-0345), File › Open
+/// Workspace… (⌘N) in place of New Window: "Your workspaces" in a new tab,
+/// and File › New Workspace… (⇧⌘N, R-0404): the list's New Workspace flow.
 struct WorkspaceTabCommands: Commands {
     @Environment(\.openWindow) private var openWindow
     /// Whether a workspace window is open (the commands are off without).
     let hasWindow: Bool
+    /// New Workspace…: AppModel.newWorkspace.
+    let newWorkspace: () -> Void
 
     var body: some Commands {
         CommandGroup(replacing: .newItem) {
             Button(WorkspaceTabText.openWorkspace) { openWindow(id: WorkspaceWindows.id) }
                 .keyboardShortcut("n", modifiers: .command)
+            Button(NewWorkspaceCommand.title, action: newWorkspace)
+                .keyboardShortcut(NewWorkspaceCommand.key, modifiers: NewWorkspaceCommand.modifiers)
         }
         CommandGroup(before: .windowArrangement) {
             Menu(WorkspaceTabText.showWorkspaceTab) {

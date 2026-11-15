@@ -5,7 +5,8 @@ import PortenvKit
 import SwiftUI
 
 /// The tab bar (GUIDELINES.md §3, §4.1): 30 pt under the toolbar, one tab
-/// per tmux window in the box, `+` for a new tab. Tabs share the width
+/// per tmux window in the box, `+` for a new tab (not in an agent's view,
+/// §6.2) and, with You selected, Split Right and Split Down. Tabs share the width
 /// equally (the main-window mockup). tmux's own status bar is always
 /// hidden; the app owns names and order.
 struct TabBar: View {
@@ -15,6 +16,9 @@ struct TabBar: View {
     /// Split view: where a tab's pane is (0 to 1), for its glyph; nil for a
     /// tab in no pane, or with one pane.
     var paneFrame: (String) -> CGRect? = { _ in nil }
+    /// Split view, while the workspace's terminal shows: its Split Right and
+    /// Split Down sit next to `+`, with You selected only (R-0410).
+    var split: SplitController?
     /// The tab being renamed, and the name being typed.
     @State private var renaming: String?
     @State private var draft = ""
@@ -39,18 +43,26 @@ struct TabBar: View {
                         })
                 Divider()
             }
-            Button {
-                Task { await tabs.newTab() }
-            } label: {
-                Image(systemName: "plus")
-                    .font(.system(size: 12, weight: .medium))
-                    .frame(width: 36, height: 30)
-                    .contentShape(Rectangle())
+            // No `+` in an agent's view: agents open their own tabs (owner,
+            // 2026-10-21; TabBarControls).
+            if tabs.showsNewTabButton {
+                Button {
+                    Task { await tabs.newTab() }
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 12, weight: .medium))
+                        .frame(width: 36, height: 30)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .help(A11y.newTab)
+                .accessibilityLabel(A11y.newTab)
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
-            .help(A11y.newTab)
-            .accessibilityLabel(A11y.newTab)
+            // Agents split their own panes (owner, 2026-10-21, R-0410).
+            if let split, tabs.showsSplitButtons {
+                TabBarSplitButtons(split: split)
+            }
         }
         .frame(height: 30)
         // The bar is the window colour, tinted; the selected tab is the

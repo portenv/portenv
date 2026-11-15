@@ -917,6 +917,10 @@ public nonisolated struct Portenv_Types_V1_BoardMessage: Sendable {
   /// so the app shows the notice in that agent's column. Empty otherwise.
   public var about: String = String()
 
+  /// Set by portenvd on portenv share's message only: the branch shared,
+  /// agent/<from>, so the app offers Fetch on it. Empty otherwise.
+  public var sharedBranch: String = String()
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -1621,7 +1625,7 @@ nonisolated extension Portenv_Types_V1_Tab: SwiftProtobuf.Message, SwiftProtobuf
 
 nonisolated extension Portenv_Types_V1_BoardMessage: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".BoardMessage"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}from\0\u{1}to\0\u{3}thread_id\0\u{1}type\0\u{1}text\0\u{3}created_at\0\u{1}files\0\u{1}about\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{1}from\0\u{1}to\0\u{3}thread_id\0\u{1}type\0\u{1}text\0\u{3}created_at\0\u{1}files\0\u{1}about\0\u{3}shared_branch\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1638,6 +1642,7 @@ nonisolated extension Portenv_Types_V1_BoardMessage: SwiftProtobuf.Message, Swif
       case 7: try { try decoder.decodeSingularMessageField(value: &self._createdAt) }()
       case 8: try { try decoder.decodeRepeatedMessageField(value: &self.files) }()
       case 9: try { try decoder.decodeSingularStringField(value: &self.about) }()
+      case 10: try { try decoder.decodeSingularStringField(value: &self.sharedBranch) }()
       default: break
       }
     }
@@ -1675,6 +1680,9 @@ nonisolated extension Portenv_Types_V1_BoardMessage: SwiftProtobuf.Message, Swif
     if !self.about.isEmpty {
       try visitor.visitSingularStringField(value: self.about, fieldNumber: 9)
     }
+    if !self.sharedBranch.isEmpty {
+      try visitor.visitSingularStringField(value: self.sharedBranch, fieldNumber: 10)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -1688,6 +1696,7 @@ nonisolated extension Portenv_Types_V1_BoardMessage: SwiftProtobuf.Message, Swif
     if lhs._createdAt != rhs._createdAt {return false}
     if lhs.files != rhs.files {return false}
     if lhs.about != rhs.about {return false}
+    if lhs.sharedBranch != rhs.sharedBranch {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

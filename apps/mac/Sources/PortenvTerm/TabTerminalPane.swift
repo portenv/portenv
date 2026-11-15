@@ -17,6 +17,8 @@ public final class TabTerminalHost: NSView {
     /// Called when the terminal gains or loses the keyboard focus.
     public var onFocusChange: (Bool) -> Void = { _ in }
     private var watch: NSKeyValueObservation?
+    /// The selection changes this host has landed for.
+    var selectionChanges = 0
     private var focused = false
 
     public override init(frame: NSRect) {
@@ -76,12 +78,17 @@ public struct TabTerminalPane: NSViewRepresentable {
     /// terminal asks for.
     public var textSize: CGFloat
     public var onTextSizeKey: (TerminalTextSize.Step) -> Void
+    /// A new count: the sidebar's selection changed (GUIDELINES §4.1), so
+    /// the tab on screen lands as a switch does.
+    public var selectionChanges: Int
 
     public init(source: any TabTerminalSource, label: String, isFocused: Binding<Bool>,
                 textSize: CGFloat = TerminalTextSize.defaultPoints,
                 onTextSizeKey: @escaping (TerminalTextSize.Step) -> Void = { _ in },
+                selectionChanges: Int = 0,
                 onReset: @escaping (TabTerminalSize) -> Void = { _ in },
                 onEnded: @escaping (TabTerminalEnd) -> Void = { _ in }) {
+        self.selectionChanges = selectionChanges
         self.source = source
         self.label = label
         _isFocused = isFocused
@@ -112,6 +119,10 @@ public struct TabTerminalPane: NSViewRepresentable {
             if binding.wrappedValue != focused { binding.wrappedValue = focused }
         }
         host.show(source)
+        if host.selectionChanges != selectionChanges {
+            host.selectionChanges = selectionChanges
+            host.terminal.shownBySelection()
+        }
         if isFocused { host.focus() }
     }
 }

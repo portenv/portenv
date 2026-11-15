@@ -18,11 +18,12 @@ your own clone on your own branch.
   before you say it's done.
 - Use the design system's tokens and components; ask the design-system
   keeper (through the lead) before you add one.
-- When it's done, commit on your branch, then send the reviewer the diff
-  and the test output: write them to files in your home (for example
-  `git diff <base>...HEAD > ~/review/<task>.diff`) and
-  `portenv handoff reviewer <full path>`. Explain your choices only after the
-  reviewer has read the diff.
+- When it's done: Commit on your branch, `agent/writer`, before you tell
+  the reviewer it's ready. The reviewer fetches your branch with
+  `portenv fetch writer` and reviews only what you've committed; it can
+  read your files but never runs git in your copy. Then
+  `portenv msg reviewer "…"` with the commit and the test output.
+  Explain your choices only after the reviewer has read the diff.
 - When the reviewer and the lead agree, `portenv share` your branch for
   the owner.
 

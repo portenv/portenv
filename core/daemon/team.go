@@ -68,6 +68,10 @@ type teamEngine struct {
 	// readBoard reads a workspace's board back after a restart; nil reads
 	// nothing (tests).
 	readBoard func(ctx context.Context, box string) ([]*agentv1.ReadBoardResponse, error)
+	// wantedFile is where a workspace's running agents are remembered, so
+	// it starts them again when it opens (CC-0747, teamresume.go); nil or
+	// "" remembers them only in memory (tests).
+	wantedFile func(box string) string
 
 	mu    sync.Mutex
 	boxes map[string]*teamBox
@@ -114,7 +118,12 @@ type teamBox struct {
 	// (R-0411, teamidle.go).
 	noPromptSince map[string]time.Time
 	idleUnknown   map[string]bool
-	changed       chan struct{}
+	// wanted is the agents the owner's starts left running: a start that
+	// worked adds one, the owner's Stop removes it, and the box's next start
+	// starts them again (CC-0747). Read from wantedFile on first use.
+	wanted       map[string]bool
+	wantedLoaded bool
+	changed      chan struct{}
 }
 
 // teamEvent is one thing that happened, in order; a cursor is a count of
@@ -1011,32 +1020,54 @@ func (e *teamEngine) startAgentAs(ctx context.Context, name, agentID string, app
 		b.states[agentID] = typesv1.AgentState_AGENT_STATE_STOPPED
 		return nil, err
 	}
+	e.runningLocked(b, a, r.GetTabs())
+	e.setWantedLocked(name, b, agentID, true)
+	info := e.infoLocked(b, a)
+	b.events = append(b.events, teamEvent{agent: info})
+	b.changedLocked()
+	return info, nil
+}
+
+// runningLocked records an agent as running with its tabs: its routines'
+// timers start, and any line about a failed start goes.
+func (e *teamEngine) runningLocked(b *teamBox, a *TeamAgent, tabs []*typesv1.Tab) {
+	agentID := a.ID
 	b.states[agentID] = typesv1.AgentState_AGENT_STATE_RUNNING
 	delete(b.startErr, agentID)
 	b.routines[agentID] = nil
 	idle := runnerIdlePattern(a.Runner)
 	delete(b.routinesOff, agentID)
-	if off := idleOffLine(a.Runner, len(a.Spec.Routines) > 0); off != "" {
+	routines := 0
+	if a.Spec != nil {
+		routines = len(a.Spec.Routines)
+	}
+	if off := idleOffLine(a.Runner, routines > 0); off != "" {
 		b.routinesOff[agentID] = off
 	}
 	b.setWakeableLocked(agentID, idle != "")
 	b.clearIdleUnknownLocked(agentID)
-	for _, r := range a.Spec.Routines {
-		if idle == "" {
-			break
+	if a.Spec != nil {
+		for _, r := range a.Spec.Routines {
+			if idle == "" {
+				break
+			}
+			every := time.Duration(r.EveryMinutes) * time.Minute
+			b.routines[agentID] = append(b.routines[agentID], &routineState{every: every, note: r.Note, next: e.now().Add(every)})
 		}
-		every := time.Duration(r.EveryMinutes) * time.Minute
-		b.routines[agentID] = append(b.routines[agentID], &routineState{every: every, note: r.Note, next: e.now().Add(every)})
 	}
 	b.tabs[agentID], b.panes[agentID] = nil, nil
-	for _, t := range r.GetTabs() {
+	for _, t := range tabs {
 		b.tabs[agentID] = append(b.tabs[agentID], t.GetId())
 		b.panes[agentID] = append(b.panes[agentID], t.GetPaneIds()...)
 	}
-	info := e.infoLocked(b, a)
-	b.events = append(b.events, teamEvent{agent: info})
-	b.changedLocked()
-	return info, nil
+}
+
+// stoppedLocked records an agent as stopped: no routines, no tabs.
+func (b *teamBox) stoppedLocked(agentID string) {
+	b.states[agentID] = typesv1.AgentState_AGENT_STATE_STOPPED
+	b.clearIdleUnknownLocked(agentID)
+	delete(b.routines, agentID)
+	b.tabs[agentID], b.panes[agentID] = nil, nil
 }
 
 func (e *teamEngine) stopAgent(ctx context.Context, name, agentID string) (*daemonv1.AgentInfo, error) {
@@ -1060,10 +1091,8 @@ func (e *teamEngine) stopAgent(ctx context.Context, name, agentID string) (*daem
 		return nil, err
 	}
 	defer b.mu.Unlock()
-	b.states[agentID] = typesv1.AgentState_AGENT_STATE_STOPPED
-	b.clearIdleUnknownLocked(agentID)
-	delete(b.routines, agentID)
-	b.tabs[agentID], b.panes[agentID] = nil, nil
+	b.stoppedLocked(agentID)
+	e.setWantedLocked(name, b, agentID, false)
 	info := e.infoLocked(b, a)
 	b.events = append(b.events, teamEvent{agent: info})
 	b.changedLocked()
@@ -1171,6 +1200,15 @@ func (e *teamEngine) startApprovedLocked(ctx context.Context, name string, b *te
 		e.noticeLocked(ctx, name, b, boardOwner, d.GetId(), "Portenv couldn't start the team: "+err.Error()+". Click Start again.")
 		return
 	}
+	e.startInBackgroundLocked(ctx, name, b, &team, ids, d.GetId())
+}
+
+// startInBackgroundLocked starts agents the owner has already approved
+// starting, in portenvd: each shows as starting now, then starts through
+// startAgentAs in the background; one that can't start goes back to
+// stopped, and the owner is told why on the board, in thread. It returns
+// the agents it set starting.
+func (e *teamEngine) startInBackgroundLocked(ctx context.Context, name string, b *teamBox, team *Team, ids []string, thread string) []string {
 	var starting []string
 	allowed, active := team.Limits.normal().MaxAgents, b.activeLocked("")
 	for _, id := range ids {
@@ -1187,7 +1225,7 @@ func (e *teamEngine) startApprovedLocked(ctx context.Context, name string, b *te
 			line := startLimitLine(a.displayName(), active, allowed)
 			b.startErr[id] = line
 			b.events = append(b.events, teamEvent{agent: e.infoLocked(b, a)})
-			e.noticeAboutLocked(ctx, name, b, boardOwner, d.GetId(), id, line)
+			e.noticeAboutLocked(ctx, name, b, boardOwner, thread, id, line)
 			continue
 		}
 		active++
@@ -1196,7 +1234,7 @@ func (e *teamEngine) startApprovedLocked(ctx context.Context, name string, b *te
 		starting = append(starting, id)
 	}
 	if len(starting) == 0 {
-		return
+		return nil
 	}
 	b.changedLocked()
 	bg := context.WithoutCancel(ctx)
@@ -1205,10 +1243,11 @@ func (e *teamEngine) startApprovedLocked(ctx context.Context, name string, b *te
 		defer e.starts.Done()
 		for _, id := range starting {
 			if _, err := e.startAgentAs(bg, name, id, true); err != nil {
-				e.startFailed(bg, name, id, d.GetId(), err)
+				e.startFailed(bg, name, id, thread, err)
 			}
 		}
 	}()
+	return starting
 }
 
 // startFailed puts an agent an approval was starting back to stopped, and

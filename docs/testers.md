@@ -7,6 +7,10 @@ What to know before you try Portenv's design-tester build. It's short on purpose
 - A Mac with Apple silicon and macOS 26.
 - **Docker Desktop**, installed and open. Portenv runs your workspaces in it for now. If it isn't running, Portenv says so and waits for it.
 
+## Installing
+
+Open `Portenv.dmg` and drag Portenv to Applications. If an older Portenv is in Applications, replace it.
+
 ## The terminal
 
 Control-click doesn't open the terminal's menu (Copy, Paste, Select All, Find…), because the terminal takes it; right-click or tap with two fingers instead.

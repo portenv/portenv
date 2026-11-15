@@ -216,9 +216,7 @@ public final class MarkedTerminalView: TerminalView {
         if !tracker.seeding, scrolledUp { outputWhileScrolledUp = true }
         let allowed = filter.filter(bytes)
         if !allowed.isEmpty {
-            feeding = true
-            feed(byteArray: allowed[...])
-            feeding = false
+            withFeeding { feed(byteArray: allowed[...]) }
         }
         overlay.needsDisplay = true
     }
@@ -243,7 +241,19 @@ public final class MarkedTerminalView: TerminalView {
     /// terminal type into the tab, as the person. Only what the person types,
     /// pastes, clicks or enters through IME goes to the source, through
     /// SwiftTerm's `send(data:)`.
-    public override func send(source _: Terminal, data _: ArraySlice<UInt8>) {}
+    ///
+    /// The one exception is the person's own mouse: SwiftTerm writes a
+    /// mouse report (a click, a drag, the wheel) through this same path when
+    /// the program asked for them. Such a report passes, but only outside
+    /// `feed`, where every reply to a program is made: a program can't make
+    /// the terminal type into the tab by asking for one. Without it the
+    /// wheel did nothing in a full-screen program that scrolls its own
+    /// output, such as Claude Code's fullscreen renderer (build 257).
+    public override func send(source _: Terminal, data: ArraySlice<UInt8>) {
+        let bytes = Array(data)
+        guard !feeding, MouseReport.isReport(bytes) else { return }
+        source?.send(bytes)
+    }
 
     // MARK: Landing on a switch (GUIDELINES §4.1)
 
@@ -288,6 +298,14 @@ public final class MarkedTerminalView: TerminalView {
 
     /// Output is being drawn: its scrolling isn't the owner's.
     private var feeding = false
+
+    /// Runs `body` as output being drawn: its scrolling isn't the owner's,
+    /// and nothing the emulator writes meanwhile reaches the tab.
+    func withFeeding(_ body: () -> Void) {
+        feeding = true
+        defer { feeding = false }
+        body()
+    }
 
     /// Records the tab being left.
     private func remember() {

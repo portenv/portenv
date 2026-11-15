@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -522,7 +523,7 @@ func TestTabTerminalSkipsAndSaysSoWhenTheReaderFallsBehind(t *testing.T) {
 // even among identical prompts, and leaves older epochs' marks out (they
 // can't be aligned); authors go only with a command mark it carries.
 func TestBuildSeedPutsMarksOnTheirLines(t *testing.T) {
-	disp := []string{"%1 80 3 2 2 2 0 0 2 0 1 0 0 0 0 0 0 0 1 0 0"}
+	disp := []string{"%1 80 3 2 2 2 0 0 2 0 1 0 0 0 0 0 0 0 1 0 0 0 0"}
 	main := []string{"$ ls", "a", "$ ls", "b", "$ "}
 	snap := &paneSnapshot{cursorLine: 104, epoch: 2, marks: []paneMark{
 		{kind: markCommand, line: 100, epoch: 2},
@@ -637,6 +638,145 @@ exec sleep 600
 	cur := strings.Fields(h.raw("display", "-p", "-t", tab, "#{cursor_x} #{cursor_y}"))
 	if p := e.CursorPosition(); strconv.Itoa(p.X) != cur[0] || strconv.Itoa(p.Y) != cur[1] {
 		t.Errorf("viewer cursor %v, tmux %v", p, cur)
+	}
+}
+
+// emulatorRows is what a viewer fed seed and output shows, row by row,
+// trailing spaces trimmed.
+func emulatorRows(e *vt.Emulator, cols, rows int) []string {
+	out := make([]string, rows)
+	for y := range rows {
+		var b strings.Builder
+		for x := range cols {
+			if c := e.CellAt(x, y); c != nil && c.Content != "" {
+				b.WriteString(c.Content)
+			} else {
+				b.WriteByte(' ')
+			}
+		}
+		out[y] = strings.TrimRight(b.String(), " ")
+	}
+	return out
+}
+
+// tmuxRows is what tmux shows of a pane (or, with -a, the grid it keeps
+// aside), row by row, trailing spaces trimmed.
+func tmuxRows(h *tabTermHarness, rows int, args ...string) []string {
+	got := strings.Split(strings.TrimRight(h.raw(append([]string{"capture-pane", "-p"}, args...)...), "\n"), "\n")
+	out := make([]string, rows)
+	for y := range rows {
+		if y < len(got) {
+			out[y] = strings.TrimRight(got[y], " ")
+		}
+	}
+	return out
+}
+
+// With a full-screen program on the alternate screen, the seed draws the
+// program's screen on top and the main screen under it, never the other way
+// round: tmux's `capture-pane -a` is the grid it keeps aside, the main
+// screen while the program runs (build 257: Claude Code's fullscreen
+// renderer came back blank after a tab switch, but for the rows it redrew).
+// Leaving the alternate screen then shows the main screen, its cursor and
+// its history as tmux has them.
+func TestBuildSeedDrawsTheAlternateScreenOnTop(t *testing.T) {
+	// 20x3, 2 lines of history, the program's cursor at (4,1), the
+	// alternate screen on, the main screen's cursor kept at (2,2).
+	disp := []string{"%1 20 3 2 4 1 1 0 2 0 1 0 0 0 0 0 0 0 1 0 0 2 2"}
+	shown := []string{"h1", "h2", "FULL top", "", "FULL bottom"}
+	aside := []string{"$ ls", "a", "$"}
+	seed, size, _, _, err := buildSeed(disp, shown, aside, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if size != [2]int{20, 3} {
+		t.Fatalf("size %v", size)
+	}
+	e := vt.NewEmulator(20, 3)
+	_, _ = e.Write(seed)
+	if !e.IsAltScreen() {
+		t.Fatal("the seed leaves the viewer on the main screen")
+	}
+	if got, want := emulatorRows(e, 20, 3), []string{"FULL top", "", "FULL bottom"}; !slices.Equal(got, want) {
+		t.Errorf("on the alternate screen: %q, want %q", got, want)
+	}
+	if p := e.CursorPosition(); p.X != 4 || p.Y != 1 {
+		t.Errorf("program's cursor %v, want (4,1)", p)
+	}
+	_, _ = e.Write([]byte("\x1b[?1049l"))
+	if got, want := emulatorRows(e, 20, 3), []string{"$ ls", "a", "$"}; !slices.Equal(got, want) {
+		t.Errorf("after the program leaves: %q, want %q", got, want)
+	}
+	if p := e.CursorPosition(); p.X != 2 || p.Y != 2 {
+		t.Errorf("main screen's cursor %v, want (2,2)", p)
+	}
+	if n := e.ScrollbackLen(); n != 2 {
+		t.Errorf("%d lines of history, want 2", n)
+	}
+}
+
+// The same with a real tmux: a viewer that opens a tab while a full-screen
+// program runs shows what tmux shows, and again once the program leaves.
+func TestTabTerminalSeedsAFullScreenProgram(t *testing.T) {
+	dir := t.TempDir()
+	ready, goFile := filepath.Join(dir, "ready"), filepath.Join(dir, "go")
+	script := filepath.Join(dir, "prog.sh")
+	if err := os.WriteFile(script, []byte(`for i in $(seq 1 40); do printf 'shell line %s\n' $i; done
+printf '$ claude'
+printf '\033[?1049h\033[H\033[2J'
+printf '\033[1;1HFULLSCREEN top\033[12;5Hmiddle\033[24;1Hesc to interrupt\033[3;3H'
+touch `+ready+`
+while [ ! -e `+goFile+` ]; do sleep 0.05; done
+printf '\033[?1049l'
+printf ' AFTER'
+exec sleep 600
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	h := newTabTermHarness(t, "sh "+script)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	tab := h.firstTab()
+	h.raw("resize-window", "-t", tab, "-x", "80", "-y", "24")
+	for end := time.Now().Add(10 * time.Second); ; {
+		if _, err := os.Stat(ready); err == nil {
+			break
+		}
+		if time.Now().After(end) {
+			t.Fatal("the program didn't start its full screen")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if on := strings.TrimSpace(h.raw("display", "-p", "-t", tab, "#{alternate_on}")); on != "1" {
+		t.Fatalf("alternate_on %q", on)
+	}
+	tt := h.open(ctx, tab, "", 80, 24)
+	r := tt.next(5 * time.Second).GetReset_()
+	if r == nil {
+		t.Fatal("no reset")
+	}
+	cols, rows := int(r.GetSize().GetCols()), int(r.GetSize().GetRows())
+	e := vt.NewEmulator(cols, rows)
+	_, _ = e.Write(r.GetSeed())
+	if got, want := emulatorRows(e, cols, rows), tmuxRows(h, rows, "-t", tab); !slices.Equal(got, want) {
+		t.Errorf("full screen:\nviewer %q\ntmux   %q", got, want)
+	}
+	cur := strings.Fields(h.raw("display", "-p", "-t", tab, "#{cursor_x} #{cursor_y}"))
+	if p := e.CursorPosition(); strconv.Itoa(p.X) != cur[0] || strconv.Itoa(p.Y) != cur[1] {
+		t.Errorf("viewer cursor %v, tmux %v", p, cur)
+	}
+	if err := os.WriteFile(goFile, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var out []byte
+	tt.until(5*time.Second, "AFTER", func(o []byte) bool { out = o; return bytes.Contains(o, []byte("AFTER")) })
+	time.Sleep(100 * time.Millisecond)
+	_, _ = e.Write(out)
+	if got, want := emulatorRows(e, cols, rows), tmuxRows(h, rows, "-t", tab); !slices.Equal(got, want) {
+		t.Errorf("after the program left:\nviewer %q\ntmux   %q", got, want)
+	}
+	if e.ScrollbackLen() == 0 {
+		t.Error("the main screen's history didn't reach the viewer")
 	}
 }
 

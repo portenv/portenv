@@ -231,4 +231,40 @@ struct QueryReplyTests {
         v.send(txt: "y")
         #expect(s.sent.flatMap { $0 } == Array("y".utf8))
     }
+
+    /// The wheel in a full-screen program that asked for mouse reports
+    /// (Claude Code's fullscreen renderer: the alternate screen, 1000 and
+    /// 1006) reaches the program, which scrolls its own output (build 257:
+    /// it went nowhere). SwiftTerm's scrollWheel writes each notch as
+    /// `sendEvent` with button 64 (up) or 65 (down), which this calls.
+    @Test func theWheelReachesAProgramThatAskedForTheMouse() async {
+        _ = NSApplication.shared
+        let v = MarkedTerminalView(frame: NSRect(x: 0, y: 0, width: 800, height: 480))
+        let s = ScriptedTabSource(tab: "@1")
+        v.attach(s)
+        s.play(.reset(TabTerminalSize(cols: 80, rows: 24), seed: Array("\u{1b}[?1049h\u{1b}[?1000h\u{1b}[?1006hFULL".utf8)))
+        for _ in 0 ..< 200 where v.getTerminal().mouseMode == .off { try? await Task.sleep(for: .milliseconds(10)) }
+        #expect(v.getTerminal().mouseMode != .off)
+        #expect(v.getTerminal().isCurrentBufferAlternate)
+        v.getTerminal().sendEvent(buttonFlags: 64, x: 9, y: 4)
+        v.getTerminal().sendEvent(buttonFlags: 65, x: 9, y: 4)
+        #expect(s.sent == [Array("\u{1b}[<64;10;5M".utf8), Array("\u{1b}[<65;10;5M".utf8)])
+    }
+
+    /// A program can't have the terminal type a mouse report into the tab:
+    /// what the emulator writes while it's fed the program's output (where
+    /// every reply is made) never goes, whatever it looks like.
+    @Test func nothingWrittenWhileFedReachesTheTab() async {
+        _ = NSApplication.shared
+        let v = MarkedTerminalView(frame: NSRect(x: 0, y: 0, width: 800, height: 480))
+        let s = ScriptedTabSource(tab: "@1")
+        v.attach(s)
+        s.play(.reset(TabTerminalSize(cols: 80, rows: 24), seed: []))
+        let wheel = Array("\u{1b}[<64;10;5M".utf8)
+        v.withFeeding { v.send(source: v.getTerminal(), data: wheel[...]) }
+        #expect(s.sent.isEmpty)
+        // The same report from the person's own wheel goes.
+        v.send(source: v.getTerminal(), data: wheel[...])
+        #expect(s.sent == [wheel])
+    }
 }

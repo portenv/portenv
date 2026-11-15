@@ -403,6 +403,12 @@ func (s *Server) OpenBox(ctx context.Context, req *daemonv1.OpenBoxRequest) (_ *
 	// work's git gets the owner's name and email from the Mac where it has
 	// none (findings 21 and 22); never fails the open.
 	s.shareGitIdentity(ctx, ob.sess.Cfg.ID, ob.client())
+	// The team as it really is in the box, never as it was last recorded,
+	// and the agents that were running when it closed start again under
+	// the owner's earlier approvals (CC-0747). Never fails the open.
+	if s.teamEng().boxStarted(ctx, req.GetName()) {
+		s.ensureTeamPump(req.GetName())
+	}
 	summary := fmt.Sprintf("open on %s (resume rule %d: %s)", s.env.Machine, res.Rule, res.Action)
 	// Rule 4: say where the unsaved work went, with its time.
 	if o := res.Orphaned; o != nil {

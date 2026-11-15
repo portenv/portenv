@@ -18,12 +18,15 @@ type Runner struct {
 	ModelFlag string
 	// Models are the runner's own aliases, in menu order.
 	Models []string
-	Shown  bool
+	// AddDirFlag gives the runner another folder it may read: each
+	// read_clones path of a lens (ADR 0025 §9). Empty: the runner has none.
+	AddDirFlag string
+	Shown      bool
 }
 
 // Runners is the registry, in menu order.
 var Runners = []Runner{
-	{ID: "claude", Name: "Claude Code", ModelFlag: "--model", Models: []string{"opus", "sonnet", "fable"}, Shown: true},
+	{ID: "claude", Name: "Claude Code", ModelFlag: "--model", Models: []string{"opus", "sonnet", "fable"}, AddDirFlag: "--add-dir", Shown: true},
 }
 
 // RunnerByID is the shown runner with that id.

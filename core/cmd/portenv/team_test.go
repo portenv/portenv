@@ -92,6 +92,7 @@ func TestTeamCommandsSendTheRightCall(t *testing.T) {
 		{[]string{"status", "clear"}, &agentv1.TeamCallsResponse{Op: &agentv1.TeamCallsResponse_SetStatus{SetStatus: &agentv1.SetStatus{Clear: true}}}},
 		{[]string{"team", "status"}, &agentv1.TeamCallsResponse{Op: &agentv1.TeamCallsResponse_TeamStatus{TeamStatus: &agentv1.TeamStatus{}}}},
 		{[]string{"handoff", "lead", "/home/builder/design/v2", "--note", "revision 2"}, &agentv1.TeamCallsResponse{Op: &agentv1.TeamCallsResponse_Handoff{Handoff: &agentv1.Handoff{To: "lead", Path: "/home/builder/design/v2", Note: "revision 2"}}}},
+		{[]string{"fetch", "writer"}, &agentv1.TeamCallsResponse{Op: &agentv1.TeamCallsResponse_FetchClone{FetchClone: &agentv1.FetchClone{Agent: "writer"}}}},
 	} {
 		sock, got := fakeHelper(t, ok)
 		code, _, errOut := runTeamCmd(t, sock, tc.args...)
@@ -117,6 +118,15 @@ func TestProposeAgentChangeSendsTheFile(t *testing.T) {
 	p := (*got)[0].GetPropose()
 	if p.GetAgentId() != "builder" || !strings.Contains(p.GetContent(), "Build.") {
 		t.Errorf("sent %v", p)
+	}
+}
+
+// A lens's fetch (R-0412 item 16) says where the writer's branch is now.
+func TestFetchSaysWhereTheBranchIs(t *testing.T) {
+	sock, _ := fakeHelper(t, &agentv1.TeamCallsRequest{Ok: true, Result: &agentv1.TeamCallsRequest_Fetched{Fetched: &agentv1.FetchAgentBranchResponse{Ref: "refs/remotes/agents/writer", Commit: "0123456789abcdef0123456789abcdef01234567"}}})
+	code, out, errOut := runTeamCmd(t, sock, "fetch", "writer")
+	if code != 0 || !strings.Contains(out, "refs/remotes/agents/writer (0123456789ab)") || !strings.Contains(out, "git diff HEAD...agents/writer") {
+		t.Errorf("exit %d, out %q, err %q", code, out, errOut)
 	}
 }
 
@@ -181,6 +191,8 @@ func TestUsageMistakesNeverReachTheHelper(t *testing.T) {
 		{"team"},
 		{"team", "list"},
 		{"handoff", "lead"},
+		{"fetch"},
+		{"fetch", "writer", "reviewer"},
 	} {
 		if code, _, _ := runTeamCmd(t, sock, args...); code != 2 {
 			t.Errorf("%q: exit %d, want 2", args, code)

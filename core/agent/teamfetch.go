@@ -186,10 +186,29 @@ func fetchAgent(ctx context.Context, project, id, maxBytes string, git gitFunc, 
 	return json.NewEncoder(w).Encode(FetchResult{Ref: ref, Commit: commit})
 }
 
+// fetchLens is team-io fetch-lens HOME NAME WRITER MAXBYTES, run as a
+// lens (ADR 0022 §2a point 4, R-0412 item 16): fetch-agent's half, into
+// the lens's own clone HOME/NAME as refs/remotes/agents/<writer>, with the
+// bundle kept in the lens's own home while it fetches. The lens's git
+// reads only its own repository's config and that file, never the
+// writer's.
+func fetchLens(ctx context.Context, home, name, writer, maxBytes string, git gitFunc, r io.Reader, w io.Writer) error {
+	switch {
+	case !filepath.IsAbs(home) || filepath.Clean(home) != home:
+		return fmt.Errorf("%q isn't a home folder", home)
+	case name == "" || strings.ContainsAny(name, "/\\") || strings.HasPrefix(name, "."):
+		return fmt.Errorf("%q isn't a project name", name)
+	case !agentIDRE.MatchString(writer):
+		return fmt.Errorf("%q isn't an agent id", writer)
+	}
+	return fetchAgent(ctx, filepath.Join(home, name), writer, maxBytes, git, r, w)
+}
+
 // FetchAgentBranch is the owner's Fetch, in the helper: the agent's
 // bundle (as the agent) piped into fetch-agent (as work). A thin bundle
 // first; if the owner's repository lacks what it builds on, the whole
-// branch.
+// branch. With into_agent, a lens's fetch instead: the same bundle piped
+// into fetch-lens, as the lens, in its own clone.
 func (s *apiServer) FetchAgentBranch(ctx context.Context, req *agentv1.FetchAgentBranchRequest) (*agentv1.FetchAgentBranchResponse, error) {
 	id := req.GetAgentId()
 	uid, home, err := s.agentHome(id)
@@ -203,13 +222,30 @@ func (s *apiServer) FetchAgentBranch(ctx context.Context, req *agentv1.FetchAgen
 	if req.GetMaxBytes() <= 0 {
 		return nil, status.Error(codes.InvalidArgument, "no limit given")
 	}
-	project := filepath.Join(s.cfg.HomeRoot, s.cfg.User, name)
+	limit := strconv.FormatInt(req.GetMaxBytes(), 10)
+	// The second half: as work into the project, or as the lens into its
+	// own clone.
+	fetch := func(bundle io.Reader) ([]byte, error) {
+		return s.teamIOAs(ctx, []string{"fetch-agent", filepath.Join(s.cfg.HomeRoot, s.cfg.User, name), id, limit}, bundle)
+	}
+	if into := req.GetIntoAgent(); into != "" {
+		if into == id {
+			return nil, status.Errorf(codes.InvalidArgument, "%s doesn't fetch its own branch", id)
+		}
+		lensUID, lensHome, err := s.agentHome(into)
+		if err != nil {
+			return nil, err
+		}
+		fetch = func(bundle io.Reader) ([]byte, error) {
+			return s.teamIOAsAgent(ctx, lensUID, lensHome, []string{"fetch-lens", lensHome, name, id, limit}, bundle)
+		}
+	}
 	for _, mode := range []string{"thin", "full"} {
 		bundle, wait, err := s.agentStream(ctx, uid, home, []string{"bundle-own", home, name, id, mode})
 		if err != nil {
 			return nil, status.Error(codes.FailedPrecondition, err.Error())
 		}
-		out, ferr := s.teamIOAs(ctx, []string{"fetch-agent", project, id, strconv.FormatInt(req.GetMaxBytes(), 10)}, bundle)
+		out, ferr := fetch(bundle)
 		_ = bundle.Close()
 		if werr := wait(); werr != nil {
 			return nil, status.Error(codes.FailedPrecondition, werr.Error())

@@ -165,6 +165,7 @@ func newTestTeam(t *testing.T) (*TeamUsers, *fakeSystem, *[]chownCall) {
 			chowns = append(chowns, chownCall{f.Name(), uid, gid})
 			return nil
 		},
+		teamDirACL: func(string, int) error { return nil },
 	}
 	if err := os.MkdirAll(filepath.Join(team.Cfg.HomeRoot, "work"), 0o700); err != nil {
 		t.Fatal(err)

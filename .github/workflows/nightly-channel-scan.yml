@@ -62,7 +62,7 @@ jobs:
               -f images/toolbox-node/Dockerfile -t toolbox-node:nightly .
           }
           build || { echo "::warning::The build failed; trying once more in 65 seconds."; sleep 65; build; }
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: core/go.mod
           cache: false
